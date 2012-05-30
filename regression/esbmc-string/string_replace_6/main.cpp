@@ -29,9 +29,10 @@ int main ()
   assert(str == "this is a short phrase!!!");
   
   // Using iterators:                      0123456789*123456789*
+  string str = base;
   string::iterator it = str.begin();   //  ^
   str.replace(it,str.end()-3,str3);    // "sample phrase!!!"
-  assert(str == "sample phrase!!!");
+  assert(str == "sample phraseng.");
   
   cout << str << endl;
   return 0;
