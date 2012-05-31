@@ -120,8 +120,35 @@ namespace std
 		int compare ( int pos1, size_t n1, string& s ) const;
 		int compare ( int pos1, size_t n1, const char* s ) const;
 		int compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const;
-		string& substr ( size_t pos, size_t npos ) const;
-		string& substr ( size_t npos ) const;
+		string& substr ( size_t pos, size_t n )
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+			int i,k;
+			int lenOne = n+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<(pos+n);k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
+		string& substr ( size_t pos ) const
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert(pos < this->length(), "overflow");
+			int i,k;
+			int len = this->length();
+			int lenOne = len+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<len;k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
 		size_t find_first_of ( const string& s, size_t pos = 0 ) const;
 		size_t find_first_of ( const char* s, size_t pos = 0 ) const;
 		size_t find_first_of ( char c, size_t pos = 0 ) const;
@@ -706,11 +733,16 @@ namespace std
 	void string::resize ( size_t n )
 	{
 		int num = this->_size,i;
-		string tmp(this->str);
+		char *tmp = new char[n+1];
+		for(i=0;i<n;i++){
+			tmp[i] = this->str[i];
+		}
+		tmp[i]='\0';
 		this->_size= n;
-		this->str=new char[n];
-		for(i=0;i<num;i++)
-			this->str[i] = tmp.str[i];
+		this->str=new char[n+1];
+		for(i=0;i<n;i++)
+			this->str[i] = tmp[i];
+		this->str[i]='\0';
 	}
 
 	void string::resize ( size_t n, char c )
@@ -722,8 +754,9 @@ namespace std
 		this->str=new char[n];
 		for(i=0;i<num;i++)
 			this->str[i] = tmp.str[i];
-		for(i=num;i<(this->_size-2);i++)
+		for(i=num;i<(this->_size);i++)
 			this->str[i] = c;
+		this->str[i]='\0';
 	}
 
 	string& string::assign ( string& s )
@@ -856,13 +889,8 @@ namespace std
 	{
 		char* tmp = this->str;
 		tmp = tmp+pos;
-		return strspn(tmp,s.c_str());
+		return strspn(tmp,s.str);
 
-	}
-
-	size_t string::find ( string& s, size_t pos = 0 ) const
-	{
-		return strspn(str+pos,s.c_str());
 	}
 
 	size_t string::find ( const char* s, size_t pos = 0 ) const
@@ -1144,30 +1172,127 @@ namespace std
 		this->insert(pos1,tmp);
 		return *this;
 	}
-	string& string::substr ( size_t pos, size_t npos ) const
+
+	int string::compare ( const char* s ) const
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert((pos < this->length()) && ((pos+npos) <= this->length()), "overflow");
-		int i,k;
-		int lenOne = npos+1;
-		char* one = new char[lenOne];
-		for(k=0,i=pos;i<(pos+npos);k++,i++){
-			one[k] = this->str[i];
+		int i;
+		int sLen = strlen(s);
+		int len = this->length();
+		if( len < sLen)
+			return -1;
+		if (len > sLen)
+			return 1;
+		for(i=0;i<sLen;i++){
+			if(this->str[i]!=s[i]){
+				return 2;
+			}
 		}
-		one[k]='\0';
-		string tmp(one);
-		assert(tmp.length() == 6);
-		return tmp;
+		return 0;
+	}
+
+	int string::compare ( const string& s ) const
+	{
+		__ESBMC_HIDE:
+		int i;
+		int sLen = s.length();
+		int len = this->length();
+		if( len < sLen)
+			return -1;
+		if (len > sLen)
+			return 1;
+		for(i=0;i<sLen;i++){
+			if(this->str[i]!=s.str[i]){
+				return 2;
+			}
+		}
+		return 0;
+	}
+
+	int string::compare ( int pos1, size_t n1, const char* s ) const
+	{
+		__ESBMC_HIDE:
+		int i,k;
+		char* tmp = new char[n1+1];
+		for(k=0,i=pos1;i<(pos1+n1);i++,k++){
+			tmp[k] = this->str[i];
+		}
+		tmp[k] = '\0';
+		int sLen = strlen(s);
+		int len = strlen(tmp);
+		if( len < sLen)
+			return -1;
+		if (len > sLen)
+			return 1;
+		for(i=0;i<sLen;i++){
+			if(tmp[i]!=s[i]){
+				return 2;
+			}
+		}
+		return 0;
+	}
+
+	int string::compare ( int pos1, size_t n1, string& s ) const
+	{
+		__ESBMC_HIDE:
+		int i,k;
+		char* tmp = new char[n1+1];
+		for(k=0,i=pos1;i<(pos1+n1);i++,k++){
+			tmp[k] = this->str[i];
+		}
+		tmp[k] = '\0';
+		int sLen = s.length();
+		int len = strlen(tmp);
+		if( len < sLen)
+			return -1;
+		if (len > sLen)
+			return 1;
+		for(i=0;i<sLen;i++){
+			if(tmp[i]!=s.str[i]){
+				return 2;
+			}
+		}
+		return 0;
+	}
+
+	int string::compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const
+	{
+		__ESBMC_HIDE:
+		int i,k;
+
+		char* tmp = new char[n1+1];
+		for(k=0,i=pos1;i<(pos1+n1);i++,k++){
+			tmp[k] = this->str[i];
+		}
+		tmp[k] = '\0';
+
+		char* tmp2 = new char[n2+1];
+		for(k=0,i=pos2;i<(pos2+n2);i++,k++){
+			tmp2[k] = s.str[i];
+		}
+		tmp2[k] = '\0';
+
+		int sLen = strlen(tmp2);
+		int len = strlen(tmp);
+
+		if( len < sLen)
+			return -1;
+		if (len > sLen)
+			return 1;
+
+		for(i=0;i<sLen;i++){
+			if(tmp[i]!=tmp2[i]){
+				return 2;
+			}
+		}
+
+		return 0;
 	}
 #if 0
 
 
-	string string::substr ( size_t pos) const
-	{
-		__ESBMC_HIDE:
-		char* s;
-		return string(strncpy(s,str,pos));
-	}
+
+
 
 
 	string& string::replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
@@ -1182,65 +1307,7 @@ namespace std
 
 
 
-	int string::compare ( const string& s ) const
-	{
-		__ESBMC_HIDE:
-		if(s.length() > this->length())
-		   return 1;
-		if(s.length() < this->length())
-		   return -1;
-		return strcmp(s.c_str(),this->c_str());
-	}
-	int string::compare ( const char* s ) const
-	{
-		__ESBMC_HIDE:
-		if(strlen(s) > this->length())
-		   return 1;
-		if(strlen(s) < this->length())
-		   return -1;
-		return strcmp(s,this->c_str());
-	}
-	int string::compare ( int pos1, size_t n1, string& s ) const
-	{
-		__ESBMC_HIDE:
-		char* aux;
 
-		aux = strncpy(s.c_str2(),str+pos1,n1);
-
-		if(strlen((const char*)aux) > this->length())
-		   return 1;
-		if((const char*)aux < this->length())
-		   return -1;
-		return strcmp((const char*)aux,this->c_str());
-	}
-	int string::compare ( int pos1, size_t n1, const char* s ) const
-	{
-		__ESBMC_HIDE:
-		char* aux;
-
-		aux = strncpy((char*)s,str+pos1,n1);
-
-		if(strlen((const char*)aux) > strlen(s))
-		   return 1;
-		if((const char*)aux < strlen(s))
-		   return -1;
-		return strcmp((const char*)aux,s);
-	}
-	int string::compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const
-	{
-		__ESBMC_HIDE:
-		char* aux;
-		char* aux2;
-
-		aux = strncpy(s.c_str2(),str+pos1,n1);
-		aux2 = strncpy(str2,str+pos2,n2);
-
-		if(strlen((const char*)aux) > strlen((const char*)aux2))
-		   return 1;
-		if((const char*)aux < strlen((const char*)aux2))
-		   return -1;
-		return strcmp((const char*)aux,(const char*)aux2);
-	}
 
 	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
 	{
