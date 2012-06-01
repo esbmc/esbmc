@@ -88,6 +88,11 @@ void goto_symext::symex_other(void)
       it->second.constant = expr2tc();
     }
   }
+  else if (is_code_asm2t(code2))
+  {
+    // Assembly statement -> do nothing.
+    return;
+  }
   else
     throw "goto_symext: unexpected statement: " + get_expr_id(code2);
 }

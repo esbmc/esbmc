@@ -1044,6 +1044,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = expr2tc(new code_comma2t(type, op0, op1));
+  } else if (expr.id() == "code" && expr.statement() == "asm") {
+    migrate_type(expr.type(), type);
+    const irep_idt &str = expr.op0().value();
+    new_expr_ref = expr2tc(new code_asm2t(type, str));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1940,6 +1944,16 @@ migrate_expr_back(const expr2tc &ref)
     const code_goto2t &ref2 = to_code_goto2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.set("destination", ref2.target);
+    return codeexpr;
+  }
+  case expr2t::code_asm_id:
+  {
+    const code_asm2t &ref2 = to_code_asm2t(ref);
+    exprt codeexpr("code", migrate_type_back(ref2.type));
+    codeexpr.statement("asm");
+    // Don't actually set a piece of assembly as the operand here; it serves
+    // no purpose.
+    codeexpr.op0() = exprt("string-constant");
     return codeexpr;
   }
   default:

@@ -314,6 +314,7 @@ public:
     code_comma_id,
     invalid_pointer_id,
     buffer_size_id,
+    code_asm_id,
     to_bv_typecast_id,
     from_bv_typecast_id,
     end_expr_id
@@ -2118,6 +2119,18 @@ public:
 };
 template class esbmct::expr<buffer_size2t, esbmct::expr2tc_value>;
 
+class code_asm2t : public esbmct::expr<code_asm2t,
+                                            esbmct::irepidt_value>
+{
+public:
+  code_asm2t(const type2tc &type, const irep_idt &stringref)
+    : esbmct::expr<code_asm2t, esbmct::irepidt_value>
+      (type, code_asm_id, stringref) { }
+  code_asm2t(const code_asm2t &ref)
+    : esbmct::expr<code_asm2t, esbmct::irepidt_value>(ref) { }
+};
+template class esbmct::expr<code_asm2t, esbmct::irepidt_value>;
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -2266,6 +2279,7 @@ expr_macros(code_function_call);
 expr_macros(code_comma);
 expr_macros(invalid_pointer);
 expr_macros(buffer_size);
+expr_macros(code_asm);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -2434,6 +2448,7 @@ typedef irep_container<code_comma2t, expr2t::code_comma_id> code_comma2tc;
 typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
                        code_invalid_pointer2tc;
 typedef irep_container<buffer_size2t, expr2t::buffer_size_id> buffer_size2tc;
+typedef irep_container<code_asm2t, expr2t::code_asm_id> code_asm2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int

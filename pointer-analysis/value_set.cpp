@@ -1040,6 +1040,10 @@ void value_sett::apply_code(
       assign(sym, ref.operand, ns);
     }
   }
+  else if (is_code_asm2t(code))
+  {
+    // Ignore assembly. No idea why it isn't preprocessed out anyway.
+  }
   else
   {
     std::cerr << code->pretty() << std::endl;

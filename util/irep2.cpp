@@ -526,6 +526,7 @@ static const char *expr_names[] = {
   "code_comma_id",
   "invalid_pointer",
   "buffer_size",
+  "code_asm",
   "from_bv_typecast",
   "to_bv_typecast"
 };
