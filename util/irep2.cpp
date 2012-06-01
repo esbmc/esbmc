@@ -1472,11 +1472,12 @@ template <class derived, class field1, class field2, class field3, class field4>
 list_of_memberst
 esbmct::expr_methods<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
-  field1::fieldtype::tostring(thevector, indent);
-  field2::fieldtype::tostring(thevector, indent);
-  field3::fieldtype::tostring(thevector, indent);
-  field4::fieldtype::tostring(thevector, indent);
+  derived_this->field1::fieldtype::tostring(thevector, indent);
+  derived_this->field2::fieldtype::tostring(thevector, indent);
+  derived_this->field3::fieldtype::tostring(thevector, indent);
+  derived_this->field4::fieldtype::tostring(thevector, indent);
   return thevector;
 }
 
@@ -1484,21 +1485,22 @@ template <class derived, class field1, class field2, class field3, class field4>
 bool
 esbmct::expr_methods<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 {
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived &ref2 = dynamic_cast<const derived &>(ref);
 
-  if (!field1::fieldtype::cmp(
+  if (!derived_this->field1::fieldtype::cmp(
         static_cast<const typename field1::fieldtype &>(ref2)))
     return false;
 
-  if (!field2::fieldtype::cmp(
+  if (!derived_this->field2::fieldtype::cmp(
         static_cast<const typename field2::fieldtype &>(ref2)))
     return false;
 
-  if (!field3::fieldtype::cmp(
+  if (!derived_this->field3::fieldtype::cmp(
         static_cast<const typename field3::fieldtype &>(ref2)))
     return false;
 
-  if (!field4::fieldtype::cmp(
+  if (!derived_this->field4::fieldtype::cmp(
         static_cast<const typename field4::fieldtype &>(ref2)))
     return false;
 
@@ -1510,24 +1512,25 @@ int
 esbmct::expr_methods<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 {
   int tmp;
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived &ref2 = dynamic_cast<const derived &>(ref);
 
-  tmp = field1::fieldtype::lt(
+  tmp = derived_this->field1::fieldtype::lt(
                 static_cast<const typename field1::fieldtype &>(ref2));
   if (tmp != 0)
     return tmp;
 
-  tmp = field2::fieldtype::lt(
+  tmp = derived_this->field2::fieldtype::lt(
                 static_cast<const typename field2::fieldtype &>(ref2));
   if (tmp != 0)
     return tmp;
 
-  tmp = field3::fieldtype::lt(
+  tmp = derived_this->field3::fieldtype::lt(
                 static_cast<const typename field3::fieldtype &>(ref2));
   if (tmp != 0)
     return tmp;
 
-  tmp = field4::fieldtype::lt(
+  tmp = derived_this->field4::fieldtype::lt(
                 static_cast<const typename field4::fieldtype &>(ref2));
 
   return tmp;
@@ -1539,11 +1542,12 @@ esbmct::expr_methods<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
 {
 
+  const derived *derived_this = static_cast<const derived*>(this);
   expr2t::do_crc(crc);
-  field1::fieldtype::do_crc(crc);
-  field2::fieldtype::do_crc(crc);
-  field3::fieldtype::do_crc(crc);
-  field4::fieldtype::do_crc(crc);
+  derived_this->field1::fieldtype::do_crc(crc);
+  derived_this->field2::fieldtype::do_crc(crc);
+  derived_this->field3::fieldtype::do_crc(crc);
+  derived_this->field4::fieldtype::do_crc(crc);
   return;
 }
 
@@ -1553,10 +1557,11 @@ esbmct::expr_methods<derived, field1, field2, field3, field4>::list_operands
           (std::list<const expr2tc *> &inp) const
 {
 
-  field1::fieldtype::list_operands(inp);
-  field2::fieldtype::list_operands(inp);
-  field3::fieldtype::list_operands(inp);
-  field4::fieldtype::list_operands(inp);
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived_this->field1::fieldtype::list_operands(inp);
+  derived_this->field2::fieldtype::list_operands(inp);
+  derived_this->field3::fieldtype::list_operands(inp);
+  derived_this->field4::fieldtype::list_operands(inp);
   return;
 }
 
@@ -1566,10 +1571,11 @@ esbmct::expr_methods<derived, field1, field2, field3, field4>::list_operands
           (std::list<expr2tc*> &inp)
 {
 
-  field1::fieldtype::list_operands(inp);
-  field2::fieldtype::list_operands(inp);
-  field3::fieldtype::list_operands(inp);
-  field4::fieldtype::list_operands(inp);
+  const derived *derived_this = static_cast<const derived*>(this);
+  derived_this->field1::fieldtype::list_operands(inp);
+  derived_this->field2::fieldtype::list_operands(inp);
+  derived_this->field3::fieldtype::list_operands(inp);
+  derived_this->field4::fieldtype::list_operands(inp);
   return;
 }
 
