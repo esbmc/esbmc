@@ -177,6 +177,7 @@ namespace std
 		size_t rfind ( string& s, size_t pos = npos ) const;
 		size_t rfind ( const char* s, size_t pos = npos ) const;
 		size_t rfind ( char c, size_t pos = npos ) const;
+		size_t rfind ( const char* s, size_t pos = 0 , size_t n) const;
 		size_t find_last_of ( const string& s, size_t pos = npos ) const;
 		size_t find_last_of ( const char* s, size_t pos = npos ) const;
 		size_t find_last_of ( char c, size_t pos = npos ) const;
@@ -882,38 +883,215 @@ namespace std
 
 	size_t string::find ( char c, size_t pos = 0 ) const
 	{
-		return strspn(str+pos,(const char*)c);
+		int i;
+		int len = this->length();
+		for(i=0;i<len;i++)
+			if(this->str[i] == c)
+				return i;
+
 	}
 
 	size_t string::find ( string& s, size_t pos = 0 ) const
 	{
-		char* tmp = this->str;
-		tmp = tmp+pos;
-		return strspn(tmp,s.str);
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		strcpy(s2,s.str);
+		pos =-1;
+		size_t i, j;
 
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
+	}
+
+	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = n;
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		pos =-1;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
 	}
 
 	size_t string::find ( const char* s, size_t pos = 0 ) const
 	{
-		return strspn(str+pos,s);
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		strcpy(s2,s);
+		pos =-1;
+		size_t i, j;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
 	}
 
-	size_t string::rfind ( string& s, size_t pos = npos ) const
+	size_t string::rfind ( char c, size_t pos = 0 ) const
 	{
-		return strspn(this->str+pos,s.c_str());
+		int i;
+		int len = this->length();
+		for(i=len;i>0;i--)
+			if(this->str[i] == c)
+				return i;
+
 	}
 
-	size_t string::rfind ( const char* s, size_t pos = npos ) const
+	size_t string::rfind ( string& s, size_t pos = 0 ) const
 	{
-		return strspn_reverse(str, s+pos);
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		strcpy(s2,s.str);
+		pos =-1;
+		size_t i, j;
+
+		for (i = len; i > lim; i--) {
+			return this->find(s2,i);
+//			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+//				if (s1[i+j] != s2[j]) {
+//					break;
+//				}else{
+//					//if(pos == -1){
+//						pos = i-j;
+//					//}
+//				}
+//			}
+//			if ((s2[j] == '\0')) {
+//				return pos;
+//			}
+		}
+
+		return -1;
 	}
 
-	size_t string::rfind ( char c, size_t pos = npos ) const
+	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
 	{
-		char* tmp = new char[2];
-		tmp[0] = c;
-		tmp[1] = '\0';
-		return strspn_reverse(tmp, str+pos);
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = n;
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		pos =-1;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
+	}
+
+	size_t string::rfind ( const char* s, size_t pos = 0 ) const
+	{
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		strcpy(s2,s);
+		pos =-1;
+		size_t i, j;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
 	}
 
 	string& string::insert ( size_t pos1, string& s )
