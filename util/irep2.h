@@ -690,14 +690,34 @@ namespace esbmct {
 // Start with forward class definitions
 
 class bool_type2t;
+class empty_type2t;
+class symbol_type2t;
+class struct_type2t;
+class union_type2t;
 
 // Then give them a typedef name
 
 typedef esbmct::type<bool_type2t> bool_type_base;
+typedef esbmct::type<empty_type2t> empty_type_base;
+typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
+typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+                     struct_type_base;
+typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
+                     union_type_base;
 
 // And finally an explicit type instanciation.
 
 template class esbmct::type<bool_type2t>;
+template class esbmct::type<empty_type2t>;
+template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
+template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
+                            esbmct::irepidt_vec_member_names,
+                            esbmct::irepidt_name>;
+template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
+                            esbmct::irepidt_vec_member_names,
+                            esbmct::irepidt_name>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_base
@@ -709,67 +729,43 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public esbmct::type<empty_type2t>
+class empty_type2t : public empty_type_base
 {
 public:
-  empty_type2t(void) : esbmct::type<empty_type2t>(empty_id) {}
-  empty_type2t(const empty_type2t &ref) : esbmct::type<empty_type2t>(ref) {}
+  empty_type2t(void) : empty_type_base(empty_id) {}
+  empty_type2t(const empty_type2t &ref) : empty_type_base(ref) {}
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<empty_type2t>;
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t;
-template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
-typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>
-        symbol_type_type;
-class symbol_type2t : public symbol_type_type
+class symbol_type2t : public sym_type_base
 {
 public:
-  symbol_type2t(const dstring sym_name)
-    : symbol_type_type (symbol_id, sym_name) { }
-  symbol_type2t(const symbol_type2t &ref)
-    : symbol_type_type (ref) { }
+  symbol_type2t(const dstring sym_name) : sym_type_base (symbol_id, sym_name) {}
+  symbol_type2t(const symbol_type2t &ref) : sym_type_base (ref) { }
   virtual unsigned int get_width(void) const;
 };
 
-class struct_type2t;
-template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                            esbmct::irepidt_vec_member_names,
-                            esbmct::irepidt_name>;
-typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-                     struct_type_type;
-class struct_type2t : public struct_type_type
+class struct_type2t : public struct_type_base
 {
 public:
-  struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
+  struct_type2t(std::vector<type2tc> &members,
+                std::vector<irep_idt> memb_names,
                 irep_idt name)
-    : struct_type_type (struct_id, members, memb_names, name) {}
-
-  struct_type2t(const struct_type2t &ref)
-    : struct_type_type (ref) {}
-
+    : struct_type_base (struct_id, members, memb_names, name) {}
+  struct_type2t(const struct_type2t &ref) : struct_type_base (ref) {}
   virtual unsigned int get_width(void) const;
 };
 
-class union_type2t;
-typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-                     union_type_type;
-template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>;
-class union_type2t : public union_type_type
+class union_type2t : public union_type_base
 {
 public:
-  union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
-                irep_idt name)
-    : union_type_type (union_id, members, memb_names, name) {}
-
-  union_type2t(const union_type2t &ref)
-    : union_type_type (ref) {}
-
+  union_type2t(std::vector<type2tc> &members,
+               std::vector<irep_idt> memb_names,
+               irep_idt name)
+    : union_type_base (union_id, members, memb_names, name) {}
+  union_type2t(const union_type2t &ref) : union_type_base (ref) {}
   virtual unsigned int get_width(void) const;
 };
 
