@@ -6,28 +6,12 @@ using namespace std;
 
 int main ()
 {
-  string str ("There are two needles in this haystack with needles.");
+  string str ("There.");
   string str2 ("needle");
   size_t found;
 
-  // different member versions of find in the same order as above:
-  found=str.find(str2);
-  assert(int(found)==14);
-  if (found!=string::npos)
-    cout << "first 'needle' found at: " << int(found) << endl;
-
-  found=str.find("needles are small",found+1,6);
-  assert(int(found)==44);
-  if (found!=string::npos)
-    cout << "second 'needle' found at: " << int(found) << endl;
-
-  found=str.find("haystack");
-  assert(int(found)==30);
-  if (found!=string::npos)
-    cout << "'haystack' also found at: " << int(found) << endl;
-
   found=str.find('.');
-  assert(int(found)==51);
+  assert(int(found)==5);
   if (found!=string::npos)
     cout << "Period found at: " << int(found) << endl;
 
