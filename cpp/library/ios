@@ -71,21 +71,21 @@ struct ios_base {
   static const iostate eofbit   =  __eofbit;
   static const iostate failbit  =  __failbit;
 
-  static const fmtflags boolalpha   = __boolalpha;
-  static const fmtflags dec         = __dec;
-  static const fmtflags fixed       = __fixed;
-  static const fmtflags hex         = __hex;
-  static const fmtflags internal    = __internal;
-  static const fmtflags left        = __left;
-  static const fmtflags oct         = __oct;
-  static const fmtflags right       = __right;
-  static const fmtflags scientific  = __scientific;
-  static const fmtflags showbase    = __showbase;
-  static const fmtflags showpoint   = __showpoint;
-  static const fmtflags showpos     = __showpos;
-  static const fmtflags skipws      = __skipws;
-  static const fmtflags unitbuf     = __unitbuf;
-  static const fmtflags uppercase   = __uppercase;
+//  static const fmtflags boolalpha   = __boolalpha;
+//  static const fmtflags dec         = __dec;
+//  static const fmtflags fixed       = __fixed;
+//  static const fmtflags hex         = __hex;
+//  static const fmtflags internal    = __internal;
+//  static const fmtflags left        = __left;
+//  static const fmtflags oct         = __oct;
+//  static const fmtflags right       = __right;
+//  static const fmtflags scientific  = __scientific;
+//  static const fmtflags showbase    = __showbase;
+//  static const fmtflags showpoint   = __showpoint;
+//  static const fmtflags showpos     = __showpos;
+//  static const fmtflags skipws      = __skipws;
+//  static const fmtflags unitbuf     = __unitbuf;
+//  static const fmtflags uppercase   = __uppercase;
   static const fmtflags adjustfield = __adjustfield;
   static const fmtflags basefield   = __basefield;
   static const fmtflags floatfield  = __floatfield;
@@ -101,43 +101,43 @@ struct ios_base {
   static const seekdir cur  =  __cur;
   static const seekdir end  =  __end;
 
-  struct _Words
-  {
-    void*	__pword;
-    long	__iword;
-    _Words() : __pword(0), __iword(0) { }
-  };
+//  struct _Words
+//  {
+//    void*	__pword;
+//    long	__iword;
+//    _Words() : __pword(0), __iword(0) { }
+//  };
 
   // Only for failed iword/pword calls.
-  _Words		__word_zero;
+//  _Words		__word_zero;
 
   // Guaranteed storage.
   // The first 5 iword and pword slots are reserved for internal use.
-  enum { __local_word_size = 8 };
-  _Words		__local_word[__local_word_size];
+//  enum { __local_word_size = 8 };
+//  _Words		__local_word[__local_word_size];
 
   // Allocated storage.
-  int			__word_size;
-  _Words*		__word;
-
-  _Words&
-  __grow_words(int __index, bool __iword) {
-       int newsize = __local_word_size;
-       _Words* words = __local_word;
-       if (__index > __local_word_size - 1) {
-    	   newsize = __index + 1;
-       	   words = new _Words[newsize];
-
-       }
-	   if (__iword)
-		   __word_zero.__iword = 0;
-	   else
-		   __word_zero.__pword = 0;
-
-	   __word = words;
-       __word_size = newsize;
-       return __word[__index];
-  }
+//  int			__word_size;
+//  _Words*		__word;
+//
+//  _Words&
+//  __grow_words(int __index, bool __iword) {
+//       int newsize = __local_word_size;
+//       _Words* words = __local_word;
+//       if (__index > __local_word_size - 1) {
+//    	   newsize = __index + 1;
+//       	   words = new _Words[newsize];
+//
+//       }
+//	   if (__iword)
+//		   __word_zero.__iword = 0;
+//	   else
+//		   __word_zero.__pword = 0;
+//
+//	   __word = words;
+//       __word_size = newsize;
+//       return __word[__index];
+//  }
 
 //protected:
   streamsize __width;
@@ -162,31 +162,31 @@ public:
 //  locale imbue ( const locale& loc );
 //  locale getloc ( ) const;
   static int xalloc() throw();
-  long&
-  iword(int __ix)
-  {
-    if (__ix < __word_size) {
-    	_Words& word = __word[__ix];
-    	return word.__iword;
-    }
-    else {
-    	_Words& word = __grow_words(__ix, true);
-    	return word.__iword;
-    }
-  }
-
-  void*&
-  pword(int __ix)
-  {
-	  if (__ix < __word_size) {
-		_Words& word = __word[__ix];
-		return word.__pword;
-	  }
-	  else {
-		  _Words& word = __grow_words(__ix, false);
-		  return word.__pword;
-	  }
-  }
+//  long&
+//  iword(int __ix)
+//  {
+//    if (__ix < __word_size) {
+//    	_Words& word = __word[__ix];
+//    	return word.__iword;
+//    }
+//    else {
+//    	_Words& word = __grow_words(__ix, true);
+//    	return word.__iword;
+//    }
+//  }
+//
+//  void*&
+//  pword(int __ix)
+//  {
+//	  if (__ix < __word_size) {
+//		_Words& word = __word[__ix];
+//		return word.__pword;
+//	  }
+//	  else {
+//		  _Words& word = __grow_words(__ix, false);
+//		  return word.__pword;
+//	  }
+//  }
   void register_callback ( event_callback fn, int index );
   bool sync_with_stdio ( bool sync = true );
   struct Init {
@@ -327,7 +327,110 @@ char ios::fill ( char fillch )
 	return __old;
 }
 
-
 }
+
+namespace std
+{//==========Manipulators========
+
+//Independent flags (switch on):
+ios_base& boolalpha ( ios_base& str ) {
+	str.setf(__boolalpha);
+	return str;
+}
+ios_base& showbase ( ios_base& str ) {
+	str.setf(__showbase);
+	return str;
+}
+ios_base& showpoint ( ios_base& str ) {
+	str.setf(__showpoint);
+	return str;
+}
+ios_base& showpos ( ios_base& str ) {
+	str.setf(__showpos);
+	return str;
+}
+ios_base& skipws ( ios_base& str ) {
+	str.setf(__skipws);
+	return str;
+}
+ios_base& unitbuf ( ios_base& str ) {
+	str.setf(__unitbuf);
+	return str;
+}
+ios_base& uppercase ( ios_base& str ) {
+	str.setf(__uppercase);
+	return str;
+}
+
+//Independent flags (switch off):
+ios_base& noboolalpha ( ios_base& str ) {
+	str.unsetf(__boolalpha);
+	return str;
+}
+ios_base& noshowbase ( ios_base& str ) {
+	str.unsetf(__showbase);
+	return str;
+}
+ios_base& noshowpoint ( ios_base& str ) {
+	str.unsetf(__showpoint);
+	return str;
+}
+ios_base& noshowpos ( ios_base& str ) {
+	str.unsetf(__showpos);
+	return str;
+}
+ios_base& noskipws ( ios_base& str ) {
+	str.unsetf(__skipws);
+	return str;
+}
+ios_base& nounitbuf ( ios_base& str ) {
+	str.unsetf(__unitbuf);
+	return str;
+}
+ios_base& nouppercase ( ios_base& str ) {
+	str.unsetf(__uppercase);
+	return str;
+}
+
+//Numerical base format flags ("basefield" flags):
+ios_base& dec ( ios_base& str ){
+	str.setf(__dec, __basefield);
+	return str;
+}
+ios_base& hex ( ios_base& str ) {
+	str.setf(__hex, __basefield);
+	return str;
+}
+ios_base& oct ( ios_base& str ) {
+	str.setf(__oct, __basefield);
+	return str;
+}
+
+//Floating-point format flags ("floatfield" flags):
+ios_base& fixed ( ios_base& str ){
+	str.setf(__fixed, __floatfield);
+	return str;
+}
+ios_base& scientific ( ios_base& str ) {
+	str.setf(__scientific, __floatfield);
+	return str;
+}
+
+//Adustment format flags ("adjustfield" flags):
+ios_base& internal ( ios_base& str ) {
+	str.setf(__internal, __adjustfield);
+	return str;
+}
+ios_base& left ( ios_base& str ) {
+	str.setf(__left, __adjustfield);
+	return str;
+}
+ios_base& right ( ios_base& str ) {
+	str.setf(__right, __adjustfield);
+	return str;
+}
+
+}//==============================
+
 
 #endif

@@ -23,7 +23,7 @@ namespace std
 	extern ostream cerr;
 //	extern ios_base ios;
 
-	char endl = '\n';
+//	char endl = '\n';
 }
 
 #endif
