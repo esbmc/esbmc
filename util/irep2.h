@@ -750,7 +750,8 @@ class union_type2t;
 
 typedef esbmct::type_data<bool_type2t> bool_type_data;
 typedef esbmct::type_methods<bool_type2t> bool_type_methods;
-typedef esbmct::type<empty_type2t> empty_type_base;
+typedef esbmct::type_data<empty_type2t> empty_type_data;
+typedef esbmct::type_methods<empty_type2t> empty_type_methods;
 //typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
 typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                      esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
@@ -763,7 +764,8 @@ typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
 
 template class esbmct::type_data<bool_type2t>;
 template class esbmct::type_methods<bool_type2t>;
-template class esbmct::type<empty_type2t>;
+template class esbmct::type_data<empty_type2t>;
+template class esbmct::type_methods<empty_type2t>;
 //template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                             esbmct::irepidt_vec_member_names,
@@ -782,11 +784,11 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public empty_type_base
+class empty_type2t : public empty_type_methods, public empty_type_data
 {
 public:
-  empty_type2t(void) : empty_type_base(empty_id) {}
-  empty_type2t(const empty_type2t &ref) : empty_type_base(ref) {}
+  empty_type2t(void) : type2t(empty_id) {}
+  empty_type2t(const empty_type2t &ref) : type2t(ref), empty_type_data(ref) {}
   virtual unsigned int get_width(void) const;
 };
 
