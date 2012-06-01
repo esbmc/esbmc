@@ -753,6 +753,7 @@ class code_type2t;
 class array_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
+class string_type2t;
 
 // Then give them a typedef name
 
@@ -824,7 +825,9 @@ typedef esbmct::type_methods<fixedbv_type2t,
                              esbmct::uint_width,
                              esbmct::uint_int_bits>
         fixedbv_type_methods;
-
+typedef esbmct::type_data<string_type2t, esbmct::uint_width> string_type_data;
+typedef esbmct::type_methods<string_type2t, esbmct::uint_width>
+        string_type_methods;
 
 
 // And finally an explicit type instanciation.
@@ -1042,16 +1045,15 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class string_type2t : public esbmct::type<string_type2t, esbmct::uint_width>
+class string_type2t : public string_type_data, public string_type_methods
 {
 public:
   string_type2t(unsigned int elements)
-    : esbmct::type<string_type2t, esbmct::uint_width>(string_id, elements) { }
+    : type2t(string_id), string_type_data(elements) { }
   string_type2t(const string_type2t &ref)
-    : esbmct::type<string_type2t, esbmct::uint_width>(ref) { }
+    : type2t(ref), string_type_data(ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type<string_type2t, esbmct::uint_width>;
 
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is
 // fine in terms of using/ keywords in syntax, because the preprocessor
