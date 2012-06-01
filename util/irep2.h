@@ -880,6 +880,8 @@ template class esbmct::type_data<fixedbv_type2t,
 template class esbmct::type_methods<fixedbv_type2t,
                                     esbmct::uint_width,
                                     esbmct::uint_int_bits>;
+template class esbmct::type_data<string_type2t, esbmct::uint_width>;
+template class esbmct::type_methods<string_type2t, esbmct::uint_width>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods, public bool_type_data
