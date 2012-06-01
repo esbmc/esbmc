@@ -3,6 +3,8 @@
 
 //#include <stdlib.h>
 
+#include "cstring"
+
 unsigned int nondet_uint();
 
 double atof ( const char * str );
@@ -17,7 +19,12 @@ long int strtol ( const char * str, char ** endptr, int base );
 
 unsigned long int strtoul ( const char * str, char ** endptr, int base );
 
-char * getenv ( const char * name );
+char * getenv ( const char * name ) 
+{
+  char* tmp;
+  strcpy(tmp, name);
+  return tmp;
+}
 
 void exit ( int status );
 
