@@ -681,6 +681,57 @@ namespace esbmct {
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
   };
+
+  template <class derived,
+            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
+            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
+            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
+            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
+  class type_data :
+    virtual public type2t,
+    public field1::fieldtype,
+    public field2::fieldtype,
+    public field3::fieldtype,
+    public field4::fieldtype
+  {
+  public:
+
+    type_data(typename field1::type arg1 = field1::defaultval,
+        typename field2::type arg2 = field2::defaultval,
+        typename field3::type arg3 = field3::defaultval,
+        typename field4::type arg4 = field4::defaultval)
+      : type2t(type2t::end_type_id),
+        field1::fieldtype(arg1),
+        field2::fieldtype(arg2),
+        field3::fieldtype(arg3),
+        field4::fieldtype(arg4)
+    {};
+
+    type_data(const type_data &ref)
+      : type2t(ref),
+        field1::fieldtype(ref),
+        field2::fieldtype(ref),
+        field3::fieldtype(ref),
+        field4::fieldtype(ref)
+    {}
+  };
+
+  template <class derived,
+            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
+            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
+            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
+            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
+  class type_methods : virtual public type2t
+  {
+  public:
+    type_methods() : type2t(type2t::end_type_id) { }
+    virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+    virtual type2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const type2t &ref) const;
+    virtual int lt(const type2t &ref) const;
+    virtual void do_crc(boost::crc_32_type &crc) const;
+  };
 }; // esbmct
 
 // So - make some type definitions for the different types we're going to be
@@ -699,7 +750,7 @@ class union_type2t;
 
 typedef esbmct::type<bool_type2t> bool_type_base;
 typedef esbmct::type<empty_type2t> empty_type_base;
-typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
+//typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
 typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                      esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
                      struct_type_base;
@@ -711,7 +762,7 @@ typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
 
 template class esbmct::type<bool_type2t>;
 template class esbmct::type<empty_type2t>;
-template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
+//template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                             esbmct::irepidt_vec_member_names,
                             esbmct::irepidt_name>;
@@ -739,13 +790,23 @@ public:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public sym_type_base
+typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
+class symbol_type2t :
+  public esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>,
+  public esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
 {
 public:
-  symbol_type2t(const dstring sym_name) : sym_type_base (symbol_id, sym_name) {}
-  symbol_type2t(const symbol_type2t &ref) : sym_type_base (ref) { }
+  symbol_type2t(const dstring sym_name) :
+    type2t (symbol_id),
+    esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name> (sym_name) {}
+  symbol_type2t(const symbol_type2t &ref) :
+    type2t (ref),
+    esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
+    (ref) { }
   virtual unsigned int get_width(void) const;
 };
+template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
+template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 
 class struct_type2t : public struct_type_base
 {
