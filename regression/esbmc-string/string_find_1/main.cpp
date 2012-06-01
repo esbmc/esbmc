@@ -6,7 +6,7 @@ using namespace std;
 
 int main ()
 {
-  string str ("There are two needles in this haystack with needles.");
+  string str ("There are two needles in");
   string str2 ("needle");
   size_t found;
 
