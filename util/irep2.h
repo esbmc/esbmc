@@ -766,9 +766,9 @@ typedef esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
 typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_type_data;
 typedef esbmct::type_data<struct_union_type2t,
-                          esbmct::type2tc_vec_members,
-                          esbmct::irepidt_vec_member_names,
-                          esbmct::irepidt_name>
+                            esbmct::type2tc_vec_members,
+                            esbmct::irepidt_vec_member_names,
+                            esbmct::irepidt_name>
         struct_union_type_data;
 typedef esbmct::type_methods<struct_type2t,
                              esbmct::type2tc_vec_members,
@@ -781,7 +781,7 @@ typedef esbmct::type_methods<union_type2t,
                              esbmct::irepidt_name>
         union_type_methods;
 typedef esbmct::type_data<unsignedbv_type2t,
-                          esbmct::uint_width>
+                             esbmct::uint_width>
         bv_type_data;
 typedef esbmct::type_methods<unsignedbv_type2t,
                              esbmct::uint_width>
@@ -790,10 +790,10 @@ typedef esbmct::type_methods<signedbv_type2t,
                              esbmct::uint_width>
         signedbv_type_methods;
 typedef esbmct::type_data<code_type2t,
-                          esbmct::type2tc_vec_args,
-                          esbmct::type2tc_ret_type,
-                          esbmct::irepidt_vec_arg_names,
-                          esbmct::bool_ellipsis>
+                             esbmct::type2tc_vec_args,
+                             esbmct::type2tc_ret_type,
+                             esbmct::irepidt_vec_arg_names,
+                             esbmct::bool_ellipsis>
         code_type_data;
 typedef esbmct::type_methods<code_type2t,
                              esbmct::type2tc_vec_args,
@@ -802,24 +802,22 @@ typedef esbmct::type_methods<code_type2t,
                              esbmct::bool_ellipsis>
         code_type_methods;
 typedef esbmct::type_data<array_type2t,
-                          esbmct::type2tc_subtype,
-                          esbmct::expr2tc_array_size,
-                          esbmct::bool_size_is_inf>
+                             esbmct::type2tc_subtype,
+                             esbmct::expr2tc_array_size,
+                             esbmct::bool_size_is_inf>
         array_type_data;
 typedef esbmct::type_methods<array_type2t,
                              esbmct::type2tc_subtype,
                              esbmct::expr2tc_array_size,
                              esbmct::bool_size_is_inf>
         array_type_methods;
-typedef esbmct::type_data<pointer_type2t,
-                          esbmct::type2tc_subtype>
+typedef esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>
         pointer_type_data;
-typedef esbmct::type_methods<pointer_type2t,
-                             esbmct::type2tc_subtype>
+typedef esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>
         pointer_type_methods;
 typedef esbmct::type_data<fixedbv_type2t,
-                          esbmct::uint_width,
-                          esbmct::uint_int_bits>
+                             esbmct::uint_width,
+                             esbmct::uint_int_bits>
         fixedbv_type_data;
 typedef esbmct::type_methods<fixedbv_type2t,
                              esbmct::uint_width,
@@ -839,9 +837,9 @@ template class esbmct::type_methods<empty_type2t>;
 template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<struct_union_type2t,
-                                 esbmct::type2tc_vec_members,
-                                 esbmct::irepidt_vec_member_names,
-                                 esbmct::irepidt_name>;
+                                    esbmct::type2tc_vec_members,
+                                    esbmct::irepidt_vec_member_names,
+                                    esbmct::irepidt_name>;
 template class esbmct::type_methods<struct_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
@@ -851,25 +849,25 @@ template class esbmct::type_methods<union_type2t,
                                     esbmct::irepidt_vec_member_names,
                                     esbmct::irepidt_name>;
 template class esbmct::type_data<unsignedbv_type2t,
-                                 esbmct::uint_width>;
+                                    esbmct::uint_width>;
 template class esbmct::type_methods<unsignedbv_type2t,
                                     esbmct::uint_width>;
 template class esbmct::type_methods<signedbv_type2t,
                                     esbmct::uint_width>;
 template class esbmct::type_data<code_type2t,
-                                 esbmct::type2tc_vec_args,
-                                 esbmct::type2tc_ret_type,
-                                 esbmct::irepidt_vec_arg_names,
-                                 esbmct::bool_ellipsis>;
+                                    esbmct::type2tc_vec_args,
+                                    esbmct::type2tc_ret_type,
+                                    esbmct::irepidt_vec_arg_names,
+                                    esbmct::bool_ellipsis>;
 template class esbmct::type_methods<code_type2t,
                                     esbmct::type2tc_vec_args,
                                     esbmct::type2tc_ret_type,
                                     esbmct::irepidt_vec_arg_names,
                                     esbmct::bool_ellipsis>;
 template class esbmct::type_data<array_type2t,
-                                 esbmct::type2tc_subtype,
-                                 esbmct::expr2tc_array_size,
-                                 esbmct::bool_size_is_inf>;
+                                    esbmct::type2tc_subtype,
+                                    esbmct::expr2tc_array_size,
+                                    esbmct::bool_size_is_inf>;
 template class esbmct::type_methods<array_type2t,
                                     esbmct::type2tc_subtype,
                                     esbmct::expr2tc_array_size,
@@ -877,8 +875,8 @@ template class esbmct::type_methods<array_type2t,
 template class esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>;
 template class esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>;
 template class esbmct::type_data<fixedbv_type2t,
-                                 esbmct::uint_width,
-                                 esbmct::uint_int_bits>;
+                                    esbmct::uint_width,
+                                    esbmct::uint_int_bits>;
 template class esbmct::type_methods<fixedbv_type2t,
                                     esbmct::uint_width,
                                     esbmct::uint_int_bits>;
