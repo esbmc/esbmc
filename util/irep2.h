@@ -752,6 +752,7 @@ class signedbv_type2t;
 class code_type2t;
 class array_type2t;
 class pointer_type2t;
+class fixedbv_type2t;
 
 // Then give them a typedef name
 
@@ -815,6 +816,15 @@ typedef esbmct::type_data<pointer_type2t,
 typedef esbmct::type_methods<pointer_type2t,
                              esbmct::type2tc_subtype>
         pointer_type_methods;
+typedef esbmct::type_data<fixedbv_type2t,
+                          esbmct::uint_width,
+                          esbmct::uint_int_bits>
+        fixedbv_type_data;
+typedef esbmct::type_methods<fixedbv_type2t,
+                             esbmct::uint_width,
+                             esbmct::uint_int_bits>
+        fixedbv_type_methods;
+
 
 
 // And finally an explicit type instanciation.
@@ -863,6 +873,12 @@ template class esbmct::type_methods<array_type2t,
                                     esbmct::bool_size_is_inf>;
 template class esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>;
 template class esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>;
+template class esbmct::type_data<fixedbv_type2t,
+                                 esbmct::uint_width,
+                                 esbmct::uint_int_bits>;
+template class esbmct::type_methods<fixedbv_type2t,
+                                    esbmct::uint_width,
+                                    esbmct::uint_int_bits>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods, public bool_type_data
@@ -1016,18 +1032,13 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class fixedbv_type2t;
-typedef esbmct::type<fixedbv_type2t, esbmct::uint_width, esbmct::uint_int_bits>
-        fixedbv_type_type;
-template class esbmct::type<fixedbv_type2t, esbmct::uint_width,
-        esbmct::uint_int_bits>;
-class fixedbv_type2t : public fixedbv_type_type
+class fixedbv_type2t : public fixedbv_type_data, public fixedbv_type_methods
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer)
-    : fixedbv_type_type (fixedbv_id, width, integer) { }
+    : type2t(fixedbv_id), fixedbv_type_data (width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
-    : fixedbv_type_type (ref) { }
+    : type2t(ref), fixedbv_type_data (ref) { }
   virtual unsigned int get_width(void) const;
 };
 
