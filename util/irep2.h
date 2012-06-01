@@ -748,7 +748,8 @@ class union_type2t;
 
 // Then give them a typedef name
 
-typedef esbmct::type<bool_type2t> bool_type_base;
+typedef esbmct::type_data<bool_type2t> bool_type_data;
+typedef esbmct::type_methods<bool_type2t> bool_type_methods;
 typedef esbmct::type<empty_type2t> empty_type_base;
 //typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
 typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
@@ -760,7 +761,8 @@ typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type<bool_type2t>;
+template class esbmct::type_data<bool_type2t>;
+template class esbmct::type_methods<bool_type2t>;
 template class esbmct::type<empty_type2t>;
 //template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
@@ -771,11 +773,11 @@ template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
                             esbmct::irepidt_name>;
 
 /** Boolean type. No additional data */
-class bool_type2t : public bool_type_base
+class bool_type2t : public bool_type_methods, public bool_type_data
 {
 public:
-  bool_type2t(void) : bool_type_base(bool_id) {}
-  bool_type2t(const bool_type2t &ref) : bool_type_base(ref) {}
+  bool_type2t(void) : type2t (bool_id) {}
+  bool_type2t(const bool_type2t &ref) : type2t (ref), bool_type_data(ref) {}
   virtual unsigned int get_width(void) const;
 };
 
