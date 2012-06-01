@@ -252,6 +252,24 @@ string_type2t::get_width(void) const
   return width * 8;
 }
 
+const std::vector<type2tc> &
+struct_union_type2t::get_structure_members(void) const
+{
+  return members;
+}
+
+const std::vector<irep_idt> &
+struct_union_type2t::get_structure_member_names(void) const
+{
+  return member_names;
+}
+
+const irep_idt &
+struct_union_type2t::get_structure_name(void) const
+{
+  return name;
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

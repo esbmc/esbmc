@@ -743,6 +743,7 @@ namespace esbmct {
 class bool_type2t;
 class empty_type2t;
 class symbol_type2t;
+class struct_union_type2t;
 class struct_type2t;
 class union_type2t;
 
@@ -756,12 +757,21 @@ typedef esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_type_methods;
 typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_type_data;
-typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-                     struct_type_base;
-typedef esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                     esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
-                     union_type_base;
+typedef esbmct::type_data<struct_union_type2t,
+                          esbmct::type2tc_vec_members,
+                          esbmct::irepidt_vec_member_names,
+                          esbmct::irepidt_name>
+        struct_union_type_data;
+typedef esbmct::type_methods<struct_type2t,
+                             esbmct::type2tc_vec_members,
+                             esbmct::irepidt_vec_member_names,
+                             esbmct::irepidt_name>
+        struct_type_methods;
+typedef esbmct::type_methods<union_type2t,
+                             esbmct::type2tc_vec_members,
+                             esbmct::irepidt_vec_member_names,
+                             esbmct::irepidt_name>
+        union_type_methods;
 
 // And finally an explicit type instanciation.
 
@@ -771,13 +781,18 @@ template class esbmct::type_data<empty_type2t>;
 template class esbmct::type_methods<empty_type2t>;
 template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
-
-template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
-                            esbmct::irepidt_vec_member_names,
-                            esbmct::irepidt_name>;
-template class esbmct::type<union_type2t, esbmct::type2tc_vec_members,
-                            esbmct::irepidt_vec_member_names,
-                            esbmct::irepidt_name>;
+template class esbmct::type_data<struct_union_type2t,
+                                 esbmct::type2tc_vec_members,
+                                 esbmct::irepidt_vec_member_names,
+                                 esbmct::irepidt_name>;
+template class esbmct::type_methods<struct_type2t,
+                                    esbmct::type2tc_vec_members,
+                                    esbmct::irepidt_vec_member_names,
+                                    esbmct::irepidt_name>;
+template class esbmct::type_methods<union_type2t,
+                                    esbmct::type2tc_vec_members,
+                                    esbmct::irepidt_vec_member_names,
+                                    esbmct::irepidt_name>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods, public bool_type_data
@@ -809,25 +824,43 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class struct_type2t : public struct_type_base
+class struct_union_type2t : public struct_union_type_data
+{
+public:
+  struct_union_type2t(type2t::type_ids id, std::vector<type2tc> &members,
+                      std::vector<irep_idt> memb_names,
+                      irep_idt name) :
+    type2t(id), struct_union_type_data(members, memb_names, name) {}
+  struct_union_type2t(const struct_union_type2t &ref) :
+    type2t(ref), struct_union_type_data(ref) { }
+  const std::vector<type2tc> & get_structure_members(void) const;
+  const std::vector<irep_idt> & get_structure_member_names(void) const;
+  const irep_idt & get_structure_name(void) const;
+};
+
+class struct_type2t :  public struct_type_methods, public struct_union_type2t
 {
 public:
   struct_type2t(std::vector<type2tc> &members,
                 std::vector<irep_idt> memb_names,
                 irep_idt name)
-    : struct_type_base (struct_id, members, memb_names, name) {}
-  struct_type2t(const struct_type2t &ref) : struct_type_base (ref) {}
+    : type2t(struct_id),
+      struct_union_type2t (struct_id, members, memb_names, name) {}
+  struct_type2t(const struct_type2t &ref)
+    : type2t(ref), struct_union_type2t (ref) {}
   virtual unsigned int get_width(void) const;
 };
 
-class union_type2t : public union_type_base
+class union_type2t : public union_type_methods, public struct_union_type2t
 {
 public:
   union_type2t(std::vector<type2tc> &members,
                std::vector<irep_idt> memb_names,
                irep_idt name)
-    : union_type_base (union_id, members, memb_names, name) {}
-  union_type2t(const union_type2t &ref) : union_type_base (ref) {}
+    : type2t(union_id),
+      struct_union_type2t (union_id, members, memb_names, name) {}
+  union_type2t(const union_type2t &ref)
+    : type2t(ref), struct_union_type2t (ref) {}
   virtual unsigned int get_width(void) const;
 };
 
@@ -2359,42 +2392,6 @@ inline bool is_constant_expr(const expr2tc &t)
 inline bool is_structure_type(const type2tc &t)
 {
   return t->type_id == type2t::struct_id || t->type_id == type2t::union_id;
-}
-
-inline const std::vector<type2tc> &get_structure_members(const type2tc &someval)
-{
-  if (is_struct_type(someval)) {
-    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
-    return v.members;
-  } else {
-    assert(is_union_type(someval));
-    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
-    return v.members;
-  }
-}
-
-inline const std::vector<irep_idt> &get_structure_member_names(const type2tc &someval)
-{
-  if (is_struct_type(someval)) {
-    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
-    return v.member_names;
-  } else {
-    assert(is_union_type(someval));
-    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
-    return v.member_names;
-  }
-}
-
-inline const irep_idt &get_structure_name(const type2tc &someval)
-{
-  if (is_struct_type(someval)) {
-    const struct_type2t &v = static_cast<const struct_type2t &>(*someval.get());
-    return v.name;
-  } else {
-    assert(is_union_type(someval));
-    const union_type2t &v = static_cast<const union_type2t &>(*someval.get());
-    return v.name;
-  }
 }
 
 inline bool is_nil_expr(const expr2tc &exp)
