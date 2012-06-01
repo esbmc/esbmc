@@ -752,7 +752,10 @@ typedef esbmct::type_data<bool_type2t> bool_type_data;
 typedef esbmct::type_methods<bool_type2t> bool_type_methods;
 typedef esbmct::type_data<empty_type2t> empty_type_data;
 typedef esbmct::type_methods<empty_type2t> empty_type_methods;
-//typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
+typedef esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
+        symbol_type_methods;
+typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
+        symbol_type_data;
 typedef esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                      esbmct::irepidt_vec_member_names, esbmct::irepidt_name>
                      struct_type_base;
@@ -766,7 +769,9 @@ template class esbmct::type_data<bool_type2t>;
 template class esbmct::type_methods<bool_type2t>;
 template class esbmct::type_data<empty_type2t>;
 template class esbmct::type_methods<empty_type2t>;
-//template class esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name>;
+template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
+template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
+
 template class esbmct::type<struct_type2t, esbmct::type2tc_vec_members,
                             esbmct::irepidt_vec_member_names,
                             esbmct::irepidt_name>;
@@ -794,23 +799,15 @@ public:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-typedef esbmct::type<symbol_type2t, esbmct::irepidt_symbol_name> sym_type_base;
-class symbol_type2t :
-  public esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>,
-  public esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
+class symbol_type2t : public symbol_type_methods, public symbol_type_data
 {
 public:
   symbol_type2t(const dstring sym_name) :
-    type2t (symbol_id),
-    esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name> (sym_name) {}
+    type2t (symbol_id), symbol_type_data(sym_name) {}
   symbol_type2t(const symbol_type2t &ref) :
-    type2t (ref),
-    esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
-    (ref) { }
+    type2t (ref), symbol_type_data(ref) { }
   virtual unsigned int get_width(void) const;
 };
-template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
-template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 
 class struct_type2t : public struct_type_base
 {
