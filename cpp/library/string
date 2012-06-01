@@ -187,6 +187,7 @@ namespace std
 		string& erase ( size_t pos = 0 );
 		string& erase ( size_t pos = 0, size_t n );
 		string& erase ( size_t pos = 0, size_t n , char* tmp );
+		string& erase ( size_t pos = 0);
 		string& replace ( size_t pos1, size_t n1,   const string& s );
 		string& replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 );
 		string& replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
@@ -1011,19 +1012,18 @@ namespace std
 		size_t i, j;
 
 		for (i = len; i > lim; i--) {
-			return this->find(s2,i);
-//			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-//				if (s1[i+j] != s2[j]) {
-//					break;
-//				}else{
-//					//if(pos == -1){
-//						pos = i-j;
-//					//}
-//				}
-//			}
-//			if ((s2[j] == '\0')) {
-//				return pos;
-//			}
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i-j;
+					}
+				}
+			}
+			if ((s2[j] == '\0')) {
+				return pos;
+			}
 		}
 
 		return -1;
@@ -1294,6 +1294,35 @@ namespace std
 		this->str[i] = '\0';
 		return *this;
 	}
+
+    string& string::erase ( size_t pos = 0)
+    {
+        __ESBMC_HIDE:
+    int n = this->length()-1;
+        __ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+        int i,k,len  = this->length();
+        int lenOne = pos +1;
+        char* one = new char[lenOne];
+        for(i=0;i<pos;i++){
+            one[i] = this->str[i];
+        }
+        int lenTwo = (len-(pos+n))+1;
+        char* two = new char[lenTwo];
+        for(k=0,i=pos+n;i<len;i++,k++){
+            two[k] = this->str[i];
+        }
+        int totalLen =len-n;
+        this->str = new char[totalLen+1];
+        this->_size = totalLen;
+        for(i=0;i<lenOne-1;i++){
+            this->str[i] = one[i];
+        }
+        for(k=0;k<lenTwo-1;k++,i++){
+            this->str[i] = two[k];
+        }
+        this->str[i] = '\0';
+        return *this;
+    }
 
 	string& string::replace ( size_t pos1, size_t n1, const string& s )
 	{
