@@ -751,6 +751,7 @@ class unsignedbv_type2t;
 class signedbv_type2t;
 class code_type2t;
 class array_type2t;
+class pointer_type2t;
 
 // Then give them a typedef name
 
@@ -808,6 +809,12 @@ typedef esbmct::type_methods<array_type2t,
                              esbmct::expr2tc_array_size,
                              esbmct::bool_size_is_inf>
         array_type_methods;
+typedef esbmct::type_data<pointer_type2t,
+                          esbmct::type2tc_subtype>
+        pointer_type_data;
+typedef esbmct::type_methods<pointer_type2t,
+                             esbmct::type2tc_subtype>
+        pointer_type_methods;
 
 
 // And finally an explicit type instanciation.
@@ -854,6 +861,8 @@ template class esbmct::type_methods<array_type2t,
                                     esbmct::type2tc_subtype,
                                     esbmct::expr2tc_array_size,
                                     esbmct::bool_size_is_inf>;
+template class esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>;
+template class esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods, public bool_type_data
@@ -997,16 +1006,13 @@ public:
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t;
-typedef esbmct::type<pointer_type2t, esbmct::type2tc_subtype> pointer_type_type;
-template class esbmct::type<pointer_type2t, esbmct::type2tc_subtype>;
-class pointer_type2t : public pointer_type_type
+class pointer_type2t : public pointer_type_data, public pointer_type_methods
 {
 public:
   pointer_type2t(const type2tc subtype)
-    : pointer_type_type (pointer_id, subtype) {}
+    : type2t(pointer_id), pointer_type_data (subtype) {}
   pointer_type2t(const pointer_type2t &ref)
-    : pointer_type_type (ref) {}
+    : type2t(ref), pointer_type_data (ref) {}
   virtual unsigned int get_width(void) const;
 };
 
