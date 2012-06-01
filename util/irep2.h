@@ -818,6 +818,12 @@ template class esbmct::type_methods<union_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
                                     esbmct::irepidt_name>;
+template class esbmct::type_data<unsignedbv_type2t,
+                                 esbmct::uint_width>;
+template class esbmct::type_methods<unsignedbv_type2t,
+                                    esbmct::uint_width>;
+template class esbmct::type_methods<signedbv_type2t,
+                                    esbmct::uint_width>;
 template class esbmct::type_data<code_type2t,
                                  esbmct::type2tc_vec_args,
                                  esbmct::type2tc_ret_type,
