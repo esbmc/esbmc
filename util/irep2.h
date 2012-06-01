@@ -746,6 +746,9 @@ class symbol_type2t;
 class struct_union_type2t;
 class struct_type2t;
 class union_type2t;
+class bv_type2t;
+class unsignedbv_type2t;
+class signedbv_type2t;
 
 // Then give them a typedef name
 
@@ -772,6 +775,15 @@ typedef esbmct::type_methods<union_type2t,
                              esbmct::irepidt_vec_member_names,
                              esbmct::irepidt_name>
         union_type_methods;
+typedef esbmct::type_data<unsignedbv_type2t,
+                          esbmct::uint_width>
+        bv_type_data;
+typedef esbmct::type_methods<unsignedbv_type2t,
+                             esbmct::uint_width>
+        unsignedbv_type_methods;
+typedef esbmct::type_methods<signedbv_type2t,
+                             esbmct::uint_width>
+        signedbv_type_methods;
 
 // And finally an explicit type instanciation.
 
@@ -864,30 +876,32 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class unsignedbv_type2t;
-typedef esbmct::type<unsignedbv_type2t, esbmct::uint_width> unsigned_type_type;
-template class esbmct::type<unsignedbv_type2t, esbmct::uint_width>;
-class unsignedbv_type2t : public unsigned_type_type
+class bv_type2t : public bv_type_data
 {
 public:
-  unsignedbv_type2t(unsigned int width)
-    : unsigned_type_type (unsignedbv_id, width) { }
-  unsignedbv_type2t(const unsignedbv_type2t &ref)
-    : unsigned_type_type (ref) { }
+  bv_type2t(type2t::type_ids id, unsigned int w)
+    : type2t(id), bv_type_data(w) {}
+  bv_type2t(const bv_type2t &ref)
+    : type2t(ref), bv_type_data(ref) { }
   virtual unsigned int get_width(void) const;
 };
 
-class signedbv_type2t;
-typedef esbmct::type<signedbv_type2t, esbmct::uint_width> signed_type_type;
-template class esbmct::type<signedbv_type2t, esbmct::uint_width>;
-class signedbv_type2t : public signed_type_type
+class unsignedbv_type2t : public bv_type2t, public unsignedbv_type_methods
+{
+public:
+  unsignedbv_type2t(unsigned int width)
+    : type2t(unsignedbv_id), bv_type2t(unsignedbv_id, width) { }
+  unsignedbv_type2t(const unsignedbv_type2t &ref)
+    : type2t(ref), bv_type2t (ref) { }
+};
+
+class signedbv_type2t : public bv_type2t, public signedbv_type_methods
 {
 public:
   signedbv_type2t(signed int width)
-    : signed_type_type (signedbv_id, width) { }
+    : type2t(signedbv_id), bv_type2t (signedbv_id, width) { }
   signedbv_type2t(const signedbv_type2t &ref)
-    : signed_type_type (ref) { }
-  virtual unsigned int get_width(void) const;
+    : type2t(ref), bv_type2t (ref) { }
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */

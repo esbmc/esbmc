@@ -158,13 +158,7 @@ bool_type2t::get_width(void) const
 }
 
 unsigned int
-unsignedbv_type2t::get_width(void) const
-{
-  return width;
-}
-
-unsigned int
-signedbv_type2t::get_width(void) const
+bv_type2t::get_width(void) const
 {
   return width;
 }
