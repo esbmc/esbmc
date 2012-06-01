@@ -143,7 +143,7 @@ mp_integer pointer_offset_size(const type2t &type)
 {
   if(type.type_id == type2t::array_id)
   {
-    const array_type2t &ref = static_cast<const array_type2t&>(type);
+    const array_type2t &ref = dynamic_cast<const array_type2t&>(type);
     mp_integer sub=pointer_offset_size(*ref.subtype.get());
 
     // get size

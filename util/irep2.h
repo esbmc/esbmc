@@ -750,6 +750,7 @@ class bv_type2t;
 class unsignedbv_type2t;
 class signedbv_type2t;
 class code_type2t;
+class array_type2t;
 
 // Then give them a typedef name
 
@@ -797,6 +798,17 @@ typedef esbmct::type_methods<code_type2t,
                              esbmct::irepidt_vec_arg_names,
                              esbmct::bool_ellipsis>
         code_type_methods;
+typedef esbmct::type_data<array_type2t,
+                          esbmct::type2tc_subtype,
+                          esbmct::expr2tc_array_size,
+                          esbmct::bool_size_is_inf>
+        array_type_data;
+typedef esbmct::type_methods<array_type2t,
+                             esbmct::type2tc_subtype,
+                             esbmct::expr2tc_array_size,
+                             esbmct::bool_size_is_inf>
+        array_type_methods;
+
 
 // And finally an explicit type instanciation.
 
@@ -834,6 +846,14 @@ template class esbmct::type_methods<code_type2t,
                                     esbmct::type2tc_ret_type,
                                     esbmct::irepidt_vec_arg_names,
                                     esbmct::bool_ellipsis>;
+template class esbmct::type_data<array_type2t,
+                                 esbmct::type2tc_subtype,
+                                 esbmct::expr2tc_array_size,
+                                 esbmct::bool_size_is_inf>;
+template class esbmct::type_methods<array_type2t,
+                                    esbmct::type2tc_subtype,
+                                    esbmct::expr2tc_array_size,
+                                    esbmct::bool_size_is_inf>;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods, public bool_type_data
@@ -951,19 +971,14 @@ public:
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t;
-typedef esbmct::type<array_type2t, esbmct::type2tc_subtype,
-                     esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>
-                     array_type_type;
-template class esbmct::type<array_type2t, esbmct::type2tc_subtype,
-                     esbmct::expr2tc_array_size, esbmct::bool_size_is_inf>;
-class array_type2t : public array_type_type
+class array_type2t : public array_type_data, public array_type_methods
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
-    : array_type_type (array_id, subtype, size, inf) { }
+    : type2t(array_id), array_type_data (subtype, size, inf) { }
   array_type2t(const array_type2t &ref)
-    : array_type_type (ref) { }
+    : type2t(ref), array_type_data (ref) { }
+
   virtual unsigned int get_width(void) const;
 
   // Exception for invalid manipulations of an infinitely sized array. No actual

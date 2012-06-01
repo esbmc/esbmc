@@ -136,8 +136,8 @@ expr2tc pointer_logict::object_rec(
 
   if(src->type->type_id == type2t::array_id)
   {
-    const array_type2t &arrtype = static_cast<const array_type2t&>
-                                             (*src->type.get());
+    const array_type2t &arrtype = dynamic_cast<const array_type2t&>
+                                              (*src->type.get());
     mp_integer size=pointer_offset_size(*arrtype.subtype.get());
 
     if (size == 0)
