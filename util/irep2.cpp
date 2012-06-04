@@ -1443,7 +1443,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::list_operands
 
 template <class derived, class field1, class field2, class field3, class field4>
 void
-esbmct::type_methods<derived, field1, field2, field3, field4>
+esbmct::old_type_methods<derived, field1, field2, field3, field4>
       ::convert_smt_type(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1453,7 +1453,7 @@ esbmct::type_methods<derived, field1, field2, field3, field4>
 
 template <class derived, class field1, class field2, class field3, class field4>
 type2tc
-esbmct::type_methods<derived, field1, field2, field3, field4>::clone(void) const
+esbmct::old_type_methods<derived, field1, field2, field3, field4>::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -1462,7 +1462,7 @@ esbmct::type_methods<derived, field1, field2, field3, field4>::clone(void) const
 
 template <class derived, class field1, class field2, class field3, class field4>
 list_of_memberst
-esbmct::type_methods<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
+esbmct::old_type_methods<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
@@ -1475,7 +1475,7 @@ esbmct::type_methods<derived, field1, field2, field3, field4>::tostring(unsigned
 
 template <class derived, class field1, class field2, class field3, class field4>
 bool
-esbmct::type_methods<derived, field1, field2, field3, field4>::cmp(const type2t &ref) const
+esbmct::old_type_methods<derived, field1, field2, field3, field4>::cmp(const type2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived &ref2 = dynamic_cast<const derived &>(ref);
@@ -1501,7 +1501,7 @@ esbmct::type_methods<derived, field1, field2, field3, field4>::cmp(const type2t 
 
 template <class derived, class field1, class field2, class field3, class field4>
 int
-esbmct::type_methods<derived, field1, field2, field3, field4>::lt(const type2t &ref)const
+esbmct::old_type_methods<derived, field1, field2, field3, field4>::lt(const type2t &ref)const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1530,7 +1530,7 @@ esbmct::type_methods<derived, field1, field2, field3, field4>::lt(const type2t &
 
 template <class derived, class field1, class field2, class field3, class field4>
 void
-esbmct::type_methods<derived, field1, field2, field3, field4>::do_crc
+esbmct::old_type_methods<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
 {
 

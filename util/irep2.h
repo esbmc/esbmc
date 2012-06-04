@@ -679,10 +679,10 @@ namespace esbmct {
             class field2 = esbmct::blank_value<esbmct::name_empty_2>,
             class field3 = esbmct::blank_value<esbmct::name_empty_3>,
             class field4 = esbmct::blank_value<esbmct::name_empty_4> >
-  class type_methods : virtual public type2t
+  class old_type_methods : virtual public type2t
   {
   public:
-    type_methods() : type2t(type2t::end_type_id) { }
+    old_type_methods() : type2t(type2t::end_type_id) { }
     virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
@@ -716,11 +716,11 @@ class string_type2t;
 // Then give them a typedef name
 
 typedef esbmct::type_data<bool_type2t> bool_type_data;
-typedef esbmct::type_methods<bool_type2t> bool_type_methods;
+typedef esbmct::old_type_methods<bool_type2t> bool_old_type_methods;
 typedef esbmct::type_data<empty_type2t> empty_type_data;
-typedef esbmct::type_methods<empty_type2t> empty_type_methods;
-typedef esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
-        symbol_type_methods;
+typedef esbmct::old_type_methods<empty_type2t> empty_old_type_methods;
+typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
+        symbol_old_type_methods;
 typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_type_data;
 typedef esbmct::type_data<struct_union_type2t,
@@ -728,96 +728,96 @@ typedef esbmct::type_data<struct_union_type2t,
                             esbmct::irepidt_vec_member_names,
                             esbmct::irepidt_name>
         struct_union_type_data;
-typedef esbmct::type_methods<struct_type2t,
+typedef esbmct::old_type_methods<struct_type2t,
                              esbmct::type2tc_vec_members,
                              esbmct::irepidt_vec_member_names,
                              esbmct::irepidt_name>
-        struct_type_methods;
-typedef esbmct::type_methods<union_type2t,
+        struct_old_type_methods;
+typedef esbmct::old_type_methods<union_type2t,
                              esbmct::type2tc_vec_members,
                              esbmct::irepidt_vec_member_names,
                              esbmct::irepidt_name>
-        union_type_methods;
+        union_old_type_methods;
 typedef esbmct::type_data<unsignedbv_type2t,
                              esbmct::uint_width>
         bv_type_data;
-typedef esbmct::type_methods<unsignedbv_type2t,
+typedef esbmct::old_type_methods<unsignedbv_type2t,
                              esbmct::uint_width>
-        unsignedbv_type_methods;
-typedef esbmct::type_methods<signedbv_type2t,
+        unsignedbv_old_type_methods;
+typedef esbmct::old_type_methods<signedbv_type2t,
                              esbmct::uint_width>
-        signedbv_type_methods;
+        signedbv_old_type_methods;
 typedef esbmct::type_data<code_type2t,
                              esbmct::type2tc_vec_args,
                              esbmct::type2tc_ret_type,
                              esbmct::irepidt_vec_arg_names,
                              esbmct::bool_ellipsis>
         code_type_data;
-typedef esbmct::type_methods<code_type2t,
+typedef esbmct::old_type_methods<code_type2t,
                              esbmct::type2tc_vec_args,
                              esbmct::type2tc_ret_type,
                              esbmct::irepidt_vec_arg_names,
                              esbmct::bool_ellipsis>
-        code_type_methods;
+        code_old_type_methods;
 typedef esbmct::type_data<array_type2t,
                              esbmct::type2tc_subtype,
                              esbmct::expr2tc_array_size,
                              esbmct::bool_size_is_inf>
         array_type_data;
-typedef esbmct::type_methods<array_type2t,
+typedef esbmct::old_type_methods<array_type2t,
                              esbmct::type2tc_subtype,
                              esbmct::expr2tc_array_size,
                              esbmct::bool_size_is_inf>
-        array_type_methods;
+        array_old_type_methods;
 typedef esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>
         pointer_type_data;
-typedef esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>
-        pointer_type_methods;
+typedef esbmct::old_type_methods<pointer_type2t, esbmct::type2tc_subtype>
+        pointer_old_type_methods;
 typedef esbmct::type_data<fixedbv_type2t,
                              esbmct::uint_width,
                              esbmct::uint_int_bits>
         fixedbv_type_data;
-typedef esbmct::type_methods<fixedbv_type2t,
+typedef esbmct::old_type_methods<fixedbv_type2t,
                              esbmct::uint_width,
                              esbmct::uint_int_bits>
-        fixedbv_type_methods;
+        fixedbv_old_type_methods;
 typedef esbmct::type_data<string_type2t, esbmct::uint_width> string_type_data;
-typedef esbmct::type_methods<string_type2t, esbmct::uint_width>
-        string_type_methods;
+typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
+        string_old_type_methods;
 
 
 // And finally an explicit type instanciation.
 
 template class esbmct::type_data<bool_type2t>;
-template class esbmct::type_methods<bool_type2t>;
+template class esbmct::old_type_methods<bool_type2t>;
 template class esbmct::type_data<empty_type2t>;
-template class esbmct::type_methods<empty_type2t>;
-template class esbmct::type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
+template class esbmct::old_type_methods<empty_type2t>;
+template class esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<struct_union_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
                                     esbmct::irepidt_name>;
-template class esbmct::type_methods<struct_type2t,
+template class esbmct::old_type_methods<struct_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
                                     esbmct::irepidt_name>;
-template class esbmct::type_methods<union_type2t,
+template class esbmct::old_type_methods<union_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
                                     esbmct::irepidt_name>;
 template class esbmct::type_data<unsignedbv_type2t,
                                     esbmct::uint_width>;
-template class esbmct::type_methods<unsignedbv_type2t,
+template class esbmct::old_type_methods<unsignedbv_type2t,
                                     esbmct::uint_width>;
-template class esbmct::type_methods<signedbv_type2t,
+template class esbmct::old_type_methods<signedbv_type2t,
                                     esbmct::uint_width>;
 template class esbmct::type_data<code_type2t,
                                     esbmct::type2tc_vec_args,
                                     esbmct::type2tc_ret_type,
                                     esbmct::irepidt_vec_arg_names,
                                     esbmct::bool_ellipsis>;
-template class esbmct::type_methods<code_type2t,
+template class esbmct::old_type_methods<code_type2t,
                                     esbmct::type2tc_vec_args,
                                     esbmct::type2tc_ret_type,
                                     esbmct::irepidt_vec_arg_names,
@@ -826,23 +826,23 @@ template class esbmct::type_data<array_type2t,
                                     esbmct::type2tc_subtype,
                                     esbmct::expr2tc_array_size,
                                     esbmct::bool_size_is_inf>;
-template class esbmct::type_methods<array_type2t,
+template class esbmct::old_type_methods<array_type2t,
                                     esbmct::type2tc_subtype,
                                     esbmct::expr2tc_array_size,
                                     esbmct::bool_size_is_inf>;
 template class esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>;
-template class esbmct::type_methods<pointer_type2t, esbmct::type2tc_subtype>;
+template class esbmct::old_type_methods<pointer_type2t, esbmct::type2tc_subtype>;
 template class esbmct::type_data<fixedbv_type2t,
                                     esbmct::uint_width,
                                     esbmct::uint_int_bits>;
-template class esbmct::type_methods<fixedbv_type2t,
+template class esbmct::old_type_methods<fixedbv_type2t,
                                     esbmct::uint_width,
                                     esbmct::uint_int_bits>;
 template class esbmct::type_data<string_type2t, esbmct::uint_width>;
-template class esbmct::type_methods<string_type2t, esbmct::uint_width>;
+template class esbmct::old_type_methods<string_type2t, esbmct::uint_width>;
 
 /** Boolean type. No additional data */
-class bool_type2t : public bool_type_methods, public bool_type_data
+class bool_type2t : public bool_old_type_methods, public bool_type_data
 {
 public:
   bool_type2t(void) : type2t (bool_id) {}
@@ -851,7 +851,7 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public empty_type_methods, public empty_type_data
+class empty_type2t : public empty_old_type_methods, public empty_type_data
 {
 public:
   empty_type2t(void) : type2t(empty_id) {}
@@ -861,7 +861,7 @@ public:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public symbol_type_methods, public symbol_type_data
+class symbol_type2t : public symbol_old_type_methods, public symbol_type_data
 {
 public:
   symbol_type2t(const dstring sym_name) :
@@ -885,7 +885,7 @@ public:
   const irep_idt & get_structure_name(void) const;
 };
 
-class struct_type2t :  public struct_type_methods, public struct_union_type2t
+class struct_type2t :  public struct_old_type_methods, public struct_union_type2t
 {
 public:
   struct_type2t(std::vector<type2tc> &members,
@@ -898,7 +898,7 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class union_type2t : public union_type_methods, public struct_union_type2t
+class union_type2t : public union_old_type_methods, public struct_union_type2t
 {
 public:
   union_type2t(std::vector<type2tc> &members,
@@ -921,7 +921,7 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class unsignedbv_type2t : public bv_type2t, public unsignedbv_type_methods
+class unsignedbv_type2t : public bv_type2t, public unsignedbv_old_type_methods
 {
 public:
   unsignedbv_type2t(unsigned int width)
@@ -930,7 +930,7 @@ public:
     : type2t(ref), bv_type2t (ref) { }
 };
 
-class signedbv_type2t : public bv_type2t, public signedbv_type_methods
+class signedbv_type2t : public bv_type2t, public signedbv_old_type_methods
 {
 public:
   signedbv_type2t(signed int width)
@@ -940,7 +940,7 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class code_type2t : public code_type_data, public code_type_methods
+class code_type2t : public code_type_data, public code_old_type_methods
 {
 public:
   code_type2t(const std::vector<type2tc> &args, const type2tc &ret_type,
@@ -957,7 +957,7 @@ public:
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : public array_type_data, public array_type_methods
+class array_type2t : public array_type_data, public array_old_type_methods
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
@@ -983,7 +983,7 @@ public:
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : public pointer_type_data, public pointer_type_methods
+class pointer_type2t : public pointer_type_data, public pointer_old_type_methods
 {
 public:
   pointer_type2t(const type2tc subtype)
@@ -993,7 +993,7 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class fixedbv_type2t : public fixedbv_type_data, public fixedbv_type_methods
+class fixedbv_type2t : public fixedbv_type_data, public fixedbv_old_type_methods
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer)
@@ -1003,7 +1003,7 @@ public:
   virtual unsigned int get_width(void) const;
 };
 
-class string_type2t : public string_type_data, public string_type_methods
+class string_type2t : public string_type_data, public string_old_type_methods
 {
 public:
   string_type2t(unsigned int elements)
