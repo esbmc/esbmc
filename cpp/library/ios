@@ -209,7 +209,7 @@ struct ios: ios_base{
   ios() : ios_base() {}
 
   mutable char  __fill;
-  std::streambuf*    __streambuf;
+  streambuf*    __streambuf;
 
 public:
   bool operator ! ( ) const;
