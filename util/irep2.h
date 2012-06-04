@@ -645,60 +645,6 @@ namespace esbmct {
             class field2 = esbmct::blank_value<esbmct::name_empty_2>,
             class field3 = esbmct::blank_value<esbmct::name_empty_3>,
             class field4 = esbmct::blank_value<esbmct::name_empty_4> >
-  class expr_data :
-    virtual public expr2t,
-    public field1::fieldtype,
-    public field2::fieldtype,
-    public field3::fieldtype,
-    public field4::fieldtype
-  {
-  public:
-
-    expr_data(const type2tc type, expr_ids id,
-        typename field1::type arg1 = field1::defaultval,
-        typename field2::type arg2 = field2::defaultval,
-        typename field3::type arg3 = field3::defaultval,
-        typename field4::type arg4 = field4::defaultval)
-      : expr2t(type, id),
-        field1::fieldtype(arg1),
-        field2::fieldtype(arg2),
-        field3::fieldtype(arg3),
-        field4::fieldtype(arg4)
-    {};
-
-    expr_data(const expr_data &ref)
-      : expr2t(ref),
-        field1::fieldtype(ref),
-        field2::fieldtype(ref),
-        field3::fieldtype(ref),
-        field4::fieldtype(ref)
-    {}
-  };
-
-  template <class derived,
-            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
-            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
-            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
-            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
-  class expr_methods : virtual public expr2t
-  {
-    virtual void convert_smt(prop_convt &obj, void *&arg) const;
-    virtual expr2tc clone(void) const;
-    virtual list_of_memberst tostring(unsigned int indent) const;
-    virtual bool cmp(const expr2t &ref) const;
-    virtual int lt(const expr2t &ref) const;
-    virtual void do_crc(boost::crc_32_type &crc) const;
-    virtual void list_operands(std::list<const expr2tc*> &inp) const;
-  protected:
-    virtual void list_operands(std::list<expr2tc*> &inp);
-    virtual expr2t *clone_raw(void) const;
-  };
-
-  template <class derived,
-            class field1 = esbmct::blank_value<esbmct::name_empty_1>,
-            class field2 = esbmct::blank_value<esbmct::name_empty_2>,
-            class field3 = esbmct::blank_value<esbmct::name_empty_3>,
-            class field4 = esbmct::blank_value<esbmct::name_empty_4> >
   class type_data :
     virtual public type2t,
     public field1::fieldtype,
