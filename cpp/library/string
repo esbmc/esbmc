@@ -120,35 +120,6 @@ namespace std
 		int compare ( int pos1, size_t n1, string& s ) const;
 		int compare ( int pos1, size_t n1, const char* s ) const;
 		int compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const;
-		string& substr ( size_t pos, size_t n )
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
-			int i,k;
-			int lenOne = n+1;
-			char* one = new char[lenOne];
-			for(k=0,i=pos;i<(pos+n);k++,i++){
-				one[k] = this->str[i];
-			}
-			one[k]='\0';
-			string tmp(one);
-			return tmp;
-		}
-		string& substr ( size_t pos ) const
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert(pos < this->length(), "overflow");
-			int i,k;
-			int len = this->length();
-			int lenOne = len+1;
-			char* one = new char[lenOne];
-			for(k=0,i=pos;i<len;k++,i++){
-				one[k] = this->str[i];
-			}
-			one[k]='\0';
-			string tmp(one);
-			return tmp;
-		}
 		size_t find_first_of ( const string& s, size_t pos = 0 ) const;
 		size_t find_first_of ( const char* s, size_t pos = 0 ) const;
 		size_t find_first_of ( char c, size_t pos = 0 ) const;
@@ -205,6 +176,37 @@ namespace std
 		    void insert ( iterator p, InputIterator first, InputIterator last );
 		size_t copy ( char* s, size_t n, size_t pos = 0) const;
 		const char* data() const;
+
+		string& substr ( size_t pos, size_t n )
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+			int i,k;
+			int lenOne = n+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<(pos+n);k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
+
+		string& substr ( size_t pos ) const
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert(pos < this->length(), "overflow");
+			int i,k;
+			int len = this->length();
+			int lenOne = len+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<len;k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
 
 	    const_iterator begin() const{
 	    	const_iterator first(this->str);
@@ -1518,6 +1520,165 @@ namespace std
 			}
 		}
 	}
+
+	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s.str[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
+			}
+		}
+	}
+
+	size_t string::find_first_of ( char c, size_t pos = 0 ) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		for(i=0;i<len;i++){
+			if(s1[i] == c){
+				return i;
+			}
+		}
+
+	}
+
+	size_t string::find_first_not_of ( const string& s, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s.str[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			number = 0;
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					number++;
+				}
+			}
+			if(number == 0){
+				return i;
+			}
+		}
+	}
+
+	size_t string::find_first_not_of ( const char* s, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			number = 0;
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					number++;
+				}
+			}
+			if(number == 0){
+				return i;
+			}
+		}
+	}
+
+	size_t string::find_first_not_of ( char c, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		number = 0;
+
+		for(i=0;i<len;i++){
+			if(s1[i] == c){
+				number++;
+			}
+		}
+		if(number == 0){
+			return i;
+		}
+	}
+
+//	size_t string::find_last_of ( const string& s, size_t pos = npos ) const
+//	{
+//		return strspn_reverse(s.c_str(), str+pos);
+//	}
+
+	size_t string::find_last_of ( const char* s, size_t pos = npos ) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=len;i>0;i--){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
+			}
+		}
+	}
+
+//	size_t string::find_last_of ( char c, size_t pos = npos ) const
+//	{
+//		return strspn_reverse((const char *)c, str+pos);
+//	}
 #if 0
 
 
@@ -1539,86 +1700,12 @@ namespace std
 
 
 
-	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
-	{
-		return strcspn(s.c_str(), str+pos);
-	}
-
-	size_t string::find_first_of ( char c, size_t pos = 0 ) const
-	{
-		__ESBMC_HIDE:
-		char *aux;
-		aux = strchr(str+pos, c);
-		if(aux!=0)
-			return 1;
-		return 0;
-	}
 
 
 
-	size_t string::find_last_of ( const string& s, size_t pos = npos ) const
-	{
-		return strspn_reverse(s.c_str(), str+pos);
-	}
-	size_t string::find_last_of ( const char* s, size_t pos = npos ) const
-	{
-		return strspn_reverse(str, s+pos);
-	}
-	size_t string::find_last_of ( char c, size_t pos = npos ) const
-	{
-		return strspn_reverse((const char *)c, str+pos);
-	}
-	size_t string::find_first_not_of ( const string& s, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int i=0,j=0;
-		const char* tmp = this->c_str();
-		const char* tmp2 = s.c_str();
-		while(tmp2[i]!='\0')
-		{
-			while(tmp[j]!='\0')
-			{
-				if (tmp[j] != tmp2[i])
-					return j;
-				j++;
-			}
-			i++;
-		}
-		j--;
-		return j;
-	}
-	size_t string::find_first_not_of ( const char* s, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int i=0,j=0;
-		const char* tmp = this->c_str();
-		while(s[i]!='\0')
-		{
-			while(tmp[j]!='\0')
-			{
-				if (tmp[j] != s[i])
-					return j;
-				j++;
-			}
-			i++;
-		}
-		j--;
-		return j;
-	}
-	size_t string::find_first_not_of ( char c, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int j=0;
-		const char* tmp = this->c_str();
-		while(tmp[j]!='\0')
-		{
-			if (tmp[j] != c)
-				return j;
-			j++;
-		}
-		j--;
-		return j;
-	}
+
+
+
 
 #endif
 }
