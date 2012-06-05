@@ -375,7 +375,7 @@ void goto_convertt::convert_catch(
   const codet &code,
   goto_programt &dest)
 {
-//  assert(code.operands().size()>=2);
+  assert(code.operands().size()>=2);
 
   // add the CATCH-push instruction to 'dest'
   goto_programt::targett catch_push_instruction=dest.add_instruction();
