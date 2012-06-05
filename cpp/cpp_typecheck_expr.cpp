@@ -932,7 +932,7 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
     // There is an expr-vs-type ambiguity, as it is possible to write
     // (f)(1), where 'f' is a function symbol and not a type.
 
-    if(expr.type().id()=="cpp_name")
+    if(expr.type().id()=="cpp-name")
     {
       // try to resolve as type
       cpp_typecheck_fargst fargs;
