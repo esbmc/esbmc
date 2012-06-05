@@ -674,6 +674,28 @@ namespace esbmct {
     {}
   };
 
+  class blank_method_operand {
+  };
+
+  template <class derived,
+            class field1_type, field1_type derived::*field1_ptr,
+            class field2_type, field2_type derived::*field2_ptr,
+            class field3_type, field3_type derived::*field3_ptr,
+            class field4_type, field4_type derived::*field4_ptr>
+  class type_methods : virtual public type2t
+  {
+  public:
+    type_methods() : type2t(type2t::end_type_id) { }
+#if 0
+    virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+    virtual type2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const type2t &ref) const;
+    virtual int lt(const type2t &ref) const;
+    virtual void do_crc(boost::crc_32_type &crc) const;
+#endif
+  };
+
   template <class derived,
             class field1 = esbmct::blank_value<esbmct::name_empty_1>,
             class field2 = esbmct::blank_value<esbmct::name_empty_2>,
