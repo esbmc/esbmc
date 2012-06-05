@@ -686,14 +686,12 @@ namespace esbmct {
   {
   public:
     type_methods() : type2t(type2t::end_type_id) { }
-#if 0
     virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(boost::crc_32_type &crc) const;
-#endif
   };
 
   template <class derived,
