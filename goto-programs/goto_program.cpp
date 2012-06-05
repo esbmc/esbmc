@@ -51,7 +51,7 @@ std::ostream& goto_programt::output_instruction(
         l_it!=it->local_variables.end();
         l_it++)
       out << " " << *l_it;
-    
+
     out << std::endl;
   }
 
@@ -65,7 +65,7 @@ std::ostream& goto_programt::output_instruction(
     {
       out << " " << *l_it;
     }
-    
+
     out << std::endl;
   }
 
@@ -79,7 +79,7 @@ std::ostream& goto_programt::output_instruction(
   case NO_INSTRUCTION_TYPE:
     out << "NO INSTRUCTION TYPE SET" << std::endl;
     break;
-  
+
   case GOTO:
     if(!it->guard.is_true())
     {
@@ -89,14 +89,14 @@ std::ostream& goto_programt::output_instruction(
     }
 
     out << "GOTO ";
-    
+
     for(instructiont::targetst::const_iterator
         gt_it=it->targets.begin();
         gt_it!=it->targets.end();
         gt_it++)
     {
       if(gt_it!=it->targets.begin()) out << ", ";
-    
+
       target_numberst::const_iterator t_it2=
         target_numbers.find(*gt_it);
 
@@ -105,59 +105,110 @@ std::ostream& goto_programt::output_instruction(
       else
         out << t_it2->second;
     }
-      
+
     out << std::endl;
     break;
-    
+
   case RETURN:
   case OTHER:
   case FUNCTION_CALL:
   case ASSIGN:
     out << from_expr(ns, identifier, it->code) << std::endl;
     break;
-    
+
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
       out << "ASSUME ";
     else
       out << "ASSERT ";
-      
+
     {
       out << from_expr(ns, identifier, it->guard);
-    
+
       const irep_idt &comment=it->location.comment();
       if(comment!="") out << " // " << comment;
     }
-      
+
     out << std::endl;
     break;
-    
+
+  case THROW:
+    out << "THROW";
+
+    {
+      const irept::subt &exception_list=
+        it->code.find("exception_list").get_sub();
+
+      for(irept::subt::const_iterator
+          it=exception_list.begin();
+          it!=exception_list.end();
+          it++)
+        out << " " << it->id();
+    }
+
+    if(it->code.operands().size()==1)
+      out << ": " << from_expr(ns, identifier, it->code.op0());
+
+    out << std::endl;
+    break;
+
+  case CATCH:
+    out << "CATCH ";
+
+    {
+      unsigned i=0;
+      const irept::subt &exception_list=
+        it->code.find("exception_list").get_sub();
+      assert(it->targets.size()==exception_list.size());
+
+      for(instructiont::targetst::const_iterator
+          gt_it=it->targets.begin();
+          gt_it!=it->targets.end();
+          gt_it++,
+          i++)
+      {
+        if(gt_it!=it->targets.begin()) out << ", ";
+        out << exception_list[i].id() << "->";
+
+        target_numberst::const_iterator t_it=
+          target_numbers.find(*gt_it);
+
+        if(t_it==target_numbers.end())
+          out << "unknown";
+        else
+          out << t_it->second;
+      }
+    }
+
+    out << std::endl;
+    break;
+
   case SKIP:
     out << "SKIP" << std::endl;
     break;
-    
+
   case END_FUNCTION:
     out << "END_FUNCTION" << std::endl;
     break;
-    
+
   case LOCATION:
     out << "LOCATION" << std::endl;
     break;
-    
+
   case ATOMIC_BEGIN:
     out << "ATOMIC_BEGIN" << std::endl;
     break;
-    
+
   case ATOMIC_END:
     out << "ATOMIC_END" << std::endl;
     break;
-    
+
   default:
     throw "unknown statement";
   }
 
-  return out;  
+  return out;
 }
 
 /*******************************************************************\
