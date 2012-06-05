@@ -53,8 +53,6 @@ void cpp_exception_list_rec(
     return;
   }
 
-  std::cout << "XX: " << src.pretty() << std::endl;
-
   return;
 }
 
