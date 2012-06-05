@@ -4266,7 +4266,8 @@ bool Parser::rThrowExpr(exprt &exp)
 
   int t=lex->LookAhead(0);
 
-  exp=exprt("cpp-throw");
+  exp=exprt("sideeffect");
+  exp.statement("cpp-throw");
   set_location(exp, tk);
 
   if(t==':' || t==';')
