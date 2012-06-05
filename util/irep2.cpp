@@ -1309,7 +1309,7 @@ do_type_list_operands<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
   }
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
 {
@@ -1318,7 +1318,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::convert_smt(prop_convt &o
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 expr2tc
 esbmct::expr<derived, field1, field2, field3, field4>::clone(void) const
 {
@@ -1327,7 +1327,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::clone(void) const
   return expr2tc(new_obj);
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 expr2t *
 esbmct::expr<derived, field1, field2, field3, field4>::clone_raw(void) const
 {
@@ -1336,7 +1336,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::clone_raw(void) const
   return new_obj;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 list_of_memberst
 esbmct::expr<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
@@ -1348,7 +1348,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::tostring(unsigned int ind
   return thevector;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 bool
 esbmct::expr<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
 {
@@ -1373,7 +1373,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)con
   return true;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 int
 esbmct::expr<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
 {
@@ -1401,7 +1401,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::lt(const expr2t &ref)cons
   return tmp;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
@@ -1415,7 +1415,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::do_crc
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::list_operands
           (std::list<const expr2tc *> &inp) const
@@ -1428,7 +1428,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::list_operands
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::expr<derived, field1, field2, field3, field4>::list_operands
           (std::list<expr2tc*> &inp)
@@ -1441,7 +1441,7 @@ esbmct::expr<derived, field1, field2, field3, field4>::list_operands
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::old_type_methods<derived, field1, field2, field3, field4>
       ::convert_smt_type(prop_convt &obj, void *&arg) const
@@ -1451,7 +1451,7 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 type2tc
 esbmct::old_type_methods<derived, field1, field2, field3, field4>::clone(void) const
 {
@@ -1460,7 +1460,7 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>::clone(void) c
   return type2tc(new_obj);
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 list_of_memberst
 esbmct::old_type_methods<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
 {
@@ -1473,7 +1473,7 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>::tostring(unsi
   return thevector;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 bool
 esbmct::old_type_methods<derived, field1, field2, field3, field4>::cmp(const type2t &ref) const
 {
@@ -1499,7 +1499,7 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>::cmp(const typ
   return true;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 int
 esbmct::old_type_methods<derived, field1, field2, field3, field4>::lt(const type2t &ref)const
 {
@@ -1528,7 +1528,7 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>::lt(const type
   return tmp;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived,class field1, class field2, class field3, class field4>
 void
 esbmct::old_type_methods<derived, field1, field2, field3, field4>::do_crc
           (boost::crc_32_type &crc) const
