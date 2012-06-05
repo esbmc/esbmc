@@ -6,17 +6,17 @@ using namespace std;
 
 int main ()
 {
-  string str ("look for non-alphabetic characters...");
+  string str ("look non-a.");
   size_t found;
 
-  found=str.find_first_not_of("abcdefghijklmnopqrstuvwxyz ");
+  found=str.find_first_not_of("aijklnop ");
   if (found!=string::npos)
   {
     cout << "First non-alphabetic character is " << str[found];
     cout << " at position " << int(found) << endl;
   }
   assert(str[found] == '-');
-  assert(found == 12);
+  assert(found == 8);
 
   return 0;
 }
