@@ -680,14 +680,14 @@ namespace esbmct {
   const unsigned int num_type_fields = 4;
 
   template <class derived,
-            class field1_type = type2t::type_ids,
-            field1_type derived::*field1_ptr = &type2t::type_id,
-            class field2_type = type2t::type_ids,
-            field2_type derived::*field2_ptr = &type2t::type_id,
-            class field3_type = type2t::type_ids,
-            field3_type derived::*field3_ptr = &type2t::type_id,
-            class field4_type = type2t::type_ids,
-            field4_type derived::*field4_ptr = &type2t::type_id>
+    class field1_type = type2t::type_ids,
+    field1_type derived::*field1_ptr = (field1_type derived::*)&type2t::type_id,
+    class field2_type = type2t::type_ids,
+    field2_type derived::*field2_ptr = (field2_type derived::*)&type2t::type_id,
+    class field3_type = type2t::type_ids,
+    field3_type derived::*field3_ptr = (field3_type derived::*)&type2t::type_id,
+    class field4_type = type2t::type_ids,
+    field4_type derived::*field4_ptr = (field4_type derived::*)&type2t::type_id>
   class type_methods : virtual public type2t
   {
   public:
