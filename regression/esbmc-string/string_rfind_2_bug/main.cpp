@@ -7,16 +7,18 @@ using namespace std;
 
 int main ()
 {
-  string str ("The sixth sick sheik's sixth sheep's sick.");
-  string key ("sixth");
+  string str ("T six sd six hck.");
+  string key ("six");
   size_t found;
 
   found=str.rfind(key);
+
+assert(found == 9);
   
   
   if (found!=string::npos)
-    str.replace (found,key.length(),"seventh");
-	assert(str != "The sixth sick sheik's seventh sheep's sick.");
+    str.replace (found,key.length(),"se");
+	assert(str != "T six sd se hck.");
   cout << str << endl;
 
   return 0;
