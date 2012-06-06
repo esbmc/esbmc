@@ -1616,40 +1616,41 @@ namespace std
 
 	size_t string::rfind ( string& s, size_t pos = 0 ) const
 	{
-		int len = this->length();
+		size_t i, j, k;
+		int num = 0;
 		int lim = pos;
+
+		int len = this->length();
 		char* s1 = new char[len+1];
 		strcpy(s1,this->str);
+
 		int slen = s.length();
 		char* s2 = new char[slen+1];
 		strcpy(s2,s.str);
-		pos =-1;
-		size_t i, j, k;
-		int num = 0;
 
-		 for(i=len-1;i>=lim;i--){
-			 for(k=i,j=slen-1;j>=0;j--){
-				 if(s1[k] != s2[j]){
-				 	break;
-				 }else{
-					 num++;
-				    if(num==slen){
-						 return k;
-					 }
-					 k--;
-				 }
-			 }
-		 }
-
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
+					break;
+				}else{
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
+				}
+			}
+		}
 		return -1;
 	}
 
 	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
 	{
-		size_t i, j;
+		size_t i, j, k;
+		int num = 0;
+		int lim = pos;
 
 		int len = this->length();
-		int lim = pos;
 		char* s1 = new char[len+1];
 		strcpy(s1,this->str);
 
@@ -1660,50 +1661,47 @@ namespace std
 		}
 		s2[i] = '\0';
 
-		pos =-1;
-
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
 					break;
 				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
 				}
 			}
-			if (s2[j] == '\0') {
-				return pos;
-			}
 		}
-
 		return -1;
 	}
 
 	size_t string::rfind ( const char* s, size_t pos = 0 ) const
 	{
-		int len = this->length();
+		size_t i, j, k;
+		int num = 0;
 		int lim = pos;
+
+		int len = this->length();
 		char* s1 = new char[len+1];
 		strcpy(s1,this->str);
+
 		int slen = strlen(s);
 		char* s2 = new char[slen+1];
 		strcpy(s2,s);
-		pos =-1;
-		size_t i, j;
 
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
 					break;
 				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
 				}
-			}
-			if (s2[j] == '\0') {
-				return pos;
 			}
 		}
 
