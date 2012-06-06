@@ -1741,3 +1741,5 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
   do_type_crc<field4_type>(derived_this->*field4_ptr, crc);
   return;
 }
+
+bool_type2t::field_names[esbmct::num_type_fields] = { "", "", "", "" };

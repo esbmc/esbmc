@@ -871,6 +871,8 @@ public:
   bool_type2t(void) : type2t (bool_id) {}
   bool_type2t(const bool_type2t &ref) : type2t (ref), bool_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
