@@ -1609,6 +1609,23 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
   return type2tc(new_obj);
 }
 
+template <typename T>
+void
+do_type2string(T &thething, unsigned int idx, std::string (&names)[4],
+               list_of_memberst &vec, unsigned int indent)
+{
+  vec.push_back(member_entryt(names[idx], type_to_string<T>(thething, indent)));
+}
+
+template <>
+void
+do_type2string<type2t::type_ids>(type2t::type_ids &thething,
+                                 unsigned int idx, std::string (&names)[4],
+                                 list_of_memberst &vec, unsigned int indent)
+{
+  // Do nothing; this is a dummy member.
+}
+
 template <class derived,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
@@ -1623,10 +1640,14 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
 {
   const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
-  thevector.push_back(member_entryt("nonamesintempaltesyet", type_to_string<field1_type>(derived_this->*field1_ptr, indent)));
-  thevector.push_back(member_entryt("nonamesintempaltesyet", type_to_string<field2_type>(derived_this->*field2_ptr, indent)));
-  thevector.push_back(member_entryt("nonamesintempaltesyet", type_to_string<field3_type>(derived_this->*field3_ptr, indent)));
-  thevector.push_back(member_entryt("nonamesintempaltesyet", type_to_string<field4_type>(derived_this->*field4_ptr, indent)));
+  do_type2string<field1_type>(derived_this->*field1_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field2_type>(derived_this->*field2_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field3_type>(derived_this->*field3_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field4_type>(derived_this->*field4_ptr, 0,
+                              derived_this->field_names, thevector, indent);
   return thevector;
 }
 
