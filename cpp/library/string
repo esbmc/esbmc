@@ -316,14 +316,14 @@ namespace std
 		__ESBMC_HIDE:
 		_size=strlen(s);
 		str=new char[_size+1];
-		//npos = _size-1;
+
 		strcpy(str,s);
 	}
 
 	string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE:
-		//__ESBMC_assert(n < strlen(s),"string overflow");
+		__ESBMC_assert(n > strlen(s),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -335,6 +335,7 @@ namespace std
 	string::string (string& s, size_t n)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert(n > s.length(),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -347,12 +348,14 @@ namespace std
 
 	string::string(int len)
 	{
+		__ESBMC_assert(len > 0 ,"the parameter must be greater than zero");
 	    str = new char [len+1];
 	    _size = len;
 	}
 
 	string::string(char c, size_t n)
 	{
+		__ESBMC_assert(c!=NULL ,"the parameter must be different than NULL");
 	    str = new char [n+1];
 	    for(int i = 0; i <= n; i++)
 	        str[i] = c;
@@ -1704,7 +1707,6 @@ namespace std
 				}
 			}
 		}
-
 		return -1;
 	}
 }
