@@ -677,6 +677,8 @@ namespace esbmct {
   class blank_method_operand {
   };
 
+  const unsigned int num_type_fields = 4;
+
   template <class derived,
             class field1_type, field1_type derived::*field1_ptr,
             class field2_type, field2_type derived::*field2_ptr,

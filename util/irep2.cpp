@@ -1611,7 +1611,8 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
 
 template <typename T>
 void
-do_type2string(T &thething, unsigned int idx, std::string (&names)[4],
+do_type2string(T &thething, unsigned int idx,
+               std::string (&names)[esbmct::num_type_fields],
                list_of_memberst &vec, unsigned int indent)
 {
   vec.push_back(member_entryt(names[idx], type_to_string<T>(thething, indent)));
@@ -1619,8 +1620,8 @@ do_type2string(T &thething, unsigned int idx, std::string (&names)[4],
 
 template <>
 void
-do_type2string<type2t::type_ids>(type2t::type_ids &thething,
-                                 unsigned int idx, std::string (&names)[4],
+do_type2string<type2t::type_ids>(type2t::type_ids &thething, unsigned int idx,
+                                 std::string (&names)[esbmct::num_type_fields],
                                  list_of_memberst &vec, unsigned int indent)
 {
   // Do nothing; this is a dummy member.
