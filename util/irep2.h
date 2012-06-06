@@ -741,8 +741,7 @@ class string_type2t;
 
 // Then give them a typedef name
 
-typedef esbmct::type_data<bool_type2t> bool_type_data;
-typedef esbmct::old_type_methods<bool_type2t> bool_old_type_methods;
+typedef esbmct::type_methods<bool_type2t> bool_type_methods;
 typedef esbmct::type_data<empty_type2t> empty_type_data;
 typedef esbmct::old_type_methods<empty_type2t> empty_old_type_methods;
 typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
@@ -814,8 +813,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_data<bool_type2t>;
-template class esbmct::old_type_methods<bool_type2t>;
 template class esbmct::type_data<empty_type2t>;
 template class esbmct::old_type_methods<empty_type2t>;
 template class esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
@@ -868,11 +865,11 @@ template class esbmct::type_data<string_type2t, esbmct::uint_width>;
 template class esbmct::old_type_methods<string_type2t, esbmct::uint_width>;
 
 /** Boolean type. No additional data */
-class bool_type2t : public bool_old_type_methods, public bool_type_data
+class bool_type2t : public virtual type2t, public bool_type_methods
 {
 public:
   bool_type2t(void) : type2t (bool_id) {}
-  bool_type2t(const bool_type2t &ref) : type2t (ref), bool_type_data(ref) {}
+  bool_type2t(const bool_type2t &ref) : type2t (ref), bool_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
 };
 
