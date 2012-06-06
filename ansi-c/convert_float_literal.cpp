@@ -37,19 +37,23 @@ void convert_float_literal(
   mp_integer significand;
   mp_integer exponent;
   bool is_float, is_long;
-  
+
   parse_float(src, significand, exponent, is_float, is_long);
-  
+
   dest=exprt("constant");
-  
+
   dest.cformat(src);
 
-  if(is_float)
+  if(is_float) {
     dest.type()=float_type();
-  else if(is_long)
+    dest.type().set("#cpp_type", "float");
+  } else if(is_long) {
     dest.type()=long_double_type();
-  else
+    dest.type().set("#cpp_type", "long_double");
+  } else {
     dest.type()=double_type();
+    dest.type().set("#cpp_type", "double");
+  }
 
   if(config.ansi_c.use_fixed_for_float)
   {
