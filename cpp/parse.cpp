@@ -5396,6 +5396,7 @@ bool Parser::rCompoundStatement(codet &statement)
   #endif
 
   statement=code_blockt();
+  set_location(statement, ob);
 
   while(lex->LookAhead(0)!='}')
   {
@@ -5884,12 +5885,14 @@ bool Parser::rTryStatement(codet &statement)
   statement=codet("cpp-catch");
   set_location(statement, tk);
 
-  codet body;
+  {
+    codet body;
 
-  if(!rCompoundStatement(body))
-    return false;
+    if(!rCompoundStatement(body))
+      return false;
 
-  statement.move_to_operands(body);
+    statement.move_to_operands(body);
+  }
 
   // iterate while there are catch clauses
   do
@@ -5913,13 +5916,38 @@ bool Parser::rTryStatement(codet &statement)
     {
       if(!rArgDeclaration(declaration))
         return false;
+
+      // No name in the declarator? Make one.
+      assert(declaration.declarators().size()==1);
+
+      if(declaration.declarators().front().name().is_nil())
+      {
+        irept name("name");
+        name.identifier("#anon");
+        declaration.declarators().front().name()=cpp_namet();
+        declaration.declarators().front().name().get_sub().push_back(name);
+      }
     }
 
     if(lex->GetToken(cp)!=')')
       return false;
 
+    codet body;
+
     if(!rCompoundStatement(body))
       return false;
+
+    // We prepend the declaration to the body
+    // as a declaration statement
+    assert(body.get_statement()=="block");
+
+    code_declt code_decl;
+    code_decl.move_to_operands(declaration);
+
+    codet::operandst &ops=body.operands();
+    ops.insert(ops.begin(), code_decl);
+
+    statement.move_to_operands(body);
   }
   while(lex->LookAhead(0)==TOK_CATCH);
 
