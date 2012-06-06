@@ -6,7 +6,7 @@ using namespace std;
 
 int main ()
 {
-  string str ("T six sd six shck.");
+  string str ("T six sd six hck.");
   string key ("six");
   size_t found;
 
