@@ -1611,7 +1611,7 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
 
 template <typename T>
 void
-do_type2string(T &thething, unsigned int idx,
+do_type2string(const T &thething, unsigned int idx,
                std::string (&names)[esbmct::num_type_fields],
                list_of_memberst &vec, unsigned int indent)
 {
@@ -1620,7 +1620,8 @@ do_type2string(T &thething, unsigned int idx,
 
 template <>
 void
-do_type2string<type2t::type_ids>(type2t::type_ids &thething, unsigned int idx,
+do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
+                                 unsigned int idx,
                                  std::string (&names)[esbmct::num_type_fields],
                                  list_of_memberst &vec, unsigned int indent)
 {
