@@ -1624,22 +1624,22 @@ namespace std
 		char* s2 = new char[slen+1];
 		strcpy(s2,s.str);
 		pos =-1;
-		size_t i, j;
+		size_t i, j, k;
+		int num = 0;
 
-		for (i = len-1; i >= lim; i--) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i-j;
-					}
-				}
-			}
-			if (j > slen) {
-				return pos;
-			}
-		}
+		 for(i=len-1;i>=lim;i--){
+			 for(k=i,j=slen-1;j>=0;j--){
+				 if(s1[k] != s2[j]){
+				 	break;
+				 }else{
+					 num++;
+				    if(num==slen){
+						 return k;
+					 }
+					 k--;
+				 }
+			 }
+		 }
 
 		return -1;
 	}
