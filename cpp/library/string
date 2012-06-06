@@ -990,111 +990,6 @@ namespace std
 		return -1;
 	}
 
-	size_t string::rfind ( char c, size_t pos = 0 ) const
-	{
-		int i;
-		int len = this->length();
-		for(i=len;i>0;i--)
-			if(this->str[i] == c)
-				return i;
-	}
-
-	size_t string::rfind ( string& s, size_t pos = 0 ) const
-	{
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-		int slen = s.length();
-		char* s2 = new char[slen+1];
-		strcpy(s2,s.str);
-		pos =-1;
-		size_t i, j;
-
-		for (i = len-1; i >= lim; i--) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i-j;
-					}
-				}
-			}
-			if (j == slen+1) {
-				return pos;
-			}
-		}
-
-		return -1;
-	}
-
-	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
-	{
-		size_t i, j;
-
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-
-		int slen = n;
-		char* s2 = new char[slen+1];
-		for(i=0;i<slen;i++){
-			s2[i] = s[i];
-		}
-		s2[i] = '\0';
-
-		pos =-1;
-
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
-				}
-			}
-			if (s2[j] == '\0') {
-				return pos;
-			}
-		}
-
-		return -1;
-	}
-
-	size_t string::rfind ( const char* s, size_t pos = 0 ) const
-	{
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-		int slen = strlen(s);
-		char* s2 = new char[slen+1];
-		strcpy(s2,s);
-		pos =-1;
-		size_t i, j;
-
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
-				}
-			}
-			if (s2[j] == '\0') {
-				return pos;
-			}
-		}
-
-		return -1;
-	}
-
 	string& string::insert ( size_t pos1, string& s )
 	{
 		__ESBMC_HIDE:
@@ -1710,17 +1605,109 @@ namespace std
 		}
 	}
 
-#if 0
-
-	string& string::replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
-
-
-	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
+	size_t string::rfind ( char c, size_t pos = 0 ) const
 	{
-		__ESBMC_assert((strlen(s)<=this->_size)&&(pos<this->_size)&&(n-pos<this->_size), "string overflow");
-		return strspn(str+pos,s);
+		int i;
+		int len = this->length();
+		for(i=len;i>0;i--)
+			if(this->str[i] == c)
+				return i;
 	}
 
-#endif
+	size_t string::rfind ( string& s, size_t pos = 0 ) const
+	{
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		strcpy(s2,s.str);
+		pos =-1;
+		size_t i, j;
+
+		for (i = len-1; i >= lim; i--) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i-j;
+					}
+				}
+			}
+			if (j > slen) {
+				return pos;
+			}
+		}
+
+		return -1;
+	}
+
+	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = n;
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		pos =-1;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
+	}
+
+	size_t string::rfind ( const char* s, size_t pos = 0 ) const
+	{
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		strcpy(s2,s);
+		pos =-1;
+		size_t i, j;
+
+		for (i = lim; i < len; i++) {
+			for (j = 0; (j < slen) && ((i+j) < len); j++) {
+				if (s1[i+j] != s2[j]) {
+					break;
+				}else{
+					if(pos == -1){
+						pos = i+j;
+					}
+				}
+			}
+			if (s2[j] == '\0') {
+				return pos;
+			}
+		}
+
+		return -1;
+	}
 }
 #endif
