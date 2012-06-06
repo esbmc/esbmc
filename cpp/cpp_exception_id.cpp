@@ -43,6 +43,11 @@ void cpp_exception_list_rec(
       return;
     }
   }
+  else if(src.id()=="symbol")
+  {
+    irep_idt identifier = src.identifier();
+    dest.push_back(id2string(identifier)+suffix);
+  }
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
