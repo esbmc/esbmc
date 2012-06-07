@@ -60,13 +60,13 @@ reachability_treet::setup_for_new_explore(void)
 
   execution_statet *s;
   if (options.get_bool_option("schedule")) {
+    schedule_target = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
-                                               this, target_template->clone(),
+                                               this, schedule_target,
                                                permanent_context,
                                                options, &schedule_total_claims,
                                                &schedule_remaining_claims));
-    schedule_target = target_template;
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
