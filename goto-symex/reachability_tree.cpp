@@ -201,6 +201,8 @@ reachability_treet::create_next_state(void)
       new_state->switch_to_thread(next_thread_id);
     }
 
+    new_state->execute_guard();
+
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
   }
