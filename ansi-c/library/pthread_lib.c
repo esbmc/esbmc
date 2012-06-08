@@ -335,11 +335,15 @@ __ESBMC_HIDE:
   __ESBMC_cond_lock_field(*cond) = 1;
   ++count_wait;
 
+  // If something failed to join in the meantime, stop exploration,
+  __ESBMC_assume(join_wait == 0);
+
   __ESBMC_atomic_end();
   // Other thread activity to happen in this gap
   __ESBMC_atomic_begin();
 
-  if (assrt) {
+  if (assrt && __ESBMC_cond_lock_field(*cond) == 1) {
+    // If we're _not_ unlocked, check for deadlock.
     deadlock_wait = (count_lock + count_wait + join_wait == num_threads_running);
     __ESBMC_assert(!deadlock_wait, "deadlock detected with pthread_cond_wait");
   }
@@ -348,6 +352,9 @@ __ESBMC_HIDE:
   // deadlock assertions possibly trigger.
   __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
   --count_wait;
+
+  // If something failed to join in the meantime, stop exploration,
+  __ESBMC_assume(join_wait == 0);
 
   __ESBMC_atomic_end();
 
