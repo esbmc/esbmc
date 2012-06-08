@@ -1,3 +1,5 @@
 main.c
 --unwind 1 --context-switch 4
 ^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION FAILURE$
