@@ -1215,23 +1215,59 @@ public:
 
 extern type_poolt type_pool;
 
+// Start of definitions for expressions. Forward decs,
+
+class constant2t;
+class constant_int2t;
+class constant_string2t;
+class constant_datatype2t;
+class constant_struct2t;
+class constant_union2t;
+class constant_array2t;
+class constant_array_of2t;
+
+// Data definitions.
+
+class constant2t : public expr2t
+{
+public:
+  constant2t(const type2tc &t, expr2t::expr_ids id) : expr2t(t, id) { }
+  constant2t(const constant2t &ref) : expr2t(ref) { }
+};
+
+class constant_int_data : public constant2t
+{
+public:
+  constant_int_data(const type2tc &t, expr2t::expr_ids id, const BigInt &bint)
+    : constant2t(t, id), constant_value(bint) { }
+  constant_int_data(const constant_int_data &ref)
+    : constant2t(ref), constant_value(ref.constant_value) { }
+
+  BigInt constant_value;
+};
+
+// Give everything a typedef name
+
+typedef esbmct::expr_methods<constant_int2t, constant_int_data,
+        BigInt, constant_int_data, &constant_int_data::constant_value>
+        constant_int_expr_methods;
+
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
-class constant_int2t : public esbmct::expr<constant_int2t,
-                                         esbmct::constant_bigint_value>
+class constant_int2t : public constant_int_expr_methods
 {
 public:
   constant_int2t(const type2tc &type, const BigInt &input)
-    : esbmct::expr<constant_int2t, esbmct::constant_bigint_value>
-               (type, constant_int_id, input) { }
+    : constant_int_expr_methods(type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
-    : esbmct::expr<constant_int2t, esbmct::constant_bigint_value> (ref) { }
+    : constant_int_expr_methods(ref) { }
 
   /** Accessor for fetching native int of this constant */
   unsigned long as_ulong(void) const;
   long as_long(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_int2t, esbmct::constant_bigint_value>;
 
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code

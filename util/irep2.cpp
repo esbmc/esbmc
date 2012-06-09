@@ -1871,6 +1871,14 @@ std::string fixedbv_type2t::field_names [esbmct::num_type_fields]  =
 std::string string_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", ""};
 
+
+// Exprs
+
+std::string constant_int2t::field_names [esbmct::num_type_fields]  =
+{ "constant_value", "", "", ""};
+
+// Explicit template instanciations
+
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
 template class esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
@@ -1903,3 +1911,8 @@ template class esbmct::type_methods<fixedbv_type2t, fixedbv_data,
     unsigned int, fixedbv_data, &fixedbv_data::integer_bits>;
 template class esbmct::type_methods<string_type2t, string_data,
     unsigned int, string_data, &string_data::width>;
+
+// Explicit instanciation for exprs.
+
+template class esbmct::expr_methods<constant_int2t, constant_int_data,
+    BigInt, constant_int_data, &constant_int_data::constant_value>;
