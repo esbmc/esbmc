@@ -10,6 +10,8 @@
 #include <boost/mpl/if.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/crc.hpp>
+#include <boost/utility/enable_if.hpp>
+#include <boost/fusion/include/equal_to.hpp>
 
 #include <irep.h>
 #include <fixedbv.h>
@@ -690,19 +692,39 @@ namespace esbmct {
     field4_type derived::*field4_ptr = (field4_type derived::*)&type2t::type_id>
   class type_methods : public subclass
   {
+    class dummy_type_tag {
+      typedef int type;
+    };
+
   public:
-    type_methods(type2t::type_ids id) : subclass(id) { }
-    type_methods(type2t::type_ids id, const field1_type &arg1)
+    template <class arbitary = dummy_type_tag>
+    type_methods(type2t::type_ids id,
+                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
+      : subclass(id) { }
+
+    template <class arbitary = dummy_type_tag>
+    type_methods(type2t::type_ids id,
+                 const field1_type &arg1,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,type2t::type_ids>, arbitary >::type* = NULL)
       : subclass(id, arg1) { }
+
+    template <class arbitary = dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
-                 const field2_type &arg2)
+                 const field2_type &arg2,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids>, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2) { }
-    type_methods(type2t::type_ids id, const field1_type &arg1,
-                 const field2_type &arg2, const field3_type &arg3)
-      : subclass(id, arg1, arg2, arg3) { }
+
+    template <class arbitary = dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
-                 const field4_type &arg4)
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids>, arbitary >::type* = NULL)
+      : subclass(id, arg1, arg2, arg3) { }
+
+    template <class arbitary = dummy_type_tag>
+    type_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 const field4_type &arg4,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids>, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3, arg4) { }
 
     type_methods(const type_methods<derived, subclass, field1_type, field1_ptr,
@@ -829,9 +851,10 @@ typedef esbmct::type_data<string_type2t, esbmct::uint_width> string_type_data;
 typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
         string_old_type_methods;
 
-
 // And finally an explicit type instanciation.
 
+template class esbmct::type_methods<bool_type2t, type2t>;
+template class esbmct::type_methods<empty_type2t, type2t>;
 template class esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<struct_union_type2t,
