@@ -772,7 +772,6 @@ namespace esbmct {
 class bool_type2t;
 class empty_type2t;
 class symbol_type2t;
-class struct_union_type2t;
 class struct_type2t;
 class union_type2t;
 class bv_type2t;
@@ -797,27 +796,42 @@ public:
   irep_idt symbol_name;
 };
 
+class struct_union_data : public type2t
+{
+public:
+  struct_union_data(type2t::type_ids id, const std::vector<type2tc> &membs,
+                     const std::vector<irep_idt> &names, const irep_idt &n)
+    : type2t(id), members(membs), member_names(names), name(n) { }
+  struct_union_data(const struct_union_data &ref)
+    : type2t(ref), members(ref.members), member_names(ref.member_names),
+      name(ref.name) { }
+
+  const std::vector<type2tc> & get_structure_members(void) const;
+  const std::vector<irep_idt> & get_structure_member_names(void) const;
+  const irep_idt & get_structure_name(void) const;
+
+  std::vector<type2tc> members;
+  std::vector<irep_idt> member_names;
+  irep_idt name;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
 typedef esbmct::type_methods<empty_type2t, type2t> empty_type_methods;
 typedef esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
         symbol_type_data, &symbol_type_data::symbol_name> symbol_type_methods;
-typedef esbmct::type_data<struct_union_type2t,
-                            esbmct::type2tc_vec_members,
-                            esbmct::irepidt_vec_member_names,
-                            esbmct::irepidt_name>
-        struct_union_type_data;
-typedef esbmct::old_type_methods<struct_type2t,
-                             esbmct::type2tc_vec_members,
-                             esbmct::irepidt_vec_member_names,
-                             esbmct::irepidt_name>
-        struct_old_type_methods;
-typedef esbmct::old_type_methods<union_type2t,
-                             esbmct::type2tc_vec_members,
-                             esbmct::irepidt_vec_member_names,
-                             esbmct::irepidt_name>
-        union_old_type_methods;
+typedef esbmct::type_methods<struct_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>
+    struct_type_methods;
+typedef esbmct::type_methods<union_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>
+    union_type_methods;
+
 typedef esbmct::type_data<unsignedbv_type2t,
                              esbmct::uint_width>
         bv_type_data;
@@ -867,18 +881,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_data<struct_union_type2t,
-                                    esbmct::type2tc_vec_members,
-                                    esbmct::irepidt_vec_member_names,
-                                    esbmct::irepidt_name>;
-template class esbmct::old_type_methods<struct_type2t,
-                                    esbmct::type2tc_vec_members,
-                                    esbmct::irepidt_vec_member_names,
-                                    esbmct::irepidt_name>;
-template class esbmct::old_type_methods<union_type2t,
-                                    esbmct::type2tc_vec_members,
-                                    esbmct::irepidt_vec_member_names,
-                                    esbmct::irepidt_name>;
 template class esbmct::type_data<unsignedbv_type2t,
                                     esbmct::uint_width>;
 template class esbmct::old_type_methods<unsignedbv_type2t,
@@ -951,44 +953,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class struct_union_type2t : public struct_union_type_data
+class struct_type2t : public struct_type_methods
 {
 public:
-  struct_union_type2t(type2t::type_ids id, std::vector<type2tc> &members,
-                      std::vector<irep_idt> memb_names,
-                      irep_idt name) :
-    type2t(id), struct_union_type_data(members, memb_names, name) {}
-  struct_union_type2t(const struct_union_type2t &ref) :
-    type2t(ref), struct_union_type_data(ref) { }
-  const std::vector<type2tc> & get_structure_members(void) const;
-  const std::vector<irep_idt> & get_structure_member_names(void) const;
-  const irep_idt & get_structure_name(void) const;
-};
-
-class struct_type2t :  public struct_old_type_methods, public struct_union_type2t
-{
-public:
-  struct_type2t(std::vector<type2tc> &members,
-                std::vector<irep_idt> memb_names,
+  struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
-    : type2t(struct_id),
-      struct_union_type2t (struct_id, members, memb_names, name) {}
-  struct_type2t(const struct_type2t &ref)
-    : type2t(ref), struct_union_type2t (ref) {}
+    : struct_type_methods(struct_id, members, memb_names, name) {}
+  struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
-class union_type2t : public union_old_type_methods, public struct_union_type2t
+class union_type2t : public union_type_methods
 {
 public:
-  union_type2t(std::vector<type2tc> &members,
-               std::vector<irep_idt> memb_names,
-               irep_idt name)
-    : type2t(union_id),
-      struct_union_type2t (union_id, members, memb_names, name) {}
-  union_type2t(const union_type2t &ref)
-    : type2t(ref), struct_union_type2t (ref) {}
+  union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
+                irep_idt name)
+    : union_type_methods(union_id, members, memb_names, name) {}
+  union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 class bv_type2t : public bv_type_data

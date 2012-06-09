@@ -1738,8 +1738,8 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
   if (is_structure_type(with.type)) {
     unsigned int idx = 0;
-    const struct_union_type2t &data_ref =
-      dynamic_cast<const struct_union_type2t  &>(*with.type);
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*with.type);
     const std::vector<irep_idt> &names = data_ref.get_structure_member_names();
 
     convert_bv(with.source_value, tuple);
@@ -1784,8 +1784,8 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   u_int j = 0;
   Z3_ast struct_var;
 
-  const struct_union_type2t &data_ref =
-    dynamic_cast<const struct_union_type2t &>(*member.source_value->type);
+  const struct_union_data &data_ref =
+    dynamic_cast<const struct_union_data &>(*member.source_value->type);
   const std::vector<irep_idt> &member_names =
     data_ref.get_structure_member_names();
 

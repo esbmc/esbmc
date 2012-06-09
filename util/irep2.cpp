@@ -247,19 +247,19 @@ string_type2t::get_width(void) const
 }
 
 const std::vector<type2tc> &
-struct_union_type2t::get_structure_members(void) const
+struct_union_data::get_structure_members(void) const
 {
   return members;
 }
 
 const std::vector<irep_idt> &
-struct_union_type2t::get_structure_member_names(void) const
+struct_union_data::get_structure_member_names(void) const
 {
   return member_names;
 }
 
 const irep_idt &
-struct_union_type2t::get_structure_name(void) const
+struct_union_data::get_structure_name(void) const
 {
   return name;
 }
@@ -1747,8 +1747,20 @@ std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
 std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
 { "symbol_name", "", "", ""};
+std::string struct_type2t::field_names [esbmct::num_type_fields]  =
+{ "members", "member_names", "typename", ""};
+std::string union_type2t::field_names [esbmct::num_type_fields]  =
+{ "members", "member_names", "typename", ""};
 
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
 template class esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
                symbol_type_data, &symbol_type_data::symbol_name>;
+template class esbmct::type_methods<struct_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>;
+template class esbmct::type_methods<union_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>;

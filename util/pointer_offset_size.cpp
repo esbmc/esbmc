@@ -158,8 +158,8 @@ mp_integer pointer_offset_size(const type2t &type)
   else if(type.type_id == type2t::struct_id ||
           type.type_id == type2t::union_id)
   {
-    const struct_union_type2t &data_ref =
-      dynamic_cast<const struct_union_type2t &>(type);
+    const struct_union_data &data_ref =
+      static_cast<const struct_union_data &>(type);
     const std::vector<type2tc> &members = data_ref.get_structure_members();
 
     mp_integer result=1; // for the struct itself
