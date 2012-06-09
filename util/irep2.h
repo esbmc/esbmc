@@ -845,6 +845,54 @@ public:
   bool ellipsis;
 };
 
+class array_data : public type2t
+{
+public:
+  array_data(type2t::type_ids id, const type2tc &st, const expr2tc &sz, bool i)
+    : type2t(id), subtype(st), array_size(sz), size_is_infinite(i) { }
+  array_data(const array_data &ref)
+    : type2t(ref), subtype(ref.subtype), array_size(ref.array_size),
+      size_is_infinite(ref.size_is_infinite) { }
+
+  type2tc subtype;
+  expr2tc array_size;
+  bool size_is_infinite;
+};
+
+class pointer_data : public type2t
+{
+public:
+  pointer_data(type2t::type_ids id, const type2tc &st)
+    : type2t(id), subtype(st) { }
+  pointer_data(const pointer_data &ref)
+    : type2t(ref), subtype(ref.subtype) { }
+
+  type2tc subtype;
+};
+
+class fixedbv_data : public type2t
+{
+public:
+  fixedbv_data(type2t::type_ids id, unsigned int w, unsigned int ib)
+    : type2t(id), width(w), integer_bits(ib) { }
+  fixedbv_data(const fixedbv_data &ref)
+    : type2t(ref), width(ref.width), integer_bits(ref.integer_bits) { }
+
+  unsigned int width;
+  unsigned int integer_bits;
+};
+
+class string_data : public type2t
+{
+public:
+  string_data(type2t::type_ids id, unsigned int w)
+    : type2t(id), width(w) { }
+  string_data(const string_data &ref)
+    : type2t(ref), width(ref.width) { }
+
+  unsigned int width;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
@@ -871,53 +919,21 @@ typedef esbmct::type_methods<code_type2t, code_data,
     std::vector<irep_idt>, code_data, &code_data::argument_names,
     bool, code_data, &code_data::ellipsis>
     code_type_methods;
-
-typedef esbmct::type_data<array_type2t,
-                             esbmct::type2tc_subtype,
-                             esbmct::expr2tc_array_size,
-                             esbmct::bool_size_is_inf>
-        array_type_data;
-typedef esbmct::old_type_methods<array_type2t,
-                             esbmct::type2tc_subtype,
-                             esbmct::expr2tc_array_size,
-                             esbmct::bool_size_is_inf>
-        array_old_type_methods;
-typedef esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>
-        pointer_type_data;
-typedef esbmct::old_type_methods<pointer_type2t, esbmct::type2tc_subtype>
-        pointer_old_type_methods;
-typedef esbmct::type_data<fixedbv_type2t,
-                             esbmct::uint_width,
-                             esbmct::uint_int_bits>
-        fixedbv_type_data;
-typedef esbmct::old_type_methods<fixedbv_type2t,
-                             esbmct::uint_width,
-                             esbmct::uint_int_bits>
-        fixedbv_old_type_methods;
-typedef esbmct::type_data<string_type2t, esbmct::uint_width> string_type_data;
-typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
-        string_old_type_methods;
-
-// And finally an explicit type instanciation.
-
-template class esbmct::type_data<array_type2t,
-                                    esbmct::type2tc_subtype,
-                                    esbmct::expr2tc_array_size,
-                                    esbmct::bool_size_is_inf>;
-template class esbmct::old_type_methods<array_type2t,
-                                    esbmct::type2tc_subtype,
-                                    esbmct::expr2tc_array_size,
-                                    esbmct::bool_size_is_inf>;
-template class esbmct::type_data<pointer_type2t, esbmct::type2tc_subtype>;
-template class esbmct::old_type_methods<pointer_type2t, esbmct::type2tc_subtype>;
-template class esbmct::type_data<fixedbv_type2t,
-                                    esbmct::uint_width,
-                                    esbmct::uint_int_bits>;
-template class esbmct::old_type_methods<fixedbv_type2t,
-                                    esbmct::uint_width,
-                                    esbmct::uint_int_bits>;
-template class esbmct::type_data<string_type2t, esbmct::uint_width>;
-template class esbmct::old_type_methods<string_type2t, esbmct::uint_width>;
+typedef esbmct::type_methods<array_type2t, array_data,
+    type2tc, array_data, &array_data::subtype,
+    expr2tc, array_data, &array_data::array_size,
+    bool, array_data, &array_data::size_is_infinite>
+    array_type_methods;
+typedef esbmct::type_methods<pointer_type2t, pointer_data,
+    type2tc, pointer_data, &pointer_data::subtype>
+    pointer_type_methods;
+typedef esbmct::type_methods<fixedbv_type2t, fixedbv_data,
+    unsigned int, fixedbv_data, &fixedbv_data::width,
+    unsigned int, fixedbv_data, &fixedbv_data::integer_bits>
+    fixedbv_type_methods;
+typedef esbmct::type_methods<string_type2t, string_data,
+    unsigned int, string_data, &string_data::width>
+    string_type_methods;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods
@@ -1017,13 +1033,13 @@ public:
 
 /** Array type. Comes with a subtype of the array and a size that might be
  *  constant, might be nondeterministic. */
-class array_type2t : public array_type_data, public array_old_type_methods
+class array_type2t : public array_type_methods
 {
 public:
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
-    : type2t(array_id), array_type_data (subtype, size, inf) { }
+    : array_type_methods (array_id, subtype, size, inf) { }
   array_type2t(const array_type2t &ref)
-    : type2t(ref), array_type_data (ref) { }
+    : array_type_methods(ref) { }
 
   virtual unsigned int get_width(void) const;
 
@@ -1039,38 +1055,46 @@ public:
     dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
     expr2tc size;
   };
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Pointer type. Simply has a subtype, of what it points to. No other
  *  attributes */
-class pointer_type2t : public pointer_type_data, public pointer_old_type_methods
+class pointer_type2t : public pointer_type_methods
 {
 public:
   pointer_type2t(const type2tc subtype)
-    : type2t(pointer_id), pointer_type_data (subtype) {}
+    : pointer_type_methods(pointer_id, subtype) { }
   pointer_type2t(const pointer_type2t &ref)
-    : type2t(ref), pointer_type_data (ref) {}
+    : pointer_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
-class fixedbv_type2t : public fixedbv_type_data, public fixedbv_old_type_methods
+class fixedbv_type2t : public fixedbv_type_methods
 {
 public:
   fixedbv_type2t(unsigned int width, unsigned int integer)
-    : type2t(fixedbv_id), fixedbv_type_data (width, integer) { }
+    : fixedbv_type_methods(fixedbv_id, width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
-    : type2t(ref), fixedbv_type_data (ref) { }
+    : fixedbv_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
-class string_type2t : public string_type_data, public string_old_type_methods
+class string_type2t : public string_type_methods
 {
 public:
   string_type2t(unsigned int elements)
-    : type2t(string_id), string_type_data(elements) { }
+    : string_type_methods(string_id, elements) { }
   string_type2t(const string_type2t &ref)
-    : type2t(ref), string_type_data(ref) { }
+    : string_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is

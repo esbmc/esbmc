@@ -1757,6 +1757,14 @@ std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", ""};
 std::string code_type2t::field_names [esbmct::num_type_fields]  =
 { "arguments", "ret_type", "argument_names", "ellipsis"};
+std::string array_type2t::field_names [esbmct::num_type_fields]  =
+{ "subtype", "array_size", "size_is_infinite", ""};
+std::string pointer_type2t::field_names [esbmct::num_type_fields]  =
+{ "subtype", "", "", ""};
+std::string fixedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "integer_bits", "", ""};
+std::string string_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
 
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
@@ -1779,3 +1787,14 @@ template class esbmct::type_methods<code_type2t, code_data,
     type2tc, code_data, &code_data::ret_type,
     std::vector<irep_idt>, code_data, &code_data::argument_names,
     bool, code_data, &code_data::ellipsis>;
+template class esbmct::type_methods<array_type2t, array_data,
+    type2tc, array_data, &array_data::subtype,
+    expr2tc, array_data, &array_data::array_size,
+    bool, array_data, &array_data::size_is_infinite>;
+template class esbmct::type_methods<pointer_type2t, pointer_data,
+    type2tc, pointer_data, &pointer_data::subtype>;
+template class esbmct::type_methods<fixedbv_type2t, fixedbv_data,
+    unsigned int, fixedbv_data, &fixedbv_data::width,
+    unsigned int, fixedbv_data, &fixedbv_data::integer_bits>;
+template class esbmct::type_methods<string_type2t, string_data,
+    unsigned int, string_data, &string_data::width>;
