@@ -158,7 +158,7 @@ bool_type2t::get_width(void) const
 }
 
 unsigned int
-bv_type2t::get_width(void) const
+bv_data::get_width(void) const
 {
   return width;
 }
@@ -1751,6 +1751,10 @@ std::string struct_type2t::field_names [esbmct::num_type_fields]  =
 { "members", "member_names", "typename", ""};
 std::string union_type2t::field_names [esbmct::num_type_fields]  =
 { "members", "member_names", "typename", ""};
+std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
+std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
 
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;

@@ -815,6 +815,17 @@ public:
   irep_idt name;
 };
 
+class bv_data : public type2t
+{
+public:
+  bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w) { }
+  bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
+
+  virtual unsigned int get_width(void) const;
+
+  unsigned int width;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
@@ -831,16 +842,11 @@ typedef esbmct::type_methods<union_type2t, struct_union_data,
     std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
     irep_idt, struct_union_data, &struct_union_data::name>
     union_type_methods;
+typedef esbmct::type_methods<unsignedbv_type2t, bv_data, unsigned int, bv_data,
+    &bv_data::width> unsignedbv_type_methods;
+typedef esbmct::type_methods<signedbv_type2t, bv_data, unsigned int, bv_data,
+    &bv_data::width> signedbv_type_methods;
 
-typedef esbmct::type_data<unsignedbv_type2t,
-                             esbmct::uint_width>
-        bv_type_data;
-typedef esbmct::old_type_methods<unsignedbv_type2t,
-                             esbmct::uint_width>
-        unsignedbv_old_type_methods;
-typedef esbmct::old_type_methods<signedbv_type2t,
-                             esbmct::uint_width>
-        signedbv_old_type_methods;
 typedef esbmct::type_data<code_type2t,
                              esbmct::type2tc_vec_args,
                              esbmct::type2tc_ret_type,
@@ -881,12 +887,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_data<unsignedbv_type2t,
-                                    esbmct::uint_width>;
-template class esbmct::old_type_methods<unsignedbv_type2t,
-                                    esbmct::uint_width>;
-template class esbmct::old_type_methods<signedbv_type2t,
-                                    esbmct::uint_width>;
 template class esbmct::type_data<code_type2t,
                                     esbmct::type2tc_vec_args,
                                     esbmct::type2tc_ret_type,
@@ -977,32 +977,26 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class bv_type2t : public bv_type_data
-{
-public:
-  bv_type2t(type2t::type_ids id, unsigned int w)
-    : type2t(id), bv_type_data(w) {}
-  bv_type2t(const bv_type2t &ref)
-    : type2t(ref), bv_type_data(ref) { }
-  virtual unsigned int get_width(void) const;
-};
-
-class unsignedbv_type2t : public bv_type2t, public unsignedbv_old_type_methods
+class unsignedbv_type2t : public unsignedbv_type_methods
 {
 public:
   unsignedbv_type2t(unsigned int width)
-    : type2t(unsignedbv_id), bv_type2t(unsignedbv_id, width) { }
+    : unsignedbv_type_methods(unsignedbv_id, width) { }
   unsignedbv_type2t(const unsignedbv_type2t &ref)
-    : type2t(ref), bv_type2t (ref) { }
+    : unsignedbv_type_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
-class signedbv_type2t : public bv_type2t, public signedbv_old_type_methods
+class signedbv_type2t : public signedbv_type_methods
 {
 public:
   signedbv_type2t(signed int width)
-    : type2t(signedbv_id), bv_type2t (signedbv_id, width) { }
+    : signedbv_type_methods(signedbv_id, width) { }
   signedbv_type2t(const signedbv_type2t &ref)
-    : type2t(ref), bv_type2t (ref) { }
+    : signedbv_type_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
