@@ -648,14 +648,14 @@ namespace esbmct {
   const unsigned int num_type_fields = 4;
 
   template <class derived, class subclass,
-  typename field1_type = type2t::type_ids, class field1_class = type2t,
-  field1_type field1_class::*field1_ptr = &field1_class::type_id,
-  typename field2_type = type2t::type_ids, class field2_class = type2t,
-  field2_type field2_class::*field2_ptr = &field2_class::type_id,
-  typename field3_type = type2t::type_ids, class field3_class = type2t,
-  field3_type field3_class::*field3_ptr = &field3_class::type_id,
-  typename field4_type = type2t::type_ids, class field4_class = type2t,
-  field4_type field4_class::*field4_ptr = &field4_class::type_id>
+          typename field1_type = type2t::type_ids, class field1_class = type2t,
+          field1_type field1_class::*field1_ptr = &field1_class::type_id,
+          typename field2_type = type2t::type_ids, class field2_class = type2t,
+          field2_type field2_class::*field2_ptr = &field2_class::type_id,
+          typename field3_type = type2t::type_ids, class field3_class = type2t,
+          field3_type field3_class::*field3_ptr = &field3_class::type_id,
+          typename field4_type = type2t::type_ids, class field4_class = type2t,
+          field4_type field4_class::*field4_ptr = &field4_class::type_id>
   class type_methods : public subclass
   {
     class dummy_type_tag {
