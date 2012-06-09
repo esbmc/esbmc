@@ -826,6 +826,25 @@ public:
   unsigned int width;
 };
 
+class code_data : public type2t
+{
+public:
+  code_data(type2t::type_ids id, const std::vector<type2tc> &args,
+            const type2tc &ret, const std::vector<irep_idt> &names, bool e)
+    : type2t(id), arguments(args), ret_type(ret), argument_names(names),
+      ellipsis(e) { }
+  code_data(const code_data &ref)
+    : type2t(ref), arguments(ref.arguments), ret_type(ref.ret_type),
+      argument_names(ref.argument_names), ellipsis(ref.ellipsis) { }
+
+  virtual unsigned int get_width(void) const;
+
+  std::vector<type2tc> arguments;
+  type2tc ret_type;
+  std::vector<irep_idt> argument_names;
+  bool ellipsis;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
@@ -846,19 +865,13 @@ typedef esbmct::type_methods<unsignedbv_type2t, bv_data, unsigned int, bv_data,
     &bv_data::width> unsignedbv_type_methods;
 typedef esbmct::type_methods<signedbv_type2t, bv_data, unsigned int, bv_data,
     &bv_data::width> signedbv_type_methods;
+typedef esbmct::type_methods<code_type2t, code_data,
+    std::vector<type2tc>, code_data, &code_data::arguments,
+    type2tc, code_data, &code_data::ret_type,
+    std::vector<irep_idt>, code_data, &code_data::argument_names,
+    bool, code_data, &code_data::ellipsis>
+    code_type_methods;
 
-typedef esbmct::type_data<code_type2t,
-                             esbmct::type2tc_vec_args,
-                             esbmct::type2tc_ret_type,
-                             esbmct::irepidt_vec_arg_names,
-                             esbmct::bool_ellipsis>
-        code_type_data;
-typedef esbmct::old_type_methods<code_type2t,
-                             esbmct::type2tc_vec_args,
-                             esbmct::type2tc_ret_type,
-                             esbmct::irepidt_vec_arg_names,
-                             esbmct::bool_ellipsis>
-        code_old_type_methods;
 typedef esbmct::type_data<array_type2t,
                              esbmct::type2tc_subtype,
                              esbmct::expr2tc_array_size,
@@ -887,16 +900,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_data<code_type2t,
-                                    esbmct::type2tc_vec_args,
-                                    esbmct::type2tc_ret_type,
-                                    esbmct::irepidt_vec_arg_names,
-                                    esbmct::bool_ellipsis>;
-template class esbmct::old_type_methods<code_type2t,
-                                    esbmct::type2tc_vec_args,
-                                    esbmct::type2tc_ret_type,
-                                    esbmct::irepidt_vec_arg_names,
-                                    esbmct::bool_ellipsis>;
 template class esbmct::type_data<array_type2t,
                                     esbmct::type2tc_subtype,
                                     esbmct::expr2tc_array_size,
@@ -1000,19 +1003,16 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class code_type2t : public code_type_data, public code_old_type_methods
+class code_type2t : public code_type_methods
 {
 public:
   code_type2t(const std::vector<type2tc> &args, const type2tc &ret_type,
               const std::vector<irep_idt> &names, bool e)
-    : type2t(code_id), code_type_data (args, ret_type, names, e)
-  {
-    assert(args.size() == names.size());
-  }
+    : code_type_methods(code_id, args, ret_type, names, e)
+  { assert(args.size() == names.size()); }
+  code_type2t(const code_type2t &ref) : code_type_methods(ref) { }
 
-  code_type2t(const code_type2t &ref)
-    : type2t(ref), code_type_data (ref) {}
-  virtual unsigned int get_width(void) const;
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Array type. Comes with a subtype of the array and a size that might be

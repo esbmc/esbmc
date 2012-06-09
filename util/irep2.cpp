@@ -235,7 +235,7 @@ fixedbv_type2t::get_width(void) const
 }
 
 unsigned int
-code_type2t::get_width(void) const
+code_data::get_width(void) const
 {
   throw new symbolic_type_excp();
 }
@@ -1755,6 +1755,8 @@ std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", ""};
 std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", ""};
+std::string code_type2t::field_names [esbmct::num_type_fields]  =
+{ "arguments", "ret_type", "argument_names", "ellipsis"};
 
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
