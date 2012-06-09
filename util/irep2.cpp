@@ -935,6 +935,14 @@ type_to_string<type2t::type_ids>(const type2t::type_ids &id,
 }
 
 template <>
+inline std::string
+type_to_string<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                 int indent __attribute__((unused)))
+{
+  return "";
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -1023,6 +1031,14 @@ do_type_cmp<type2t::type_ids>(const type2t::type_ids &id,
                               const type2t::type_ids &id2)
 {
   return true; // Dummy field comparison.
+}
+
+template <>
+inline bool
+do_type_cmp<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                    const expr2t::expr_ids &id2)
+{
+  return 0; // Dummy field comparison.
 }
 
 template <>
@@ -1163,6 +1179,14 @@ do_type_lt<type2t::type_ids>(const type2t::type_ids &id,
 }
 
 template <>
+inline int
+do_type_lt<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                   const expr2t::expr_ids &id2)
+{
+  return 0; // Dummy field comparison
+}
+
+template <>
 inline void
 do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
 {
@@ -1276,6 +1300,14 @@ do_type_crc<type2t::type_ids>(const type2t::type_ids &i,boost::crc_32_type &crc)
   return; // Dummy field crc
 }
 
+template <>
+inline void
+do_type_crc<const expr2t::expr_ids>(const expr2t::expr_ids &i,
+                                    boost::crc_32_type &crc)
+{
+  return; // Dummy field crc
+}
+
 template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<bool>(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1283,6 +1315,7 @@ template<> inline void do_type_list_operands<unsigned int>(const unsigned int &t
 template<> inline void do_type_list_operands<BigInt>(const BigInt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
 template<> inline void do_type_list_operands<type2tc>(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1291,8 +1324,7 @@ template<> inline void do_type_list_operands<unsigned int>(unsigned int &theval 
 template<> inline void do_type_list_operands<BigInt>(BigInt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<fixedbvt>(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<dstring>(dstring &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-
-
+template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list< expr2tc*> &inp __attribute__((unused))) { return; }
 
 template<>
 inline void
