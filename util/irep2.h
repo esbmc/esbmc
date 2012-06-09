@@ -682,14 +682,14 @@ namespace esbmct {
   const unsigned int num_type_fields = 4;
 
   template <class derived, class subclass,
-    class field1_type = type2t::type_ids,
-    field1_type derived::*field1_ptr = (field1_type derived::*)&type2t::type_id,
-    class field2_type = type2t::type_ids,
-    field2_type derived::*field2_ptr = (field2_type derived::*)&type2t::type_id,
-    class field3_type = type2t::type_ids,
-    field3_type derived::*field3_ptr = (field3_type derived::*)&type2t::type_id,
-    class field4_type = type2t::type_ids,
-    field4_type derived::*field4_ptr = (field4_type derived::*)&type2t::type_id>
+  typename field1_type = type2t::type_ids, class field1_class = type2t,
+  field1_type field1_class::*field1_ptr = &field1_class::type_id,
+  typename field2_type = type2t::type_ids, class field2_class = type2t,
+  field2_type field2_class::*field2_ptr = &field2_class::type_id,
+  typename field3_type = type2t::type_ids, class field3_class = type2t,
+  field3_type field3_class::*field3_ptr = &field3_class::type_id,
+  typename field4_type = type2t::type_ids, class field4_class = type2t,
+  field4_type field4_class::*field4_ptr = &field4_class::type_id>
   class type_methods : public subclass
   {
     class dummy_type_tag {
@@ -730,10 +730,11 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids>, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3, arg4) { }
 
-    type_methods(const type_methods<derived, subclass, field1_type, field1_ptr,
-                                    field2_type, field2_ptr,
-                                    field3_type, field3_ptr,
-                                    field4_type, field4_ptr> &ref)
+    type_methods(const type_methods<derived, subclass,
+                                    field1_type, field1_class, field1_ptr,
+                                    field2_type, field2_class, field2_ptr,
+                                    field3_type, field3_class, field3_ptr,
+                                    field4_type, field4_class, field4_ptr> &ref)
       : subclass(ref) { }
 
     virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
@@ -783,14 +784,25 @@ class pointer_type2t;
 class fixedbv_type2t;
 class string_type2t;
 
+// We also require in advance, the actual classes that store type data.
+
+class symbol_type_data : public type2t
+{
+public:
+  symbol_type_data(type2t::type_ids id, const dstring sym_name) :
+    type2t (id), symbol_name(sym_name) {}
+  symbol_type_data(const symbol_type_data &ref) :
+    type2t (ref), symbol_name(ref.symbol_name) { }
+
+  irep_idt symbol_name;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
 typedef esbmct::type_methods<empty_type2t, type2t> empty_type_methods;
-typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
-        symbol_old_type_methods;
-typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
-        symbol_type_data;
+typedef esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
+        symbol_type_data, &symbol_type_data::symbol_name> symbol_type_methods;
 typedef esbmct::type_data<struct_union_type2t,
                             esbmct::type2tc_vec_members,
                             esbmct::irepidt_vec_member_names,
@@ -857,8 +869,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 template class esbmct::type_methods<bool_type2t, type2t>;
 template class esbmct::type_methods<empty_type2t, type2t>;
-template class esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
-template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<struct_union_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,
@@ -930,14 +940,17 @@ public:
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when
  *  a struct/array contains a recursive pointer to its own type. */
-class symbol_type2t : public symbol_old_type_methods, public symbol_type_data
+
+class symbol_type2t : public symbol_type_methods
 {
 public:
   symbol_type2t(const dstring sym_name) :
-    type2t (symbol_id), symbol_type_data(sym_name) {}
+    symbol_type_methods(symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref) :
-    type2t (ref), symbol_type_data(ref) { }
+    symbol_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 class struct_union_type2t : public struct_union_type_data
