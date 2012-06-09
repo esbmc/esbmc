@@ -664,37 +664,37 @@ namespace esbmct {
 
   public:
     template <class arbitary = dummy_type_tag>
-    expr_methods(type2t::type_ids id,
+    expr_methods(const type2tc &t, expr2t::expr_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
-      : subclass(id) { }
+      : subclass(t, id) { }
 
     template <class arbitary = dummy_type_tag>
-    expr_methods(type2t::type_ids id,
+    expr_methods(const type2tc &t, expr2t::expr_ids id,
                  const field1_type &arg1,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,type2t::type_ids>, arbitary >::type* = NULL,
-                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids> >, arbitary >::type* = NULL)
-      : subclass(id, arg1) { }
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : subclass(t, id, arg1) { }
 
     template <class arbitary = dummy_type_tag>
-    expr_methods(type2t::type_ids id, const field1_type &arg1,
+    expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids>, arbitary >::type* = NULL,
-                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids> >, arbitary >::type* = NULL)
-      : subclass(id, arg1, arg2) { }
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : subclass(t, id, arg1, arg2) { }
 
     template <class arbitary = dummy_type_tag>
-    expr_methods(type2t::type_ids id, const field1_type &arg1,
+    expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids>, arbitary >::type* = NULL,
-                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids> >, arbitary >::type* = NULL)
-      : subclass(id, arg1, arg2, arg3) { }
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : subclass(t, id, arg1, arg2, arg3) { }
 
     template <class arbitary = dummy_type_tag>
-    expr_methods(type2t::type_ids id, const field1_type &arg1,
+    expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids>, arbitary >::type* = NULL)
-      : subclass(id, arg1, arg2, arg3, arg4) { }
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids>, arbitary >::type* = NULL)
+      : subclass(t, id, arg1, arg2, arg3, arg4) { }
 
     expr_methods(const expr_methods<derived, subclass,
                                     field1_type, field1_class, field1_ptr,
