@@ -656,6 +656,74 @@ namespace esbmct {
           field3_type field3_class::*field3_ptr = &field3_class::type_id,
           typename field4_type = type2t::type_ids, class field4_class = type2t,
           field4_type field4_class::*field4_ptr = &field4_class::type_id>
+  class expr_methods : public subclass
+  {
+    class dummy_type_tag {
+      typedef int type;
+    };
+
+  public:
+    template <class arbitary = dummy_type_tag>
+    expr_methods(type2t::type_ids id,
+                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
+      : subclass(id) { }
+
+    template <class arbitary = dummy_type_tag>
+    expr_methods(type2t::type_ids id,
+                 const field1_type &arg1,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,type2t::type_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids> >, arbitary >::type* = NULL)
+      : subclass(id, arg1) { }
+
+    template <class arbitary = dummy_type_tag>
+    expr_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids> >, arbitary >::type* = NULL)
+      : subclass(id, arg1, arg2) { }
+
+    template <class arbitary = dummy_type_tag>
+    expr_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids> >, arbitary >::type* = NULL)
+      : subclass(id, arg1, arg2, arg3) { }
+
+    template <class arbitary = dummy_type_tag>
+    expr_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 const field4_type &arg4,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids>, arbitary >::type* = NULL)
+      : subclass(id, arg1, arg2, arg3, arg4) { }
+
+    expr_methods(const expr_methods<derived, subclass,
+                                    field1_type, field1_class, field1_ptr,
+                                    field2_type, field2_class, field2_ptr,
+                                    field3_type, field3_class, field3_ptr,
+                                    field4_type, field4_class, field4_ptr> &ref)
+      : subclass(ref) { }
+
+    virtual void convert_smt(prop_convt &obj, void *&arg) const;
+    virtual expr2tc clone(void) const;
+    virtual list_of_memberst tostring(unsigned int indent) const;
+    virtual bool cmp(const expr2t &ref) const;
+    virtual int lt(const expr2t &ref) const;
+    virtual void do_crc(boost::crc_32_type &crc) const;
+    virtual void list_operands(std::list<const expr2tc*> &inp) const;
+  protected:
+    virtual void list_operands(std::list<expr2tc*> &inp);
+    virtual expr2t *clone_raw(void) const;
+  };
+
+  template <class derived, class subclass,
+          typename field1_type = type2t::type_ids, class field1_class = type2t,
+          field1_type field1_class::*field1_ptr = &field1_class::type_id,
+          typename field2_type = type2t::type_ids, class field2_class = type2t,
+          field2_type field2_class::*field2_ptr = &field2_class::type_id,
+          typename field3_type = type2t::type_ids, class field3_class = type2t,
+          field3_type field3_class::*field3_ptr = &field3_class::type_id,
+          typename field4_type = type2t::type_ids, class field4_class = type2t,
+          field4_type field4_class::*field4_ptr = &field4_class::type_id>
   class type_methods : public subclass
   {
     class dummy_type_tag {
