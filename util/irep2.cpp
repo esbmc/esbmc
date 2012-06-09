@@ -1770,3 +1770,12 @@ template class esbmct::type_methods<union_type2t, struct_union_data,
     std::vector<type2tc>, struct_union_data, &struct_union_data::members,
     std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
     irep_idt, struct_union_data, &struct_union_data::name>;
+template class esbmct::type_methods<unsignedbv_type2t, bv_data,
+    unsigned int, bv_data, &bv_data::width>;
+template class esbmct::type_methods<signedbv_type2t, bv_data,
+    unsigned int, bv_data, &bv_data::width>;
+template class esbmct::type_methods<code_type2t, code_data,
+    std::vector<type2tc>, code_data, &code_data::arguments,
+    type2tc, code_data, &code_data::ret_type,
+    std::vector<irep_idt>, code_data, &code_data::argument_names,
+    bool, code_data, &code_data::ellipsis>;
