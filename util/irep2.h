@@ -679,7 +679,7 @@ namespace esbmct {
 
   const unsigned int num_type_fields = 4;
 
-  template <class derived,
+  template <class derived, class subclass,
     class field1_type = type2t::type_ids,
     field1_type derived::*field1_ptr = (field1_type derived::*)&type2t::type_id,
     class field2_type = type2t::type_ids,
@@ -688,10 +688,29 @@ namespace esbmct {
     field3_type derived::*field3_ptr = (field3_type derived::*)&type2t::type_id,
     class field4_type = type2t::type_ids,
     field4_type derived::*field4_ptr = (field4_type derived::*)&type2t::type_id>
-  class type_methods : virtual public type2t
+  class type_methods : public subclass
   {
   public:
-    type_methods() : type2t(type2t::end_type_id) { }
+    type_methods(type2t::type_ids id) : subclass(id) { }
+    type_methods(type2t::type_ids id, const field1_type &arg1)
+      : subclass(id, arg1) { }
+    type_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2)
+      : subclass(id, arg1, arg2) { }
+    type_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3)
+      : subclass(id, arg1, arg2, arg3) { }
+    type_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 const field4_type &arg4)
+      : subclass(id, arg1, arg2, arg3, arg4) { }
+
+    type_methods(const type_methods<derived, subclass, field1_type, field1_ptr,
+                                    field2_type, field2_ptr,
+                                    field3_type, field3_ptr,
+                                    field4_type, field4_ptr> &ref)
+      : subclass(ref) { }
+
     virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
@@ -741,7 +760,7 @@ class string_type2t;
 
 // Then give them a typedef name
 
-typedef esbmct::type_methods<bool_type2t> bool_type_methods;
+typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
 typedef esbmct::type_data<empty_type2t> empty_type_data;
 typedef esbmct::old_type_methods<empty_type2t> empty_old_type_methods;
 typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
@@ -865,11 +884,11 @@ template class esbmct::type_data<string_type2t, esbmct::uint_width>;
 template class esbmct::old_type_methods<string_type2t, esbmct::uint_width>;
 
 /** Boolean type. No additional data */
-class bool_type2t : public virtual type2t, public bool_type_methods
+class bool_type2t : public bool_type_methods
 {
 public:
-  bool_type2t(void) : type2t (bool_id) {}
-  bool_type2t(const bool_type2t &ref) : type2t (ref), bool_type_methods(ref) {}
+  bool_type2t(void) : bool_type_methods (bool_id) {}
+  bool_type2t(const bool_type2t &ref) : bool_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
 
   static std::string field_names[esbmct::num_type_fields];

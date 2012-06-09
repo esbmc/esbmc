@@ -1575,16 +1575,16 @@ esbmct::old_type_methods<derived, field1, field2, field3, field4>::do_crc
   return;
 }
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 void
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::convert_smt_type(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1592,16 +1592,16 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
   return;
 }
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 type2tc
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1628,16 +1628,16 @@ do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
   // Do nothing; this is a dummy member.
 }
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 list_of_memberst
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::tostring(unsigned int indent) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1653,16 +1653,16 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
   return thevector;
 }
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 bool
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::cmp(const type2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1684,17 +1684,17 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
 }
 
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 int
 
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::lt(const type2t &ref)const
 {
   int tmp;
@@ -1720,16 +1720,16 @@ esbmct::type_methods<derived, field1_type, field1_ptr,
   return tmp;
 }
 
-template <class derived,
+template <class derived, class subclass,
           class field1_type, field1_type derived::*field1_ptr,
           class field2_type, field2_type derived::*field2_ptr,
           class field3_type, field3_type derived::*field3_ptr,
           class field4_type, field4_type derived::*field4_ptr>
 void
-esbmct::type_methods<derived, field1_type, field1_ptr,
-                              field2_type, field2_ptr,
-                              field3_type, field3_ptr,
-                              field4_type, field4_ptr>
+esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
+                                        field2_type, field2_ptr,
+                                        field3_type, field3_ptr,
+                                        field4_type, field4_ptr>
       ::do_crc (boost::crc_32_type &crc) const
 {
 
