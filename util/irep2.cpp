@@ -1647,7 +1647,7 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 {
   const derived *derived_this = static_cast<const derived*>(this);
 
-  derived_this->type2t::do_crc(crc);
+  derived_this->expr2t::do_crc(crc);
   do_type_crc<field1_type>(derived_this->*field1_ptr, crc);
   do_type_crc<field2_type>(derived_this->*field2_ptr, crc);
   do_type_crc<field3_type>(derived_this->*field3_ptr, crc);
