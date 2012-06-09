@@ -787,7 +787,6 @@ class string_type2t;
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
 typedef esbmct::type_methods<empty_type2t, type2t> empty_type_methods;
-typedef esbmct::old_type_methods<empty_type2t> empty_old_type_methods;
 typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_old_type_methods;
 typedef esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>
