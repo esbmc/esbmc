@@ -761,7 +761,7 @@ class string_type2t;
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
-typedef esbmct::type_data<empty_type2t> empty_type_data;
+typedef esbmct::type_methods<empty_type2t, type2t> empty_type_methods;
 typedef esbmct::old_type_methods<empty_type2t> empty_old_type_methods;
 typedef esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>
         symbol_old_type_methods;
@@ -832,8 +832,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_data<empty_type2t>;
-template class esbmct::old_type_methods<empty_type2t>;
 template class esbmct::old_type_methods<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<symbol_type2t, esbmct::irepidt_symbol_name>;
 template class esbmct::type_data<struct_union_type2t,
@@ -895,12 +893,14 @@ public:
 };
 
 /** Empty type. For void pointers and the like, with no type. No extra data */
-class empty_type2t : public empty_old_type_methods, public empty_type_data
+class empty_type2t : public empty_type_methods
 {
 public:
-  empty_type2t(void) : type2t(empty_id) {}
-  empty_type2t(const empty_type2t &ref) : type2t(ref), empty_type_data(ref) {}
+  empty_type2t(void) : empty_type_methods(empty_id) {}
+  empty_type2t(const empty_type2t &ref) : empty_type_methods(ref) { }
   virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
 
 /** Symbol type. Temporary, prior to linking up types after parsing, or when

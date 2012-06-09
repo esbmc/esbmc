@@ -1744,3 +1744,5 @@ esbmct::type_methods<derived, subclass, field1_type, field1_ptr,
 }
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","",""};
+std::string empty_type2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
