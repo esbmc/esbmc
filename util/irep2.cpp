@@ -1666,7 +1666,7 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
       ::cmp(const type2t &ref) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
-  const derived *ref2 = dynamic_cast<const derived *>(&ref);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
   if (do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
@@ -1698,7 +1698,7 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
-  const derived *ref2 = dynamic_cast<const derived *>(&ref);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
   tmp = do_type_lt<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr);
   if (tmp != 0)
