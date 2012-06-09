@@ -867,8 +867,6 @@ typedef esbmct::old_type_methods<string_type2t, esbmct::uint_width>
 
 // And finally an explicit type instanciation.
 
-template class esbmct::type_methods<bool_type2t, type2t>;
-template class esbmct::type_methods<empty_type2t, type2t>;
 template class esbmct::type_data<struct_union_type2t,
                                     esbmct::type2tc_vec_members,
                                     esbmct::irepidt_vec_member_names,

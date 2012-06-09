@@ -1747,3 +1747,8 @@ std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
 std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
 { "symbol_name", "", "", ""};
+
+template class esbmct::type_methods<bool_type2t, type2t>;
+template class esbmct::type_methods<empty_type2t, type2t>;
+template class esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
+               symbol_type_data, &symbol_type_data::symbol_name>;
