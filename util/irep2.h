@@ -1232,6 +1232,7 @@ class typecast2t;
 class to_bv_typecast2t;
 class from_bv_typecast2t;
 class if2t;
+class equality2t;
 
 // Data definitions.
 
@@ -1347,6 +1348,19 @@ public:
   expr2tc false_value;
 };
 
+class relation_data : public expr2t
+{
+  public:
+  relation_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
+                const expr2tc &s2)
+    : expr2t(t, id), side_1(s1), side_2(s2) { }
+  relation_data(const relation_data &ref)
+    : expr2t(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1393,6 +1407,10 @@ typedef esbmct::expr_methods<if2t, if_data,
         expr2tc, if_data, &if_data::true_value,
         expr2tc, if_data, &if_data::false_value>
         if_expr_methods;
+typedef esbmct::expr_methods<equality2t, relation_data,
+        expr2tc, relation_data, &relation_data::side_1,
+        expr2tc, relation_data, &relation_data::side_2>
+        equality_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1560,19 +1578,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class equality2t : public esbmct::expr<equality2t, esbmct::expr2tc_side_1,
-                                     esbmct::expr2tc_side_2>
+class equality2t : public equality_expr_methods
 {
 public:
   equality2t(const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), equality_id, v1, v2) {}
+    : equality_expr_methods(type_pool.get_bool(), equality_id, v1, v2) {}
   equality2t(const equality2t &ref)
-    : esbmct::expr<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+    : equality_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<equality2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
 class notequal2t : public esbmct::expr<notequal2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>
