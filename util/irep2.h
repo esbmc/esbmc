@@ -1299,6 +1299,10 @@ typedef esbmct::expr_methods<constant_union2t, constant_datatype_data,
         std::vector<expr2tc>, constant_datatype_data,
         &constant_datatype_data::datatype_members>
         constant_union_expr_methods;
+typedef esbmct::expr_methods<constant_array2t, constant_datatype_data,
+        std::vector<expr2tc>, constant_datatype_data,
+        &constant_datatype_data::datatype_members>
+        constant_array_expr_methods;
 typedef esbmct::expr_methods<constant_bool2t, constant_bool_data,
         bool, constant_bool_data, &constant_bool_data::constant_value>
         constant_bool_expr_methods;
@@ -1387,17 +1391,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class constant_array2t : public esbmct::expr<constant_array2t,
-                                           esbmct::expr2tc_vec_datatype_members>
+class constant_array2t : public constant_array_expr_methods
 {
 public:
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : esbmct::expr<constant_array2t, esbmct::expr2tc_vec_datatype_members>
-      (type, constant_array_id, members) { }
+    : constant_array_expr_methods(type, constant_array_id, members) { }
   constant_array2t(const constant_array2t &ref)
-    : esbmct::expr<constant_array2t, esbmct::expr2tc_vec_datatype_members>(ref){}
+    : constant_array_expr_methods(ref){}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_array2t, esbmct::expr2tc_vec_datatype_members>;
 
 class constant_array_of2t : public esbmct::expr<constant_array_of2t,
                                               esbmct::expr2tc_initializer>
