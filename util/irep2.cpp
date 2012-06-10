@@ -1952,6 +1952,8 @@ std::string or2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string xor2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string implies2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2048,5 +2050,8 @@ template class esbmct::expr_methods<or2t, logic_2ops,
     expr2tc, logic_2ops, &logic_2ops::side_1,
     expr2tc, logic_2ops, &logic_2ops::side_2>;
 template class esbmct::expr_methods<xor2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<implies2t, logic_2ops,
     expr2tc, logic_2ops, &logic_2ops::side_1,
     expr2tc, logic_2ops, &logic_2ops::side_2>;

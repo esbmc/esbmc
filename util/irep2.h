@@ -1242,6 +1242,7 @@ class not2t;
 class and2t;
 class or2t;
 class xor2t;
+class implies2t;
 
 // Data definitions.
 
@@ -1488,6 +1489,10 @@ typedef esbmct::expr_methods<xor2t, logic_2ops,
         expr2tc, logic_2ops, &logic_2ops::side_1,
         expr2tc, logic_2ops, &logic_2ops::side_2>
         xor_expr_methods;
+typedef esbmct::expr_methods<implies2t, logic_2ops,
+        expr2tc, logic_2ops, &logic_2ops::side_1,
+        expr2tc, logic_2ops, &logic_2ops::side_2>
+        implies_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1786,20 +1791,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class implies2t : public esbmct::expr<implies2t, esbmct::expr2tc_side_1,
-                                               esbmct::expr2tc_side_2>
+class implies2t : public implies_expr_methods
 {
 public:
-  implies2t(const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<implies2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), implies_id, v1, v2) {}
+  implies2t(const expr2tc &s1, const expr2tc &s2)
+  : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2) {}
   implies2t(const implies2t &ref)
-    : esbmct::expr<implies2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+  : implies_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<implies2t, esbmct::expr2tc_side_1,
-                                     esbmct::expr2tc_side_2>;
 
 class bitand2t : public esbmct::expr<bitand2t, esbmct::expr2tc_side_1,
                                              esbmct::expr2tc_side_2>
