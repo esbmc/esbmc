@@ -1240,6 +1240,7 @@ class lessthanequal2t;
 class greaterthanequal2t;
 class not2t;
 class and2t;
+class or2t;
 
 // Data definitions.
 
@@ -1478,6 +1479,10 @@ typedef esbmct::expr_methods<and2t, logic_2ops,
         expr2tc, logic_2ops, &logic_2ops::side_1,
         expr2tc, logic_2ops, &logic_2ops::side_2>
         and_expr_methods;
+typedef esbmct::expr_methods<or2t, logic_2ops,
+        expr2tc, logic_2ops, &logic_2ops::side_1,
+        expr2tc, logic_2ops, &logic_2ops::side_2>
+        or_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1750,19 +1755,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class or2t : public esbmct::expr<or2t, esbmct::expr2tc_side_1,
-                                     esbmct::expr2tc_side_2>
+class or2t : public or_expr_methods
 {
 public:
-  or2t(const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<or2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), or_id, v1, v2) {}
+  or2t(const expr2tc &s1, const expr2tc &s2)
+  : or_expr_methods(type_pool.get_bool(), or_id, s1, s2) {}
   or2t(const or2t &ref)
-    : esbmct::expr<or2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+  : or_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<or2t, esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>;
 
 class xor2t : public esbmct::expr<xor2t, esbmct::expr2tc_side_1,
                                        esbmct::expr2tc_side_2>

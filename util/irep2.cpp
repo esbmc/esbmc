@@ -1948,6 +1948,8 @@ std::string not2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
 std::string and2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string or2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2038,5 +2040,8 @@ template class esbmct::expr_methods<greaterthanequal2t, relation_data,
 template class esbmct::expr_methods<not2t, not_data,
     expr2tc, not_data, &not_data::value>;
 template class esbmct::expr_methods<and2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<or2t, logic_2ops,
     expr2tc, logic_2ops, &logic_2ops::side_1,
     expr2tc, logic_2ops, &logic_2ops::side_2>;
