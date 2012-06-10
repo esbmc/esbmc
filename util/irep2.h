@@ -1254,6 +1254,7 @@ class bitnot2t;
 class neg2t;
 class abs2t;
 class add2t;
+class sub2t;
 
 // Data definitions.
 
@@ -1611,6 +1612,10 @@ typedef esbmct::expr_methods<add2t, arith_2ops,
         expr2tc, arith_2ops, &arith_2ops::side_1,
         expr2tc, arith_2ops, &arith_2ops::side_2>
         add_expr_methods;
+typedef esbmct::expr_methods<sub2t, arith_2ops,
+        expr2tc, arith_2ops, &arith_2ops::side_1,
+        expr2tc, arith_2ops, &arith_2ops::side_2>
+        sub_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2063,20 +2068,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class sub2t : public esbmct::expr<sub2t, esbmct::expr2tc_side_1,
-                                       esbmct::expr2tc_side_2>
+class sub2t : public sub_expr_methods
 {
 public:
   sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<sub2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type, sub_id, v1, v2) {}
+    : sub_expr_methods(type, sub_id, v1, v2) {}
   sub2t(const sub2t &ref)
-    : esbmct::expr<sub2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+    : sub_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<sub2t, esbmct::expr2tc_side_1,
-                                 esbmct::expr2tc_side_2>;
 
 class mul2t : public esbmct::expr<mul2t, esbmct::expr2tc_side_1,
                                        esbmct::expr2tc_side_2>
