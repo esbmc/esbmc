@@ -1022,7 +1022,7 @@ inline bool
 do_type_cmp<type2t::type_ids>(const type2t::type_ids &id,
                               const type2t::type_ids &id2)
 {
-  return 0; // Dummy field comparison.
+  return true; // Dummy field comparison.
 }
 
 template <>
@@ -1773,16 +1773,16 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
 
-  if (do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
+  if (!do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
 
-  if (do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
+  if (!do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
     return false;
 
-  if (do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
+  if (!do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
     return false;
 
-  if (do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
+  if (!do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
     return false;
 
   return true;
