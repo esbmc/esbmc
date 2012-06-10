@@ -1263,6 +1263,7 @@ class ashr2t;
 class same_object2t;
 class pointer_offset2t;
 class pointer_object2t;
+class address_of2t;
 
 // Data definitions.
 
@@ -1678,6 +1679,9 @@ typedef esbmct::expr_methods<pointer_offset2t, pointer_ops,
 typedef esbmct::expr_methods<pointer_object2t, pointer_ops,
         expr2tc, pointer_ops, &pointer_ops::ptr_obj>
         pointer_object_expr_methods;
+typedef esbmct::expr_methods<address_of2t, pointer_ops,
+        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
+        address_of_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2245,18 +2249,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class address_of2t : public esbmct::expr<address_of2t,
-                                           esbmct::expr2tc_ptr_obj>
+class address_of2t : public address_of_expr_methods
 {
 public:
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : esbmct::expr<address_of2t, esbmct::expr2tc_ptr_obj>
-      (type2tc(new pointer_type2t(subtype)), address_of_id, ptrobj) {}
+    : address_of_expr_methods(type2tc(new pointer_type2t(subtype)),
+                              address_of_id, ptrobj) {}
   address_of2t(const address_of2t &ref)
-    : esbmct::expr<address_of2t, esbmct::expr2tc_ptr_obj> (ref) {}
+    : address_of_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<address_of2t, esbmct::expr2tc_ptr_obj>;
 
 class byte_extract2t : public esbmct::expr<byte_extract2t,
                                            esbmct::bool_big_endian,

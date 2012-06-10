@@ -1994,6 +1994,8 @@ std::string pointer_offset2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", ""};
 std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", ""};
+std::string address_of2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2149,4 +2151,6 @@ template class esbmct::expr_methods<same_object2t, same_object_data,
 template class esbmct::expr_methods<pointer_offset2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
 template class esbmct::expr_methods<pointer_object2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<address_of2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
