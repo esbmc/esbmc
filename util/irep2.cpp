@@ -1938,6 +1938,8 @@ std::string notequal2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string lessthan2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string greaterthan2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2014,5 +2016,8 @@ template class esbmct::expr_methods<notequal2t, relation_data,
     expr2tc, relation_data, &relation_data::side_1,
     expr2tc, relation_data, &relation_data::side_2>;
 template class esbmct::expr_methods<lessthan2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<greaterthan2t, relation_data,
     expr2tc, relation_data, &relation_data::side_1,
     expr2tc, relation_data, &relation_data::side_2>;
