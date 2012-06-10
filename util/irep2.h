@@ -1246,6 +1246,7 @@ class implies2t;
 class bitand2t;
 class bitor2t;
 class bitxor2t;
+class bitnand2t;
 
 // Data definitions.
 
@@ -1530,6 +1531,10 @@ typedef esbmct::expr_methods<bitxor2t, bit_2ops,
         expr2tc, bit_2ops, &bit_2ops::side_1,
         expr2tc, bit_2ops, &bit_2ops::side_2>
         bitxor_expr_methods;
+typedef esbmct::expr_methods<bitnand2t, bit_2ops,
+        expr2tc, bit_2ops, &bit_2ops::side_1,
+        expr2tc, bit_2ops, &bit_2ops::side_2>
+        bitnand_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1880,20 +1885,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class bitnand2t : public esbmct::expr<bitnand2t, esbmct::expr2tc_side_1,
-                                               esbmct::expr2tc_side_2>
+class bitnand2t : public bitnand_expr_methods
 {
 public:
-  bitnand2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<bitnand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type, bitnand_id, v1, v2) {}
+  bitnand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
+  : bitnand_expr_methods(t, bitnand_id, s1, s2) {}
   bitnand2t(const bitnand2t &ref)
-    : esbmct::expr<bitnand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+  : bitnand_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<bitnand2t, esbmct::expr2tc_side_1,
-                                     esbmct::expr2tc_side_2>;
 
 class bitnor2t : public esbmct::expr<bitnor2t, esbmct::expr2tc_side_1,
                                              esbmct::expr2tc_side_2>
