@@ -1958,6 +1958,8 @@ std::string bitand2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string bitor2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string bitxor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2063,5 +2065,8 @@ template class esbmct::expr_methods<bitand2t, bit_2ops,
     expr2tc, bit_2ops, &bit_2ops::side_1,
     expr2tc, bit_2ops, &bit_2ops::side_2>;
 template class esbmct::expr_methods<bitor2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitxor2t, bit_2ops,
     expr2tc, bit_2ops, &bit_2ops::side_1,
     expr2tc, bit_2ops, &bit_2ops::side_2>;
