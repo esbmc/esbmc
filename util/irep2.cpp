@@ -1934,6 +1934,8 @@ std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", ""};
 std::string equality2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string notequal2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2004,5 +2006,8 @@ template class esbmct::expr_methods<if2t, if_data,
     expr2tc, if_data, &if_data::true_value,
     expr2tc, if_data, &if_data::false_value>;
 template class esbmct::expr_methods<equality2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<notequal2t, relation_data,
     expr2tc, relation_data, &relation_data::side_1,
     expr2tc, relation_data, &relation_data::side_2>;

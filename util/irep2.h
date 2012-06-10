@@ -1233,6 +1233,7 @@ class to_bv_typecast2t;
 class from_bv_typecast2t;
 class if2t;
 class equality2t;
+class notequal2t;
 
 // Data definitions.
 
@@ -1411,6 +1412,10 @@ typedef esbmct::expr_methods<equality2t, relation_data,
         expr2tc, relation_data, &relation_data::side_1,
         expr2tc, relation_data, &relation_data::side_2>
         equality_expr_methods;
+typedef esbmct::expr_methods<notequal2t, relation_data,
+        expr2tc, relation_data, &relation_data::side_1,
+        expr2tc, relation_data, &relation_data::side_2>
+        notequal_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1591,19 +1596,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class notequal2t : public esbmct::expr<notequal2t, esbmct::expr2tc_side_1,
-                                     esbmct::expr2tc_side_2>
+class notequal2t : public notequal_expr_methods
 {
 public:
   notequal2t(const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), notequal_id, v1, v2) {}
+    : notequal_expr_methods(type_pool.get_bool(), notequal_id, v1, v2) {}
   notequal2t(const notequal2t &ref)
-    : esbmct::expr<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+    : notequal_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<notequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
 class lessthan2t : public esbmct::expr<lessthan2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>
