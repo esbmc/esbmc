@@ -1220,6 +1220,7 @@ extern type_poolt type_pool;
 class constant2t;
 class constant_int2t;
 class constant_fixedbv2t;
+class constant_bool2t;
 class constant_string2t;
 class constant_datatype2t;
 class constant_struct2t;
@@ -1271,6 +1272,17 @@ public:
   std::vector<expr2tc> datatype_members;
 };
 
+class constant_bool_data : public constant2t
+{
+public:
+  constant_bool_data(const type2tc &t, expr2t::expr_ids id, bool value)
+    : constant2t(t, id), constant_value(value) { }
+  constant_bool_data(const constant_bool_data &ref)
+    : constant2t(ref), constant_value(ref.constant_value) { }
+
+  bool constant_value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1287,6 +1299,9 @@ typedef esbmct::expr_methods<constant_union2t, constant_datatype_data,
         std::vector<expr2tc>, constant_datatype_data,
         &constant_datatype_data::datatype_members>
         constant_union_expr_methods;
+typedef esbmct::expr_methods<constant_bool2t, constant_bool_data,
+        bool, constant_bool_data, &constant_bool_data::constant_value>
+        constant_bool_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1319,20 +1334,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class constant_bool2t : public esbmct::expr<constant_bool2t,
-                                          esbmct::constant_bool_value>
+class constant_bool2t : public constant_bool_expr_methods
 {
 public:
   constant_bool2t(bool value)
-    : esbmct::expr<constant_bool2t, esbmct::constant_bool_value>
-                (type_pool.get_bool(), constant_bool_id, value) { }
+    : constant_bool_expr_methods(type_pool.get_bool(), constant_bool_id, value)
+      { }
   constant_bool2t(const constant_bool2t &ref)
-    : esbmct::expr<constant_bool2t, esbmct::constant_bool_value>(ref) { }
+    : constant_bool_expr_methods(ref) { }
 
   bool is_true(void) const;
   bool is_false(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_bool2t, esbmct::constant_bool_value>;
 
 /** Constant class for string constants. */
 class constant_string2t : public esbmct::expr<constant_string2t,
