@@ -2055,3 +2055,6 @@ template class esbmct::expr_methods<xor2t, logic_2ops,
 template class esbmct::expr_methods<implies2t, logic_2ops,
     expr2tc, logic_2ops, &logic_2ops::side_1,
     expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<bitand2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;

@@ -1243,6 +1243,7 @@ class and2t;
 class or2t;
 class xor2t;
 class implies2t;
+class bitand2t;
 
 // Data definitions.
 
@@ -1404,6 +1405,28 @@ public:
   expr2tc side_2;
 };
 
+class bitops : public expr2t
+{
+public:
+  bitops(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  bitops(const bitops &ref)
+    : expr2t(ref) { }
+};
+
+class bit_2ops : public bitops
+{
+public:
+  bit_2ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
+           const expr2tc &s2)
+    : bitops(t, id), side_1(s1), side_2(s2) { }
+  bit_2ops(const bit_2ops &ref)
+    : bitops(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1493,6 +1516,10 @@ typedef esbmct::expr_methods<implies2t, logic_2ops,
         expr2tc, logic_2ops, &logic_2ops::side_1,
         expr2tc, logic_2ops, &logic_2ops::side_2>
         implies_expr_methods;
+typedef esbmct::expr_methods<bitand2t, bit_2ops,
+        expr2tc, bit_2ops, &bit_2ops::side_1,
+        expr2tc, bit_2ops, &bit_2ops::side_2>
+        bitand_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1804,20 +1831,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class bitand2t : public esbmct::expr<bitand2t, esbmct::expr2tc_side_1,
-                                             esbmct::expr2tc_side_2>
+class bitand2t : public bitand_expr_methods
 {
 public:
-  bitand2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<bitand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type, bitand_id, v1, v2) {}
+  bitand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
+  : bitand_expr_methods(t, bitand_id, s1, s2) {}
   bitand2t(const bitand2t &ref)
-    : esbmct::expr<bitand2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+  : bitand_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<bitand2t, esbmct::expr2tc_side_1,
-                                    esbmct::expr2tc_side_2>;
 
 class bitor2t : public esbmct::expr<bitor2t, esbmct::expr2tc_side_1,
                                            esbmct::expr2tc_side_2>
