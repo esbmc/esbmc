@@ -1252,6 +1252,7 @@ class bitnxor2t;
 class lshr2t;
 class bitnot2t;
 class neg2t;
+class abs2t;
 
 // Data definitions.
 
@@ -1602,6 +1603,9 @@ typedef esbmct::expr_methods<bitnot2t, bitnot_data,
 typedef esbmct::expr_methods<neg2t, arith_1op,
         expr2tc, arith_1op, &arith_1op::value>
         neg_expr_methods;
+typedef esbmct::expr_methods<abs2t, arith_1op,
+        expr2tc, arith_1op, &arith_1op::value>
+        abs_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2030,15 +2034,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class abs2t : public esbmct::expr<abs2t,esbmct::expr2tc_value>
+class abs2t : public abs_expr_methods
 {
 public:
   abs2t(const type2tc &type, const expr2tc &val)
-    : esbmct::expr<abs2t, esbmct::expr2tc_value> (type, abs_id, val) {}
+    : abs_expr_methods(type, abs_id, val) {}
   abs2t(const abs2t &ref)
-    : esbmct::expr<abs2t, esbmct::expr2tc_value> (ref) {}
+    : abs_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<abs2t, esbmct::expr2tc_value>;
 
 class add2t : public esbmct::expr<add2t, esbmct::expr2tc_side_1,
                                        esbmct::expr2tc_side_2>
