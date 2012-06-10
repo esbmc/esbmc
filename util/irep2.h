@@ -1237,6 +1237,7 @@ class notequal2t;
 class lessthan2t;
 class greaterthan2t;
 class lessthanequal2t;
+class greaterthanequal2t;
 
 // Data definitions.
 
@@ -1431,6 +1432,10 @@ typedef esbmct::expr_methods<lessthanequal2t, relation_data,
         expr2tc, relation_data, &relation_data::side_1,
         expr2tc, relation_data, &relation_data::side_2>
         lessthanequal_expr_methods;
+typedef esbmct::expr_methods<greaterthanequal2t, relation_data,
+        expr2tc, relation_data, &relation_data::side_1,
+        expr2tc, relation_data, &relation_data::side_2>
+        greaterthanequal_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1663,20 +1668,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class greaterthanequal2t : public esbmct::expr<greaterthanequal2t,
-                                          esbmct::expr2tc_side_1,
-                                          esbmct::expr2tc_side_2>
+class greaterthanequal2t : public greaterthanequal_expr_methods
 {
 public:
   greaterthanequal2t(const expr2tc &v1, const expr2tc &v2)
-  : esbmct::expr<greaterthanequal2t,esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), greaterthanequal_id, v1, v2) {}
+    : greaterthanequal_expr_methods(type_pool.get_bool(), greaterthanequal_id,
+                                    v1, v2) {}
   greaterthanequal2t(const greaterthanequal2t &ref)
-  : esbmct::expr<greaterthanequal2t,esbmct::expr2tc_side_1,esbmct::expr2tc_side_2>
-      (ref) {}
+    : greaterthanequal_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<greaterthanequal2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>;
 
 class not2t : public esbmct::expr<not2t, esbmct::expr2tc_value>
 {
