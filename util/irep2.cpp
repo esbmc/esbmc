@@ -1954,6 +1954,8 @@ std::string xor2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string implies2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string bitand2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 std::string bitor2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 
