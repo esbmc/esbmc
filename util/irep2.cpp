@@ -1928,6 +1928,8 @@ std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", ""};
 std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", ""};
+std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "", "", ""};
 
 // Explicit template instanciations
 
@@ -1990,4 +1992,6 @@ template class esbmct::expr_methods<symbol2t, symbol_data,
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
+    expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
