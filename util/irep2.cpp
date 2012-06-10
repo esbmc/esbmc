@@ -1038,7 +1038,7 @@ inline bool
 do_type_cmp<const expr2t::expr_ids>(const expr2t::expr_ids &id,
                                     const expr2t::expr_ids &id2)
 {
-  return 0; // Dummy field comparison.
+  return true; // Dummy field comparison.
 }
 
 template <>
