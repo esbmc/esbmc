@@ -1238,6 +1238,7 @@ class lessthan2t;
 class greaterthan2t;
 class lessthanequal2t;
 class greaterthanequal2t;
+class not2t;
 
 // Data definitions.
 
@@ -1366,6 +1367,26 @@ class relation_data : public expr2t
   expr2tc side_2;
 };
 
+class logical_ops : public expr2t
+{
+public:
+  logical_ops(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  logical_ops(const logical_ops &ref)
+    : expr2t(ref) { }
+};
+
+class not_data : public logical_ops
+{
+public:
+  not_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+    : logical_ops(t, id), value(v) { }
+  not_data(const not_data &ref)
+    : logical_ops(ref), value(ref.value) { }
+
+  expr2tc value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1436,6 +1457,9 @@ typedef esbmct::expr_methods<greaterthanequal2t, relation_data,
         expr2tc, relation_data, &relation_data::side_1,
         expr2tc, relation_data, &relation_data::side_2>
         greaterthanequal_expr_methods;
+typedef esbmct::expr_methods<not2t, not_data,
+        expr2tc, not_data, &not_data::value>
+        not_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1682,18 +1706,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class not2t : public esbmct::expr<not2t, esbmct::expr2tc_value>
+class not2t : public not_expr_methods
 {
 public:
   not2t(const expr2tc &val)
-  : esbmct::expr<not2t, esbmct::expr2tc_value>
-    (type_pool.get_bool(), not_id, val) {}
+  : not_expr_methods(type_pool.get_bool(), not_id, val) {}
   not2t(const not2t &ref)
-  : esbmct::expr<not2t, esbmct::expr2tc_value>
-    (ref) {}
+  : not_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<not2t, esbmct::expr2tc_value>;
 
 class and2t : public esbmct::expr<and2t, esbmct::expr2tc_side_1,
                                        esbmct::expr2tc_side_2>

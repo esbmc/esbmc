@@ -1944,6 +1944,8 @@ std::string lessthanequal2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string greaterthanequal2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string not2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2031,3 +2033,5 @@ template class esbmct::expr_methods<lessthanequal2t, relation_data,
 template class esbmct::expr_methods<greaterthanequal2t, relation_data,
     expr2tc, relation_data, &relation_data::side_1,
     expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<not2t, not_data,
+    expr2tc, not_data, &not_data::value>;
