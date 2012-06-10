@@ -1219,6 +1219,7 @@ extern type_poolt type_pool;
 
 class constant2t;
 class constant_int2t;
+class constant_fixedbv2t;
 class constant_string2t;
 class constant_datatype2t;
 class constant_struct2t;
@@ -1246,11 +1247,26 @@ public:
   BigInt constant_value;
 };
 
+class constant_fixedbv_data : public constant2t
+{
+public:
+  constant_fixedbv_data(const type2tc &t, expr2t::expr_ids id,
+                        const fixedbvt &fbv)
+    : constant2t(t, id), value(fbv) { }
+  constant_fixedbv_data(const constant_fixedbv_data &ref)
+    : constant2t(ref), value(ref.value) { }
+
+  fixedbvt value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
         BigInt, constant_int_data, &constant_int_data::constant_value>
         constant_int_expr_methods;
+typedef esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
+        fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
+        constant_fixedbv_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1272,17 +1288,16 @@ public:
 /** Constant fixedbv class. Records a floating point number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
  *  as fraction/integer parts. */
-class constant_fixedbv2t : public esbmct::expr<constant_fixedbv2t,
-                                             esbmct::fixedbv_value>
+class constant_fixedbv2t : public constant_fixedbv_expr_methods
 {
 public:
   constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
-    : esbmct::expr<constant_fixedbv2t, esbmct::fixedbv_value>
-                (type, constant_fixedbv_id, value) { }
+    : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
-    : esbmct::expr<constant_fixedbv2t, esbmct::fixedbv_value> (ref) { }
+    : constant_fixedbv_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_fixedbv2t, esbmct::fixedbv_value>;
 
 class constant_bool2t : public esbmct::expr<constant_bool2t,
                                           esbmct::constant_bool_value>

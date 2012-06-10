@@ -1908,6 +1908,8 @@ std::string string_type2t::field_names [esbmct::num_type_fields]  =
 
 std::string constant_int2t::field_names [esbmct::num_type_fields]  =
 { "constant_value", "", "", ""};
+std::string constant_fixedbv2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -1948,3 +1950,5 @@ template class esbmct::type_methods<string_type2t, string_data,
 
 template class esbmct::expr_methods<constant_int2t, constant_int_data,
     BigInt, constant_int_data, &constant_int_data::constant_value>;
+template class esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
+    fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>;
