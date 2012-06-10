@@ -1259,6 +1259,18 @@ public:
   fixedbvt value;
 };
 
+class constant_datatype_data : public constant2t
+{
+public:
+  constant_datatype_data(const type2tc &t, expr2t::expr_ids id,
+                         const std::vector<expr2tc> &m)
+    : constant2t(t, id), datatype_members(m) { }
+  constant_datatype_data(const constant_datatype_data &ref)
+    : constant2t(ref), datatype_members(ref.datatype_members) { }
+
+  std::vector<expr2tc> datatype_members;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1267,6 +1279,14 @@ typedef esbmct::expr_methods<constant_int2t, constant_int_data,
 typedef esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
         fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
         constant_fixedbv_expr_methods;
+typedef esbmct::expr_methods<constant_struct2t, constant_datatype_data,
+        std::vector<expr2tc>, constant_datatype_data,
+        &constant_datatype_data::datatype_members>
+        constant_struct_expr_methods;
+typedef esbmct::expr_methods<constant_union2t, constant_datatype_data,
+        std::vector<expr2tc>, constant_datatype_data,
+        &constant_datatype_data::datatype_members>
+        constant_union_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1330,29 +1350,27 @@ public:
 };
 template class esbmct::expr<constant_string2t, esbmct::irepidt_value>;
 
-class constant_struct2t : public esbmct::expr<constant_struct2t,
-                                           esbmct::expr2tc_vec_datatype_members>
+class constant_struct2t : public constant_struct_expr_methods
 {
 public:
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : esbmct::expr<constant_struct2t, esbmct::expr2tc_vec_datatype_members>
-      (type, constant_struct_id, members) { }
+    : constant_struct_expr_methods (type, constant_struct_id, members) { }
   constant_struct2t(const constant_struct2t &ref)
-    : esbmct::expr<constant_struct2t, esbmct::expr2tc_vec_datatype_members>(ref){}
-};
-template class esbmct::expr<constant_struct2t, esbmct::expr2tc_vec_datatype_members>;
+    : constant_struct_expr_methods(ref) { }
 
-class constant_union2t : public esbmct::expr<constant_union2t,
-                                           esbmct::expr2tc_vec_datatype_members>
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class constant_union2t : public constant_union_expr_methods
 {
 public:
   constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
-    : esbmct::expr<constant_union2t, esbmct::expr2tc_vec_datatype_members>
-      (type, constant_union_id, members) { }
+    : constant_union_expr_methods (type, constant_union_id, members) { }
   constant_union2t(const constant_union2t &ref)
-    : esbmct::expr<constant_union2t, esbmct::expr2tc_vec_datatype_members>(ref){}
+    : constant_union_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_union2t, esbmct::expr2tc_vec_datatype_members>;
 
 class constant_array2t : public esbmct::expr<constant_array2t,
                                            esbmct::expr2tc_vec_datatype_members>
