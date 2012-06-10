@@ -1250,6 +1250,7 @@ class bitnand2t;
 class bitnor2t;
 class bitnxor2t;
 class lshr2t;
+class bitnot2t;
 
 // Data definitions.
 
@@ -1420,6 +1421,17 @@ public:
     : expr2t(ref) { }
 };
 
+class bitnot_data : public bitops
+{
+public:
+  bitnot_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+    : bitops(t, id), value(v) { }
+  bitnot_data(const bitnot_data &ref)
+    : bitops(ref), value(ref.value) { }
+
+  expr2tc value;
+};
+
 class bit_2ops : public bitops
 {
 public:
@@ -1550,6 +1562,9 @@ typedef esbmct::expr_methods<lshr2t, bit_2ops,
         expr2tc, bit_2ops, &bit_2ops::side_1,
         expr2tc, bit_2ops, &bit_2ops::side_2>
         lshr_expr_methods;
+typedef esbmct::expr_methods<bitnot2t, bitnot_data,
+        expr2tc, bitnot_data, &bitnot_data::value>
+        bitnot_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1939,18 +1954,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class bitnot2t : public esbmct::expr<bitnot2t, esbmct::expr2tc_value>
+class bitnot2t : public bitnot_expr_methods
 {
 public:
   bitnot2t(const type2tc &type, const expr2tc &v)
-    : esbmct::expr<bitnot2t, esbmct::expr2tc_value>
-      (type, bitnot_id, v) {}
+    : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const bitnot2t &ref)
-    : esbmct::expr<bitnot2t, esbmct::expr2tc_value>
-      (ref) {}
+    : bitnot_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<bitnot2t, esbmct::expr2tc_value>;
 
 class lshr2t : public lshr_expr_methods
 {
