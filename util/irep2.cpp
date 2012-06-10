@@ -1930,6 +1930,8 @@ std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", ""};
 std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", ""};
+std::string if2t::field_names [esbmct::num_type_fields]  =
+{ "cond", "true_value", "false_value", ""};
 
 // Explicit template instanciations
 
@@ -1995,3 +1997,7 @@ template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<if2t, if_data,
+    expr2tc, if_data, &if_data::cond,
+    expr2tc, if_data, &if_data::true_value,
+    expr2tc, if_data, &if_data::false_value>;

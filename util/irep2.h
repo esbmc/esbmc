@@ -1231,6 +1231,7 @@ class symbol2t;
 class typecast2t;
 class to_bv_typecast2t;
 class from_bv_typecast2t;
+class if2t;
 
 // Data definitions.
 
@@ -1331,6 +1332,21 @@ public:
   expr2tc from;
 };
 
+class if_data : public expr2t
+{
+public:
+  if_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &c,
+                const expr2tc &tv, const expr2tc &fv)
+    : expr2t(t, id), cond(c), true_value(tv), false_value(fv) { }
+  if_data(const if_data &ref)
+    : expr2t(ref), cond(ref.cond), true_value(ref.true_value),
+      false_value(ref.false_value) { }
+
+  expr2tc cond;
+  expr2tc true_value;
+  expr2tc false_value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1372,6 +1388,11 @@ typedef esbmct::expr_methods<to_bv_typecast2t, typecast_data,
 typedef esbmct::expr_methods<from_bv_typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
         from_bv_typecast_expr_methods;
+typedef esbmct::expr_methods<if2t, if_data,
+        expr2tc, if_data, &if_data::cond,
+        expr2tc, if_data, &if_data::true_value,
+        expr2tc, if_data, &if_data::false_value>
+        if_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1525,25 +1546,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class if2t : public esbmct::expr<if2t,
-                               esbmct::expr2tc_cond,
-                               esbmct::expr2tc_true_value,
-                               esbmct::expr2tc_false_value>
+class if2t : public if_expr_methods
 {
 public:
   if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
-    : esbmct::expr<if2t, esbmct::expr2tc_cond, esbmct::expr2tc_true_value,
-                 esbmct::expr2tc_false_value>
-                 (type, if_id, cond, trueval, falseval) {}
+    : if_expr_methods(type, if_id, cond, trueval, falseval) {}
   if2t(const if2t &ref)
-    : esbmct::expr<if2t, esbmct::expr2tc_cond, esbmct::expr2tc_true_value,
-                 esbmct::expr2tc_false_value>(ref) {}
+    : if_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<if2t, esbmct::expr2tc_cond,
-                          esbmct::expr2tc_true_value,
-                          esbmct::expr2tc_false_value>;
 
 class equality2t : public esbmct::expr<equality2t, esbmct::expr2tc_side_1,
                                      esbmct::expr2tc_side_2>
