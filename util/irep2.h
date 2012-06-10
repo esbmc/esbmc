@@ -1294,6 +1294,17 @@ public:
   expr2tc initializer;
 };
 
+class constant_string_data : public constant2t
+{
+public:
+  constant_string_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
+    : constant2t(t, id), value(v) { }
+  constant_string_data(const constant_string_data &ref)
+    : constant2t(ref), value(ref.value) { }
+
+  irep_idt value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1320,6 +1331,9 @@ typedef esbmct::expr_methods<constant_bool2t, constant_bool_data,
 typedef esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
         expr2tc, constant_array_of_data, &constant_array_of_data::initializer>
         constant_array_of_expr_methods;
+typedef esbmct::expr_methods<constant_string2t, constant_string_data,
+        irep_idt, constant_string_data, &constant_string_data::value>
+        constant_string_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1368,20 +1382,19 @@ public:
 };
 
 /** Constant class for string constants. */
-class constant_string2t : public esbmct::expr<constant_string2t,
-                                            esbmct::irepidt_value>
+class constant_string2t : public constant_string_expr_methods
 {
 public:
   constant_string2t(const type2tc &type, const irep_idt &stringref)
-    : esbmct::expr<constant_string2t, esbmct::irepidt_value>
-      (type, constant_string_id, stringref) { }
+    : constant_string_expr_methods(type, constant_string_id, stringref) { }
   constant_string2t(const constant_string2t &ref)
-    : esbmct::expr<constant_string2t, esbmct::irepidt_value>(ref) { }
+    : constant_string_expr_methods(ref) { }
 
   /** Convert string to a constant length array */
   expr2tc to_array(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_string2t, esbmct::irepidt_value>;
 
 class constant_struct2t : public constant_struct_expr_methods
 {
