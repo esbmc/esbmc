@@ -1249,6 +1249,7 @@ class bitxor2t;
 class bitnand2t;
 class bitnor2t;
 class bitnxor2t;
+class lshr2t;
 
 // Data definitions.
 
@@ -1545,6 +1546,10 @@ typedef esbmct::expr_methods<bitnxor2t, bit_2ops,
         expr2tc, bit_2ops, &bit_2ops::side_1,
         expr2tc, bit_2ops, &bit_2ops::side_2>
         bitnxor_expr_methods;
+typedef esbmct::expr_methods<lshr2t, bit_2ops,
+        expr2tc, bit_2ops, &bit_2ops::side_1,
+        expr2tc, bit_2ops, &bit_2ops::side_2>
+        lshr_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1947,20 +1952,18 @@ public:
 };
 template class esbmct::expr<bitnot2t, esbmct::expr2tc_value>;
 
-class lshr2t : public esbmct::expr<lshr2t, esbmct::expr2tc_side_1,
-                                         esbmct::expr2tc_side_2>
+class lshr2t : public lshr_expr_methods
 {
 public:
-  lshr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<lshr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type, lshr_id, v1, v2) {}
+  lshr2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
+  : lshr_expr_methods(t, lshr_id, s1, s2) {}
   lshr2t(const lshr2t &ref)
-    : esbmct::expr<lshr2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+  : lshr_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<lshr2t, esbmct::expr2tc_side_1,
-                                  esbmct::expr2tc_side_2>;
 
 class neg2t : public esbmct::expr<neg2t,esbmct::expr2tc_value>
 {
