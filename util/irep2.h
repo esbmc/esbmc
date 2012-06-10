@@ -1227,6 +1227,7 @@ class constant_struct2t;
 class constant_union2t;
 class constant_array2t;
 class constant_array_of2t;
+class symbol2t;
 
 // Data definitions.
 
@@ -1305,6 +1306,17 @@ public:
   irep_idt value;
 };
 
+class symbol_data : public expr2t
+{
+public:
+  symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
+    : expr2t(t, id), name(v) { }
+  symbol_data(const symbol_data &ref)
+    : expr2t(ref), name(ref.name) { }
+
+  irep_idt name;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1334,6 +1346,9 @@ typedef esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
 typedef esbmct::expr_methods<constant_string2t, constant_string_data,
         irep_idt, constant_string_data, &constant_string_data::value>
         constant_string_expr_methods;
+typedef esbmct::expr_methods<symbol2t, symbol_data,
+        irep_idt, symbol_data, &symbol_data::name>
+        symbol_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1440,15 +1455,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class symbol2t : public esbmct::expr<symbol2t, esbmct::irepidt_name>
+class symbol2t : public symbol_expr_methods
 {
 public:
   symbol2t(const type2tc &type, const irep_idt &init)
-    : esbmct::expr<symbol2t, esbmct::irepidt_name> (type, symbol_id, init) { }
+    : symbol_expr_methods(type, symbol_id, init) { }
   symbol2t(const symbol2t &ref)
-    : esbmct::expr<symbol2t, esbmct::irepidt_name>(ref){}
+    : symbol_expr_methods(ref){}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<symbol2t, esbmct::irepidt_name>;
 
 class typecast2t : public esbmct::expr<typecast2t, esbmct::expr2tc_from>
 {
