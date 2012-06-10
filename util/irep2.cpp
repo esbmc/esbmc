@@ -1970,6 +1970,8 @@ std::string lshr2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string bitnot2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
+std::string neg2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2094,3 +2096,5 @@ template class esbmct::expr_methods<lshr2t, bit_2ops,
     expr2tc, bit_2ops, &bit_2ops::side_2>;
 template class esbmct::expr_methods<bitnot2t, bitnot_data,
     expr2tc, bitnot_data, &bitnot_data::value>;
+template class esbmct::expr_methods<neg2t, arith_1op,
+    expr2tc, arith_1op, &arith_1op::value>;

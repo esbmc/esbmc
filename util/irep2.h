@@ -1251,6 +1251,7 @@ class bitnor2t;
 class bitnxor2t;
 class lshr2t;
 class bitnot2t;
+class neg2t;
 
 // Data definitions.
 
@@ -1445,6 +1446,39 @@ public:
   expr2tc side_2;
 };
 
+class arith_ops : public expr2t
+{
+public:
+  arith_ops(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  arith_ops(const arith_ops &ref)
+    : expr2t(ref) { }
+};
+
+class arith_1op : public arith_ops
+{
+public:
+  arith_1op(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v)
+    : arith_ops(t, id), value(v) { }
+  arith_1op(const arith_1op &ref)
+    : arith_ops(ref), value(ref.value) { }
+
+  expr2tc value;
+};
+
+class arith_2ops : public arith_ops
+{
+public:
+  arith_2ops(const type2tc &t, arith_ops::expr_ids id, const expr2tc &v1,
+             const expr2tc &v2)
+    : arith_ops(t, id), side_1(v1), side_2(v2) { }
+  arith_2ops(const arith_2ops &ref)
+    : arith_ops(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1565,6 +1599,9 @@ typedef esbmct::expr_methods<lshr2t, bit_2ops,
 typedef esbmct::expr_methods<bitnot2t, bitnot_data,
         expr2tc, bitnot_data, &bitnot_data::value>
         bitnot_expr_methods;
+typedef esbmct::expr_methods<neg2t, arith_1op,
+        expr2tc, arith_1op, &arith_1op::value>
+        neg_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1980,16 +2017,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class neg2t : public esbmct::expr<neg2t,esbmct::expr2tc_value>
+class neg2t : public neg_expr_methods
 {
 public:
   neg2t(const type2tc &type, const expr2tc &val)
-    : esbmct::expr<neg2t, esbmct::expr2tc_value> (type, neg_id, val) {}
+    : neg_expr_methods(type, neg_id, val) {}
   neg2t(const neg2t &ref)
-    : esbmct::expr<neg2t, esbmct::expr2tc_value> (ref) {}
+    : neg_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<neg2t, esbmct::expr2tc_value>;
 
 class abs2t : public esbmct::expr<abs2t,esbmct::expr2tc_value>
 {
