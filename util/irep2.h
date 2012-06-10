@@ -1262,6 +1262,7 @@ class shl2t;
 class ashr2t;
 class same_object2t;
 class pointer_offset2t;
+class pointer_object2t;
 
 // Data definitions.
 
@@ -1674,6 +1675,9 @@ typedef esbmct::expr_methods<same_object2t, same_object_data,
 typedef esbmct::expr_methods<pointer_offset2t, pointer_ops,
         expr2tc, pointer_ops, &pointer_ops::ptr_obj>
         pointer_offset_expr_methods;
+typedef esbmct::expr_methods<pointer_object2t, pointer_ops,
+        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
+        pointer_object_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2230,17 +2234,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class pointer_object2t : public esbmct::expr<pointer_object2t,
-                                           esbmct::expr2tc_ptr_obj>
+class pointer_object2t : public pointer_object_expr_methods
 {
 public:
   pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
-    : esbmct::expr<pointer_object2t, esbmct::expr2tc_ptr_obj>
-      (type, pointer_object_id, ptrobj) {}
+    : pointer_object_expr_methods(type, pointer_object_id, ptrobj) {}
   pointer_object2t(const pointer_object2t &ref)
-    : esbmct::expr<pointer_object2t, esbmct::expr2tc_ptr_obj> (ref) {}
+    : pointer_object_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<pointer_object2t, esbmct::expr2tc_ptr_obj>;
 
 class address_of2t : public esbmct::expr<address_of2t,
                                            esbmct::expr2tc_ptr_obj>
