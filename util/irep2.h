@@ -1283,6 +1283,17 @@ public:
   bool constant_value;
 };
 
+class constant_array_of_data : public constant2t
+{
+public:
+  constant_array_of_data(const type2tc &t, expr2t::expr_ids id, expr2tc value)
+    : constant2t(t, id), initializer(value) { }
+  constant_array_of_data(const constant_array_of_data &ref)
+    : constant2t(ref), initializer(ref.initializer) { }
+
+  expr2tc initializer;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1306,6 +1317,9 @@ typedef esbmct::expr_methods<constant_array2t, constant_datatype_data,
 typedef esbmct::expr_methods<constant_bool2t, constant_bool_data,
         bool, constant_bool_data, &constant_bool_data::constant_value>
         constant_bool_expr_methods;
+typedef esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
+        expr2tc, constant_array_of_data, &constant_array_of_data::initializer>
+        constant_array_of_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1402,17 +1416,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class constant_array_of2t : public esbmct::expr<constant_array_of2t,
-                                              esbmct::expr2tc_initializer>
+class constant_array_of2t : public constant_array_of_expr_methods
 {
 public:
   constant_array_of2t(const type2tc &type, const expr2tc &init)
-    : esbmct::expr<constant_array_of2t, esbmct::expr2tc_initializer>
-      (type, constant_array_of_id, init) { }
+    : constant_array_of_expr_methods(type, constant_array_of_id, init) { }
   constant_array_of2t(const constant_array_of2t &ref)
-    : esbmct::expr<constant_array_of2t, esbmct::expr2tc_initializer>(ref){}
+    : constant_array_of_expr_methods(ref){}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<constant_array_of2t, esbmct::expr2tc_initializer>;
 
 class symbol2t : public esbmct::expr<symbol2t, esbmct::irepidt_name>
 {

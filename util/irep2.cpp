@@ -1918,6 +1918,8 @@ std::string constant_bool2t::field_names [esbmct::num_type_fields]  =
 { "constant_value", "", "", ""};
 std::string constant_array2t::field_names [esbmct::num_type_fields]  =
 { "members", "", "", ""};
+std::string constant_array_of2t::field_names [esbmct::num_type_fields]  =
+{ "initializer", "", "", ""};
 
 // Explicit template instanciations
 
@@ -1971,3 +1973,5 @@ template class esbmct::expr_methods<constant_bool2t, constant_bool_data,
 template class esbmct::expr_methods<constant_array2t, constant_datatype_data,
     std::vector<expr2tc>, constant_datatype_data,
     &constant_datatype_data::datatype_members>;
+template class esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
+    expr2tc, constant_array_of_data, &constant_array_of_data::initializer>;
