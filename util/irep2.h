@@ -1260,6 +1260,8 @@ class div2t;
 class modulus2t;
 class shl2t;
 class ashr2t;
+class same_object2t;
+class pointer_offset2t;
 
 // Data definitions.
 
@@ -1487,6 +1489,30 @@ public:
   expr2tc side_2;
 };
 
+class same_object_data : public expr2t
+{
+public:
+  same_object_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v1,
+                   const expr2tc &v2)
+    : expr2t(t, id), side_1(v1), side_2(v2) { }
+  same_object_data(const same_object_data &ref)
+    : expr2t(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+};
+
+class pointer_ops : public expr2t
+{
+public:
+  pointer_ops(const type2tc &t, expr2t::expr_ids id, const expr2tc &p)
+    : expr2t(t, id), ptr_obj(p) { }
+  pointer_ops(const pointer_ops &ref)
+    : expr2t(ref), ptr_obj(ref.ptr_obj) { }
+
+  expr2tc ptr_obj;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1641,6 +1667,13 @@ typedef esbmct::expr_methods<ashr2t, arith_2ops,
         expr2tc, arith_2ops, &arith_2ops::side_1,
         expr2tc, arith_2ops, &arith_2ops::side_2>
         ashr_expr_methods;
+typedef esbmct::expr_methods<same_object2t, same_object_data,
+        expr2tc, same_object_data, &same_object_data::side_1,
+        expr2tc, same_object_data, &same_object_data::side_2>
+        same_object_expr_methods;
+typedef esbmct::expr_methods<pointer_offset2t, pointer_ops,
+        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
+        pointer_offset_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2171,34 +2204,31 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class same_object2t : public esbmct::expr<same_object2t, esbmct::expr2tc_side_1,
-                                                       esbmct::expr2tc_side_2>
+class same_object2t : public same_object_expr_methods
 {
 public:
   same_object2t(const expr2tc &v1, const expr2tc &v2)
-    : esbmct::expr<same_object2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (type_pool.get_bool(), same_object_id, v1, v2) {}
+    : same_object_expr_methods(type_pool.get_bool(), same_object_id, v1, v2) {}
   same_object2t(const same_object2t &ref)
-    : esbmct::expr<same_object2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) {}
+    : same_object_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<same_object2t, esbmct::expr2tc_side_1,
-                                         esbmct::expr2tc_side_2>;
 
-
-class pointer_offset2t : public esbmct::expr<pointer_offset2t,
-                                           esbmct::expr2tc_ptr_obj>
+class pointer_offset2t : public pointer_offset_expr_methods
 {
 public:
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
-    : esbmct::expr<pointer_offset2t, esbmct::expr2tc_ptr_obj>
-      (type, pointer_offset_id, ptrobj) {}
+    : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj) {}
   pointer_offset2t(const pointer_offset2t &ref)
-    : esbmct::expr<pointer_offset2t, esbmct::expr2tc_ptr_obj> (ref) {}
+    : pointer_offset_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<pointer_offset2t, esbmct::expr2tc_ptr_obj>;
 
 class pointer_object2t : public esbmct::expr<pointer_object2t,
                                            esbmct::expr2tc_ptr_obj>
