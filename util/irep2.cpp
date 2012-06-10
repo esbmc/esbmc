@@ -1978,6 +1978,8 @@ std::string add2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
 std::string sub2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string mul2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2110,5 +2112,8 @@ template class esbmct::expr_methods<add2t, arith_2ops,
     expr2tc, arith_2ops, &arith_2ops::side_1,
     expr2tc, arith_2ops, &arith_2ops::side_2>;
 template class esbmct::expr_methods<sub2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<mul2t, arith_2ops,
     expr2tc, arith_2ops, &arith_2ops::side_1,
     expr2tc, arith_2ops, &arith_2ops::side_2>;
