@@ -1229,6 +1229,7 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
+class to_bv_typecast2t;
 
 // Data definitions.
 
@@ -1364,6 +1365,9 @@ typedef esbmct::expr_methods<symbol2t, symbol_data,
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
         typecast_expr_methods;
+typedef esbmct::expr_methods<to_bv_typecast2t, typecast_data,
+        expr2tc, typecast_data, &typecast_data::from>
+        to_bv_typecast_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -1495,17 +1499,16 @@ public:
 
 // Typecast, but explicitly either to or from a bit vector. This prevents any
 // semantic conversion of floats to/from bits.
-class to_bv_typecast2t : public esbmct::expr<to_bv_typecast2t,
-                                             esbmct::expr2tc_from>
+class to_bv_typecast2t : public to_bv_typecast_expr_methods
 {
 public:
   to_bv_typecast2t(const type2tc &type, const expr2tc &from)
-    : esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>
-    (type, to_bv_typecast_id, from) { }
+    : to_bv_typecast_expr_methods(type, to_bv_typecast_id, from) { }
   to_bv_typecast2t(const to_bv_typecast2t &ref)
-    : esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>(ref){}
+    : to_bv_typecast_expr_methods(ref){}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<to_bv_typecast2t, esbmct::expr2tc_from>;
 
 class from_bv_typecast2t : public esbmct::expr<from_bv_typecast2t,
                                              esbmct::expr2tc_from>

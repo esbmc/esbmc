@@ -1926,6 +1926,8 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "", "", ""};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", ""};
+std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "", "", ""};
 
 // Explicit template instanciations
 
@@ -1986,4 +1988,6 @@ template class esbmct::expr_methods<constant_string2t, constant_string_data,
 template class esbmct::expr_methods<symbol2t, symbol_data,
     irep_idt, symbol_data, &symbol_data::name>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
+    expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
