@@ -2016,6 +2016,8 @@ std::string overflow2t::field_names [esbmct::num_type_fields]  =
 { "operand", "", "", ""};
 std::string overflow_cast2t::field_names [esbmct::num_type_fields]  =
 { "operand", "bits", "", ""};
+std::string overflow_neg2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2204,3 +2206,5 @@ template class esbmct::expr_methods<overflow2t, overflow_ops,
 template class esbmct::expr_methods<overflow_cast2t, overflow_cast_data,
     expr2tc, overflow_ops, &overflow_ops::operand,
     unsigned int, overflow_cast_data, &overflow_cast_data::bits>;
+template class esbmct::expr_methods<overflow_neg2t, overflow_ops,
+    expr2tc, overflow_ops, &overflow_ops::operand>;

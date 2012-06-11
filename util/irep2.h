@@ -1274,6 +1274,7 @@ class zero_length_string2t;
 class isnan2t;
 class overflow2t;
 class overflow_cast2t;
+class overflow_neg2t;
 
 // Data definitions.
 
@@ -1870,6 +1871,9 @@ typedef esbmct::expr_methods<overflow_cast2t, overflow_cast_data,
         expr2tc, overflow_ops, &overflow_ops::operand,
         unsigned int, overflow_cast_data, &overflow_cast_data::bits>
         overflow_cast_expr_methods;
+typedef esbmct::expr_methods<overflow_neg2t, overflow_ops,
+        expr2tc, overflow_ops, &overflow_ops::operand>
+        overflow_neg_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2581,18 +2585,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class overflow_neg2t : public esbmct::expr<overflow_neg2t,
-                                         esbmct::expr2tc_operand>
+class overflow_neg2t : public overflow_neg_expr_methods
 {
 public:
   overflow_neg2t(const expr2tc &operand)
-    : esbmct::expr<overflow_neg2t, esbmct::expr2tc_operand>
-      (type_pool.get_bool(), overflow_neg_id, operand) {}
+    : overflow_neg_expr_methods(type_pool.get_bool(), overflow_neg_id,
+                                operand) {}
   overflow_neg2t(const overflow_neg2t &ref)
-    : esbmct::expr<overflow_neg2t, esbmct::expr2tc_operand>
-      (ref) {}
+    : overflow_neg_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<overflow_neg2t, esbmct::expr2tc_operand>;
 
 class unknown2t : public esbmct::expr<unknown2t>
 {
