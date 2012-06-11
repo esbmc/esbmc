@@ -1287,6 +1287,7 @@ class sideeffect2t;
 class code_block2t;
 class code_assign2t;
 class code_init2t;
+class code_decl2t;
 
 // Data definitions.
 
@@ -1763,6 +1764,17 @@ public:
   expr2tc source;
 };
 
+class code_decl_data : public code_base
+{
+public:
+  code_decl_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
+    : code_base(t, id), value(v) { }
+  code_decl_data(const code_decl_data &ref)
+    : code_base(ref), value(ref.value) { }
+
+  irep_idt value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2013,6 +2025,9 @@ typedef esbmct::expr_methods<code_init2t, code_assign_data,
         expr2tc, code_assign_data, &code_assign_data::target,
         expr2tc, code_assign_data, &code_assign_data::source>
         code_init_expr_methods;
+typedef esbmct::expr_methods<code_decl2t, code_decl_data,
+        irep_idt, code_decl_data, &code_decl_data::value>
+        code_decl_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2883,16 +2898,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_decl2t : public esbmct::expr<code_decl2t, esbmct::irepidt_value>
+class code_decl2t : public code_decl_expr_methods
 {
 public:
   code_decl2t(const type2tc &t, const irep_idt &name)
-    : esbmct::expr<code_decl2t, esbmct::irepidt_value> (t, code_decl_id, name){}
+    : code_decl_expr_methods(t, code_decl_id, name){}
   code_decl2t(const code_decl2t &ref)
-    : esbmct::expr<code_decl2t, esbmct::irepidt_value>
-      (ref) {}
+    : code_decl_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_decl2t, esbmct::irepidt_value>;
 
 class code_printf2t : public esbmct::expr<code_printf2t,
                                           esbmct::expr2tc_vec_operands>
