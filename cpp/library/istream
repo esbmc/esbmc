@@ -4,7 +4,7 @@
 #include "ios"
 #include "definitions.h"
 #include "cstring"
-#include "iomanip"
+//#include "iomanip"
 
 
 namespace std
@@ -14,8 +14,8 @@ struct istream: ios
 //  streamsize width ( ) const;
 //  streamsize width ( streamsize wide );
   virtual ~istream ();
-  istream(int id = 0): id(id), ios(), _gcount(0) {};
-  istream (streambuf * sb): _gcount(0) {};
+  istream(int id = 0): ios(), id(id) {_gcount = 0;};
+  istream (streambuf * sb) {_gcount=0;};
   int id;
   istream& ignore(int i = 1, int delim = EOF);
 
@@ -54,13 +54,13 @@ struct istream: ios
 		sentry& operator= (const sentry& ); // not defined
   };
 
-  streamsize _gcount;
+  static streamsize _gcount;
 
 private:
   istream(const istream&); // disabled
   istream& operator=(const istream&); // disabled
   streamsize _filesize = nondet_uint();
-  streampos _filepos = 0;
+  static streampos _filepos = 0;
 };
 
 }
@@ -138,8 +138,9 @@ inline istream& operator>> (istream& is, unsigned char& ch ) {
 }
 
 istream& operator>> (istream& is, char* str ) {
-	  is._gcount = strlen(str);
-	  return is;
+	if (!strcmp(str,"")) is._gcount = strlen(str);
+	else is._gcount = 0;
+	return is;
 }
 //istream& operator>> (istream& is, signed char* str );
 istream& operator>> (istream& is, unsigned char* str ) {
@@ -268,7 +269,10 @@ istream& istream::putback ( char c ) {
 	_gcount = 0;
 	return *this;
 }
-istream& istream::unget ( );
+istream& istream::unget ( ) {
+	_gcount = 0;
+	return *this;
+}
 
 istream& istream::seekg ( ios::streampos pos ) {
 	//__ESBMC_assert (pos<=_filesize, "Invalid stream position");

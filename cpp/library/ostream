@@ -3,7 +3,8 @@
 
 #include "ios"
 #include "definitions.h"
-#include "iomanip"
+//#include "iomanip"
+//#include "cstring"
 
 namespace std
 {
@@ -12,7 +13,8 @@ struct ostream
 	typedef int streampos;
 	typedef int streamoff;
 
-	ostream(){}
+	ostream();
+	explicit ostream (streambuf * sb);
 	ostream(int id): id(id){}
 	virtual ~ostream();
 
@@ -24,7 +26,7 @@ struct ostream
 	void put(char c);
 //	void write(char str[], size_t n);
 	ostream& write ( const char* s , streamsize n );
-	streampos tellg ( ); //model
+	streampos tellp ( ); //model
 	ostream& seekp ( streampos pos ); //model
 	ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
 //	ostream& flush ( );
@@ -45,8 +47,9 @@ private:
 	ostream(const ostream&); // disabled
 	ostream& operator=(const ostream&); // disabled
 	streamsize _filesize = nondet_uint();
-	ios::streampos _filepos = 0;
+	static ios::streampos _filepos;
 };
+//ios::streampos ostream::_filepos = 0;
 
 }
 
@@ -172,7 +175,24 @@ namespace std
 	//	void ostream::write(char str[], size_t n)
 	ostream& ostream::write ( const char* s , streamsize n )
 	{
-		return ostream();
+		_filepos = n;
+		return *this;
+	}
+
+	ostream& ostream::seekp ( ios::streampos pos ) {
+		//__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+		_filepos = pos;
+		return *this;
+	}
+	ostream& ostream::seekp ( ios::streamoff off, ios_base::seekdir dir ) {
+		if (dir==ios::beg) {_filepos=off;}
+		if (dir==ios::cur) {_filepos+=off;}
+		if (dir==ios::end) {_filepos=_filesize-off;}
+		return *this;
+	}
+	ios::streampos ostream::tellp ( ) {
+		__ESBMC_assert (_filepos>=0, "Invalid stream position");
+		return _filepos;
 	}
 }
 

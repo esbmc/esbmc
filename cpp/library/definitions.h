@@ -31,6 +31,7 @@ float nondet_float();
 bool nondet_bool();
 char* nondet_charPointer();
 char nondet_char();
+struct smanip {};
 
 typedef unsigned int size_t;
 #define _SIZE_T_DEFINED

@@ -7,7 +7,6 @@
 namespace std
 {
 //Parameterized manipulators
-struct smanip {};
 
 smanip setiosflags ( ios_base::fmtflags mask );
 smanip resetiosflags ( ios_base::fmtflags mask );
