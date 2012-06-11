@@ -2044,6 +2044,8 @@ std::string code_init2t::field_names [esbmct::num_type_fields]  =
 { "target", "source", "", ""};
 std::string code_decl2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
+std::string code_printf2t::field_names [esbmct::num_type_fields]  =
+{ "operands", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2264,3 +2266,5 @@ template class esbmct::expr_methods<code_init2t, code_assign_data,
     expr2tc, code_assign_data, &code_assign_data::source>;
 template class esbmct::expr_methods<code_decl2t, code_decl_data,
     irep_idt, code_decl_data, &code_decl_data::value>;
+template class esbmct::expr_methods<code_printf2t, code_printf_data,
+    std::vector<expr2tc>, code_printf_data, &code_printf_data::operands>;
