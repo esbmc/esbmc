@@ -959,7 +959,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
-    if (expr.statement() != "nondet")
+    if (expr.statement() != "nondet" && expr.statement() != "cpp_new")
       migrate_expr(expr.op0(), operand);
 
     migrate_expr((const exprt&)expr.cmt_size(), thesize);
