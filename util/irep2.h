@@ -2943,7 +2943,8 @@ class code_cpp_del_array2t : public code_cpp_del_array_expr_methods
 {
 public:
   code_cpp_del_array2t(const expr2tc &v)
-    : code_cpp_del_array_expr_methods(type_pool.get_empty(), code_asm_id, v) { }
+    : code_cpp_del_array_expr_methods(type_pool.get_empty(),
+                                      code_cpp_del_array_id, v) { }
   code_cpp_del_array2t(const code_cpp_del_array2t &ref)
     : code_cpp_del_array_expr_methods(ref) { }
 
