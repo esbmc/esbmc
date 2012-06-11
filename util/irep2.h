@@ -1297,6 +1297,7 @@ class code_goto2t;
 class object_descriptor2t;
 class code_function_call2t;
 class code_comma2t;
+class invalid_pointer2t;
 
 // Data definitions.
 
@@ -2142,6 +2143,9 @@ typedef esbmct::expr_methods<code_comma2t, code_comma_data,
         expr2tc, code_comma_data, &code_comma_data::side_1,
         expr2tc, code_comma_data, &code_comma_data::side_2>
         code_comma_expr_methods;
+typedef esbmct::expr_methods<invalid_pointer2t, pointer_ops,
+        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
+        invalid_pointer_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3127,18 +3131,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class invalid_pointer2t : public esbmct::expr<invalid_pointer2t,
-                                                 esbmct::expr2tc_ptr_obj>
+class invalid_pointer2t : public invalid_pointer_expr_methods
 {
 public:
   invalid_pointer2t(const expr2tc &obj)
-    : esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>
-      (type_pool.get_bool(), invalid_pointer_id, obj) {}
+    : invalid_pointer_expr_methods(type_pool.get_bool(), invalid_pointer_id,
+                                   obj) {}
   invalid_pointer2t(const invalid_pointer2t &ref)
-    : esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>
-      (ref) { }
+    : invalid_pointer_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<invalid_pointer2t, esbmct::expr2tc_ptr_obj>;
 
 class buffer_size2t : public esbmct::expr<buffer_size2t, esbmct::expr2tc_value>
 {

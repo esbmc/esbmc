@@ -2062,6 +2062,8 @@ std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
 { "return", "function", "operands", ""};
 std::string code_comma2t::field_names [esbmct::num_type_fields]  =
 { "side_1", "side_2", "", ""};
+std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2303,3 +2305,5 @@ template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
 template class esbmct::expr_methods<code_comma2t, code_comma_data,
     expr2tc, code_comma_data, &code_comma_data::side_1,
     expr2tc, code_comma_data, &code_comma_data::side_2>;
+template class esbmct::expr_methods<invalid_pointer2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
