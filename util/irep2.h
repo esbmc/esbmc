@@ -1272,6 +1272,7 @@ class index2t;
 class zero_string2t;
 class zero_length_string2t;
 class isnan2t;
+class overflow2t;
 
 // Data definitions.
 
@@ -1638,6 +1639,17 @@ public:
   expr2tc value;
 };
 
+class overflow_ops : public expr2t
+{
+public:
+  overflow_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &v)
+    : expr2t(t, id), operand(v) { }
+  overflow_ops(const overflow_ops &ref)
+    : expr2t(ref), operand(ref.operand) { }
+
+  expr2tc operand;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1838,6 +1850,9 @@ typedef esbmct::expr_methods<zero_length_string2t, string_ops,
 typedef esbmct::expr_methods<isnan2t, isnan_data,
         expr2tc, isnan_data, &isnan_data::value>
         isnan_expr_methods;
+typedef esbmct::expr_methods<overflow2t, overflow_ops,
+        expr2tc, overflow_ops, &overflow_ops::operand>
+        overflow_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2524,18 +2539,18 @@ public:
  *  operand is the expected type result of the operation. That way we can tell
  *  whether to do a signed or unsigned over/underflow test. */
 
-class overflow2t : public esbmct::expr<overflow2t, esbmct::expr2tc_operand>
+class overflow2t : public overflow_expr_methods
 {
 public:
   overflow2t(const expr2tc &operand)
-    : esbmct::expr<overflow2t, esbmct::expr2tc_operand>
-      (type_pool.get_bool(), overflow_id, operand) {}
+    : overflow_expr_methods(type_pool.get_bool(), overflow_id, operand) {}
   overflow2t(const overflow2t &ref)
-    : esbmct::expr<overflow2t, esbmct::expr2tc_operand>
-      (ref) {}
+    : overflow_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<overflow2t, esbmct::expr2tc_operand>;
 
 class overflow_cast2t : public esbmct::expr<overflow_cast2t,
                                           esbmct::uint_bits,
