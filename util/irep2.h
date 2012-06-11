@@ -1296,6 +1296,7 @@ class code_free2t;
 class code_goto2t;
 class object_descriptor2t;
 class code_function_call2t;
+class code_comma2t;
 
 // Data definitions.
 
@@ -1845,6 +1846,19 @@ public:
   std::vector<expr2tc> operands;
 };
 
+class code_comma_data : public code_base
+{
+public:
+  code_comma_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &s1,
+                  const expr2tc &s2)
+    : code_base(t, id), side_1(s1), side_2(s2) { }
+  code_comma_data(const code_comma_data &ref)
+    : code_base(ref), side_1(ref.side_1), side_2(ref.side_2) { }
+
+  expr2tc side_1;
+  expr2tc side_2;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2124,6 +2138,10 @@ typedef esbmct::expr_methods<code_function_call2t, code_funccall_data,
         expr2tc, code_funccall_data, &code_funccall_data::function,
         std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>
         code_function_call_expr_methods;
+typedef esbmct::expr_methods<code_comma2t, code_comma_data,
+        expr2tc, code_comma_data, &code_comma_data::side_1,
+        expr2tc, code_comma_data, &code_comma_data::side_2>
+        code_comma_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3098,19 +3116,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_comma2t : public esbmct::expr<code_comma2t, esbmct::expr2tc_side_1,
-                                                       esbmct::expr2tc_side_2>
+class code_comma2t : public code_comma_expr_methods
 {
 public:
   code_comma2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
-    : esbmct::expr<code_comma2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (t, code_comma_id, s1, s2) {}
+    : code_comma_expr_methods(t, code_comma_id, s1, s2) {}
   code_comma2t(const code_comma2t &ref)
-    : esbmct::expr<code_comma2t, esbmct::expr2tc_side_1, esbmct::expr2tc_side_2>
-      (ref) { }
+    : code_comma_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_comma2t, esbmct::expr2tc_side_1,
-                                          esbmct::expr2tc_side_2>;
 
 class invalid_pointer2t : public esbmct::expr<invalid_pointer2t,
                                                  esbmct::expr2tc_ptr_obj>

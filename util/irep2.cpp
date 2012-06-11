@@ -2060,6 +2060,8 @@ std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
 { "object", "offset", "", ""};
 std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
 { "return", "function", "operands", ""};
+std::string code_comma2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
 
 // Explicit template instanciations
 
@@ -2298,3 +2300,6 @@ template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
     expr2tc, code_funccall_data, &code_funccall_data::ret,
     expr2tc, code_funccall_data, &code_funccall_data::function,
     std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>;
+template class esbmct::expr_methods<code_comma2t, code_comma_data,
+    expr2tc, code_comma_data, &code_comma_data::side_1,
+    expr2tc, code_comma_data, &code_comma_data::side_2>;
