@@ -24,8 +24,7 @@ void goto_symext::symex_other(void)
   {
     // ignore
   }
-  else if (is_code_cpp_del_array2t(code2))
-//          || statement=="cpp_delete")
+  else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
     expr2tc deref_code(code2);
 
