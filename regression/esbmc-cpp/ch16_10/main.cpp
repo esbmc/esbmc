@@ -34,10 +34,10 @@ int main()
    
    int contentLength = 0;
    int endPassword = 0;
-   
+
    // data was posted
    if ( getenv( "CONTENT_LENGTH" ) ) {
-
+#if 1
       // retrieve query string
       contentLength = atoi( getenv( "CONTENT_LENGTH" ) );
       cin.read( query, contentLength );
@@ -65,8 +65,9 @@ int main()
 
       userName = dataString.substr( userLocation, endUser - 
          userLocation );
+#endif
    } // end if
-   #if 1
+#if 1
    // no data was retrieved
    if ( dataString == "" ) {
       header();
@@ -211,10 +212,10 @@ int main()
          } // end else 
       } // end else 
    } // end if
-   #endif
+
    cout << "</body>\n</html>\n";
    return 0;
-
+#endif
 } // end main
 #if 1
 // function to output header
