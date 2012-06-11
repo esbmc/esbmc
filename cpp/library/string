@@ -83,6 +83,7 @@ namespace std
 		string (const_iterator begin, const_iterator end);
 		char* c_str ( ) const;
 		bool operator== (string& b);
+		bool operator== (string& a) const;
 		bool operator== ( const char* lhs);
 		bool operator== (string& a, string& b);
 		bool operator== ( const char* lhs, string& rhs );
@@ -390,6 +391,15 @@ namespace std
                else
                     return false;
 	}
+
+  bool string::operator== (string& b) const
+	{
+		__ESBMC_HIDE:
+               if (strcmp(this->str, b.str) == 0)
+                    return true;
+               else
+                    return false;
+	}  
 
 	bool string::operator== ( const char* lhs)
 	{
