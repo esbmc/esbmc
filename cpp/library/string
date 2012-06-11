@@ -1205,7 +1205,7 @@ namespace std
     string& string::erase ( size_t pos = 0)
     {
         __ESBMC_HIDE:
-    int n = this->length()-1;
+    		int n = this->length()-1;
         __ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
         int i,k,len  = this->length();
         int lenOne = pos +1;
