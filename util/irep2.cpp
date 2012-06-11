@@ -1460,11 +1460,11 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
   list_of_memberst thevector;
   do_type2string<field1_type>(derived_this->*field1_ptr, 0,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field2_type>(derived_this->*field2_ptr, 0,
+  do_type2string<field2_type>(derived_this->*field2_ptr, 1,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field3_type>(derived_this->*field3_ptr, 0,
+  do_type2string<field3_type>(derived_this->*field3_ptr, 2,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field4_type>(derived_this->*field4_ptr, 0,
+  do_type2string<field4_type>(derived_this->*field4_ptr, 3,
                               derived_this->field_names, thevector, indent);
   return thevector;
 }
@@ -1651,11 +1651,11 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   list_of_memberst thevector;
   do_type2string<field1_type>(derived_this->*field1_ptr, 0,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field2_type>(derived_this->*field2_ptr, 0,
+  do_type2string<field2_type>(derived_this->*field2_ptr, 1,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field3_type>(derived_this->*field3_ptr, 0,
+  do_type2string<field3_type>(derived_this->*field3_ptr, 2,
                               derived_this->field_names, thevector, indent);
-  do_type2string<field4_type>(derived_this->*field4_ptr, 0,
+  do_type2string<field4_type>(derived_this->*field4_ptr, 3,
                               derived_this->field_names, thevector, indent);
   return thevector;
 }
