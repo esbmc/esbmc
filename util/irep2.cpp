@@ -2026,6 +2026,8 @@ std::string null_object2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
 std::string dynamic_object2t::field_names [esbmct::num_type_fields]  =
 { "instance", "invalid", "unknown", ""};
+std::string dereference2t::field_names [esbmct::num_type_fields]  =
+{ "pointer", "", "", ""};
 std::string valid_object2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
 std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
