@@ -1570,6 +1570,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
     expr2tc addrof2(new address_of2t(obj.type, ifval.false_value));
     expr2tc newif(new if2t (obj.type, ifval.cond, addrof1, addrof2));
     convert_bv(newif, bv);
+  } else if (is_typecast2t(obj.ptr_obj)) {
+    // Take the address of whatevers being casted. Either way, they all end up
+    // being of a pointer_tuple type, so this should be fine.
+    address_of2tc tmp(new address_of2t(type2tc(),
+                                       to_typecast2t(obj.ptr_obj).from));
+    tmp.get()->type = obj.type;
+    convert_bv(tmp, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand");
   }
