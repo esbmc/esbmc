@@ -1298,6 +1298,7 @@ class object_descriptor2t;
 class code_function_call2t;
 class code_comma2t;
 class invalid_pointer2t;
+class buffer_size2t;
 
 // Data definitions.
 
@@ -1860,6 +1861,17 @@ public:
   expr2tc side_2;
 };
 
+class buffer_size_data : public expr2t
+{
+public:
+  buffer_size_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &v)
+    : expr2t(t, id), value(v) { }
+  buffer_size_data(const buffer_size_data &ref)
+    : expr2t(ref), value(ref.value) { }
+
+  expr2tc value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2146,6 +2158,9 @@ typedef esbmct::expr_methods<code_comma2t, code_comma_data,
 typedef esbmct::expr_methods<invalid_pointer2t, pointer_ops,
         expr2tc, pointer_ops, &pointer_ops::ptr_obj>
         invalid_pointer_expr_methods;
+typedef esbmct::expr_methods<buffer_size2t, buffer_size_data,
+        expr2tc, buffer_size_data, &buffer_size_data::value>
+        buffer_size_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3143,17 +3158,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class buffer_size2t : public esbmct::expr<buffer_size2t, esbmct::expr2tc_value>
+class buffer_size2t : public buffer_size_expr_methods
 {
 public:
   buffer_size2t(const type2tc &t, const expr2tc &obj)
-    : esbmct::expr<buffer_size2t, esbmct::expr2tc_value>
-      (t, buffer_size_id, obj) {}
+    : buffer_size_expr_methods(t, buffer_size_id, obj) {}
   buffer_size2t(const buffer_size2t &ref)
-    : esbmct::expr<buffer_size2t, esbmct::expr2tc_value>
-      (ref) { }
+    : buffer_size_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<buffer_size2t, esbmct::expr2tc_value>;
 
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
