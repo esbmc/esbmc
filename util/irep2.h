@@ -1284,6 +1284,8 @@ class valid_object2t;
 class deallocated_obj2t;
 class dynamic_size2t;
 class sideeffect2t;
+class code_block2t;
+class code_assign2t;
 
 // Data definitions.
 
@@ -1726,6 +1728,40 @@ public:
   unsigned int kind;
 };
 
+class code_base : public expr2t
+{
+public:
+  code_base(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  code_base(const code_base &ref)
+    : expr2t(ref) { }
+};
+
+class code_block_data : public code_base
+{
+public:
+  code_block_data(const type2tc &t, expr2t::expr_ids id,
+                  const std::vector<expr2tc> &v)
+    : code_base(t, id), operands(v) { }
+  code_block_data(const code_block_data &ref)
+    : code_base(ref), operands(ref.operands) { }
+
+  std::vector<expr2tc> operands;
+};
+
+class code_assign_data : public code_base
+{
+public:
+  code_assign_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &ta,
+                   const expr2tc &s)
+    : code_base(t, id), target(ta), source(s) { }
+  code_assign_data(const code_assign_data &ref)
+    : code_base(ref), target(ref.target), source(ref.source) { }
+
+  expr2tc target;
+  expr2tc source;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1965,6 +2001,13 @@ typedef esbmct::expr_methods<sideeffect2t, sideeffect_data,
         type2tc, sideeffect_data, &sideeffect_data::alloctype,
         unsigned int, sideeffect_data, &sideeffect_data::kind>
         sideeffect_expr_methods;
+typedef esbmct::expr_methods<code_block2t, code_block_data,
+        std::vector<expr2tc>, code_block_data, &code_block_data::operands>
+        code_block_expr_methods;
+typedef esbmct::expr_methods<code_assign2t, code_assign_data,
+        expr2tc, code_assign_data, &code_assign_data::target,
+        expr2tc, code_assign_data, &code_assign_data::source>
+        code_assign_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2799,32 +2842,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_block2t : public esbmct::expr<code_block2t,
-                                         esbmct::expr2tc_vec_operands>
+class code_block2t : public code_block_expr_methods
 {
 public:
   code_block2t(const std::vector<expr2tc> &operands)
-    : esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands>
-      (type_pool.get_empty(), code_block_id, operands) {}
+    : code_block_expr_methods(type_pool.get_empty(), code_block_id, operands) {}
   code_block2t(const code_block2t &ref)
-    : esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands> (ref) {}
-};
-template class esbmct::expr<code_block2t, esbmct::expr2tc_vec_operands>;
+    : code_block_expr_methods(ref) {}
 
-class code_assign2t : public esbmct::expr<code_assign2t,
-                                          esbmct::expr2tc_target,
-                                          esbmct::expr2tc_source>
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_assign2t : public code_assign_expr_methods
 {
 public:
   code_assign2t(const expr2tc &target, const expr2tc &source)
-    : esbmct::expr<code_assign2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
-      (type_pool.get_empty(), code_assign_id, target, source) {}
+    : code_assign_expr_methods(type_pool.get_empty(), code_assign_id,
+                               target, source) {}
   code_assign2t(const code_assign2t &ref)
-    : esbmct::expr<code_assign2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
-      (ref) {}
+    : code_assign_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_assign2t, esbmct::expr2tc_target,
-                            esbmct::expr2tc_source>;
 
 class code_init2t : public esbmct::expr<code_init2t,
                                           esbmct::expr2tc_target,
