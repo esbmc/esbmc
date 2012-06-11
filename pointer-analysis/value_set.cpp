@@ -922,7 +922,7 @@ void value_sett::do_function_call(
   type2tc tmp_migrated_type;
   migrate_type(type, tmp_migrated_type);
   const code_type2t &migrated_type =
-    static_cast<const code_type2t &>(*tmp_migrated_type.get());
+    dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
 
   const std::vector<type2tc> &argument_types = migrated_type.arguments;
   const std::vector<irep_idt> &argument_names = migrated_type.argument_names;

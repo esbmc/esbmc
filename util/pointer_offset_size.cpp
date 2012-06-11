@@ -143,7 +143,7 @@ mp_integer pointer_offset_size(const type2t &type)
 {
   if(type.type_id == type2t::array_id)
   {
-    const array_type2t &ref = static_cast<const array_type2t&>(type);
+    const array_type2t &ref = dynamic_cast<const array_type2t&>(type);
     mp_integer sub=pointer_offset_size(*ref.subtype.get());
 
     // get size
@@ -158,19 +158,13 @@ mp_integer pointer_offset_size(const type2t &type)
   else if(type.type_id == type2t::struct_id ||
           type.type_id == type2t::union_id)
   {
-    const std::vector<type2tc> *members;
-    if (type.type_id == type2t::struct_id) {
-      const struct_type2t &ref = static_cast<const struct_type2t&>(type);
-      members = &ref.members;
-    } else {
-      assert(type.type_id == type2t::union_id);
-      const union_type2t &ref = static_cast<const union_type2t&>(type);
-      members = &ref.members;
-    }
+    const struct_union_data &data_ref =
+      static_cast<const struct_union_data &>(type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
 
     mp_integer result=1; // for the struct itself
 
-    forall_types(it, (*members)) {
+    forall_types(it, members) {
       result += pointer_offset_size(**it);
     }
 

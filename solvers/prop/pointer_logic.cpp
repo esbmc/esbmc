@@ -136,8 +136,8 @@ expr2tc pointer_logict::object_rec(
 
   if(src->type->type_id == type2t::array_id)
   {
-    const array_type2t &arrtype = static_cast<const array_type2t&>
-                                             (*src->type.get());
+    const array_type2t &arrtype = dynamic_cast<const array_type2t&>
+                                              (*src->type.get());
     mp_integer size=pointer_offset_size(*arrtype.subtype.get());
 
     if (size == 0)
@@ -154,9 +154,11 @@ expr2tc pointer_logict::object_rec(
   }
   else if (is_structure_type(src->type))
   {
-    const std::vector<type2tc> &members = get_structure_members(src->type);
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*src->type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
     const std::vector<irep_idt> &member_names =
-                                     get_structure_member_names(src->type);
+      data_ref.get_structure_member_names();
 
     assert(offset>=0);
   

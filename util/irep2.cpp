@@ -158,13 +158,7 @@ bool_type2t::get_width(void) const
 }
 
 unsigned int
-unsignedbv_type2t::get_width(void) const
-{
-  return width;
-}
-
-unsigned int
-signedbv_type2t::get_width(void) const
+bv_data::get_width(void) const
 {
   return width;
 }
@@ -241,7 +235,7 @@ fixedbv_type2t::get_width(void) const
 }
 
 unsigned int
-code_type2t::get_width(void) const
+code_data::get_width(void) const
 {
   throw new symbolic_type_excp();
 }
@@ -250,6 +244,24 @@ unsigned int
 string_type2t::get_width(void) const
 {
   return width * 8;
+}
+
+const std::vector<type2tc> &
+struct_union_data::get_structure_members(void) const
+{
+  return members;
+}
+
+const std::vector<irep_idt> &
+struct_union_data::get_structure_member_names(void) const
+{
+  return member_names;
+}
+
+const irep_idt &
+struct_union_data::get_structure_name(void) const
+{
+  return name;
 }
 
 /*************************** Base expr2t definitions **************************/
@@ -916,6 +928,22 @@ type_to_string<irep_idt>(const irep_idt &theval,
 }
 
 template <>
+inline std::string
+type_to_string<type2t::type_ids>(const type2t::type_ids &id,
+                                 int indent __attribute__((unused)))
+{
+  return "";
+}
+
+template <>
+inline std::string
+type_to_string<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                 int indent __attribute__((unused)))
+{
+  return "";
+}
+
+template <>
 inline bool
 do_type_cmp<bool>(const bool &side1, const bool &side2)
 {
@@ -996,6 +1024,22 @@ inline bool
 do_type_cmp<irep_idt>(const irep_idt &side1, const irep_idt &side2)
 {
   return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<type2t::type_ids>(const type2t::type_ids &id,
+                              const type2t::type_ids &id2)
+{
+  return true; // Dummy field comparison.
+}
+
+template <>
+inline bool
+do_type_cmp<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                    const expr2t::expr_ids &id2)
+{
+  return true; // Dummy field comparison.
 }
 
 template <>
@@ -1128,6 +1172,22 @@ do_type_lt<irep_idt>(const irep_idt &side1, const irep_idt &side2)
 }
 
 template <>
+inline int
+do_type_lt<type2t::type_ids>(const type2t::type_ids &id,
+                             const type2t::type_ids &id2)
+{
+  return 0; // Dummy field comparison
+}
+
+template <>
+inline int
+do_type_lt<const expr2t::expr_ids>(const expr2t::expr_ids &id,
+                                   const expr2t::expr_ids &id2)
+{
+  return 0; // Dummy field comparison
+}
+
+template <>
 inline void
 do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
 {
@@ -1234,6 +1294,21 @@ do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
   return;
 }
 
+template <>
+inline void
+do_type_crc<type2t::type_ids>(const type2t::type_ids &i,boost::crc_32_type &crc)
+{
+  return; // Dummy field crc
+}
+
+template <>
+inline void
+do_type_crc<const expr2t::expr_ids>(const expr2t::expr_ids &i,
+                                    boost::crc_32_type &crc)
+{
+  return; // Dummy field crc
+}
+
 template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<bool>(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1241,6 +1316,7 @@ template<> inline void do_type_list_operands<unsigned int>(const unsigned int &t
 template<> inline void do_type_list_operands<BigInt>(const BigInt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
 template<> inline void do_type_list_operands<type2tc>(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1249,8 +1325,7 @@ template<> inline void do_type_list_operands<unsigned int>(unsigned int &theval 
 template<> inline void do_type_list_operands<BigInt>(BigInt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<fixedbvt>(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<dstring>(dstring &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
-
-
+template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list< expr2tc*> &inp __attribute__((unused))) { return; }
 
 template<>
 inline void
@@ -1298,141 +1373,243 @@ do_type_list_operands<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
   }
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <typename T>
 void
-esbmct::expr<derived, field1, field2, field3, field4>::convert_smt(prop_convt &obj, void *&arg) const
+do_type2string(const T &thething, unsigned int idx,
+               std::string (&names)[esbmct::num_type_fields],
+               list_of_memberst &vec, unsigned int indent)
+{
+  vec.push_back(member_entryt(names[idx], type_to_string<T>(thething, indent)));
+}
+
+template <>
+void
+do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
+                                 unsigned int idx,
+                                 std::string (&names)[esbmct::num_type_fields],
+                                 list_of_memberst &vec, unsigned int indent)
+{
+  // Do nothing; this is a dummy member.
+}
+
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
+void
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_expr(*new_this, arg);
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 expr2tc
-esbmct::expr<derived, field1, field2, field3, field4>::clone(void) const
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
   return expr2tc(new_obj);
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 expr2t *
-esbmct::expr<derived, field1, field2, field3, field4>::clone_raw(void) const
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::clone_raw(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
   return new_obj;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 list_of_memberst
-esbmct::expr<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::tostring(unsigned int indent) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
-  field1::fieldtype::tostring(thevector, indent);
-  field2::fieldtype::tostring(thevector, indent);
-  field3::fieldtype::tostring(thevector, indent);
-  field4::fieldtype::tostring(thevector, indent);
+  do_type2string<field1_type>(derived_this->*field1_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field2_type>(derived_this->*field2_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field3_type>(derived_this->*field3_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field4_type>(derived_this->*field4_ptr, 0,
+                              derived_this->field_names, thevector, indent);
   return thevector;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 bool
-esbmct::expr<derived, field1, field2, field3, field4>::cmp(const expr2t &ref)const
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::cmp(const expr2t &ref)const
 {
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
-  if (!field1::fieldtype::cmp(
-        static_cast<const typename field1::fieldtype &>(ref2)))
+  if (!do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
 
-  if (!field2::fieldtype::cmp(
-        static_cast<const typename field2::fieldtype &>(ref2)))
+  if (!do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
     return false;
 
-  if (!field3::fieldtype::cmp(
-        static_cast<const typename field3::fieldtype &>(ref2)))
+  if (!do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
     return false;
 
-  if (!field4::fieldtype::cmp(
-        static_cast<const typename field4::fieldtype &>(ref2)))
+  if (!do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
     return false;
 
   return true;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 int
-esbmct::expr<derived, field1, field2, field3, field4>::lt(const expr2t &ref)const
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::lt(const expr2t &ref)const
 {
   int tmp;
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
-  tmp = field1::fieldtype::lt(
-                static_cast<const typename field1::fieldtype &>(ref2));
+  tmp = do_type_lt<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field2::fieldtype::lt(
-                static_cast<const typename field2::fieldtype &>(ref2));
+  tmp = do_type_lt<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field3::fieldtype::lt(
-                static_cast<const typename field3::fieldtype &>(ref2));
+  tmp = do_type_lt<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field4::fieldtype::lt(
-                static_cast<const typename field4::fieldtype &>(ref2));
+  tmp = do_type_lt<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr);
+  if (tmp != 0)
+    return tmp;
 
   return tmp;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 void
-esbmct::expr<derived, field1, field2, field3, field4>::do_crc
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::do_crc
           (boost::crc_32_type &crc) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
 
-  expr2t::do_crc(crc);
-  field1::fieldtype::do_crc(crc);
-  field2::fieldtype::do_crc(crc);
-  field3::fieldtype::do_crc(crc);
-  field4::fieldtype::do_crc(crc);
+  derived_this->expr2t::do_crc(crc);
+  do_type_crc<field1_type>(derived_this->*field1_ptr, crc);
+  do_type_crc<field2_type>(derived_this->*field2_ptr, crc);
+  do_type_crc<field3_type>(derived_this->*field3_ptr, crc);
+  do_type_crc<field4_type>(derived_this->*field4_ptr, crc);
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 void
-esbmct::expr<derived, field1, field2, field3, field4>::list_operands
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::list_operands
           (std::list<const expr2tc *> &inp) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
 
-  field1::fieldtype::list_operands(inp);
-  field2::fieldtype::list_operands(inp);
-  field3::fieldtype::list_operands(inp);
-  field4::fieldtype::list_operands(inp);
+  do_type_list_operands<field1_type>(derived_this->*field1_ptr, inp);
+  do_type_list_operands<field2_type>(derived_this->*field2_ptr, inp);
+  do_type_list_operands<field3_type>(derived_this->*field3_ptr, inp);
+  do_type_list_operands<field4_type>(derived_this->*field4_ptr, inp);
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+        typename field1_type, class field1_class,
+        field1_type field1_class::*field1_ptr,
+        typename field2_type, class field2_class,
+        field2_type field2_class::*field2_ptr,
+        typename field3_type, class field3_class,
+        field3_type field3_class::*field3_ptr,
+        typename field4_type, class field4_class,
+        field4_type field4_class::*field4_ptr>
 void
-esbmct::expr<derived, field1, field2, field3, field4>::list_operands
+esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr>::list_operands
           (std::list<expr2tc*> &inp)
 {
+  derived *derived_this = static_cast<derived*>(this);
 
-  field1::fieldtype::list_operands(inp);
-  field2::fieldtype::list_operands(inp);
-  field3::fieldtype::list_operands(inp);
-  field4::fieldtype::list_operands(inp);
+  do_type_list_operands<field1_type>(derived_this->*field1_ptr, inp);
+  do_type_list_operands<field2_type>(derived_this->*field2_ptr, inp);
+  do_type_list_operands<field3_type>(derived_this->*field3_ptr, inp);
+  do_type_list_operands<field4_type>(derived_this->*field4_ptr, inp);
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 void
-esbmct::type<derived, field1, field2, field3, field4>
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
       ::convert_smt_type(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
@@ -1440,90 +1617,570 @@ esbmct::type<derived, field1, field2, field3, field4>
   return;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 type2tc
-esbmct::type<derived, field1, field2, field3, field4>::clone(void) const
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
+      ::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
   return type2tc(new_obj);
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 list_of_memberst
-esbmct::type<derived, field1, field2, field3, field4>::tostring(unsigned int indent) const
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
+      ::tostring(unsigned int indent) const
 {
+  const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
-  field1::fieldtype::tostring(thevector, indent);
-  field2::fieldtype::tostring(thevector, indent);
-  field3::fieldtype::tostring(thevector, indent);
-  field4::fieldtype::tostring(thevector, indent);
+  do_type2string<field1_type>(derived_this->*field1_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field2_type>(derived_this->*field2_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field3_type>(derived_this->*field3_ptr, 0,
+                              derived_this->field_names, thevector, indent);
+  do_type2string<field4_type>(derived_this->*field4_ptr, 0,
+                              derived_this->field_names, thevector, indent);
   return thevector;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 bool
-esbmct::type<derived, field1, field2, field3, field4>::cmp(const type2t &ref) const
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
+      ::cmp(const type2t &ref) const
 {
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
-  if (!field1::fieldtype::cmp(
-        static_cast<const typename field1::fieldtype &>(ref2)))
+  if (!do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
 
-  if (!field2::fieldtype::cmp(
-        static_cast<const typename field2::fieldtype &>(ref2)))
+  if (!do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
     return false;
 
-  if (!field3::fieldtype::cmp(
-        static_cast<const typename field3::fieldtype &>(ref2)))
+  if (!do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
     return false;
 
-  if (!field4::fieldtype::cmp(
-        static_cast<const typename field4::fieldtype &>(ref2)))
+  if (!do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
     return false;
 
   return true;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 int
-esbmct::type<derived, field1, field2, field3, field4>::lt(const type2t &ref)const
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
+      ::lt(const type2t &ref)const
 {
   int tmp;
-  const derived &ref2 = static_cast<const derived &>(ref);
+  const derived *derived_this = static_cast<const derived*>(this);
+  const derived *ref2 = static_cast<const derived *>(&ref);
 
-  tmp = field1::fieldtype::lt(
-                static_cast<const typename field1::fieldtype &>(ref2));
+  tmp = do_type_lt<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field2::fieldtype::lt(
-                static_cast<const typename field2::fieldtype &>(ref2));
+  tmp = do_type_lt<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field3::fieldtype::lt(
-                static_cast<const typename field3::fieldtype &>(ref2));
+  tmp = do_type_lt<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = field4::fieldtype::lt(
-                static_cast<const typename field4::fieldtype &>(ref2));
+  tmp = do_type_lt<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr);
+  if (tmp != 0)
+    return tmp;
 
   return tmp;
 }
 
-template <class derived, class field1, class field2, class field3, class field4>
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr>
 void
-esbmct::type<derived, field1, field2, field3, field4>::do_crc
-          (boost::crc_32_type &crc) const
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr>
+      ::do_crc (boost::crc_32_type &crc) const
 {
 
-  type2t::do_crc(crc);
-  field1::fieldtype::do_crc(crc);
-  field2::fieldtype::do_crc(crc);
-  field3::fieldtype::do_crc(crc);
-  field4::fieldtype::do_crc(crc);
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  derived_this->type2t::do_crc(crc);
+  do_type_crc<field1_type>(derived_this->*field1_ptr, crc);
+  do_type_crc<field2_type>(derived_this->*field2_ptr, crc);
+  do_type_crc<field3_type>(derived_this->*field3_ptr, crc);
+  do_type_crc<field4_type>(derived_this->*field4_ptr, crc);
   return;
 }
+
+std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","",""};
+std::string empty_type2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
+std::string symbol_type2t::field_names [esbmct::num_type_fields]  =
+{ "symbol_name", "", "", ""};
+std::string struct_type2t::field_names [esbmct::num_type_fields]  =
+{ "members", "member_names", "typename", ""};
+std::string union_type2t::field_names [esbmct::num_type_fields]  =
+{ "members", "member_names", "typename", ""};
+std::string unsignedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
+std::string signedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
+std::string code_type2t::field_names [esbmct::num_type_fields]  =
+{ "arguments", "ret_type", "argument_names", "ellipsis"};
+std::string array_type2t::field_names [esbmct::num_type_fields]  =
+{ "subtype", "array_size", "size_is_infinite", ""};
+std::string pointer_type2t::field_names [esbmct::num_type_fields]  =
+{ "subtype", "", "", ""};
+std::string fixedbv_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "integer_bits", "", ""};
+std::string string_type2t::field_names [esbmct::num_type_fields]  =
+{ "width", "", "", ""};
+
+
+// Exprs
+
+std::string constant_int2t::field_names [esbmct::num_type_fields]  =
+{ "constant_value", "", "", ""};
+std::string constant_fixedbv2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string constant_struct2t::field_names [esbmct::num_type_fields]  =
+{ "members", "", "", ""};
+std::string constant_union2t::field_names [esbmct::num_type_fields]  =
+{ "members", "", "", ""};
+std::string constant_bool2t::field_names [esbmct::num_type_fields]  =
+{ "constant_value", "", "", ""};
+std::string constant_array2t::field_names [esbmct::num_type_fields]  =
+{ "members", "", "", ""};
+std::string constant_array_of2t::field_names [esbmct::num_type_fields]  =
+{ "initializer", "", "", ""};
+std::string constant_string2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string symbol2t::field_names [esbmct::num_type_fields]  =
+{ "name", "", "", ""};
+std::string typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "", "", ""};
+std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "", "", ""};
+std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
+{ "from", "", "", ""};
+std::string if2t::field_names [esbmct::num_type_fields]  =
+{ "cond", "true_value", "false_value", ""};
+std::string equality2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string notequal2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string lessthan2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string greaterthan2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string lessthanequal2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string greaterthanequal2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string not2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string and2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string or2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string xor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string implies2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitand2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitxor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitnand2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitnor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitnxor2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string lshr2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string bitnot2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string neg2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string abs2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string add2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string sub2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string mul2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string div2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string modulus2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string shl2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string ashr2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string same_object2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string pointer_offset2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
+std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
+std::string address_of2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
+std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
+{ "big_endian", "source_value", "source_offset", ""};
+std::string byte_update2t::field_names [esbmct::num_type_fields]  =
+{ "big_endian", "source_value", "source_offset", "update_value"};
+std::string with2t::field_names [esbmct::num_type_fields]  =
+{ "source_value", "update_field", "update_value", ""};
+std::string member2t::field_names [esbmct::num_type_fields]  =
+{ "source_value", "member_name", "", ""};
+std::string index2t::field_names [esbmct::num_type_fields]  =
+{ "source_value", "index", "", ""};
+std::string zero_string2t::field_names [esbmct::num_type_fields]  =
+{ "string", "", "", ""};
+std::string zero_length_string2t::field_names [esbmct::num_type_fields]  =
+{ "string", "", "", ""};
+std::string isnan2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string overflow2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
+std::string overflow_cast2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "bits", "", ""};
+std::string overflow_neg2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
+std::string unknown2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
+std::string invalid2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
+std::string null_object2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
+std::string dynamic_object2t::field_names [esbmct::num_type_fields]  =
+{ "instance", "invalid", "unknown", ""};
+std::string dereference2t::field_names [esbmct::num_type_fields]  =
+{ "pointer", "", "", ""};
+std::string valid_object2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string sideeffect2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "size", "alloctype", "kind"};
+std::string code_block2t::field_names [esbmct::num_type_fields]  =
+{ "operands", "", "", ""};
+std::string code_assign2t::field_names [esbmct::num_type_fields]  =
+{ "target", "source", "", ""};
+std::string code_init2t::field_names [esbmct::num_type_fields]  =
+{ "target", "source", "", ""};
+std::string code_decl2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string code_printf2t::field_names [esbmct::num_type_fields]  =
+{ "operands", "", "", ""};
+std::string code_expression2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
+std::string code_return2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
+std::string code_skip2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", ""};
+std::string code_free2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", ""};
+std::string code_goto2t::field_names [esbmct::num_type_fields]  =
+{ "target", "", "", ""};
+std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
+{ "object", "offset", "", ""};
+std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
+{ "return", "function", "operands", ""};
+std::string code_comma2t::field_names [esbmct::num_type_fields]  =
+{ "side_1", "side_2", "", ""};
+std::string invalid_pointer2t::field_names [esbmct::num_type_fields]  =
+{ "pointer_obj", "", "", ""};
+std::string buffer_size2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+std::string code_asm2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
+
+// Explicit template instanciations
+
+template class esbmct::type_methods<bool_type2t, type2t>;
+template class esbmct::type_methods<empty_type2t, type2t>;
+template class esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
+               symbol_type_data, &symbol_type_data::symbol_name>;
+template class esbmct::type_methods<struct_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>;
+template class esbmct::type_methods<union_type2t, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name>;
+template class esbmct::type_methods<unsignedbv_type2t, bv_data,
+    unsigned int, bv_data, &bv_data::width>;
+template class esbmct::type_methods<signedbv_type2t, bv_data,
+    unsigned int, bv_data, &bv_data::width>;
+template class esbmct::type_methods<code_type2t, code_data,
+    std::vector<type2tc>, code_data, &code_data::arguments,
+    type2tc, code_data, &code_data::ret_type,
+    std::vector<irep_idt>, code_data, &code_data::argument_names,
+    bool, code_data, &code_data::ellipsis>;
+template class esbmct::type_methods<array_type2t, array_data,
+    type2tc, array_data, &array_data::subtype,
+    expr2tc, array_data, &array_data::array_size,
+    bool, array_data, &array_data::size_is_infinite>;
+template class esbmct::type_methods<pointer_type2t, pointer_data,
+    type2tc, pointer_data, &pointer_data::subtype>;
+template class esbmct::type_methods<fixedbv_type2t, fixedbv_data,
+    unsigned int, fixedbv_data, &fixedbv_data::width,
+    unsigned int, fixedbv_data, &fixedbv_data::integer_bits>;
+template class esbmct::type_methods<string_type2t, string_data,
+    unsigned int, string_data, &string_data::width>;
+
+// Explicit instanciation for exprs.
+
+template class esbmct::expr_methods<constant_int2t, constant_int_data,
+    BigInt, constant_int_data, &constant_int_data::constant_value>;
+template class esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
+    fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>;
+template class esbmct::expr_methods<constant_struct2t, constant_datatype_data,
+    std::vector<expr2tc>, constant_datatype_data,
+    &constant_datatype_data::datatype_members>;
+template class esbmct::expr_methods<constant_union2t, constant_datatype_data,
+    std::vector<expr2tc>, constant_datatype_data,
+    &constant_datatype_data::datatype_members>;
+template class esbmct::expr_methods<constant_bool2t, constant_bool_data,
+    bool, constant_bool_data, &constant_bool_data::constant_value>;
+template class esbmct::expr_methods<constant_array2t, constant_datatype_data,
+    std::vector<expr2tc>, constant_datatype_data,
+    &constant_datatype_data::datatype_members>;
+template class esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
+    expr2tc, constant_array_of_data, &constant_array_of_data::initializer>;
+template class esbmct::expr_methods<constant_string2t, constant_string_data,
+    irep_idt, constant_string_data, &constant_string_data::value>;
+template class esbmct::expr_methods<symbol2t, symbol_data,
+    irep_idt, symbol_data, &symbol_data::name>;
+template class esbmct::expr_methods<typecast2t, typecast_data,
+    expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
+    expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
+    expr2tc, typecast_data, &typecast_data::from>;
+template class esbmct::expr_methods<if2t, if_data,
+    expr2tc, if_data, &if_data::cond,
+    expr2tc, if_data, &if_data::true_value,
+    expr2tc, if_data, &if_data::false_value>;
+template class esbmct::expr_methods<equality2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<notequal2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<lessthan2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<greaterthan2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<lessthanequal2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<greaterthanequal2t, relation_data,
+    expr2tc, relation_data, &relation_data::side_1,
+    expr2tc, relation_data, &relation_data::side_2>;
+template class esbmct::expr_methods<not2t, not_data,
+    expr2tc, not_data, &not_data::value>;
+template class esbmct::expr_methods<and2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<or2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<xor2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<implies2t, logic_2ops,
+    expr2tc, logic_2ops, &logic_2ops::side_1,
+    expr2tc, logic_2ops, &logic_2ops::side_2>;
+template class esbmct::expr_methods<bitand2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitor2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitxor2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitnand2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitnor2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitnxor2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<lshr2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
+template class esbmct::expr_methods<bitnot2t, bitnot_data,
+    expr2tc, bitnot_data, &bitnot_data::value>;
+template class esbmct::expr_methods<neg2t, arith_1op,
+    expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<abs2t, arith_1op,
+    expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<add2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<sub2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<mul2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<div2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<modulus2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<shl2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<ashr2t, arith_2ops,
+    expr2tc, arith_2ops, &arith_2ops::side_1,
+    expr2tc, arith_2ops, &arith_2ops::side_2>;
+template class esbmct::expr_methods<same_object2t, same_object_data,
+    expr2tc, same_object_data, &same_object_data::side_1,
+    expr2tc, same_object_data, &same_object_data::side_2>;
+template class esbmct::expr_methods<pointer_offset2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<pointer_object2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<address_of2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
+    bool, byte_extract_data, &byte_extract_data::big_endian,
+    expr2tc, byte_extract_data, &byte_extract_data::source_value,
+    expr2tc, byte_extract_data, &byte_extract_data::source_offset>;
+template class esbmct::expr_methods<byte_update2t, byte_update_data,
+    bool, byte_update_data, &byte_update_data::big_endian,
+    expr2tc, byte_update_data, &byte_update_data::source_value,
+    expr2tc, byte_update_data, &byte_update_data::source_offset,
+    expr2tc, byte_update_data, &byte_update_data::update_value>;
+template class esbmct::expr_methods<with2t, with_data,
+    expr2tc, with_data, &with_data::source_value,
+    expr2tc, with_data, &with_data::update_field,
+    expr2tc, with_data, &with_data::update_value>;
+template class esbmct::expr_methods<member2t, member_data,
+    expr2tc, member_data, &member_data::source_value,
+    irep_idt, member_data, &member_data::member>;
+template class esbmct::expr_methods<index2t, index_data,
+    expr2tc, index_data, &index_data::source_value,
+    expr2tc, index_data, &index_data::index>;
+template class esbmct::expr_methods<zero_string2t, string_ops,
+    expr2tc, string_ops, &string_ops::string>;
+template class esbmct::expr_methods<zero_length_string2t, string_ops,
+    expr2tc, string_ops, &string_ops::string>;
+template class esbmct::expr_methods<isnan2t, isnan_data,
+    expr2tc, isnan_data, &isnan_data::value>;
+template class esbmct::expr_methods<overflow2t, overflow_ops,
+    expr2tc, overflow_ops, &overflow_ops::operand>;
+template class esbmct::expr_methods<overflow_cast2t, overflow_cast_data,
+    expr2tc, overflow_ops, &overflow_ops::operand,
+    unsigned int, overflow_cast_data, &overflow_cast_data::bits>;
+template class esbmct::expr_methods<overflow_neg2t, overflow_ops,
+    expr2tc, overflow_ops, &overflow_ops::operand>;
+template class esbmct::expr_methods<unknown2t, expr2t>;
+template class esbmct::expr_methods<invalid2t, expr2t>;
+template class esbmct::expr_methods<null_object2t, expr2t>;
+template class esbmct::expr_methods<dynamic_object2t, dynamic_object_data,
+    expr2tc, dynamic_object_data, &dynamic_object_data::instance,
+    bool, dynamic_object_data, &dynamic_object_data::invalid,
+    bool, dynamic_object_data, &dynamic_object_data::unknown>;
+template class esbmct::expr_methods<dereference2t, dereference_data,
+    expr2tc, dereference_data, &dereference_data::value>;
+template class esbmct::expr_methods<valid_object2t, object_ops,
+    expr2tc, object_ops, &object_ops::value>;
+template class esbmct::expr_methods<deallocated_obj2t, object_ops,
+    expr2tc, object_ops, &object_ops::value>;
+template class esbmct::expr_methods<dynamic_size2t, object_ops,
+    expr2tc, object_ops, &object_ops::value>;
+template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
+    expr2tc, sideeffect_data, &sideeffect_data::operand,
+    expr2tc, sideeffect_data, &sideeffect_data::size,
+    type2tc, sideeffect_data, &sideeffect_data::alloctype,
+    unsigned int, sideeffect_data, &sideeffect_data::kind>;
+template class esbmct::expr_methods<code_block2t, code_block_data,
+    std::vector<expr2tc>, code_block_data, &code_block_data::operands>;
+template class esbmct::expr_methods<code_assign2t, code_assign_data,
+    expr2tc, code_assign_data, &code_assign_data::target,
+    expr2tc, code_assign_data, &code_assign_data::source>;
+template class esbmct::expr_methods<code_init2t, code_assign_data,
+    expr2tc, code_assign_data, &code_assign_data::target,
+    expr2tc, code_assign_data, &code_assign_data::source>;
+template class esbmct::expr_methods<code_decl2t, code_decl_data,
+    irep_idt, code_decl_data, &code_decl_data::value>;
+template class esbmct::expr_methods<code_printf2t, code_printf_data,
+    std::vector<expr2tc>, code_printf_data, &code_printf_data::operands>;
+template class esbmct::expr_methods<code_expression2t, code_expression_data,
+    expr2tc, code_expression_data, &code_expression_data::operand>;
+template class esbmct::expr_methods<code_return2t, code_expression_data,
+    expr2tc, code_expression_data, &code_expression_data::operand>;
+template class esbmct::expr_methods<code_skip2t, expr2t>;
+template class esbmct::expr_methods<code_free2t, code_expression_data,
+    expr2tc, code_expression_data, &code_expression_data::operand>;
+template class esbmct::expr_methods<code_goto2t, code_goto_data,
+    irep_idt, code_goto_data, &code_goto_data::target>;
+template class esbmct::expr_methods<object_descriptor2t, object_desc_data,
+    expr2tc, object_desc_data, &object_desc_data::object,
+    expr2tc, object_desc_data, &object_desc_data::offset>;
+template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
+    expr2tc, code_funccall_data, &code_funccall_data::ret,
+    expr2tc, code_funccall_data, &code_funccall_data::function,
+    std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>;
+template class esbmct::expr_methods<code_comma2t, code_comma_data,
+    expr2tc, code_comma_data, &code_comma_data::side_1,
+    expr2tc, code_comma_data, &code_comma_data::side_2>;
+template class esbmct::expr_methods<invalid_pointer2t, pointer_ops,
+    expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<buffer_size2t, buffer_size_data,
+    expr2tc, buffer_size_data, &buffer_size_data::value>;
+template class esbmct::expr_methods<code_asm2t, code_asm_data,
+    irep_idt, code_asm_data, &code_asm_data::value>;

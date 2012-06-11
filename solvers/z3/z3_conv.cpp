@@ -878,7 +878,8 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 void
 z3_convt::convert_smt_expr(const constant_struct2t &data, void *&_bv)
 {
-  const struct_type2t &ref =static_cast<const struct_type2t&>(*data.type.get());
+  const struct_type2t &ref =
+    dynamic_cast<const struct_type2t&>(*data.type.get());
   convert_struct_union(data.datatype_members, ref.members, data.type,
                        false, _bv);
 }
@@ -886,7 +887,7 @@ z3_convt::convert_smt_expr(const constant_struct2t &data, void *&_bv)
 void
 z3_convt::convert_smt_expr(const constant_union2t &data, void *&_bv)
 {
-  const union_type2t &ref = static_cast<const union_type2t&>(*data.type.get());
+  const union_type2t &ref = dynamic_cast<const union_type2t&>(*data.type.get());
   convert_struct_union(data.datatype_members, ref.members, data.type,
                        true, _bv);
 }
@@ -1737,7 +1738,9 @@ z3_convt::convert_smt_expr(const with2t &with, void *&_bv)
 
   if (is_structure_type(with.type)) {
     unsigned int idx = 0;
-    const std::vector<irep_idt> &names = get_structure_member_names(with.type);
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*with.type);
+    const std::vector<irep_idt> &names = data_ref.get_structure_member_names();
 
     convert_bv(with.source_value, tuple);
     convert_bv(with.update_value, value);
@@ -1781,8 +1784,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
   u_int j = 0;
   Z3_ast struct_var;
 
+  const struct_union_data &data_ref =
+    dynamic_cast<const struct_union_data &>(*member.source_value->type);
   const std::vector<irep_idt> &member_names =
-                          get_structure_member_names(member.source_value->type);
+    data_ref.get_structure_member_names();
 
   forall_names(it, member_names) {
     if (*it == member.member.as_string())
@@ -1803,8 +1808,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
     }
 
     if (cache_result != union_vars.end()) {
-      const std::vector<type2tc> &members =
-        get_structure_members(member.source_value->type);
+      const std::vector<type2tc> &members = data_ref.get_structure_members();
 
       const type2tc source_type = members[cache_result->second];
       if (source_type == member.type) {
