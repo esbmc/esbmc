@@ -1985,6 +1985,20 @@ migrate_expr_back(const expr2tc &ref)
     codeexpr.op0() = exprt("string-constant");
     return codeexpr;
   }
+  case expr2t::code_cpp_del_array_id:
+  {
+    const code_cpp_del_array2t &ref2 = to_code_cpp_del_array2t(ref);
+    exprt codeexpr("cpp_delete[]", typet());
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return codeexpr;
+  }
+  case expr2t::code_cpp_delete_id:
+  {
+    const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
+    exprt codeexpr("cpp_delete", typet());
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return codeexpr;
+  }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
   }
