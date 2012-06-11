@@ -1393,6 +1393,16 @@ do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
   // Do nothing; this is a dummy member.
 }
 
+template <>
+void
+do_type2string<expr2t::expr_ids>(const expr2t::expr_ids &thething,
+                                 unsigned int idx,
+                                 std::string (&names)[esbmct::num_type_fields],
+                                 list_of_memberst &vec, unsigned int indent)
+{
+  // Do nothing; this is a dummy member.
+}
+
 template <class derived, class subclass,
         typename field1_type, class field1_class,
         field1_type field1_class::*field1_ptr,
