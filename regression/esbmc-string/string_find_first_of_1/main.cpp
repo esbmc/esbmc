@@ -6,10 +6,11 @@ using namespace std;
 
 int main ()
 {
-  string str ("look for non-alphabetic characters...");
-  size_t found;
+  string str ("look for non-a");
+  size_t found, num;
 
-  found=str.find_first_of("-_=+!@#$%&*()[{]}^~?/:;.,ºª|\\");
+  found=str.find_first_of("-_=");
+
   if (found!=string::npos)
   {
     cout << "First non-alphabetic character is " << str[found];

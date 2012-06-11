@@ -216,6 +216,7 @@ int strlen(const char *s)
 #if 1
 size_t strlen(const char *s)
 {
+  __ESBMC_assert(s!=NULL, "string must contain any character");
   size_t len=0;
   while(*s!=NULL) {s++; len++;}
   return len;
@@ -230,16 +231,6 @@ for (i = 0; s[i] != 0; i++);
 
 return i;
 }
-#endif
-size_t strspn_reverse(const char *s1, const char *s2)
-{
-    size_t ret=strlen(s1);
-    while(*s1 && strchr(s2,*s1--))
-        ret--;
-    return ret;
-}
-
-#if 0
 char* strtok(char* str, const char* delim)
 {
 	static char* p=0;

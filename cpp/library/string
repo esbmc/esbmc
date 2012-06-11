@@ -120,35 +120,6 @@ namespace std
 		int compare ( int pos1, size_t n1, string& s ) const;
 		int compare ( int pos1, size_t n1, const char* s ) const;
 		int compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const;
-		string& substr ( size_t pos, size_t n )
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
-			int i,k;
-			int lenOne = n+1;
-			char* one = new char[lenOne];
-			for(k=0,i=pos;i<(pos+n);k++,i++){
-				one[k] = this->str[i];
-			}
-			one[k]='\0';
-			string tmp(one);
-			return tmp;
-		}
-		string& substr ( size_t pos ) const
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert(pos < this->length(), "overflow");
-			int i,k;
-			int len = this->length();
-			int lenOne = len+1;
-			char* one = new char[lenOne];
-			for(k=0,i=pos;i<len;k++,i++){
-				one[k] = this->str[i];
-			}
-			one[k]='\0';
-			string tmp(one);
-			return tmp;
-		}
 		size_t find_first_of ( const string& s, size_t pos = 0 ) const;
 		size_t find_first_of ( const char* s, size_t pos = 0 ) const;
 		size_t find_first_of ( char c, size_t pos = 0 ) const;
@@ -187,6 +158,7 @@ namespace std
 		string& erase ( size_t pos = 0 );
 		string& erase ( size_t pos = 0, size_t n );
 		string& erase ( size_t pos = 0, size_t n , char* tmp );
+		string& erase ( size_t pos = 0);
 		string& replace ( size_t pos1, size_t n1,   const string& s );
 		string& replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 );
 		string& replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
@@ -204,6 +176,37 @@ namespace std
 		    void insert ( iterator p, InputIterator first, InputIterator last );
 		size_t copy ( char* s, size_t n, size_t pos = 0) const;
 		const char* data() const;
+
+		string& substr ( size_t pos, size_t n )
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+			int i,k;
+			int lenOne = n+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<(pos+n);k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
+
+		string& substr ( size_t pos ) const
+		{
+			__ESBMC_HIDE:
+			__ESBMC_assert(pos < this->length(), "overflow");
+			int i,k;
+			int len = this->length();
+			int lenOne = len+1;
+			char* one = new char[lenOne];
+			for(k=0,i=pos;i<len;k++,i++){
+				one[k] = this->str[i];
+			}
+			one[k]='\0';
+			string tmp(one);
+			return tmp;
+		}
 
 	    const_iterator begin() const{
 	    	const_iterator first(this->str);
@@ -313,14 +316,14 @@ namespace std
 		__ESBMC_HIDE:
 		_size=strlen(s);
 		str=new char[_size+1];
-		//npos = _size-1;
+
 		strcpy(str,s);
 	}
 
 	string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE:
-		//__ESBMC_assert(n < strlen(s),"string overflow");
+		__ESBMC_assert(n > strlen(s),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -332,6 +335,7 @@ namespace std
 	string::string (string& s, size_t n)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert(n > s.length(),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -344,12 +348,14 @@ namespace std
 
 	string::string(int len)
 	{
+		__ESBMC_assert(len > 0 ,"the parameter must be greater than zero");
 	    str = new char [len+1];
 	    _size = len;
 	}
 
 	string::string(char c, size_t n)
 	{
+		__ESBMC_assert(c!=NULL ,"the parameter must be different than NULL");
 	    str = new char [n+1];
 	    for(int i = 0; i <= n; i++)
 	        str[i] = c;
@@ -663,7 +669,7 @@ namespace std
 	    for(j=i, k=0; j<totalLen; j++, k++)
 	    	temp[j] = s.str[k];
 	    temp[j]='\0';
-	    this->str = new char[totalLen];
+	    this->str = new char[totalLen+1];
 	    this->_size = totalLen;
 	    strcpy(this->str, temp);
 	    return *this;
@@ -682,7 +688,7 @@ namespace std
 	    for(j=i, k=0; j<totalLen; j++, k++)
 	    	temp[j] = s[k];
 	    temp[j]='\0';
-	    this->str = new char[totalLen];
+	    this->str = new char[totalLen+1];
 	    this->_size = totalLen;
 	    strcpy(this->str, temp);
 	    return *this;
@@ -701,7 +707,7 @@ namespace std
 	    temp[i] = s;
 	    i++;
 	    temp[i] = '\0';
-	    this->str = new char[totalLen];
+	    this->str = new char[totalLen+1];
 	    this->_size = totalLen;
 	    strcpy(this->str, temp);
 		return *this;
@@ -889,7 +895,6 @@ namespace std
 		for(i=0;i<len;i++)
 			if(this->str[i] == c)
 				return i;
-
 	}
 
 	size_t string::find ( string& s, size_t pos = 0 ) const
@@ -959,113 +964,6 @@ namespace std
 	}
 
 	size_t string::find ( const char* s, size_t pos = 0 ) const
-	{
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-		int slen = strlen(s);
-		char* s2 = new char[slen+1];
-		strcpy(s2,s);
-		pos =-1;
-		size_t i, j;
-
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
-				}
-			}
-			if (s2[j] == '\0') {
-				return pos;
-			}
-		}
-
-		return -1;
-	}
-
-	size_t string::rfind ( char c, size_t pos = 0 ) const
-	{
-		int i;
-		int len = this->length();
-		for(i=len;i>0;i--)
-			if(this->str[i] == c)
-				return i;
-
-	}
-
-	size_t string::rfind ( string& s, size_t pos = 0 ) const
-	{
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-		int slen = s.length();
-		char* s2 = new char[slen+1];
-		strcpy(s2,s.str);
-		pos =-1;
-		size_t i, j;
-
-		for (i = len; i > lim; i--) {
-			return this->find(s2,i);
-//			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-//				if (s1[i+j] != s2[j]) {
-//					break;
-//				}else{
-//					//if(pos == -1){
-//						pos = i-j;
-//					//}
-//				}
-//			}
-//			if ((s2[j] == '\0')) {
-//				return pos;
-//			}
-		}
-
-		return -1;
-	}
-
-	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
-	{
-		size_t i, j;
-
-		int len = this->length();
-		int lim = pos;
-		char* s1 = new char[len+1];
-		strcpy(s1,this->str);
-
-		int slen = n;
-		char* s2 = new char[slen+1];
-		for(i=0;i<slen;i++){
-			s2[i] = s[i];
-		}
-		s2[i] = '\0';
-
-		pos =-1;
-
-		for (i = lim; i < len; i++) {
-			for (j = 0; (j < slen) && ((i+j) < len); j++) {
-				if (s1[i+j] != s2[j]) {
-					break;
-				}else{
-					if(pos == -1){
-						pos = i+j;
-					}
-				}
-			}
-			if (s2[j] == '\0') {
-				return pos;
-			}
-		}
-
-		return -1;
-	}
-
-	size_t string::rfind ( const char* s, size_t pos = 0 ) const
 	{
 		int len = this->length();
 		int lim = pos;
@@ -1295,6 +1193,35 @@ namespace std
 		return *this;
 	}
 
+    string& string::erase ( size_t pos = 0)
+    {
+        __ESBMC_HIDE:
+    int n = this->length()-1;
+        __ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
+        int i,k,len  = this->length();
+        int lenOne = pos +1;
+        char* one = new char[lenOne];
+        for(i=0;i<pos;i++){
+            one[i] = this->str[i];
+        }
+        int lenTwo = (len-(pos+n))+1;
+        char* two = new char[lenTwo];
+        for(k=0,i=pos+n;i<len;i++,k++){
+            two[k] = this->str[i];
+        }
+        int totalLen =len-n;
+        this->str = new char[totalLen+1];
+        this->_size = totalLen;
+        for(i=0;i<lenOne-1;i++){
+            this->str[i] = one[i];
+        }
+        for(k=0;k<lenTwo-1;k++,i++){
+            this->str[i] = two[k];
+        }
+        this->str[i] = '\0';
+        return *this;
+    }
+
 	string& string::replace ( size_t pos1, size_t n1, const string& s )
 	{
 		__ESBMC_HIDE:
@@ -1467,111 +1394,320 @@ namespace std
 
 		return 0;
 	}
-#if 0
-
-
-
-
-
-
-	string& string::replace ( size_t pos1, size_t n1, char* s, size_t pos2, size_t n2 );
-
-
-	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
+	size_t string::find_first_of ( const char* s, size_t pos = 0 ) const
 	{
-		__ESBMC_assert((strlen(s)<=this->_size)&&(pos<this->_size)&&(n-pos<this->_size), "string overflow");
-		return strspn(str+pos,s);
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
+			}
+		}
 	}
-
-
-
-
-
 
 	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
 	{
-		return strcspn(s.c_str(), str+pos);
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s.str[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
+			}
+		}
 	}
-	size_t string::find_first_of ( const char* s, size_t pos = 0 ) const
-	{
-		return strcspn(s, str+pos);
-	}
+
 	size_t string::find_first_of ( char c, size_t pos = 0 ) const
 	{
-		__ESBMC_HIDE:
-		char *aux;
-		aux = strchr(str+pos, c);
-		if(aux!=0)
-			return 1;
-		return 0;
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		for(i=0;i<len;i++){
+			if(s1[i] == c){
+				return i;
+			}
+		}
 	}
 
+	size_t string::find_first_not_of ( const string& s, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
 
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s.str[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			number = 0;
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					number++;
+				}
+			}
+			if(number == 0){
+				return i;
+			}
+		}
+	}
+
+	size_t string::find_first_not_of ( const char* s, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=0;i<len;i++){
+			number = 0;
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					number++;
+				}
+			}
+			if(number == 0){
+				return i;
+			}
+		}
+	}
+
+	size_t string::find_first_not_of ( char c, size_t pos = 0 ) const
+	{
+		size_t i, j;
+		int number;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		number = 0;
+
+		for(i=0;i<len;i++){
+			if(s1[i] == c){
+				number++;
+			}
+		}
+		if(number == 0){
+			return i;
+		}
+	}
 
 	size_t string::find_last_of ( const string& s, size_t pos = npos ) const
 	{
-		return strspn_reverse(s.c_str(), str+pos);
-	}
-	size_t string::find_last_of ( const char* s, size_t pos = npos ) const
-	{
-		return strspn_reverse(str, s+pos);
-	}
-	size_t string::find_last_of ( char c, size_t pos = npos ) const
-	{
-		return strspn_reverse((const char *)c, str+pos);
-	}
-	size_t string::find_first_not_of ( const string& s, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int i=0,j=0;
-		const char* tmp = this->c_str();
-		const char* tmp2 = s.c_str();
-		while(tmp2[i]!='\0')
-		{
-			while(tmp[j]!='\0')
-			{
-				if (tmp[j] != tmp2[i])
-					return j;
-				j++;
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s.str[i];
+		}
+		s2[i] = '\0';
+
+		for(i=len;i>0;i--){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
 			}
-			i++;
 		}
-		j--;
-		return j;
-	}
-	size_t string::find_first_not_of ( const char* s, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int i=0,j=0;
-		const char* tmp = this->c_str();
-		while(s[i]!='\0')
-		{
-			while(tmp[j]!='\0')
-			{
-				if (tmp[j] != s[i])
-					return j;
-				j++;
-			}
-			i++;
-		}
-		j--;
-		return j;
-	}
-	size_t string::find_first_not_of ( char c, size_t pos = 0 ) const
-	{
-		__ESBMC_assert(pos>this->length(), "overflow");
-		int j=0;
-		const char* tmp = this->c_str();
-		while(tmp[j]!='\0')
-		{
-			if (tmp[j] != c)
-				return j;
-			j++;
-		}
-		j--;
-		return j;
 	}
 
-#endif
+	size_t string::find_last_of ( const char* s, size_t pos = npos ) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=len;i>0;i--){
+			for(j=0;j<slen;j++){
+				if(s1[i] == s2[j]){
+					return i;
+				}
+			}
+		}
+	}
+
+	size_t string::find_last_of ( char c, size_t pos = npos ) const
+	{
+		size_t i, j;
+
+		int len = this->length();
+		int lim = pos;
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		for(i=len;i>0;i--){
+			if(s1[i] == c){
+				return i;
+			}
+		}
+	}
+
+	size_t string::rfind ( char c, size_t pos = 0 ) const
+	{
+		int i;
+		int len = this->length();
+		for(i=len;i>0;i--)
+			if(this->str[i] == c)
+				return i;
+	}
+
+	size_t string::rfind ( string& s, size_t pos = 0 ) const
+	{
+		size_t i, j, k;
+		int num = 0;
+		int lim = pos;
+
+		int len = this->length();
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = s.length();
+		char* s2 = new char[slen+1];
+		strcpy(s2,s.str);
+
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
+					break;
+				}else{
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
+				}
+			}
+		}
+		return -1;
+	}
+
+	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
+	{
+		size_t i, j, k;
+		int num = 0;
+		int lim = pos;
+
+		int len = this->length();
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = n;
+		char* s2 = new char[slen+1];
+		for(i=0;i<slen;i++){
+			s2[i] = s[i];
+		}
+		s2[i] = '\0';
+
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
+					break;
+				}else{
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
+				}
+			}
+		}
+		return -1;
+	}
+
+	size_t string::rfind ( const char* s, size_t pos = 0 ) const
+	{
+		size_t i, j, k;
+		int num = 0;
+		int lim = pos;
+
+		int len = this->length();
+		char* s1 = new char[len+1];
+		strcpy(s1,this->str);
+
+		int slen = strlen(s);
+		char* s2 = new char[slen+1];
+		strcpy(s2,s);
+
+		for(i=len-1;i>=lim;i--){
+			for(k=i,j=slen-1;j>=0;j--){
+				if(s1[k] != s2[j]){
+					break;
+				}else{
+					num++;
+				   if(num==slen){
+					   return k;
+				   }
+				   k--;
+				}
+			}
+		}
+		return -1;
+	}
 }
 #endif
