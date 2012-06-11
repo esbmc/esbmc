@@ -1289,6 +1289,7 @@ class code_assign2t;
 class code_init2t;
 class code_decl2t;
 class code_printf2t;
+class code_expression2t;
 
 // Data definitions.
 
@@ -1788,6 +1789,17 @@ public:
   std::vector<expr2tc> operands;
 };
 
+class code_expression_data : public code_base
+{
+public:
+  code_expression_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o)
+    : code_base(t, id), operand(o) { }
+  code_expression_data(const code_expression_data &ref)
+    : code_base(ref), operand(ref.operand) { }
+
+  expr2tc operand;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2044,6 +2056,9 @@ typedef esbmct::expr_methods<code_decl2t, code_decl_data,
 typedef esbmct::expr_methods<code_printf2t, code_printf_data,
         std::vector<expr2tc>, code_printf_data, &code_printf_data::operands>
         code_printf_expr_methods;
+typedef esbmct::expr_methods<code_expression2t, code_expression_data,
+        expr2tc, code_expression_data, &code_expression_data::operand>
+        code_expression_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2936,17 +2951,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_expression2t : public esbmct::expr<code_expression2t,
-                                              esbmct::expr2tc_operand>
+class code_expression2t : public code_expression_expr_methods
 {
 public:
   code_expression2t(const expr2tc &oper)
-    : esbmct::expr<code_expression2t, esbmct::expr2tc_operand>
-      (type_pool.get_empty(), code_expression_id, oper) {}
+    : code_expression_expr_methods(type_pool.get_empty(), code_expression_id,
+                                   oper) {}
   code_expression2t(const code_expression2t &ref)
-    : esbmct::expr<code_expression2t, esbmct::expr2tc_operand> (ref) {}
+    : code_expression_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_expression2t, esbmct::expr2tc_operand>;
 
 class code_return2t : public esbmct::expr<code_return2t,
                                           esbmct::expr2tc_operand>
