@@ -2034,6 +2034,8 @@ std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
 std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
+std::string sideeffect2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "size", "alloctype", "kind"};
 
 // Explicit template instanciations
 
@@ -2239,3 +2241,8 @@ template class esbmct::expr_methods<deallocated_obj2t, object_ops,
     expr2tc, object_ops, &object_ops::value>;
 template class esbmct::expr_methods<dynamic_size2t, object_ops,
     expr2tc, object_ops, &object_ops::value>;
+template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
+    expr2tc, sideeffect_data, &sideeffect_data::operand,
+    expr2tc, sideeffect_data, &sideeffect_data::size,
+    type2tc, sideeffect_data, &sideeffect_data::alloctype,
+    unsigned int, sideeffect_data, &sideeffect_data::kind>;

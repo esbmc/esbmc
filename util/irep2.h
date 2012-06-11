@@ -1283,6 +1283,7 @@ class dereference2t;
 class valid_object2t;
 class deallocated_obj2t;
 class dynamic_size2t;
+class sideeffect2t;
 
 // Data definitions.
 
@@ -1709,6 +1710,22 @@ public:
   expr2tc value;
 };
 
+class sideeffect_data : public expr2t
+{
+public:
+  sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
+                  const expr2tc &sz, const type2tc &tp, unsigned int k)
+    : expr2t(t, id), operand(op), size(sz), alloctype(tp), kind(k) { }
+  sideeffect_data(const sideeffect_data &ref)
+    : expr2t(ref), operand(ref.operand), size(ref.size),
+      alloctype(ref.alloctype), kind(ref.kind) { }
+
+  expr2tc operand;
+  expr2tc size;
+  type2tc alloctype;
+  unsigned int kind;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1942,6 +1959,12 @@ typedef esbmct::expr_methods<deallocated_obj2t, object_ops,
 typedef esbmct::expr_methods<dynamic_size2t, object_ops,
         expr2tc, object_ops, &object_ops::value>
         dynamic_size_expr_methods;
+typedef esbmct::expr_methods<sideeffect2t, sideeffect_data,
+        expr2tc, sideeffect_data, &sideeffect_data::operand,
+        expr2tc, sideeffect_data, &sideeffect_data::size,
+        type2tc, sideeffect_data, &sideeffect_data::alloctype,
+        unsigned int, sideeffect_data, &sideeffect_data::kind>
+        sideeffect_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2757,11 +2780,7 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class sideeffect2t : public esbmct::expr<sideeffect2t,
-                                         esbmct::expr2tc_operand,
-                                         esbmct::expr2tc_size,
-                                         esbmct::type2tc_alloctype,
-                                         esbmct::uint_kind>
+class sideeffect2t : public sideeffect_expr_methods
 {
 public:
   enum allockind {
@@ -2773,19 +2792,12 @@ public:
 
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
                const type2tc &alloct, allockind k)
-    : esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
-                   esbmct::expr2tc_size, esbmct::type2tc_alloctype,
-                   esbmct::uint_kind>
-      (t, sideeffect_id, oper, sz, alloct, k) {}
+    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k) {}
   sideeffect2t(const sideeffect2t &ref)
-    : esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
-                   esbmct::expr2tc_size, esbmct::type2tc_alloctype,
-                   esbmct::uint_kind> (ref) {}
+    : sideeffect_expr_methods(ref) {}
 
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<sideeffect2t, esbmct::expr2tc_operand,
-                            esbmct::expr2tc_size, esbmct::type2tc_alloctype,
-                            esbmct::uint_kind>;
 
 class code_block2t : public esbmct::expr<code_block2t,
                                          esbmct::expr2tc_vec_operands>
