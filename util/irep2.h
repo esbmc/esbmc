@@ -1268,6 +1268,7 @@ class byte_extract2t;
 class byte_update2t;
 class with2t;
 class member2t;
+class index2t;
 
 // Data definitions.
 
@@ -1599,6 +1600,19 @@ public:
   irep_idt member;
 };
 
+class index_data : public datatype_ops
+{
+public:
+  index_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &sv,
+              const expr2tc &i)
+    : datatype_ops(t, id), source_value(sv), index(i) { }
+  index_data(const index_data &ref)
+    : datatype_ops(ref), source_value(ref.source_value), index(ref.index) { }
+
+  expr2tc source_value;
+  expr2tc index;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1786,6 +1800,10 @@ typedef esbmct::expr_methods<member2t, member_data,
         expr2tc, member_data, &member_data::source_value,
         irep_idt, member_data, &member_data::member>
         member_expr_methods;
+typedef esbmct::expr_methods<index2t, index_data,
+        expr2tc, index_data, &index_data::source_value,
+        expr2tc, index_data, &index_data::index>
+        index_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2420,20 +2438,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class index2t : public esbmct::expr<index2t, esbmct::expr2tc_source_value,
-                                           esbmct::expr2tc_index>
+class index2t : public index_expr_methods
 {
 public:
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
-    : esbmct::expr<index2t, esbmct::expr2tc_source_value, esbmct::expr2tc_index>
-      (type, index_id, source, index) {}
+    : index_expr_methods(type, index_id, source, index) {}
   index2t(const index2t &ref)
-    : esbmct::expr<index2t, esbmct::expr2tc_source_value, esbmct::expr2tc_index>
-      (ref) {}
+    : index_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<index2t, esbmct::expr2tc_source_value,
-                                   esbmct::expr2tc_index>;
 
 class zero_string2t : public esbmct::expr<zero_string2t, esbmct::expr2tc_string>
 {
