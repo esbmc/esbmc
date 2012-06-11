@@ -1295,6 +1295,7 @@ class code_skip2t;
 class code_free2t;
 class code_goto2t;
 class object_descriptor2t;
+class code_function_call2t;
 
 // Data definitions.
 
@@ -1829,6 +1830,21 @@ class object_desc_data : public expr2t
     expr2tc offset;
 };
 
+class code_funccall_data : public code_base
+{
+public:
+  code_funccall_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &r,
+                     const expr2tc &func, const std::vector<expr2tc> &ops)
+    : code_base(t, id), ret(r), function(func), operands(ops) { }
+  code_funccall_data(const code_funccall_data &ref)
+    : code_base(ref), ret(ref.ret), function(ref.function),
+      operands(ref.operands) { }
+
+  expr2tc ret;
+  expr2tc function;
+  std::vector<expr2tc> operands;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2103,6 +2119,11 @@ typedef esbmct::expr_methods<object_descriptor2t, object_desc_data,
         expr2tc, object_desc_data, &object_desc_data::object,
         expr2tc, object_desc_data, &object_desc_data::offset>
         object_desc_expr_methods;
+typedef esbmct::expr_methods<code_function_call2t, code_funccall_data,
+        expr2tc, code_funccall_data, &code_funccall_data::ret,
+        expr2tc, code_funccall_data, &code_funccall_data::function,
+        std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>
+        code_function_call_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3064,25 +3085,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_function_call2t : public esbmct::expr<code_function_call2t,
-                                                 esbmct::expr2tc_ret,
-                                                 esbmct::expr2tc_function,
-                                                 esbmct::expr2tc_vec_operands>
+class code_function_call2t : public code_function_call_expr_methods
 {
 public:
   code_function_call2t(const expr2tc &r, const expr2tc &func,
                        const std::vector<expr2tc> args)
-    : esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
-                   esbmct::expr2tc_function, esbmct::expr2tc_vec_operands>
-      (type_pool.get_empty(), code_function_call_id, r, func, args) {}
+    : code_function_call_expr_methods(type_pool.get_empty(),
+                                      code_function_call_id, r, func, args) {}
   code_function_call2t(const code_function_call2t &ref)
-    : esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
-                   esbmct::expr2tc_function, esbmct::expr2tc_vec_operands>
-      (ref) { }
+    : code_function_call_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_function_call2t, esbmct::expr2tc_ret,
-                                                  esbmct::expr2tc_function,
-                                                  esbmct::expr2tc_vec_operands>;
 
 class code_comma2t : public esbmct::expr<code_comma2t, esbmct::expr2tc_side_1,
                                                        esbmct::expr2tc_side_2>

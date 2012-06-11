@@ -2058,6 +2058,8 @@ std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 { "target", "", "", ""};
 std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
 { "object", "offset", "", ""};
+std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
+{ "return", "function", "operands", ""};
 
 // Explicit template instanciations
 
@@ -2292,3 +2294,7 @@ template class esbmct::expr_methods<code_goto2t, code_goto_data,
 template class esbmct::expr_methods<object_descriptor2t, object_desc_data,
     expr2tc, object_desc_data, &object_desc_data::object,
     expr2tc, object_desc_data, &object_desc_data::offset>;
+template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
+    expr2tc, code_funccall_data, &code_funccall_data::ret,
+    expr2tc, code_funccall_data, &code_funccall_data::function,
+    std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>;
