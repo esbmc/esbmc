@@ -1019,6 +1019,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_free2t(theop));
+  } else if (expr.id() == irept::id_code && expr.statement() == "cpp_delete[]"){
+    assert(expr.operands().size() == 1);
+    expr2tc theop;
+    migrate_expr(expr.op0(), theop);
+    new_expr_ref = expr2tc(new code_cpp_del_array2t(theop));
   } else if (expr.id() == "object_descriptor") {
     migrate_type(expr.op0().type(), type);
     expr2tc op0, op1;

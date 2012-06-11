@@ -1039,6 +1039,7 @@ class code_comma2t;
 class invalid_pointer2t;
 class buffer_size2t;
 class code_asm2t;
+class code_cpp_del_array2t;
 
 // Data definitions.
 
@@ -1915,6 +1916,9 @@ typedef esbmct::expr_methods<buffer_size2t, buffer_size_data,
 typedef esbmct::expr_methods<code_asm2t, code_asm_data,
         irep_idt, code_asm_data, &code_asm_data::value>
         code_asm_expr_methods;
+typedef esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
+        expr2tc, code_expression_data, &code_expression_data::operand>
+        code_cpp_del_array_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2930,6 +2934,17 @@ public:
     : code_asm_expr_methods(type, code_asm_id, stringref) { }
   code_asm2t(const code_asm2t &ref)
     : code_asm_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class code_cpp_del_array2t : public code_cpp_del_array_expr_methods
+{
+public:
+  code_cpp_del_array2t(const expr2tc &v)
+    : code_cpp_del_array_expr_methods(type_pool.get_empty(), code_asm_id, v) { }
+  code_cpp_del_array2t(const code_cpp_del_array2t &ref)
+    : code_cpp_del_array_expr_methods(ref) { }
 
   static std::string field_names[esbmct::num_type_fields];
 };
