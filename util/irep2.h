@@ -1286,6 +1286,7 @@ class dynamic_size2t;
 class sideeffect2t;
 class code_block2t;
 class code_assign2t;
+class code_init2t;
 
 // Data definitions.
 
@@ -2008,6 +2009,10 @@ typedef esbmct::expr_methods<code_assign2t, code_assign_data,
         expr2tc, code_assign_data, &code_assign_data::target,
         expr2tc, code_assign_data, &code_assign_data::source>
         code_assign_expr_methods;
+typedef esbmct::expr_methods<code_init2t, code_assign_data,
+        expr2tc, code_assign_data, &code_assign_data::target,
+        expr2tc, code_assign_data, &code_assign_data::source>
+        code_init_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2865,20 +2870,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_init2t : public esbmct::expr<code_init2t,
-                                          esbmct::expr2tc_target,
-                                          esbmct::expr2tc_source>
+// NB: code_init2t is a specialization of code_assign2t
+class code_init2t : public code_init_expr_methods
 {
 public:
   code_init2t(const expr2tc &target, const expr2tc &source)
-    : esbmct::expr<code_init2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
-      (type_pool.get_empty(), code_init_id, target, source) {}
+    : code_init_expr_methods(type_pool.get_empty(), code_init_id,
+                               target, source) {}
   code_init2t(const code_init2t &ref)
-    : esbmct::expr<code_init2t, esbmct::expr2tc_target,esbmct::expr2tc_source>
-      (ref) {}
+    : code_init_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_init2t, esbmct::expr2tc_target,
-                            esbmct::expr2tc_source>;
 
 class code_decl2t : public esbmct::expr<code_decl2t, esbmct::irepidt_value>
 {
