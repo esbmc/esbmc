@@ -323,7 +323,7 @@ namespace std
 	string::string (const char * s, size_t n)
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert(n > strlen(s),"string overflow");
+		__ESBMC_assert(n < strlen(s),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -335,7 +335,7 @@ namespace std
 	string::string (string& s, size_t n)
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert(n > s.length(),"string overflow");
+		__ESBMC_assert(n < s.length(),"string overflow");
 		int i;
 		str=new char[n+1];
 		_size = n;
@@ -355,7 +355,8 @@ namespace std
 
 	string::string(char c, size_t n)
 	{
-		__ESBMC_assert(c!=NULL ,"the parameter must be different than NULL");
+		__ESBMC_assert(c!=NULL ,"the first parameter must be different than NULL");
+		__ESBMC_assert(n>0 ,"the second parameter must be different than zero");
 	    str = new char [n+1];
 	    for(int i = 0; i <= n; i++)
 	        str[i] = c;
