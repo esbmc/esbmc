@@ -3543,7 +3543,6 @@ Function: goto_convertt::get_string_constant
 const std::string &goto_convertt::get_string_constant(
   const exprt &expr)
 {
-
   if(expr.id()=="typecast" &&
      expr.operands().size()==1)
     return get_string_constant(expr.op0());
@@ -3555,6 +3554,8 @@ const std::string &goto_convertt::get_string_constant(
      expr.op0().op0().id()!="string-constant")
   {
     err_location(expr);
+    str << "expected string constant, but got: "
+          << expr.pretty() << std::endl;
     throw 0;
   }
 
