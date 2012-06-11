@@ -970,7 +970,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
       migrate_expr((const exprt&)expr.find("size"), thesize);
-    else
+    else if (expr.statement() != "nondet")
+      // For everything other than nondet,
       migrate_expr((const exprt&)expr.cmt_size(), thesize);
 
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
