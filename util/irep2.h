@@ -1278,6 +1278,7 @@ class overflow_neg2t;
 class unknown2t;
 class invalid2t;
 class null_object2t;
+class dynamic_object2t;
 
 // Data definitions.
 
@@ -1667,6 +1668,21 @@ public:
   unsigned int bits;
 };
 
+class dynamic_object_data : public expr2t
+{
+public:
+  dynamic_object_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &i,
+                      bool inv, bool unk)
+    : expr2t(t, id), instance(i), invalid(inv), unknown(unk) { }
+  dynamic_object_data(const dynamic_object_data &ref)
+    : expr2t(ref), instance(ref.instance), invalid(ref.invalid),
+      unknown(ref.unknown) { }
+
+  expr2tc instance;
+  bool invalid;
+  bool unknown;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1883,6 +1899,11 @@ typedef esbmct::expr_methods<invalid2t, expr2t>
         invalid_expr_methods;
 typedef esbmct::expr_methods<null_object2t, expr2t>
         null_object_expr_methods;
+typedef esbmct::expr_methods<dynamic_object2t, dynamic_object_data,
+        expr2tc, dynamic_object_data, &dynamic_object_data::instance,
+        bool, dynamic_object_data, &dynamic_object_data::invalid,
+        bool, dynamic_object_data, &dynamic_object_data::unknown>
+        dynamic_object_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2639,23 +2660,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class dynamic_object2t : public esbmct::expr<dynamic_object2t,
-                                             esbmct::expr2tc_instance,
-                                             esbmct::bool_invalid,
-                                             esbmct::bool_unknown>
+class dynamic_object2t : public dynamic_object_expr_methods
 {
 public:
   dynamic_object2t(const type2tc &type, const expr2tc inst,
                    bool inv, bool uknown)
-    : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                   esbmct::bool_invalid, esbmct::bool_unknown>
-      (type, dynamic_object_id, inst, inv, uknown) {}
+    : dynamic_object_expr_methods(type, dynamic_object_id, inst, inv, uknown) {}
   dynamic_object2t(const dynamic_object2t &ref)
-    : esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                   esbmct::bool_invalid, esbmct::bool_unknown> (ref) {}
+    : dynamic_object_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<dynamic_object2t, esbmct::expr2tc_instance,
-                                   esbmct::bool_invalid, esbmct::bool_unknown>;
 
 class dereference2t : public esbmct::expr<dereference2t, esbmct::expr2tc_value>
 {

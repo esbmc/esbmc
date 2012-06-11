@@ -2024,6 +2024,8 @@ std::string invalid2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
 std::string null_object2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
+std::string dynamic_object2t::field_names [esbmct::num_type_fields]  =
+{ "instance", "invalid", "unknown", ""};
 
 // Explicit template instanciations
 
@@ -2217,3 +2219,7 @@ template class esbmct::expr_methods<overflow_neg2t, overflow_ops,
 template class esbmct::expr_methods<unknown2t, expr2t>;
 template class esbmct::expr_methods<invalid2t, expr2t>;
 template class esbmct::expr_methods<null_object2t, expr2t>;
+template class esbmct::expr_methods<dynamic_object2t, dynamic_object_data,
+    expr2tc, dynamic_object_data, &dynamic_object_data::instance,
+    bool, dynamic_object_data, &dynamic_object_data::invalid,
+    bool, dynamic_object_data, &dynamic_object_data::unknown>;
