@@ -1395,7 +1395,7 @@ do_type2string<type2t::type_ids>(const type2t::type_ids &thething,
 
 template <>
 void
-do_type2string<expr2t::expr_ids>(const expr2t::expr_ids &thething,
+do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
                                  unsigned int idx,
                                  std::string (&names)[esbmct::num_type_fields],
                                  list_of_memberst &vec, unsigned int indent)
