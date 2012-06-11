@@ -1266,6 +1266,7 @@ class pointer_object2t;
 class address_of2t;
 class byte_extract2t;
 class byte_update2t;
+class with2t;
 
 // Data definitions.
 
@@ -1558,6 +1559,32 @@ public:
   expr2tc update_value;
 };
 
+class datatype_ops : public expr2t
+{
+public:
+  datatype_ops(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  datatype_ops(const datatype_ops &ref)
+    : expr2t(ref) { }
+};
+
+class with_data : public datatype_ops
+{
+public:
+  with_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &sv,
+            const expr2tc &uf, const expr2tc &uv)
+    : datatype_ops(t, id), source_value(sv), update_field(uf), update_value(uv)
+      { }
+  with_data(const with_data &ref)
+    : datatype_ops(ref), source_value(ref.source_value),
+      update_field(ref.update_field), update_value(ref.update_value)
+      { }
+
+  expr2tc source_value;
+  expr2tc update_field;
+  expr2tc update_value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1736,6 +1763,11 @@ typedef esbmct::expr_methods<byte_update2t, byte_update_data,
         expr2tc, byte_update_data, &byte_update_data::source_offset,
         expr2tc, byte_update_data, &byte_update_data::update_value>
         byte_update_expr_methods;
+typedef esbmct::expr_methods<with2t, with_data,
+        expr2tc, with_data, &with_data::source_value,
+        expr2tc, with_data, &with_data::update_field,
+        expr2tc, with_data, &with_data::update_value>
+        with_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2343,26 +2375,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class with2t : public esbmct::expr<with2t, esbmct::expr2tc_source_value,
-                                         esbmct::expr2tc_update_field,
-                                         esbmct::expr2tc_update_value>
+class with2t : public with_expr_methods
 {
 public:
   with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
          const expr2tc &value)
-    : esbmct::expr<with2t, esbmct::expr2tc_source_value,
-                         esbmct::expr2tc_update_field,
-                         esbmct::expr2tc_update_value>
-      (type, with_id, source, field, value) {}
+    : with_expr_methods(type, with_id, source, field, value) {}
   with2t(const with2t &ref)
-    : esbmct::expr<with2t, esbmct::expr2tc_source_value,
-                         esbmct::expr2tc_update_field,
-                         esbmct::expr2tc_update_value> (ref) {}
+    : with_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<with2t, esbmct::expr2tc_source_value,
-                                  esbmct::expr2tc_update_field,
-                                  esbmct::expr2tc_update_value>;
 
 class member2t : public esbmct::expr<member2t, esbmct::expr2tc_source_value,
                                              esbmct::irepidt_member>

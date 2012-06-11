@@ -2000,6 +2000,8 @@ std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
 { "big_endian", "source_value", "source_offset", ""};
 std::string byte_update2t::field_names [esbmct::num_type_fields]  =
 { "big_endian", "source_value", "source_offset", "update_value"};
+std::string with2t::field_names [esbmct::num_type_fields]  =
+{ "source_value", "update_field", "update_value", ""};
 
 // Explicit template instanciations
 
@@ -2167,3 +2169,7 @@ template class esbmct::expr_methods<byte_update2t, byte_update_data,
     expr2tc, byte_update_data, &byte_update_data::source_value,
     expr2tc, byte_update_data, &byte_update_data::source_offset,
     expr2tc, byte_update_data, &byte_update_data::update_value>;
+template class esbmct::expr_methods<with2t, with_data,
+    expr2tc, with_data, &with_data::source_value,
+    expr2tc, with_data, &with_data::update_field,
+    expr2tc, with_data, &with_data::update_value>;
