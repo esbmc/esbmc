@@ -1044,6 +1044,10 @@ void value_sett::apply_code(
   {
     // Ignore assembly. No idea why it isn't preprocessed out anyway.
   }
+  else if (is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code))
+  {
+    // Ignore these too
+  }
   else
   {
     std::cerr << code->pretty() << std::endl;
