@@ -1267,6 +1267,7 @@ class address_of2t;
 class byte_extract2t;
 class byte_update2t;
 class with2t;
+class member2t;
 
 // Data definitions.
 
@@ -1585,6 +1586,19 @@ public:
   expr2tc update_value;
 };
 
+class member_data : public datatype_ops
+{
+public:
+  member_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &sv,
+              const irep_idt &m)
+    : datatype_ops(t, id), source_value(sv), member(m) { }
+  member_data(const member_data &ref)
+    : datatype_ops(ref), source_value(ref.source_value), member(ref.member) { }
+
+  expr2tc source_value;
+  irep_idt member;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1768,6 +1782,10 @@ typedef esbmct::expr_methods<with2t, with_data,
         expr2tc, with_data, &with_data::update_field,
         expr2tc, with_data, &with_data::update_value>
         with_expr_methods;
+typedef esbmct::expr_methods<member2t, member_data,
+        expr2tc, member_data, &member_data::source_value,
+        irep_idt, member_data, &member_data::member>
+        member_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2389,20 +2407,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class member2t : public esbmct::expr<member2t, esbmct::expr2tc_source_value,
-                                             esbmct::irepidt_member>
+class member2t : public member_expr_methods
 {
 public:
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
-    : esbmct::expr<member2t, esbmct::expr2tc_source_value, esbmct::irepidt_member>
-      (type, member_id, source, memb) {}
+    : member_expr_methods(type, member_id, source, memb) {}
   member2t(const member2t &ref)
-    : esbmct::expr<member2t, esbmct::expr2tc_source_value, esbmct::irepidt_member>
-      (ref) {}
+    : member_expr_methods(ref) {}
+
   virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<member2t, esbmct::expr2tc_source_value,
-                                    esbmct::irepidt_member>;
 
 class index2t : public esbmct::expr<index2t, esbmct::expr2tc_source_value,
                                            esbmct::expr2tc_index>
