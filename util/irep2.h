@@ -665,7 +665,7 @@ namespace esbmct {
   public:
     template <class arbitary = dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
-                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
+                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,expr2t>, arbitary >::type* = NULL)
       : subclass(t, id) { }
 
     template <class arbitary = dummy_type_tag>
