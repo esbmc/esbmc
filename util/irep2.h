@@ -1292,6 +1292,7 @@ class code_printf2t;
 class code_expression2t;
 class code_return2t;
 class code_skip2t;
+class code_free2t;
 
 // Data definitions.
 
@@ -2066,6 +2067,9 @@ typedef esbmct::expr_methods<code_return2t, code_expression_data,
         code_return_expr_methods;
 typedef esbmct::expr_methods<code_skip2t, expr2t>
         code_skip_expr_methods;
+typedef esbmct::expr_methods<code_free2t, code_expression_data,
+        expr2tc, code_expression_data, &code_expression_data::operand>
+        code_free_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2992,17 +2996,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_free2t : public esbmct::expr<code_free2t,
-                                          esbmct::expr2tc_operand>
+class code_free2t : public code_free_expr_methods
 {
 public:
   code_free2t(const expr2tc &oper)
-    : esbmct::expr<code_free2t, esbmct::expr2tc_operand>
-      (type_pool.get_empty(), code_free_id, oper) {}
+    : code_free_expr_methods(type_pool.get_empty(), code_free_id, oper) {}
   code_free2t(const code_free2t &ref)
-    : esbmct::expr<code_free2t, esbmct::expr2tc_operand> (ref) {}
+    : code_free_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_free2t, esbmct::expr2tc_operand>;
 
 class code_goto2t : public esbmct::expr<code_goto2t, esbmct::irepidt_target>
 {
