@@ -18,6 +18,8 @@ Date: Feb 2012
 #include "cassert"
 #include "iostream"
 
+#define const_iterator const iterator
+
 size_t npos;
 
 namespace std
@@ -27,10 +29,148 @@ namespace std
 
 		class iterator{
 		public:
-			iterator(const iterator&);
-		    iterator();
-		};
+				char* pointer;
 
+				iterator(iterator& i){
+					pointer = i.pointer;
+				}
+
+				iterator(){
+					pointer = NULL;
+				}
+
+				//This creates an iterator that points to the value pointed to by p_pointer.
+				iterator(char* p_pointer){
+					pointer = p_pointer;
+				}
+
+				iterator& operator=( iterator& left, const iterator& right ){
+					left.pointer = right.pointer;
+					return left;
+				}
+
+				char* operator -> (){ //operator returns memo address pointer
+					return pointer;
+				}
+
+//				char& operator * (iterator& rhs){
+//					return *pointer; //operator returns pointer value
+//				}
+
+				char& operator * (){
+					return *pointer;
+				}
+
+				//operator subtracts n positions on pointer address of this
+
+				iterator& operator - (int n) const{
+							iterator buffer;
+							buffer.pointer = pointer - sizeof(char)*n;
+							return buffer;
+						}
+
+				iterator& operator + (int n) const{
+					iterator buffer;
+					buffer.pointer = pointer + sizeof(char)*n;
+					return buffer;
+				}
+
+
+				//operator increases pointer address, but returns old value.
+				//It's like "++c"
+				iterator& operator ++ (){
+					iterator buffer;
+					buffer.pointer = pointer;
+					pointer = pointer + sizeof(char);
+					return buffer;
+				}
+
+				//operator increases pointer address and returns new value
+				//It's like "c++"
+				iterator operator ++ (int _b){
+					iterator buffer;
+					buffer.pointer = pointer + sizeof(char);
+					return buffer;
+				}
+#if 1
+				//operator decreases pointer address, but returns old value.
+				//It's like "--c"
+				iterator& operator -- (){
+					iterator buffer;
+					buffer.pointer = pointer;
+					pointer = pointer - sizeof(char);
+					return buffer;
+				}
+
+				//operator decreases pointer address and returns new value
+				//It's like "c--"
+				iterator operator -- (int _b){
+					iterator buffer;
+					buffer.pointer = pointer + sizeof(char);
+					return buffer;
+				}
+
+				//operator returns true if both members point to the same address
+				//returns false if not happen
+
+				bool operator == ( const iterator& right)const{
+					return (pointer ==  right.pointer);
+				}
+
+				//just the complement of "=="
+
+				bool operator != ( const iterator& right)const{
+					return !(pointer == right.pointer);
+				}
+
+				//operator returns true if pointer address of right is higher than this
+
+				bool operator < ( const iterator& right)const{
+					return (pointer < right.pointer);
+
+				}
+
+				//operator returns true if pointer address of right is lower than this
+
+				bool operator > ( const iterator& right)const{
+					return (pointer > right.pointer);
+				}
+
+				//operator returns true if pointer address of right is higher or equal than this
+
+				bool operator <= ( const iterator& right)const{
+					return !(pointer > right.pointer);
+				}
+
+				//operator returns true if pointer address of right is lower or equal than this
+
+				bool operator >= ( const iterator& right)const{
+					return !(pointer < right.pointer);
+				}
+
+				//operator adds n positions on pointer address of this
+
+
+						//	      iterator operator - (const iterator&) const;
+
+				//operator adds n positions on pointer address, and returns its address value
+
+				iterator& operator += (int n){
+					iterator buffer;
+					buffer.pointer = pointer + sizeof(char)*n;
+					return buffer;
+				}
+
+				//operator subtracts n positions on pointer address, and returns its address value
+
+				iterator operator -= (int n){
+					iterator buffer;
+					buffer.pointer = pointer - sizeof(char)*n;
+					return buffer;
+				}
+		#endif
+		};
+#if 0
 		class const_iterator{
 		public:
 			char* i_str;
@@ -72,7 +212,7 @@ namespace std
 		    const_iterator& operator += (int);
 		    const_iterator& operator -= (int);
 		};
-
+#endif
 		string ();
 		string (char*);
 		string (const char * s, size_t n);
@@ -165,6 +305,13 @@ namespace std
 		string& replace ( size_t pos1, size_t n1,   const char* s, size_t n2 );
 		string& replace ( size_t pos1, size_t n1,   const char* s );
 		string& replace ( size_t pos1, size_t n1,   size_t n2, char c );
+
+		//new add
+		string& replace ( iterator i1, iterator i2, const string& str );
+		string& replace ( iterator i1, iterator i2, const char* s, size_t n2 );
+		string& replace ( iterator i1, iterator i2, const char* s );
+		string& replace ( iterator i1, iterator i2, size_t n2, char c );
+
 		string& insert ( size_t pos1, string& s );
 		string& insert ( size_t pos1, string& s, size_t pos2, size_t n );
 		string& insert ( size_t pos1, const char* s, size_t n);
@@ -374,7 +521,7 @@ namespace std
 		return o;
 	}
 
-	inline string::ostream& operator << (ostream& o, struct const_iterator&)
+	inline string::ostream& operator << (ostream& o, struct iterator&)
 	{
 		return o;
 	}
@@ -1288,7 +1435,40 @@ namespace std
 		this->insert(pos1,tmp);
 		return *this;
 	}
-
+/*
+	string& replace ( iterator i1, iterator i2, const string& str ){
+		size_t beginn, end;
+		beginn = (size_t) i1->pointer;
+		end = (size_t) i2.pointer;
+		beginn = beginn - this.begin();
+		end = end - this.begin();
+		return replace(beginn, end - beginn, str);
+	}
+	string& replace ( iterator i1, iterator i2, const char* s, size_t n2 ){
+		size_t beginn, end;
+		beginn = (size_t) i1->pointer;
+		end = (size_t) i2.pointer;
+		beginn = beginn - this.begin();
+		end = end - this.begin();
+		return replace(beginn, end - beginn, s, n2);
+	}
+	string& replace ( iterator i1, iterator i2, const char* s ){
+		size_t beginn, end;
+		beginn = (size_t) i1->pointer;
+		end = (size_t) i2.pointer;
+		beginn = beginn - this.begin();
+		end = end - this.begin();
+		return replace(beginn, end - beginn, s);
+	}
+	string& replace ( iterator i1, iterator i2, size_t n2, char c ){
+		size_t beginn, end;
+		beginn = (size_t) i1->pointer;
+		end = (size_t) i2.pointer;
+		beginn = beginn - this.begin();
+		end = end - this.begin();
+		return replace(beginn, end - beginn, n2, c);
+	}
+*/
 	int string::compare ( const char* s ) const
 	{
 		__ESBMC_HIDE:
