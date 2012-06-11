@@ -1281,6 +1281,7 @@ class null_object2t;
 class dynamic_object2t;
 class dereference2t;
 class valid_object2t;
+class deallocated_obj2t;
 
 // Data definitions.
 
@@ -1934,6 +1935,9 @@ typedef esbmct::expr_methods<dereference2t, dereference_data,
 typedef esbmct::expr_methods<valid_object2t, object_ops,
         expr2tc, object_ops, &object_ops::value>
         valid_object_expr_methods;
+typedef esbmct::expr_methods<deallocated_obj2t, object_ops,
+        expr2tc, object_ops, &object_ops::value>
+        deallocated_obj_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2725,17 +2729,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class deallocated_obj2t : public esbmct::expr<deallocated_obj2t,
-                                              esbmct::expr2tc_value>
+class deallocated_obj2t : public deallocated_obj_expr_methods
 {
 public:
   deallocated_obj2t(const expr2tc &operand)
-    : esbmct::expr<deallocated_obj2t, esbmct::expr2tc_value>
-      (type_pool.get_bool(), deallocated_obj_id, operand) {}
+    : deallocated_obj_expr_methods(type_pool.get_bool(), deallocated_obj_id,
+                                   operand) {}
   deallocated_obj2t(const deallocated_obj2t &ref)
-    : esbmct::expr<deallocated_obj2t, esbmct::expr2tc_value> (ref) {}
+    : deallocated_obj_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<deallocated_obj2t, esbmct::expr2tc_value>;
 
 class dynamic_size2t : public esbmct::expr<dynamic_size2t,
                                               esbmct::expr2tc_value>
