@@ -200,22 +200,18 @@ void goto_symext::symex_cpp_new(
 
   // make symbol expression
 
-  expr2tc rhs = expr2tc(new address_of2t(
-                                     type2tc(new pointer_type2t(renamedtype2)),
-                                     expr2tc()));
+  expr2tc rhs = expr2tc(new address_of2t(type2tc(renamedtype2), expr2tc()));
   address_of2t &addrof = to_address_of2t(rhs);
 
   if(do_array)
   {
-    expr2tc sym = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
-                                       symbol.name));
+    expr2tc sym = expr2tc(new symbol2t(newtype, symbol.name));
     expr2tc zero = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
     expr2tc idx = expr2tc(new index2t(renamedtype2, sym, zero));
     addrof.ptr_obj = idx;
   }
   else
-    addrof.ptr_obj = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
-                                          symbol.name));
+    addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
   
   cur_state->rename(rhs);
 
