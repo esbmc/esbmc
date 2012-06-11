@@ -24,11 +24,10 @@ void goto_symext::symex_other(void)
   {
     // ignore
   }
-#if 0
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
+  else if (is_code_cpp_del_array2t(code2))
+//          || statement=="cpp_delete")
   {
-    codet deref_code(code);
+    expr2tc deref_code(code2);
 
     replace_dynamic_allocation(deref_code);
     replace_nondet(deref_code);
@@ -36,7 +35,6 @@ void goto_symext::symex_other(void)
 
     symex_cpp_delete(deref_code);
   }
-#endif
   else if (is_code_free2t(code2))
   {
     // ignore

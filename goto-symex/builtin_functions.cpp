@@ -224,7 +224,7 @@ void goto_symext::symex_cpp_new(
 }
 
 // XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
+void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }
