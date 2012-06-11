@@ -91,7 +91,11 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     }
 
     irep_idt name = type.get("tag");
+    if (name.as_string() == "")
+      name = type.get("name"); // C++
+
     assert(name.as_string() != "");
+
     struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
