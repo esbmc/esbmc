@@ -1293,6 +1293,7 @@ class code_expression2t;
 class code_return2t;
 class code_skip2t;
 class code_free2t;
+class code_goto2t;
 
 // Data definitions.
 
@@ -1803,6 +1804,17 @@ public:
   expr2tc operand;
 };
 
+class code_goto_data : public code_base
+{
+public:
+  code_goto_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &tg)
+    : code_base(t, id), target(tg) { }
+  code_goto_data(const code_goto_data &ref)
+    : code_base(ref), target(ref.target) { }
+
+  irep_idt target;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2070,6 +2082,9 @@ typedef esbmct::expr_methods<code_skip2t, expr2t>
 typedef esbmct::expr_methods<code_free2t, code_expression_data,
         expr2tc, code_expression_data, &code_expression_data::operand>
         code_free_expr_methods;
+typedef esbmct::expr_methods<code_goto2t, code_goto_data,
+        irep_idt, code_goto_data, &code_goto_data::target>
+        code_goto_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3007,16 +3022,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class code_goto2t : public esbmct::expr<code_goto2t, esbmct::irepidt_target>
+class code_goto2t : public code_goto_expr_methods
 {
 public:
   code_goto2t(const irep_idt &targ)
-    : esbmct::expr<code_goto2t, esbmct::irepidt_target>
-      (type_pool.get_empty(), code_goto_id, targ) {}
+    : code_goto_expr_methods(type_pool.get_empty(), code_goto_id, targ) {}
   code_goto2t(const code_goto2t &ref)
-    : esbmct::expr<code_goto2t, esbmct::irepidt_target> (ref) {}
+    : code_goto_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<code_goto2t, esbmct::irepidt_target>;
 
 class object_descriptor2t : public esbmct::expr<object_descriptor2t,
                                                 esbmct::expr2tc_object,

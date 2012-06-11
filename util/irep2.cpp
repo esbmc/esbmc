@@ -2054,6 +2054,8 @@ std::string code_skip2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", ""};
 std::string code_free2t::field_names [esbmct::num_type_fields]  =
 { "operand", "", "", ""};
+std::string code_goto2t::field_names [esbmct::num_type_fields]  =
+{ "target", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2283,3 +2285,5 @@ template class esbmct::expr_methods<code_return2t, code_expression_data,
 template class esbmct::expr_methods<code_skip2t, expr2t>;
 template class esbmct::expr_methods<code_free2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;
+template class esbmct::expr_methods<code_goto2t, code_goto_data,
+    irep_idt, code_goto_data, &code_goto_data::target>;
