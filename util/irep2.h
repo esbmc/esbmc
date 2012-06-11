@@ -1264,6 +1264,7 @@ class same_object2t;
 class pointer_offset2t;
 class pointer_object2t;
 class address_of2t;
+class byte_extract2t;
 
 // Data definitions.
 
@@ -1515,6 +1516,30 @@ public:
   expr2tc ptr_obj;
 };
 
+class byte_ops : public expr2t
+{
+public:
+  byte_ops(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id){ }
+  byte_ops(const byte_ops &ref)
+    : expr2t(ref) { }
+};
+
+class byte_extract_data : public byte_ops
+{
+public:
+  byte_extract_data(const type2tc &t, expr2t::expr_ids id, bool be,
+                    const expr2tc &s, const expr2tc &o)
+    : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o) { }
+  byte_extract_data(const byte_extract_data &ref)
+    : byte_ops(ref), big_endian(ref.big_endian), source_value(ref.source_value),
+      source_offset(ref.source_offset) { }
+
+  bool big_endian;
+  expr2tc source_value;
+  expr2tc source_offset;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1682,6 +1707,11 @@ typedef esbmct::expr_methods<pointer_object2t, pointer_ops,
 typedef esbmct::expr_methods<address_of2t, pointer_ops,
         expr2tc, pointer_ops, &pointer_ops::ptr_obj>
         address_of_expr_methods;
+typedef esbmct::expr_methods<byte_extract2t, byte_extract_data,
+        bool, byte_extract_data, &byte_extract_data::big_endian,
+        expr2tc, byte_extract_data, &byte_extract_data::source_value,
+        expr2tc, byte_extract_data, &byte_extract_data::source_offset>
+        byte_extract_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2263,24 +2293,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class byte_extract2t : public esbmct::expr<byte_extract2t,
-                                           esbmct::bool_big_endian,
-                                           esbmct::expr2tc_source_value,
-                                           esbmct::expr2tc_source_offset>
+class byte_extract2t : public byte_extract_expr_methods
 {
 public:
   byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset)
-    : esbmct::expr<byte_extract2t, esbmct::bool_big_endian,
-                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>
-      (type, byte_extract_id, is_big_endian, source, offset) {}
+    : byte_extract_expr_methods(type, byte_extract_id, is_big_endian,
+                               source, offset) {}
   byte_extract2t(const byte_extract2t &ref)
-    : esbmct::expr<byte_extract2t, esbmct::bool_big_endian,
-                 esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>
-      (ref) {}
+    : byte_extract_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<byte_extract2t, esbmct::bool_big_endian,
-                  esbmct::expr2tc_source_value, esbmct::expr2tc_source_offset>;
 
 class byte_update2t : public esbmct::expr<byte_update2t,
                                            esbmct::bool_big_endian,

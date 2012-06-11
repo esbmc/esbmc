@@ -1996,6 +1996,8 @@ std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", ""};
 std::string address_of2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", ""};
+std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
+{ "big_endian", "source_value", "source_offset", ""};
 
 // Explicit template instanciations
 
@@ -2154,3 +2156,7 @@ template class esbmct::expr_methods<pointer_object2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
 template class esbmct::expr_methods<address_of2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
+template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
+    bool, byte_extract_data, &byte_extract_data::big_endian,
+    expr2tc, byte_extract_data, &byte_extract_data::source_value,
+    expr2tc, byte_extract_data, &byte_extract_data::source_offset>;
