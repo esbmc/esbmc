@@ -541,7 +541,8 @@ static const char *expr_names[] = {
   "code_asm",
   "from_bv_typecast",
   "to_bv_typecast",
-  "cpp_del_array"
+  "cpp_del_array",
+  "cpp_delete"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -1950,6 +1951,8 @@ std::string code_asm2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
 std::string code_cpp_del_array2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
+std::string code_cpp_delete2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2198,4 +2201,6 @@ template class esbmct::expr_methods<buffer_size2t, buffer_size_data,
 template class esbmct::expr_methods<code_asm2t, code_asm_data,
     irep_idt, code_asm_data, &code_asm_data::value>;
 template class esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
+    expr2tc, code_expression_data, &code_expression_data::operand>;
+template class esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;

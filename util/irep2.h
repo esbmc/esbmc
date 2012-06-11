@@ -320,6 +320,7 @@ public:
     to_bv_typecast_id,
     from_bv_typecast_id,
     code_cpp_del_array_id,
+    code_cpp_delete_id,
     end_expr_id
   };
 
@@ -1041,6 +1042,7 @@ class invalid_pointer2t;
 class buffer_size2t;
 class code_asm2t;
 class code_cpp_del_array2t;
+class code_cpp_delete2t;
 
 // Data definitions.
 
@@ -1920,6 +1922,9 @@ typedef esbmct::expr_methods<code_asm2t, code_asm_data,
 typedef esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
         expr2tc, code_expression_data, &code_expression_data::operand>
         code_cpp_del_array_expr_methods;
+typedef esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
+        expr2tc, code_expression_data, &code_expression_data::operand>
+        code_cpp_delete_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2951,6 +2956,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_delete2t : public code_cpp_delete_expr_methods
+{
+public:
+  code_cpp_delete2t(const expr2tc &v)
+    : code_cpp_delete_expr_methods(type_pool.get_empty(),
+                                   code_cpp_delete_id, v) { }
+  code_cpp_delete2t(const code_cpp_delete2t &ref)
+    : code_cpp_delete_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -3101,6 +3118,7 @@ expr_macros(invalid_pointer);
 expr_macros(buffer_size);
 expr_macros(code_asm);
 expr_macros(code_cpp_del_array);
+expr_macros(code_cpp_delete);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -3236,6 +3254,8 @@ typedef irep_container<buffer_size2t, expr2t::buffer_size_id> buffer_size2tc;
 typedef irep_container<code_asm2t, expr2t::code_asm_id> code_asm2tc;
 typedef irep_container<code_cpp_del_array2t, expr2t::code_cpp_del_array_id>
                        code_cpp_del_array2tc;
+typedef irep_container<code_cpp_delete2t, expr2t::code_cpp_delete_id>
+                       code_cpp_delete2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int
