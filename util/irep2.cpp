@@ -540,7 +540,8 @@ static const char *expr_names[] = {
   "buffer_size",
   "code_asm",
   "from_bv_typecast",
-  "to_bv_typecast"
+  "to_bv_typecast",
+  "cpp_del_array"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)

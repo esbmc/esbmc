@@ -319,6 +319,7 @@ public:
     code_asm_id,
     to_bv_typecast_id,
     from_bv_typecast_id,
+    code_cpp_del_array_id,
     end_expr_id
   };
 
@@ -3098,6 +3099,7 @@ expr_macros(code_comma);
 expr_macros(invalid_pointer);
 expr_macros(buffer_size);
 expr_macros(code_asm);
+expr_macros(code_cpp_del_array);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -3231,6 +3233,8 @@ typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
                        code_invalid_pointer2tc;
 typedef irep_container<buffer_size2t, expr2t::buffer_size_id> buffer_size2tc;
 typedef irep_container<code_asm2t, expr2t::code_asm_id> code_asm2tc;
+typedef irep_container<code_cpp_del_array2t, expr2t::code_cpp_del_array_id>
+                       code_cpp_del_array2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int
