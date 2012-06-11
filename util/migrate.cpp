@@ -967,7 +967,12 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
         expr.statement() != "cpp_new[]")
       migrate_expr(expr.op0(), operand);
 
-    migrate_expr((const exprt&)expr.cmt_size(), thesize);
+    if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
+      // These hide the size in a real size field,
+      migrate_expr((const exprt&)expr.find("size"), thesize);
+    else
+      migrate_expr((const exprt&)expr.cmt_size(), thesize);
+
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
     if (expr.statement() == "malloc")
