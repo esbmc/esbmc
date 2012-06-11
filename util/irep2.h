@@ -1273,6 +1273,7 @@ class zero_string2t;
 class zero_length_string2t;
 class isnan2t;
 class overflow2t;
+class overflow_cast2t;
 
 // Data definitions.
 
@@ -1650,6 +1651,18 @@ public:
   expr2tc operand;
 };
 
+class overflow_cast_data : public overflow_ops
+{
+public:
+  overflow_cast_data(const type2tc &t, datatype_ops::expr_ids id,
+                     const expr2tc &v, unsigned int b)
+    : overflow_ops(t, id, v), bits(b) { }
+  overflow_cast_data(const overflow_cast_data &ref)
+    : overflow_ops(ref), bits(ref.bits) { }
+
+  unsigned int bits;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1853,6 +1866,10 @@ typedef esbmct::expr_methods<isnan2t, isnan_data,
 typedef esbmct::expr_methods<overflow2t, overflow_ops,
         expr2tc, overflow_ops, &overflow_ops::operand>
         overflow_expr_methods;
+typedef esbmct::expr_methods<overflow_cast2t, overflow_cast_data,
+        expr2tc, overflow_ops, &overflow_ops::operand,
+        unsigned int, overflow_cast_data, &overflow_cast_data::bits>
+        overflow_cast_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2552,20 +2569,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class overflow_cast2t : public esbmct::expr<overflow_cast2t,
-                                          esbmct::uint_bits,
-                                          esbmct::expr2tc_operand>
+class overflow_cast2t : public overflow_cast_expr_methods
 {
 public:
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
-    : esbmct::expr<overflow_cast2t, esbmct::uint_bits, esbmct::expr2tc_operand>
-      (type_pool.get_bool(), overflow_cast_id, bits, operand) {}
+    : overflow_cast_expr_methods(type_pool.get_bool(), overflow_cast_id,
+                                 operand, bits) {}
   overflow_cast2t(const overflow_cast2t &ref)
-    : esbmct::expr<overflow_cast2t, esbmct::uint_bits, esbmct::expr2tc_operand>
-      (ref) {}
+    : overflow_cast_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<overflow_cast2t, esbmct::uint_bits,
-                                           esbmct::expr2tc_operand>;
 
 class overflow_neg2t : public esbmct::expr<overflow_neg2t,
                                          esbmct::expr2tc_operand>
