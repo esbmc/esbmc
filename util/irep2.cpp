@@ -2056,6 +2056,8 @@ std::string code_free2t::field_names [esbmct::num_type_fields]  =
 { "operand", "", "", ""};
 std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 { "target", "", "", ""};
+std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
+{ "object", "offset", "", ""};
 
 // Explicit template instanciations
 
@@ -2287,3 +2289,6 @@ template class esbmct::expr_methods<code_free2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;
 template class esbmct::expr_methods<code_goto2t, code_goto_data,
     irep_idt, code_goto_data, &code_goto_data::target>;
+template class esbmct::expr_methods<object_descriptor2t, object_desc_data,
+    expr2tc, object_desc_data, &object_desc_data::object,
+    expr2tc, object_desc_data, &object_desc_data::offset>;

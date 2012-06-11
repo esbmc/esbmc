@@ -1294,6 +1294,7 @@ class code_return2t;
 class code_skip2t;
 class code_free2t;
 class code_goto2t;
+class object_descriptor2t;
 
 // Data definitions.
 
@@ -1815,6 +1816,19 @@ public:
   irep_idt target;
 };
 
+class object_desc_data : public expr2t
+{
+  public:
+    object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
+                     const expr2tc &offs)
+      : expr2t(t, id), object(o), offset(offs) { }
+    object_desc_data(const object_desc_data &ref)
+      : expr2t(ref), object(ref.object), offset(ref.offset) { }
+
+    expr2tc object;
+    expr2tc offset;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2085,6 +2099,10 @@ typedef esbmct::expr_methods<code_free2t, code_expression_data,
 typedef esbmct::expr_methods<code_goto2t, code_goto_data,
         irep_idt, code_goto_data, &code_goto_data::target>
         code_goto_expr_methods;
+typedef esbmct::expr_methods<object_descriptor2t, object_desc_data,
+        expr2tc, object_desc_data, &object_desc_data::object,
+        expr2tc, object_desc_data, &object_desc_data::offset>
+        object_desc_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3033,22 +3051,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class object_descriptor2t : public esbmct::expr<object_descriptor2t,
-                                                esbmct::expr2tc_object,
-                                                esbmct::expr2tc_offset>
+class object_descriptor2t : public object_desc_expr_methods
 {
 public:
   object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
-                   esbmct::expr2tc_offset>
-      (t, object_descriptor_id, root, offs) {}
+    : object_desc_expr_methods(t, object_descriptor_id, root, offs) {}
   object_descriptor2t(const object_descriptor2t &ref)
-    : esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
-                   esbmct::expr2tc_offset> (ref) {}
+    : object_desc_expr_methods(ref) {}
+
   const expr2tc &get_root_object(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<object_descriptor2t, esbmct::expr2tc_object,
-                                                 esbmct::expr2tc_offset>;
 
 class code_function_call2t : public esbmct::expr<code_function_call2t,
                                                  esbmct::expr2tc_ret,
