@@ -2223,3 +2223,5 @@ template class esbmct::expr_methods<dynamic_object2t, dynamic_object_data,
     expr2tc, dynamic_object_data, &dynamic_object_data::instance,
     bool, dynamic_object_data, &dynamic_object_data::invalid,
     bool, dynamic_object_data, &dynamic_object_data::unknown>;
+template class esbmct::expr_methods<dereference2t, dereference_data,
+    expr2tc, dereference_data, &dereference_data::value>;
