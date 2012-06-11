@@ -34,6 +34,8 @@ char nondet_char();
 struct smanip {};
 
 typedef unsigned int size_t;
+typedef int ptrdiff_t;
+
 #define _SIZE_T_DEFINED
 
 #endif

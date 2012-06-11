@@ -12,6 +12,7 @@ Date: Feb 2012
 #define STL_ALGORITHM
 
 #include "iterator"
+#include "definitions.h"
 
 namespace std
 {
@@ -91,20 +92,28 @@ template<class InIt, class Ty, class Dist>
             const Ty& val);
 
 //template <class InputIterator, class T>
-//	T count ( InputIterator first, InputIterator last, const T& value );
+//  typename iterator_traits<InputIterator>::difference_type
+//    count ( ForwardIterator first, ForwardIterator last, const T& value );
 
 template <class InputIterator, class T>
-  ptrdiff_t count ( InputIterator first, InputIterator last, const T& value )
+	ptrdiff_t count ( InputIterator first, InputIterator last, const T& value )
 {
   ptrdiff_t ret=0;
   while (first != last) if (*first++ == value) ++ret;
   return ret;
 }
 
-template<class InIt, class Pr, class Dist>
-    typename iterator_traits<InIt>::difference_type
-        count_if(InIt first, InIt last,
-            Pr pred);
+//template<class InIt, class Pr, class Dist>
+//    typename iterator_traits<InIt>::difference_type
+//        count_if(InIt first, InIt last, Pr pred);
+
+template <class InputIterator, class T>
+	ptrdiff_t count_if ( InputIterator first, InputIterator last, const T& pred )
+{
+  ptrdiff_t ret=0;
+  while (first != last) if (pred(*first++)) ++ret;
+  return ret;
+}
 
 template<class InIt1, class InIt2>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
