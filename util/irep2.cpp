@@ -2032,6 +2032,8 @@ std::string valid_object2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
 std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", ""};
+std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2234,4 +2236,6 @@ template class esbmct::expr_methods<dereference2t, dereference_data,
 template class esbmct::expr_methods<valid_object2t, object_ops,
     expr2tc, object_ops, &object_ops::value>;
 template class esbmct::expr_methods<deallocated_obj2t, object_ops,
+    expr2tc, object_ops, &object_ops::value>;
+template class esbmct::expr_methods<dynamic_size2t, object_ops,
     expr2tc, object_ops, &object_ops::value>;
