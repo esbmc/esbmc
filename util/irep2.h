@@ -1269,6 +1269,7 @@ class byte_update2t;
 class with2t;
 class member2t;
 class index2t;
+class zero_string2t;
 
 // Data definitions.
 
@@ -1613,6 +1614,17 @@ public:
   expr2tc index;
 };
 
+class string_ops : public expr2t
+{
+public:
+  string_ops(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &s)
+    : expr2t(t, id), string(s) { }
+  string_ops(const string_ops &ref)
+    : expr2t(ref), string(ref.string) { }
+
+  expr2tc string;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1804,6 +1816,9 @@ typedef esbmct::expr_methods<index2t, index_data,
         expr2tc, index_data, &index_data::source_value,
         expr2tc, index_data, &index_data::index>
         index_expr_methods;
+typedef esbmct::expr_methods<zero_string2t, string_ops,
+        expr2tc, string_ops, &string_ops::string>
+        zero_string_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2451,17 +2466,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class zero_string2t : public esbmct::expr<zero_string2t, esbmct::expr2tc_string>
+class zero_string2t : public zero_string_expr_methods
 {
 public:
   zero_string2t(const expr2tc &string)
-    : esbmct::expr<zero_string2t, esbmct::expr2tc_string>
-      (type_pool.get_bool(), zero_string_id, string) {}
+    : zero_string_expr_methods(type_pool.get_bool(), zero_string_id, string) {}
   zero_string2t(const zero_string2t &ref)
-    : esbmct::expr<zero_string2t, esbmct::expr2tc_string>
-      (ref) {}
+    : zero_string_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<zero_string2t, esbmct::expr2tc_string>;
 
 class zero_length_string2t : public esbmct::expr<zero_length_string2t, esbmct::expr2tc_string>
 {

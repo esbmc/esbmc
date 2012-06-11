@@ -2006,6 +2006,8 @@ std::string member2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "member_name", "", ""};
 std::string index2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "index", "", ""};
+std::string zero_string2t::field_names [esbmct::num_type_fields]  =
+{ "string", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2183,3 +2185,5 @@ template class esbmct::expr_methods<member2t, member_data,
 template class esbmct::expr_methods<index2t, index_data,
     expr2tc, index_data, &index_data::source_value,
     expr2tc, index_data, &index_data::index>;
+template class esbmct::expr_methods<zero_string2t, string_ops,
+    expr2tc, string_ops, &string_ops::string>;
