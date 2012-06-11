@@ -21,7 +21,8 @@ unsigned long int strtoul ( const char * str, char ** endptr, int base );
 
 char * getenv ( const char * name ) 
 {
-  char* tmp;
+  size_t size=strlen(name)+1;
+  char tmp[size];
   strcpy(tmp, name);
   return tmp;
 }
