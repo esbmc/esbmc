@@ -1271,6 +1271,7 @@ class member2t;
 class index2t;
 class zero_string2t;
 class zero_length_string2t;
+class isnan2t;
 
 // Data definitions.
 
@@ -1626,6 +1627,17 @@ public:
   expr2tc string;
 };
 
+class isnan_data : public expr2t
+{
+public:
+  isnan_data(const type2tc &t, datatype_ops::expr_ids id, const expr2tc &in)
+    : expr2t(t, id), value(in) { }
+  isnan_data(const isnan_data &ref)
+    : expr2t(ref), value(ref.value) { }
+
+  expr2tc value;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1823,6 +1835,9 @@ typedef esbmct::expr_methods<zero_string2t, string_ops,
 typedef esbmct::expr_methods<zero_length_string2t, string_ops,
         expr2tc, string_ops, &string_ops::string>
         zero_length_string_expr_methods;
+typedef esbmct::expr_methods<isnan2t, isnan_data,
+        expr2tc, isnan_data, &isnan_data::value>
+        isnan_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2493,17 +2508,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class isnan2t : public esbmct::expr<isnan2t, esbmct::expr2tc_value>
+class isnan2t : public isnan_expr_methods
 {
 public:
   isnan2t(const expr2tc &value)
-    : esbmct::expr<isnan2t, esbmct::expr2tc_value>
-      (type_pool.get_bool(), isnan_id, value) {}
+    : isnan_expr_methods(type_pool.get_bool(), isnan_id, value) {}
   isnan2t(const isnan2t &ref)
-    : esbmct::expr<isnan2t, esbmct::expr2tc_value>
-      (ref) {}
+    : isnan_expr_methods(ref) {}
+
+  static std::string field_names[esbmct::num_type_fields];
 };
-template class esbmct::expr<isnan2t, esbmct::expr2tc_value>;
 
 /** Check whether operand overflows. Operand must be either add, subtract,
  *  or multiply. XXXjmorse - in the future we should ensure the type of the

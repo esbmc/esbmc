@@ -2010,6 +2010,8 @@ std::string zero_string2t::field_names [esbmct::num_type_fields]  =
 { "string", "", "", ""};
 std::string zero_length_string2t::field_names [esbmct::num_type_fields]  =
 { "string", "", "", ""};
+std::string isnan2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2191,3 +2193,5 @@ template class esbmct::expr_methods<zero_string2t, string_ops,
     expr2tc, string_ops, &string_ops::string>;
 template class esbmct::expr_methods<zero_length_string2t, string_ops,
     expr2tc, string_ops, &string_ops::string>;
+template class esbmct::expr_methods<isnan2t, isnan_data,
+    expr2tc, isnan_data, &isnan_data::value>;
