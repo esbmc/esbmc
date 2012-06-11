@@ -155,7 +155,6 @@ namespace std
 		size_t find_first_not_of ( const string& s, size_t pos = 0 ) const;
 		size_t find_first_not_of ( const char* s, size_t pos = 0 ) const;
 		size_t find_first_not_of ( char c, size_t pos = 0 ) const;
-		string& erase ( size_t pos = 0 );
 		string& erase ( size_t pos = 0, size_t n );
 		string& erase ( size_t pos = 0, size_t n , char* tmp );
 		string& erase ( size_t pos = 0);
