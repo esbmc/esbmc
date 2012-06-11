@@ -187,6 +187,14 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type_pool.get_code(type);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
+  } else if (type.id() == "destructor") {
+    // No such thing as returning a destructor; this appears to turn up when
+    // there's a call to a destructor. Return type should be empty.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "constructor") {
+    // Likewise, a constructor returns nothing, the new operator returns
+    // something.
+    new_type_ref = type_pool.get_empty();
   } else {
     type.dump();
     assert(0);
