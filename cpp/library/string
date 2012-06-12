@@ -579,7 +579,7 @@ namespace std
 	string::string (char *s)
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert( s == NULL ,"string invalid" );
+		__ESBMC_assert( s != NULL ,"string invalid" );
 		_size=strlen(s);
 		str=new char[_size+1];
 
