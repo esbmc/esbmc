@@ -545,7 +545,8 @@ static const char *expr_names[] = {
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
-  "cpp_throw"
+  "cpp_throw",
+  "cpp_name"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -1366,6 +1367,7 @@ do_type_crc<const expr2t::expr_ids>(const expr2t::expr_ids &i,
   return; // Dummy field crc
 }
 
+template<> inline void do_type_list_operands<std::vector<type2tc> >(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::vector<unsigned int> >(const std::vector<unsigned int> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1376,6 +1378,7 @@ template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __
 template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
+template<> inline void do_type_list_operands<std::vector<type2tc> >(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::vector<unsigned int> >(std::vector<unsigned int> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<type2tc>(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -2066,6 +2069,8 @@ std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
 { "operand", "exception_list", "", "", ""};
 std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
 { "operand", "", "", "", ""};
+std::string cpp_name2t::field_names [esbmct::num_type_fields]  =
+{ "name", "template args", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2324,3 +2329,6 @@ template class esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
     &code_cpp_catch_data::excp_list>;
 template class esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
     expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>;
+template class esbmct::expr_methods<cpp_name2t, cpp_name_data,
+    irep_idt, cpp_name_data, &cpp_name_data::name,
+    std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>;

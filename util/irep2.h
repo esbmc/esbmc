@@ -323,6 +323,7 @@ public:
     code_cpp_delete_id,
     code_cpp_catch_id,
     code_cpp_throw_id,
+    cpp_name_id,
     end_expr_id
   };
 
@@ -1070,6 +1071,7 @@ class code_cpp_del_array2t;
 class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
+class cpp_name2t;
 
 // Data definitions.
 
@@ -1681,6 +1683,19 @@ public:
   expr2tc operand;
 };
 
+class cpp_name_data : public expr2t
+{
+public:
+  cpp_name_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &n,
+                const std::vector<type2tc> &templ_args)
+    : expr2t(t, id), name(n), template_args(templ_args) { }
+  cpp_name_data(const cpp_name_data &ref)
+    : expr2t(ref), name(ref.name), template_args(ref.template_args) { }
+
+  irep_idt name;
+  std::vector<type2tc> template_args;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1988,6 +2003,10 @@ typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
 typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
         expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>
         code_cpp_throw_expr_methods;
+typedef esbmct::expr_methods<cpp_name2t, cpp_name_data,
+        irep_idt, cpp_name_data, &cpp_name_data::name,
+        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
+        cpp_name_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3055,6 +3074,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class cpp_name2t : public cpp_name_expr_methods
+{
+public:
+  cpp_name2t(const irep_idt &n, const std::vector<type2tc> &ta)
+    : cpp_name_expr_methods(type_pool.get_empty(), cpp_name_id, n, ta){}
+  cpp_name2t(const cpp_name2t &ref)
+    : cpp_name_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -3208,6 +3238,7 @@ expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
+expr_macros(cpp_name);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -3349,6 +3380,7 @@ typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
                        code_cpp_catch2tc;
 typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
                        code_cpp_throw2tc;
+typedef irep_container<cpp_name2t, expr2t::cpp_name_id> cpp_name2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int
