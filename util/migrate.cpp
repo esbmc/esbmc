@@ -971,7 +971,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
       // These hide the size in a real size field,
       migrate_expr((const exprt&)expr.find("size"), thesize);
-    else if (expr.statement() != "nondet")
+    else if (expr.statement() != "nondet" &&
+             expr.statement() != "function_call")
       // For everything other than nondet,
       migrate_expr((const exprt&)expr.cmt_size(), thesize);
 
@@ -985,8 +986,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::cpp_new_arr;
     else if (expr.statement() == "nondet")
       t = sideeffect2t::nondet;
+    else if (expr.statement() == "function_call")
+      t = sideeffect2t::function_call;
     else
       assert(0 && "Unexpected side-effect statement");
+
+    if (t == sideeffect2t::function_call) {
+      const exprt &arguments = expr.op1();
+      forall_operands(it, arguments) {
+        args.push_back(expr2tc());
+        migrate_expr(*it, args.back());
+      }
+    }
 
     new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
                                             cmt_type, t, args));
@@ -1832,10 +1843,22 @@ migrate_expr_back(const expr2tc &ref)
     if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    exprt operand = migrate_expr_back(ref2.operand);
-
-    if (ref2.kind != sideeffect2t::nondet)
+    if (ref2.kind == sideeffect2t::function_call) {
+      // "Operand" is 1st op,
+      exprt operand = migrate_expr_back(ref2.operand);
+      // 2nd op is "arguments".
+      exprt args("arguments");
+      for (std::vector<expr2tc>::const_iterator it = ref2.arguments.begin();
+           it != ref2.arguments.end(); it++)
+        args.copy_to_operands(migrate_expr_back(*it));
+      theexpr.copy_to_operands(operand, args);
+    } else if (ref2.kind == sideeffect2t::nondet) {
+      ; // Do nothing
+    } else {
+      exprt operand = migrate_expr_back(ref2.operand);
       theexpr.copy_to_operands(operand);
+    }
+
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
 
@@ -1851,6 +1874,9 @@ migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::nondet:
       theexpr.statement("nondet");
+      break;
+    case sideeffect2t::function_call:
+      theexpr.statement("function_call");
       break;
     default:
       assert(0 && "Unexpected side effect type when back-converting");
