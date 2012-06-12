@@ -544,7 +544,8 @@ static const char *expr_names[] = {
   "to_bv_typecast",
   "cpp_del_array",
   "cpp_delete",
-  "cpp_catch"
+  "cpp_catch",
+  "cpp_throw"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2063,6 +2064,8 @@ std::string code_cpp_delete2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
 { "operand", "exception_list", "", "", ""};
+std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2319,3 +2322,5 @@ template class esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
     expr2tc, code_cpp_catch_data, &code_cpp_catch_data::operand,
     std::vector<unsigned int>, code_cpp_catch_data,
     &code_cpp_catch_data::excp_list>;
+template class esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
+    expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>;
