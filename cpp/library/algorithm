@@ -449,12 +449,23 @@ template <class T>
 template<class Ty, class Pr>
     const Ty& min(const Ty& left, const Ty& right, Pr pred);
 
+const int min(const int left, const int right)
+{
+    if (left<right) return left;
+    else return right;
+}
+
+const char min(const char left, const char right)
+{
+    if (left<right) return left;
+    else return right;
+}
+
 template <class T>
 const T& min(const T& left, const T& right)
 {
     if (left<right) return left;
     else return right;
-//  return (left<right) ? left : right;
 }
 
 template<class FwdIt>
