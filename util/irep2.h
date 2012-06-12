@@ -321,6 +321,7 @@ public:
     from_bv_typecast_id,
     code_cpp_del_array_id,
     code_cpp_delete_id,
+    code_cpp_catch_id,
     end_expr_id
   };
 
@@ -1066,6 +1067,7 @@ class buffer_size2t;
 class code_asm2t;
 class code_cpp_del_array2t;
 class code_cpp_delete2t;
+class code_cpp_catch2t;
 
 // Data definitions.
 
@@ -1653,6 +1655,19 @@ public:
   irep_idt value;
 };
 
+class code_cpp_catch_data : public code_base
+{
+public:
+  code_cpp_catch_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
+                      const std::vector<expr2tc> &el)
+    : code_base(t, id), operand(o), excp_list(el) { }
+  code_cpp_catch_data(const code_cpp_catch_data &ref)
+    : code_base(ref), operand(ref.operand) { }
+
+  expr2tc operand;
+  std::vector<expr2tc> excp_list;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -1952,6 +1967,11 @@ typedef esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
 typedef esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
         expr2tc, code_expression_data, &code_expression_data::operand>
         code_cpp_delete_expr_methods;
+typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
+        expr2tc, code_cpp_catch_data, &code_cpp_catch_data::operand,
+        std::vector<expr2tc>, code_cpp_catch_data,
+        &code_cpp_catch_data::excp_list>
+        code_cpp_catch_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -2996,6 +3016,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_catch2t : public code_cpp_catch_expr_methods
+{
+public:
+  code_cpp_catch2t(const expr2tc &o, const std::vector<expr2tc> &el)
+    : code_cpp_catch_expr_methods(type_pool.get_empty(),
+                                   code_cpp_catch_id, o, el) { }
+  code_cpp_catch2t(const code_cpp_catch2t &ref)
+    : code_cpp_catch_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -3147,6 +3179,7 @@ expr_macros(buffer_size);
 expr_macros(code_asm);
 expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);
+expr_macros(code_cpp_catch);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -3284,6 +3317,8 @@ typedef irep_container<code_cpp_del_array2t, expr2t::code_cpp_del_array_id>
                        code_cpp_del_array2tc;
 typedef irep_container<code_cpp_delete2t, expr2t::code_cpp_delete_id>
                        code_cpp_delete2tc;
+typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
+                       code_cpp_catch2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int
