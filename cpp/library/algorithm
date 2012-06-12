@@ -432,12 +432,24 @@ template<class RanIt>
 template<class RanIt, class Pr>
     void sort_heap(RanIt first, RanIt last, Pr pred);
 
+const int max(const int left, const int right)
+{
+    if (left>right) return left;
+    else return right;
+}
+
+template <class T>
+  const char max(const char left, const char right)
+{
+    if (left>right) return left;
+    else return right;
+}
+
 template <class T>
   const T& max(const T& left, const T& right)
 {
     if (left>right) return left;
     else return right;
-	//return (left>right) ? left : right;    // or: return comp(a,b)?b:a; for the comp version
 }
 
 //template<class Ty, class Pr>
