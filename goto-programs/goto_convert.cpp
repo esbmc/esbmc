@@ -336,15 +336,11 @@ void goto_convertt::convert_catch(
   // add the CATCH-push instruction to 'dest'
   goto_programt::targett catch_push_instruction=dest.add_instruction();
   catch_push_instruction->make_catch();
-  std::cerr << "XXX jmorse, converting cpp catch's" << std::endl;
-#if 0
-  catch_push_instruction->code.set_statement("cpp-catch");
   catch_push_instruction->location=code.location();
 
   // the CATCH-push instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &exception_list=
-    catch_push_instruction->code.add("exception_list").get_sub();
+  // one per target.
+  std::vector<unsigned int> exception_list;
 
   // add a SKIP target for the end of everything
   goto_programt end;
@@ -357,7 +353,9 @@ void goto_convertt::convert_catch(
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
   catch_pop_instruction->make_catch();
-  catch_pop_instruction->code.set_statement("cpp-catch");
+  std::vector<unsigned int> empty_excp_list;
+  catch_pop_instruction->code =
+    expr2tc(new code_cpp_catch2t(expr2tc(), empty_excp_list));
 
   // add a goto to the end of the 'try' block
   dest.add_instruction()->make_goto(end_target);
@@ -367,7 +365,7 @@ void goto_convertt::convert_catch(
     const codet &block=to_code(code.operands()[i]);
 
     // grab the ID and add to CATCH instruction
-    exception_list.push_back(irept(block.get("exception_id")));
+    exception_list.push_back(atoi(block.get("exception_id").as_string().c_str()));
 
     goto_programt tmp;
     convert(block, tmp);
@@ -380,7 +378,8 @@ void goto_convertt::convert_catch(
 
   // add end-target
   dest.destructive_append(end);
-#endif
+
+  catch_push_instruction->code = expr2tc(new code_cpp_catch2t(expr2tc(), exception_list));
 }
 
 /*******************************************************************\
