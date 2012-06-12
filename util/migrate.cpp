@@ -963,6 +963,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
+    std::vector<expr2tc> args;
     if (expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
         expr.statement() != "cpp_new[]")
       migrate_expr(expr.op0(), operand);
@@ -988,7 +989,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       assert(0 && "Unexpected side-effect statement");
 
     new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
-                                            cmt_type, t));
+                                            cmt_type, t, args));
   } else if (expr.id() == irept::id_code && expr.statement() == "assign") {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);

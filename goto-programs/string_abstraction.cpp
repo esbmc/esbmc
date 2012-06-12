@@ -660,9 +660,12 @@ expr2tc string_abstractiont::build_unknown(whatt what, bool write)
 
   case LENGTH:
   case SIZE:
+    {
+    std::vector<expr2tc> args;
     result = expr2tc(new sideeffect2t(tmp_type, expr2tc(), expr2tc(), type2tc(),
-                                      sideeffect2t::nondet));
+                                      sideeffect2t::nondet, args));
     break;
+    }
 
   default: assert(false);
   }

@@ -350,9 +350,10 @@ void string_instrumentationt::do_sprintf(
     return_assignment->location=target->location;
     return_assignment->local_variables=target->local_variables;
 
+    std::vector<expr2tc> args;
     expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(),
                                            expr2tc(), type2tc(),
-                                           sideeffect2t::nondet));
+                                           sideeffect2t::nondet, args));
 
     return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
   }
@@ -456,8 +457,10 @@ void string_instrumentationt::do_fscanf(
     return_assignment->location=target->location;
     return_assignment->local_variables=target->local_variables;
 
+    std::vector<expr2tc> args;
     expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(), expr2tc(),
-                                           type2tc(), sideeffect2t::nondet));
+                                           type2tc(), sideeffect2t::nondet,
+                                           args));
 
     return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
   }
@@ -1006,9 +1009,10 @@ void string_instrumentationt::do_strerror(
 
   {
     goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+    std::vector<expr2tc> args;
     expr2tc nondet_size = expr2tc(new sideeffect2t(uint_type2(), expr2tc(),
                                                    expr2tc(), type2tc(),
-                                                   sideeffect2t::nondet));
+                                                   sideeffect2t::nondet, args));
 
     exprt sym = symbol_expr(symbol_size);
     expr2tc new_sym;

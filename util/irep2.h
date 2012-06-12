@@ -1496,16 +1496,19 @@ class sideeffect_data : public expr2t
 {
 public:
   sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
-                  const expr2tc &sz, const type2tc &tp, unsigned int k)
-    : expr2t(t, id), operand(op), size(sz), alloctype(tp), kind(k) { }
+                  const expr2tc &sz, const type2tc &tp, unsigned int k,
+                  const std::vector<expr2tc> &args)
+    : expr2t(t, id), operand(op), size(sz), alloctype(tp), kind(k),
+      arguments(args) { }
   sideeffect_data(const sideeffect_data &ref)
     : expr2t(ref), operand(ref.operand), size(ref.size),
-      alloctype(ref.alloctype), kind(ref.kind) { }
+      alloctype(ref.alloctype), kind(ref.kind), arguments(ref.arguments) { }
 
   expr2tc operand;
   expr2tc size;
   type2tc alloctype;
   unsigned int kind;
+  std::vector<expr2tc> arguments;
 };
 
 class code_base : public expr2t
@@ -1887,7 +1890,8 @@ typedef esbmct::expr_methods<sideeffect2t, sideeffect_data,
         expr2tc, sideeffect_data, &sideeffect_data::operand,
         expr2tc, sideeffect_data, &sideeffect_data::size,
         type2tc, sideeffect_data, &sideeffect_data::alloctype,
-        unsigned int, sideeffect_data, &sideeffect_data::kind>
+        unsigned int, sideeffect_data, &sideeffect_data::kind,
+        std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>
         sideeffect_expr_methods;
 typedef esbmct::expr_methods<code_block2t, code_block_data,
         std::vector<expr2tc>, code_block_data, &code_block_data::operands>
@@ -2770,12 +2774,13 @@ public:
     malloc,
     cpp_new,
     cpp_new_arr,
-    nondet
+    nondet,
+    function_call
   };
 
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
-               const type2tc &alloct, allockind k)
-    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k) {}
+               const type2tc &alloct, allockind k, std::vector<expr2tc> &a)
+    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k, a) {}
   sideeffect2t(const sideeffect2t &ref)
     : sideeffect_expr_methods(ref) {}
 

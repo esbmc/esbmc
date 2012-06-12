@@ -1968,7 +1968,7 @@ std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
 std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string sideeffect2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "size", "alloctype", "kind", ""};
+{ "operand", "size", "alloctype", "kind", "arguments"};
 std::string code_block2t::field_names [esbmct::num_type_fields]  =
 { "operands", "", "", "", ""};
 std::string code_assign2t::field_names [esbmct::num_type_fields]  =
@@ -2214,7 +2214,8 @@ template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
     expr2tc, sideeffect_data, &sideeffect_data::operand,
     expr2tc, sideeffect_data, &sideeffect_data::size,
     type2tc, sideeffect_data, &sideeffect_data::alloctype,
-    unsigned int, sideeffect_data, &sideeffect_data::kind>;
+    unsigned int, sideeffect_data, &sideeffect_data::kind,
+    std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>;
 template class esbmct::expr_methods<code_block2t, code_block_data,
     std::vector<expr2tc>, code_block_data, &code_block_data::operands>;
 template class esbmct::expr_methods<code_assign2t, code_assign_data,
