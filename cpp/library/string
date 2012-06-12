@@ -197,6 +197,8 @@ namespace std
 				return buffer;
 			}
 
+	    const_iterator& operator ++ ();
+	    const_iterator& operator ++ (int);
 
 			//operator returns true if both members point to the same address
 			//returns false if not happen
@@ -207,7 +209,7 @@ namespace std
 
 			//just the complement of "=="
 
-			bool operator != ( const iterator& right)const{
+			bool operator != ( const const_iterator& right)const{
 				return !(pointer == right.pointer);
 			}
 
