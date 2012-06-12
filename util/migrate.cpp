@@ -1089,6 +1089,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), type);
     const irep_idt &str = expr.op0().value();
     new_expr_ref = expr2tc(new code_asm2t(type, str));
+  } else if (expr.id() == "cpp-throw") {
+    // No type,
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = expr2tc(new code_cpp_throw2t(op));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2023,6 +2028,13 @@ migrate_expr_back(const expr2tc &ref)
   {
     const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
     exprt codeexpr("cpp_delete", typet());
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_id:
+  {
+    const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
+    exprt codeexpr("cpp-throw");
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }
