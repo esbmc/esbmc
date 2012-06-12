@@ -27,12 +27,20 @@ namespace std
 	class string{
 	public:
 
+		class const_iterator;
 		class iterator{
 		public:
 				char* pointer;
+				int pos;
 
 				iterator(iterator& i){
 					pointer = i.pointer;
+					pos = i.pos;
+				}
+
+				iterator(const_iterator& i){
+					pointer = i.pointer;
+					pos = i.pos;
 				}
 
 				iterator(){
@@ -44,10 +52,17 @@ namespace std
 					pointer = p_pointer;
 				}
 
-				iterator& operator=( iterator& left, const iterator& right ){
+				iterator& operator=( iterator& left, const_iterator& right ){
 					left.pointer = right.pointer;
+					left.pos = right.pos;
 					return left;
 				}
+
+				iterator& operator=( iterator& left, iterator& right ){
+									left.pointer = right.pointer;
+									left.pos = right.pos;
+									return left;
+								}
 
 				char* operator -> (){ //operator returns memo address pointer
 					return pointer;
@@ -61,12 +76,15 @@ namespace std
 				iterator& operator - (int n) const{
 							iterator buffer;
 							buffer.pointer = pointer - sizeof(char)*n;
+							buffer.pos = pos - n;
+							//TODO assert se pos for menor que zero
 							return buffer;
 						}
 
 				iterator& operator + (int n) const{
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char)*n;
+					buffer.pos = pos + n;
 					return buffer;
 				}
 
@@ -75,7 +93,9 @@ namespace std
 				iterator& operator ++ (){
 					iterator buffer;
 					buffer.pointer = pointer;
+					buffer.pos = pos;
 					pointer = pointer + sizeof(char);
+					pos++;
 					return buffer;
 				}
 
@@ -84,6 +104,7 @@ namespace std
 				iterator operator ++ (int _b){
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char);
+					buffer.pos++;
 					return buffer;
 				}
 				//operator decreases pointer address, but returns old value.
@@ -91,7 +112,9 @@ namespace std
 				iterator& operator -- (){
 					iterator buffer;
 					buffer.pointer = pointer;
+					buffer.pos = pos;
 					pointer = pointer - sizeof(char);
+					pos--;
 					return buffer;
 				}
 
@@ -100,6 +123,7 @@ namespace std
 				iterator operator -- (int _b){
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char);
+					buffer.pos--;
 					return buffer;
 				}
 
@@ -107,45 +131,71 @@ namespace std
 				//returns false if not happen
 
 				bool operator == ( const iterator& right)const{
-					return (pointer ==  right.pointer);
+					return (pointer ==  right.pointer && pos == right.pos);
 				}
+
+				bool operator == ( const const_iterator& right)const{
+									return (pointer ==  right.pointer && pos == right.pos);
+								}
 
 				//just the complement of "=="
 
 				bool operator != ( const iterator& right)const{
-					return !(pointer == right.pointer);
+					return !(pos == right.pos);
 				}
+
+				bool operator != ( const const_iterator& right)const{
+									return !(pos == right.pos);
+								}
 
 				//operator returns true if pointer address of right is higher than this
 
 				bool operator < ( const iterator& right)const{
-					return (pointer < right.pointer);
+					return (pos < right.pos);
+
+				}
+
+				bool operator < ( const const_iterator& right)const{
+					return (pos < right.pos);
 
 				}
 
 				//operator returns true if pointer address of right is lower than this
 
 				bool operator > ( const iterator& right)const{
-					return (pointer > right.pointer);
+					return (pos > right.pos);
 				}
+
+				bool operator > ( const const_iterator& right)const{
+									return (pos > right.pos);
+								}
 
 				//operator returns true if pointer address of right is higher or equal than this
 
 				bool operator <= ( const iterator& right)const{
-					return !(pointer > right.pointer);
+					return !(pos > right.pos);
 				}
+
+				bool operator <= ( const const_iterator& right)const{
+									return !(pos > right.pos);
+								}
 
 				//operator returns true if pointer address of right is lower or equal than this
 
 				bool operator >= ( const iterator& right)const{
-					return !(pointer < right.pointer);
+					return !(pos < right.pos);
 				}
+
+				bool operator >= ( const const_iterator& right)const{
+									return !(pos < right.pos);
+								}
 
 				//operator adds n positions on pointer address, and returns its address value
 
 				iterator& operator += (int n){
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char)*n;
+					buffer.pos = pos + n;
 					return buffer;
 				}
 
@@ -154,6 +204,7 @@ namespace std
 				iterator operator -= (int n){
 					iterator buffer;
 					buffer.pointer = pointer - sizeof(char)*n;
+					buffer.pos = pos - n;
 					return buffer;
 				}
 		};
@@ -162,9 +213,16 @@ namespace std
 		public:
 
 			char* pointer;
+			int pos;
 
-			const_iterator(iterator& i){
+			/*const_iterator(iterator& i){
 				pointer = i.pointer;
+				pos = i.pos;
+			}*/
+
+			const_iterator(const_iterator& i){
+				pointer = i.pointer;
+				pos = i.pos;
 			}
 
 			const_iterator(){
@@ -185,20 +243,20 @@ namespace std
 			}
 
 			//operator subtracts n positions on pointer address of this
-			iterator& operator - (int n) const{
-						iterator buffer;
+			const_iterator& operator - (int n) const{
+						const_iterator buffer;
 						buffer.pointer = pointer - sizeof(char)*n;
 						return buffer;
 					}
 
-			iterator& operator + (int n) const{
-				iterator buffer;
+			const_iterator& operator + (int n) const{
+				const_iterator buffer;
 				buffer.pointer = pointer + sizeof(char)*n;
 				return buffer;
 			}
 
-	    const_iterator& operator ++ ();
-	    const_iterator& operator ++ (int);
+			const_iterator& operator ++ ();
+			const_iterator& operator ++ (int);
 
 			//operator returns true if both members point to the same address
 			//returns false if not happen
@@ -207,11 +265,19 @@ namespace std
 				return (pointer ==  right.pointer);
 			}
 
+			bool operator == ( const const_iterator& right)const{
+							return (pointer ==  right.pointer);
+						}
+
 			//just the complement of "=="
 
 			bool operator != ( const const_iterator& right)const{
 				return !(pointer == right.pointer);
 			}
+
+			bool operator != ( const iterator& right)const{
+							return !(pointer == right.pointer);
+						}
 
 			//operator returns true if pointer address of right is higher than this
 
@@ -220,11 +286,20 @@ namespace std
 
 			}
 
+			bool operator < ( const const_iterator& right)const{
+							return (pointer < right.pointer);
+
+						}
+
 			//operator returns true if pointer address of right is lower than this
 
 			bool operator > ( const iterator& right)const{
 				return (pointer > right.pointer);
 			}
+
+			bool operator > ( const const_iterator& right)const{
+							return (pointer > right.pointer);
+						}
 
 			//operator returns true if pointer address of right is higher or equal than this
 
@@ -232,11 +307,22 @@ namespace std
 				return !(pointer > right.pointer);
 			}
 
+			bool operator <= ( const const_iterator& right)const{
+							return !(pointer > right.pointer);
+						}
+
 			//operator returns true if pointer address of right is lower or equal than this
 
 			bool operator >= ( const iterator& right)const{
 				return !(pointer < right.pointer);
 			}
+
+			bool operator >= ( const const_iterator& right)const{
+							return !(pointer < right.pointer);
+						}const_iterator(iterator& i){
+							pointer = i.pointer;
+							pos = i.pos;
+						}
 
 			//operator adds n positions on pointer address, and returns its address value
 
@@ -337,10 +423,10 @@ namespace std
 		string& replace ( size_t pos1, size_t n1,   size_t n2, char c );
 
 		//new add
-		string& replace ( iterator i1, iterator i2, const string& str );
-		string& replace ( iterator i1, iterator i2, const char* s, size_t n2 );
-		string& replace ( iterator i1, iterator i2, const char* s );
-		string& replace ( iterator i1, iterator i2, size_t n2, char c );
+		string& replace ( string::iterator i1, string::iterator i2, string& str );
+		string& replace ( string::iterator i1, string::iterator i2, const char* s, size_t n2 );
+		string& replace ( string::iterator i1, string::iterator i2, const char* s );
+		string& replace ( string::iterator i1, string::iterator i2, size_t n2, char c );
 
 		string& insert ( size_t pos1, string& s );
 		string& insert ( size_t pos1, string& s, size_t pos2, size_t n );
@@ -385,15 +471,17 @@ namespace std
 			return tmp;
 		}
 
-	    const_iterator begin() const{
-	    	const_iterator first(this->str);
-	    	return first;
-	    }
+	    string::iterator& begin() const{
+	    	    	string::iterator first(this->str);
+	    	    	first.pos = 0;
+	    	    	return first;
+	    	    }
 
-	    const_iterator end() const{
-	    	const_iterator end(this->str);
-	    	return end;
-	    }
+	    string::iterator end() const{
+	    	    	string::iterator end(this->str);
+	    	    	end.pos = this->length() - 1;
+	    	    	return end;
+	    	    }
 
 		string& operator+ ( string& s)
 		{
@@ -1466,16 +1554,17 @@ namespace std
 		return *this;
 	}
 //new add
-	/*
-	string& replace ( iterator i1, iterator i2, const string& str )
+
+	string& string::replace ( string::iterator i1, string::iterator i2, string& str )
 	{
-		size_t beginn, end;
-		beginn = (size_t) i1->pointer;
-		end = (size_t) i2.pointer;
-		beginn = beginn - this.begin();
-		end = end - this.begin();
-		return replace(beginn, end - beginn, str);
+		int tmp_one = i1.pos;
+		int tmp_two = i2.pos+1;
+		int tmp = tmp_two - tmp_one;
+		this->erase(tmp_one,tmp);
+		this->insert(tmp_one,str.str);
+		return *this;
 	}
+	/*
 	string& replace ( iterator i1, iterator i2, const char* s, size_t n2 )
 	{
 		size_t beginn, end;
