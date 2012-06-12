@@ -579,6 +579,7 @@ namespace std
 	string::string (char *s)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( s == NULL ,"string invalid" );
 		_size=strlen(s);
 		str=new char[_size+1];
 
@@ -1086,6 +1087,9 @@ namespace std
 		size_t aux = n + pos;
 		if (pos>this->size()){
 			throw("out_of_range");
+		}
+		if(s == NULL){
+			s = new char[n];
 		}
 		strncpy(s, this->c_str()+pos, aux);
 		return n;
