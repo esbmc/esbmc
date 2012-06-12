@@ -4,6 +4,7 @@
 
 #include "std_types.h"
 #include "migrate.h"
+#include "i2string.h"
 
 #include <solvers/prop/prop_conv.h>
 
@@ -903,6 +904,28 @@ type_to_string<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
 
 template <>
 inline std::string
+type_to_string<std::vector<unsigned int> >(
+                                       const std::vector<unsigned int> &theval,
+                                       int indent __attribute__((unused)))
+{
+  char buffer[64];
+  std::string astring = "\n";
+  int i;
+
+  i = 0;
+  for (std::vector<unsigned int>::const_iterator it = theval.begin();
+       it != theval.end(); it++) {
+    snprintf(buffer, 63, "%d", i);
+    buffer[63] = '\0';
+    astring += indent_str(indent) + std::string(buffer) + ": " + i2string(*it) + "\n";
+    i++;
+  }
+
+  return astring;
+}
+
+template <>
+inline std::string
 type_to_string<expr2tc>(const expr2tc &theval, int indent)
 {
 
@@ -995,6 +1018,14 @@ template <>
 inline bool
 do_type_cmp<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
                                     const std::vector<irep_idt> &side2)
+{
+  return (side1 == side2);
+}
+
+template <>
+inline bool
+do_type_cmp<std::vector<unsigned int> >(const std::vector<unsigned int> &side1,
+                                        const std::vector<unsigned int> &side2)
 {
   return (side1 == side2);
 }
@@ -1127,6 +1158,18 @@ template <>
 inline int
 do_type_lt<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
                                   const std::vector<irep_idt> &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  return 0;
+}
+
+template <>
+inline int
+do_type_lt<std::vector<unsigned int> >(const std::vector<unsigned int> &side1,
+                                       const std::vector<unsigned int> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1270,6 +1313,16 @@ do_type_crc<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
 
 template <>
 inline void
+do_type_crc<std::vector<unsigned int> >(const std::vector<unsigned int> &theval,
+                                        boost::crc_32_type &crc)
+{
+  for (std::vector<unsigned int>::const_iterator it = theval.begin();
+       it != theval.end(); it++)
+    crc.process_bytes(&(*it), sizeof(unsigned int));
+}
+
+template <>
+inline void
 do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
 {
 
@@ -1312,6 +1365,7 @@ do_type_crc<const expr2t::expr_ids>(const expr2t::expr_ids &i,
   return; // Dummy field crc
 }
 
+template<> inline void do_type_list_operands<std::vector<unsigned int> >(const std::vector<unsigned int> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<type2tc>(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<bool>(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1321,6 +1375,7 @@ template<> inline void do_type_list_operands<fixedbvt>(const fixedbvt &theval __
 template<> inline void do_type_list_operands<dstring>(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<const expr2t::expr_ids>(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
+template<> inline void do_type_list_operands<std::vector<unsigned int> >(std::vector<unsigned int> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<type2tc>(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<std::list<type2tc> >(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 template<> inline void do_type_list_operands<bool>(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
