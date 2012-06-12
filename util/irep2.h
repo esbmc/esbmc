@@ -1659,13 +1659,13 @@ class code_cpp_catch_data : public code_base
 {
 public:
   code_cpp_catch_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                      const std::vector<expr2tc> &el)
+                      const std::vector<unsigned int> &el)
     : code_base(t, id), operand(o), excp_list(el) { }
   code_cpp_catch_data(const code_cpp_catch_data &ref)
     : code_base(ref), operand(ref.operand) { }
 
   expr2tc operand;
-  std::vector<expr2tc> excp_list;
+  std::vector<unsigned int> excp_list;
 };
 
 // Give everything a typedef name
@@ -1969,7 +1969,7 @@ typedef esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
         code_cpp_delete_expr_methods;
 typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
         expr2tc, code_cpp_catch_data, &code_cpp_catch_data::operand,
-        std::vector<expr2tc>, code_cpp_catch_data,
+        std::vector<unsigned int>, code_cpp_catch_data,
         &code_cpp_catch_data::excp_list>
         code_cpp_catch_expr_methods;
 
@@ -3019,7 +3019,7 @@ public:
 class code_cpp_catch2t : public code_cpp_catch_expr_methods
 {
 public:
-  code_cpp_catch2t(const expr2tc &o, const std::vector<expr2tc> &el)
+  code_cpp_catch2t(const expr2tc &o, const std::vector<unsigned int> &el)
     : code_cpp_catch_expr_methods(type_pool.get_empty(),
                                    code_cpp_catch_id, o, el) { }
   code_cpp_catch2t(const code_cpp_catch2t &ref)
