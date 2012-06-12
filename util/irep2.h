@@ -189,6 +189,7 @@ public:
     signedbv_id,
     fixedbv_id,
     string_id,
+    cpp_name_id,
     end_type_id
   };
 
@@ -323,7 +324,6 @@ public:
     code_cpp_delete_id,
     code_cpp_catch_id,
     code_cpp_throw_id,
-    cpp_name_id,
     end_expr_id
   };
 
@@ -566,6 +566,7 @@ class array_type2t;
 class pointer_type2t;
 class fixedbv_type2t;
 class string_type2t;
+class cpp_name_type2t;
 
 // We also require in advance, the actual classes that store type data.
 
@@ -677,6 +678,19 @@ public:
   unsigned int width;
 };
 
+class cpp_name_data : public type2t
+{
+public:
+  cpp_name_data(type2t::type_ids id, const irep_idt &n,
+                const std::vector<type2tc> &templ_args)
+    : type2t(id), name(n), template_args(templ_args) { }
+  cpp_name_data(const cpp_name_data &ref)
+    : type2t(ref), name(ref.name), template_args(ref.template_args) { }
+
+  irep_idt name;
+  std::vector<type2tc> template_args;
+};
+
 // Then give them a typedef name
 
 typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
@@ -718,6 +732,10 @@ typedef esbmct::type_methods<fixedbv_type2t, fixedbv_data,
 typedef esbmct::type_methods<string_type2t, string_data,
     unsigned int, string_data, &string_data::width>
     string_type_methods;
+typedef esbmct::type_methods<cpp_name_type2t, cpp_name_data,
+        irep_idt, cpp_name_data, &cpp_name_data::name,
+        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
+        cpp_name_type_methods;
 
 /** Boolean type. No additional data */
 class bool_type2t : public bool_type_methods
@@ -881,6 +899,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class cpp_name_type2t : public cpp_name_type_methods
+{
+public:
+  cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
+    : cpp_name_type_methods(cpp_name_id, n, ta){}
+  cpp_name_type2t(const cpp_name_type2t &ref)
+    : cpp_name_type_methods(ref) { }
+
+  virtual unsigned int get_width(void) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 // Generate some "is-this-a-blah" macros, and type conversion macros. This is
 // fine in terms of using/ keywords in syntax, because the preprocessor
 // preprocesses everything out. One more used to C++ templates might raise their
@@ -908,6 +939,7 @@ type_macros(unsignedbv);
 type_macros(signedbv);
 type_macros(fixedbv);
 type_macros(string);
+type_macros(cpp_name);
 #undef type_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -1071,7 +1103,6 @@ class code_cpp_del_array2t;
 class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
-class cpp_name2t;
 
 // Data definitions.
 
@@ -1683,19 +1714,6 @@ public:
   expr2tc operand;
 };
 
-class cpp_name_data : public expr2t
-{
-public:
-  cpp_name_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &n,
-                const std::vector<type2tc> &templ_args)
-    : expr2t(t, id), name(n), template_args(templ_args) { }
-  cpp_name_data(const cpp_name_data &ref)
-    : expr2t(ref), name(ref.name), template_args(ref.template_args) { }
-
-  irep_idt name;
-  std::vector<type2tc> template_args;
-};
-
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2003,10 +2021,6 @@ typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
 typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
         expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>
         code_cpp_throw_expr_methods;
-typedef esbmct::expr_methods<cpp_name2t, cpp_name_data,
-        irep_idt, cpp_name_data, &cpp_name_data::name,
-        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
-        cpp_name_expr_methods;
 
 /** Constant integer class. Records a constant integer of an arbitary
  *  precision */
@@ -3074,17 +3088,6 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class cpp_name2t : public cpp_name_expr_methods
-{
-public:
-  cpp_name2t(const irep_idt &n, const std::vector<type2tc> &ta)
-    : cpp_name_expr_methods(type_pool.get_empty(), cpp_name_id, n, ta){}
-  cpp_name2t(const cpp_name2t &ref)
-    : cpp_name_expr_methods(ref) { }
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -3238,7 +3241,6 @@ expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
-expr_macros(cpp_name);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -3380,7 +3382,6 @@ typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
                        code_cpp_catch2tc;
 typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
                        code_cpp_throw2tc;
-typedef irep_container<cpp_name2t, expr2t::cpp_name_id> cpp_name2tc;
 
 // XXXjmorse - to be moved into struct union superclass when it exists.
 inline unsigned int

@@ -49,7 +49,8 @@ static const char *type_names[] = {
   "unsignedbv",
   "signedbv",
   "fixedbv",
-  "string"
+  "string",
+  "cpp_name"
 };
 // If this fires, you've added/removed a type id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -203,6 +204,12 @@ unsigned int
 symbol_type2t::get_width(void) const
 {
   assert(0 && "Fetching width of symbol type - invalid operation");
+}
+
+unsigned int
+cpp_name_type2t::get_width(void) const
+{
+  assert(0 && "Fetching width of cpp_name type - invalid operation");
 }
 
 unsigned int
@@ -545,8 +552,7 @@ static const char *expr_names[] = {
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
-  "cpp_throw",
-  "cpp_name"
+  "cpp_throw"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -1895,7 +1901,8 @@ std::string fixedbv_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "integer_bits", "", "", ""};
 std::string string_type2t::field_names [esbmct::num_type_fields]  =
 { "width", "", "", "", ""};
-
+std::string cpp_name_type2t::field_names [esbmct::num_type_fields]  =
+{ "name", "template args", "", "", ""};
 
 // Exprs
 
@@ -2069,8 +2076,6 @@ std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
 { "operand", "exception_list", "", "", ""};
 std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
 { "operand", "", "", "", ""};
-std::string cpp_name2t::field_names [esbmct::num_type_fields]  =
-{ "name", "template args", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2106,6 +2111,9 @@ template class esbmct::type_methods<fixedbv_type2t, fixedbv_data,
     unsigned int, fixedbv_data, &fixedbv_data::integer_bits>;
 template class esbmct::type_methods<string_type2t, string_data,
     unsigned int, string_data, &string_data::width>;
+template class esbmct::type_methods<cpp_name_type2t, cpp_name_data,
+    irep_idt, cpp_name_data, &cpp_name_data::name,
+    std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>;
 
 // Explicit instanciation for exprs.
 
@@ -2329,6 +2337,3 @@ template class esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
     &code_cpp_catch_data::excp_list>;
 template class esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
     expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>;
-template class esbmct::expr_methods<cpp_name2t, cpp_name_data,
-    irep_idt, cpp_name_data, &cpp_name_data::name,
-    std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>;

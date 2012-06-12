@@ -152,6 +152,25 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
 
     code_type2t *c = new code_type2t(args, ret_type, arg_names, ellipsis);
     new_type_ref = type2tc(c);
+  } else if (type.id() == "cpp-name") {
+    // No type,
+    std::vector<type2tc> template_args;
+    const exprt &cpy = (const exprt &)type;
+    assert(cpy.op0().id() == "name");
+    irep_idt name = cpy.op0().identifier();
+
+    // Fetch possibly nonexistant template arguments.
+    if (cpy.operands().size() == 2) {
+      assert(cpy.op1().id() == "template_args");
+      forall_operands(it, cpy.op1()) {
+        assert((*it).id() == "type");
+        type2tc tmptype;
+        migrate_type((*it).type(), tmptype);
+        template_args.push_back(tmptype);
+      }
+    }
+
+    new_type_ref = type2tc(new cpp_name_type2t(name, template_args));
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
   } else {
@@ -199,6 +218,9 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     // Likewise, a constructor returns nothing, the new operator returns
     // something.
     new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "cpp-name") {
+    real_migrate_type(type, new_type_ref);
+    // No caching; no reason, just not doing it right now.
   } else {
     type.dump();
     assert(0);
@@ -1094,24 +1116,6 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op;
     migrate_expr(expr.op0(), op);
     new_expr_ref = expr2tc(new code_cpp_throw2t(op));
-  } else if (expr.id() == "cpp-name") {
-    // No type,
-    std::vector<type2tc> template_args;
-    assert(expr.op0().id() == "name");
-    irep_idt name = expr.op0().identifier();
-
-    // Fetch possibly nonexistant template arguments.
-    if (expr.operands().size() == 2) {
-      assert(expr.op1().id() == "template_args");
-      forall_operands(it, expr.op1()) {
-        assert((*it).id() == "type");
-        type2tc tmptype;
-        migrate_type((*it).type(), tmptype);
-        template_args.push_back(tmptype);
-      }
-    }
-
-    new_expr_ref = expr2tc(new cpp_name2t(name, template_args));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1245,6 +1249,31 @@ migrate_type_back(const type2tc &ref)
     }
   case type2t::string_id:
     return string_typet();
+  case type2t::cpp_name_id:
+  {
+    const cpp_name_type2t &ref2 = to_cpp_name_type(ref);
+    exprt thetype("cpp-name");
+    exprt name("name");
+    name.identifier(ref2.name);
+    thetype.copy_to_operands(name);
+
+    if (ref2.template_args.size() != 0) {
+      exprt args("template_args");
+      exprt &arglist = (exprt&)args.add("arguments");
+      forall_types(it, ref2.template_args) {
+        typet tmp = migrate_type_back(*it);
+        exprt type("type");
+        type.type() = tmp;
+        arglist.copy_to_operands(type); // Yep, that's how it's structured.
+      }
+
+      thetype.copy_to_operands(args);
+    }
+
+    typet ret;
+    ret.swap((irept&)thetype);
+    return ret;
+  }
   default:
     assert(0 && "Unrecognized type in migrate_type_back");
   }
@@ -2054,29 +2083,6 @@ migrate_expr_back(const expr2tc &ref)
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
     exprt codeexpr("cpp-throw");
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
-    return codeexpr;
-  }
-  case expr2t::cpp_name_id:
-  {
-    const cpp_name2t &ref2 = to_cpp_name2t(ref);
-    exprt codeexpr("cpp-name");
-    exprt name("name");
-    name.identifier(ref2.name);
-    codeexpr.copy_to_operands(name);
-
-    if (ref2.template_args.size() != 0) {
-      exprt args("template_args");
-      exprt &arglist = (exprt&)args.add("arguments");
-      forall_types(it, ref2.template_args) {
-        typet tmp = migrate_type_back(*it);
-        exprt type("type");
-        type.type() = tmp;
-        arglist.copy_to_operands(type); // Yep, that's how it's structured.
-      }
-
-      codeexpr.copy_to_operands(args);
-    }
-
     return codeexpr;
   }
   default:
