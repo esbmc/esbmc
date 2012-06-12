@@ -249,8 +249,6 @@ void goto_convertt::convert(
 {
   const irep_idt &statement=code.get_statement();
 
-  dest.instructions.clear();
-
   link_up_type_names((codet&)code, ns);
 
   if(statement=="block")
