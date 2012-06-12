@@ -1662,7 +1662,7 @@ public:
                       const std::vector<unsigned int> &el)
     : code_base(t, id), operand(o), excp_list(el) { }
   code_cpp_catch_data(const code_cpp_catch_data &ref)
-    : code_base(ref), operand(ref.operand) { }
+    : code_base(ref), operand(ref.operand), excp_list(ref.excp_list) { }
 
   expr2tc operand;
   std::vector<unsigned int> excp_list;
