@@ -2260,7 +2260,7 @@ template class esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;
 template class esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;
-typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
+template class esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
     expr2tc, code_cpp_catch_data, &code_cpp_catch_data::operand,
     std::vector<unsigned int>, code_cpp_catch_data,
     &code_cpp_catch_data::excp_list>;
