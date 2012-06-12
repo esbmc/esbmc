@@ -2062,7 +2062,7 @@ std::string code_cpp_del_array2t::field_names [esbmct::num_type_fields]  =
 std::string code_cpp_delete2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "", "", "", ""};
+{ "operand", "exception_list", "", "", ""};
 
 // Explicit template instanciations
 
