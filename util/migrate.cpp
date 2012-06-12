@@ -156,13 +156,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     // No type,
     std::vector<type2tc> template_args;
     const exprt &cpy = (const exprt &)type;
-    assert(cpy.op0().id() == "name");
-    irep_idt name = cpy.op0().identifier();
+    assert(cpy.get_sub()[0].id() == "name");
+    irep_idt name = cpy.get_sub()[0].identifier();
 
     // Fetch possibly nonexistant template arguments.
     if (cpy.operands().size() == 2) {
-      assert(cpy.op1().id() == "template_args");
-      forall_operands(it, cpy.op1()) {
+      assert(cpy.get_sub()[0].id() == "template_args");
+      forall_irep(it, cpy.get_sub()) {
         assert((*it).id() == "type");
         type2tc tmptype;
         migrate_type((*it).type(), tmptype);
@@ -1255,7 +1255,7 @@ migrate_type_back(const type2tc &ref)
     exprt thetype("cpp-name");
     exprt name("name");
     name.identifier(ref2.name);
-    thetype.copy_to_operands(name);
+    thetype.get_sub().push_back(name);
 
     if (ref2.template_args.size() != 0) {
       exprt args("template_args");
@@ -1267,7 +1267,7 @@ migrate_type_back(const type2tc &ref)
         arglist.copy_to_operands(type); // Yep, that's how it's structured.
       }
 
-      thetype.copy_to_operands(args);
+      thetype.get_sub().push_back(args);
     }
 
     typet ret;
