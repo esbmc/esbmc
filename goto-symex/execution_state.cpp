@@ -351,7 +351,6 @@ execution_statet::switch_to_thread(unsigned int i)
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
-  execute_guard();
 }
 
 bool

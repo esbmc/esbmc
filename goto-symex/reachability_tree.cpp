@@ -32,6 +32,7 @@ reachability_treet::reachability_treet(
     symex_targett *target,
     contextt &context) :
     goto_functions(goto_functions),
+    permanent_context(context),
     ns(ns),
     options(opts)
 {
@@ -45,21 +46,32 @@ reachability_treet::reachability_treet(
   else
     por = true;
 
+  target_template = target;
+}
+
+void
+reachability_treet::setup_for_new_explore(void)
+{
+
+  execution_states.clear();
+
   at_end_of_run = false;
   has_complete_formula = false;
 
   execution_statet *s;
   if (options.get_bool_option("schedule")) {
+    schedule_target = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
-                                               this, target, context, opts,
-                                               &schedule_total_claims,
+                                               this, schedule_target,
+                                               permanent_context,
+                                               options, &schedule_total_claims,
                                                &schedule_remaining_claims));
-    schedule_target = target;
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target, context, opts));
+                                               target_template->clone(),
+                                               permanent_context, options));
     schedule_target = NULL;
   }
 
@@ -183,6 +195,8 @@ reachability_treet::create_next_state(void)
       new_state->switch_to_thread(next_thread_id);
     }
 
+    new_state->execute_guard();
+
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
   }
@@ -256,7 +270,6 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
 
 bool reachability_treet::is_at_end_of_run()
 {
-
   return at_end_of_run ||
          get_cur_state().get_active_state().thread_ended ||
          get_cur_state().get_active_state().call_stack.empty();
@@ -406,7 +419,7 @@ bool reachability_treet::dfs_position::write_to_file(
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
     entry.cur_thread = htons(it->cur_thread);
-    
+
     if (fwrite(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
@@ -645,6 +658,8 @@ reachability_treet::check_thread_viable(int tid, const expr2tc &expr, bool quiet
 goto_symext::symex_resultt *
 reachability_treet::get_next_formula()
 {
+
+  assert(execution_states.size() > 0 && "Must setup RT before exploring");
 
   while(!is_has_complete_formula())
   {

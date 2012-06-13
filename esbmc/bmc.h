@@ -27,7 +27,7 @@ class bmct:public messaget
 {
 public:
   bmct(const goto_functionst &funcs, optionst &opts,
-       contextt &_context, message_handlert &_message_handler):
+      contextt &_context, message_handlert &_message_handler):
     messaget(_message_handler),
     options(opts),
     context(_context),

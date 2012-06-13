@@ -2796,7 +2796,6 @@ z3_convt::set_to(const expr2tc &expr, bool value)
       union_vars.insert(std::pair<std::string, unsigned int>(ref, idx));
     }
   }
-
 }
 
 literalt
