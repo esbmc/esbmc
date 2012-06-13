@@ -1,9 +1,10 @@
 unsigned int nondet_uint();
 int nondet_int();
 
+#define SIZE 1
+
 main()
 {
-  unsigned int SIZE=1;
   unsigned int j,k;
   int array[SIZE], menor;
   
