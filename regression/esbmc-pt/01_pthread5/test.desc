@@ -5,3 +5,4 @@ main.c
 ^VERIFICATION SUCCESSFUL$
 --
 ^warning: ignoring
+^VERIFICATION FAILED$
