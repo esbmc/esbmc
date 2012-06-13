@@ -13,7 +13,7 @@ int main ()
   string str4="useful.";
 
 
-  string str=base;                // "this is a test string."
+  string str=base;  /*              // "this is a test string."
   str.replace(9,5,str2);          // "this is an example string."
   assert(str == "this is an example string.");
   
@@ -28,17 +28,19 @@ int main ()
   
   str.replace(22,1,3,'!');        // "this is a short phrase!!!"
   assert(str == "this is a short phrase!!!");
+  */
+  
   // Using iterators:                      0123456789*123456789*
   string::iterator it = str.begin();   //  ^
   str.replace(it,str.end()-3,str3);    // "sample phrase!!!"
-  assert(str == "sample phrase!!!");
+  assert(str == "sample phraseng.");
   
   str.replace(it,it+6,"replace it",7); // "replace phrase!!!"
-  assert(str == "replace phrase!!!");
+  assert(str == "replace phraseng.");
   
   it+=8;                               //          ^
   str.replace(it,it+6,"is cool");      // "replace is cool!!!"
-  assert(str == "replace is cool!!!");  
+  assert(str == "replace is coolng.");  
   
   cout << str << endl;
   return 0;
