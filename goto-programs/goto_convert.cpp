@@ -394,7 +394,9 @@ void goto_convertt::convert_catch(
   end_target->make_skip();
 
   // the first operand is the 'try' block
-  convert(to_code(code.op0()), dest);
+  goto_programt tmp;
+  convert(to_code(code.op0()), tmp);
+  dest.destructive_append(tmp);
 
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
@@ -411,7 +413,6 @@ void goto_convertt::convert_catch(
     // grab the ID and add to CATCH instruction
     exception_list.push_back(irept(block.get("exception_id")));
 
-    goto_programt tmp;
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
     dest.destructive_append(tmp);
@@ -2725,12 +2726,12 @@ void goto_convertt::convert_return(
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
 
-	if(options.get_bool_option("atomicity-check"))
-	{
+    if(options.get_bool_option("atomicity-check"))
+    {
       unsigned int globals = get_expr_number_globals(new_code.return_value());
       if(globals > 0)
-    	break_globals2assignments(new_code.return_value(), dest,code.location());
-	}
+        break_globals2assignments(new_code.return_value(), dest,code.location());
+    }
   }
 
   if(targets.return_value)
