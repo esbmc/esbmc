@@ -105,6 +105,8 @@ namespace std
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char);
 					buffer.pos++;
+					pos++;
+					pointer = pointer + sizeof(char);
 					return buffer;
 				}
 				//operator decreases pointer address, but returns old value.
@@ -124,6 +126,8 @@ namespace std
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char);
 					buffer.pos--;
+					pos--;
+					pointer = pointer - sizeof(char);
 					return buffer;
 				}
 
@@ -194,8 +198,9 @@ namespace std
 
 				iterator& operator += (int n){
 					iterator buffer;
-					buffer.pointer = pointer + sizeof(char)*n;
-					buffer.pos = pos + n;
+					buffer = buffer + n;
+					pointer = pointer + sizeof(char)*n;
+					pos+=n;
 					return buffer;
 				}
 
@@ -203,8 +208,9 @@ namespace std
 
 				iterator operator -= (int n){
 					iterator buffer;
-					buffer.pointer = pointer - sizeof(char)*n;
-					buffer.pos = pos - n;
+					buffer = buffer - n;
+					pointer = pointer - sizeof(char)*n;
+					pos += n;
 					return buffer;
 				}
 		};
@@ -483,9 +489,10 @@ namespace std
 
 		//new add
 		string& replace ( string::iterator i1, string::iterator i2, string& str );
-		string& replace ( string::iterator i1, string::iterator i2, const char* s, size_t n2 );
-		string& replace ( string::iterator i1, string::iterator i2, const char* s );
+		string& replace ( string::iterator i1, string::iterator i2, char* s, size_t n2 );
+		string& replace ( string::iterator i1, string::iterator i2, char* s );
 		string& replace ( string::iterator i1, string::iterator i2, size_t n2, char c );
+		string& replace ( string::iterator i1, string::iterator i2, string::iterator i3, string::iterator i4);
 
 		string& insert ( size_t pos1, string& s );
 		string& insert ( size_t pos1, string& s, size_t pos2, size_t n );
@@ -1627,35 +1634,49 @@ namespace std
 		this->insert(tmp_one,str.str);
 		return *this;
 	}
-	/*
-	string& replace ( iterator i1, iterator i2, const char* s, size_t n2 )
+
+	string& string::replace ( string::iterator i1, string::iterator i2, char* s, size_t n2 )
 	{
-		size_t beginn, end;
-		beginn = (size_t) i1->pointer;
-		end = (size_t) i2.pointer;
-		beginn = beginn - this.begin();
-		end = end - this.begin();
-		return replace(beginn, end - beginn, s, n2);
+		int tmp_one = i1.pos;
+		int tmp_two = i2.pos;
+		int tmpx = tmp_two - tmp_one;
+		this->replace (tmp_one,tmpx,s,n2);
+		return *this;
 	}
-	string& replace ( iterator i1, iterator i2, const char* s )
+
+
+	string& string::replace ( string::iterator i1, string::iterator i2, char* s )
 	{
-		size_t beginn, end;
-		beginn = (size_t) i1->pointer;
-		end = (size_t) i2.pointer;
-		beginn = beginn - this.begin();
-		end = end - this.begin();
-		return replace(beginn, end - beginn, s);
+		int tmp_one = i1.pos;
+		int tmp_two = i2.pos;
+		int tmpx = tmp_two - tmp_one;
+		this->erase(tmp_one,tmpx);
+		this->insert(tmp_one,s);
+		return *this;
 	}
-	string& replace ( iterator i1, iterator i2, size_t n2, char c )
+
+
+	string& string::replace ( string::iterator i1, string::iterator i2, size_t n2, char c )
 	{
-		size_t beginn, end;
-		beginn = (size_t) i1->pointer;
-		end = (size_t) i2.pointer;
-		beginn = beginn - this.begin();
-		end = end - this.begin();
-		return replace(beginn, end - beginn, n2, c);
+		int tmp_one = i1.pos;
+		int tmp_two = i2.pos+1;
+		int tmpk = tmp_two - tmp_one;
+		this->erase(tmp_one,tmpk);
+		int k;
+		char *tmp = new char[n2+1];
+		for(k=0;k<n2;k++)
+			tmp[k]=c;
+		tmp[k] = '\0';
+		this->insert(tmp_one,tmp);
+		return *this;
 	}
-*/
+
+	string& string::replace ( string::iterator i1, string::iterator i2, string::iterator i3, string::iterator i4 )
+	{
+
+		return *this;
+	}
+
 	int string::compare ( const char* s ) const
 	{
 		__ESBMC_HIDE:
