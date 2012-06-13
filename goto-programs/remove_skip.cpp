@@ -24,7 +24,7 @@ static bool is_skip(goto_programt::instructionst::iterator it)
 {
   if(it->is_skip())
     return !it->code.explict();
- 
+
   if(it->is_goto())
   {
     if(it->guard.is_false()) return true;
@@ -37,13 +37,13 @@ static bool is_skip(goto_programt::instructionst::iterator it)
 
     return it->targets.front()==next_it;
   }
-  
+
   if(it->is_other())
   {
     return it->code.is_nil() ||
            it->code.statement()=="skip";
   }
-  
+
   return false;
 }
 
@@ -71,7 +71,7 @@ void remove_skip(goto_programt &goto_program)
       it!=goto_program.instructions.end();)
   {
     goto_programt::targett old_target=it;
-    
+
     // for collecting labels
     std::list<irep_idt> labels;
 
@@ -88,7 +88,7 @@ void remove_skip(goto_programt &goto_program)
     }
 
     goto_programt::targett new_target=it;
-    
+
     // save labels
     it->labels.splice(it->labels.begin(), labels);
 
@@ -115,7 +115,7 @@ void remove_skip(goto_programt &goto_program)
           t_it!=i_it->targets.end();
           t_it++)
       {
-        new_targetst::const_iterator 
+        new_targetst::const_iterator
           result=new_targets.find(*t_it);
 
         if(result!=new_targets.end())
@@ -130,7 +130,7 @@ void remove_skip(goto_programt &goto_program)
      is_skip(--goto_program.instructions.end()) &&
      goto_program.target_numbers.find(--goto_program.instructions.end())==
      goto_program.target_numbers.end())
-    goto_program.instructions.pop_back();   
+    goto_program.instructions.pop_back();
 }
 
 /*******************************************************************\
