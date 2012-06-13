@@ -11,8 +11,6 @@ namespace std
 {
 struct istream: ios
 {
-//  streamsize width ( ) const;
-//  streamsize width ( streamsize wide );
   virtual ~istream ();
   istream(int id = 0): ios(), id(id) {_gcount = 0;};
   istream (streambuf * sb) {_gcount=0;};
@@ -95,8 +93,7 @@ istream& operator>> (istream& is, unsigned int& val ) {
 	is._gcount=0;
 	return is;
 }
-//istream& operator>> (istream& is, long& val );
-//istream& operator>> (istream& is, unsigned long& val );
+
 istream& operator>> (istream& is, float& val ) {
 	is._gcount=0;
 	return is;
@@ -105,7 +102,6 @@ istream& operator>> (istream& is, double& val ) {
 	is._gcount=0;
 	return is;
 }
-//istream& operator>> (istream& is, long double& val );
 istream& operator>> (istream& is, void*& val ) {
 	is._gcount=0;
 	return is;
@@ -130,9 +126,7 @@ istream& operator>> (istream& is, char& ch ) {
 	is._gcount=0;
 	return is;
 }
-//inline istream& operator>> (istream& is, signed char& ch ) {
-//	return (is >> reinterpret_cast <char&> (ch));
-//}
+
 inline istream& operator>> (istream& is, unsigned char& ch ) {
 	return (is >> reinterpret_cast <char&> (ch));
 }
@@ -141,52 +135,10 @@ istream& operator>> (istream& is, char* str ) {
   is._gcount = 0;
 	return is;
 }
-//istream& operator>> (istream& is, signed char* str );
 istream& operator>> (istream& is, unsigned char* str ) {
 	return (is >> reinterpret_cast <char*> (str));
 }
 istream& operator>> (istream& is, smanip sm );
-
-
-//inline istream& operator >> (istream& is, char& c)
-//{
-//  esbmc::esbmc_read_char(is.id,c);
-//  return is;
-//}
-//
-//template <class T>
-//T operator >> (istream& is, char c[]) {
-//  return is;
-//}
-//
-//inline bool operator >> (istream& is, char c[])
-//{
-//  //	return is;
-//  return nondet_bool();
-//}
-//
-//inline istream& operator >> (istream& is, int& i)
-//{
-//  esbmc::esbmc_read_int(is.id,i);
-//  return is;
-//}
-//
-////inline istream& operator >> (istream& is, smanip)
-////{
-////  return is;
-////}
-//
-//inline istream& operator >> (istream& is, unsigned long& l)
-//{
-//  esbmc::esbmc_read_unsigned_long(is.id,l);
-//  return is;
-//}
-//
-//inline istream& operator >> (istream& is, double& d)
-//{
-//  esbmc::esbmc_read_double(is.id,d);
-//  return is;
-//}
 
 int istream::get()
 {
