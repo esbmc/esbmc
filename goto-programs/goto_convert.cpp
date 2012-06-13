@@ -162,9 +162,6 @@ void goto_convertt::goto_convert_rec(
   convert(code, dest);
 
   finish_gotos();
-  remove_skip(dest);
-
-  dest.update();
 }
 
 /*******************************************************************\

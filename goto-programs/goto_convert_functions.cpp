@@ -16,6 +16,7 @@ Date: June 2003
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
+#include "remove_skip.h"
 
 /*******************************************************************\
 
@@ -198,77 +199,85 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   f.type=to_code_type(symbol.type);
   f.body_available=symbol.value.is_not_nil();
 
-  if(f.body_available)
+  if(!f.body_available) return;
+
+  if(!symbol.value.is_code())
   {
-    const code_typet::argumentst &arguments=f.type.arguments();
+    err_location(symbol.value);
+    throw "got invalid code for function `"+id2string(identifier)+"'";
+  }
 
-    std::list<irep_idt> arg_ids;
+  const code_typet::argumentst &arguments=f.type.arguments();
 
-    // add as local variables
-    for(code_typet::argumentst::const_iterator
-        it=arguments.begin();
-        it!=arguments.end();
-        it++)
-    {
-      const irep_idt &identifier=it->get_identifier();
-      assert(identifier!="");
-      arg_ids.push_back(identifier);
-    }
+  std::list<irep_idt> arg_ids;
 
-    if(!symbol.value.is_code())
-    {
-      err_location(symbol.value);
-      throw "got invalid code for function `"+id2string(identifier)+"'";
-    }
+  // add as local variables
+  for(code_typet::argumentst::const_iterator
+      it=arguments.begin();
+      it!=arguments.end();
+      it++)
+  {
+    const irep_idt &identifier=it->get_identifier();
+    assert(identifier!="");
+    arg_ids.push_back(identifier);
+  }
 
-    codet tmp(to_code(symbol.value));
+  if(!symbol.value.is_code())
+  {
+    err_location(symbol.value);
+    throw "got invalid code for function `"+id2string(identifier)+"'";
+  }
 
-    locationt end_location;
+  codet tmp(to_code(symbol.value));
 
-    if(to_code(symbol.value).get_statement()=="block")
-      end_location=static_cast<const locationt &>(
+  locationt end_location;
+
+  if(to_code(symbol.value).get_statement()=="block")
+    end_location=static_cast<const locationt &>(
         symbol.value.end_location());
-    else
-      end_location.make_nil();
+  else
+    end_location.make_nil();
 
-    targets=targetst();
-    targets.return_set=true;
-    targets.return_value=
+  targets=targetst();
+  targets.return_set=true;
+  targets.return_value=
       f.type.return_type().id()!="empty" &&
       f.type.return_type().id()!="constructor" &&
       f.type.return_type().id()!="destructor";
 
-    goto_convert_rec(tmp, f.body);
+  goto_convert_rec(tmp, f.body);
 
-    // add non-det return value, if needed
-    if(targets.return_value)
-      add_return(f, end_location);
+  // add non-det return value, if needed
+  if(targets.return_value)
+    add_return(f, end_location);
 
-    // add end of function
+  // add end of function
 
-    goto_programt::targett t=f.body.add_instruction();
-    t->type=END_FUNCTION;
-    t->location=end_location;
-    t->code.identifier(identifier);
+  goto_programt::targett t=f.body.add_instruction();
+  t->type=END_FUNCTION;
+  t->location=end_location;
+  t->code.identifier(identifier);
 
-    if(to_code(symbol.value).get_statement()=="block")
-      t->location=static_cast<const locationt &>(
+  if(to_code(symbol.value).get_statement()=="block")
+    t->location=static_cast<const locationt &>(
         symbol.value.end_location());
 
-    // do local variables
-    Forall_goto_program_instructions(i_it, f.body)
-    {
-      i_it->add_local_variables(arg_ids);
-      i_it->function=identifier;
-    }
-
-    f.body.compute_targets();
-    f.body.number_targets();
-
-    if(hide(f.body))
-      f.type.hide(true);
+  // do local variables
+  Forall_goto_program_instructions(i_it, f.body)
+  {
+    i_it->add_local_variables(arg_ids);
+    i_it->function=identifier;
   }
 
+  f.body.compute_targets();
+  f.body.number_targets();
+
+  remove_skip(f.body);
+
+  f.body.update();
+
+  if(hide(f.body))
+    f.type.hide(true);
 }
 
 /*******************************************************************\
@@ -400,7 +409,7 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
   // So; instead we test to see whether a type symbol is linked correctly, and
   // if it isn't we look up what module the current block of code came from and
   // try to guess what type symbol it should have.
- 
+
   typet type2;
   if (type.id() == "symbol") {
     if (type.identifier() == sname) {
