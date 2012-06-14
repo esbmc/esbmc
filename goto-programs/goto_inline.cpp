@@ -94,7 +94,10 @@ void goto_inlinet::parameter_assignments(
       exprt actual(*it1);
 
       // it should be the same exact type
-      if(!base_type_eq(arg_type, actual.type(), ns))
+      type2tc arg_type_2, actual_type_2;
+      migrate_type(arg_type, arg_type_2);
+      migrate_type(actual.type(), actual_type_2);
+      if (!base_type_eq(arg_type_2, actual_type_2, ns))
       {
         const typet &f_argtype = ns.follow(arg_type);
         const typet &f_acttype = ns.follow(actual.type());

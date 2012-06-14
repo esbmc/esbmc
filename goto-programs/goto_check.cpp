@@ -432,7 +432,10 @@ void goto_checkt::add_guarded_claim(
   // first try simplifier on it
   if(!options.get_bool_option("no-simplify"))
   {
-    base_type(expr, ns);
+    expr2tc tmpexpr;
+    migrate_expr(expr, tmpexpr);
+    base_type(tmpexpr, ns);
+    expr = migrate_expr_back(tmpexpr);
     simplify(expr);
   }
 
