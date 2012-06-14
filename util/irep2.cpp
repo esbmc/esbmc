@@ -816,9 +816,6 @@ BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
 
 template <class T>
-static inline int do_type_lt(const T &side1, const T &side2);
-
-template <class T>
 static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
 
 template <class T>
@@ -1062,9 +1059,8 @@ do_type_cmp(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
   return true; // Dummy field comparison.
 }
 
-template <>
 inline int
-do_type_lt<bool>(const bool &side1, const bool &side2)
+do_type_lt(const bool &side1, const bool &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1074,9 +1070,8 @@ do_type_lt<bool>(const bool &side1, const bool &side2)
     return 0;
 }
 
-template <>
 inline int
-do_type_lt<unsigned int>(const unsigned int &side1, const unsigned int &side2)
+do_type_lt(const unsigned int &side1, const unsigned int &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1086,17 +1081,15 @@ do_type_lt<unsigned int>(const unsigned int &side1, const unsigned int &side2)
     return 0;
 }
 
-template <>
 inline int
-do_type_lt<BigInt>(const BigInt &side1, const BigInt &side2)
+do_type_lt(const BigInt &side1, const BigInt &side2)
 {
   // BigInt also has its own less than comparator.
   return side1.compare(side2);
 }
 
-template <>
 inline int
-do_type_lt<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
+do_type_lt(const fixedbvt &side1, const fixedbvt &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1105,10 +1098,8 @@ do_type_lt<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
-                                  const std::vector<expr2tc> &side2)
+do_type_lt(const std::vector<expr2tc> &side1, const std::vector<expr2tc> &side2)
 {
 
 
@@ -1123,10 +1114,8 @@ do_type_lt<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<std::vector<type2tc> >(const std::vector<type2tc> &side1,
-                                  const std::vector<type2tc> &side2)
+do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 {
 
   int tmp = 0;
@@ -1140,10 +1129,9 @@ do_type_lt<std::vector<type2tc> >(const std::vector<type2tc> &side1,
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
-                                  const std::vector<irep_idt> &side2)
+do_type_lt(const std::vector<irep_idt> &side1,
+           const std::vector<irep_idt> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1152,10 +1140,9 @@ do_type_lt<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<std::vector<unsigned int> >(const std::vector<unsigned int> &side1,
-                                       const std::vector<unsigned int> &side2)
+do_type_lt(const std::vector<unsigned int> &side1,
+           const std::vector<unsigned int> &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1164,9 +1151,8 @@ do_type_lt<std::vector<unsigned int> >(const std::vector<unsigned int> &side1,
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
+do_type_lt(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return 0; // Catch nulls
@@ -1178,9 +1164,8 @@ do_type_lt<expr2tc>(const expr2tc &side1, const expr2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-template <>
 inline int
-do_type_lt<type2tc>(const type2tc &side1, const type2tc &side2)
+do_type_lt(const type2tc &side1, const type2tc &side2)
 {
   if (*side1.get() == *side2.get())
     return 0; // Both may be null;
@@ -1192,9 +1177,8 @@ do_type_lt<type2tc>(const type2tc &side1, const type2tc &side2)
     return side1->ltchecked(*side2.get());
 }
 
-template <>
 inline int
-do_type_lt<irep_idt>(const irep_idt &side1, const irep_idt &side2)
+do_type_lt(const irep_idt &side1, const irep_idt &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1203,18 +1187,14 @@ do_type_lt<irep_idt>(const irep_idt &side1, const irep_idt &side2)
   return 0;
 }
 
-template <>
 inline int
-do_type_lt<type2t::type_ids>(const type2t::type_ids &id,
-                             const type2t::type_ids &id2)
+do_type_lt(const type2t::type_ids &id, const type2t::type_ids &id2)
 {
   return 0; // Dummy field comparison
 }
 
-template <>
 inline int
-do_type_lt<const expr2t::expr_ids>(const expr2t::expr_ids &id,
-                                   const expr2t::expr_ids &id2)
+do_type_lt(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
 {
   return 0; // Dummy field comparison
 }
@@ -1587,23 +1567,23 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
 
-  tmp = do_type_lt<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr);
+  tmp = do_type_lt(derived_this->*field1_ptr, ref2->*field1_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr);
+  tmp = do_type_lt(derived_this->*field2_ptr, ref2->*field2_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr);
+  tmp = do_type_lt(derived_this->*field3_ptr, ref2->*field3_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr);
+  tmp = do_type_lt(derived_this->*field4_ptr, ref2->*field4_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field5_type>(derived_this->*field5_ptr, ref2->*field5_ptr);
+  tmp = do_type_lt(derived_this->*field5_ptr, ref2->*field5_ptr);
   if (tmp != 0)
     return tmp;
 
@@ -1807,23 +1787,23 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
 
-  tmp = do_type_lt<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr);
+  tmp = do_type_lt(derived_this->*field1_ptr, ref2->*field1_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr);
+  tmp = do_type_lt(derived_this->*field2_ptr, ref2->*field2_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr);
+  tmp = do_type_lt(derived_this->*field3_ptr, ref2->*field3_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr);
+  tmp = do_type_lt(derived_this->*field4_ptr, ref2->*field4_ptr);
   if (tmp != 0)
     return tmp;
 
-  tmp = do_type_lt<field5_type>(derived_this->*field5_ptr, ref2->*field5_ptr);
+  tmp = do_type_lt(derived_this->*field5_ptr, ref2->*field5_ptr);
   if (tmp != 0)
     return tmp;
 
