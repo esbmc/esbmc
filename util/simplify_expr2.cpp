@@ -124,7 +124,7 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
       // Need to switch this number to being an unsigned representation of the
       // same bit vector.
       int64_t the_num = tmp_bv.to_integer().to_int64();
-      uint64_t mask = (1 << (type->get_width())) - 1;
+      uint64_t mask = (1ULL << (type->get_width())) - 1ULL;
       uint64_t output = the_num & mask;
       tmp_bv.from_integer(BigInt(output));
     }
