@@ -499,8 +499,101 @@ namespace std
 		string& insert ( size_t pos1, const char* s, size_t n);
 		string& insert ( size_t pos1, const char* s );
 		string& insert ( size_t pos1, size_t n, char c );
-		iterator insert ( const_iterator p, char c );
-		void insert ( const_iterator p, size_t n, char c );
+		string& insert (iterator it_one, iterator it_two , iterator it_three);
+		iterator insert ( iterator p, char c )
+		{
+			int pos1 = p.pos;
+			int n = 1;
+			int i;
+			char *s = new char[n+1];
+			for (i = 0;i<n;i++){
+				s[i] = c;
+			}
+			int len  = this->length(),i,k;
+			int sLen = n;
+			__ESBMC_assert(pos1 < len, "overflow");
+			int lenOne = pos1 +1;
+			char* one = new char[lenOne];
+			for(i=0;i<pos1;i++){
+				one[i] = this->str[i];
+			}
+			int lenTwo = (len-pos1)+1;
+			char* two = new char[lenTwo];
+			for(k=0,i=pos1;i<len;i++,k++){
+				two[k] = this->str[i];
+			}
+			int totalLen = len + n;
+			this->str = new char[totalLen+1];
+			this->_size = totalLen;
+
+			for(i=0;i<lenOne-1;i++){
+				this->str[i] = one[i];
+			}
+			for(k=0;k<sLen;k++,i++){
+				this->str[i] = s[k];
+			}
+			for(k=0;k<lenTwo-1;k++,i++){
+				this->str[i] = two[k];
+			}
+			this->str[i] = '\0';
+			string::iterator it(this->str);
+			it.pos = 0;
+			return it;
+		}
+		string& insert ( const_iterator p, size_t n, char c )
+		{
+			int pos1 = p.pos;
+			int i;
+			char *s = new char[n+1];
+			for (i = 0;i<n;i++){
+				s[i] = c;
+			}
+			int len  = this->length(),i,k;
+			int sLen = n;
+			__ESBMC_assert(pos1 < len, "overflow");
+			if (pos1 == (len -1)){
+				char* one = new char[len];
+				for(i=0;i<len;i++){
+					one[i] = this->str[i];
+				}
+				int totalLen = len + n;
+				this->str = new char[totalLen+1];
+				this->_size = totalLen;
+				for(i=0;i<len;i++){
+					this->str[i] = one[i];
+				}
+				for(;i<totalLen;i++){
+					this->str[i] = c;
+				}
+				this->str[i] = '\0';
+				return *this;
+			}
+			int lenOne = pos1 +1;
+			char* one = new char[lenOne];
+			for(i=0;i<pos1;i++){
+				one[i] = this->str[i];
+			}
+			int lenTwo = (len-pos1)+1;
+			char* two = new char[lenTwo];
+			for(k=0,i=pos1;i<len;i++,k++){
+				two[k] = this->str[i];
+			}
+			int totalLen = len + n;
+			this->str = new char[totalLen+1];
+			this->_size = totalLen;
+
+			for(i=0;i<lenOne-1;i++){
+				this->str[i] = one[i];
+			}
+			for(k=0;k<sLen;k++,i++){
+				this->str[i] = s[k];
+			}
+			for(k=0;k<lenTwo-1;k++,i++){
+				this->str[i] = two[k];
+			}
+			this->str[i] = '\0';
+			return *this;
+		}
 		template<class InputIterator>
 		    void insert ( iterator p, InputIterator first, InputIterator last );
 		size_t copy ( char* s, size_t n, size_t pos = 0) const;
