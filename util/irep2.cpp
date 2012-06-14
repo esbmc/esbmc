@@ -816,9 +816,6 @@ BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
 
 template <class T>
-static inline bool do_type_cmp(const T &side1, const T &side2);
-
-template <class T>
 static inline int do_type_lt(const T &side1, const T &side2);
 
 template <class T>
@@ -973,70 +970,61 @@ type_to_string(const expr2t::expr_ids &id, int indent __attribute__((unused)))
   return "";
 }
 
-template <>
 inline bool
-do_type_cmp<bool>(const bool &side1, const bool &side2)
+do_type_cmp(const bool &side1, const bool &side2)
 {
   return (side1 == side2) ? true : false;
 }
 
-template <>
 inline bool
-do_type_cmp<unsigned int>(const unsigned int &side1, const unsigned int &side2)
+do_type_cmp(const unsigned int &side1, const unsigned int &side2)
 {
   return (side1 == side2) ? true : false;
 }
 
-template <>
 inline bool
-do_type_cmp<BigInt>(const BigInt &side1, const BigInt &side2)
+do_type_cmp(const BigInt &side1, const BigInt &side2)
 {
   // BigInt has its own equality operator.
   return (side1 == side2) ? true : false;
 }
 
-template <>
 inline bool
-do_type_cmp<fixedbvt>(const fixedbvt &side1, const fixedbvt &side2)
+do_type_cmp(const fixedbvt &side1, const fixedbvt &side2)
 {
   return (side1 == side2) ? true : false;
 }
 
-template <>
 inline bool
-do_type_cmp<std::vector<expr2tc> >(const std::vector<expr2tc> &side1,
-                                   const std::vector<expr2tc> &side2)
+do_type_cmp(const std::vector<expr2tc> &side1,
+            const std::vector<expr2tc> &side2)
 {
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<std::vector<type2tc> >(const std::vector<type2tc> &side1,
-                                   const std::vector<type2tc> &side2)
+do_type_cmp(const std::vector<type2tc> &side1,
+            const std::vector<type2tc> &side2)
 {
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<std::vector<irep_idt> >(const std::vector<irep_idt> &side1,
-                                    const std::vector<irep_idt> &side2)
+do_type_cmp(const std::vector<irep_idt> &side1,
+            const std::vector<irep_idt> &side2)
 {
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<std::vector<unsigned int> >(const std::vector<unsigned int> &side1,
-                                        const std::vector<unsigned int> &side2)
+do_type_cmp(const std::vector<unsigned int> &side1,
+            const std::vector<unsigned int> &side2)
 {
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
+do_type_cmp(const expr2tc &side1, const expr2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // Catch null
@@ -1046,9 +1034,8 @@ do_type_cmp<expr2tc>(const expr2tc &side1, const expr2tc &side2)
     return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<type2tc>(const type2tc &side1, const type2tc &side2)
+do_type_cmp(const type2tc &side1, const type2tc &side2)
 {
   if (side1.get() == side2.get())
     return true; // both null ptr check
@@ -1057,25 +1044,20 @@ do_type_cmp<type2tc>(const type2tc &side1, const type2tc &side2)
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<irep_idt>(const irep_idt &side1, const irep_idt &side2)
+do_type_cmp(const irep_idt &side1, const irep_idt &side2)
 {
   return (side1 == side2);
 }
 
-template <>
 inline bool
-do_type_cmp<type2t::type_ids>(const type2t::type_ids &id,
-                              const type2t::type_ids &id2)
+do_type_cmp(const type2t::type_ids &id, const type2t::type_ids &id2)
 {
   return true; // Dummy field comparison.
 }
 
-template <>
 inline bool
-do_type_cmp<const expr2t::expr_ids>(const expr2t::expr_ids &id,
-                                    const expr2t::expr_ids &id2)
+do_type_cmp(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
 {
   return true; // Dummy field comparison.
 }
@@ -1569,19 +1551,19 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
 
-  if (!do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
+  if (!do_type_cmp(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
 
-  if (!do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
+  if (!do_type_cmp(derived_this->*field2_ptr, ref2->*field2_ptr))
     return false;
 
-  if (!do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
+  if (!do_type_cmp(derived_this->*field3_ptr, ref2->*field3_ptr))
     return false;
 
-  if (!do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
+  if (!do_type_cmp(derived_this->*field4_ptr, ref2->*field4_ptr))
     return false;
 
-  if (!do_type_cmp<field5_type>(derived_this->*field5_ptr, ref2->*field5_ptr))
+  if (!do_type_cmp(derived_this->*field5_ptr, ref2->*field5_ptr))
     return false;
 
   return true;
@@ -1788,19 +1770,19 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
 
-  if (!do_type_cmp<field1_type>(derived_this->*field1_ptr, ref2->*field1_ptr))
+  if (!do_type_cmp(derived_this->*field1_ptr, ref2->*field1_ptr))
     return false;
 
-  if (!do_type_cmp<field2_type>(derived_this->*field2_ptr, ref2->*field2_ptr))
+  if (!do_type_cmp(derived_this->*field2_ptr, ref2->*field2_ptr))
     return false;
 
-  if (!do_type_cmp<field3_type>(derived_this->*field3_ptr, ref2->*field3_ptr))
+  if (!do_type_cmp(derived_this->*field3_ptr, ref2->*field3_ptr))
     return false;
 
-  if (!do_type_cmp<field4_type>(derived_this->*field4_ptr, ref2->*field4_ptr))
+  if (!do_type_cmp(derived_this->*field4_ptr, ref2->*field4_ptr))
     return false;
 
-  if (!do_type_cmp<field5_type>(derived_this->*field5_ptr, ref2->*field5_ptr))
+  if (!do_type_cmp(derived_this->*field5_ptr, ref2->*field5_ptr))
     return false;
 
   return true;
