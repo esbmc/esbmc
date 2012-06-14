@@ -148,26 +148,6 @@ typedef irep_container<expr2t, -1> expr2tc;
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-template <class T>
-static inline std::string type_to_string(const T &theval, int indent);
-
-template <class T>
-static inline bool do_type_cmp(const T &side1, const T &side2);
-
-template <class T>
-static inline int do_type_lt(const T &side1, const T &side2);
-
-template <class T>
-static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
-
-template <class T>
-static inline void do_type_list_operands(const T &theval,
-                                         std::list<const expr2tc*> &inp);
-
-template <class T>
-static inline void do_type_list_operands(T& theval,
-                                         std::list<expr2tc*> &inp);
-
 /** Base class for all types */
 class type2t
 {
