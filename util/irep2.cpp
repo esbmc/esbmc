@@ -816,9 +816,6 @@ BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
 
 template <class T>
-static inline std::string type_to_string(const T &theval, int indent);
-
-template <class T>
 static inline bool do_type_cmp(const T &side1, const T &side2);
 
 template <class T>
@@ -835,26 +832,22 @@ template <class T>
 static inline void do_type_list_operands(T& theval,
                                          std::list<expr2tc*> &inp);
 
-template <>
 inline std::string
-type_to_string<bool>(const bool &thebool, int indent __attribute__((unused)))
+type_to_string(const bool &thebool, int indent __attribute__((unused)))
 {
   return (thebool) ? "true" : "false";
 }
 
-template <>
 inline std::string
-type_to_string<unsigned int>(const unsigned int &theval,
-                             int indent __attribute__((unused)))
+type_to_string(const unsigned int &theval, int indent __attribute__((unused)))
 {
   char buffer[64];
   snprintf(buffer, 63, "%d", theval);
   return std::string(buffer);
 }
 
-template <>
 inline std::string
-type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
+type_to_string(const BigInt &theint, int indent __attribute__((unused)))
 {
   char buffer[256], *buf;
 
@@ -862,18 +855,14 @@ type_to_string<BigInt>(const BigInt &theint, int indent __attribute__((unused)))
   return std::string(buf);
 }
 
-template <>
 inline std::string
-type_to_string<fixedbvt>(const fixedbvt &theval,
-                         int indent __attribute__((unused)))
+type_to_string(const fixedbvt &theval, int indent __attribute__((unused)))
 {
   return theval.to_ansi_c_string();
 }
 
-template <>
 inline std::string
-type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
-                                     int indent)
+type_to_string(const std::vector<expr2tc> &theval, int indent)
 {
   char buffer[64];
   std::string astring = "\n";
@@ -890,10 +879,8 @@ type_to_string<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
   return astring;
 }
 
-template <>
 inline std::string
-type_to_string<std::vector<type2tc> >(const std::vector<type2tc> &theval,
-                                      int indent)
+type_to_string(const std::vector<type2tc> &theval, int indent)
 {
   char buffer[64];
   std::string astring = "\n";
@@ -910,10 +897,9 @@ type_to_string<std::vector<type2tc> >(const std::vector<type2tc> &theval,
   return astring;
 }
 
-template <>
 inline std::string
-type_to_string<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
-                                       int indent __attribute__((unused)))
+type_to_string(const std::vector<irep_idt> &theval,
+               int indent __attribute__((unused)))
 {
   char buffer[64];
   std::string astring = "\n";
@@ -930,11 +916,9 @@ type_to_string<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
   return astring;
 }
 
-template <>
 inline std::string
-type_to_string<std::vector<unsigned int> >(
-                                       const std::vector<unsigned int> &theval,
-                                       int indent __attribute__((unused)))
+type_to_string(const std::vector<unsigned int> &theval,
+               int indent __attribute__((unused)))
 {
   char buffer[64];
   std::string astring = "\n";
@@ -952,9 +936,8 @@ type_to_string<std::vector<unsigned int> >(
   return astring;
 }
 
-template <>
 inline std::string
-type_to_string<expr2tc>(const expr2tc &theval, int indent)
+type_to_string(const expr2tc &theval, int indent)
 {
 
   if (theval.get() != NULL)
@@ -962,9 +945,8 @@ type_to_string<expr2tc>(const expr2tc &theval, int indent)
   return "";
 }
 
-template <>
 inline std::string
-type_to_string<type2tc>(const type2tc &theval, int indent)
+type_to_string(const type2tc &theval, int indent)
 {
 
   if (theval.get() != NULL)
@@ -973,26 +955,20 @@ type_to_string<type2tc>(const type2tc &theval, int indent)
     return "";
 }
 
-template <>
 inline std::string
-type_to_string<irep_idt>(const irep_idt &theval,
-                         int indent __attribute__((unused)))
+type_to_string(const irep_idt &theval, int indent __attribute__((unused)))
 {
   return theval.as_string();
 }
 
-template <>
 inline std::string
-type_to_string<type2t::type_ids>(const type2t::type_ids &id,
-                                 int indent __attribute__((unused)))
+type_to_string(const type2t::type_ids &id, int indent __attribute__((unused)))
 {
   return "";
 }
 
-template <>
 inline std::string
-type_to_string<const expr2t::expr_ids>(const expr2t::expr_ids &id,
-                                 int indent __attribute__((unused)))
+type_to_string(const expr2t::expr_ids &id, int indent __attribute__((unused)))
 {
   return "";
 }
@@ -1467,7 +1443,7 @@ do_type2string(const T &thething, unsigned int idx,
                std::string (&names)[esbmct::num_type_fields],
                list_of_memberst &vec, unsigned int indent)
 {
-  vec.push_back(member_entryt(names[idx], type_to_string<T>(thething, indent)));
+  vec.push_back(member_entryt(names[idx], type_to_string(thething, indent)));
 }
 
 template <>
