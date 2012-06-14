@@ -816,9 +816,6 @@ BOOST_STATIC_ASSERT(type2t::end_type_id <= 256);
 BOOST_STATIC_ASSERT(expr2t::end_expr_id <= 256);
 
 template <class T>
-static inline void do_type_crc(const T &theval, boost::crc_32_type &crc);
-
-template <class T>
 static inline void do_type_list_operands(const T &theval,
                                          std::list<const expr2tc*> &inp);
 
@@ -1199,9 +1196,8 @@ do_type_lt(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
   return 0; // Dummy field comparison
 }
 
-template <>
 inline void
-do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
+do_type_crc(const bool &thebool, boost::crc_32_type &crc)
 {
 
   if (thebool)
@@ -1211,18 +1207,16 @@ do_type_crc<bool>(const bool &thebool, boost::crc_32_type &crc)
   return;
 }
 
-template <>
 inline void
-do_type_crc<unsigned int>(const unsigned int &theval, boost::crc_32_type &crc)
+do_type_crc(const unsigned int &theval, boost::crc_32_type &crc)
 {
 
   crc.process_bytes(&theval, sizeof(theval));
   return;
 }
 
-template <>
 inline void
-do_type_crc<BigInt>(const BigInt &theint, boost::crc_32_type &crc)
+do_type_crc(const BigInt &theint, boost::crc_32_type &crc)
 {
   unsigned char buffer[256];
 
@@ -1241,55 +1235,45 @@ do_type_crc<BigInt>(const BigInt &theint, boost::crc_32_type &crc)
   return;
 }
 
-template <>
 inline void
-do_type_crc<fixedbvt>(const fixedbvt &theval, boost::crc_32_type &crc)
+do_type_crc(const fixedbvt &theval, boost::crc_32_type &crc)
 {
 
-  do_type_crc<BigInt>(theval.to_integer(), crc);
+  do_type_crc(theval.to_integer(), crc);
   return;
 }
 
-template <>
 inline void
-do_type_crc<std::vector<expr2tc> >(const std::vector<expr2tc> &theval,
-                                   boost::crc_32_type &crc)
+do_type_crc(const std::vector<expr2tc> &theval, boost::crc_32_type &crc)
 {
   forall_exprs(it, theval)
     (*it)->do_crc(crc);
 }
 
-template <>
 inline void
-do_type_crc<std::vector<type2tc> >(const std::vector<type2tc> &theval,
-                                   boost::crc_32_type &crc)
+do_type_crc(const std::vector<type2tc> &theval, boost::crc_32_type &crc)
 {
   forall_types(it, theval)
     (*it)->do_crc(crc);
 }
 
-template <>
 inline void
-do_type_crc<std::vector<irep_idt> >(const std::vector<irep_idt> &theval,
-                                    boost::crc_32_type &crc)
+do_type_crc(const std::vector<irep_idt> &theval, boost::crc_32_type &crc)
 {
   forall_names(it, theval)
     crc.process_bytes((*it).as_string().c_str(), (*it).as_string().size());
 }
 
-template <>
 inline void
-do_type_crc<std::vector<unsigned int> >(const std::vector<unsigned int> &theval,
-                                        boost::crc_32_type &crc)
+do_type_crc(const std::vector<unsigned int> &theval, boost::crc_32_type &crc)
 {
   for (std::vector<unsigned int>::const_iterator it = theval.begin();
        it != theval.end(); it++)
     crc.process_bytes(&(*it), sizeof(unsigned int));
 }
 
-template <>
 inline void
-do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
+do_type_crc(const expr2tc &theval, boost::crc_32_type &crc)
 {
 
   if (theval.get() != NULL)
@@ -1297,9 +1281,8 @@ do_type_crc<expr2tc>(const expr2tc &theval, boost::crc_32_type &crc)
   return;
 }
 
-template <>
 inline void
-do_type_crc<type2tc>(const type2tc &theval, boost::crc_32_type &crc)
+do_type_crc(const type2tc &theval, boost::crc_32_type &crc)
 {
 
   if (theval.get() != NULL)
@@ -1307,26 +1290,22 @@ do_type_crc<type2tc>(const type2tc &theval, boost::crc_32_type &crc)
   return;
 }
 
-template <>
 inline void
-do_type_crc<irep_idt>(const irep_idt &theval, boost::crc_32_type &crc)
+do_type_crc(const irep_idt &theval, boost::crc_32_type &crc)
 {
 
   crc.process_bytes(theval.as_string().c_str(), theval.as_string().size());
   return;
 }
 
-template <>
 inline void
-do_type_crc<type2t::type_ids>(const type2t::type_ids &i,boost::crc_32_type &crc)
+do_type_crc(const type2t::type_ids &i,boost::crc_32_type &crc)
 {
   return; // Dummy field crc
 }
 
-template <>
 inline void
-do_type_crc<const expr2t::expr_ids>(const expr2t::expr_ids &i,
-                                    boost::crc_32_type &crc)
+do_type_crc(const expr2t::expr_ids &i, boost::crc_32_type &crc)
 {
   return; // Dummy field crc
 }
@@ -1608,11 +1587,11 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
   const derived *derived_this = static_cast<const derived*>(this);
 
   derived_this->expr2t::do_crc(crc);
-  do_type_crc<field1_type>(derived_this->*field1_ptr, crc);
-  do_type_crc<field2_type>(derived_this->*field2_ptr, crc);
-  do_type_crc<field3_type>(derived_this->*field3_ptr, crc);
-  do_type_crc<field4_type>(derived_this->*field4_ptr, crc);
-  do_type_crc<field5_type>(derived_this->*field5_ptr, crc);
+  do_type_crc(derived_this->*field1_ptr, crc);
+  do_type_crc(derived_this->*field2_ptr, crc);
+  do_type_crc(derived_this->*field3_ptr, crc);
+  do_type_crc(derived_this->*field4_ptr, crc);
+  do_type_crc(derived_this->*field5_ptr, crc);
   return;
 }
 
@@ -1828,11 +1807,11 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   const derived *derived_this = static_cast<const derived*>(this);
 
   derived_this->type2t::do_crc(crc);
-  do_type_crc<field1_type>(derived_this->*field1_ptr, crc);
-  do_type_crc<field2_type>(derived_this->*field2_ptr, crc);
-  do_type_crc<field3_type>(derived_this->*field3_ptr, crc);
-  do_type_crc<field4_type>(derived_this->*field4_ptr, crc);
-  do_type_crc<field5_type>(derived_this->*field5_ptr, crc);
+  do_type_crc(derived_this->*field1_ptr, crc);
+  do_type_crc(derived_this->*field2_ptr, crc);
+  do_type_crc(derived_this->*field3_ptr, crc);
+  do_type_crc(derived_this->*field4_ptr, crc);
+  do_type_crc(derived_this->*field5_ptr, crc);
   return;
 }
 
