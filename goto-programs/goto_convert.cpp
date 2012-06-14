@@ -1954,6 +1954,8 @@ void goto_convertt::assume_cond(
   if (neg)
     result_expr.make_not();
 
+  remove_sideeffects(result_expr, dest, true);
+
   migrate_expr(result_expr, e->guard);
 
   dest.destructive_append(tmp_e);
