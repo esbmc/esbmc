@@ -1782,11 +1782,7 @@ void goto_convertt::make_nondet_assign(
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
     if (state.components()[j].type().is_array())
-    {
-      rhs_expr=exprt("array_of", state.components()[j].type());
-      exprt value=side_effect_expr_nondett(state.components()[j].type().subtype());
-      rhs_expr.move_to_operands(value);
-    }
+      rhs_expr = side_effect_expr_nondett(state.components()[j].type());
 
     std::string identifier;
     identifier = "cs$"+i2string(state_counter);
