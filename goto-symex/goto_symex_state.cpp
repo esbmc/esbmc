@@ -115,7 +115,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 	}
 
       const with2t &with = to_with2t(expr);
-      if (!constant_propagation(with.source_value))
+
+      if (is_constant_array_of2t(with.source_value))
+      {
+        // Don't constant propagate any assignments to array_of's that haven't
+        // been simplified away. There's no benefit at all.
+        with_counter=0;
+        return false;
+      }
+      else if (!constant_propagation(with.source_value))
       {
     	with_counter=0;
         return false;
