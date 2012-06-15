@@ -285,6 +285,11 @@ namespace std
 							return !(pointer == right.pointer);
 						}
 
+			bool operator!= ( iterator right )
+			{
+				return !(pointer == right.pointer);
+			}
+
 			//operator returns true if pointer address of right is higher than this
 
 			bool operator < ( const iterator& right)const{
