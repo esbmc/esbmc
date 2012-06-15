@@ -11,6 +11,57 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 
+void
+hacky_hash::ingest(uint8_t b)
+{
+  val ^= (b << pos++);
+  pos &= 1;
+  val = (pos == 0) ? (val << 5 | val >> 11) : val;
+}
+
+void
+hacky_hash::ingest(uint16_t b)
+{
+  val ^= b;
+  val = val << 5 | val >> 11;
+}
+
+void
+hacky_hash::ingest(uint32_t b)
+{
+  val ^= (uint16_t)b;
+  val = val << 5 | val >> 11;
+  val ^= (uint16_t)(b >> 16);
+  val = val << 5 | val >> 11;
+}
+
+void
+hacky_hash::ingest(uint64_t b)
+{
+  val ^= (uint16_t)b;
+  val = val << 5 | val >> 11;
+  val ^= (uint16_t)(b >> 16);
+  val = val << 5 | val >> 11;
+  val ^= (uint16_t)(b >> 32);
+  val = val << 5 | val >> 11;
+  val ^= (uint16_t)(b >> 48);
+  val = val << 5 | val >> 11;
+}
+
+void
+hacky_hash::ingest(void *bs, unsigned int sz)
+{
+  uint8_t *foo = (uint8_t*)bs;
+  for (unsigned int i = 0; i < sz; i++)
+    ingest(foo[i]);
+}
+
+uint16_t
+hacky_hash::result(void) const
+{
+  return val;
+}
+
 std::string
 indent_str(unsigned int indent)
 {
@@ -141,15 +192,15 @@ type2t::dump(void) const
 uint32_t
 type2t::crc(void) const
 {
-  boost::crc_32_type crc;
-  do_crc(crc);
-  return crc.checksum();
+  hacky_hash hash;
+  do_crc(hash);
+  return hash.result();
 }
 
 void
-type2t::do_crc(boost::crc_32_type &crc) const
+type2t::do_crc(hacky_hash &hash) const
 {
-  crc.process_byte(type_id);
+  hash.ingest((uint8_t)type_id);
   return;
 }
 
@@ -384,16 +435,16 @@ expr2t::lt(const expr2t &ref) const
 uint32_t
 expr2t::crc(void) const
 {
-  boost::crc_32_type crc;
-  do_crc(crc);
-  return crc.checksum();
+  hacky_hash hash;
+  do_crc(hash);
+  return hash.result();
 }
 
 void
-expr2t::do_crc(boost::crc_32_type &crc) const
+expr2t::do_crc(hacky_hash &hash) const
 {
-  crc.process_byte(expr_id);
-  type->do_crc(crc);
+  hash.ingest((uint8_t)expr_id);
+  type->do_crc(hash);
   return;
 }
 
@@ -1189,35 +1240,35 @@ do_type_lt(const expr2t::expr_ids &id, const expr2t::expr_ids &id2)
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const bool &thebool, boost::crc_32_type &crc)
+do_type_crc(const bool &thebool, hacky_hash &hash)
 {
 
   if (thebool)
-    crc.process_byte(0);
+    hash.ingest((uint8_t)0);
   else
-    crc.process_byte(1);
+    hash.ingest((uint8_t)1);
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const unsigned int &theval, boost::crc_32_type &crc)
+do_type_crc(const unsigned int &theval, hacky_hash &hash)
 {
 
-  crc.process_bytes(&theval, sizeof(theval));
+  hash.ingest((void*)&theval, sizeof(theval));
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const BigInt &theint, boost::crc_32_type &crc)
+do_type_crc(const BigInt &theint, hacky_hash &hash)
 {
   unsigned char buffer[256];
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
     if (theint.is_zero())
-      crc.process_byte(0);
+      hash.ingest((uint8_t)0);
     else
-      crc.process_bytes(buffer, theint.get_len());
+      hash.ingest(buffer, theint.get_len());
   } else {
     // bigint is too large to fit in that static buffer. This is insane; but
     // rather than wasting time heap allocing we'll just skip recording data,
@@ -1228,76 +1279,76 @@ do_type_crc(const BigInt &theint, boost::crc_32_type &crc)
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const fixedbvt &theval, boost::crc_32_type &crc)
+do_type_crc(const fixedbvt &theval, hacky_hash &hash)
 {
 
-  do_type_crc(theval.to_integer(), crc);
+  do_type_crc(theval.to_integer(), hash);
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const std::vector<expr2tc> &theval, boost::crc_32_type &crc)
+do_type_crc(const std::vector<expr2tc> &theval, hacky_hash &hash)
 {
   forall_exprs(it, theval)
-    (*it)->do_crc(crc);
+    (*it)->do_crc(hash);
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const std::vector<type2tc> &theval, boost::crc_32_type &crc)
+do_type_crc(const std::vector<type2tc> &theval, hacky_hash &hash)
 {
   forall_types(it, theval)
-    (*it)->do_crc(crc);
+    (*it)->do_crc(hash);
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const std::vector<irep_idt> &theval, boost::crc_32_type &crc)
+do_type_crc(const std::vector<irep_idt> &theval, hacky_hash &hash)
 {
   forall_names(it, theval)
-    crc.process_bytes((*it).as_string().c_str(), (*it).as_string().size());
+    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const std::vector<unsigned int> &theval, boost::crc_32_type &crc)
+do_type_crc(const std::vector<unsigned int> &theval, hacky_hash &hash)
 {
   for (std::vector<unsigned int>::const_iterator it = theval.begin();
        it != theval.end(); it++)
-    crc.process_bytes(&(*it), sizeof(unsigned int));
+    hash.ingest((void*)&(*it), sizeof(unsigned int));
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const expr2tc &theval, boost::crc_32_type &crc)
+do_type_crc(const expr2tc &theval, hacky_hash &hash)
 {
 
   if (theval.get() != NULL)
-    theval->do_crc(crc);
+    theval->do_crc(hash);
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const type2tc &theval, boost::crc_32_type &crc)
+do_type_crc(const type2tc &theval, hacky_hash &hash)
 {
 
   if (theval.get() != NULL)
-    theval->do_crc(crc);
+    theval->do_crc(hash);
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const irep_idt &theval, boost::crc_32_type &crc)
+do_type_crc(const irep_idt &theval, hacky_hash &hash)
 {
 
-  crc.process_bytes(theval.as_string().c_str(), theval.as_string().size());
+  hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
   return;
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const type2t::type_ids &i,boost::crc_32_type &crc)
+do_type_crc(const type2t::type_ids &i, hacky_hash &hash)
 {
   return; // Dummy field crc
 }
 
 static inline __attribute__((always_inline)) void
-do_type_crc(const expr2t::expr_ids &i, boost::crc_32_type &crc)
+do_type_crc(const expr2t::expr_ids &i, hacky_hash &hash)
 {
   return; // Dummy field crc
 }
@@ -1567,16 +1618,16 @@ template <class derived, class subclass,
         field5_type field5_class::*field5_ptr>
 void
 esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr>::do_crc
-          (boost::crc_32_type &crc) const
+          (hacky_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
 
-  derived_this->expr2t::do_crc(crc);
-  do_type_crc(derived_this->*field1_ptr, crc);
-  do_type_crc(derived_this->*field2_ptr, crc);
-  do_type_crc(derived_this->*field3_ptr, crc);
-  do_type_crc(derived_this->*field4_ptr, crc);
-  do_type_crc(derived_this->*field5_ptr, crc);
+  derived_this->expr2t::do_crc(hash);
+  do_type_crc(derived_this->*field1_ptr, hash);
+  do_type_crc(derived_this->*field2_ptr, hash);
+  do_type_crc(derived_this->*field3_ptr, hash);
+  do_type_crc(derived_this->*field4_ptr, hash);
+  do_type_crc(derived_this->*field5_ptr, hash);
   return;
 }
 
@@ -1786,17 +1837,17 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
                                         field3_type, field3_class, field3_ptr,
                                         field4_type, field4_class, field4_ptr,
                                         field5_type, field5_class, field5_ptr>
-      ::do_crc (boost::crc_32_type &crc) const
+      ::do_crc (hacky_hash &hash) const
 {
 
   const derived *derived_this = static_cast<const derived*>(this);
 
-  derived_this->type2t::do_crc(crc);
-  do_type_crc(derived_this->*field1_ptr, crc);
-  do_type_crc(derived_this->*field2_ptr, crc);
-  do_type_crc(derived_this->*field3_ptr, crc);
-  do_type_crc(derived_this->*field4_ptr, crc);
-  do_type_crc(derived_this->*field5_ptr, crc);
+  derived_this->type2t::do_crc(hash);
+  do_type_crc(derived_this->*field1_ptr, hash);
+  do_type_crc(derived_this->*field2_ptr, hash);
+  do_type_crc(derived_this->*field3_ptr, hash);
+  do_type_crc(derived_this->*field4_ptr, hash);
+  do_type_crc(derived_this->*field5_ptr, hash);
   return;
 }
 

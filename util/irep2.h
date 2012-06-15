@@ -56,6 +56,23 @@
   for (expr2t::Expr_operands::iterator it = ops.begin(); \
        it != ops.end(); it++)
 
+class hacky_hash
+{
+public:
+  hacky_hash() : val(0), pos(0) { }
+
+  void ingest(uint8_t b);
+  void ingest(uint16_t b);
+  void ingest(uint32_t b);
+  void ingest(uint64_t b);
+  void ingest(void *bs, unsigned int sz);
+
+  uint16_t result(void) const;
+
+  uint16_t val;
+  unsigned int pos;
+};
+
 class prop_convt;
 class type2t;
 class expr2t;
@@ -197,7 +214,7 @@ public:
   virtual bool cmp(const type2t &ref) const = 0;
   virtual int lt(const type2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  virtual void do_crc(hacky_hash &hash) const;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -332,7 +349,7 @@ public:
   virtual bool cmp(const expr2t &ref) const;
   virtual int lt(const expr2t &ref) const;
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
-  virtual void do_crc(boost::crc_32_type &crc) const;
+  virtual void do_crc(hacky_hash &hash) const;
   virtual void list_operands(std::list<const expr2tc*> &inp) const = 0;
 
   // Caution - updating sub operands of an expr2t *must* always preserve type
@@ -444,7 +461,7 @@ namespace esbmct {
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
-    virtual void do_crc(boost::crc_32_type &crc) const;
+    virtual void do_crc(hacky_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
@@ -523,7 +540,7 @@ namespace esbmct {
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
-    virtual void do_crc(boost::crc_32_type &crc) const;
+    virtual void do_crc(hacky_hash &hash) const;
   };
 }; // esbmct
 
