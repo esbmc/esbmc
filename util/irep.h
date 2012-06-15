@@ -422,14 +422,6 @@ public:
     return get_bool(a_binding);
   }
 
-  inline bool is_bounds_check_set(void) const {
-    return (get(a_bounds_check) != "");
-  }
-
-  inline bool bounds_check(void) const {
-    return get_bool(a_bounds_check);
-  }
-
   inline bool cmt_constant(void) const {
     return get_bool(a_cmt_constant);
   }
@@ -688,14 +680,6 @@ public:
 
   inline void binding(bool val) {
     set(a_binding, val);
-  }
-
-  inline void bounds_check(const irep_idt val) {
-    set(a_bounds_check, val);
-  }
-
-  inline void bounds_check(bool val) {
-    set(a_bounds_check, val);
   }
 
   inline void code(const irept &val) {
@@ -1040,7 +1024,7 @@ public:
   static const irep_idt a_pretty_name, a_property, a_size, a_integer_bits, a_to;
   static const irep_idt a_failed_symbol, a_dynamic, a_cmt_base_name, a_id_class;
   static const irep_idt a_cmt_identifier, a_cformat, a_cmt_width, a_axiom;
-  static const irep_idt a_binding, a_bounds_check, a_cmt_constant, a_default;
+  static const irep_idt a_binding, a_cmt_constant, a_default;
   static const irep_idt a_ellipsis, a_explicit, a_file_local, a_free_var;
   static const irep_idt a_hex_or_oct, a_hide, a_implicit, a_incomplete;
   static const irep_idt a_initialization, a_inlined, a_invalid_object;

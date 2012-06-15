@@ -277,11 +277,18 @@ void goto_checkt::bounds_check(
   if(expr.id()!="index")
     return;
 
-  if(expr.is_bounds_check_set() && !expr.bounds_check())
-    return;
-
   if(expr.operands().size()!=2)
     throw "index takes two operands";
+
+  // Don't bounds check the initial index of argv in the "main" function; it's
+  // always correct, and just adds needless claims. In the past a "no bounds
+  // check" attribute in old irep handled this.
+  if (expr.op0().id_string() == "symbol" &&
+      expr.op0().identifier() == "c::argv'" &&
+      expr.op1().id_string() == "symbol" &&
+      expr.op1().identifier() == "c::argc'")
+    return;
+
 
   typet array_type=ns.follow(expr.op0().type());
 
