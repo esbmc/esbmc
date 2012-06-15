@@ -74,10 +74,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
 
-  if (is_constant_expr(expr))
+  if (is_constant_expr(expr)) {
     return true;
-
-  if (is_address_of2t(expr))
+  }
+  else if (is_symbol2t(expr) && to_symbol2t(expr).name == "NULL")
+  {
+    // Null is also essentially a constant.
+    return true;
+  }
+  else if (is_address_of2t(expr))
   {
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
   }
