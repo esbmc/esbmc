@@ -543,6 +543,22 @@ with2t::do_simplify(bool second __attribute__((unused))) const
     constant_struct2tc s = expr2tc(c_struct.clone());
     s.get()->datatype_members[no] = update_value;
     return expr2tc(s);
+  } else if (is_constant_union2t(source_value)) {
+    const constant_union2t &c_union = to_constant_union2t(source_value);
+    const union_type2t &thetype = to_union_type(c_union.type);
+    const constant_string2t &memb = to_constant_string2t(update_field);
+    unsigned no = get_component_number(c_union.type, memb.value);
+    assert(no < thetype.member_names.size());
+
+    // If the update value type matches the current lump of data's type, we can
+    // just replace it with the new value. As far as I can tell, constant unions
+    // only ever contain one member, and it's the member most recently written.
+    if (thetype.members[no] != update_value->type)
+      return expr2tc();
+
+    std::vector<expr2tc> newmembers;
+    newmembers.push_back(update_value);
+    return expr2tc(new constant_union2t(type, newmembers));
   } else if (is_constant_array2t(source_value) &&
              is_constant_int2t(update_field)) {
     const constant_array2t &array = to_constant_array2t(source_value);
