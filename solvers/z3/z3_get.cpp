@@ -211,14 +211,16 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
 
     expr2tc expr;
     int i = 0;
-    int comp_nr;
+    // Z3's own int64 type. It uses a long long rather than C99 int64_t,
+    // because MSVC doesn't support C99, the !@*&%'s
+    __int64 comp_nr;
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
     tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
 
     assert(Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST);
-    Z3_bool tbool = Z3_get_numeral_int(z3_ctx, tmp, &comp_nr);
+    Z3_bool tbool = Z3_get_numeral_int64(z3_ctx, tmp, &comp_nr);
     assert(tbool);
 
     if (num_fields == 0)
