@@ -1487,7 +1487,7 @@ z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *&_bv)
 
   // See pointer_object2t conversion:
   const expr2tc *ptr = &offs.ptr_obj;
-  while (is_typecast2t(*ptr))
+  while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)->type))
     ptr = &to_typecast2t(*ptr).from;
 
   convert_bv(*ptr, pointer);
@@ -1507,7 +1507,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *&_bv)
   // would make the tuple select we're about to make explode.
 
   const expr2tc *ptr = &obj.ptr_obj;
-  while (is_typecast2t(*ptr))
+  while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)->type))
     ptr = &to_typecast2t(*ptr).from;
 
   convert_bv(*ptr, pointer);
