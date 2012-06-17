@@ -103,6 +103,11 @@
        it != ops.end(); it++)
 
 /** Like forall_operands2, but for non-const exprs.
+ *
+ *  If you feel the need to replace the contents of an expression without
+ *  knowing its concrete type (i.e., in simplification) you can assign an
+ *  expr2tc into the expr using one of these operand pointers.
+ *
  *  @see forall_operands2
  */
 #define Forall_operands2(it, ops, theexpr) \
