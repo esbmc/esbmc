@@ -406,8 +406,20 @@ public:
 };
 
 
+/** Fetch identifying name for a type.
+ *  I.E., this is the class of the type, what you'd get if you called type.id()
+ *  with the old stringy irep. Ideally this should be a class method, but as it
+ *  was added as a hack I haven't got round to it yet.
+ *  @param type Type to fetch identifier for
+ *  @return String containing name of type class.
+ */
 std::string get_type_id(const type2t &type);
 
+/** Fetch identifying name for a type.
+ *  Just passes through to type2t accepting function with the same name.
+ *  @param type Type to fetch identifier for
+ *  @return String containing name of type class.
+ */
 static inline std::string get_type_id(const type2tc &type)
 {
   return get_type_id(*type);
