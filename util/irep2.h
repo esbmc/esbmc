@@ -107,6 +107,14 @@
   for (expr2t::Expr_operands::iterator it = ops.begin(); \
        it != ops.end(); it++)
 
+/** Hash calculating class for irep2 data.
+ *  This class takes lumps of data from irep2's internal types and munges them
+ *  into a hash. This exists because the crc32 being used before was rather
+ *  slow. The implementation behind this (just an xor and a roll) is very simple
+ *  and probably doesn't have any nice distribution properties, but improved
+ *  regression test speeds by a couple of seconds, and one test I was worried
+ *  about by 25%.
+ */
 class hacky_hash
 {
 public:
