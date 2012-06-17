@@ -1,6 +1,10 @@
 #ifndef _UTIL_IREP2_H_
 #define _UTIL_IREP2_H_
 
+/** @file irep2.h
+ *  Classes and definitions for non-stringy internal representation.
+ */
+
 #include <stdarg.h>
 
 #include <vector>
@@ -18,36 +22,85 @@
 
 // XXXjmorse - abstract, access modifies, need consideration
 
+/** Iterate over all expr2tc's in a vector.
+ *  Deals only with constant vectors.
+ *  @see Forall_exprs
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of expr2tc's.
+ */
 #define forall_exprs(it, vect) \
   for (std::vector<expr2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all expr2tc's in a vector.
+ *  Deals only with non-constant vectors.
+ *  @see forall_exprs
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of expr2tc's.
+ */
 #define Forall_exprs(it, vect) \
   for (std::vector<expr2tc>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all type2tc's in a vector.
+ *  Deals only with constant vectors
+ *  @see Forall_types
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of type2tc's.
+ */
 #define forall_types(it, vect) \
   for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all type2tc's in a vector.
+ *  Deals only with non-constant vectors
+ *  @see forall_types
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of type2tc's.
+ */
 #define Forall_types(it, vect) \
   for (std::vector<type2tc>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all irep_idt's in a vector.
+ *  Deals only with constant vectors of string-pool IDs.
+ *  @see Forall_names
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of irep_idts's.
+ */
 #define forall_names(it, vect) \
   for (std::vector<irep_idt>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all irep_idt's in a vector.
+ *  Deals only with non-constant vectors of string-pool IDs.
+ *  @see forall_names
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of irep_idts's.
+ */
 #define Forall_names(it, vect) \
   for (std::vector<std::string>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all expr-like operands in an irep.
+ *  This macro generates a list of all irep2 operands to a particular irep2,
+ *  and then iterates over them. Fixed-type operands (such as the member name
+ *  in a member2t) are not part of the list. This macro declares a std::list of
+ *  expr2tc's in the current scope.
+ *  @see Forall_operands2
+ *  @param it Name to give iterator to be declared
+ *  @param ops Name for std::list of expr2tc's to be declared
+ *  @param theexpr expr2tc to retrieve list of operands from.
+ */
 #define forall_operands2(it, ops, theexpr) \
   expr2t::expr_operands ops; \
   theexpr->list_operands(ops); \
   for (expr2t::expr_operands::const_iterator it = ops.begin(); \
        it != ops.end(); it++)
 
+/** Like forall_operands2, but for non-const exprs.
+ *  @see forall_operands2
+ */
 #define Forall_operands2(it, ops, theexpr) \
   expr2t::Expr_operands ops; \
   theexpr.get()->list_operands(ops); \
