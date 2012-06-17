@@ -248,7 +248,10 @@ typedef irep_container<expr2t, -1> expr2tc;
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-/** Base class for all types */
+/** Base class for all types.
+ *  Contains only a type identifier enumeration - for some types (such as bool,
+ *  or empty,) there's no need for any significant amount of data to be stored.
+ */
 class type2t
 {
 public:
@@ -273,30 +276,129 @@ public:
     end_type_id
   };
 
-  // Class to be thrown when attempting to fetch the width of a symbolic type,
-  // such as empty or code. Caller will have to worry about what to do about
-  // that.
+  /** Symbolic type exception class.
+   *  To be thrown when attempting to fetch the width of a symbolic type, such
+   *  as empty or code. Caller will have to worry about what to do about that.
+   */
   class symbolic_type_excp {
   };
 
 protected:
+  /** Primary constructor.
+   *  @param id Type ID of type being constructed
+   */
   type2t(type_ids id);
+
+  /** Copy constructor */
   type2t(const type2t &ref);
 
 public:
+  /** Despatcher for SMT conversion.
+   *  Each subclass of type2t overrides this method, and provides a routine
+   *  that will invoke a method in the class prop_convt that will convert it
+   *  to SMT representation. This converted representation is assigned to the
+   *  pointer arg, which is assumed to be an appropriate pointer type for the
+   *  prop_convt object being passed down. Implemented in bulk by type_methods
+   *  template.
+   *  @see type_methods
+   *  @param prop_convt Object to perform SMT conversion with.
+   *  @param arg Reference to pointer to assign output to.
+   */
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+
+  /** Fetch bit width of this type.
+   *  For a particular type, calculate its size in a bit representation of
+   *  itself. May throw various exceptions depending on whether this operation
+   *  is viable - for example, for symbol types, infinite sized or dynamically
+   *  sized arrays.
+   *  @throws symbolic_type_excp
+   *  @throws array_type2t::inf_sized_array_excp
+   *  @throws array_type2t::dyn_sized_array_excp
+   *  @return Size of types byte representation, in bits
+   */
   virtual unsigned int get_width(void) const = 0;
+
+  /* These are all self explanatory */
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
-  int ltchecked(const type2t &ref) const;
+
+  /** Produce a string representation of type.
+   *  Takes body of the current type and produces a human readable
+   *  representation. Similar to the string-irept's pretty method, although a
+   *  different format.
+   *  @param indent Number of spaces to indent lines by in the output
+   *  @return String obj containing representation of this object
+   */
   std::string pretty(unsigned int indent = 0) const;
+
+  /** Dump object string representation to stdout.
+   *  This take the output of the pretty method, and dumps it to stdout. To be
+   *  used for debugging and when single stepping in gdb.
+   *  @see pretty
+   */
   void dump(void) const;
+
+  /** Produce a checksum/hash of the current object.
+   *  Takes current object and produces a lossy digest of it. Originally used
+   *  crc32, now uses a more hacky but faster hash function. For use in hash
+   *  objects.
+   *  @see do_crc
+   *  @return Digest of the current type.
+   */
   uint32_t crc(void) const;
+
+  /** Perform checked invocation of cmp method.
+   *  Takes reference to another type - if they have the same type id, invoke
+   *  the cmp function and return its result. Otherwise, return false. Using
+   *  this method ensures thatthe implementer of cmp knows the reference it
+   *  operates on is on the same type as itself.
+   *  @param ref Reference to type to compare this object against
+   *  @return True if types are the same, false otherwise.
+   */
   bool cmpchecked(const type2t &ref) const;
+
+  /** Perform checked invocation of lt method.
+   *  Identical to cmpchecked, except with the lt method.
+   *  @see cmpchecked
+   *  @param ref Reference to type to measure this against.
+   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
+   */
+  int ltchecked(const type2t &ref) const;
+
+  /** Virtual method to compare two types.
+   *  To be overridden by an extending type; assumes that itself and the
+   *  parameter are of the same extended type. Call via cmpchecked.
+   *  @see cmpchecked
+   *  @param ref Reference to (same class of) type to compare against
+   *  @return True if types match, false otherwise
+   */
   virtual bool cmp(const type2t &ref) const = 0;
+
+  /** Virtual method to compare two types.
+   *  To be overridden by an extending type; assumes that itself and the
+   *  parameter are of the same extended type. Call via cmpchecked.
+   *  @see cmpchecked
+   *  @param ref Reference to (same class of) type to compare against
+   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
+   */
   virtual int lt(const type2t &ref) const;
+
+  /** Extract a list of members from type as strings.
+   *  Produces a list of pairs, mapping a member name to a string value. Used
+   *  in the body of the pretty method.
+   *  @see pretty
+   *  @param indent Number of spaces to indent output strings with, if multiline
+   *  @return list of name:value pairs.
+   */
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
+
+  /** Perform crc operation accumulating into parameter.
+   *  Performs the operation of the cmp method, but overridden to be specific to
+   *  a particular type. Accumulates data into the hash object parameter.
+   *  @see cmp
+   *  @param hash Object to accumulate hash data into.
+   */
   virtual void do_crc(hacky_hash &hash) const;
 
   /** Instance of type_ids recording this types type. */
