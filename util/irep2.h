@@ -137,6 +137,30 @@ class type2t;
 class expr2t;
 class constant_array2t;
 
+/** Reference counted container for expr2t based classes.
+ *  This class extends boost shared_ptr's to contain anything that's a subclass
+ *  of expr2t. It provides several ways of accessing the contained pointer;
+ *  crucially it ensures that the only way to get a non-const reference or
+ *  pointer is via the get() method, which call the detach() method.
+ *
+ *  This exists to ensure that we honour the model set forth by the old string
+ *  based internal representation - specifically, that if you performed a const
+ *  operation on an irept (fetching data) then the contained piece of data
+ *  could continue to be shared between numerous data structures, for example
+ *  a piece of code could exist in a contextt, a namespacet, and a goto_programt
+ *  and all would share the same contained data structure, preventing additional
+ *  memory consumption.
+ *
+ *  If anything copied an irept from one of these place it'd also share that
+ *  contained data; but if it made a modifying operation (add, set, or just
+ *  taking a non-const reference the contained data,) then the detach() method
+ *  would be called, which duplicated the contained item and let the current
+ *  piece of code modify the duplicate copy, while all the other storage
+ *  locations continued to share the original.
+ *
+ *  So yeah, that's what this class attempts to implement, via the medium of
+ *  boosts shared_ptr.
+ */
 template <class T, int expid>
 class irep_container : public boost::shared_ptr<T>
 {
