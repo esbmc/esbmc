@@ -401,11 +401,12 @@ namespace esbmct {
      field5_type field5_class::*field5_ptr = &field5_class::expr_id>
   class expr_methods : public subclass
   {
+  public:
     class dummy_type_tag {
+    public:
       typedef int type;
     };
 
-  public:
     template <class arbitary = dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,expr2t>, arbitary >::type* = NULL)
@@ -481,11 +482,12 @@ namespace esbmct {
           field5_type field5_class::*field5_ptr = &field5_class::type_id>
   class type_methods : public subclass
   {
+  public:
     class dummy_type_tag {
+    public:
       typedef int type;
     };
 
-  public:
     template <class arbitary = dummy_type_tag>
     type_methods(type2t::type_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
