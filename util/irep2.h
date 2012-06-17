@@ -87,6 +87,10 @@
  *  and then iterates over them. Fixed-type operands (such as the member name
  *  in a member2t) are not part of the list. This macro declares a std::list of
  *  expr2tc's in the current scope.
+ *
+ *  NB: This iterates of expr2tc _pointers_. So, you need to dereference first
+ *  the iterator, then the pointer, i.e. "(*it)->blah".
+ *
  *  @see Forall_operands2
  *  @param it Name to give iterator to be declared
  *  @param ops Name for std::list of expr2tc's to be declared
