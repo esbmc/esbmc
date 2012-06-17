@@ -734,7 +734,19 @@ public:
   type2tc type;
 };
 
+/** Fetch string identifier for an expression.
+ *  Returns the class name of the expr passed in - this is equivalent to the
+ *  result of expr.id() in old stringy irep. Should ideally be a method of
+ *  expr2t, but haven't got around to moving it yet.
+ *  @param expr Expression to operate upon
+ *  @return String containing class name of expression.
+ */
 std::string get_expr_id(const expr2t &expr);
+
+/** Fetch string identifier for an expression.
+ *  Like the expr2t equivalent with the same name, but de-ensapculates an
+ *  expr2tc.
+ */
 static inline std::string get_expr_id(const expr2tc &expr)
 {
   return get_expr_id(*expr);
