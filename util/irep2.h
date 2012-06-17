@@ -752,14 +752,69 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-// for "ESBMC templates",
+/** A namespace for "ESBMC templates".
+ *  This means anything designed to mess with expressions or types declared in
+ *  this header, via the medium of templates. */
 namespace esbmct {
 
   class blank_method_operand {
   };
 
+  /** Maximum number of fields to support in expr2t subclasses. This value
+   *  controls the types of any arrays that need to consider the number of
+   *  fields. Unfortunately it can't control template parameters, because
+   *  vardic templates are C++11. */
   const unsigned int num_type_fields = 5;
 
+  /** Template for providing templated methods to expr2t classes.
+   *
+   *  What this does: we give expr_methods a set of template parameters that
+   *  describe the structure of an expr2t subclass. For each field, we give
+   *  the template:
+   *
+   *    - The type of the field
+   *    - The class that field is part of
+   *    - A pointer offset to that field.
+   *
+   *  What this means, is that we can @a type @a generically access a member
+   *  of a class from within the template, without knowing what type it is,
+   *  what its name is, or even what type contains it.
+   *
+   *  We can then use that to make all the boring methods of expr2t type
+   *  generic too. For example: we can make the comparision method by accessing
+   *  each field in the class we're dealing with, passing them to another
+   *  function to do the comparison (with the type resolved by templates or
+   *  via overloading), and then inspecting the output of that.
+   *
+   *  In fact, we can make type generic implementations of all the following
+   *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
+   *  list_operands.
+   *
+   *  So, that's what this template provides; an expr2t class can be made by
+   *  inheriting from this template, telling it what class it'll end up with,
+   *  and what to subclass from, and what the fields in the class being derived
+   *  from look like. This means we can construct a type hierarchy with whatever
+   *  inheretence we like and whatever fields we like, then latch expr_methods
+   *  on top of that to implement all the anoying boring boilerplate code.
+   *
+   *  @tparam derived Type of class that'll derive from this template.
+   *  @tparam subclass Type of class for this template to derive from.
+   *  @tparam field1_type Type of 1st field in subclass.
+   *  @tparam field1_class Class that 1st field belongs to.
+   *  @tparam field1_ptr Class pointer to first field.
+   *  @tparam field2_type Type of 2st field in subclass.
+   *  @tparam field2_class Class that 2st field belongs to.
+   *  @tparam field2_ptr Class pointer to first field.
+   *  @tparam field3_type Type of 3st field in subclass.
+   *  @tparam field3_class Class that 3st field belongs to.
+   *  @tparam field3_ptr Class pointer to first field.
+   *  @tparam field4_type Type of 4st field in subclass.
+   *  @tparam field4_class Class that 4st field belongs to.
+   *  @tparam field4_ptr Class pointer to first field.
+   *  @tparam field5_type Type of 5st field in subclass.
+   *  @tparam field5_class Class that 5st field belongs to.
+   *  @tparam field5_ptr Class pointer to first field.
+   */
   template <class derived, class subclass,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
