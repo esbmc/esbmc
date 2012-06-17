@@ -394,7 +394,7 @@ public:
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
 
   /** Perform crc operation accumulating into parameter.
-   *  Performs the operation of the cmp method, but overridden to be specific to
+   *  Performs the operation of the crc method, but overridden to be specific to
    *  a particular type. Accumulates data into the hash object parameter.
    *  @see cmp
    *  @param hash Object to accumulate hash data into.
