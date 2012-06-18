@@ -1217,7 +1217,10 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Empty type. For void pointers and the like, with no type. No extra data */
+/** Empty type.
+ *  For void pointers and the like, with no type. No extra data.
+ *  @extends type2t
+ */
 class empty_type2t : public empty_type_methods
 {
 public:
@@ -1228,12 +1231,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Symbol type. Temporary, prior to linking up types after parsing, or when
- *  a struct/array contains a recursive pointer to its own type. */
-
+/** Symbolic type.
+ *  Temporary, prior to linking up types after parsing, or when a struct/array
+ *  contains a recursive pointer to its own type.
+ *  @extends symbol_type_data
+ */
 class symbol_type2t : public symbol_type_methods
 {
 public:
+  /** Primary constructor. @param sym_name Name of symbolic type. */
   symbol_type2t(const dstring sym_name) :
     symbol_type_methods(symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref) :
