@@ -931,6 +931,10 @@ namespace esbmct {
     virtual expr2t *clone_raw(void) const;
   };
 
+  /** Template for generating type2t boilerplate methods.
+   *  Take a look at expr_methods for how this works, in an identical fashion.
+   *  @see expr_methods
+   */
   template <class derived, class subclass,
           typename field1_type = type2t::type_ids, class field1_class = type2t,
           field1_type field1_class::*field1_ptr = &field1_class::type_id,
