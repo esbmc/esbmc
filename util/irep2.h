@@ -2584,18 +2584,27 @@ typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
         expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>
         code_cpp_throw_expr_methods;
 
-/** Constant integer class. Records a constant integer of an arbitary
- *  precision */
+/** Constant integer class.
+ *  Records a constant integer of an arbitary precision, signed or unsigned.
+ *  Simplification operations will cause the integer to be clipped to whatever
+ *  bit size is in expr type.
+ *  @extends constant_int_data
+ */
 class constant_int2t : public constant_int_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this integer.
+   *  @param input BigInt object containing the integer we're dealing with
+   */
   constant_int2t(const type2tc &type, const BigInt &input)
     : constant_int_expr_methods(type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
     : constant_int_expr_methods(ref) { }
 
-  /** Accessor for fetching native int of this constant */
+  /** Accessor for fetching machine-word unsigned integer of this constant */
   unsigned long as_ulong(void) const;
+  /** Accessor for fetching machine-word integer of this constant */
   long as_long(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
