@@ -846,12 +846,27 @@ namespace esbmct {
      field5_type field5_class::*field5_ptr = &field5_class::expr_id>
   class expr_methods : public subclass
   {
+    // Dummy type tag - exists to be an arbitary, local class, for use in some
+    // templates. See below.
   public:
     class dummy_type_tag {
     public:
       typedef int type;
     };
 
+    // So to make constructor disabling work, we have to turn it into a
+    // template. Do this by adding a template parameter that has a default and
+    // isn't used.
+    //
+    // Then, we add a dummy end argument with a default - this never actually
+    // gets an argument from the user. However, the type for it is calculated
+    // via the boost::lazy_enable_if template, which causes an error if the
+    // condition given to it is false. That error stops this template from
+    // being instanciated anywhere, so the constructor never exists.
+    //
+    // The condition given to the boost template just checks something against
+    // the types in the overall template parameters. In this case, we only want
+    // this constructor if we're subclassing the expr2t class directly.
     template <class arbitary = dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,expr2t>, arbitary >::type* = NULL)
