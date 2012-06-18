@@ -1342,11 +1342,23 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Array type. Comes with a subtype of the array and a size that might be
- *  constant, might be nondeterministic. */
+/** Array type.
+ *  Comes with a subtype of the array and a size that might be constant, might
+ *  be nondeterministic, might be infinite. These facts are recorded in the
+ *  array_size and size_is_infinite fields.
+ *
+ *  If size_is_infinite is true, array_size will be null. If array_size is
+ *  not a constant number, then it's a dynamically sized array.
+ *  @extends array_data
+ */
 class array_type2t : public array_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param subtype Type of elements in this array.
+   *  @param size Size of this array.
+   *  @param inf Whether or not this array is infinitely sized
+   */
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
     : array_type_methods (array_id, subtype, size, inf) { }
   array_type2t(const array_type2t &ref)
@@ -1354,13 +1366,14 @@ public:
 
   virtual unsigned int get_width(void) const;
 
-  // Exception for invalid manipulations of an infinitely sized array. No actual
-  // data stored.
+  /** Exception for invalid manipulations of an infinitely sized array. No
+   *  actual data stored. */
   class inf_sized_array_excp {
   };
 
-  // Exception for invalid manipultions of dynamically sized arrays. No actual
-  // data stored.
+  /** Exception for invalid manipultions of dynamically sized arrays.
+   *  Stores the size of the array in the exception; this way the catcher
+   *  has it immediately to hand. */
   class dyn_sized_array_excp {
   public:
     dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
