@@ -1443,9 +1443,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** C++ Name type.
+ *  Contains a type name, but also a vector of template parameters.
+ *  I assume something in the C++ frontend uses this.
+ *  @extends cpp_name_data
+ */
 class cpp_name_type2t : public cpp_name_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param n Name of this type.
+   *  @param ta Vector of template arguments (types).
+   */
   cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
     : cpp_name_type_methods(cpp_name_id, n, ta){}
   cpp_name_type2t(const cpp_name_type2t &ref)
