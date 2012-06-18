@@ -2652,16 +2652,23 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant class for string constants. */
+/** Constant class for string constants.
+ *  Contains an irep_idt representing the constant string.
+ *  @extends constant_string_data
+ */
 class constant_string2t : public constant_string_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this string; presumably a string_type2t.
+   *  @param stringref String pool'd string we're dealing with
+   */
   constant_string2t(const type2tc &type, const irep_idt &stringref)
     : constant_string_expr_methods(type, constant_string_id, stringref) { }
   constant_string2t(const constant_string2t &ref)
     : constant_string_expr_methods(ref) { }
 
-  /** Convert string to a constant length array */
+  /** Convert string to a constant length array of characters */
   expr2tc to_array(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
