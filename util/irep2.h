@@ -3149,9 +3149,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nxor operation. Invert bits in bitvector operand. Operand must have the
+ *  same type as this expr. @extends bitnot_data */
 class bitnot2t : public bitnot_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v Value to invert */
   bitnot2t(const type2tc &type, const expr2tc &v)
     : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const bitnot2t &ref)
@@ -3162,9 +3167,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Logical shift right. Shifts operand 1 to the right by the number of bits in
+ *  operand 2, with zeros shifted into empty spaces. All types must be integers,
+ *  will probably find that the shifted value type must match the expr type.
+ *  @extends bit_2ops */
 class lshr2t : public lshr_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expression.
+   *  @param s1 Value to be shifted.
+   *  @param s2 Number of bits to shift by, potentially nondeterministic. */
   lshr2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : lshr_expr_methods(t, lshr_id, s1, s2) {}
   lshr2t(const lshr2t &ref)
@@ -3175,9 +3188,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic negation. Negate the operand, which must be a number type. Operand
+ *  type must match expr type. @extends arith_1op */
 class neg2t : public neg_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param val Value to negate. */
   neg2t(const type2tc &type, const expr2tc &val)
     : neg_expr_methods(type, neg_id, val) {}
   neg2t(const neg2t &ref)
@@ -3188,9 +3206,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic abs. Take absolute value of the operand, which must be a number
+ *  type. Operand type must match expr type. @extends arith_1op */
 class abs2t : public abs_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param val Value to abs. */
   abs2t(const type2tc &type, const expr2tc &val)
     : abs_expr_methods(type, abs_id, val) {}
   abs2t(const abs2t &ref)
