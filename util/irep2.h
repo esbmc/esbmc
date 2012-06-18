@@ -1383,11 +1383,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Pointer type. Simply has a subtype, of what it points to. No other
- *  attributes */
+/** Pointer type.
+ *  Simply has a subtype, of what it points to. No other attributes.
+ *  @extends pointer_data
+ */
 class pointer_type2t : public pointer_type_methods
 {
 public:
+  /** Primary constructor. @param subtype Subtype of this pointer */
   pointer_type2t(const type2tc subtype)
     : pointer_type_methods(pointer_id, subtype) { }
   pointer_type2t(const pointer_type2t &ref)
@@ -1397,9 +1400,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Fixed bitvector type.
+ *  Contains a spec for a fixed bitwidth number -- this is the equivalent of a
+ *  fixedbv_spect in the old irep situation. Stores how bits are distributed
+ *  over integer bits and fraction bits.
+ *  @extend fixedbv_data
+ */
 class fixedbv_type2t : public fixedbv_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param width Total number of bits in this type of fixedbv
+   *  @param integer Number of integer bits in this type of fixedbv
+   */
   fixedbv_type2t(unsigned int width, unsigned int integer)
     : fixedbv_type_methods(fixedbv_id, width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
@@ -1409,9 +1422,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** String type class.
+ *  Slightly artificial as original irep had no type for this; Represents the
+ *  type of a string constant. Because it needs a bit width, we also store the
+ *  size of the constant string in elements.
+ *  @extends string_data
+ */
 class string_type2t : public string_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param elements Number of 8-bit characters in string constant.
+   */
   string_type2t(unsigned int elements)
     : string_type_methods(string_id, elements) { }
   string_type2t(const string_type2t &ref)
