@@ -917,6 +917,8 @@ namespace esbmct {
                                     field5_type, field5_class, field5_ptr> &ref)
       : subclass(ref) { }
 
+    // Override expr2t methods that we're going to be generating automagically
+
     virtual void convert_smt(prop_convt &obj, void *&arg) const;
     virtual expr2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
