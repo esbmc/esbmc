@@ -2840,9 +2840,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** If-then-else expression.
+ *  Represents a ternary operation, (cond) ? truevalue : falsevalue.
+ *  @extends if_data
+ */
 class if2t : public if_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type this expression evaluates to.
+   *  @param cond Condition to evaulate which side of ternary operator is used.
+   *  @param trueval Value to use if cond evaluates to true.
+   *  @param falseval Value to use if cond evaluates to false.
+   */
   if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
     : if_expr_methods(type, if_id, cond, trueval, falseval) {}
