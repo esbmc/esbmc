@@ -1203,7 +1203,10 @@ typedef esbmct::type_methods<cpp_name_type2t, cpp_name_data,
         std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
         cpp_name_type_methods;
 
-/** Boolean type. No additional data */
+/** Boolean type.
+ *  Identifies a boolean type. Contains no additional data.
+ *  @extends typet
+ */
 class bool_type2t : public bool_type_methods
 {
 public:
