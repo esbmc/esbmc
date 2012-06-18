@@ -2758,9 +2758,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Symbol type.
+ *  Contains the name of some variable. Various levels of renaming.
+ *  @extends symbol_data
+ */
 class symbol2t : public symbol_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type that this symbol has
+   *  @param init Name of this symbol
+   */
   symbol2t(const type2tc &type, const irep_idt &init)
     : symbol_expr_methods(type, symbol_id, init) { }
   symbol2t(const symbol2t &ref)
