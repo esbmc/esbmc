@@ -1498,10 +1498,12 @@ type_macros(cpp_name);
 #undef dynamic_cast
 #endif
 
+/** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
 
+/** Test whether type is a number type - bv or fixedbv. */
 inline bool is_number_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
