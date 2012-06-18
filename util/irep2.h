@@ -2610,12 +2610,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant fixedbv class. Records a floating point number in what I assume
+/** Constant fixedbv class. Records a fixed-width number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
- *  as fraction/integer parts. */
+ *  as fraction/integer parts. Stored in a fixedbvt.
+ *  @extends constant_fixedbv_data
+ */
 class constant_fixedbv2t : public constant_fixedbv_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression.
+   *  @param value fixedbvt object containing number we'll be operating on
+   */
   constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
     : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
@@ -2624,16 +2630,23 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant boolean value.
+ *  Contains a constant bool; rather self explanatory.
+ *  @extends constant_bool_data
+ */
 class constant_bool2t : public constant_bool_expr_methods
 {
 public:
+  /** Primary constructor. @param value True or false */
   constant_bool2t(bool value)
     : constant_bool_expr_methods(type_pool.get_bool(), constant_bool_id, value)
       { }
   constant_bool2t(const constant_bool2t &ref)
     : constant_bool_expr_methods(ref) { }
 
+  /** Return whether contained boolean is true. */
   bool is_true(void) const;
+  /** Return whether contained boolean is false. */
   bool is_false(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
