@@ -2777,9 +2777,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Typecast expression.
+ *  Represents cast from contained expression 'from' to the type of this
+ *  typecast.
+ *  @extends typecast_data
+ */
 class typecast2t : public typecast_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type to typecast to
+   *  @param from Expression to cast from.
+   */
   typecast2t(const type2tc &type, const expr2tc &from)
     : typecast_expr_methods(type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
