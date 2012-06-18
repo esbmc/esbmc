@@ -2717,9 +2717,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant array.
+ *  Contains a vector of array elements, pretty self explanatory. Only valid if
+ *  its type has a constant sized array, can't have constant arrays of dynamic
+ *  or infinitely sized arrays.
+ *  @extends constant_datatype_data
+ */
 class constant_array2t : public constant_array_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this array, must be a constant sized array
+   *  @param membrs Vector of elements in this array
+   */
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members) { }
   constant_array2t(const constant_array2t &ref)
@@ -2728,9 +2738,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant array of one particular value.
+ *  Expression with array type, possibly dynamic or infinitely sized, with
+ *  all elements initialized to a single value.
+ *  @extends constant_array_of_data
+ */
 class constant_array_of2t : public constant_array_of_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression, must be an array.
+   *  @param init Initializer for each element in this array
+   */
   constant_array_of2t(const type2tc &type, const expr2tc &init)
     : constant_array_of_expr_methods(type, constant_array_of_id, init) { }
   constant_array_of2t(const constant_array_of2t &ref)
