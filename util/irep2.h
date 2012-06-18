@@ -2955,9 +2955,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Not operation. Inverts boolean operand. Always has boolean type.
+ *  @extends not_data */
 class not2t : public not_expr_methods
 {
 public:
+  /** Primary constructor. @param val Boolean typed operand to invert. */
   not2t(const expr2tc &val)
   : not_expr_methods(type_pool.get_bool(), not_id, val) {}
   not2t(const not2t &ref)
@@ -2968,9 +2971,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** And operation. Computes boolean value of (side_1 & side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class and2t : public and_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   and2t(const expr2tc &s1, const expr2tc &s2)
   : and_expr_methods(type_pool.get_bool(), and_id, s1, s2) {}
   and2t(const and2t &ref)
@@ -2981,9 +2987,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Or operation. Computes boolean value of (side_1 | side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class or2t : public or_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   or2t(const expr2tc &s1, const expr2tc &s2)
   : or_expr_methods(type_pool.get_bool(), or_id, s1, s2) {}
   or2t(const or2t &ref)
@@ -2994,9 +3003,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Xor operation. Computes boolean value of (side_1 ^ side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class xor2t : public xor_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   xor2t(const expr2tc &s1, const expr2tc &s2)
   : xor_expr_methods(type_pool.get_bool(), xor_id, s1, s2) {}
   xor2t(const xor2t &ref)
@@ -3007,9 +3019,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Implies operation. Computes boolean value of (side_1 -> side_2). Always
+ *  results in boolean type. @extends logic_2ops */
 class implies2t : public implies_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   implies2t(const expr2tc &s1, const expr2tc &s2)
   : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2) {}
   implies2t(const implies2t &ref)
