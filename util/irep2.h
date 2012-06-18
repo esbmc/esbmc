@@ -1249,9 +1249,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Struct type.
+ *  Represents both C structs and the data in C++ classes. Contains a vector
+ *  of types recording what type each member is, a vector of names recording
+ *  what the member names are, and a name for the struct.
+ *  @extends struct_union_data
+ */
 class struct_type2t : public struct_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param members Vector of types for the members in this struct.
+   *  @param memb_names Vector of names for the members in this struct.
+   *  @param name Name of this struct.
+   */
   struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
     : struct_type_methods(struct_id, members, memb_names, name) {}
@@ -1261,9 +1272,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Union type.
+ *  Represents a union type - in a similar vein to struct_type2t, this contains
+ *  a vector of types and vector of names, each element of which corresponds to
+ *  a member in the union. There's also a name for the union.
+ *  @extends struct_union_data
+ */
 class union_type2t : public union_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param members Vector of types corresponding to each member of union.
+   *  @param memb_names Vector of names corresponding to each member of union.
+   *  @param name Name of this union
+   */
   union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
     : union_type_methods(union_id, members, memb_names, name) {}
@@ -1273,9 +1295,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Unsigned integer type.
+ *  Represents any form of unsigned integer; the size of this integer is
+ *  recorded in the width field.
+ *  @extends bv_data
+ */
 class unsignedbv_type2t : public unsignedbv_type_methods
 {
 public:
+  /** Primary constructor. @param width Width of represented integer */
   unsignedbv_type2t(unsigned int width)
     : unsignedbv_type_methods(unsignedbv_id, width) { }
   unsignedbv_type2t(const unsignedbv_type2t &ref)
@@ -1284,9 +1312,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Signed integer type.
+ *  Represents any form of signed integer; the size of this integer is
+ *  recorded in the width field.
+ *  @extends bv_data
+ */
 class signedbv_type2t : public signedbv_type_methods
 {
 public:
+  /** Primary constructor. @param width Width of represented integer */
   signedbv_type2t(signed int width)
     : signedbv_type_methods(signedbv_id, width) { }
   signedbv_type2t(const signedbv_type2t &ref)
