@@ -797,6 +797,24 @@ namespace esbmct {
    *  inheretence we like and whatever fields we like, then latch expr_methods
    *  on top of that to implement all the anoying boring boilerplate code.
    *
+   *  ----
+   *
+   *  The constructors also need come documentation - We want to be able to
+   *  pass constructor arguments down to the class we're deriving from
+   *  without any additional boilerplate. However, unfortunately, we can't
+   *  make a vardic constructor, nor generate a bunch of explicit constructors
+   *  because they'll attempt to link against subclass constructors that don't
+   *  exist.
+   *
+   *  The solution to this is a series of explicit constructors that get
+   *  disabled by some boost magic depending on what the template parameters
+   *  are. The upshot is that however many number of template arguments are
+   *  provided, a constructor with that many arguments (plus expr id and type)
+   *  is enabled. For more information on how this is made possible, first
+   *  consult a doctor, then mail jmorse.
+   *
+   *  ----
+   *
    *  @tparam derived Type of class that'll derive from this template.
    *  @tparam subclass Type of class for this template to derive from.
    *  @tparam field1_type Type of 1st field in subclass.
