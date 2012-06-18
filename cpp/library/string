@@ -428,6 +428,7 @@ namespace std
 		string& erase ( size_t pos = 0);
 		string& erase ( iterator it )
 		{
+			__ESBMC_assert(it.pos != NULL, "The parameter must to be different than NULL");
 			int pos = it.pos;
 		   	int n = 1;
 		    __ESBMC_assert(pos < this->length(), "overflow");
@@ -457,6 +458,8 @@ namespace std
 
 		string& erase ( iterator begin, iterator end)
 		{
+			__ESBMC_assert(begin.pos != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert(end.pos != NULL, "The second parameter must to be different than NULL");
 			int pos = begin.pos;
 		    int i,k,len  = this->length();
 		    int n = (end.pos - begin.pos) + 1;
@@ -507,6 +510,8 @@ namespace std
 		string& insert (iterator it_one, iterator it_two , iterator it_three);
 		iterator insert ( iterator p, char c )
 		{
+			__ESBMC_assert(p.pos != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert(c != NULL, "The second parameter must to be different than NULL");
 			int pos1 = p.pos;
 			int n = 1;
 			int i;
@@ -547,6 +552,9 @@ namespace std
 		}
 		string& insert ( const_iterator p, size_t n, char c )
 		{
+			__ESBMC_assert( p.pos != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert( n != NULL, "The second parameter must to be different than NULL");
+			__ESBMC_assert( c != NULL, "The third parameter must to be different than NULL");
 			int pos1 = p.pos;
 			int i;
 			char *s = new char[n+1];
@@ -607,6 +615,8 @@ namespace std
 		string& substr ( size_t pos, size_t n )
 		{
 			__ESBMC_HIDE:
+			__ESBMC_assert( pos != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert( n != NULL, "The second parameter must to be different than NULL");
 			__ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
 			int i,k;
 			int lenOne = n+1;
@@ -622,6 +632,7 @@ namespace std
 		string& substr ( size_t pos ) const
 		{
 			__ESBMC_HIDE:
+			__ESBMC_assert( pos != NULL, "The first parameter must to be different than NULL");
 			__ESBMC_assert(pos < this->length(), "overflow");
 			int i,k;
 			int len = this->length();
@@ -649,6 +660,7 @@ namespace std
 
 		string& operator+ ( string& s)
 		{
+			__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 			int rhsLen = s._size;
 			int lhsLen = this->_size;
 		    int totalLen = lhsLen + rhsLen;
@@ -668,6 +680,7 @@ namespace std
 		string& operator+ ( const char* s)
 		{
 			__ESBMC_HIDE:
+			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		    int rhsLen = strlen(s);
 		    int totalLen = this->_size + rhsLen;
 		    char temp[totalLen+1];
@@ -686,6 +699,7 @@ namespace std
 		string& operator+ ( char s)
 		{
 			__ESBMC_HIDE:
+			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		    int totalLen = this->_size +1;
 		    char temp[totalLen+1];
 		    int i=0, j, k;
@@ -701,18 +715,23 @@ namespace std
 
 		template <class T>
 		string& assign ( T first, T last ){
+			__ESBMC_assert( first != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert( last != NULL, "The second parameter must to be different than NULL");
 			int i;
 			this->_size = first;
-			this->str = new char[first];
-			for (i = 1;i<first;i++){
+			this->str = new char[first + 1];
+			for (i = 0;i<first;i++){
 				this->str[i] = last;
 			}
+			this->str[i] = '\0';
 			return *this;
 		}
 
 		template <class InputIterator>
 		string& append ( InputIterator first, InputIterator last )
 		{
+			__ESBMC_assert( first != NULL, "The first parameter must to be different than NULL");
+			__ESBMC_assert( last != NULL, "The second parameter must to be different than NULL");
 		    int rhsLen = first;
 		    int totalLen = this->_size + rhsLen;
 		    string temp(totalLen);
@@ -823,18 +842,20 @@ namespace std
                     return false;
 	}
 
-  bool string::operator== (string& b) const
+    bool string::operator== (string& b) const
 	{
 		__ESBMC_HIDE:
-               if (strcmp(this->str, b.str) == 0)
-                    return true;
-               else
-                    return false;
+		__ESBMC_assert( b.str != NULL, "The parameter must to be different than NULL");
+        if (strcmp(this->str, b.str) == 0)
+        	return true;
+        else
+            return false;
 	}  
 
 	bool string::operator== ( const char* lhs)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The parameter must to be different than NULL");
 		int aux;
 		aux = strcmp((char*)lhs, this->str);
 		if (aux == 0){
@@ -847,6 +868,8 @@ namespace std
 	bool string::operator== (string& a, string& b)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( b.str != NULL, "The second parameter must to be different than NULL");
 		int aux;
 		aux = strcmp(b.c_str(), a.c_str());
 		if (aux == 0){
@@ -859,6 +882,8 @@ namespace std
 	bool string::operator== ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs.str != NULL, "The second parameter must to be different than NULL");
 		int aux;
 		aux = strcmp((char*)lhs, rhs.c_str());
 		if (aux == 0){
@@ -871,6 +896,8 @@ namespace std
 	bool string::operator== ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs.str != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs != NULL, "The second parameter must to be different than NULL");
 		int aux;
 		aux = strcmp(lhs.c_str(), (char*)rhs);
 		if (aux == 0){
@@ -883,6 +910,7 @@ namespace std
 	bool string::operator!= (string& a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The parameter must to be different than NULL");
 		int aux;
 		aux = strcmp(a.c_str(), this->c_str());
 		if (aux == 0){
@@ -895,6 +923,7 @@ namespace std
 	bool string::operator!= ( const char* lhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The parameter must to be different than NULL");
 		int aux;
 		aux = strcmp((char*)lhs, this->c_str());
 		if (aux == 0){
@@ -907,6 +936,8 @@ namespace std
 	bool string::operator!= ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs.str != NULL, "The second parameter must to be different than NULL");
 		int aux;
 		aux = strcmp((char*)lhs, rhs.c_str());
 		if (aux == 0){
@@ -919,6 +950,8 @@ namespace std
 	bool string::operator!= ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs.str != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs != NULL, "The second parameter must to be different than NULL");
 		int aux;
 		aux = strcmp(lhs.c_str(), (char*)rhs);
 		if (aux == 0){
@@ -931,6 +964,7 @@ namespace std
 	bool string::operator> (string& a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The parameter must to be different than NULL");
 		if ( this->length() > a.length() )
 			return true;
 		return false;
@@ -939,6 +973,7 @@ namespace std
 	bool string::operator> (const char* a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a != NULL, "The parameter must to be different than NULL");
 		if ( this->length() > strlen(a) )
 			return true;
 		return false;
@@ -947,6 +982,8 @@ namespace std
 	bool string::operator> ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs.str != NULL, "The second parameter must to be different than NULL");
 		if ( strlen(lhs) > rhs.length() )
 			return true;
 		return false;
@@ -955,6 +992,8 @@ namespace std
 	bool string::operator> ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs.str != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs != NULL, "The second parameter must to be different than NULL");
 		if ( lhs.length() > strlen(rhs) )
 			return true;
 		return false;
@@ -963,6 +1002,7 @@ namespace std
 	bool string::operator< (string& a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The parameter must to be different than NULL");
 		if ( this->length() < a.length() ){
 			return true;
 		}else{
@@ -973,6 +1013,7 @@ namespace std
 	bool string::operator< (const char* a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a != NULL, "The parameter must to be different than NULL");
 		if ( this->length() < strlen(a) )
 			return true;
 		return false;
@@ -981,6 +1022,8 @@ namespace std
 	bool string::operator< ( const char* lhs, string& rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs.str != NULL, "The second parameter must to be different than NULL");
 		if ( strlen(lhs) < rhs.length() )
 			return true;
 		return false;
@@ -989,6 +1032,8 @@ namespace std
 	bool string::operator< ( string& lhs, const char* rhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs.str != NULL, "The first parameter must to be different than NULL");
+		__ESBMC_assert( rhs != NULL, "The second parameter must to be different than NULL");
 		if ( lhs.length() < strlen(rhs) )
 			return true;
 		return false;
@@ -997,6 +1042,7 @@ namespace std
 	bool string::operator >=(string& a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The parameter must to be different than NULL");
 		if ( this->length() >= a.length() )
 			return true;
 		return false;
@@ -1005,6 +1051,7 @@ namespace std
 	bool string::operator>= ( const char* lhs )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The parameter must to be different than NULL");
 		if ( this->length() >= (strlen(lhs)) )
 			return true;
 		return false;
@@ -1013,6 +1060,7 @@ namespace std
 	bool string::operator <=(string& a)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( a.str != NULL, "The parameter must to be different than NULL");
 		if ( this->length() <= a.length() )
 			return true;
 		return false;
@@ -1021,6 +1069,7 @@ namespace std
 	bool string::operator <=(const char* lhs)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( lhs != NULL, "The parameter must to be different than NULL");
 		if ( this->length() <= strlen(lhs) )
 			return true;
 		return false;
@@ -1062,6 +1111,7 @@ namespace std
 	string& string::operator= ( string& str )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( str.str != NULL, "The parameter must to be different than NULL");
 		int i, len;
 		this->_size=str.length();
 		this->str=new char[this->_size+1];
@@ -1075,6 +1125,8 @@ namespace std
 
 	string& string::operator= ( const char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->_size=strlen(s);
 		this->str=new char[this->_size+1];
 		return string(strcpy(this->c_str(), s));
@@ -1082,6 +1134,8 @@ namespace std
 
 	string& string::operator= ( char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->_size=strlen(s);
 		this->str=new char[this->_size+1];
 		return string(strcpy(this->c_str(), s));
@@ -1089,6 +1143,8 @@ namespace std
 
 	string& string::operator= ( char s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->_size=1;
 		this->str=new char[this->_size+1];
 		this->str[0] = s;
@@ -1098,6 +1154,8 @@ namespace std
 
 	string& string::operator+=( string& s)
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int rhsLen = s._size;
 		int lhsLen = this->_size;
 	    int totalLen = lhsLen + rhsLen;
@@ -1117,6 +1175,8 @@ namespace std
 
 	string& string::operator+= (const char* s)
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int rhsLen = strlen(s);
 		int lhsLen = this->_size;
 	    int totalLen = lhsLen + rhsLen;
@@ -1136,6 +1196,8 @@ namespace std
 
 	string& string::operator+= (char s)
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 	    int totalLen = this->_size +1;
 	    char temp[totalLen+1];
 	    int i=0;
@@ -1155,6 +1217,8 @@ namespace std
 
 	void string::swap ( string& s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		string aux(s.str);
 		s.str = this->str;
 		s._size = this->_size;
@@ -1180,6 +1244,8 @@ namespace std
 
 	void string::resize ( size_t n )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( n > 0, "The parameter must to be greater than zero");
 		int num = this->_size,i;
 		char *tmp = new char[n+1];
 		for(i=0;i<n;i++){
@@ -1195,6 +1261,9 @@ namespace std
 
 	void string::resize ( size_t n, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( n > 0, "The parameter must to be greater than zero");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int num, i;
 		num = this->length();
 		string tmp(this->str);
@@ -1209,12 +1278,17 @@ namespace std
 
 	string& string::assign ( string& s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		*this=s;
 		return *this;
 	}
 
 	string& string::assign ( string& s, size_t pos = 0, size_t n )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < s.length()) && ((pos+n) < s.length()) && (n > 0), "string overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		this->_size=(n);
 		this->str=new char[this->_size+1];
 		strncpy(this->str, s.str+pos, n);
@@ -1223,6 +1297,9 @@ namespace std
 
 	string& string::assign ( const char* s, size_t n )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (n < strlen(s)) && (n > 0) , "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->_size=(n);
 		this->str=new char[this->_size];
 		strncpy(this->str, s, n);
@@ -1231,23 +1308,32 @@ namespace std
 
 	string& string::assign ( const char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		*this=s;
 		return *this;
 	}
 
 	string& string::assign ( size_t n, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( n > 0 , "string overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int i;
 		this->_size = n;
-		this->str = new char[n];
-		for (i = 1;i<n;i++){
+		this->str = new char[n+1];
+		for (i = 0;i<n;i++){
 			this->str[i] = c;
 		}
+		this->str[i] = '\0';
 		return *this;
 	}
 
 	size_t string::copy ( char* s, size_t n, size_t pos = 0) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < this->length()) && ((pos+n) < this->length()) && (n > 0), "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t aux = n + pos;
 		if (pos>this->size()){
 			throw("out_of_range");
@@ -1266,12 +1352,17 @@ namespace std
 
 	string& string::append (  string& s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		*this += s;
 		return *this;
 	}
 
 	string& string::append ( const char* s, size_t n )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( n > 0 , "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		if( n > strlen(s) )
 			throw("out_of_range");
 	    int rhsLen = n;
@@ -1288,6 +1379,9 @@ namespace std
 
 	string& string::append ( string& s, size_t pos, size_t n )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < s.length()) && ((pos+n) < s.length()) && (n > 0), "string overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		if( (pos > s._size) || (n > (s._size-pos)) )
 			throw("out_of_range");
 
@@ -1305,6 +1399,8 @@ namespace std
 
 	string& string::append ( const char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 	    int rhsLen = strlen(s);
 	    int totalLen = this->_size + rhsLen;
 	    string temp(totalLen);
@@ -1319,6 +1415,9 @@ namespace std
 
 	string& string::append ( size_t n, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( n > 0 , "string overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 	    int rhsLen = n;
 	    int totalLen = this->_size + rhsLen;
 	    string temp(totalLen);
@@ -1333,6 +1432,9 @@ namespace std
 
 	size_t string::find ( char c, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < this->length()) , "string overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int i;
 		int len = this->length();
 		for(i=0;i<len;i++)
@@ -1342,6 +1444,9 @@ namespace std
 
 	size_t string::find ( string& s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < this->length()) , "string overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int len = this->length();
 		int lim = pos;
 		char* s1 = new char[len+1];
@@ -1372,6 +1477,9 @@ namespace std
 
 	size_t string::find ( const char* s, size_t pos = 0 , size_t n) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < this->length()) && ((pos+n) < this->length()) && (n > 0), "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -1408,6 +1516,9 @@ namespace std
 
 	size_t string::find ( const char* s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos > 0) && (pos < this->length()) , "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int len = this->length();
 		int lim = pos;
 		char* s1 = new char[len+1];
@@ -1439,6 +1550,8 @@ namespace std
 	string& string::insert ( size_t pos1, string& s )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( (pos1 > 0) && (pos1 < this->length()) , "string overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int len  = this->length(),i,k;
 		__ESBMC_assert(pos1 < len, "overflow");
 		int lenOne = pos1 +1;
@@ -1471,6 +1584,9 @@ namespace std
 	string& string::insert ( size_t pos1, string& s, size_t pos2, size_t n )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( (pos1 > 0) && (pos1 < this->length()) , "string overflow");
+		__ESBMC_assert( (pos2 > 0) && (pos2 < s.length()) && ((pos2+n) < s.length()) && (n > 0), "string overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int len  = this->length(),i,k;
 		int lim = n + pos2;
 		int sLen = s.length();
@@ -1506,6 +1622,9 @@ namespace std
 	string& string::insert ( size_t pos1, const char* s, size_t n)
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( (pos1 > 0) && (pos1 < this->length()) , "string overflow");
+		__ESBMC_assert( n > 0 , "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int len  = this->length(),i,k;
 		int lim = n;
 		int sLen = strlen(s);
@@ -1541,9 +1660,10 @@ namespace std
 	string& string::insert ( size_t pos1, const char* s )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( (pos1 > 0) && (pos1 < this->length()) , "string overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int len  = this->length(),i,k;
 		int sLen = strlen(s);
-		//__ESBMC_assert(pos1 < len, "overflow");
 		int lenOne = pos1 +1;
 		char* one = new char[lenOne];
 		for(i=0;i<pos1;i++){
@@ -1573,6 +1693,9 @@ namespace std
 
 	string& string::insert ( size_t pos1, size_t n, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( (pos1 > 0) && (pos1 < this->length()) && ((pos1+n) < this->length()) && (n > 0), "string overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int i;
 		char *s = new char[n+1];
 		for (i = 0;i<n;i++){
@@ -1639,7 +1762,7 @@ namespace std
     string& string::erase ( size_t pos = 0)
     {
         __ESBMC_HIDE:
-    		int n = this->length()-1;
+    	int n = this->length()-1;
         __ESBMC_assert((pos < this->length()) && ((pos+n) <= this->length()), "overflow");
         int i,k,len  = this->length();
         int lenOne = pos +1;
@@ -1668,6 +1791,8 @@ namespace std
 	string& string::replace ( size_t pos1, size_t n1, const string& s )
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		this->erase(pos1,n1);
 		this->insert(pos1,s.str);
 		return *this;
@@ -1675,6 +1800,10 @@ namespace std
 
 	string& string::replace ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert((pos2 < s.length()) && ((pos2+n2) <= s.length()) && (n2>0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		this->erase(pos1,n1);
 		int i,k;
 		char *tmp = new char[n2+1];
@@ -1687,6 +1816,10 @@ namespace std
 
 	string& string::replace ( size_t pos1, size_t n1, const char* s, size_t n2 )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert(n2 > 0, "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->erase(pos1,n1);
 		int i,k;
 		char *tmp = new char[n2+1];
@@ -1699,6 +1832,9 @@ namespace std
 
 	string& string::replace ( size_t pos1, size_t n1, const char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		this->erase(pos1,n1);
 		int i,k,n2;
 		n2 = strlen(s);
@@ -1712,6 +1848,10 @@ namespace std
 
 	string& string::replace ( size_t pos1, size_t n1, size_t n2, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert(n2 > 0, "overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		this->erase(pos1,n1);
 		int k;
 		char *tmp = new char[n2+1];
@@ -1725,6 +1865,8 @@ namespace std
 
 	string& string::replace ( string::iterator i1, string::iterator i2, string& str )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( str.str != NULL, "The parameter must to be different than NULL");
 		int tmp_one = i1.pos;
 		int tmp_two = i2.pos+1;
 		int tmp = tmp_two - tmp_one;
@@ -1735,6 +1877,8 @@ namespace std
 
 	string& string::replace ( string::iterator i1, string::iterator i2, char* s, size_t n2 )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int tmp_one = i1.pos;
 		int tmp_two = i2.pos;
 		int tmpx = tmp_two - tmp_one;
@@ -1745,6 +1889,8 @@ namespace std
 
 	string& string::replace ( string::iterator i1, string::iterator i2, char* s )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int tmp_one = i1.pos;
 		int tmp_two = i2.pos;
 		int tmpx = tmp_two - tmp_one;
@@ -1756,6 +1902,8 @@ namespace std
 
 	string& string::replace ( string::iterator i1, string::iterator i2, size_t n2, char c )
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int tmp_one = i1.pos;
 		int tmp_two = i2.pos+1;
 		int tmpk = tmp_two - tmp_one;
@@ -1778,6 +1926,7 @@ namespace std
 	int string::compare ( const char* s ) const
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int i;
 		int sLen = strlen(s);
 		int len = this->length();
@@ -1796,6 +1945,7 @@ namespace std
 	int string::compare ( const string& s ) const
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int i;
 		int sLen = s.length();
 		int len = this->length();
@@ -1814,6 +1964,8 @@ namespace std
 	int string::compare ( int pos1, size_t n1, const char* s ) const
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		int i,k;
 		char* tmp = new char[n1+1];
 		for(k=0,i=pos1;i<(pos1+n1);i++,k++){
@@ -1837,6 +1989,8 @@ namespace std
 	int string::compare ( int pos1, size_t n1, string& s ) const
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int i,k;
 		char* tmp = new char[n1+1];
 		for(k=0,i=pos1;i<(pos1+n1);i++,k++){
@@ -1860,6 +2014,9 @@ namespace std
 	int string::compare ( size_t pos1, size_t n1, string& s, size_t pos2, size_t n2 ) const
 	{
 		__ESBMC_HIDE:
+		__ESBMC_assert((pos1 < this->length()) && ((pos1+n1) <= this->length()), "overflow");
+		__ESBMC_assert((pos2 < s.length()) && ((pos2+n2) <= s.length()) && (n2>0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		int i,k;
 
 		char* tmp = new char[n1+1];
@@ -1892,6 +2049,9 @@ namespace std
 	}
 	size_t string::find_first_of ( const char* s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -1917,6 +2077,9 @@ namespace std
 
 	size_t string::find_first_of ( const string& s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -1942,6 +2105,9 @@ namespace std
 
 	size_t string::find_first_of ( char c, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -1958,6 +2124,9 @@ namespace std
 
 	size_t string::find_first_not_of ( const string& s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 		int number;
 
@@ -1988,6 +2157,9 @@ namespace std
 
 	size_t string::find_first_not_of ( const char* s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 		int number;
 
@@ -2018,6 +2190,9 @@ namespace std
 
 	size_t string::find_first_not_of ( char c, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 		int number;
 
@@ -2040,6 +2215,9 @@ namespace std
 
 	size_t string::find_last_of ( const string& s, size_t pos = npos ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -2065,6 +2243,9 @@ namespace std
 
 	size_t string::find_last_of ( const char* s, size_t pos = npos ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -2090,6 +2271,9 @@ namespace std
 
 	size_t string::find_last_of ( char c, size_t pos = npos ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		size_t i, j;
 
 		int len = this->length();
@@ -2106,6 +2290,8 @@ namespace std
 
 	size_t string::rfind ( char c, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 		int i;
 		int len = this->length();
 		for(i=len;i>0;i--)
@@ -2115,6 +2301,9 @@ namespace std
 
 	size_t string::rfind ( string& s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
 		size_t i, j, k;
 		int num = 0;
 		int lim = pos;
@@ -2145,6 +2334,9 @@ namespace std
 
 	size_t string::rfind ( const char* s, size_t pos = 0 , size_t n) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j, k;
 		int num = 0;
 		int lim = pos;
@@ -2178,6 +2370,9 @@ namespace std
 
 	size_t string::rfind ( const char* s, size_t pos = 0 ) const
 	{
+		__ESBMC_HIDE:
+		__ESBMC_assert((pos < this->length()) && (pos >= 0), "overflow");
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		size_t i, j, k;
 		int num = 0;
 		int lim = pos;
