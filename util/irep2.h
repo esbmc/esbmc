@@ -1014,7 +1014,8 @@ namespace esbmct {
 
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later
-// definitions.
+// definitions. If you'd like to add another type - don't. Vast tracts of code
+// only expect the types below, it's be extremely difficult to hack new ones in.
 
 // Start with forward class definitions
 
