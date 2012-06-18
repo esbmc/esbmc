@@ -2798,11 +2798,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Typecast, but explicitly either to or from a bit vector. This prevents any
-// semantic conversion of floats to/from bits.
+/** Typecast to a bit vector.
+ *  In contrast to typecast2t, this expr forces a bit representation cast of
+ *  whatever its operand is, rather than a semantic cast. This is the only way
+ *  to express the bit-value of floats, as a normal typecast will attemp to
+ *  cast their value.
+ *  @extends typecast_data
+ */
 class to_bv_typecast2t : public to_bv_typecast_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type to convert value to.
+   *  @param from Value to convert from.
+   */
   to_bv_typecast2t(const type2tc &type, const expr2tc &from)
     : to_bv_typecast_expr_methods(type, to_bv_typecast_id, from) { }
   to_bv_typecast2t(const to_bv_typecast2t &ref)
@@ -2811,9 +2820,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Typecast from a bitvector.
+ *  Like to_bv_typecast2t, but in the other direction.
+ *  @see to_bv_typecast2t
+ *  @extends typecast_data
+ */
 class from_bv_typecast2t : public from_bv_typecast_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type to convert value to.
+   *  @param from Value to convert from.
+   */
   from_bv_typecast2t(const type2tc &type, const expr2tc &from)
     : from_bv_typecast_expr_methods(type, from_bv_typecast_id, from) { }
   from_bv_typecast2t(const from_bv_typecast2t &ref)
