@@ -3035,9 +3035,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit and operation. Perform bit and between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitand2t : public bitand_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitand_expr_methods(t, bitand_id, s1, s2) {}
   bitand2t(const bitand2t &ref)
@@ -3048,9 +3054,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit or operation. Perform bit or between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitor2t : public bitor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitor_expr_methods(t, bitor_id, s1, s2) {}
   bitor2t(const bitor2t &ref)
@@ -3061,9 +3073,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit xor operation. Perform bit xor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitxor2t : public bitxor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitxor_expr_methods(t, bitxor_id, s1, s2) {}
   bitxor2t(const bitxor2t &ref)
@@ -3074,9 +3092,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nand operation. Perform bit nand between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnand2t : public bitnand_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnand_expr_methods(t, bitnand_id, s1, s2) {}
   bitnand2t(const bitnand2t &ref)
@@ -3087,9 +3111,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nor operation. Perform bit nor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnor2t : public bitnor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnor_expr_methods(t, bitnor_id, s1, s2) {}
   bitnor2t(const bitnor2t &ref)
@@ -3100,9 +3130,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nxor operation. Perform bit nxor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnxor2t : public bitnxor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnxor_expr_methods(t, bitnxor_id, s1, s2) {}
   bitnxor2t(const bitnxor2t &ref)
