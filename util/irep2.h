@@ -2674,9 +2674,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant structure.
+ *  Contains a vector of expressions containing each member of the struct
+ *  we're dealing with, corresponding to the types and field names in the
+ *  struct_type2t type.
+ *  @extends constant_datatype_data
+ */
 class constant_struct2t : public constant_struct_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this structure, presumably a struct_type2t
+   *  @param membrs Vector of member values that make up this struct.
+   */
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_struct_expr_methods (type, constant_struct_id, members) { }
   constant_struct2t(const constant_struct2t &ref)
@@ -2685,9 +2695,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant union expression.
+ *  Almost the same as constant_struct2t - a vector of members corresponding
+ *  to the members described in the type. However, it seems the values pumped
+ *  at us by CBMC only ever have one member (at position 0) representing the
+ *  most recent value written to the union.
+ *  @extend constant_datatype_data
+ */
 class constant_union2t : public constant_union_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this structure, presumably a union_type2t
+   *  @param membrs Vector of member values that make up this union.
+   */
   constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_union_expr_methods (type, constant_union_id, members) { }
   constant_union2t(const constant_union2t &ref)
