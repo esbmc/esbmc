@@ -2864,6 +2864,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Equality expression. Evaluate whether two exprs are the same. Always has
+ *  boolean type. @extends relation_data */
 class equality2t : public equality_expr_methods
 {
 public:
@@ -2877,6 +2879,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Inequality expression. Evaluate whether two exprs are different. Always has
+ *  boolean type. @extends relation_data */
 class notequal2t : public notequal_expr_methods
 {
 public:
@@ -2890,6 +2894,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Lessthan relation. Evaluate whether expression is less than another. Always
+ *  has boolean type. @extends relation_data */
 class lessthan2t : public lessthan_expr_methods
 {
 public:
@@ -2903,6 +2909,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Greaterthan relation. Evaluate whether expression is greater than another.
+ * Always has boolean type. @extends relation_data */
 class greaterthan2t : public greaterthan_expr_methods
 {
 public:
@@ -2916,6 +2924,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Lessthanequal relation. Evaluate whether expression is less-than or
+ * equal to another. Always has boolean type. @extends relation_data */
 class lessthanequal2t : public lessthanequal_expr_methods
 {
 public:
@@ -2929,6 +2939,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Greaterthanequal relation. Evaluate whether expression is greater-than or
+ * equal to another. Always has boolean type. @extends relation_data */
 class greaterthanequal2t : public greaterthanequal_expr_methods
 {
 public:
