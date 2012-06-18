@@ -1509,7 +1509,14 @@ inline bool is_number_type(const type2tc &t) \
           t->type_id == type2t::signedbv_id ||
           t->type_id == type2t::fixedbv_id); }
 
-// And now, some more utilities.
+/** Pool for caching converted types.
+ *  Various common types (bool, empty for example) needn't be reallocated
+ *  every time we need a new one; it's better to have some global constants
+ *  of them, which is what this class provides. There are global bool and empty
+ *  types to be used; in addition, there are helper methods to create integer
+ *  types with common bit widths, and methods to enter a used type into a cache
+ *  of them, allowing migration of typet <=> type2t to be faster.
+ */
 class type_poolt {
 public:
   type_poolt(void);
