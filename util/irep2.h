@@ -4358,6 +4358,12 @@ get_component_number(const type2tc &type, const irep_idt &name)
   assert(0);
 }
 
+/** Test if expr is true. First checks whether the expr is a constant bool, and
+ *  then whether it's true-valued. If these are both true, return true,
+ *  otherwise return false.
+ *  @param expr Expression to check for true value.
+ *  @return Whether or not expr is true-valued.
+ */
 inline bool
 is_true(const expr2tc &expr)
 {
@@ -4367,6 +4373,12 @@ is_true(const expr2tc &expr)
     return false;
 }
 
+/** Test if expr is false. First checks whether the expr is a constant bool, and
+ *  then whether it's false-valued. If these are both true, return true,
+ *  otherwise return false.
+ *  @param expr Expression to check for false value.
+ *  @return Whether or not expr is true-valued.
+ */
 inline bool
 is_false(const expr2tc &expr)
 {
