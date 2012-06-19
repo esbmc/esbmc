@@ -3484,9 +3484,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** With operation. Updates either an array or a struct/union with a new element
+ *  or member. Expression value is the arary or struct/union with the updated
+ *  value. Ideally in the future this will become two operations, one for arrays
+ *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression; Same as source.
+   *  @param source Data object to update.
+   *  @param field Field to update - a constant string naming the field if source
+   *         is a struct/union, or an integer index if source is an array. */
   with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
          const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value) {}
@@ -3498,9 +3507,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Member operation. Extracts a particular member out of a struct or union.
+ *  @extends member_data */
 class member2t : public member_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of extracted member.
+   *  @param source Data structure to extract from.
+   *  @param memb ΩName of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb) {}
   member2t(const member2t &ref)
@@ -3511,9 +3526,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Array index operation. Extracts an element from an array at a particular
+ *  index. @extends index_data */
 class index2t : public index_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of element extracted.
+   *  @param source Array to extract data from.
+   *  @param index Element in source to extract from. */
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
     : index_expr_methods(type, index_id, source, index) {}
   index2t(const index2t &ref)
