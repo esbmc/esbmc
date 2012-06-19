@@ -3414,9 +3414,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Address of operation. Takes some object as an argument - ideally a symbol
+ *  renamed to level 1, unfortunately some string constants reach here. Produces
+ *  pointer typed expression.
+ *  @extends pointer_ops */
 class address_of2t : public address_of_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param subtype Subtype of pointer to generate. Crucially, the type of the
+   *         expr is a pointer to this subtype. This is slightly unintuitive,
+   *         might be changed in the future.
+   *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : address_of_expr_methods(type2tc(new pointer_type2t(subtype)),
                               address_of_id, ptrobj) {}
