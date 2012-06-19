@@ -85,7 +85,7 @@ public:
     {
       type=GOTO;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -94,7 +94,7 @@ public:
     {
       type=RETURN;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -103,7 +103,7 @@ public:
     {
       type=SKIP;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -136,7 +136,7 @@ public:
     {
       type=OTHER;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -145,7 +145,7 @@ public:
     {
       type=CATCH;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -193,7 +193,7 @@ public:
       type(NO_INSTRUCTION_TYPE),
       location_number(0)
     {
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
     }
 
     instructiont(goto_program_instruction_typet _type):
@@ -201,7 +201,7 @@ public:
       type(_type),
       location_number(0)
     {
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
     }
     
     void swap(instructiont &instruction)

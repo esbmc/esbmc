@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 expr2tc guardt::as_expr(guard_listt::const_iterator it) const
 {
   if (it == guard_list.end())
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
   else if (it == --guard_list.end())
     return guard_list.back();
 

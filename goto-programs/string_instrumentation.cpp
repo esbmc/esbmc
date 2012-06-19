@@ -1051,7 +1051,7 @@ void string_instrumentationt::do_strerror(
   {
     goto_programt::targett assignment2=tmp.add_instruction(ASSIGN);
     expr2tc zero_string = expr2tc(new zero_string2t(ptr));
-    expr2tc true_val = expr2tc(new constant_bool2t(true));
+    expr2tc true_val = true_expr;
     expr2tc assign = expr2tc(new code_assign2t(zero_string, true_val));
 
     assignment2->code = assign;
@@ -1157,7 +1157,7 @@ void string_instrumentationt::invalidate_buffer(
   back->location=target->location;
   back->local_variables=target->local_variables;
   back->make_goto(check);
-  back->guard = expr2tc(new constant_bool2t(true));
+  back->guard = true_expr;
 
   goto_programt::targett exit=dest.add_instruction();
   exit->location=target->location;

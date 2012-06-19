@@ -119,7 +119,7 @@ void goto_symext::symex_malloc(
 
   expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
 
-  expr2tc truth = expr2tc(new constant_bool2t(true));
+  expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);
 }

@@ -132,7 +132,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
 
   if (is_bool_type(type)) {
     if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
-      return expr2tc(new constant_bool2t(true));
+      return true_expr;
     else
       return expr2tc(new constant_bool2t(false));
   } else if (is_array_type(type)) {

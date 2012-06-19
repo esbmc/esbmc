@@ -822,10 +822,10 @@ or2t::do_simplify(bool second __attribute__((unused))) const
 
   // If either operand is true, the expr is true
   if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   // If both or operands are false, the expr is false.
   if (is_constant_bool2t(side_1)
@@ -856,12 +856,12 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
 
   // False => * evaluate to true, always
   if (is_constant_bool2t(side_1) && !to_constant_bool2t(side_1).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   // Otherwise, the only other thing that will make this expr always true is
   // if side 2 is true.
   if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   return expr2tc();
 }
@@ -1099,7 +1099,7 @@ typecast2t::do_simplify(bool second) const
       if (bv.get_value().is_zero()) {
         return expr2tc(new constant_bool2t(false));
       } else {
-        return expr2tc(new constant_bool2t(true));
+        return true_expr;
       }
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
                 (is_bv_type(from->type) || is_fixedbv_type(from->type))) {
@@ -1407,7 +1407,7 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
   if (is_symbol2t(a) && is_symbol2t(b)) {
     if (to_symbol2t(a).name == to_symbol2t(b).name)
-      return expr2tc(new constant_bool2t(true));
+      return true_expr;
   } else if (is_index2t(a) && is_index2t(b)) {
     return obj_equals_addr_of(to_index2t(a).source_value,
                               to_index2t(b).source_value);
@@ -1430,7 +1430,7 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
   if (is_symbol2t(side_1) && is_symbol2t(side_2) &&
       to_symbol2t(side_1).name == "NULL" &&
       to_symbol2t(side_1).name == "NULL")
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   return expr2tc();
 }

@@ -33,7 +33,7 @@ expr2tc abstract_domain_baset::get_guard(
   locationt to) const
 {
   if(!from->is_goto())
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   locationt next=from;
   next++;

@@ -529,7 +529,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = expr2tc(new code_assign2t(lhs, rhs));
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
-  assignment->guard = expr2tc(new constant_bool2t(true));
+  assignment->guard = true_expr;
   dest.destructive_insert(it, tmp);
 
   return;
@@ -1118,7 +1118,7 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
       migrate_type(osizetype, sizetype);
 
       std::vector<expr2tc> operands;
-      operands.push_back(expr2tc(new constant_bool2t(true)));
+      operands.push_back(true_expr);
       operands.push_back(expr2tc(new constant_int2t(lentype, l)));
       operands.push_back(expr2tc(new constant_int2t(sizetype, l+1)));
       expr2tc value = expr2tc(new constant_struct2t(string_struct, operands));
@@ -1336,7 +1336,7 @@ void string_abstractiont::abstract_char_assign(
     {
       goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
       assignment1->code =
-        expr2tc(new code_assign2t(i1, expr2tc(new constant_bool2t(true))));
+        expr2tc(new code_assign2t(i1, true_expr));
       assignment1->location=target->location;
       assignment1->local_variables=target->local_variables;
     }
