@@ -3776,9 +3776,21 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Irep for various side effects. Stores data about various things that can
+ *  cause side effects, such as memory allocations, nondeterministic value
+ *  allocations (nondet_* funcs,), and for some reason function calls.
+ *
+ *  Function calls are the one thing that stand out here as being weird; it seems
+ *  they get stored in expressions and then pulled out in GOTO conversion to be
+ *  evaluated in front of the current expression. However, in one or two places
+ *  they seem to escape and reach the solver, which is bad.
+ *
+ *  @extends sideeffect_data */
 class sideeffect2t : public sideeffect_expr_methods
 {
 public:
+  /** Enumeration identifying each particular kind of side effect. The values
+   *  themselves are entirely self explanatory. */
   enum allockind {
     malloc,
     cpp_new,
@@ -3787,6 +3799,12 @@ public:
     function_call
   };
 
+  /** Primary constructor.
+   *  @param t Type this side-effect evaluates to.
+   *  @param operand Not really certain. Sometimes turns up in string-irep.
+   *  @param sz Size of dynamic allocation to make.
+   *  @param alloct Type of piece of data to allocate.
+   *  @param a Vector of arguments to function call. */
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
                const type2tc &alloct, allockind k, std::vector<expr2tc> &a)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k, a) {}
