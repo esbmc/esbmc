@@ -3545,9 +3545,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Is string zero operation. Checks to see whether string operand is zero or
+ *  not? In reality I've no idea, this is something string-abstraction related.
+ *  Boolean result. @extends string_ops */
 class zero_string2t : public zero_string_expr_methods
 {
 public:
+  /** Primary constructor. @param string String type operand to test. */
   zero_string2t(const expr2tc &string)
     : zero_string_expr_methods(type_pool.get_bool(), zero_string_id, string) {}
   zero_string2t(const zero_string2t &ref)
@@ -3556,9 +3560,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Check for zero length string. No idea how this is different from zero_string,
+ *  but it has a different irep in old stringy irep, so here we are. Boolean
+ *  result. @extends string_ops */
 class zero_length_string2t : public zero_length_string_expr_methods
 {
 public:
+  /** Primary constructor. @param string String type operand to test. */
   zero_length_string2t(const expr2tc &string)
     : zero_length_string_expr_methods(type_pool.get_bool(),
                                       zero_length_string_id, string) {}
