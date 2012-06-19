@@ -74,12 +74,12 @@ pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
   list_of_memberst memb = obj.tostring(indent);
 
-  std::string indentstr = indent_str(indent);
+  std::string indentstr = indent_str(indent + 2);
   std::string exprstr = ident;
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
        it++) {
-    exprstr += "\n" + indentstr + it->first + " : " + it->second;
+    exprstr += "\n" + indentstr + "* " + it->first + " : " + it->second;
   }
 
   return exprstr;
@@ -640,7 +640,7 @@ expr2t::pretty(unsigned int indent) const
                                                      expr_names[expr_id],
                                                      *this);
   // Dump the type on the end.
-  ret += std::string("\n") + indent_str(indent) + "type : "
+  ret += std::string("\n") + indent_str(indent) + "  * type : "
          + type->pretty(indent + 2);
   return ret;
 }
