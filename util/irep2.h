@@ -3647,9 +3647,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record unknown data value. Exclusively for use in pointer analysis to record
+ *  the fact that we point at an unknown item of data. No idea why it has to be
+ *  part of irep, but it was in the past, so it will be now. Ideally in the
+ *  future this should change. @extends expr2t */
 class unknown2t : public unknown_expr_methods
 {
 public:
+  /** Primary constructor. @param type Type of unknown data item */
   unknown2t(const type2tc &type)
     : unknown_expr_methods(type, unknown_id) {}
   unknown2t(const unknown2t &ref)
@@ -3658,6 +3663,10 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record invalid data value. Exclusively for use in pointer analysis to record
+ *  the fact that what we point at is guarenteed to be invalid or nonexistant.
+ *  Like unknown2t, ideally in the future shouldn't subclass expr2t.
+ *  @extends expr2t */
 class invalid2t : public invalid_expr_methods
 {
 public:
@@ -3669,6 +3678,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record null pointer value. Exclusively for use in pointer analysis to record
+ *  the fact that a pointer can be NULL. Like unknown2t, should in the future
+ *  become a non-expr2t subclass. @extends expr2t */
 class null_object2t : public null_object_expr_methods
 {
 public:
