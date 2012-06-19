@@ -212,7 +212,7 @@ void dereferencet::build_reference_to(
   const guardt &guard)
 {
   value = expr2tc();
-  pointer_guard = expr2tc(new constant_bool2t(false));
+  pointer_guard = false_expr;
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {

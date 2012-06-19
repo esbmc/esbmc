@@ -832,7 +832,7 @@ or2t::do_simplify(bool second __attribute__((unused))) const
       && !to_constant_bool2t(side_1).constant_value
       && is_constant_bool2t(side_2)
       && !to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(false));
+    return false_expr;
 
   return expr2tc();
 }
@@ -1097,7 +1097,7 @@ typecast2t::do_simplify(bool second) const
       fixedbvt bv;
       to_fixedbv(from, bv);
       if (bv.get_value().is_zero()) {
-        return expr2tc(new constant_bool2t(false));
+        return false_expr;
       } else {
         return true_expr;
       }

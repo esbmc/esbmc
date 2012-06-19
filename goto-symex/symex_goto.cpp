@@ -283,7 +283,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   expr2tc negated_cond;
 
   if (is_constant_bool2t(guard) && to_constant_bool2t(guard).constant_value) {
-    negated_cond = expr2tc(new constant_bool2t(false));
+    negated_cond = false_expr;
   } else {
     negated_cond = expr2tc(new not2t(guard));
   }

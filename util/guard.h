@@ -66,7 +66,7 @@ public:
   void make_false()
   {
     guard_list.clear();
-    expr2tc tmp = expr2tc(new constant_bool2t(false));
+    expr2tc tmp = false_expr;
     guard_list.push_back(tmp);
   }
   

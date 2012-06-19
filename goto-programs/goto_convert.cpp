@@ -201,7 +201,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = expr2tc(new constant_bool2t(false));
+    t->guard = false_expr;
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");

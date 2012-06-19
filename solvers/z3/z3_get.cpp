@@ -134,7 +134,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
     if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
       return true_expr;
     else
-      return expr2tc(new constant_bool2t(false));
+      return false_expr;
   } else if (is_array_type(type)) {
     typedef std::pair<mp_integer, expr2tc> array_elem;
     const array_type2t & type_ref = to_array_type(type);

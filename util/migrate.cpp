@@ -381,7 +381,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     if (theval == "true")
       new_expr_ref = true_expr;
     else
-      new_expr_ref = expr2tc(new constant_bool2t(false));
+      new_expr_ref = false_expr;
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_pointer &&
              expr.value() == "NULL") {
     // Null is a symbol with pointer type.

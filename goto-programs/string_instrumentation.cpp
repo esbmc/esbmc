@@ -341,7 +341,7 @@ void string_instrumentationt::do_sprintf(
 
   // in the abstract model, we have to report a
   // (possibly false) positive here
-  assertion->make_assertion(expr2tc(new constant_bool2t(false)));
+  assertion->make_assertion(false_expr);
 
   do_format_string_read(tmp, target, arguments, 1, 2, "sprintf");
 

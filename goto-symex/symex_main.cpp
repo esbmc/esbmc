@@ -81,7 +81,7 @@ goto_symext::symex_step(reachability_treet & art)
   {
     unsigned max_depth = atoi(options.get_option("depth").c_str());
     if (max_depth != 0 && cur_state->depth > max_depth)
-      cur_state->guard.add(expr2tc(new constant_bool2t(false)));
+      cur_state->guard.add(false_expr);
     cur_state->depth++;
   }
 

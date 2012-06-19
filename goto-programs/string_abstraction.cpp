@@ -655,7 +655,7 @@ expr2tc string_abstractiont::build_unknown(whatt what, bool write)
   switch(what)
   {
   case IS_ZERO:
-    result = expr2tc(new constant_bool2t(false));
+    result = false_expr;
     break;
 
   case LENGTH:
@@ -964,7 +964,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 
       {
         std::vector<expr2tc> operands;
-        operands.push_back(expr2tc(new constant_bool2t(false)));
+        operands.push_back(false_expr);
         operands.push_back(obj_array_type.array_size);
         typet blah = build_type(SIZE);
         type2tc an_op_type;
@@ -1040,7 +1040,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 
     {    
       std::vector<expr2tc> operands;
-      operands.push_back(expr2tc(new constant_bool2t(false)));
+      operands.push_back(false_expr);
       operands.push_back(obj_array_type.array_size);
       typet tmptype = build_type(SIZE);
       type2tc eventmpertype;

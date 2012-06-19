@@ -423,7 +423,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
       if (implications.count(guard) != 0) {
         it->cond = true_expr;
         it->rhs = true_expr;
-        it->guard = expr2tc(new constant_bool2t(false));
+        it->guard = false_expr;
 	sliced_SSA_steps++;
 	if (it->is_output())
 	  trace_loc_sliced++;
@@ -437,7 +437,7 @@ void symex_slice_by_tracet::slice_SSA_steps(
 	if (implications.count(neg_expr) != 0) {
           it->cond = true_expr;
           it->rhs = true_expr;
-          it->guard = expr2tc(new constant_bool2t(false));
+          it->guard = false_expr;
 	  sliced_SSA_steps++;
 	  if (it->is_output())
 	    trace_loc_sliced++;
