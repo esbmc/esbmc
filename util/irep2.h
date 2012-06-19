@@ -1,6 +1,10 @@
 #ifndef _UTIL_IREP2_H_
 #define _UTIL_IREP2_H_
 
+/** @file irep2.h
+ *  Classes and definitions for non-stringy internal representation.
+ */
+
 #include <stdarg.h>
 
 #include <vector>
@@ -18,42 +22,108 @@
 
 // XXXjmorse - abstract, access modifies, need consideration
 
+/** Iterate over all expr2tc's in a vector.
+ *  Deals only with constant vectors.
+ *  @see Forall_exprs
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of expr2tc's.
+ */
 #define forall_exprs(it, vect) \
   for (std::vector<expr2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all expr2tc's in a vector.
+ *  Deals only with non-constant vectors.
+ *  @see forall_exprs
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of expr2tc's.
+ */
 #define Forall_exprs(it, vect) \
   for (std::vector<expr2tc>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all type2tc's in a vector.
+ *  Deals only with constant vectors
+ *  @see Forall_types
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of type2tc's.
+ */
 #define forall_types(it, vect) \
   for (std::vector<type2tc>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all type2tc's in a vector.
+ *  Deals only with non-constant vectors
+ *  @see forall_types
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of type2tc's.
+ */
 #define Forall_types(it, vect) \
   for (std::vector<type2tc>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all irep_idt's in a vector.
+ *  Deals only with constant vectors of string-pool IDs.
+ *  @see Forall_names
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of irep_idts's.
+ */
 #define forall_names(it, vect) \
   for (std::vector<irep_idt>::const_iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all irep_idt's in a vector.
+ *  Deals only with non-constant vectors of string-pool IDs.
+ *  @see forall_names
+ *  @param it Name to give iterator to be declared
+ *  @param vect Reference to vector of irep_idts's.
+ */
 #define Forall_names(it, vect) \
   for (std::vector<std::string>::iterator (it) = (vect).begin();\
        it != (vect).end(); it++)
 
+/** Iterate over all expr-like operands in an irep.
+ *  This macro generates a list of all irep2 operands to a particular irep2,
+ *  and then iterates over them. Fixed-type operands (such as the member name
+ *  in a member2t) are not part of the list. This macro declares a std::list of
+ *  expr2tc's in the current scope.
+ *
+ *  NB: This iterates of expr2tc _pointers_. So, you need to dereference first
+ *  the iterator, then the pointer, i.e. "(*it)->blah".
+ *
+ *  @see Forall_operands2
+ *  @param it Name to give iterator to be declared
+ *  @param ops Name for std::list of expr2tc's to be declared
+ *  @param theexpr expr2tc to retrieve list of operands from.
+ */
 #define forall_operands2(it, ops, theexpr) \
   expr2t::expr_operands ops; \
   theexpr->list_operands(ops); \
   for (expr2t::expr_operands::const_iterator it = ops.begin(); \
        it != ops.end(); it++)
 
+/** Like forall_operands2, but for non-const exprs.
+ *
+ *  If you feel the need to replace the contents of an expression without
+ *  knowing its concrete type (i.e., in simplification) you can assign an
+ *  expr2tc into the expr using one of these operand pointers.
+ *
+ *  @see forall_operands2
+ */
 #define Forall_operands2(it, ops, theexpr) \
   expr2t::Expr_operands ops; \
   theexpr.get()->list_operands(ops); \
   for (expr2t::Expr_operands::iterator it = ops.begin(); \
        it != ops.end(); it++)
 
+/** Hash calculating class for irep2 data.
+ *  This class takes lumps of data from irep2's internal types and munges them
+ *  into a hash. This exists because the crc32 being used before was rather
+ *  slow. The implementation behind this (just an xor and a roll) is very simple
+ *  and probably doesn't have any nice distribution properties, but improved
+ *  regression test speeds by a couple of seconds, and one test I was worried
+ *  about by 25%.
+ */
 class hacky_hash
 {
 public:
@@ -76,6 +146,30 @@ class type2t;
 class expr2t;
 class constant_array2t;
 
+/** Reference counted container for expr2t based classes.
+ *  This class extends boost shared_ptr's to contain anything that's a subclass
+ *  of expr2t. It provides several ways of accessing the contained pointer;
+ *  crucially it ensures that the only way to get a non-const reference or
+ *  pointer is via the get() method, which call the detach() method.
+ *
+ *  This exists to ensure that we honour the model set forth by the old string
+ *  based internal representation - specifically, that if you performed a const
+ *  operation on an irept (fetching data) then the contained piece of data
+ *  could continue to be shared between numerous data structures, for example
+ *  a piece of code could exist in a contextt, a namespacet, and a goto_programt
+ *  and all would share the same contained data structure, preventing additional
+ *  memory consumption.
+ *
+ *  If anything copied an irept from one of these place it'd also share that
+ *  contained data; but if it made a modifying operation (add, set, or just
+ *  taking a non-const reference the contained data,) then the detach() method
+ *  would be called, which duplicated the contained item and let the current
+ *  piece of code modify the duplicate copy, while all the other storage
+ *  locations continued to share the original.
+ *
+ *  So yeah, that's what this class attempts to implement, via the medium of
+ *  boosts shared_ptr.
+ */
 template <class T, int expid>
 class irep_container : public boost::shared_ptr<T>
 {
@@ -163,7 +257,10 @@ typedef irep_container<expr2t, -1> expr2tc;
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
 
-/** Base class for all types */
+/** Base class for all types.
+ *  Contains only a type identifier enumeration - for some types (such as bool,
+ *  or empty,) there's no need for any significant amount of data to be stored.
+ */
 class type2t
 {
 public:
@@ -188,30 +285,129 @@ public:
     end_type_id
   };
 
-  // Class to be thrown when attempting to fetch the width of a symbolic type,
-  // such as empty or code. Caller will have to worry about what to do about
-  // that.
+  /** Symbolic type exception class.
+   *  To be thrown when attempting to fetch the width of a symbolic type, such
+   *  as empty or code. Caller will have to worry about what to do about that.
+   */
   class symbolic_type_excp {
   };
 
 protected:
+  /** Primary constructor.
+   *  @param id Type ID of type being constructed
+   */
   type2t(type_ids id);
+
+  /** Copy constructor */
   type2t(const type2t &ref);
 
 public:
+  /** Despatcher for SMT conversion.
+   *  Each subclass of type2t overrides this method, and provides a routine
+   *  that will invoke a method in the class prop_convt that will convert it
+   *  to SMT representation. This converted representation is assigned to the
+   *  pointer arg, which is assumed to be an appropriate pointer type for the
+   *  prop_convt object being passed down. Implemented in bulk by type_methods
+   *  template.
+   *  @see type_methods
+   *  @param prop_convt Object to perform SMT conversion with.
+   *  @param arg Reference to pointer to assign output to.
+   */
   virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+
+  /** Fetch bit width of this type.
+   *  For a particular type, calculate its size in a bit representation of
+   *  itself. May throw various exceptions depending on whether this operation
+   *  is viable - for example, for symbol types, infinite sized or dynamically
+   *  sized arrays.
+   *  @throws symbolic_type_excp
+   *  @throws array_type2t::inf_sized_array_excp
+   *  @throws array_type2t::dyn_sized_array_excp
+   *  @return Size of types byte representation, in bits
+   */
   virtual unsigned int get_width(void) const = 0;
+
+  /* These are all self explanatory */
   bool operator==(const type2t &ref) const;
   bool operator!=(const type2t &ref) const;
   bool operator<(const type2t &ref) const;
-  int ltchecked(const type2t &ref) const;
+
+  /** Produce a string representation of type.
+   *  Takes body of the current type and produces a human readable
+   *  representation. Similar to the string-irept's pretty method, although a
+   *  different format.
+   *  @param indent Number of spaces to indent lines by in the output
+   *  @return String obj containing representation of this object
+   */
   std::string pretty(unsigned int indent = 0) const;
+
+  /** Dump object string representation to stdout.
+   *  This take the output of the pretty method, and dumps it to stdout. To be
+   *  used for debugging and when single stepping in gdb.
+   *  @see pretty
+   */
   void dump(void) const;
+
+  /** Produce a checksum/hash of the current object.
+   *  Takes current object and produces a lossy digest of it. Originally used
+   *  crc32, now uses a more hacky but faster hash function. For use in hash
+   *  objects.
+   *  @see do_crc
+   *  @return Digest of the current type.
+   */
   uint32_t crc(void) const;
+
+  /** Perform checked invocation of cmp method.
+   *  Takes reference to another type - if they have the same type id, invoke
+   *  the cmp function and return its result. Otherwise, return false. Using
+   *  this method ensures thatthe implementer of cmp knows the reference it
+   *  operates on is on the same type as itself.
+   *  @param ref Reference to type to compare this object against
+   *  @return True if types are the same, false otherwise.
+   */
   bool cmpchecked(const type2t &ref) const;
+
+  /** Perform checked invocation of lt method.
+   *  Identical to cmpchecked, except with the lt method.
+   *  @see cmpchecked
+   *  @param ref Reference to type to measure this against.
+   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
+   */
+  int ltchecked(const type2t &ref) const;
+
+  /** Virtual method to compare two types.
+   *  To be overridden by an extending type; assumes that itself and the
+   *  parameter are of the same extended type. Call via cmpchecked.
+   *  @see cmpchecked
+   *  @param ref Reference to (same class of) type to compare against
+   *  @return True if types match, false otherwise
+   */
   virtual bool cmp(const type2t &ref) const = 0;
+
+  /** Virtual method to compare two types.
+   *  To be overridden by an extending type; assumes that itself and the
+   *  parameter are of the same extended type. Call via cmpchecked.
+   *  @see cmpchecked
+   *  @param ref Reference to (same class of) type to compare against
+   *  @return 0 if types are the same, 1 if this > ref, -1 if ref > this.
+   */
   virtual int lt(const type2t &ref) const;
+
+  /** Extract a list of members from type as strings.
+   *  Produces a list of pairs, mapping a member name to a string value. Used
+   *  in the body of the pretty method.
+   *  @see pretty
+   *  @param indent Number of spaces to indent output strings with, if multiline
+   *  @return list of name:value pairs.
+   */
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
+
+  /** Perform crc operation accumulating into parameter.
+   *  Performs the operation of the crc method, but overridden to be specific to
+   *  a particular type. Accumulates data into the hash object parameter.
+   *  @see cmp
+   *  @param hash Object to accumulate hash data into.
+   */
   virtual void do_crc(hacky_hash &hash) const;
 
   /** Instance of type_ids recording this types type. */
@@ -219,20 +415,37 @@ public:
 };
 
 
+/** Fetch identifying name for a type.
+ *  I.E., this is the class of the type, what you'd get if you called type.id()
+ *  with the old stringy irep. Ideally this should be a class method, but as it
+ *  was added as a hack I haven't got round to it yet.
+ *  @param type Type to fetch identifier for
+ *  @return String containing name of type class.
+ */
 std::string get_type_id(const type2t &type);
 
+/** Fetch identifying name for a type.
+ *  Just passes through to type2t accepting function with the same name.
+ *  @param type Type to fetch identifier for
+ *  @return String containing name of type class.
+ */
 static inline std::string get_type_id(const type2tc &type)
 {
   return get_type_id(*type);
 }
 
-/** Base class for all expressions */
+/** Base class for all expressions.
+ *  In this base, contains an expression id used for distinguishing different
+ *  classes of expr, in addition we have a type as all exprs should have types.
+ */
 class expr2t
 {
 public:
   /** Enumeration identifying each sort of expr.
    *  The idea being to permit runtime identification of a type for debugging or
-   *  otherwise. See type2t::type_ids. */
+   *  otherwise.
+   *  @see type2t::type_ids.
+   */
   enum expr_ids {
     constant_int_id,
     constant_fixedbv_id,
@@ -322,47 +535,196 @@ public:
     end_expr_id
   };
 
+  /** Type for list of constant expr operands */
   typedef std::list<const expr2tc*> expr_operands;
+  /** Type for list of non-constant expr operands */
   typedef std::list<expr2tc*> Expr_operands;
 
 protected:
+  /** Primary constructor.
+   *  @param type Type of this new expr
+   *  @param id Class identifier for this new expr
+   */
   expr2t(const type2tc type, expr_ids id);
+  /** Copy constructor */
   expr2t(const expr2t &ref);
 
 public:
-  /** Clone method. Entirely self explanatory */
+  /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
+  /** SMT conversion despatcher function.
+   *  In a similar vein to convert_smt_type, this method is overridden by all
+   *  subclasses to call an appropriate method in the passed in prop_convt
+   *  object that will convert itself to a piece of SMT AST. That's then
+   *  returned in the arg ptr passed down, which is assumed to be of an
+   *  appropriate pointer type for the prop_convt object doing the converting.
+   *
+   *  This means that the procedure to look up what method to convert an irep
+   *  with is now O(1) rather than O(n), where n is a large number of irep
+   *  names that we have to compare the expr id against before working out
+   *  what method to call.
+   *  @see type2t::convert_smt_type
+   *  @param obj SMT converter object to use to convert this expr
+   *  @param arg Pointer that will receive converted piece of AST.
+   */
   virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
 
+  /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
   bool operator!=(const expr2t &ref) const;
+
+  /** Perform type-checked call to lt method.
+   *  Checks that this object and the one we're comparing against have the same
+   *  expr class, so that the lt method can assume it's working on objects of
+   *  the same type.
+   *  @see type2t::ltchecked
+   *  @param ref Expression object we're comparing this object against.
+   *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
+   */
   int ltchecked(const expr2t &ref) const;
+
+  /** Produce textual representation of this expr.
+   *  Like the stringy-irep's pretty method, this takes the current object and
+   *  produces a textual representation that can be read by a human to
+   *  understand what's going on.
+   *  @param indent Number of spaces to indent the output string lines by
+   *  @return String object containing textual expr representation.
+   */
   std::string pretty(unsigned int indent = 0) const;
+
+  /** Calculate number of exprs descending from this one.
+   *  For statistics collection - calculates the number of expressions that
+   *  make up this particular expression (i.e., count however many expr2tc's you
+   *  can reach from this expr).
+   *  @return Number of expr2tc's reachable from this node.
+   */
   unsigned long num_nodes(void) const;
+
+  /** Calculate max depth of exprs from this point.
+   *  Looks at all sub-exprs of this expr, and calculates the longest chain one
+   *  can descend before there are no more. Useful for statistics about the
+   *  exprs we're dealing with.
+   *  @return Number of expr2tc's reachable from this node.
+   */
   unsigned long depth(void) const;
+
+  /** Write textual representation of this object to stdout.
+   *  For use in debugging - dumps the output of the pretty method to stdout.
+   *  Can either be used in portion of code, or more commonly called from gdb.
+   */
   void dump(void) const;
+
+  /** Calculate a hash/digest of the current expr.
+   *  For use in hash data structures; used to be a crc32, but is now a 16 bit
+   *  hash function generated by myself to be fast. May not have nice
+   *  distribution properties, but is at least fast.
+   *  @return Hash value of this expr
+   */
   uint32_t crc(void) const;
+
+  /** Perform comparison operation between this and another expr.
+   *  Overridden by subclasses of expr2t to compare different members of this
+   *  and the passed in object. Assumes that the passed in object is the same
+   *  class type as this; Should be called via operator==, which will do that
+   *  check automagically.
+   *  @see type2t::cmp
+   *  @param ref Expr object to compare this against
+   *  @return True if objects are the same; false otherwise.
+   */
   virtual bool cmp(const expr2t &ref) const;
+
+  /** Compare two expr objects.
+   *  Overridden by subclasses - takes two expr objects (this and ref) of the
+   *  same type, and compares them, in the same manner as memcmp. The assumption
+   *  that the objects are of the same type means lt should be called via
+   *  ltchecked to check for different expr types.
+   *  @see type2t::lt
+   *  @param ref Expr object to compare this against
+   *  @return 0 If exprs are the same, 1 if this > ref, -1 if ref > this.
+   */
   virtual int lt(const expr2t &ref) const;
+
+  /** Convert fields of subclasses to a string representation.
+   *  Used internally by the pretty method - creates a list of pairs
+   *  representing the fields in the subclass. Each pair is a pair of strings
+   *  of the form fieldname : value. The value may be multiline, in which case
+   *  the new line will have at least indent number of indenting spaces.
+   *  @param indent Number of spaces to indent multiline output by
+   *  @return list of string pairs, of form fieldname:value
+   */
   virtual list_of_memberst tostring(unsigned int indent) const = 0;
+
+  /** Perform digest/hash function on expr object.
+   *  Takes all fields in this exprs and adds them to the passed in hash object
+   *  to compute an expression-hash. Overridden by subclasses.
+   *  @param hash Hash object to accumulate expression data into.
+   */
   virtual void do_crc(hacky_hash &hash) const;
+
+  /** Generate a list of expr operands.
+   *  Use forall_operands2 instead; this method is overridden by subclasses and
+   *  when invoked fills the inp list with pointers to any exprs that make up
+   *  this expr. Any fields that aren't expr-based (i.e., the field name in
+   *  a member2t expr) are not entered into this list.
+   *
+   *  Comes in a const and non-const flavour. When using the non-const flavour,
+   *  one can overwrite field-exprs within another expr without knowing the
+   *  exprs concrete type. In this case, it's immensely important to preserve
+   *  type correctness.
+   *
+   *  @see forall_operands2
+   *  @see Forall_operands2
+   *  @param inp List of pointers to exprs that are in fields of this expr.
+   */
   virtual void list_operands(std::list<const expr2tc*> &inp) const = 0;
 
-  // Caution - updating sub operands of an expr2t *must* always preserve type
-  // correctness, as there's no way to check that an expr expecting a pointer
-  // type operand *always* has a pointer type operand.
-  // This list operands method should be protected; however it's required on
-  // account of all those places where exprs are rewritten in place. Ideally,
-  // "all those places" shouldn't exist in the future.
+  /** Generate a list of expr operands.
+   *  See the other const version of this method
+   */
   virtual void list_operands(std::list<expr2tc*> &inp) = 0;
+
+  /** Self explanatory. Like clone, but without being wrapped in an expr2tc */
   virtual expr2t * clone_raw(void) const = 0;
 
+  /** Simplify an expression.
+   *  Similar to simplification in the string-based irep, this generates an
+   *  expression with any calculations or operations that can be simplified,
+   *  simplified. In contrast to the old form though, this creates a new expr
+   *  if something gets simplified, just to make it clear exactly what's
+   *  going on.
+   *  @return Either a nil expr (null pointer contents) if nothing could be
+   *          simplified or a simplified expression.
+   */
   expr2tc simplify(void) const;
-  // Shallow -> one level only. second indicates that this is its second
-  // invocation, after a first invocation where all its operands aren't
-  // simplified.
+
+  /** expr-specific simplification methods.
+   *  By default, an expression can't be simplified, and this method returns
+   *  a nil expression to show that. However if simplification is possible, the
+   *  subclass overrides this and if it can simplify its operands, returns a
+   *  new simplified expression. It should attempt to modify itself (it's
+   *  const).
+   *
+   *  If simplification failed the first time around, the simplify method will
+   *  simplify this expressions operands for it via the medium of list_operands,
+   *  and will then call an expr with the simplified operands to see if it's now
+   *  become simplifiable. This call occurs whether or not any operands were
+   *  actually simplified, see below.
+   *
+   *  The 'second' parameter can be used to avoid invoking expensive attempts
+   *  to simplify an expression more than once - on the first call to
+   *  do_simplify this parameter will be false, then on the second it's be true,
+   *  allowing method implementation to save the expensive stuff until all of
+   *  its operands have certainly been simplified.
+   *
+   *  Currently simplification does some things that it shouldn't: pointer
+   *  arithmetic for example. I'm not sure where this can be relocated to
+   *  though.
+   *  @param second Whether this is the second call to do_simplify on this obj
+   *  @return expr2tc A nil expression if no simplifcation could occur, or a new
+   *          simplified object if it can.
+   */
   virtual expr2tc do_simplify(bool second = false) const;
 
   /** Instance of expr_ids recording tihs exprs type. */
@@ -372,20 +734,105 @@ public:
   type2tc type;
 };
 
+/** Fetch string identifier for an expression.
+ *  Returns the class name of the expr passed in - this is equivalent to the
+ *  result of expr.id() in old stringy irep. Should ideally be a method of
+ *  expr2t, but haven't got around to moving it yet.
+ *  @param expr Expression to operate upon
+ *  @return String containing class name of expression.
+ */
 std::string get_expr_id(const expr2t &expr);
+
+/** Fetch string identifier for an expression.
+ *  Like the expr2t equivalent with the same name, but de-ensapculates an
+ *  expr2tc.
+ */
 static inline std::string get_expr_id(const expr2tc &expr)
 {
   return get_expr_id(*expr);
 }
 
-// for "ESBMC templates",
+/** A namespace for "ESBMC templates".
+ *  This means anything designed to mess with expressions or types declared in
+ *  this header, via the medium of templates. */
 namespace esbmct {
 
   class blank_method_operand {
   };
 
+  /** Maximum number of fields to support in expr2t subclasses. This value
+   *  controls the types of any arrays that need to consider the number of
+   *  fields. Unfortunately it can't control template parameters, because
+   *  vardic templates are C++11. */
   const unsigned int num_type_fields = 5;
 
+  /** Template for providing templated methods to expr2t classes.
+   *
+   *  What this does: we give expr_methods a set of template parameters that
+   *  describe the structure of an expr2t subclass. For each field, we give
+   *  the template:
+   *
+   *    - The type of the field
+   *    - The class that field is part of
+   *    - A pointer offset to that field.
+   *
+   *  What this means, is that we can @a type @a generically access a member
+   *  of a class from within the template, without knowing what type it is,
+   *  what its name is, or even what type contains it.
+   *
+   *  We can then use that to make all the boring methods of expr2t type
+   *  generic too. For example: we can make the comparision method by accessing
+   *  each field in the class we're dealing with, passing them to another
+   *  function to do the comparison (with the type resolved by templates or
+   *  via overloading), and then inspecting the output of that.
+   *
+   *  In fact, we can make type generic implementations of all the following
+   *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
+   *  list_operands.
+   *
+   *  So, that's what this template provides; an expr2t class can be made by
+   *  inheriting from this template, telling it what class it'll end up with,
+   *  and what to subclass from, and what the fields in the class being derived
+   *  from look like. This means we can construct a type hierarchy with whatever
+   *  inheretence we like and whatever fields we like, then latch expr_methods
+   *  on top of that to implement all the anoying boring boilerplate code.
+   *
+   *  ----
+   *
+   *  The constructors also need come documentation - We want to be able to
+   *  pass constructor arguments down to the class we're deriving from
+   *  without any additional boilerplate. However, unfortunately, we can't
+   *  make a vardic constructor, nor generate a bunch of explicit constructors
+   *  because they'll attempt to link against subclass constructors that don't
+   *  exist.
+   *
+   *  The solution to this is a series of explicit constructors that get
+   *  disabled by some boost magic depending on what the template parameters
+   *  are. The upshot is that however many number of template arguments are
+   *  provided, a constructor with that many arguments (plus expr id and type)
+   *  is enabled. For more information on how this is made possible, first
+   *  consult a doctor, then mail jmorse.
+   *
+   *  ----
+   *
+   *  @tparam derived Type of class that'll derive from this template.
+   *  @tparam subclass Type of class for this template to derive from.
+   *  @tparam field1_type Type of 1st field in subclass.
+   *  @tparam field1_class Class that 1st field belongs to.
+   *  @tparam field1_ptr Class pointer to first field.
+   *  @tparam field2_type Type of 2st field in subclass.
+   *  @tparam field2_class Class that 2st field belongs to.
+   *  @tparam field2_ptr Class pointer to first field.
+   *  @tparam field3_type Type of 3st field in subclass.
+   *  @tparam field3_class Class that 3st field belongs to.
+   *  @tparam field3_ptr Class pointer to first field.
+   *  @tparam field4_type Type of 4st field in subclass.
+   *  @tparam field4_class Class that 4st field belongs to.
+   *  @tparam field4_ptr Class pointer to first field.
+   *  @tparam field5_type Type of 5st field in subclass.
+   *  @tparam field5_class Class that 5st field belongs to.
+   *  @tparam field5_ptr Class pointer to first field.
+   */
   template <class derived, class subclass,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
@@ -399,12 +846,27 @@ namespace esbmct {
      field5_type field5_class::*field5_ptr = &field5_class::expr_id>
   class expr_methods : public subclass
   {
+    // Dummy type tag - exists to be an arbitary, local class, for use in some
+    // templates. See below.
   public:
     class dummy_type_tag {
     public:
       typedef int type;
     };
 
+    // So to make constructor disabling work, we have to turn it into a
+    // template. Do this by adding a template parameter that has a default and
+    // isn't used.
+    //
+    // Then, we add a dummy end argument with a default - this never actually
+    // gets an argument from the user. However, the type for it is calculated
+    // via the boost::lazy_enable_if template, which causes an error if the
+    // condition given to it is false. That error stops this template from
+    // being instanciated anywhere, so the constructor never exists.
+    //
+    // The condition given to the boost template just checks something against
+    // the types in the overall template parameters. In this case, we only want
+    // this constructor if we're subclassing the expr2t class directly.
     template <class arbitary = dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,expr2t>, arbitary >::type* = NULL)
@@ -455,6 +917,8 @@ namespace esbmct {
                                     field5_type, field5_class, field5_ptr> &ref)
       : subclass(ref) { }
 
+    // Override expr2t methods that we're going to be generating automagically
+
     virtual void convert_smt(prop_convt &obj, void *&arg) const;
     virtual expr2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
@@ -467,6 +931,10 @@ namespace esbmct {
     virtual expr2t *clone_raw(void) const;
   };
 
+  /** Template for generating type2t boilerplate methods.
+   *  Take a look at expr_methods for how this works, in an identical fashion.
+   *  @see expr_methods
+   */
   template <class derived, class subclass,
           typename field1_type = type2t::type_ids, class field1_class = type2t,
           field1_type field1_class::*field1_ptr = &field1_class::type_id,
@@ -546,7 +1014,8 @@ namespace esbmct {
 
 // So - make some type definitions for the different types we're going to be
 // working with. This is to avoid the repeated use of template names in later
-// definitions.
+// definitions. If you'd like to add another type - don't. Vast tracts of code
+// only expect the types below, it's be extremely difficult to hack new ones in.
 
 // Start with forward class definitions
 
@@ -734,7 +1203,10 @@ typedef esbmct::type_methods<cpp_name_type2t, cpp_name_data,
         std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
         cpp_name_type_methods;
 
-/** Boolean type. No additional data */
+/** Boolean type.
+ *  Identifies a boolean type. Contains no additional data.
+ *  @extends typet
+ */
 class bool_type2t : public bool_type_methods
 {
 public:
@@ -745,7 +1217,10 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Empty type. For void pointers and the like, with no type. No extra data */
+/** Empty type.
+ *  For void pointers and the like, with no type. No extra data.
+ *  @extends type2t
+ */
 class empty_type2t : public empty_type_methods
 {
 public:
@@ -756,12 +1231,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Symbol type. Temporary, prior to linking up types after parsing, or when
- *  a struct/array contains a recursive pointer to its own type. */
-
+/** Symbolic type.
+ *  Temporary, prior to linking up types after parsing, or when a struct/array
+ *  contains a recursive pointer to its own type.
+ *  @extends symbol_type_data
+ */
 class symbol_type2t : public symbol_type_methods
 {
 public:
+  /** Primary constructor. @param sym_name Name of symbolic type. */
   symbol_type2t(const dstring sym_name) :
     symbol_type_methods(symbol_id, sym_name) { }
   symbol_type2t(const symbol_type2t &ref) :
@@ -771,9 +1249,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Struct type.
+ *  Represents both C structs and the data in C++ classes. Contains a vector
+ *  of types recording what type each member is, a vector of names recording
+ *  what the member names are, and a name for the struct.
+ *  @extends struct_union_data
+ */
 class struct_type2t : public struct_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param members Vector of types for the members in this struct.
+   *  @param memb_names Vector of names for the members in this struct.
+   *  @param name Name of this struct.
+   */
   struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
     : struct_type_methods(struct_id, members, memb_names, name) {}
@@ -783,9 +1272,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Union type.
+ *  Represents a union type - in a similar vein to struct_type2t, this contains
+ *  a vector of types and vector of names, each element of which corresponds to
+ *  a member in the union. There's also a name for the union.
+ *  @extends struct_union_data
+ */
 class union_type2t : public union_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param members Vector of types corresponding to each member of union.
+   *  @param memb_names Vector of names corresponding to each member of union.
+   *  @param name Name of this union
+   */
   union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
                 irep_idt name)
     : union_type_methods(union_id, members, memb_names, name) {}
@@ -795,9 +1295,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Unsigned integer type.
+ *  Represents any form of unsigned integer; the size of this integer is
+ *  recorded in the width field.
+ *  @extends bv_data
+ */
 class unsignedbv_type2t : public unsignedbv_type_methods
 {
 public:
+  /** Primary constructor. @param width Width of represented integer */
   unsignedbv_type2t(unsigned int width)
     : unsignedbv_type_methods(unsignedbv_id, width) { }
   unsignedbv_type2t(const unsignedbv_type2t &ref)
@@ -806,9 +1312,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Signed integer type.
+ *  Represents any form of signed integer; the size of this integer is
+ *  recorded in the width field.
+ *  @extends bv_data
+ */
 class signedbv_type2t : public signedbv_type_methods
 {
 public:
+  /** Primary constructor. @param width Width of represented integer */
   signedbv_type2t(signed int width)
     : signedbv_type_methods(signedbv_id, width) { }
   signedbv_type2t(const signedbv_type2t &ref)
@@ -830,11 +1342,23 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Array type. Comes with a subtype of the array and a size that might be
- *  constant, might be nondeterministic. */
+/** Array type.
+ *  Comes with a subtype of the array and a size that might be constant, might
+ *  be nondeterministic, might be infinite. These facts are recorded in the
+ *  array_size and size_is_infinite fields.
+ *
+ *  If size_is_infinite is true, array_size will be null. If array_size is
+ *  not a constant number, then it's a dynamically sized array.
+ *  @extends array_data
+ */
 class array_type2t : public array_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param subtype Type of elements in this array.
+   *  @param size Size of this array.
+   *  @param inf Whether or not this array is infinitely sized
+   */
   array_type2t(const type2tc subtype, const expr2tc size, bool inf)
     : array_type_methods (array_id, subtype, size, inf) { }
   array_type2t(const array_type2t &ref)
@@ -842,13 +1366,14 @@ public:
 
   virtual unsigned int get_width(void) const;
 
-  // Exception for invalid manipulations of an infinitely sized array. No actual
-  // data stored.
+  /** Exception for invalid manipulations of an infinitely sized array. No
+   *  actual data stored. */
   class inf_sized_array_excp {
   };
 
-  // Exception for invalid manipultions of dynamically sized arrays. No actual
-  // data stored.
+  /** Exception for invalid manipultions of dynamically sized arrays.
+   *  Stores the size of the array in the exception; this way the catcher
+   *  has it immediately to hand. */
   class dyn_sized_array_excp {
   public:
     dyn_sized_array_excp(const expr2tc _size) : size(_size) {}
@@ -858,11 +1383,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Pointer type. Simply has a subtype, of what it points to. No other
- *  attributes */
+/** Pointer type.
+ *  Simply has a subtype, of what it points to. No other attributes.
+ *  @extends pointer_data
+ */
 class pointer_type2t : public pointer_type_methods
 {
 public:
+  /** Primary constructor. @param subtype Subtype of this pointer */
   pointer_type2t(const type2tc subtype)
     : pointer_type_methods(pointer_id, subtype) { }
   pointer_type2t(const pointer_type2t &ref)
@@ -872,9 +1400,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Fixed bitvector type.
+ *  Contains a spec for a fixed bitwidth number -- this is the equivalent of a
+ *  fixedbv_spect in the old irep situation. Stores how bits are distributed
+ *  over integer bits and fraction bits.
+ *  @extend fixedbv_data
+ */
 class fixedbv_type2t : public fixedbv_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param width Total number of bits in this type of fixedbv
+   *  @param integer Number of integer bits in this type of fixedbv
+   */
   fixedbv_type2t(unsigned int width, unsigned int integer)
     : fixedbv_type_methods(fixedbv_id, width, integer) { }
   fixedbv_type2t(const fixedbv_type2t &ref)
@@ -884,9 +1422,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** String type class.
+ *  Slightly artificial as original irep had no type for this; Represents the
+ *  type of a string constant. Because it needs a bit width, we also store the
+ *  size of the constant string in elements.
+ *  @extends string_data
+ */
 class string_type2t : public string_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param elements Number of 8-bit characters in string constant.
+   */
   string_type2t(unsigned int elements)
     : string_type_methods(string_id, elements) { }
   string_type2t(const string_type2t &ref)
@@ -896,9 +1443,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** C++ Name type.
+ *  Contains a type name, but also a vector of template parameters.
+ *  I assume something in the C++ frontend uses this.
+ *  @extends cpp_name_data
+ */
 class cpp_name_type2t : public cpp_name_type_methods
 {
 public:
+  /** Primary constructor.
+   *  @param n Name of this type.
+   *  @param ta Vector of template arguments (types).
+   */
   cpp_name_type2t(const irep_idt &n, const std::vector<type2tc> &ta)
     : cpp_name_type_methods(cpp_name_id, n, ta){}
   cpp_name_type2t(const cpp_name_type2t &ref)
@@ -942,16 +1498,25 @@ type_macros(cpp_name);
 #undef dynamic_cast
 #endif
 
+/** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
 
+/** Test whether type is a number type - bv or fixedbv. */
 inline bool is_number_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
           t->type_id == type2t::fixedbv_id); }
 
-// And now, some more utilities.
+/** Pool for caching converted types.
+ *  Various common types (bool, empty for example) needn't be reallocated
+ *  every time we need a new one; it's better to have some global constants
+ *  of them, which is what this class provides. There are global bool and empty
+ *  types to be used; in addition, there are helper methods to create integer
+ *  types with common bit widths, and methods to enter a used type into a cache
+ *  of them, allowing migration of typet <=> type2t to be faster.
+ */
 class type_poolt {
 public:
   type_poolt(void);
@@ -2019,29 +2584,44 @@ typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
         expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>
         code_cpp_throw_expr_methods;
 
-/** Constant integer class. Records a constant integer of an arbitary
- *  precision */
+/** Constant integer class.
+ *  Records a constant integer of an arbitary precision, signed or unsigned.
+ *  Simplification operations will cause the integer to be clipped to whatever
+ *  bit size is in expr type.
+ *  @extends constant_int_data
+ */
 class constant_int2t : public constant_int_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this integer.
+   *  @param input BigInt object containing the integer we're dealing with
+   */
   constant_int2t(const type2tc &type, const BigInt &input)
     : constant_int_expr_methods(type, constant_int_id, input) { }
   constant_int2t(const constant_int2t &ref)
     : constant_int_expr_methods(ref) { }
 
-  /** Accessor for fetching native int of this constant */
+  /** Accessor for fetching machine-word unsigned integer of this constant */
   unsigned long as_ulong(void) const;
+  /** Accessor for fetching machine-word integer of this constant */
   long as_long(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant fixedbv class. Records a floating point number in what I assume
+/** Constant fixedbv class. Records a fixed-width number in what I assume
  *  to be mantissa/exponent form, but which is described throughout CBMC code
- *  as fraction/integer parts. */
+ *  as fraction/integer parts. Stored in a fixedbvt.
+ *  @extends constant_fixedbv_data
+ */
 class constant_fixedbv2t : public constant_fixedbv_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression.
+   *  @param value fixedbvt object containing number we'll be operating on
+   */
   constant_fixedbv2t(const type2tc &type, const fixedbvt &value)
     : constant_fixedbv_expr_methods(type, constant_fixedbv_id, value) { }
   constant_fixedbv2t(const constant_fixedbv2t &ref)
@@ -2050,39 +2630,63 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant boolean value.
+ *  Contains a constant bool; rather self explanatory.
+ *  @extends constant_bool_data
+ */
 class constant_bool2t : public constant_bool_expr_methods
 {
 public:
+  /** Primary constructor. @param value True or false */
   constant_bool2t(bool value)
     : constant_bool_expr_methods(type_pool.get_bool(), constant_bool_id, value)
       { }
   constant_bool2t(const constant_bool2t &ref)
     : constant_bool_expr_methods(ref) { }
 
+  /** Return whether contained boolean is true. */
   bool is_true(void) const;
+  /** Return whether contained boolean is false. */
   bool is_false(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
 
-/** Constant class for string constants. */
+/** Constant class for string constants.
+ *  Contains an irep_idt representing the constant string.
+ *  @extends constant_string_data
+ */
 class constant_string2t : public constant_string_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this string; presumably a string_type2t.
+   *  @param stringref String pool'd string we're dealing with
+   */
   constant_string2t(const type2tc &type, const irep_idt &stringref)
     : constant_string_expr_methods(type, constant_string_id, stringref) { }
   constant_string2t(const constant_string2t &ref)
     : constant_string_expr_methods(ref) { }
 
-  /** Convert string to a constant length array */
+  /** Convert string to a constant length array of characters */
   expr2tc to_array(void) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant structure.
+ *  Contains a vector of expressions containing each member of the struct
+ *  we're dealing with, corresponding to the types and field names in the
+ *  struct_type2t type.
+ *  @extends constant_datatype_data
+ */
 class constant_struct2t : public constant_struct_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this structure, presumably a struct_type2t
+   *  @param membrs Vector of member values that make up this struct.
+   */
   constant_struct2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_struct_expr_methods (type, constant_struct_id, members) { }
   constant_struct2t(const constant_struct2t &ref)
@@ -2091,9 +2695,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant union expression.
+ *  Almost the same as constant_struct2t - a vector of members corresponding
+ *  to the members described in the type. However, it seems the values pumped
+ *  at us by CBMC only ever have one member (at position 0) representing the
+ *  most recent value written to the union.
+ *  @extend constant_datatype_data
+ */
 class constant_union2t : public constant_union_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this structure, presumably a union_type2t
+   *  @param membrs Vector of member values that make up this union.
+   */
   constant_union2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_union_expr_methods (type, constant_union_id, members) { }
   constant_union2t(const constant_union2t &ref)
@@ -2102,9 +2717,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant array.
+ *  Contains a vector of array elements, pretty self explanatory. Only valid if
+ *  its type has a constant sized array, can't have constant arrays of dynamic
+ *  or infinitely sized arrays.
+ *  @extends constant_datatype_data
+ */
 class constant_array2t : public constant_array_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this array, must be a constant sized array
+   *  @param membrs Vector of elements in this array
+   */
   constant_array2t(const type2tc &type, const std::vector<expr2tc> &members)
     : constant_array_expr_methods(type, constant_array_id, members) { }
   constant_array2t(const constant_array2t &ref)
@@ -2113,9 +2738,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Constant array of one particular value.
+ *  Expression with array type, possibly dynamic or infinitely sized, with
+ *  all elements initialized to a single value.
+ *  @extends constant_array_of_data
+ */
 class constant_array_of2t : public constant_array_of_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression, must be an array.
+   *  @param init Initializer for each element in this array
+   */
   constant_array_of2t(const type2tc &type, const expr2tc &init)
     : constant_array_of_expr_methods(type, constant_array_of_id, init) { }
   constant_array_of2t(const constant_array_of2t &ref)
@@ -2124,9 +2758,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Symbol type.
+ *  Contains the name of some variable. Various levels of renaming.
+ *  @extends symbol_data
+ */
 class symbol2t : public symbol_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type that this symbol has
+   *  @param init Name of this symbol
+   */
   symbol2t(const type2tc &type, const irep_idt &init)
     : symbol_expr_methods(type, symbol_id, init) { }
   symbol2t(const symbol2t &ref)
@@ -2135,9 +2777,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Typecast expression.
+ *  Represents cast from contained expression 'from' to the type of this
+ *  typecast.
+ *  @extends typecast_data
+ */
 class typecast2t : public typecast_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type to typecast to
+   *  @param from Expression to cast from.
+   */
   typecast2t(const type2tc &type, const expr2tc &from)
     : typecast_expr_methods(type, typecast_id, from) { }
   typecast2t(const typecast2t &ref)
@@ -2147,11 +2798,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Typecast, but explicitly either to or from a bit vector. This prevents any
-// semantic conversion of floats to/from bits.
+/** Typecast to a bit vector.
+ *  In contrast to typecast2t, this expr forces a bit representation cast of
+ *  whatever its operand is, rather than a semantic cast. This is the only way
+ *  to express the bit-value of floats, as a normal typecast will attemp to
+ *  cast their value.
+ *  @extends typecast_data
+ */
 class to_bv_typecast2t : public to_bv_typecast_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type to convert value to.
+   *  @param from Value to convert from.
+   */
   to_bv_typecast2t(const type2tc &type, const expr2tc &from)
     : to_bv_typecast_expr_methods(type, to_bv_typecast_id, from) { }
   to_bv_typecast2t(const to_bv_typecast2t &ref)
@@ -2160,9 +2820,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Typecast from a bitvector.
+ *  Like to_bv_typecast2t, but in the other direction.
+ *  @see to_bv_typecast2t
+ *  @extends typecast_data
+ */
 class from_bv_typecast2t : public from_bv_typecast_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type to convert value to.
+   *  @param from Value to convert from.
+   */
   from_bv_typecast2t(const type2tc &type, const expr2tc &from)
     : from_bv_typecast_expr_methods(type, from_bv_typecast_id, from) { }
   from_bv_typecast2t(const from_bv_typecast2t &ref)
@@ -2171,9 +2840,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** If-then-else expression.
+ *  Represents a ternary operation, (cond) ? truevalue : falsevalue.
+ *  @extends if_data
+ */
 class if2t : public if_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type this expression evaluates to.
+   *  @param cond Condition to evaulate which side of ternary operator is used.
+   *  @param trueval Value to use if cond evaluates to true.
+   *  @param falseval Value to use if cond evaluates to false.
+   */
   if2t(const type2tc &type, const expr2tc &cond, const expr2tc &trueval,
        const expr2tc &falseval)
     : if_expr_methods(type, if_id, cond, trueval, falseval) {}
@@ -2185,6 +2864,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Equality expression. Evaluate whether two exprs are the same. Always has
+ *  boolean type. @extends relation_data */
 class equality2t : public equality_expr_methods
 {
 public:
@@ -2198,6 +2879,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Inequality expression. Evaluate whether two exprs are different. Always has
+ *  boolean type. @extends relation_data */
 class notequal2t : public notequal_expr_methods
 {
 public:
@@ -2211,6 +2894,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Lessthan relation. Evaluate whether expression is less than another. Always
+ *  has boolean type. @extends relation_data */
 class lessthan2t : public lessthan_expr_methods
 {
 public:
@@ -2224,6 +2909,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Greaterthan relation. Evaluate whether expression is greater than another.
+ * Always has boolean type. @extends relation_data */
 class greaterthan2t : public greaterthan_expr_methods
 {
 public:
@@ -2237,6 +2924,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Lessthanequal relation. Evaluate whether expression is less-than or
+ * equal to another. Always has boolean type. @extends relation_data */
 class lessthanequal2t : public lessthanequal_expr_methods
 {
 public:
@@ -2250,6 +2939,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Greaterthanequal relation. Evaluate whether expression is greater-than or
+ * equal to another. Always has boolean type. @extends relation_data */
 class greaterthanequal2t : public greaterthanequal_expr_methods
 {
 public:
@@ -2264,9 +2955,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Not operation. Inverts boolean operand. Always has boolean type.
+ *  @extends not_data */
 class not2t : public not_expr_methods
 {
 public:
+  /** Primary constructor. @param val Boolean typed operand to invert. */
   not2t(const expr2tc &val)
   : not_expr_methods(type_pool.get_bool(), not_id, val) {}
   not2t(const not2t &ref)
@@ -2277,9 +2971,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** And operation. Computes boolean value of (side_1 & side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class and2t : public and_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   and2t(const expr2tc &s1, const expr2tc &s2)
   : and_expr_methods(type_pool.get_bool(), and_id, s1, s2) {}
   and2t(const and2t &ref)
@@ -2290,9 +2987,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Or operation. Computes boolean value of (side_1 | side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class or2t : public or_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   or2t(const expr2tc &s1, const expr2tc &s2)
   : or_expr_methods(type_pool.get_bool(), or_id, s1, s2) {}
   or2t(const or2t &ref)
@@ -2303,9 +3003,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Xor operation. Computes boolean value of (side_1 ^ side_2). Always results
+ *  in boolean type. @extends logic_2ops */
 class xor2t : public xor_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   xor2t(const expr2tc &s1, const expr2tc &s2)
   : xor_expr_methods(type_pool.get_bool(), xor_id, s1, s2) {}
   xor2t(const xor2t &ref)
@@ -2316,9 +3019,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Implies operation. Computes boolean value of (side_1 -> side_2). Always
+ *  results in boolean type. @extends logic_2ops */
 class implies2t : public implies_expr_methods
 {
 public:
+  /** Primary constructor. @param s1 Operand 1. @param s2 Operand 2. */
   implies2t(const expr2tc &s1, const expr2tc &s2)
   : implies_expr_methods(type_pool.get_bool(), implies_id, s1, s2) {}
   implies2t(const implies2t &ref)
@@ -2329,9 +3035,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit and operation. Perform bit and between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitand2t : public bitand_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitand_expr_methods(t, bitand_id, s1, s2) {}
   bitand2t(const bitand2t &ref)
@@ -2342,9 +3054,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit or operation. Perform bit or between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitor2t : public bitor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitor_expr_methods(t, bitor_id, s1, s2) {}
   bitor2t(const bitor2t &ref)
@@ -2355,9 +3073,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit xor operation. Perform bit xor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitxor2t : public bitxor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitxor_expr_methods(t, bitxor_id, s1, s2) {}
   bitxor2t(const bitxor2t &ref)
@@ -2368,9 +3092,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nand operation. Perform bit nand between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnand2t : public bitnand_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnand2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnand_expr_methods(t, bitnand_id, s1, s2) {}
   bitnand2t(const bitnand2t &ref)
@@ -2381,9 +3111,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nor operation. Perform bit nor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnor2t : public bitnor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnor_expr_methods(t, bitnor_id, s1, s2) {}
   bitnor2t(const bitnor2t &ref)
@@ -2394,9 +3130,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nxor operation. Perform bit nxor between two bitvector operands. Types of
+ *  this expr and both operands must match. @extends bit_2ops */
 class bitnxor2t : public bitnxor_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expr.
+   *  @param s1 Operand 1.
+   *  @param s2 Operand 2. */
   bitnxor2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : bitnxor_expr_methods(t, bitnxor_id, s1, s2) {}
   bitnxor2t(const bitnxor2t &ref)
@@ -2407,9 +3149,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Bit nxor operation. Invert bits in bitvector operand. Operand must have the
+ *  same type as this expr. @extends bitnot_data */
 class bitnot2t : public bitnot_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v Value to invert */
   bitnot2t(const type2tc &type, const expr2tc &v)
     : bitnot_expr_methods(type, bitnot_id, v) {}
   bitnot2t(const bitnot2t &ref)
@@ -2420,9 +3167,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Logical shift right. Shifts operand 1 to the right by the number of bits in
+ *  operand 2, with zeros shifted into empty spaces. All types must be integers,
+ *  will probably find that the shifted value type must match the expr type.
+ *  @extends bit_2ops */
 class lshr2t : public lshr_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param t Type of this expression.
+   *  @param s1 Value to be shifted.
+   *  @param s2 Number of bits to shift by, potentially nondeterministic. */
   lshr2t(const type2tc &t, const expr2tc &s1, const expr2tc &s2)
   : lshr_expr_methods(t, lshr_id, s1, s2) {}
   lshr2t(const lshr2t &ref)
@@ -2433,9 +3188,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic negation. Negate the operand, which must be a number type. Operand
+ *  type must match expr type. @extends arith_1op */
 class neg2t : public neg_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param val Value to negate. */
   neg2t(const type2tc &type, const expr2tc &val)
     : neg_expr_methods(type, neg_id, val) {}
   neg2t(const neg2t &ref)
@@ -2446,9 +3206,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic abs. Take absolute value of the operand, which must be a number
+ *  type. Operand type must match expr type. @extends arith_1op */
 class abs2t : public abs_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param val Value to abs. */
   abs2t(const type2tc &type, const expr2tc &val)
     : abs_expr_methods(type, abs_id, val) {}
   abs2t(const abs2t &ref)
@@ -2457,9 +3222,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Addition operation. Adds two operands together. Must both be numeric types.
+ *  Types of both operands and expr type should match. @extends arith_2ops */
 class add2t : public add_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : add_expr_methods(type, add_id, v1, v2) {}
   add2t(const add2t &ref)
@@ -2470,9 +3241,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Subtraction operation. Subtracts second operand from first operand. Must both
+ *  be numeric types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class sub2t : public sub_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : sub_expr_methods(type, sub_id, v1, v2) {}
   sub2t(const sub2t &ref)
@@ -2483,9 +3261,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Multiplication operation. Multiplies the two operands. Must both be numeric
+ *  types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class mul2t : public mul_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : mul_expr_methods(type, mul_id, v1, v2) {}
   mul2t(const mul2t &ref)
@@ -2496,9 +3281,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Division operation. Divides first operand by second operand. Must both be
+ *  numeric types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class div2t : public div_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : div_expr_methods(type, div_id, v1, v2) {}
   div2t(const div2t &ref)
@@ -2509,9 +3301,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Modulus operation. Takes modulus of first operand divided by 2nd operand.
+ *  Should both be integer types. Types of both operands and expr type should
+ *  match. @extends arith_2ops */
 class modulus2t : public modulus_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : modulus_expr_methods(type, modulus_id, v1, v2) {}
   modulus2t(const modulus2t &ref)
@@ -2522,9 +3321,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Shift left operation. Shifts contents of first operand left by number of
+ *  bit positions indicated by the second operand. Both must be integers. Types
+ *  of both operands and expr type should match. @extends arith_2ops */
 class shl2t : public shl_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 Value to shift.
+   *  @param v2 Number of bits to to shift by. */
   shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : shl_expr_methods(type, shl_id, v1, v2) {}
   shl2t(const shl2t &ref)
@@ -2535,9 +3341,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic Shift right operation. Shifts contents of first operand right by
+ *  number of bit positions indicated by the second operand, preserving sign of
+ *  original number. Both must be integers. Types of both operands and expr type
+ *  should match. @extends arith_2ops */
 class ashr2t : public ashr_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 Value to shift.
+   *  @param v2 Number of bits to to shift by. */
   ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : ashr_expr_methods(type, ashr_id, v1, v2) {}
   ashr2t(const ashr2t &ref)
@@ -2548,9 +3362,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Same-object operation. Checks whether two operands with pointer type have the
+ *  same pointer object or not. Always has boolean result.
+ *  @extends same_object_data */
 class same_object2t : public same_object_expr_methods
 {
 public:
+  /** Primary constructor. @param v1 First object. @param v2 Second object. */
   same_object2t(const expr2tc &v1, const expr2tc &v2)
     : same_object_expr_methods(type_pool.get_bool(), same_object_id, v1, v2) {}
   same_object2t(const same_object2t &ref)
@@ -2561,9 +3379,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract pointer offset. From an expression of pointer type, produce the
+ *  number of bytes difference between where this pointer points to and the start
+ *  of the object it points at. @extends pointer_ops */
 class pointer_offset2t : public pointer_offset_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Model basic integer type.
+   *  @param ptrobj Pointer object to get offset from. */
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj) {}
   pointer_offset2t(const pointer_offset2t &ref)
@@ -2574,9 +3398,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract pointer object. From an expression of pointer type, produce the
+ *  pointer object that this pointer points into. @extends pointer_ops */
 class pointer_object2t : public pointer_object_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Model basic integer type.
+   *  @param ptrobj Pointer object to get object from. */
   pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_object_expr_methods(type, pointer_object_id, ptrobj) {}
   pointer_object2t(const pointer_object2t &ref)
@@ -2585,9 +3414,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Address of operation. Takes some object as an argument - ideally a symbol
+ *  renamed to level 1, unfortunately some string constants reach here. Produces
+ *  pointer typed expression.
+ *  @extends pointer_ops */
 class address_of2t : public address_of_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param subtype Subtype of pointer to generate. Crucially, the type of the
+   *         expr is a pointer to this subtype. This is slightly unintuitive,
+   *         might be changed in the future.
+   *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
     : address_of_expr_methods(type2tc(new pointer_type2t(subtype)),
                               address_of_id, ptrobj) {}
@@ -2599,9 +3437,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract byte from data. From a particular data structure, extracts a single
+ *  byte from its byte representation, at a particular offset into the data
+ *  structure. Currently, Z3 backend throws its cookies if the offset isn't
+ *  a constant value.
+ *  @extends byte_extract_data */
 class byte_extract2t : public byte_extract_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression. Presumably a 8 bit integer.
+   *  @param is_big_endian Whether or not to use big endian byte representation
+   *         of source object.
+   *  @param source Object to extract data from. Any type.
+   *  @param offset Offset into source data object to extract from. */
   byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset)
     : byte_extract_expr_methods(type, byte_extract_id, is_big_endian,
@@ -2612,9 +3461,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Update byte. Takes a data object and updates the value of a particular
+ *  byte in its byte representation, at a particular offset into the data object.
+ *  Output of expression is a new copy of the source object, with the updated
+ *  value. Currently, Z3 backend throws its cookies if the offset isn't a
+ *  constant value. @extends byte_update_data */
 class byte_update2t : public byte_update_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type of resulting, updated, data object.
+   *  @param is_big_endian Whether to use big endian byte representation.
+   *  @param source Source object in which to update a byte.
+   *  @param updateval Value of byte to  update source with. */
   byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset, const expr2tc &updateval)
     : byte_update_expr_methods(type, byte_update_id, is_big_endian,
@@ -2625,9 +3484,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** With operation. Updates either an array or a struct/union with a new element
+ *  or member. Expression value is the arary or struct/union with the updated
+ *  value. Ideally in the future this will become two operations, one for arrays
+ *  and one for structs/unions. @extends with_data */
 class with2t : public with_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression; Same as source.
+   *  @param source Data object to update.
+   *  @param field Field to update - a constant string naming the field if source
+   *         is a struct/union, or an integer index if source is an array. */
   with2t(const type2tc &type, const expr2tc &source, const expr2tc &field,
          const expr2tc &value)
     : with_expr_methods(type, with_id, source, field, value) {}
@@ -2639,9 +3507,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Member operation. Extracts a particular member out of a struct or union.
+ *  @extends member_data */
 class member2t : public member_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of extracted member.
+   *  @param source Data structure to extract from.
+   *  @param memb ΩName of member to extract.  */
   member2t(const type2tc &type, const expr2tc &source, const irep_idt &memb)
     : member_expr_methods(type, member_id, source, memb) {}
   member2t(const member2t &ref)
@@ -2652,9 +3526,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Array index operation. Extracts an element from an array at a particular
+ *  index. @extends index_data */
 class index2t : public index_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of element extracted.
+   *  @param source Array to extract data from.
+   *  @param index Element in source to extract from. */
   index2t(const type2tc &type, const expr2tc &source, const expr2tc &index)
     : index_expr_methods(type, index_id, source, index) {}
   index2t(const index2t &ref)
@@ -2665,9 +3545,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Is string zero operation. Checks to see whether string operand is zero or
+ *  not? In reality I've no idea, this is something string-abstraction related.
+ *  Boolean result. @extends string_ops */
 class zero_string2t : public zero_string_expr_methods
 {
 public:
+  /** Primary constructor. @param string String type operand to test. */
   zero_string2t(const expr2tc &string)
     : zero_string_expr_methods(type_pool.get_bool(), zero_string_id, string) {}
   zero_string2t(const zero_string2t &ref)
@@ -2676,9 +3560,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Check for zero length string. No idea how this is different from zero_string,
+ *  but it has a different irep in old stringy irep, so here we are. Boolean
+ *  result. @extends string_ops */
 class zero_length_string2t : public zero_length_string_expr_methods
 {
 public:
+  /** Primary constructor. @param string String type operand to test. */
   zero_length_string2t(const expr2tc &string)
     : zero_length_string_expr_methods(type_pool.get_bool(),
                                       zero_length_string_id, string) {}
@@ -2688,9 +3576,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Is operand not-a-number. Used to implement C library isnan function for
+ *  float/double values. Boolean result. @extends isnan_data */
 class isnan2t : public isnan_expr_methods
 {
 public:
+  /** Primary constructor. @param value Number value to test for nan */
   isnan2t(const expr2tc &value)
     : isnan_expr_methods(type_pool.get_bool(), isnan_id, value) {}
   isnan2t(const isnan2t &ref)
@@ -2700,13 +3591,18 @@ public:
 };
 
 /** Check whether operand overflows. Operand must be either add, subtract,
- *  or multiply. XXXjmorse - in the future we should ensure the type of the
+ *  or multiply, and have integer operands themselves. If the result of the
+ *  operation doesn't fit in the bitwidth of the operands, this expr evaluates
+ *  to true. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
- *  whether to do a signed or unsigned over/underflow test. */
-
+ *  whether to do a signed or unsigned over/underflow test.
+ *  @extends overflow_ops */
 class overflow2t : public overflow_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param operand Operation to test overflow on; either an add, subtract, or
+   *         multiply. */
   overflow2t(const expr2tc &operand)
     : overflow_expr_methods(type_pool.get_bool(), overflow_id, operand) {}
   overflow2t(const overflow2t &ref)
@@ -2717,9 +3613,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test if a cast overflows. Check to see whether casting the operand to a
+ *  particular bitsize will cause an integer overflow. If it does, this expr
+ *  evaluates to true. @extends overflow_cast_data */
 class overflow_cast2t : public overflow_cast_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param operand Value to test cast out on. Should have integer type.
+   *  @param bits Number of integer bits to cast operand to.  */
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
     : overflow_cast_expr_methods(type_pool.get_bool(), overflow_cast_id,
                                  operand, bits) {}
@@ -2729,9 +3631,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test for negation overflows. Check whether or not negating an operand would
+ *  lead to an integer overflow - for example, there's no representation of
+ *  -INT_MIN. Evaluates to true if overflow would occur. @extends overflow_ops */
 class overflow_neg2t : public overflow_neg_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Integer to test negation of. */
   overflow_neg2t(const expr2tc &operand)
     : overflow_neg_expr_methods(type_pool.get_bool(), overflow_neg_id,
                                 operand) {}
@@ -2741,9 +3647,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record unknown data value. Exclusively for use in pointer analysis to record
+ *  the fact that we point at an unknown item of data. No idea why it has to be
+ *  part of irep, but it was in the past, so it will be now. Ideally in the
+ *  future this should change. @extends expr2t */
 class unknown2t : public unknown_expr_methods
 {
 public:
+  /** Primary constructor. @param type Type of unknown data item */
   unknown2t(const type2tc &type)
     : unknown_expr_methods(type, unknown_id) {}
   unknown2t(const unknown2t &ref)
@@ -2752,6 +3663,10 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record invalid data value. Exclusively for use in pointer analysis to record
+ *  the fact that what we point at is guarenteed to be invalid or nonexistant.
+ *  Like unknown2t, ideally in the future shouldn't subclass expr2t.
+ *  @extends expr2t */
 class invalid2t : public invalid_expr_methods
 {
 public:
@@ -2763,6 +3678,9 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record null pointer value. Exclusively for use in pointer analysis to record
+ *  the fact that a pointer can be NULL. Like unknown2t, should in the future
+ *  become a non-expr2t subclass. @extends expr2t */
 class null_object2t : public null_object_expr_methods
 {
 public:
@@ -2774,6 +3692,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
+ *  @extends dynamic_object_data */
 class dynamic_object2t : public dynamic_object_expr_methods
 {
 public:
@@ -2786,9 +3706,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Dereference operation. Expanded by symbolic execution into an if-then-else
+ *  set of cases that take the value set of what this pointer might point at,
+ *  examines the pointer's pointer object, and constructs a huge if-then-else
+ *  case to evaluate to the appropriate data object for this pointer.
+ *  @extends dereference_data */
 class dereference2t : public dereference_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of dereferenced data.
+   *  @param operand Pointer to dereference. */
   dereference2t(const type2tc &type, const expr2tc &operand)
     : dereference_expr_methods(type, dereference_id, operand) {}
   dereference2t(const dereference2t &ref)
@@ -2797,9 +3725,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test whether ptr is valid. Expanded at symex time to look up whether or not
+ *  the pointer operand is invalid (i.e., doesn't point at something and thus
+ *  would be invalid to dereference). Boolean result. @extends object_ops */
 class valid_object2t : public valid_object_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer value to examine for validity*/
   valid_object2t(const expr2tc &operand)
     : valid_object_expr_methods(type_pool.get_bool(), valid_object_id, operand)
       {}
@@ -2809,9 +3741,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test pointer for deallocation. Check for use after free: this irep is
+ *  expanded at symex time to look up whether or not the operand is a) an invalid
+ *  object, and b) if it is, whether it's been marked as being deallocated.
+ *  Evalutes to true if that's the case. @extends object_ops */
 class deallocated_obj2t : public deallocated_obj_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer to check for deallocation */
   deallocated_obj2t(const expr2tc &operand)
     : deallocated_obj_expr_methods(type_pool.get_bool(), deallocated_obj_id,
                                    operand) {}
@@ -2821,9 +3758,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Retrieve dynamic size of pointer obj. For a dynamically allocated pointer
+ *  object, retrieves its potentially nondeterministic object size. Expanded at
+ *  symex time to access a modelling array. Not sure what happens if you feed
+ *  it a nondynamic pointer, it'll probably give you a free variable.
+ *  @extends object_ops */
 class dynamic_size2t : public dynamic_size_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
   dynamic_size2t(const expr2tc &operand)
     : dynamic_size_expr_methods(type_pool.get_bool(), dynamic_size_id, operand)
       {}
@@ -2833,9 +3776,21 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Irep for various side effects. Stores data about various things that can
+ *  cause side effects, such as memory allocations, nondeterministic value
+ *  allocations (nondet_* funcs,), and for some reason function calls.
+ *
+ *  Function calls are the one thing that stand out here as being weird; it seems
+ *  they get stored in expressions and then pulled out in GOTO conversion to be
+ *  evaluated in front of the current expression. However, in one or two places
+ *  they seem to escape and reach the solver, which is bad.
+ *
+ *  @extends sideeffect_data */
 class sideeffect2t : public sideeffect_expr_methods
 {
 public:
+  /** Enumeration identifying each particular kind of side effect. The values
+   *  themselves are entirely self explanatory. */
   enum allockind {
     malloc,
     cpp_new,
@@ -2844,6 +3799,12 @@ public:
     function_call
   };
 
+  /** Primary constructor.
+   *  @param t Type this side-effect evaluates to.
+   *  @param operand Not really certain. Sometimes turns up in string-irep.
+   *  @param sz Size of dynamic allocation to make.
+   *  @param alloct Type of piece of data to allocate.
+   *  @param a Vector of arguments to function call. */
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
                const type2tc &alloct, allockind k, std::vector<expr2tc> &a)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k, a) {}
