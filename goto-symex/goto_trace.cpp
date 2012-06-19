@@ -300,16 +300,14 @@ get_metada_from_llvm(
       if (k == 1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch;
       if (k == 2) const_cast<goto_tracet*>(&goto_trace)->FuncName = pch;
       if (k == 3) const_cast<goto_tracet*>(&goto_trace)->VarName = pch;
-      //std::cout<<"varname - "<<goto_trace.VarName<<std::endl;
       if (k == 4) const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
       pch = strtok(NULL, "@#");
       k++;
     }
-    //********************change
-    // indentifier************************************/
+
+    //********************change indentifier***********************************/
     if (!is_nil_expr(it->original_lhs) && is_symbol2t(it->original_lhs)) {
       expr2tc &lhs = const_cast<expr2tc&>(it->original_lhs);
-//		exprt* lhs = const_cast<exprt*>(&it->original_lhs);
       char identstr[to_symbol2t(it->original_lhs).name.as_string().size()];
       strcpy(identstr, to_symbol2t(it->original_lhs).name.as_string().c_str());
       int j = 0;
@@ -365,7 +363,7 @@ show_goto_trace(
 	  }
 	  out << "  " << it->pc->location << std::endl;
 	}
-	//std::cout<<"comment "<<it->comment<<std::endl;
+
 	out << "  " << it->comment << std::endl;
 
 	if (it->pc->is_assert()) {
