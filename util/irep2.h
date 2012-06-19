@@ -3576,9 +3576,12 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Is operand not-a-number. Used to implement C library isnan function for
+ *  float/double values. Boolean result. @extends isnan_data */
 class isnan2t : public isnan_expr_methods
 {
 public:
+  /** Primary constructor. @param value Number value to test for nan */
   isnan2t(const expr2tc &value)
     : isnan_expr_methods(type_pool.get_bool(), isnan_id, value) {}
   isnan2t(const isnan2t &ref)
