@@ -272,7 +272,7 @@ void get_metada_from_llvm(
 {
   char line[it->pc->location.get_line().as_string().length()];
   strcpy(line,it->pc->location.get_line().c_str());
-  if (is_struct_type(it->rhs->type)) {
+  if (!is_nil_expr(it->rhs) && is_struct_type(it->rhs->type)) {
           struct_type2t &struct_type = const_cast<struct_type2t&>(to_struct_type(it->original_lhs->type));
 
 	  std::string ident = to_symbol2t(it->original_lhs).name.as_string();
@@ -310,6 +310,7 @@ void get_metada_from_llvm(
         k++;
       }
       //********************change indentifier************************************/
+      if (!is_nil_expr(it->original_lhs) && is_symbol2t(it->original_lhs)) {
                 expr2tc &lhs = const_cast<expr2tc&>(it->original_lhs);
 //		exprt* lhs = const_cast<exprt*>(&it->original_lhs);
 		char identstr[to_symbol2t(it->original_lhs).name.as_string().size()];
@@ -330,6 +331,7 @@ void get_metada_from_llvm(
 		  j++;
 		}
                 to_symbol2t(lhs).name = irep_idt(newidentifier);
+      }
 		//**********************************************************************/
 
         const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
