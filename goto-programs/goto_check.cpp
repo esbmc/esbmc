@@ -742,8 +742,6 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       if (is_code_expression2t(i.code)) {
         check(migrate_expr_back(i.code));
       } else if (is_code_printf2t(i.code)) {
-#warning XXX jmorse cpp try potentially un-checked if you don't fix this
-//    		  || statement=="cpp-try")
         forall_operands2(it, expr_list, i.code)
           check(migrate_expr_back(**it));
       }
