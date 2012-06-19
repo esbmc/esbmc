@@ -3725,9 +3725,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test whether ptr is valid. Expanded at symex time to look up whether or not
+ *  the pointer operand is invalid (i.e., doesn't point at something and thus
+ *  would be invalid to dereference). Boolean result. @extends object_ops */
 class valid_object2t : public valid_object_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer value to examine for validity*/
   valid_object2t(const expr2tc &operand)
     : valid_object_expr_methods(type_pool.get_bool(), valid_object_id, operand)
       {}
@@ -3737,9 +3741,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test pointer for deallocation. Check for use after free: this irep is
+ *  expanded at symex time to look up whether or not the operand is a) an invalid
+ *  object, and b) if it is, whether it's been marked as being deallocated.
+ *  Evalutes to true if that's the case. @extends object_ops */
 class deallocated_obj2t : public deallocated_obj_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer to check for deallocation */
   deallocated_obj2t(const expr2tc &operand)
     : deallocated_obj_expr_methods(type_pool.get_bool(), deallocated_obj_id,
                                    operand) {}
@@ -3749,9 +3758,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Retrieve dynamic size of pointer obj. For a dynamically allocated pointer
+ *  object, retrieves its potentially nondeterministic object size. Expanded at
+ *  symex time to access a modelling array. Not sure what happens if you feed
+ *  it a nondynamic pointer, it'll probably give you a free variable.
+ *  @extends object_ops */
 class dynamic_size2t : public dynamic_size_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Pointer object to fetch size for. */
   dynamic_size2t(const expr2tc &operand)
     : dynamic_size_expr_methods(type_pool.get_bool(), dynamic_size_id, operand)
       {}
