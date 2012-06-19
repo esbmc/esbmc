@@ -1057,7 +1057,15 @@ public:
     : type2t(ref), members(ref.members), member_names(ref.member_names),
       name(ref.name) { }
 
+  /** Fetch index number of member. Given a textual name of a member of a
+   *  struct or union, this method will look up what index it is into the
+   *  vector of types that make up this struct/union. Always returns the correct
+   *  index, if you give it a name that isn't part of this struct/union it'll
+   *  abort.
+   *  @param name Name of member of this struct/union to look up.
+   *  @return Index into members/member_names vectors */
   unsigned int get_component_number(const irep_idt &name) const;
+
   const std::vector<type2tc> & get_structure_members(void) const;
   const std::vector<irep_idt> & get_structure_member_names(void) const;
   const irep_idt & get_structure_name(void) const;
