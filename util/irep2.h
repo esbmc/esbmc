@@ -3437,9 +3437,20 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract byte from data. From a particular data structure, extracts a single
+ *  byte from its byte representation, at a particular offset into the data
+ *  structure. Currently, Z3 backend throws its cookies if the offset isn't
+ *  a constant value.
+ *  @extends byte_extract_data */
 class byte_extract2t : public byte_extract_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expression. Presumably a 8 bit integer.
+   *  @param is_big_endian Whether or not to use big endian byte representation
+   *         of source object.
+   *  @param source Object to extract data from. Any type.
+   *  @param offset Offset into source data object to extract from. */
   byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset)
     : byte_extract_expr_methods(type, byte_extract_id, is_big_endian,
@@ -3450,9 +3461,19 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Update byte. Takes a data object and updates the value of a particular
+ *  byte in its byte representation, at a particular offset into the data object.
+ *  Output of expression is a new copy of the source object, with the updated
+ *  value. Currently, Z3 backend throws its cookies if the offset isn't a
+ *  constant value. @extends byte_update_data */
 class byte_update2t : public byte_update_expr_methods
 {
 public:
+  /** Primary constructor
+   *  @param type Type of resulting, updated, data object.
+   *  @param is_big_endian Whether to use big endian byte representation.
+   *  @param source Source object in which to update a byte.
+   *  @param updateval Value of byte to  update source with. */
   byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
                  const expr2tc &offset, const expr2tc &updateval)
     : byte_update_expr_methods(type, byte_update_id, is_big_endian,
