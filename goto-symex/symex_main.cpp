@@ -39,9 +39,7 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   // first try simplifier on it
   do_simplify(new_expr);
 
-  if (is_constant_bool2t(new_expr) &&
-      to_constant_bool2t(new_expr).constant_value &&
-      !options.get_bool_option("all-assertions"))
+  if (is_true(new_expr) && !options.get_bool_option("all-assertions"))
     return;
 
   cur_state->guard.guard_expr(new_expr);
@@ -125,7 +123,7 @@ goto_symext::symex_step(reachability_treet & art)
       cur_state->rename(tmp);
       do_simplify(tmp);
 
-      if (!is_constant_bool2t(tmp) || !to_constant_bool2t(tmp).constant_value) {
+      if (!is_true(tmp)) {
 	expr2tc tmp2 = tmp;
         expr2tc tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);

@@ -477,8 +477,7 @@ execution_statet::execute_guard(void)
   // If we simplified the global guard expr to false, write that to thread
   // guards, not the symbolic guard name. This is the only way to bail out of
   // evaulating a particular interleaving early right now.
-  if (is_constant_bool2t(parent_guard) &&
-      !to_constant_bool2t(parent_guard).constant_value)
+  if (is_false(parent_guard))
     guard_expr = parent_guard;
 
   // copy the new guard exprt to every threads
