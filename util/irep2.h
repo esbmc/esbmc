@@ -3222,9 +3222,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Addition operation. Adds two operands together. Must both be numeric types.
+ *  Types of both operands and expr type should match. @extends arith_2ops */
 class add2t : public add_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   add2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : add_expr_methods(type, add_id, v1, v2) {}
   add2t(const add2t &ref)
@@ -3235,9 +3241,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Subtraction operation. Subtracts second operand from first operand. Must both
+ *  be numeric types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class sub2t : public sub_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   sub2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : sub_expr_methods(type, sub_id, v1, v2) {}
   sub2t(const sub2t &ref)
@@ -3248,9 +3261,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Multiplication operation. Multiplies the two operands. Must both be numeric
+ *  types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class mul2t : public mul_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   mul2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : mul_expr_methods(type, mul_id, v1, v2) {}
   mul2t(const mul2t &ref)
@@ -3261,9 +3281,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Division operation. Divides first operand by second operand. Must both be
+ *  numeric types. Types of both operands and expr type should match.
+ *  @extends arith_2ops */
 class div2t : public div_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   div2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : div_expr_methods(type, div_id, v1, v2) {}
   div2t(const div2t &ref)
@@ -3274,9 +3301,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Modulus operation. Takes modulus of first operand divided by 2nd operand.
+ *  Should both be integer types. Types of both operands and expr type should
+ *  match. @extends arith_2ops */
 class modulus2t : public modulus_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 First operand.
+   *  @param v2 Second operand. */
   modulus2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : modulus_expr_methods(type, modulus_id, v1, v2) {}
   modulus2t(const modulus2t &ref)
