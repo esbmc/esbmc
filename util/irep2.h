@@ -3321,9 +3321,16 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Shift left operation. Shifts contents of first operand left by number of
+ *  bit positions indicated by the second operand. Both must be integers. Types
+ *  of both operands and expr type should match. @extends arith_2ops */
 class shl2t : public shl_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 Value to shift.
+   *  @param v2 Number of bits to to shift by. */
   shl2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : shl_expr_methods(type, shl_id, v1, v2) {}
   shl2t(const shl2t &ref)
@@ -3334,9 +3341,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Arithmetic Shift right operation. Shifts contents of first operand right by
+ *  number of bit positions indicated by the second operand, preserving sign of
+ *  original number. Both must be integers. Types of both operands and expr type
+ *  should match. @extends arith_2ops */
 class ashr2t : public ashr_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of this expr.
+   *  @param v1 Value to shift.
+   *  @param v2 Number of bits to to shift by. */
   ashr2t(const type2tc &type, const expr2tc &v1, const expr2tc &v2)
     : ashr_expr_methods(type, ashr_id, v1, v2) {}
   ashr2t(const ashr2t &ref)
