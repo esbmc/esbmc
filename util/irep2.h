@@ -3706,9 +3706,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Dereference operation. Expanded by symbolic execution into an if-then-else
+ *  set of cases that take the value set of what this pointer might point at,
+ *  examines the pointer's pointer object, and constructs a huge if-then-else
+ *  case to evaluate to the appropriate data object for this pointer.
+ *  @extends dereference_data */
 class dereference2t : public dereference_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Type of dereferenced data.
+   *  @param operand Pointer to dereference. */
   dereference2t(const type2tc &type, const expr2tc &operand)
     : dereference_expr_methods(type, dereference_id, operand) {}
   dereference2t(const dereference2t &ref)
