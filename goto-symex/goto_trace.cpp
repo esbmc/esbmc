@@ -238,19 +238,16 @@ void show_state_header(
 }
 
 std::string get_varname_from_guard (
-	goto_tracet::stepst::const_iterator &it __attribute__((unused)),
+	goto_tracet::stepst::const_iterator &it,
 	const goto_tracet &goto_trace __attribute__((unused)))
 {
-  std::cerr << "XXXjmorse - get_varname_from_guard victim of migration" << std::endl;
-  abort();
-#if 0
   std::string varname;
-  exprt guard_operand = it->pc->guard.op0();
+  exprt old_irep_guard = migrate_expr_back(it->pc->guard);
+  exprt guard_operand = old_irep_guard.op0();
   if (!guard_operand.operands().empty()) {
     if(!guard_operand.op0().identifier().as_string().empty()) {
       char identstr[guard_operand.op0().identifier().as_string().length()];
       strcpy(identstr, guard_operand.op0().identifier().c_str());
-      //std::cout<<"Guard "<<it->pc->guard<<std::endl;
       int j=0;
       char * tok;
       tok = strtok (identstr,"::");
@@ -263,7 +260,6 @@ std::string get_varname_from_guard (
     }
   }
   return varname;
-#endif
 }
 
 void get_metada_from_llvm(
@@ -372,9 +368,8 @@ void show_goto_trace(
         //std::cout<<"comment "<<it->comment<<std::endl;
         out << "  " << it->comment << std::endl;
 
-        if(it->pc->is_assert())
-#if 0
-        	if (!goto_trace.metadata_filename.empty() && !it->pc->guard.operands().empty()) {
+        if(it->pc->is_assert()) {
+                 if (!goto_trace.metadata_filename.empty() && !is_constant_bool2t(it->pc->guard)) {
 				std::string assertsrt, varname;
 				assertsrt = from_expr(ns, "", it->pc->guard);
 				varname=get_varname_from_guard(it,goto_trace);
@@ -384,9 +379,8 @@ void show_goto_trace(
 				}
         	}
         	else
-#endif
         		out << "  " << from_expr(ns, "", it->pc->guard)<< std::endl;
-        //std::cout<<"VarName "<<goto_trace.VarName<<" OrigVarName "<<goto_trace.OrigVarName<<std::endl;
+        }
         out << std::endl;
       }
       break;
