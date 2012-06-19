@@ -536,7 +536,8 @@ with2t::do_simplify(bool second __attribute__((unused))) const
   if (is_constant_struct2t(source_value)) {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = get_component_number(type, memb.value);
+    unsigned no = static_cast<const struct_union_data&>(*type.get())
+                  .get_component_number(memb.value);
     assert(no < c_struct.datatype_members.size());
 
     // Clone constant struct, update its field according to this "with".
@@ -547,7 +548,8 @@ with2t::do_simplify(bool second __attribute__((unused))) const
     const constant_union2t &c_union = to_constant_union2t(source_value);
     const union_type2t &thetype = to_union_type(c_union.type);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = get_component_number(c_union.type, memb.value);
+    unsigned no = static_cast<const struct_union_data&>(*c_union.type.get())
+                  .get_component_number(memb.value);
     assert(no < thetype.member_names.size());
 
     // If the update value type matches the current lump of data's type, we can
@@ -601,7 +603,9 @@ member2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_struct2t(source_value) || is_constant_union2t(source_value)) {
-    unsigned no = get_component_number(source_value->type, member);
+    unsigned no =
+      static_cast<const struct_union_data&>(*source_value->type.get())
+      .get_component_number(member);
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;

@@ -1057,6 +1057,7 @@ public:
     : type2t(ref), members(ref.members), member_names(ref.member_names),
       name(ref.name) { }
 
+  unsigned int get_component_number(const irep_idt &name) const;
   const std::vector<type2tc> & get_structure_members(void) const;
   const std::vector<irep_idt> & get_structure_member_names(void) const;
   const irep_idt & get_structure_name(void) const;
@@ -4340,23 +4341,6 @@ typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
                        code_cpp_catch2tc;
 typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
                        code_cpp_throw2tc;
-
-// XXXjmorse - to be moved into struct union superclass when it exists.
-inline unsigned int
-get_component_number(const type2tc &type, const irep_idt &name)
-{
-  const std::vector<irep_idt> &member_names = (is_struct_type(type))
-    ? to_struct_type(type).member_names : to_union_type(type).member_names;
-
-  unsigned int i = 0;
-  forall_names(it, member_names) {
-    if (*it == name)
-      return i;
-    i++;
-  }
-
-  assert(0);
-}
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,

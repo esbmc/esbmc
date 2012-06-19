@@ -323,6 +323,22 @@ struct_union_data::get_structure_name(void) const
   return name;
 }
 
+unsigned int
+struct_union_data::get_component_number(const irep_idt &name) const
+{
+
+  unsigned int i = 0;
+  forall_names(it, member_names) {
+    if (*it == name)
+      return i;
+    i++;
+  }
+
+  std::cerr << "Looking up index of nonexistant member \"" << name
+            << "\" in struct/union \"" << name << "\"" << std::endl;
+  abort();
+}
+
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)

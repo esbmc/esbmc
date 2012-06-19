@@ -1070,7 +1070,7 @@ expr2tc value_sett::make_member(
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = get_component_number(type, component_name);
+    unsigned no = to_struct_type(type).get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
   }
   else if (is_with2t(src))
@@ -1093,7 +1093,8 @@ expr2tc value_sett::make_member(
   }
 
   // give up
-  unsigned no = get_component_number(type, component_name);
+  unsigned no = static_cast<const struct_union_data&>(*type.get())
+                .get_component_number(component_name);
   const type2tc &subtype = members[no];
   expr2tc memb = expr2tc(new member2t(subtype, src, component_name));
   return memb;
