@@ -3692,6 +3692,8 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Record a dynamicly allocated object. Exclusively for use in pointer analysis.
+ *  @extends dynamic_object_data */
 class dynamic_object2t : public dynamic_object_expr_methods
 {
 public:
