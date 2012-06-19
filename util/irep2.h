@@ -3362,9 +3362,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Same-object operation. Checks whether two operands with pointer type have the
+ *  same pointer object or not. Always has boolean result.
+ *  @extends same_object_data */
 class same_object2t : public same_object_expr_methods
 {
 public:
+  /** Primary constructor. @param v1 First object. @param v2 Second object. */
   same_object2t(const expr2tc &v1, const expr2tc &v2)
     : same_object_expr_methods(type_pool.get_bool(), same_object_id, v1, v2) {}
   same_object2t(const same_object2t &ref)
@@ -3375,9 +3379,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract pointer offset. From an expression of pointer type, produce the
+ *  number of bytes difference between where this pointer points to and the start
+ *  of the object it points at. @extends pointer_ops */
 class pointer_offset2t : public pointer_offset_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Model basic integer type.
+   *  @param ptrobj Pointer object to get offset from. */
   pointer_offset2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_offset_expr_methods(type, pointer_offset_id, ptrobj) {}
   pointer_offset2t(const pointer_offset2t &ref)
@@ -3388,9 +3398,14 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Extract pointer object. From an expression of pointer type, produce the
+ *  pointer object that this pointer points into. @extends pointer_ops */
 class pointer_object2t : public pointer_object_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param type Model basic integer type.
+   *  @param ptrobj Pointer object to get object from. */
   pointer_object2t(const type2tc &type, const expr2tc &ptrobj)
     : pointer_object_expr_methods(type, pointer_object_id, ptrobj) {}
   pointer_object2t(const pointer_object2t &ref)
