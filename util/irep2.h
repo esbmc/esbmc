@@ -4358,6 +4358,24 @@ get_component_number(const type2tc &type, const irep_idt &name)
   assert(0);
 }
 
+inline bool
+is_true(const expr2tc &expr)
+{
+  if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)
+    return true;
+  else
+    return false;
+}
+
+inline bool
+is_false(const expr2tc &expr)
+{
+  if (is_constant_bool2t(expr) && !to_constant_bool2t(expr).constant_value)
+    return true;
+  else
+    return false;
+}
+
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
 
