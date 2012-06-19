@@ -4358,4 +4358,7 @@ get_component_number(const type2tc &type, const irep_idt &name)
   assert(0);
 }
 
+extern const expr2tc true_expr;
+extern const expr2tc false_expr;
+
 #endif /* _UTIL_IREP2_H_ */
