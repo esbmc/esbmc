@@ -3591,13 +3591,18 @@ public:
 };
 
 /** Check whether operand overflows. Operand must be either add, subtract,
- *  or multiply. XXXjmorse - in the future we should ensure the type of the
+ *  or multiply, and have integer operands themselves. If the result of the
+ *  operation doesn't fit in the bitwidth of the operands, this expr evaluates
+ *  to true. XXXjmorse - in the future we should ensure the type of the
  *  operand is the expected type result of the operation. That way we can tell
- *  whether to do a signed or unsigned over/underflow test. */
-
+ *  whether to do a signed or unsigned over/underflow test.
+ *  @extends overflow_ops */
 class overflow2t : public overflow_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param operand Operation to test overflow on; either an add, subtract, or
+   *         multiply. */
   overflow2t(const expr2tc &operand)
     : overflow_expr_methods(type_pool.get_bool(), overflow_id, operand) {}
   overflow2t(const overflow2t &ref)
@@ -3608,9 +3613,15 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test if a cast overflows. Check to see whether casting the operand to a
+ *  particular bitsize will cause an integer overflow. If it does, this expr
+ *  evaluates to true. @extends overflow_cast_data */
 class overflow_cast2t : public overflow_cast_expr_methods
 {
 public:
+  /** Primary constructor.
+   *  @param operand Value to test cast out on. Should have integer type.
+   *  @param bits Number of integer bits to cast operand to.  */
   overflow_cast2t(const expr2tc &operand, unsigned int bits)
     : overflow_cast_expr_methods(type_pool.get_bool(), overflow_cast_id,
                                  operand, bits) {}
@@ -3620,9 +3631,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+/** Test for negation overflows. Check whether or not negating an operand would
+ *  lead to an integer overflow - for example, there's no representation of
+ *  -INT_MIN. Evaluates to true if overflow would occur. @extends overflow_ops */
 class overflow_neg2t : public overflow_neg_expr_methods
 {
 public:
+  /** Primary constructor. @param operand Integer to test negation of. */
   overflow_neg2t(const expr2tc &operand)
     : overflow_neg_expr_methods(type_pool.get_bool(), overflow_neg_id,
                                 operand) {}
