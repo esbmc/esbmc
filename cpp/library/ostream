@@ -75,12 +75,10 @@ ostream& operator<< (ostream& out, short val);
 ostream& operator<< (ostream& out, unsigned short val);
 ostream& operator<< (ostream& out, int val);
 ostream& operator<< (ostream& out, unsigned int val);
-//	ostream& operator<< (long val);
-//	ostream& operator<< (unsigned long val);
+
 ostream& operator<< (ostream& out, float val);
 ostream& operator<< (ostream& out, double val);
-//	ostream& operator<< (long double val);
-//	ostream& operator<< (const void* val);
+
 
 ostream& operator<< (ostream& out, streambuf* sb);
 
@@ -90,69 +88,19 @@ ostream& operator<< (ostream& out, ios_base& ( *pf )(ios_base&));
 
 
 ostream& operator<< (ostream& out, char c );
-//ostream& operator<< (ostream& out, signed char c );
+
 ostream& operator<< (ostream& out, unsigned char c );
 
 ostream& operator<< (ostream& out, const char* s );
-//ostream& operator<< (ostream& out, const signed char* s );
+
 ostream& operator<< (ostream& out, const unsigned char* s );
-//ostream& operator<< (ostream& out, smanip sm );
+
 
 template < typename T >
 inline ostream& operator<< ( ostream& o, T i )
 {
 	return o;
 }
-//
-//inline ostream& operator << (ostream& o, const char*  cstr)  //ok
-//{
-//	esbmc::esbmc_print_cstr(o.id, cstr);
-//	return o;
-//}
-//
-//inline ostream& operator << (ostream& o, char  c)  //ok
-//{
-//	esbmc::esbmc_print_char(o.id, c);
-//	return o;
-//}
-//
-//inline ostream&  operator << (ostream& o, int  i)
-//{
-//	esbmc::esbmc_print_int(o.id, i);
-//	return o;
-//}
-//
-//inline ostream&  operator << (ostream& o, double  d) // Felipe Rodrigues
-//{
-//	esbmc::esbmc_print_double(o.id, d);
-//	return o;
-//}
-//
-//inline ostream& operator << (ostream& o, unsigned  i)
-//{
-//	esbmc::esbmc_print_unsigned(o.id, i);
-//	return o;
-//
-//}
-//inline ostream& operator << (ostream& o, long long  i)
-//{
-//	esbmc::esbmc_print_long_long(o.id, i);
-//	return o;
-//}
-//
-//inline ostream& operator << (ostream& o, unsigned long long  i)
-//{
-//	esbmc::esbmc_print_unsigned_long_long(o.id, i);
-//	return o;
-//}
-//
-//inline ostream& operator << (ostream& o, bool  b)
-//{
-//	esbmc::esbmc_print_bool(o.id, b);
-//	return o;
-//}
-//
-//
 
 }
 

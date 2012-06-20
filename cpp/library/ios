@@ -101,55 +101,18 @@ struct ios_base {
   static const seekdir cur  =  __cur;
   static const seekdir end  =  __end;
 
-//  struct _Words
-//  {
-//    void*	__pword;
-//    long	__iword;
-//    _Words() : __pword(0), __iword(0) { }
-//  };
-
-  // Only for failed iword/pword calls.
-//  _Words		__word_zero;
-
-  // Guaranteed storage.
-  // The first 5 iword and pword slots are reserved for internal use.
-//  enum { __local_word_size = 8 };
-//  _Words		__local_word[__local_word_size];
-
-  // Allocated storage.
-//  int			__word_size;
-//  _Words*		__word;
-//
-//  _Words&
-//  __grow_words(int __index, bool __iword) {
-//       int newsize = __local_word_size;
-//       _Words* words = __local_word;
-//       if (__index > __local_word_size - 1) {
-//    	   newsize = __index + 1;
-//       	   words = new _Words[newsize];
-//
-//       }
-//	   if (__iword)
-//		   __word_zero.__iword = 0;
-//	   else
-//		   __word_zero.__pword = 0;
-//
-//	   __word = words;
-//       __word_size = newsize;
-//       return __word[__index];
-//  }
 
 //protected:
   streamsize __width;
   streamsize __precision;
-  fmtflags	 __flags;
+  static fmtflags	 __flags = 0;
   iostate	__exception;
   iostate	 __streambuf_state;
 
 
 public:
   ios_base ();
-
+  virtual ~ios_base();
   fmtflags flags ( ) const;
   fmtflags flags ( fmtflags fmtfl );
   fmtflags setf ( fmtflags fmtfl );
@@ -159,34 +122,10 @@ public:
   streamsize precision ( streamsize prec );
   streamsize width ( ) const;
   streamsize width ( streamsize wide );
-//  locale imbue ( const locale& loc );
-//  locale getloc ( ) const;
+  locale imbue ( const locale& loc );
+  locale getloc ( ) const;
   static int xalloc() throw();
-//  long&
-//  iword(int __ix)
-//  {
-//    if (__ix < __word_size) {
-//    	_Words& word = __word[__ix];
-//    	return word.__iword;
-//    }
-//    else {
-//    	_Words& word = __grow_words(__ix, true);
-//    	return word.__iword;
-//    }
-//  }
-//
-//  void*&
-//  pword(int __ix)
-//  {
-//	  if (__ix < __word_size) {
-//		_Words& word = __word[__ix];
-//		return word.__pword;
-//	  }
-//	  else {
-//		  _Words& word = __grow_words(__ix, false);
-//		  return word.__pword;
-//	  }
-//  }
+
   void register_callback ( event_callback fn, int index );
   bool sync_with_stdio ( bool sync = true );
   struct Init {
@@ -194,6 +133,7 @@ public:
     Init();
     ~Init();
   };
+  struct failure {};
 
 private:
   ios_base (const ios_base&);
@@ -207,7 +147,7 @@ struct ios: ios_base{
   typedef int streamoff;
 
   ios() : ios_base() {}
-
+  virtual ~ios();
   mutable char  __fill;
   streambuf*    __streambuf;
 
@@ -228,7 +168,9 @@ public:
   char fill ( ) const;
   char fill ( char fillch );
 
-//  locale imbue ( const locale& loc );
+  iostate exceptions ( ) const;
+  void exceptions ( iostate except );
+  locale imbue ( const locale& loc );
 //  ostream *tie ( ) const;
 //  ostream *tie ( ostream* tiestr );
   streambuf* rdbuf ( ) const;
