@@ -11,7 +11,7 @@ extern "C" {
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdint.h>
-#include <stdint.h>
+#include <unistd.h>
 
 #ifdef _WIN32
 #include <windows.h>
