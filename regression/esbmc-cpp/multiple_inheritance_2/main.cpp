@@ -6,12 +6,12 @@ class File {
   virtual int f(void) { return 21; }
 };
 
-class InputFile: virtual public File {
+class InputFile: /*virtual*/ public File {
   public:
     virtual int f(void) { return 42; }
 };
 
-class OutputFile: virtual public File {
+class OutputFile: /*virtual*/ public File {
   public:
     virtual int f(void) { return 63; }
 };
