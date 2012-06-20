@@ -449,6 +449,9 @@ function buildtgz {
   cp scripts/licenses/* $dirname/licenses
   cp regression/smoke-tests/* $dirname/smoke-tests/
 
+  # Stripping binary
+  strip $binpath
+
   # Create a tarball
   tar -czf .release/$projname.tgz -C $tmpdirname $projname
   rm -rf $tmpdirname
