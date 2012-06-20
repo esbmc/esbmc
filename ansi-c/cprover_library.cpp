@@ -10,6 +10,8 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdint.h>
+#include <stdint.h>
 
 #ifdef _WIN32
 #include <windows.h>
