@@ -209,15 +209,6 @@ function setdefaultsatdir () {
   return
 }
 
-target_linuxplain=0
-target_linuxcompat=0
-target_linuxstatic=0
-target_windows=0
-
-# 2nd dimension
-target_32bit=0
-target_64bit=0
-
 if test "$target_linuxplain -eq 1 -o $target_linuxstatic -eq 1 -o $target_windows -eq 1"; then
   plainbuild=1
 else
