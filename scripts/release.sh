@@ -209,14 +209,37 @@ function setdefaultsatdir () {
   return
 }
 
-satdir32=`setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3"`
-if test $? = "1"; then exit 1; fi
-satdir64=`setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-3"`
-if test $? = "1"; then exit 1; fi
-satdir32compat=`setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-3"`
-if test $? = "1"; then exit 1; fi
-satdir64compat=`setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-3"`
-if test $? = "1"; then exit 1; fi
+if test "$target_linuxplain -eq 1 -o $target_linuxstatic -eq 1 -o $target_windows -eq 1"; then
+  plainbuild=1
+else
+  plainbuild=0
+fi
+
+if test $target_linuxcompat -eq 1; then
+  compatbuild=1;
+else
+  compatbuild=0;
+fi
+
+if test $plainbuild -eq 1 -a $target_32bit -eq 1; then
+  satdir32=`setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3"`
+  if test $? = "1"; then exit 1; fi
+fi
+
+if test $plainbuild -eq 1 -a $target_64bit -eq 1; then
+  satdir64=`setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-6"`
+  if test $? = "1"; then exit 1; fi
+fi
+
+if test $compatbuild -eq 1 -a $target_32bit -eq 1; then
+  satdir32compat=`setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-2"`
+  if test $? = "1"; then exit 1; fi
+fi
+
+if test $compatbuild -eq 1 -a $target_64bit -eq 1; then
+  satdir64compat=`setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-5"`
+  if test $? = "1"; then exit 1; fi
+fi
 
 if test "$satdir32" = "$satdir32compat"; then
   echo "NB: no compat-specific 32 bit solver dir"
@@ -425,6 +448,9 @@ function buildtgz {
   cp $binpath $dirname/bin/esbmc
   cp scripts/licenses/* $dirname/licenses
   cp regression/smoke-tests/* $dirname/smoke-tests/
+
+  # Stripping binary
+  strip $binpath
 
   # Create a tarball
   tar -czf .release/$projname.tgz -C $tmpdirname $projname

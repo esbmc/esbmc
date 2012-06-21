@@ -50,7 +50,7 @@ endif
 else
 # If not in compat mode, link against libgomp. Can't do it with g++34 for
 # an unknown reason.
-PLATLIBS+= -lgomp
+PLATLIBS+= -lgomp -pthread -lrt -lpthread
 endif
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
