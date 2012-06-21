@@ -169,7 +169,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
     if (!options.get_bool_option("no-unwinding-assertions"))
-      claim(expr2tc(new constant_bool2t(false)),
+      claim(false_expr,
             "recursion unwinding assertion");
 
     cur_state->source.pc++;
@@ -305,8 +305,11 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
   expr2tc func_ptr = call.function;
   dereference(func_ptr, false);
 
-  if (is_symbol2t(func_ptr) &&
-   has_prefix(to_symbol2t(func_ptr).name.as_string(), "symex::invalid_object")){
+  // Match the two varieties of failed symbol we can encounter,
+  if (is_symbol2t(func_ptr) && (
+   has_prefix(to_symbol2t(func_ptr).name.as_string(), "symex::invalid_object")||
+   to_symbol2t(func_ptr).name.as_string().find("$object") != std::string::npos))
+  {
 
     // Emit warning; perform no function call behaviour. Increment PC
     // XXX jmorse - no location information any more.

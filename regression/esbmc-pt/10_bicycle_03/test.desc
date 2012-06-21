@@ -1,3 +1,5 @@
-Bicycle.cpp  Display.cpp  EmbeddedPC.cpp  main.cpp  Thread.cpp
---unwind 2 --no-unwinding-assertions -I ~/libraries/ --z3-ir --no-pointer-check
+main.cpp
+Bicycle.cpp Display.cpp EmbeddedPC.cpp Thread.cpp --unwind 2 --no-unwinding-assertions -I ~/libraries/ --z3-ir --no-pointer-check
 ^VERIFICATION SUCCESSFUL$
+--
+^VERIFICATION FAILURE$

@@ -119,7 +119,7 @@ void goto_symext::symex_malloc(
 
   expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
 
-  expr2tc truth = expr2tc(new constant_bool2t(true));
+  expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);
 }
@@ -200,22 +200,18 @@ void goto_symext::symex_cpp_new(
 
   // make symbol expression
 
-  expr2tc rhs = expr2tc(new address_of2t(
-                                     type2tc(new pointer_type2t(renamedtype2)),
-                                     expr2tc()));
+  expr2tc rhs = expr2tc(new address_of2t(type2tc(renamedtype2), expr2tc()));
   address_of2t &addrof = to_address_of2t(rhs);
 
   if(do_array)
   {
-    expr2tc sym = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
-                                       symbol.name));
+    expr2tc sym = expr2tc(new symbol2t(newtype, symbol.name));
     expr2tc zero = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
     expr2tc idx = expr2tc(new index2t(renamedtype2, sym, zero));
     addrof.ptr_obj = idx;
   }
   else
-    addrof.ptr_obj = expr2tc(new symbol2t(type2tc(new pointer_type2t(newtype)),
-                                          symbol.name));
+    addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
   
   cur_state->rename(rhs);
 
@@ -224,7 +220,7 @@ void goto_symext::symex_cpp_new(
 }
 
 // XXX - implement as a call to free?
-void goto_symext::symex_cpp_delete(const codet &code __attribute__((unused)))
+void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
 }

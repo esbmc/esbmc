@@ -277,11 +277,18 @@ void goto_checkt::bounds_check(
   if(expr.id()!="index")
     return;
 
-  if(expr.is_bounds_check_set() && !expr.bounds_check())
-    return;
-
   if(expr.operands().size()!=2)
     throw "index takes two operands";
+
+  // Don't bounds check the initial index of argv in the "main" function; it's
+  // always correct, and just adds needless claims. In the past a "no bounds
+  // check" attribute in old irep handled this.
+  if (expr.op0().id_string() == "symbol" &&
+      expr.op0().identifier() == "c::argv'" &&
+      expr.op1().id_string() == "symbol" &&
+      expr.op1().identifier() == "c::argc'")
+    return;
+
 
   typet array_type=ns.follow(expr.op0().type());
 
@@ -432,7 +439,10 @@ void goto_checkt::add_guarded_claim(
   // first try simplifier on it
   if(!options.get_bool_option("no-simplify"))
   {
-    base_type(expr, ns);
+    expr2tc tmpexpr;
+    migrate_expr(expr, tmpexpr);
+    base_type(tmpexpr, ns);
+    expr = migrate_expr_back(tmpexpr);
     simplify(expr);
   }
 
@@ -732,8 +742,6 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       if (is_code_expression2t(i.code)) {
         check(migrate_expr_back(i.code));
       } else if (is_code_printf2t(i.code)) {
-#warning XXX jmorse cpp try potentially un-checked if you don't fix this
-//    		  || statement=="cpp-try")
         forall_operands2(it, expr_list, i.code)
           check(migrate_expr_back(**it));
       }

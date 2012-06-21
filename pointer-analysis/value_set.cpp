@@ -922,7 +922,7 @@ void value_sett::do_function_call(
   type2tc tmp_migrated_type;
   migrate_type(type, tmp_migrated_type);
   const code_type2t &migrated_type =
-    static_cast<const code_type2t &>(*tmp_migrated_type.get());
+    dynamic_cast<const code_type2t &>(*tmp_migrated_type.get());
 
   const std::vector<type2tc> &argument_types = migrated_type.arguments;
   const std::vector<irep_idt> &argument_names = migrated_type.argument_names;
@@ -1040,6 +1040,14 @@ void value_sett::apply_code(
       assign(sym, ref.operand, ns);
     }
   }
+  else if (is_code_asm2t(code))
+  {
+    // Ignore assembly. No idea why it isn't preprocessed out anyway.
+  }
+  else if (is_code_cpp_delete2t(code) || is_code_cpp_del_array2t(code))
+  {
+    // Ignore these too
+  }
   else
   {
     std::cerr << code->pretty() << std::endl;
@@ -1062,7 +1070,7 @@ expr2tc value_sett::make_member(
 
   if (is_constant_struct2t(src))
   {
-    unsigned no = get_component_number(type, component_name);
+    unsigned no = to_struct_type(type).get_component_number(component_name);
     return to_constant_struct2t(src).datatype_members[no];
   }
   else if (is_with2t(src))
@@ -1085,7 +1093,8 @@ expr2tc value_sett::make_member(
   }
 
   // give up
-  unsigned no = get_component_number(type, component_name);
+  unsigned no = static_cast<const struct_union_data&>(*type.get())
+                .get_component_number(component_name);
   const type2tc &subtype = members[no];
   expr2tc memb = expr2tc(new member2t(subtype, src, component_name));
   return memb;

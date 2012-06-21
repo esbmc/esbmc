@@ -529,7 +529,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   assignment->code = expr2tc(new code_assign2t(lhs, rhs));
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
-  assignment->guard = expr2tc(new constant_bool2t(true));
+  assignment->guard = true_expr;
   dest.destructive_insert(it, tmp);
 
   return;
@@ -655,14 +655,17 @@ expr2tc string_abstractiont::build_unknown(whatt what, bool write)
   switch(what)
   {
   case IS_ZERO:
-    result = expr2tc(new constant_bool2t(false));
+    result = false_expr;
     break;
 
   case LENGTH:
   case SIZE:
+    {
+    std::vector<expr2tc> args;
     result = expr2tc(new sideeffect2t(tmp_type, expr2tc(), expr2tc(), type2tc(),
-                                      sideeffect2t::nondet));
+                                      sideeffect2t::nondet, args));
     break;
+    }
 
   default: assert(false);
   }
@@ -961,7 +964,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 
       {
         std::vector<expr2tc> operands;
-        operands.push_back(expr2tc(new constant_bool2t(false)));
+        operands.push_back(false_expr);
         operands.push_back(obj_array_type.array_size);
         typet blah = build_type(SIZE);
         type2tc an_op_type;
@@ -1037,7 +1040,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 
     {    
       std::vector<expr2tc> operands;
-      operands.push_back(expr2tc(new constant_bool2t(false)));
+      operands.push_back(false_expr);
       operands.push_back(obj_array_type.array_size);
       typet tmptype = build_type(SIZE);
       type2tc eventmpertype;
@@ -1115,7 +1118,7 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
       migrate_type(osizetype, sizetype);
 
       std::vector<expr2tc> operands;
-      operands.push_back(expr2tc(new constant_bool2t(true)));
+      operands.push_back(true_expr);
       operands.push_back(expr2tc(new constant_int2t(lentype, l)));
       operands.push_back(expr2tc(new constant_int2t(sizetype, l+1)));
       expr2tc value = expr2tc(new constant_struct2t(string_struct, operands));
@@ -1333,7 +1336,7 @@ void string_abstractiont::abstract_char_assign(
     {
       goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
       assignment1->code =
-        expr2tc(new code_assign2t(i1, expr2tc(new constant_bool2t(true))));
+        expr2tc(new code_assign2t(i1, true_expr));
       assignment1->location=target->location;
       assignment1->local_variables=target->local_variables;
     }

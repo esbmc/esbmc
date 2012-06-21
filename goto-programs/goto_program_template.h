@@ -85,7 +85,7 @@ public:
     {
       type=GOTO;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -94,7 +94,7 @@ public:
     {
       type=RETURN;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -103,7 +103,7 @@ public:
     {
       type=SKIP;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -136,7 +136,7 @@ public:
     {
       type=OTHER;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -145,7 +145,7 @@ public:
     {
       type=CATCH;
       targets.clear();
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
       event="";
       code = expr2tc();
     }
@@ -193,7 +193,7 @@ public:
       type(NO_INSTRUCTION_TYPE),
       location_number(0)
     {
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
     }
 
     instructiont(goto_program_instruction_typet _type):
@@ -201,7 +201,7 @@ public:
       type(_type),
       location_number(0)
     {
-      guard = expr2tc(new constant_bool2t(true));
+      guard = true_expr;
     }
     
     void swap(instructiont &instruction)
@@ -292,7 +292,8 @@ public:
     else if(i.is_return())
     {
       // the successor is the end_function at the end
-      successors.push_back(--instructions.end());
+      targett tmp = instructions.end();
+      successors.push_back(--tmp);
     }
     else
       successors.push_back(next);
@@ -325,7 +326,8 @@ public:
     else if(i.is_return())
     {
       // the successor is the end_function at the end
-      successors.push_back(--instructions.end());
+      const_targett tmp = instructions.end();
+      successors.push_back(--tmp);
     }
     else
       successors.push_back(next);
@@ -375,13 +377,15 @@ public:
   targett add_instruction()
   {
     instructions.push_back(instructiont());
-    return --instructions.end();
+    targett tmp = instructions.end();
+    return --tmp;
   }
 
   targett add_instruction(goto_program_instruction_typet type)
   {
     instructions.push_back(instructiont(type));
-    return --instructions.end();
+    targett tmp = instructions.end();
+    return --tmp;
   }
 
   // these assume that the targets are computed and numbered

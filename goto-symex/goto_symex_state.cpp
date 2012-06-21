@@ -74,10 +74,15 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
 
-  if (is_constant_expr(expr))
+  if (is_constant_expr(expr)) {
     return true;
-
-  if (is_address_of2t(expr))
+  }
+  else if (is_symbol2t(expr) && to_symbol2t(expr).name == "NULL")
+  {
+    // Null is also essentially a constant.
+    return true;
+  }
+  else if (is_address_of2t(expr))
   {
     return constant_propagation_reference(to_address_of2t(expr).ptr_obj);
   }
@@ -101,22 +106,10 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_with2t(expr))
   {
-	with_counter++;
-
-	if (with_counter>6)
-	{
-		with_counter=0;
-		return false;
-	}
-
-      const with2t &with = to_with2t(expr);
-      if (!constant_propagation(with.source_value))
-      {
-    	with_counter=0;
-        return false;
-      }
-    with_counter=0;
-    return true;
+    // Keeping additional with data achieves nothing; no code in ESBMC inspects
+    // with chains to extract data from them.
+    return false;
+    with_counter++;
   }
   else if (is_constant_struct2t(expr))
   {

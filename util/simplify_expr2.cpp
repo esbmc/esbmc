@@ -124,7 +124,12 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
       // Need to switch this number to being an unsigned representation of the
       // same bit vector.
       int64_t the_num = tmp_bv.to_integer().to_int64();
-      uint64_t mask = (1 << (type->get_width())) - 1;
+
+      unsigned int width = type->get_width();
+      uint64_t mask = (1ULL << width) - 1ULL;
+      if (width == 64)
+        mask = 0xFFFFFFFFFFFFFFFF;
+
       uint64_t output = the_num & mask;
       tmp_bv.from_integer(BigInt(output));
     }
@@ -531,13 +536,31 @@ with2t::do_simplify(bool second __attribute__((unused))) const
   if (is_constant_struct2t(source_value)) {
     const constant_struct2t &c_struct = to_constant_struct2t(source_value);
     const constant_string2t &memb = to_constant_string2t(update_field);
-    unsigned no = get_component_number(type, memb.value);
+    unsigned no = static_cast<const struct_union_data&>(*type.get())
+                  .get_component_number(memb.value);
     assert(no < c_struct.datatype_members.size());
 
     // Clone constant struct, update its field according to this "with".
     constant_struct2tc s = expr2tc(c_struct.clone());
     s.get()->datatype_members[no] = update_value;
     return expr2tc(s);
+  } else if (is_constant_union2t(source_value)) {
+    const constant_union2t &c_union = to_constant_union2t(source_value);
+    const union_type2t &thetype = to_union_type(c_union.type);
+    const constant_string2t &memb = to_constant_string2t(update_field);
+    unsigned no = static_cast<const struct_union_data&>(*c_union.type.get())
+                  .get_component_number(memb.value);
+    assert(no < thetype.member_names.size());
+
+    // If the update value type matches the current lump of data's type, we can
+    // just replace it with the new value. As far as I can tell, constant unions
+    // only ever contain one member, and it's the member most recently written.
+    if (thetype.members[no] != update_value->type)
+      return expr2tc();
+
+    std::vector<expr2tc> newmembers;
+    newmembers.push_back(update_value);
+    return expr2tc(new constant_union2t(type, newmembers));
   } else if (is_constant_array2t(source_value) &&
              is_constant_int2t(update_field)) {
     const constant_array2t &array = to_constant_array2t(source_value);
@@ -580,7 +603,9 @@ member2t::do_simplify(bool second __attribute__((unused))) const
 {
 
   if (is_constant_struct2t(source_value) || is_constant_union2t(source_value)) {
-    unsigned no = get_component_number(source_value->type, member);
+    unsigned no =
+      static_cast<const struct_union_data&>(*source_value->type.get())
+      .get_component_number(member);
 
     // Clone constant struct, update its field according to this "with".
     expr2tc s;
@@ -801,17 +826,17 @@ or2t::do_simplify(bool second __attribute__((unused))) const
 
   // If either operand is true, the expr is true
   if (is_constant_bool2t(side_1) && to_constant_bool2t(side_1).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   // If both or operands are false, the expr is false.
   if (is_constant_bool2t(side_1)
       && !to_constant_bool2t(side_1).constant_value
       && is_constant_bool2t(side_2)
       && !to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(false));
+    return false_expr;
 
   return expr2tc();
 }
@@ -835,12 +860,12 @@ implies2t::do_simplify(bool second __attribute__((unused))) const
 
   // False => * evaluate to true, always
   if (is_constant_bool2t(side_1) && !to_constant_bool2t(side_1).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   // Otherwise, the only other thing that will make this expr always true is
   // if side 2 is true.
   if (is_constant_bool2t(side_2) && to_constant_bool2t(side_2).constant_value)
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   return expr2tc();
 }
@@ -1076,9 +1101,9 @@ typecast2t::do_simplify(bool second) const
       fixedbvt bv;
       to_fixedbv(from, bv);
       if (bv.get_value().is_zero()) {
-        return expr2tc(new constant_bool2t(false));
+        return false_expr;
       } else {
-        return expr2tc(new constant_bool2t(true));
+        return true_expr;
       }
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
                 (is_bv_type(from->type) || is_fixedbv_type(from->type))) {
@@ -1386,7 +1411,7 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 
   if (is_symbol2t(a) && is_symbol2t(b)) {
     if (to_symbol2t(a).name == to_symbol2t(b).name)
-      return expr2tc(new constant_bool2t(true));
+      return true_expr;
   } else if (is_index2t(a) && is_index2t(b)) {
     return obj_equals_addr_of(to_index2t(a).source_value,
                               to_index2t(b).source_value);
@@ -1409,7 +1434,7 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
   if (is_symbol2t(side_1) && is_symbol2t(side_2) &&
       to_symbol2t(side_1).name == "NULL" &&
       to_symbol2t(side_1).name == "NULL")
-    return expr2tc(new constant_bool2t(true));
+    return true_expr;
 
   return expr2tc();
 }

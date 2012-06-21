@@ -25,9 +25,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  if ((is_constant_bool2t(new_guard) &&
-        !to_constant_bool2t(new_guard).constant_value)
-      || cur_state->guard.is_false()) {
+  if ((is_false(new_guard)) || cur_state->guard.is_false()) {
 
     // reset unwinding counter
     cur_state->unwind_map[cur_state->source] = 0;
@@ -69,8 +67,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       return;
     }
 
-    if (is_constant_bool2t(new_guard) &&
-        to_constant_bool2t(new_guard).constant_value) {
+    if (is_true(new_guard)) {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -98,8 +95,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
-  if (is_constant_bool2t(new_guard) &&
-      to_constant_bool2t(new_guard).constant_value) {
+  if (is_true(new_guard)) {
     cur_state->guard.make_false();
   } else   {
     // produce new guard symbol
@@ -282,8 +278,8 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
 
   expr2tc negated_cond;
 
-  if (is_constant_bool2t(guard) && to_constant_bool2t(guard).constant_value) {
-    negated_cond = expr2tc(new constant_bool2t(false));
+  if (is_true(guard)) {
+    negated_cond = false_expr;
   } else {
     negated_cond = expr2tc(new not2t(guard));
   }
@@ -294,8 +290,35 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   bool partial_loops =
     options.get_bool_option("partial-loops");
 
-  if (!partial_loops) {
-    if (unwinding_assertions) {
+  bool base_case=
+    options.get_bool_option("base-case");
+
+  bool forward_condition=
+    options.get_bool_option("forward-condition");
+
+  if (base_case)
+  {
+    // generate unwinding assumption
+    expr2tc guarded_expr=negated_cond;
+    cur_state->guard.guard_expr(guarded_expr);
+    target->assumption(cur_state->guard.as_expr(), guarded_expr, cur_state->source);
+
+    // add to state guard to prevent further assignments
+    cur_state->guard.add(negated_cond);
+  }
+  else if (forward_condition)
+  {
+    // generate unwinding assertion
+    claim(negated_cond,
+          "unwinding assertion loop "+id2string(loop_id));
+
+    // add to state guard to prevent further assignments
+    cur_state->guard.add(negated_cond);
+  }
+  else if(!partial_loops)
+  {
+    if(unwinding_assertions)
+    {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {

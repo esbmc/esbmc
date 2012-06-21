@@ -24,8 +24,6 @@ static bool is_skip(goto_programt::instructionst::iterator it)
 {
   if (it->is_skip())
     return true;
-#warning XXX jmorse, cpp explicit skips?
-//    return !it->code.explict();
  
   if (it->is_goto())
   {

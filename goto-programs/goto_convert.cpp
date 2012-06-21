@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <i2string.h>
 #include <cprover_prefix.h>
-#include <expr_util.h>
+//#include <expr_util.h>
 #include <prefix.h>
 #include <std_expr.h>
 
@@ -21,24 +21,16 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "remove_skip.h"
 #include "destructor.h"
 
-static void
-link_up_type_names(irept &irep, const namespacet &ns)
-{
+#include <arith_tools.h>
 
-  if (irep.find(exprt::i_type) != get_nil_irep()) {
-    if (irep.find("type").id() == "symbol") {
-      typet newtype = ns.follow((typet&)irep.find("type"));
-      irep.add("type") = newtype;
-    }
-  }
+//#define DEBUG
 
-  Forall_irep(it, irep.get_sub())
-    link_up_type_names(*it, ns);
-  Forall_named_irep(it, irep.get_named_sub())
-    link_up_type_names(it->second, ns);
-
-  return;
-}
+#ifdef DEBUG
+#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
+                        "[" << __LINE__ << "]" << std::endl;
+#else
+#define DEBUGLOC
+#endif
 
 /*******************************************************************\
 
@@ -189,7 +181,7 @@ void goto_convertt::convert_label(
   if(error_label!="" && label==error_label)
   {
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = expr2tc(new constant_bool2t(false));
+    t->guard = false_expr;
     t->location=code.location();
     t->location.property("error label");
     t->location.comment("error label");
@@ -248,10 +240,6 @@ void goto_convertt::convert(
   goto_programt &dest)
 {
   const irep_idt &statement=code.get_statement();
-
-  dest.instructions.clear();
-
-  link_up_type_names((codet&)code, ns);
 
   if(statement=="block")
     convert_block(code, dest);
@@ -336,15 +324,11 @@ void goto_convertt::convert_catch(
   // add the CATCH-push instruction to 'dest'
   goto_programt::targett catch_push_instruction=dest.add_instruction();
   catch_push_instruction->make_catch();
-  std::cerr << "XXX jmorse, converting cpp catch's" << std::endl;
-#if 0
-  catch_push_instruction->code.set_statement("cpp-catch");
   catch_push_instruction->location=code.location();
 
   // the CATCH-push instruction is annotated with a list of IDs,
-  // one per target
-  irept::subt &exception_list=
-    catch_push_instruction->code.add("exception_list").get_sub();
+  // one per target.
+  std::vector<unsigned int> exception_list;
 
   // add a SKIP target for the end of everything
   goto_programt end;
@@ -357,7 +341,9 @@ void goto_convertt::convert_catch(
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
   catch_pop_instruction->make_catch();
-  catch_pop_instruction->code.set_statement("cpp-catch");
+  std::vector<unsigned int> empty_excp_list;
+  catch_pop_instruction->code =
+    expr2tc(new code_cpp_catch2t(expr2tc(), empty_excp_list));
 
   // add a goto to the end of the 'try' block
   dest.add_instruction()->make_goto(end_target);
@@ -367,7 +353,7 @@ void goto_convertt::convert_catch(
     const codet &block=to_code(code.operands()[i]);
 
     // grab the ID and add to CATCH instruction
-    exception_list.push_back(irept(block.get("exception_id")));
+    exception_list.push_back(atoi(block.get("exception_id").as_string().c_str()));
 
     goto_programt tmp;
     convert(block, tmp);
@@ -380,7 +366,8 @@ void goto_convertt::convert_catch(
 
   // add end-target
   dest.destructive_append(end);
-#endif
+
+  catch_push_instruction->code = expr2tc(new code_cpp_catch2t(expr2tc(), exception_list));
 }
 
 /*******************************************************************\
@@ -468,8 +455,8 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to check for forgotten memory
-
-  if (!loop_for_block)
+#if 1
+  if (!for_block)
   {
   if (options.get_bool_option("memory-leak-check"))
   {
@@ -496,8 +483,9 @@ void goto_convertt::convert_block(
     }
   }
   }
-  else
-    loop_for_block=false;
+  //else
+    //for_block=false;
+#endif
 }
 
 /*******************************************************************\
@@ -758,6 +746,99 @@ void goto_convertt::convert_expression(
 
 /*******************************************************************\
 
+Function: goto_convertt::is_expr_in_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_convertt::is_expr_in_state(
+  const exprt &expr,
+  const struct_typet &str)
+{
+  const struct_typet &struct_type = to_struct_type(str);
+  const struct_typet::componentst &components = struct_type.components();
+
+  //std::cout << expr.pretty() << std::endl;
+  for (struct_typet::componentst::const_iterator
+     it = components.begin();
+     it != components.end();
+     it++)
+  {
+	//std::cout << "name:" << it->get("name") << std::endl;
+    if (it->get("name").compare(expr.get_string("identifier")) == 0)
+   	  return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::get_struct_components
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
+{
+  DEBUGLOC;
+  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+  if (exp.is_symbol() && exp.type().id()!="code")
+  {
+	if (!is_expr_in_state(exp, str))
+	{
+      //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
+      //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
+      unsigned int size = str.components().size();
+      str.components().resize(size+1);
+      str.components()[size] = (struct_typet::componentt &) exp;
+      str.components()[size].set_name(exp.get_string("identifier"));
+      str.components()[size].pretty_name(exp.get_string("identifier"));
+	}
+  }
+  else if (exp.operands().size()==1)
+  {
+    DEBUGLOC;
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size()==1)
+      get_struct_components(exp.op0().op0(), str);
+  }
+  else if (exp.operands().size()==2)
+  {
+    DEBUGLOC;
+    if (exp.op0().is_symbol())
+      get_struct_components(exp.op0(), str);
+    else if (exp.op0().operands().size())
+      get_struct_components(exp.op0().op0(), str);
+  }
+  else
+  {
+    //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
+    forall_operands(it, exp)
+    {
+      //std::cout << "exp.id(): " << exp.id() << std::endl;
+      //std::cout << "it->is_code(): " << it->is_code() << std::endl;
+      DEBUGLOC;
+        get_struct_components(*it, str);
+    }
+  }
+  DEBUGLOC;
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_decl
 
   Inputs:
@@ -786,6 +867,11 @@ void goto_convertt::convert_decl(
     err_location(op0);
     throw "decl statement expects symbol as first operand";
   }
+
+  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
+  //std::cout << "op0.pretty(): " << op0.pretty() << std::endl;
+  if (inductive_step)
+    get_struct_components(op0, state);
 
   const irep_idt &identifier=op0.identifier();
 
@@ -819,7 +905,6 @@ void goto_convertt::convert_decl(
 
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
-
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
 
@@ -843,6 +928,8 @@ void goto_convertt::convert_assign(
   const code_assignt &code,
   goto_programt &dest)
 {
+  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
+
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -915,6 +1002,11 @@ void goto_convertt::convert_assign(
 		if(atomic == -1)
 			dest.add_instruction(ATOMIC_END);
   }
+
+  //std::cout << "lhs: " << lhs.pretty() << std::endl;
+  if (inductive_step)
+    get_struct_components(lhs, state);
+
 }
 
 /*******************************************************************\
@@ -971,53 +1063,6 @@ void goto_convertt::break_globals2assignments(int & atomic,exprt &lhs, exprt &rh
   }
 }
 
-void goto_convertt::break_globals2assignments(int &atomic, expr2tc &lhs,
-                                              expr2tc &rhs, goto_programt &dest,
-                                              const locationt &location)
-{
-
-  if(!options.get_bool_option("atomicity-check"))
-    return;
-
-  std::cerr << "atomicity check is a victim of irep migration" << std::endl;
-  abort();
-
-#if 0
-  /* break statements such as a = b + c as follows:
-   * tmp1 = b;
-   * tmp2 = c;
-   * atomic_begin
-   * assert tmp1==b && tmp2==c
-   * a = b + c
-   * atomic_end
-  */
-  expr2tc atomic_dest;
-  break_globals2assignments_rec(rhs, atomic_dest, dest, atomic, location);
-
-  if (atomic_dest.operands().size()==1)
-  {
-    exprt tmp;
-    tmp.swap(atomic_dest.op0());
-    atomic_dest.swap(tmp);
-  }
-  if(atomic_dest.operands().size() != 0)
-  {
-	// do an assert
-	if(atomic > 0)
-	{
-	  dest.add_instruction(ATOMIC_BEGIN);
-	  atomic = -1;
-	}
-	goto_programt::targett t=dest.add_instruction(ASSERT);
-        expr2tc tmp_guard;
-        migrate_expr(atomic_dest, tmp_guard);
-        t->guard = tmp_guard;
-	t->location=location;
-	  t->location.comment("atomicity violation on assignment to " + lhs.identifier().as_string());
-  }
-#endif
-}
-
 /*******************************************************************\
 
 Function: goto_convertt::break_globals2assignments
@@ -1063,46 +1108,6 @@ void goto_convertt::break_globals2assignments(exprt & rhs, goto_programt & dest,
     t->location=location;
     t->location.comment("atomicity violation");
   }
-}
-
-void goto_convertt::break_globals2assignments(expr2tc & rhs, goto_programt & dest, const locationt & location)
-{
-
-  if(!options.get_bool_option("atomicity-check"))
-    return;
-
-  std::cerr << "XXX jmorse - break_globals2assignments  is a victim of irep migration" << std::endl;
-  abort();
-
-#if 0
-  if (rhs.operands().size()>0)
-    if (rhs.op0().identifier().as_string().find("pthread") != std::string::npos)
- 	  return ;
-
-  if (rhs.operands().size()>0)
-    if (rhs.op0().operands().size()>0)
- 	  return ;
-
-  exprt atomic_dest = exprt("and", typet("bool"));
-  break_globals2assignments_rec(rhs,atomic_dest,dest,0,location);
-
-  if(atomic_dest.operands().size()==1)
-  {
-    exprt tmp;
-    tmp.swap(atomic_dest.op0());
-    atomic_dest.swap(tmp);
-  }
-
-  if(atomic_dest.operands().size() != 0)
-  {
-    goto_programt::targett t=dest.add_instruction(ASSERT);
-    expr2tc tmp_dest;
-    migrate_expr(atomic_dest, tmp_dest);
-    t->guard.swap(tmp_dest);
-    t->location=location;
-    t->location.comment("atomicity violation");
-  }
-#endif
 }
 
 /*******************************************************************\
@@ -1205,97 +1210,6 @@ void goto_convertt::break_globals2assignments_rec(exprt &rhs, exprt &atomic_dest
 	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
 	}
   }
-}
-
-void goto_convertt::break_globals2assignments_rec(expr2tc &rhs, expr2tc &atomic_dest, goto_programt &dest, int atomic, const locationt &location)
-{
-
-  return;
-#if 0
-  if (!options.get_bool_option("atomicity-check"))
-    return;
-
-  if (is_dereference2t(rhs) || is_index2t(rhs) || is_member2t(rhs))
-  {
-#error this is completely full of shit
-    irep_idt identifier = rhs.op0().identifier();
-    if (rhs.id() == "member")
-    {
-      const exprt &object=rhs.operands()[0];
-      identifier=object.identifier();
-    }
-    else if (rhs.id() == "index")
-    {
-      identifier=rhs.op1().identifier();
-    }
-
-    if (identifier.empty())
-	  return;
-
-	const symbolt &symbol=lookup(identifier);
-
-    if (!(identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
-          && (symbol.static_lifetime || symbol.type.is_dynamic_set()))
-    {
-	  // make new assignment to temp for each global symbol
-	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
-	  equality_exprt eq_expr;
-	  irept irep;
-	  new_symbol.to_irep(irep);
-	  eq_expr.lhs()=symbol_expr(new_symbol);
-	  eq_expr.rhs()=rhs;
-	  atomic_dest.copy_to_operands(eq_expr);
-
-	  codet assignment("assign");
-	  assignment.reserve_operands(2);
-	  assignment.copy_to_operands(symbol_expr(new_symbol));
-	  assignment.copy_to_operands(rhs);
-	  assignment.location() = location;
-	  assignment.comment("atomicity violation");
-	  copy(assignment, ASSIGN, dest);
-
-	  if(atomic == 0)
-	    rhs=symbol_expr(new_symbol);
-
-    }
-  }
-  else if(rhs.id() == "symbol")
-  {
-	const irep_idt &identifier=rhs.identifier();
-	const symbolt &symbol=lookup(identifier);
-	if(symbol.static_lifetime || symbol.type.is_dynamic_set())
-	{
-	  // make new assignment to temp for each global symbol
-	  symbolt &new_symbol=new_tmp_symbol(rhs.type());
-	  new_symbol.static_lifetime=true;
-	  equality_exprt eq_expr;
-	  irept irep;
-	  new_symbol.to_irep(irep);
-	  eq_expr.lhs()=symbol_expr(new_symbol);
-	  eq_expr.rhs()=rhs;
-	  atomic_dest.copy_to_operands(eq_expr);
-
-	  codet assignment("assign");
-	  assignment.reserve_operands(2);
-	  assignment.copy_to_operands(symbol_expr(new_symbol));
-	  assignment.copy_to_operands(rhs);
-
-	  assignment.location() = rhs.find_location();
-	  assignment.comment("atomicity violation");
-	  copy(assignment, ASSIGN, dest);
-
-	  if(atomic == 0)
-	    rhs=symbol_expr(new_symbol);
-    }
-  }
-  else if(!rhs.is_address_of())// && rhs.id() != "dereference")
-  {
-    Forall_operands(it, rhs)
-	{
-	  break_globals2assignments_rec(*it,atomic_dest,dest,atomic,location);
-	}
-  }
-#endif
 }
 
 /*******************************************************************\
@@ -1551,6 +1465,100 @@ void goto_convertt::convert_assume(
 
 /*******************************************************************\
 
+Function: goto_convertt::update_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::update_state_vector(
+  array_typet state_vector,
+  goto_programt &dest)
+{
+  //set the type of the state vector
+  state_vector.subtype() = state;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::with, state_vector);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  //s[k]=cs
+  new_expr.reserve_operands(3);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+  new_expr.move_to_operands(rhs);
+  code_assignt new_assign(lhs_array,new_expr);
+  copy(new_assign, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::assume_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assume_state_vector(
+  array_typet state_vector,
+  goto_programt &dest)
+{
+  //set the type of the state vector
+  state_vector.subtype() = state;
+
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt new_expr(exprt::index, state);
+  exprt lhs_array("symbol", state_vector);
+  exprt rhs("symbol", state);
+
+  std::string identifier_lhs, identifier_rhs;
+
+  identifier_lhs = "s$"+i2string(state_counter);
+  identifier_rhs = "cs$"+i2string(state_counter);
+
+  lhs_array.identifier(identifier_lhs);
+  rhs.identifier(identifier_rhs);
+
+  //s[k]
+  new_expr.reserve_operands(2);
+  new_expr.copy_to_operands(lhs_array);
+  new_expr.copy_to_operands(lhs_index);
+
+  //assume(s[k]!=cs)
+  exprt result_expr = gen_binary(exprt::notequal, bool_typet(), new_expr, rhs);
+  assume_cond(result_expr, false, dest);
+
+  //kindice=kindice+1
+  exprt one_expr = gen_one(int_type());
+  exprt rhs_expr = gen_binary(exprt::plus, int_type(), lhs_index, one_expr);
+  code_assignt new_assign_plus(lhs_index,rhs_expr);
+  copy(new_assign_plus, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_for
 
   Inputs:
@@ -1565,25 +1573,32 @@ void goto_convertt::convert_for(
   const codet &code,
   goto_programt &dest)
 {
+  DEBUGLOC;
+
+  set_for_block(true);
+
   if(code.operands().size()!=4)
   {
     err_location(code);
     throw "for takes four operands";
   }
 
-  loop_for_block=true;
-
   // turn for(A; c; B) { P } into
   //  A; while(c) { P; B; }
   //-----------------------------
   //    A;
+  // t: cs=nondet
   // u: sideeffects in c
+  // c: k=0
   // v: if(!c) goto z;
+  // f: s[k]=cs
   // w: P;
   // x: B;               <-- continue target
+  // d: cs assign
+  // e: assume
   // y: goto u;
   // z: ;                <-- break target
-
+  // g: assume(!c)
 
   // A;
   code_blockt block;
@@ -1593,7 +1608,23 @@ void goto_convertt::convert_for(
     convert(block, dest);
   }
 
-  exprt cond=code.op1();
+  exprt tmp=code.op1();
+
+  if (inductive_step)
+    replace_cond(tmp, dest);
+
+  exprt cond=tmp;
+
+  array_typet state_vector;
+
+  // do the t label
+  if(inductive_step)
+  {
+    assert(cond.operands().size()==2);
+    get_struct_components(cond, state);
+    get_struct_components(code.op3(), state);
+    make_nondet_assign(dest);
+  }
 
   goto_programt sideeffects;
 
@@ -1610,6 +1641,10 @@ void goto_convertt::convert_for(
   // do the u label
   goto_programt::targett u=sideeffects.instructions.begin();
 
+  // do the c label
+  if (inductive_step)
+    init_k_indice(dest);
+
   // do the v label
   goto_programt tmp_v;
   goto_programt::targett v=tmp_v.add_instruction();
@@ -1620,7 +1655,6 @@ void goto_convertt::convert_for(
 
   // do the x label
   goto_programt tmp_x;
-
   if(code.op2().is_nil())
     tmp_x.add_instruction(SKIP);
   else
@@ -1658,18 +1692,556 @@ void goto_convertt::convert_for(
    goto_programt tmp_y;
    goto_programt::targett y=tmp_y.add_instruction();
    y->make_goto(u);
-   y->guard = expr2tc(new constant_bool2t(true));
+   y->guard = true_expr;
    y->location=code.location();
 
   dest.destructive_append(sideeffects);
   dest.destructive_append(tmp_v);
+
+  // do the f label
+  if (inductive_step)
+    update_state_vector(state_vector, dest);
+
   dest.destructive_append(tmp_w);
+
+  if (inductive_step)
+    increment_var(code.op1(), dest);
+
   dest.destructive_append(tmp_x);
+
+  // do the d label
+  if (inductive_step)
+    assign_current_state(dest);
+
+  // do the e label
+  if (inductive_step)
+    assume_state_vector(state_vector, dest);
+
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
+  //std::cout << "base_case" << base_case << std::endl;
+  //std::cout << "inductive_step" << inductive_step << std::endl;
+  //std::cout << "k_induction" << k_induction << std::endl;
+
+  //do the g label
+  if (base_case || inductive_step)
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
+
   // restore break/continue
   targets.restore(old_targets);
+  set_for_block(false);
+  state_counter++;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::make_nondet_assign
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::make_nondet_assign(
+  goto_programt &dest)
+{
+  u_int j=0;
+  for (j=0; j < state.components().size(); j++)
+  {
+    exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+    if (state.components()[j].type().is_array())
+      rhs_expr = side_effect_expr_nondett(state.components()[j].type());
+
+    std::string identifier;
+    identifier = "cs$"+i2string(state_counter);
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    if (!state.components()[j].operands().size())
+    {
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+        new_expr.op1().component_name(it->get_string("identifier"));
+        assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::assign_current_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assign_current_state(
+  goto_programt &dest)
+{
+  u_int j=0;
+  for (j=0; j < state.components().size(); j++)
+  {
+    exprt rhs_expr(state.components()[j]);
+    exprt new_expr(exprt::with, state);
+    exprt lhs_expr("symbol", state);
+
+    std::string identifier;
+
+    identifier = "cs$"+i2string(state_counter);
+
+    lhs_expr.identifier(identifier);
+
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_expr);
+    new_expr.copy_to_operands(exprt("member_name"));
+    new_expr.move_to_operands(rhs_expr);
+
+    if (!state.components()[j].operands().size())
+    {
+      new_expr.op1().component_name(state.components()[j].get_string("identifier"));
+      assert(!new_expr.op1().get_string("component_name").empty());
+    }
+    else
+    {
+      forall_operands(it, state.components()[j])
+      {
+        new_expr.op1().component_name(it->get_string("identifier"));
+        assert(!new_expr.op1().get_string("component_name").empty());
+      }
+    }
+
+    code_assignt new_assign(lhs_expr,new_expr);
+    copy(new_assign, ASSIGN, dest);
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::init_k_indice
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::init_k_indice(
+  goto_programt &dest)
+{
+  std::string identifier;
+  identifier = "kindice$"+i2string(state_counter);
+  exprt lhs_index = symbol_exprt(identifier, int_type());
+  exprt zero_expr = gen_zero(int_type());
+  code_assignt new_assign(lhs_index,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::assign_state_vector
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assign_state_vector(
+  const array_typet &state_vector, 
+  goto_programt &dest)
+{
+    //set the type of the state vector
+    state_vector.subtype() = state;
+
+    std::string identifier;
+    identifier = "kindice$"+i2string(state_counter);
+
+    exprt lhs_index = symbol_exprt(identifier, int_type());
+    exprt new_expr(exprt::with, state_vector);
+    exprt lhs_array("symbol", state_vector);
+    exprt rhs("symbol", state);
+
+    std::string identifier_lhs, identifier_rhs;
+    identifier_lhs = "s$"+i2string(state_counter);
+    identifier_rhs = "cs$"+i2string(state_counter);
+
+    lhs_array.identifier(identifier_lhs);
+    rhs.identifier(identifier_rhs);
+
+    // s[k]=cs
+    new_expr.reserve_operands(3);
+    new_expr.copy_to_operands(lhs_array);
+    new_expr.copy_to_operands(lhs_index);
+    new_expr.move_to_operands(rhs);
+
+    code_assignt new_assign(lhs_array,new_expr);
+    copy(new_assign, ASSIGN, dest);
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::assume_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assume_cond(
+  const exprt &cond, 
+  const bool &neg,
+  goto_programt &dest)
+{
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSUME);
+  exprt result_expr = cond;
+  if (neg)
+    result_expr.make_not();
+
+  remove_sideeffects(result_expr, dest, true);
+
+  migrate_expr(result_expr, e->guard);
+
+  dest.destructive_append(tmp_e);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::assert_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::assert_cond(
+  const exprt &cond, 
+  const bool &neg,
+  goto_programt &dest)
+{
+  goto_programt tmp_e;
+  goto_programt::targett e=tmp_e.add_instruction(ASSERT);
+  exprt result_expr = cond;
+  if (neg)
+    result_expr.make_not();
+
+  migrate_expr(result_expr, e->guard);
+
+  dest.destructive_append(tmp_e);
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::disable_k_induction
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::disable_k_induction()
+{
+  k_induction=1;
+  inductive_step=0;
+  base_case=0;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::print_msg
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::print_msg(
+  const exprt &tmp)
+{
+  std::cerr << "warning: this program " << tmp.location().get_file() 
+            << " contains a '" << tmp.id() << "' operator at line " 
+            << tmp.location().get_line()
+            << ", so we are not applying the k-induction method to this program!" 
+            << std::endl;
+  disable_k_induction();
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::check_op_const
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_convertt::check_op_const(
+  const exprt &tmp,
+  const locationt &loc)
+{
+  if (tmp.is_constant() || tmp.type().id() == "pointer")
+  {
+    std::cerr << "warning: this program " << loc.get_file() 
+              << " contains a bounded loop at line " << loc.get_line()
+   	      << ", so we are not applying the k-induction method to this program!" 
+              << std::endl;
+    disable_k_induction();
+    return true;
+  }
+
+  return false;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::init_nondet_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::init_nondet_expr(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  exprt nondet_expr=side_effect_expr_nondett(tmp.type());
+  code_assignt new_assign_nondet(tmp,nondet_expr);
+  copy(new_assign_nondet, ASSIGN, dest);
+  nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_infinite_loop
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_infinite_loop(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  //declare variable i$ of type uint
+  std::string identifier;
+  identifier = "c::i$"+i2string(state_counter);
+  exprt indice = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(indice, state);
+
+  //declare variables n$ of type uint
+  identifier = "c::n$"+i2string(state_counter);
+  exprt n_expr = symbol_exprt(identifier, uint_type());
+
+  get_struct_components(n_expr, state);
+
+  exprt zero_expr = gen_zero(uint_type());
+  exprt nondet_expr=side_effect_expr_nondett(uint_type());
+
+  //initialize i=0
+  code_assignt new_assign(indice,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+
+
+  //initialize n=nondet_uint();
+  code_assignt new_assign_nondet(n_expr,nondet_expr);
+  copy(new_assign_nondet, ASSIGN, dest);
+
+  //assume that n>0;
+  assume_cond(gen_binary(exprt::i_gt, bool_typet(), n_expr, zero_expr), false, dest);
+
+  //replace the condition c by i<=n;
+  tmp = gen_binary(exprt::i_le, bool_typet(), indice, n_expr);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_cond
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_cond(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  //std::cout << tmp.pretty() << std::endl;
+  irep_idt exprid = tmp.id();
+  
+  if (tmp.is_true())
+  {
+    replace_infinite_loop(tmp, dest);
+  }
+  else if (exprid == ">" ||  exprid == ">=")
+  {
+    assert(tmp.operands().size()==2);
+    if (is_for_block())
+      if (check_op_const(tmp.op0(), tmp.location())) 
+        return ;
+    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
+
+    nondet_varst::const_iterator cache_result;
+    if (tmp.op0().is_constant())
+    {
+      cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op1(), dest);
+    }
+    else
+    {
+      cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op0(), dest);
+    }
+  } 
+  else if ( exprid == "<" ||  exprid == "<=")
+  {
+    //std::cout << tmp.pretty() << std::endl;
+    if (is_for_block())
+      if (check_op_const(tmp.op1(), tmp.location())) 
+        return ;
+    
+    nondet_varst::const_iterator cache_result;
+    if (tmp.op1().is_constant())
+    {
+      cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op0(), dest);
+    }
+    else
+    {
+      cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op1(), dest);
+    }
+  }
+  else if ( exprid == "and")
+  {
+    assert(tmp.operands().size()==2);
+    assert(tmp.op0().operands().size()==2);
+    assert(tmp.op1().operands().size()==2);
+
+    //check whether we have the same variable
+    if (!tmp.op0().op0().is_constant())
+    {    
+      if ((tmp.op0().op0() == tmp.op1().op0()) || 
+          (tmp.op0().op0() == tmp.op1().op1()))
+      {
+        print_msg(tmp);
+      }
+    }
+    else if (!tmp.op0().op1().is_constant())
+    {    
+      if ((tmp.op0().op1() == tmp.op1().op0()) || 
+          (tmp.op0().op1() == tmp.op1().op1()))
+      {
+        print_msg(tmp);
+      }
+    }
+  }
+  else if (exprid == "notequal")
+  {
+    print_msg(tmp);
+  }
+  else
+  {
+    std::cerr << "warning: the expression '" << tmp.id()
+	      << "' located at line " << tmp.location().get_line()
+	      << " of " << tmp.location().get_file()
+  	      << " is not supported yet" << std::endl;
+    //std::cout << tmp.pretty() << std::endl;
+    //assert(0);
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::increment_var
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::increment_var(
+  const exprt &var,
+  goto_programt &dest)
+{
+  if (var.is_true())
+  {
+	std::string identifier;
+	identifier = "c::i$"+i2string(state_counter);
+	exprt lhs_expr = symbol_exprt(identifier, uint_type());
+
+    //increment var by 1
+    exprt one_expr = gen_one(uint_type());
+    exprt rhs_expr = gen_binary(exprt::plus, uint_type(), lhs_expr, one_expr);
+    code_assignt new_assign_indice(lhs_expr,rhs_expr);
+    copy(new_assign_indice, ASSIGN, dest);
+  }
+
 }
 
 /*******************************************************************\
@@ -1694,16 +2266,38 @@ void goto_convertt::convert_while(
     throw "while takes two operands";
   }
 
-  const exprt &cond=code.op0();
+  exprt tmp=code.op0();
+
+  set_while_block(true);
+
+  if(inductive_step)
+    replace_cond(tmp, dest);
+
+  array_typet state_vector;
+  const exprt &cond=tmp;
   const locationt &location=code.location();
+
 
   //    while(c) P;
   //--------------------
+  // t: cs=nondet
   // v: sideeffects in c
-  //    if(!c) goto z;
+  // c: k=0
+  // v: if(!c) goto z;
+  // f: s[k]=cs
   // x: P;
+  // d: cs assign
+  // e: assume
   // y: goto v;          <-- continue target
   // z: ;                <-- break target
+  // g: assume(!c)
+
+  // do the t label
+  if(inductive_step)
+  {
+    get_struct_components(code.op1(), state);
+    make_nondet_assign(dest);
+  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1729,20 +2323,51 @@ void goto_convertt::convert_while(
 
   // do the x label
   goto_programt tmp_x;
+
   convert(to_code(code.op1()), tmp_x);
 
   // y: if(c) goto v;
   y->make_goto(v);
-  y->guard = expr2tc(new constant_bool2t(true));
+  y->guard = true_expr;
   y->location=code.location();
 
+  //do the c label
+  if (inductive_step)
+    init_k_indice(dest);
+
   dest.destructive_append(tmp_branch);
+
+  // do the f label
+  if (inductive_step)
+    update_state_vector(state_vector, dest);
+
+  if (inductive_step)
+    increment_var(code.op0(), dest);
+
   dest.destructive_append(tmp_x);
+
+  // do the d label
+  if (inductive_step)
+    assign_current_state(dest);
+
+  // do the e label
+  if (inductive_step)
+    assume_state_vector(state_vector, dest);
+
   dest.destructive_append(tmp_y);
+
   dest.destructive_append(tmp_z);
+
+  //do the g label
+  if (base_case /*|| inductive_step*/)
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
+  state_counter++;
+  set_while_block(false);
 }
 
 /*******************************************************************\
@@ -1770,17 +2395,39 @@ void goto_convertt::convert_dowhile(
   // save location
   locationt condition_location=code.op0().find_location();
 
-  exprt cond=code.op0();
+  exprt tmp=code.op0();
 
   goto_programt sideeffects;
-  remove_sideeffects(cond, sideeffects);
+  remove_sideeffects(tmp, sideeffects);
+
+  set_while_block(true);
+
+  if(inductive_step)
+    replace_cond(tmp, dest);
+
+  array_typet state_vector;
+  const exprt &cond=tmp;
+  const locationt &location=code.location();
 
   //    do P while(c);
   //--------------------
+  // t: cs=nondet
   // w: P;
   // x: sideeffects in c   <-- continue target
+  // c: k=0
   // y: if(c) goto w;
+  // f: s[k]=cs
+  // d: cs assign
+  // e: assume
   // z: ;                  <-- break target
+  // g: assume(!c)
+
+  // do the t label
+  if(inductive_step)
+  {
+    get_struct_components(code.op1(), state);
+    make_nondet_assign(dest);
+  }
 
   // save break/continue targets
   break_continue_targetst old_targets(targets);
@@ -1801,6 +2448,10 @@ void goto_convertt::convert_dowhile(
   else
     x=sideeffects.instructions.begin();
 
+  //do the c label
+  if (inductive_step)
+    init_k_indice(dest);
+
   // set the targets
   targets.set_break(z);
   targets.set_continue(x);
@@ -1813,22 +2464,43 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_w);
   dest.destructive_append(sideeffects);
 
+#if 0
   if(options.get_bool_option("atomicity-check"))
   {
     unsigned int globals = get_expr_number_globals(cond);
     if(globals > 0)
 	  break_globals2assignments(cond, dest,code.location());
   }
+#endif
 
   // y: if(c) goto w;
   y->make_goto(w);
-  expr2tc tmp_cond;
-  migrate_expr(cond, tmp_cond);
-  y->guard = tmp_cond;
+
+  migrate_expr(cond, y->guard);
+
   y->location=condition_location;
 
   dest.destructive_append(tmp_y);
+
+  // do the f label
+  if (inductive_step)
+    update_state_vector(state_vector, dest);
+
+  // do the d label
+  if (inductive_step)
+    assign_current_state(dest);
+
+  // do the e label
+  if (inductive_step)
+    assume_state_vector(state_vector, dest);
+
   dest.destructive_append(tmp_z);
+
+  //do the g label
+  if (base_case /*|| inductive_step*/)
+    assume_cond(cond, true, dest); //assume(!c)
+  else if (k_induction)
+    assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue targets
   targets.restore(old_targets);
@@ -2295,6 +2967,191 @@ void goto_convertt::generate_ifthenelse(
 
 /*******************************************************************\
 
+Function: goto_convertt::get_cs_member
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::get_cs_member(
+  exprt &expr,
+  exprt &result, 
+  const typet &type,
+  bool &found)
+{
+  DEBUGLOC;
+  //std::cout << "get_cs_member: " << expr.pretty() << std::endl;
+
+  found=false;
+  std::string identifier;
+
+  identifier = "cs$"+i2string(state_counter);
+
+  exprt lhs_struct("symbol", state);
+  lhs_struct.identifier(identifier);
+
+  exprt new_expr(exprt::member, type);
+  new_expr.reserve_operands(1);
+  new_expr.copy_to_operands(lhs_struct);
+  new_expr.identifier(expr.get_string("identifier"));
+  new_expr.component_name(expr.get_string("identifier"));
+  //std::cout << "expr.get_string(identifier): " << expr.get_string("identifier") << std::endl;
+
+  //std::cout << "new_expr: " << new_expr.pretty() << std::endl;  
+  assert(!new_expr.get_string("component_name").empty());
+
+  const struct_typet &struct_type = to_struct_type(lhs_struct.type());
+  const struct_typet::componentst &components = struct_type.components();
+  u_int i = 0;
+
+  for (struct_typet::componentst::const_iterator
+       it = components.begin();
+       it != components.end();
+       it++, i++)
+  {
+    //std::cout << "name: " << it->get("name") << std::endl;
+    //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
+    //std::cout << "it->pretty(): " << it->pretty() << std::endl; 
+    if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
+      found=true;
+  }
+
+  if (!found)
+  {
+    new_expr = expr;
+    std::cerr << "warning: the symbol '" << expr.get_string("identifier")
+  		  << "' at line " << expr.location().get_line()
+  		  << " is not a member of the state struct" << std::endl;
+  }
+
+
+  result = new_expr;
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::get_new_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
+{
+  DEBUGLOC;
+  //std::cout << "get_new_expr: " << expr.pretty() << std::endl;
+
+  irep_idt exprid = expr.id();
+
+  if (expr.is_symbol())
+    get_cs_member(expr, new_expr1, expr.type(), found);
+  else if (expr.is_constant())
+  {
+    new_expr1 = expr;
+    found=true;
+  }
+  else if (expr.is_index())
+  {
+    exprt array, index;
+    assert(expr.operands().size()==2);
+
+    //do we have an index of index?
+    if (expr.op0().operands().size() == 2) 
+      get_new_expr(expr.op0(), array, found); // this should return another index
+    else
+      get_cs_member(expr.op0(), array, expr.op0().type(), found); //we have one index only
+
+    get_cs_member(expr.op1(), index, expr.op1().type(), found);
+    exprt tmp(exprt::index, expr.op0().type());
+    tmp.reserve_operands(2);
+    tmp.copy_to_operands(array);
+    tmp.copy_to_operands(index);
+    new_expr1 = tmp;
+  }
+  else if (expr.operands().size() == 1)
+  {
+    get_new_expr(expr.op0(), new_expr1, found);
+  }
+  else if (expr.operands().size() == 2)
+  {
+    exprt operand0, operand1;
+    get_new_expr(expr.op0(), operand0, found);
+    get_new_expr(expr.op1(), operand1, found);
+    new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
+  }
+  else
+  {
+    std::cerr << "warning: the expression '" << expr.pretty()
+  		  << "' is not supported yet" << std::endl;
+    assert(0);
+  }
+
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::replace_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::replace_ifthenelse(
+		exprt &expr)
+{
+DEBUGLOC;
+  //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
+
+  bool found=false;
+
+  if (expr.operands().size()==0 || expr.operands().size() == 1)
+  {
+    exprt new_expr;
+    if (expr.operands().size())
+      get_new_expr(expr.op0(), new_expr, found);
+    else
+      get_new_expr(expr, new_expr, found);
+    assert(found);
+    if (!new_expr.type().is_bool())
+      new_expr.make_typecast(bool_typet());
+    expr = new_expr;
+  }
+  else
+  {
+    assert(expr.operands().size()==2);
+    assert(expr.op0().type() == expr.op1().type());
+    
+    exprt new_expr1, new_expr2;
+
+    get_new_expr(expr.op0(), new_expr1, found);
+    found=false;
+    get_new_expr(expr.op1(), new_expr2, found);
+
+    if (expr.op0().is_index())
+      assert(new_expr1.type().id() == expr.op0().op0().type().id());
+    else if (expr.op1().is_index())
+      assert(new_expr2.type().id() == expr.op1().op0().type().id());
+    else if (new_expr1.type().id() != new_expr2.type().id())
+      new_expr2.make_typecast(new_expr1.type());
+
+    expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
+  }
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::convert_ifthenelse
 
   Inputs:
@@ -2356,7 +3213,11 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 
-	  remove_sideeffects(tmp_guard, dest);
+          remove_sideeffects(tmp_guard, dest);
+	  if (inductive_step && (is_for_block() ||is_while_block()))
+	    replace_ifthenelse(tmp_guard);
+
+	  //remove_sideeffects(tmp_guard, dest);
 	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 #else
 	  exprt tmp_guard=code.op0();
@@ -2491,7 +3352,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = expr2tc(new constant_bool2t(true));
+    t_false->guard = true_expr;
     t_false->location=location;
     return;
   }
@@ -2514,7 +3375,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_true=dest.add_instruction();
     t_true->make_goto(target_true);
-    t_true->guard = expr2tc(new constant_bool2t(true));
+    t_true->guard = true_expr;
     t_true->location=location;
 
     return;
@@ -2537,7 +3398,7 @@ void goto_convertt::generate_conditional_branch(
 
     goto_programt::targett t_false=dest.add_instruction();
     t_false->make_goto(target_false);
-    t_false->guard = expr2tc(new constant_bool2t(true));
+    t_false->guard = true_expr;
     t_false->location=guard.location();
 
     return;
@@ -2560,7 +3421,7 @@ void goto_convertt::generate_conditional_branch(
 
   goto_programt::targett t_false=dest.add_instruction();
   t_false->make_goto(target_false);
-  t_false->guard = expr2tc(new constant_bool2t(true));
+  t_false->guard = true_expr;
   t_false->location=guard.location();
 }
 

@@ -495,7 +495,7 @@ void goto_convertt::do_exit(
   // same as assume(false)
 
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->guard = expr2tc(new constant_bool2t(false));
+  t_a->guard = false_expr;
   t_a->location=function.location();
 }
 
@@ -526,7 +526,7 @@ void goto_convertt::do_abort(
   // same as assume(false)
 
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
-  t_a->guard = expr2tc(new constant_bool2t(false));
+  t_a->guard = false_expr;
   t_a->location=function.location();
 }
 
@@ -855,7 +855,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = expr2tc(new constant_bool2t(false));
+    t->guard = false_expr;
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -879,7 +879,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = expr2tc(new constant_bool2t(false));
+    t->guard = false_expr;
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");
@@ -903,7 +903,7 @@ void goto_convertt::do_function_call_symbol(
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);
-    t->guard = expr2tc(new constant_bool2t(false));
+    t->guard = false_expr;
     t->location=function.location();
     t->location.user_provided(true);
     t->location.property("assertion");

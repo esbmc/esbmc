@@ -79,7 +79,16 @@ public:
   /**
    *  Default destructor.
    */
-  virtual ~reachability_treet() { };
+  virtual ~reachability_treet()
+  {
+    delete target_template;
+  };
+
+  /** Reinitialize for making new exploration of given functions.
+   *  Sets up the flags and fields of the object to start a new exploration of
+   *  the goto functions we're operating over. To be called when the previous
+   *  exploration using this object has been completed. */
+  void setup_for_new_explore(void);
 
   /**
    *  Return current execution_statet being explored / symex'd.
@@ -345,6 +354,8 @@ public:
 
   /** GOTO functions we're operating over. */
   const goto_functionst &goto_functions;
+  /** Context we're operating upon */
+  contextt &permanent_context;
   /** Flag indicating we've executed all threads to exhaustion.
    *  That is; for this particular interleaving. There may still be other
    *  interleavings to explore */
@@ -371,6 +382,10 @@ protected:
   std::list<execution_statet*>::iterator cur_state_it;
   /** "Global" symex target for output from --schedule exploration */
   symex_targett *schedule_target;
+  /** Target template; from which all targets are cloned.
+   *  This allows for the use of a non-concrete target class throughout
+   *  exploration */
+  symex_targett *target_template;
   /** Limit on context switches; -1 for no limit */
   int CS_bound;
   /** Limit on timeslices (--round-robin) */
@@ -388,7 +403,7 @@ protected:
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
   /** Options that are enabled */
-  optionst options;
+  const optionst &options;
 
   friend class execution_statet;
 };

@@ -24,11 +24,9 @@ void goto_symext::symex_other(void)
   {
     // ignore
   }
-#if 0
-  else if(statement=="cpp_delete" ||
-          statement=="cpp_delete[]")
+  else if (is_code_cpp_del_array2t(code2) || is_code_cpp_delete2t(code2))
   {
-    codet deref_code(code);
+    expr2tc deref_code(code2);
 
     replace_dynamic_allocation(deref_code);
     replace_nondet(deref_code);
@@ -36,7 +34,6 @@ void goto_symext::symex_other(void)
 
     symex_cpp_delete(deref_code);
   }
-#endif
   else if (is_code_free2t(code2))
   {
     // ignore
@@ -87,6 +84,11 @@ void goto_symext::symex_other(void)
       cur_state->level2.rename(l1_identifier, it->second.count+1);
       it->second.constant = expr2tc();
     }
+  }
+  else if (is_code_asm2t(code2))
+  {
+    // Assembly statement -> do nothing.
+    return;
   }
   else
     throw "goto_symext: unexpected statement: " + get_expr_id(code2);

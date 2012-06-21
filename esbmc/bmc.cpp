@@ -197,6 +197,13 @@ Function: bmct::report_success
 
 void bmct::report_success()
 {
+
+  if(options.get_bool_option("base-case"))
+  {
+    status("No bug has been found in the base case");
+    return ;
+  }
+
   status("VERIFICATION SUCCESSFUL");
 
   switch(ui)
@@ -344,6 +351,8 @@ bool bmct::run(void)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
+  symex->setup_for_new_explore();
+
   if(options.get_bool_option("schedule"))
   {
     if(options.get_bool_option("uw-model"))
@@ -376,11 +385,12 @@ bool bmct::run(void)
 
     do
     {
-      if (++interleaving_number>1) {
+      if(!options.get_bool_option("k-induction"))
+        if (++interleaving_number>1) {
     	  print(8, "*** Thread interleavings "+
     	           i2string((unsigned long)interleaving_number)+
     	           " ***");
-      }
+        }
 
       if(run_thread())
       {
@@ -551,17 +561,28 @@ bool bmct::run_thread()
 
 bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 {
-
   switch(bmc.run_decision_procedure(*conv, equation))
   {
-  case prop_convt::P_UNSATISFIABLE:
-    bmc.report_success();
-    return false;
+    case prop_convt::P_UNSATISFIABLE:
+      if(!bmc.options.get_bool_option("base-case"))
+        bmc.report_success();
+      else
+        bmc.status("No bug has been found in the base case");
+      return false;
 
-  case prop_convt::P_SATISFIABLE:
-    bmc.error_trace(*conv, equation);
-    bmc.report_failure();
-    return true;
+    case prop_convt::P_SATISFIABLE:
+      if(!bmc.options.get_bool_option("inductive-step")
+    		  && !bmc.options.get_bool_option("forward-condition"))
+      {
+        bmc.error_trace(*conv, equation);
+   	    bmc.report_failure();
+      }
+      else if (bmc.options.get_bool_option("forward-condition"))
+        bmc.status("The forward condition is unable to prove the property");
+      else
+        bmc.status("The inductive step is unable to prove the property");
+
+      return true;
 
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit

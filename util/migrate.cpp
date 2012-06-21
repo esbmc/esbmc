@@ -91,7 +91,9 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     }
 
     irep_idt name = type.get("tag");
-    assert(name.as_string() != "");
+    if (name.as_string() == "")
+      name = type.get("name"); // C++
+
     struct_type2t *s = new struct_type2t(members, names, name);
     new_type_ref = type2tc(s);
   } else if (type.id() == typet::t_union) {
@@ -148,6 +150,25 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
 
     code_type2t *c = new code_type2t(args, ret_type, arg_names, ellipsis);
     new_type_ref = type2tc(c);
+  } else if (type.id() == "cpp-name") {
+    // No type,
+    std::vector<type2tc> template_args;
+    const exprt &cpy = (const exprt &)type;
+    assert(cpy.get_sub()[0].id() == "name");
+    irep_idt name = cpy.get_sub()[0].identifier();
+
+    // Fetch possibly nonexistant template arguments.
+    if (cpy.operands().size() == 2) {
+      assert(cpy.get_sub()[0].id() == "template_args");
+      forall_irep(it, cpy.get_sub()) {
+        assert((*it).id() == "type");
+        type2tc tmptype;
+        migrate_type((*it).type(), tmptype);
+        template_args.push_back(tmptype);
+      }
+    }
+
+    new_type_ref = type2tc(new cpp_name_type2t(name, template_args));
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
   } else {
@@ -187,6 +208,17 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type_pool.get_code(type);
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
+  } else if (type.id() == "destructor") {
+    // No such thing as returning a destructor; this appears to turn up when
+    // there's a call to a destructor. Return type should be empty.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "constructor") {
+    // Likewise, a constructor returns nothing, the new operator returns
+    // something.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "cpp-name") {
+    real_migrate_type(type, new_type_ref);
+    // No caching; no reason, just not doing it right now.
   } else {
     type.dump();
     assert(0);
@@ -347,9 +379,9 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_bool) {
     std::string theval = expr.value().as_string();
     if (theval == "true")
-      new_expr_ref = expr2tc(new constant_bool2t(true));
+      new_expr_ref = true_expr;
     else
-      new_expr_ref = expr2tc(new constant_bool2t(false));
+      new_expr_ref = false_expr;
   } else if (expr.id() == irept::id_constant && expr.type().id() == typet::t_pointer &&
              expr.value() == "NULL") {
     // Null is a symbol with pointer type.
@@ -951,10 +983,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     sideeffect2t::allockind t;
     expr2tc operand, thesize;
     type2tc cmt_type, plaintype;
-    if (expr.statement() != "nondet")
+    std::vector<expr2tc> args;
+    if (expr.statement() != "nondet" && expr.statement() != "cpp_new" &&
+        expr.statement() != "cpp_new[]")
       migrate_expr(expr.op0(), operand);
 
-    migrate_expr((const exprt&)expr.cmt_size(), thesize);
+    if (expr.statement() == "cpp_new" || expr.statement() == "cpp_new[]")
+      // These hide the size in a real size field,
+      migrate_expr((const exprt&)expr.find("size"), thesize);
+    else if (expr.statement() != "nondet" &&
+             expr.statement() != "function_call")
+      // For everything other than nondet,
+      migrate_expr((const exprt&)expr.cmt_size(), thesize);
+
     migrate_type((const typet&)expr.cmt_type(), cmt_type);
     migrate_type(expr.type(), plaintype);
     if (expr.statement() == "malloc")
@@ -965,11 +1006,21 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       t = sideeffect2t::cpp_new_arr;
     else if (expr.statement() == "nondet")
       t = sideeffect2t::nondet;
+    else if (expr.statement() == "function_call")
+      t = sideeffect2t::function_call;
     else
       assert(0 && "Unexpected side-effect statement");
 
+    if (t == sideeffect2t::function_call) {
+      const exprt &arguments = expr.op1();
+      forall_operands(it, arguments) {
+        args.push_back(expr2tc());
+        migrate_expr(*it, args.back());
+      }
+    }
+
     new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
-                                            cmt_type, t));
+                                            cmt_type, t, args));
   } else if (expr.id() == irept::id_code && expr.statement() == "assign") {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
@@ -1006,6 +1057,16 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc theop;
     migrate_expr(expr.op0(), theop);
     new_expr_ref = expr2tc(new code_free2t(theop));
+  } else if (expr.id() == irept::id_code && expr.statement() == "cpp_delete[]"){
+    assert(expr.operands().size() == 1);
+    expr2tc theop;
+    migrate_expr(expr.op0(), theop);
+    new_expr_ref = expr2tc(new code_cpp_del_array2t(theop));
+  } else if (expr.id() == irept::id_code && expr.statement() == "cpp_delete"){
+    assert(expr.operands().size() == 1);
+    expr2tc theop;
+    migrate_expr(expr.op0(), theop);
+    new_expr_ref = expr2tc(new code_cpp_delete2t(theop));
   } else if (expr.id() == "object_descriptor") {
     migrate_type(expr.op0().type(), type);
     expr2tc op0, op1;
@@ -1044,6 +1105,15 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
     new_expr_ref = expr2tc(new code_comma2t(type, op0, op1));
+  } else if (expr.id() == "code" && expr.statement() == "asm") {
+    migrate_type(expr.type(), type);
+    const irep_idt &str = expr.op0().value();
+    new_expr_ref = expr2tc(new code_asm2t(type, str));
+  } else if (expr.id() == "cpp-throw") {
+    // No type,
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = expr2tc(new code_cpp_throw2t(op));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -1177,6 +1247,31 @@ migrate_type_back(const type2tc &ref)
     }
   case type2t::string_id:
     return string_typet();
+  case type2t::cpp_name_id:
+  {
+    const cpp_name_type2t &ref2 = to_cpp_name_type(ref);
+    exprt thetype("cpp-name");
+    exprt name("name");
+    name.identifier(ref2.name);
+    thetype.get_sub().push_back(name);
+
+    if (ref2.template_args.size() != 0) {
+      exprt args("template_args");
+      exprt &arglist = (exprt&)args.add("arguments");
+      forall_types(it, ref2.template_args) {
+        typet tmp = migrate_type_back(*it);
+        exprt type("type");
+        type.type() = tmp;
+        arglist.copy_to_operands(type); // Yep, that's how it's structured.
+      }
+
+      thetype.get_sub().push_back(args);
+    }
+
+    typet ret;
+    ret.swap((irept&)thetype);
+    return ret;
+  }
   default:
     assert(0 && "Unrecognized type in migrate_type_back");
   }
@@ -1798,10 +1893,22 @@ migrate_expr_back(const expr2tc &ref)
     if (!is_nil_expr(ref2.size))
       size = migrate_expr_back(ref2.size);
 
-    exprt operand = migrate_expr_back(ref2.operand);
-
-    if (ref2.kind != sideeffect2t::nondet)
+    if (ref2.kind == sideeffect2t::function_call) {
+      // "Operand" is 1st op,
+      exprt operand = migrate_expr_back(ref2.operand);
+      // 2nd op is "arguments".
+      exprt args("arguments");
+      for (std::vector<expr2tc>::const_iterator it = ref2.arguments.begin();
+           it != ref2.arguments.end(); it++)
+        args.copy_to_operands(migrate_expr_back(*it));
+      theexpr.copy_to_operands(operand, args);
+    } else if (ref2.kind == sideeffect2t::nondet) {
+      ; // Do nothing
+    } else {
+      exprt operand = migrate_expr_back(ref2.operand);
       theexpr.copy_to_operands(operand);
+    }
+
     theexpr.cmt_type(cmttype);
     theexpr.cmt_size(size);
 
@@ -1817,6 +1924,9 @@ migrate_expr_back(const expr2tc &ref)
       break;
     case sideeffect2t::nondet:
       theexpr.statement("nondet");
+      break;
+    case sideeffect2t::function_call:
+      theexpr.statement("function_call");
       break;
     default:
       assert(0 && "Unexpected side effect type when back-converting");
@@ -1940,6 +2050,37 @@ migrate_expr_back(const expr2tc &ref)
     const code_goto2t &ref2 = to_code_goto2t(ref);
     exprt codeexpr("code", code_typet());
     codeexpr.set("destination", ref2.target);
+    return codeexpr;
+  }
+  case expr2t::code_asm_id:
+  {
+    const code_asm2t &ref2 = to_code_asm2t(ref);
+    exprt codeexpr("code", migrate_type_back(ref2.type));
+    codeexpr.statement("asm");
+    // Don't actually set a piece of assembly as the operand here; it serves
+    // no purpose.
+    codeexpr.op0() = exprt("string-constant");
+    return codeexpr;
+  }
+  case expr2t::code_cpp_del_array_id:
+  {
+    const code_cpp_del_array2t &ref2 = to_code_cpp_del_array2t(ref);
+    exprt codeexpr("cpp_delete[]", typet());
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return codeexpr;
+  }
+  case expr2t::code_cpp_delete_id:
+  {
+    const code_cpp_delete2t &ref2 = to_code_cpp_delete2t(ref);
+    exprt codeexpr("cpp_delete", typet());
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    return codeexpr;
+  }
+  case expr2t::code_cpp_throw_id:
+  {
+    const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
+    exprt codeexpr("cpp-throw");
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }
   default:

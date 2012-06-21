@@ -171,8 +171,10 @@ void goto_convertt::do_function_call_if(
   v->location=function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);
-  if(globals > 1)
-	break_globals2assignments(v->guard, tmp_v,lhs.location());
+  if(globals > 1) {
+    exprt tmp = migrate_expr_back(v->guard);
+    break_globals2assignments(tmp, tmp_v,lhs.location());
+  }
 
   // w: f();
   goto_programt tmp_w;

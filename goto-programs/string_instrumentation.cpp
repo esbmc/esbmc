@@ -341,7 +341,7 @@ void string_instrumentationt::do_sprintf(
 
   // in the abstract model, we have to report a
   // (possibly false) positive here
-  assertion->make_assertion(expr2tc(new constant_bool2t(false)));
+  assertion->make_assertion(false_expr);
 
   do_format_string_read(tmp, target, arguments, 1, 2, "sprintf");
 
@@ -350,9 +350,10 @@ void string_instrumentationt::do_sprintf(
     return_assignment->location=target->location;
     return_assignment->local_variables=target->local_variables;
 
+    std::vector<expr2tc> args;
     expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(),
                                            expr2tc(), type2tc(),
-                                           sideeffect2t::nondet));
+                                           sideeffect2t::nondet, args));
 
     return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
   }
@@ -456,8 +457,10 @@ void string_instrumentationt::do_fscanf(
     return_assignment->location=target->location;
     return_assignment->local_variables=target->local_variables;
 
+    std::vector<expr2tc> args;
     expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(), expr2tc(),
-                                           type2tc(), sideeffect2t::nondet));
+                                           type2tc(), sideeffect2t::nondet,
+                                           args));
 
     return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
   }
@@ -1006,9 +1009,10 @@ void string_instrumentationt::do_strerror(
 
   {
     goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+    std::vector<expr2tc> args;
     expr2tc nondet_size = expr2tc(new sideeffect2t(uint_type2(), expr2tc(),
                                                    expr2tc(), type2tc(),
-                                                   sideeffect2t::nondet));
+                                                   sideeffect2t::nondet, args));
 
     exprt sym = symbol_expr(symbol_size);
     expr2tc new_sym;
@@ -1047,7 +1051,7 @@ void string_instrumentationt::do_strerror(
   {
     goto_programt::targett assignment2=tmp.add_instruction(ASSIGN);
     expr2tc zero_string = expr2tc(new zero_string2t(ptr));
-    expr2tc true_val = expr2tc(new constant_bool2t(true));
+    expr2tc true_val = true_expr;
     expr2tc assign = expr2tc(new code_assign2t(zero_string, true_val));
 
     assignment2->code = assign;
@@ -1153,7 +1157,7 @@ void string_instrumentationt::invalidate_buffer(
   back->location=target->location;
   back->local_variables=target->local_variables;
   back->make_goto(check);
-  back->guard = expr2tc(new constant_bool2t(true));
+  back->guard = true_expr;
 
   goto_programt::targett exit=dest.add_instruction();
   exit->location=target->location;

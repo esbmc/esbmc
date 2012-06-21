@@ -24,20 +24,17 @@ STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
 
+export LD LDFLAGS
 esbmc: $(OBJS)
-	echo -n "ESBMC built from " > $(OBJDIR)/buildidobj.s
-	echo -n `git rev-parse HEAD` >> $(OBJDIR)/buildidobj.s
-	echo -n " " >> $(OBJDIR)/buildidobj.s
-	echo -n `date` >> $(OBJDIR)/buildidobj.s
-	echo -n " by $(USER)@" >> $(OBJDIR)/buildidobj.s
-	echo -n `hostname` >> $(OBJDIR)/buildidobj.s
-	# Look for a dirty tree - any files that aren't '??' (i.e., untracked)
-	# or config.inc, which might differ for releases.
-	-if test -z "`git status -s | grep -v "^??" | grep -v config.inc`"; then echo -n "" >> $(OBJDIR)/buildidobj.s; else echo -n " (dirty tree)" >> $(OBJDIR)/buildidobj.s; fi
-	sh -c 'cd $(OBJDIR); $(LD) $(LDFLAGS) -b binary -r ./buildidobj.s -o buildidobj.o'
-	cd ..
-	rm $(OBJDIR)/buildidobj.s
+	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
+# This build rule fetches a libc.a from my website that I've compiled to work on
+# iridis, aka linux 2.6.18. The library is checked for my pgp signature; then
+# linked up into esbmc to produce a library that /should/ work everywhere.
+iridis-esbmc: $(OBJS)
+	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/scripts/fetchlibc.sh .libc.a $(ESBMCDIR)/scripts/gpg-keyring
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) -print-file-name=libgcc.a` `$(CXX) -print-file-name=libgcc_eh.a` ./.libc.a
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
