@@ -99,7 +99,7 @@ void renaming::level2t::rename(expr2tc &expr)
 
     // first see if it's already an l2 name
 
-    if (sym.rlevel == symbol2t::level2)
+    if (sym.rlevel == symbol2t::level2 || sym.rlevel == symbol2t::level2_global)
       return;
 
     if (sym.thename == "NULL")
