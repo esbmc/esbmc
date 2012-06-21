@@ -1752,24 +1752,21 @@ public:
   irep_idt value;
 };
 
-class symbol_base : public expr2t
+class symbol_data : public expr2t
 {
 public:
-  symbol_base(const type2tc &t, expr2t::expr_ids id)
-    : expr2t(t, id) { }
-  symbol_base(const symbol_base &ref)
-    : expr2t(ref) { }
+  enum renaming_level {
+    level0,
+    level1,
+    level2
+  };
 
-  virtual std::string get_symbol_name(void) const = 0;
-};
-
-class symbol_data : public symbol_base
-{
-public:
-  symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : symbol_base(t, id), thename(v) { }
+  symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v,
+              renaming_level lev, unsigned int l1, unsigned int l2)
+    : expr2t(t, id), thename(v), rlevel(lev), level1_num(l1), level2_num(l2) { }
   symbol_data(const symbol_data &ref)
-    : symbol_base(ref), thename(ref.thename) { }
+    : expr2t(ref), thename(ref.thename), rlevel(ref.rlevel),
+      level1_num(ref.level1_num), level2_num(ref.level2_num) { }
 
   virtual std::string get_symbol_name(void) const;
 
@@ -1779,6 +1776,9 @@ public:
   //
   // So, let's pretend that this is private, even though it can't be enforced.
   irep_idt thename;
+  renaming_level rlevel;
+  unsigned int level1_num;
+  unsigned int level2_num;
 };
 
 class typecast_data : public expr2t
@@ -2333,7 +2333,10 @@ typedef esbmct::expr_methods<constant_string2t, constant_string_data,
         irep_idt, constant_string_data, &constant_string_data::value>
         constant_string_expr_methods;
 typedef esbmct::expr_methods<symbol2t, symbol_data,
-        irep_idt, symbol_data, &symbol_data::thename>
+        irep_idt, symbol_data, &symbol_data::thename,
+        symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
+        unsigned int, symbol_data, &symbol_data::level1_num,
+        unsigned int, symbol_data, &symbol_data::level2_num>
         symbol_expr_methods;
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
@@ -2796,8 +2799,11 @@ public:
    *  @param type Type that this symbol has
    *  @param init Name of this symbol
    */
-  symbol2t(const type2tc &type, const irep_idt &init)
-    : symbol_expr_methods(type, symbol_id, init) { }
+
+  symbol2t(const type2tc &type, const irep_idt &init,
+           renaming_level lev = level0, unsigned int l1 = 0,
+           unsigned int l2 = 0)
+    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2) { }
   symbol2t(const symbol2t &ref)
     : symbol_expr_methods(ref){}
 

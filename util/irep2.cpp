@@ -903,6 +903,20 @@ type_to_string(const unsigned int &theval, int indent __attribute__((unused)))
 }
 
 static inline __attribute__((always_inline)) std::string
+type_to_string(const symbol_data::renaming_level &theval,
+               int indent __attribute__((unused)))
+{
+  switch (theval) {
+  case symbol_data::level0:
+    return "Level 0";
+  case symbol_data::level1:
+    return "Level 1";
+  case symbol_data::level2:
+    return "Level 2";
+  }
+}
+
+static inline __attribute__((always_inline)) std::string
 type_to_string(const BigInt &theint, int indent __attribute__((unused)))
 {
   char buffer[256], *buf;
@@ -1040,6 +1054,12 @@ do_type_cmp(const unsigned int &side1, const unsigned int &side2)
 {
   return (side1 == side2) ? true : false;
 }
+static inline __attribute__((always_inline)) bool
+do_type_cmp(const symbol_data::renaming_level &side1,
+            const symbol_data::renaming_level &side2)
+{
+  return (side1 == side2) ? true : false;
+}
 
 static inline __attribute__((always_inline)) bool
 do_type_cmp(const BigInt &side1, const BigInt &side2)
@@ -1134,6 +1154,18 @@ do_type_lt(const bool &side1, const bool &side2)
 
 static inline __attribute__((always_inline)) int
 do_type_lt(const unsigned int &side1, const unsigned int &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+static inline __attribute__((always_inline)) int
+do_type_lt(const symbol_data::renaming_level &side1,
+           const symbol_data::renaming_level &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1281,6 +1313,14 @@ do_type_crc(const unsigned int &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_crc(const symbol_data::renaming_level &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const BigInt &theint, hacky_hash &hash)
 {
   unsigned char buffer[256];
@@ -1375,6 +1415,7 @@ do_type_crc(const expr2t::expr_ids &i, hacky_hash &hash)
   return; // Dummy field crc
 }
 
+static inline __attribute__((always_inline)) void do_type_list_operands(const symbol_data::renaming_level &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<unsigned int> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1386,6 +1427,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const fi
 static inline __attribute__((always_inline)) void do_type_list_operands(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
+static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<unsigned int> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -2137,7 +2179,10 @@ template class esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
 template class esbmct::expr_methods<constant_string2t, constant_string_data,
     irep_idt, constant_string_data, &constant_string_data::value>;
 template class esbmct::expr_methods<symbol2t, symbol_data,
-    irep_idt, symbol_data, &symbol_data::thename>;
+    irep_idt, symbol_data, &symbol_data::thename,
+    symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
+    unsigned int, symbol_data, &symbol_data::level1_num,
+    unsigned int, symbol_data, &symbol_data::level2_num>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
