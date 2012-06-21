@@ -2836,6 +2836,12 @@ public:
            unsigned int l2 = 0, unsigned int trd = 0, unsigned int node = 0)
     : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node)
   {
+    if (lev != level0)
+      // User provided a renaming level; so they should actually have provided
+      // us with some useful data, no need to extract it from the string, which
+      // shouldn't contain it.
+      return;
+
     // Temporary: undo all renaming.
     const std::string &thestr = init.as_string();
     if (thestr.find("!") == std::string::npos) {
