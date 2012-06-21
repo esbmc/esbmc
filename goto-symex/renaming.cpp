@@ -130,8 +130,15 @@ void renaming::level2t::rename(expr2tc &expr)
     }
     else
     {
-      std::string new_identifier = name(sym.get_symbol_name(), 0);
-      expr = expr2tc(new symbol2t(sym.type, new_identifier));
+      symbol2t::renaming_level lev;
+      if (sym.rlevel == symbol2t::level0 ||
+          sym.rlevel == symbol2t::level1_global)
+        lev = symbol2t::level2_global;
+      else
+        lev = symbol2t::level2;
+
+      expr = expr2tc(new symbol2t(sym.type, sym.thename, lev,
+                                  sym.level1_num, 0, sym.thread_num, 0));
     }
   }
   else if (is_address_of2t(expr))
