@@ -2026,7 +2026,7 @@ std::string constant_array_of2t::field_names [esbmct::num_type_fields]  =
 std::string constant_string2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string symbol2t::field_names [esbmct::num_type_fields]  =
-{ "name", "", "", "", ""};
+{ "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", "", ""};
 std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
@@ -2243,7 +2243,9 @@ template class esbmct::expr_methods<symbol2t, symbol_data,
     irep_idt, symbol_data, &symbol_data::thename,
     symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
     unsigned int, symbol_data, &symbol_data::level1_num,
-    unsigned int, symbol_data, &symbol_data::level2_num>;
+    unsigned int, symbol_data, &symbol_data::level2_num,
+    unsigned int, symbol_data, &symbol_data::thread_num,
+    unsigned int, symbol_data, &symbol_data::node_num>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,

@@ -1786,11 +1786,14 @@ public:
   };
 
   symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v,
-              renaming_level lev, unsigned int l1, unsigned int l2)
-    : expr2t(t, id), thename(v), rlevel(lev), level1_num(l1), level2_num(l2) { }
+              renaming_level lev, unsigned int l1, unsigned int l2,
+              unsigned int tr, unsigned int node)
+    : expr2t(t, id), thename(v), rlevel(lev), level1_num(l1), level2_num(l2),
+      thread_num(tr), node_num(node) { }
   symbol_data(const symbol_data &ref)
     : expr2t(ref), thename(ref.thename), rlevel(ref.rlevel),
-      level1_num(ref.level1_num), level2_num(ref.level2_num) { }
+      level1_num(ref.level1_num), level2_num(ref.level2_num),
+      thread_num(ref.thread_num), node_num(ref.node_num) { }
 
   virtual std::string get_symbol_name(void) const;
 
@@ -1803,6 +1806,8 @@ public:
   renaming_level rlevel;
   unsigned int level1_num;
   unsigned int level2_num;
+  unsigned int thread_num;
+  unsigned int node_num;
 };
 
 class typecast_data : public expr2t
@@ -2360,7 +2365,9 @@ typedef esbmct::expr_methods<symbol2t, symbol_data,
         irep_idt, symbol_data, &symbol_data::thename,
         symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
         unsigned int, symbol_data, &symbol_data::level1_num,
-        unsigned int, symbol_data, &symbol_data::level2_num>
+        unsigned int, symbol_data, &symbol_data::level2_num,
+        unsigned int, symbol_data, &symbol_data::thread_num,
+        unsigned int, symbol_data, &symbol_data::node_num>
         symbol_expr_methods;
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
@@ -2826,8 +2833,8 @@ public:
 
   symbol2t(const type2tc &type, const irep_idt &init,
            renaming_level lev = level0, unsigned int l1 = 0,
-           unsigned int l2 = 0)
-    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2) { }
+           unsigned int l2 = 0, unsigned int trd = 0, unsigned int node = 0)
+    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node) { }
   symbol2t(const symbol2t &ref)
     : symbol_expr_methods(ref){}
 
