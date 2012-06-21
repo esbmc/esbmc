@@ -120,10 +120,9 @@ public:
       ignore(false)
     {
     }
-    
-    void output(
-      const namespacet &ns,
-      std::ostream &out) const;
+
+    void output(const namespacet &ns, std::ostream &out) const;
+    void short_output(const namespacet &ns, std::ostream &out) const;
   };
   
   unsigned count_ignored_SSA_steps() const

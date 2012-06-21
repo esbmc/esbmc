@@ -316,6 +316,16 @@ void symex_target_equationt::SSA_stept::output(
   out << "Guard: " << from_expr(ns, "", guard) << std::endl;
 }
 
+void symex_target_equationt::SSA_stept::short_output(
+  const namespacet &ns, std::ostream &out) const
+{
+
+  if (is_assignment() || is_assert() || is_assume())
+  {
+    out <<  from_expr(ns, "", cond) << std::endl;
+  }
+}
+
 /*******************************************************************\
 
 Function: operator <<
