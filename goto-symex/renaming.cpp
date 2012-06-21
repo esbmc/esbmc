@@ -74,8 +74,8 @@ void renaming::level1t::rename(expr2tc &expr)
       current_names.find(sym.get_symbol_name());
 
     if(it!=current_names.end())
-      expr = expr2tc(new symbol2t(sym.type,
-                                  name(sym.get_symbol_name(), it->second)));
+      expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level1,
+                                  it->second, 0, _thread_id, 0));
   }
   else if (is_address_of2t(expr))
   {
