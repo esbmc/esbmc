@@ -114,10 +114,17 @@ void renaming::level2t::rename(expr2tc &expr)
 
     if(it!=current_names.end())
     {
+      // Is this a global symbol? Gets renamed differently.
+      symbol2t::renaming_level lev;
+      if (sym.rlevel == symbol2t::level0)
+        lev = symbol2t::level2_global;
+      else
+        lev = symbol2t::level2;
+
       if (!is_nil_expr(it->second.constant))
         expr = it->second.constant; // sym is now invalid reference
       else
-        expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level2,
+        expr = expr2tc(new symbol2t(sym.type, sym.thename, lev,
                                     sym.level1_num, it->second.count,
                                     sym.thread_num, it->second.node_id));
     }

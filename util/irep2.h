@@ -1782,7 +1782,9 @@ public:
   enum renaming_level {
     level0,
     level1,
-    level2
+    level2,
+    level1_global,
+    level2_global
   };
 
   symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v,

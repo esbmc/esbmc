@@ -695,6 +695,13 @@ symbol_data::get_symbol_name(void) const
                                + "!" + i2string(thread_num)
                                + "&" + i2string(node_num)
                                + "#" + i2string(level2_num);
+  case level1_global:
+    // Just return global name,
+    return thename.as_string();
+  case level2_global:
+    // Global name with l2 details
+    return thename.as_string() + "&" + i2string(node_num)
+                               + "#" + i2string(level2_num);
   }
 }
 
@@ -924,6 +931,10 @@ type_to_string(const symbol_data::renaming_level &theval,
     return "Level 1";
   case symbol_data::level2:
     return "Level 2";
+  case symbol_data::level1_global:
+    return "Level 1 (global)";
+  case symbol_data::level2_global:
+    return "Level 2 (global)";
   }
 }
 
