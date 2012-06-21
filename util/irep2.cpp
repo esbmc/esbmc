@@ -681,6 +681,12 @@ constant_bool2t::is_false(void) const
   return !constant_value;
 }
 
+std::string
+symbol_data::get_symbol_name(void) const
+{
+  return thename.as_string();
+}
+
 expr2tc
 constant_string2t::to_array(void) const
 {
@@ -2131,7 +2137,7 @@ template class esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
 template class esbmct::expr_methods<constant_string2t, constant_string_data,
     irep_idt, constant_string_data, &constant_string_data::value>;
 template class esbmct::expr_methods<symbol2t, symbol_data,
-    irep_idt, symbol_data, &symbol_data::name>;
+    irep_idt, symbol_data, &symbol_data::thename>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,

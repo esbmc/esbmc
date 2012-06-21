@@ -76,7 +76,7 @@ public:
       return false;
 
     const symbol2t &sym = to_symbol2t(assign.target);
-    std::string identifier = sym.name.as_string();
+    std::string identifier = sym.get_symbol_name();
 
 	//these assignments come from the buil-in-libraries
     if (identifier.find("built-in-library")!= std::string::npos

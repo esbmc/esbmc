@@ -1378,20 +1378,20 @@ migrate_expr_back(const expr2tc &ref)
   {
     const symbol2t &ref2 = to_symbol2t(ref);
     typet thetype = migrate_type_back(ref->type);
-    if (has_prefix(ref2.name.as_string(), "nondet$")) {
+    if (has_prefix(ref2.get_symbol_name(), "nondet$")) {
       exprt thesym("nondet_symbol", thetype);
-      thesym.identifier(irep_idt(std::string(ref2.name.c_str() + 7)));
+      thesym.identifier(irep_idt(std::string(ref2.get_symbol_name().c_str() + 7)));
       return thesym;
-    } else if (ref2.name == "NULL") {
+    } else if (ref2.get_symbol_name() == "NULL") {
       // Special case.
       constant_exprt const_expr(migrate_type_back(ref2.type));
-      const_expr.set_value(ref2.name);
+      const_expr.set_value(ref2.get_symbol_name());
       return const_expr;
-    } else if (ref2.name == "INVALID") {
+    } else if (ref2.get_symbol_name() == "INVALID") {
       exprt invalid("invalid-object", pointer_typet(empty_typet()));
       return invalid;
     } else {
-      return symbol_exprt(ref2.name, thetype);
+      return symbol_exprt(ref2.get_symbol_name(), thetype);
     }
   }
   case expr2t::typecast_id:

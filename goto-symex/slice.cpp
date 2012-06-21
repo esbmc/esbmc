@@ -33,7 +33,7 @@ void symex_slicet::get_symbols(const expr2tc &expr)
     get_symbols(**it);
 
   if (is_symbol2t(expr))
-    depends.insert(symbol2tc(expr)->name);
+    depends.insert(symbol2tc(expr)->get_symbol_name());
 }
 
 void symex_slicet::slice(symex_target_equationt &equation)
@@ -78,7 +78,7 @@ void symex_slicet::slice_assignment(
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  if(depends.find(symbol2tc(SSA_step.lhs)->name) == depends.end())
+  if(depends.find(symbol2tc(SSA_step.lhs)->get_symbol_name()) == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;

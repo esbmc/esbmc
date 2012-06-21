@@ -67,13 +67,15 @@ void renaming::level1t::rename(expr2tc &expr)
 
     // first see if it's already an l1 name
 
-    if (sym.name.as_string().find("@") != std::string::npos)
+    if (sym.get_symbol_name().find("@") != std::string::npos)
       return;
 
-    const current_namest::const_iterator it = current_names.find(sym.name);
+    const current_namest::const_iterator it =
+      current_names.find(sym.get_symbol_name());
 
     if(it!=current_names.end())
-      sym.name = name(sym.name, it->second);
+      expr = expr2tc(new symbol2t(sym.type,
+                                  name(sym.get_symbol_name(), it->second)));
   }
   else if (is_address_of2t(expr))
   {
@@ -97,29 +99,31 @@ void renaming::level2t::rename(expr2tc &expr)
 
     // first see if it's already an l2 name
 
-    if (sym.name.as_string().find("#") != std::string::npos)
+    if (sym.get_symbol_name().find("#") != std::string::npos)
       return;
 
-    if (sym.name.as_string() == "NULL")
+    if (sym.get_symbol_name() == "NULL")
       return;
-    if (sym.name.as_string() == "INVALID")
+    if (sym.get_symbol_name() == "INVALID")
       return;
-    if (has_prefix(sym.name.as_string(), "nondet$"))
+    if (has_prefix(sym.get_symbol_name(), "nondet$"))
       return;
 
-    const current_namest::const_iterator it = current_names.find(sym.name);
+    const current_namest::const_iterator it =
+      current_names.find(sym.get_symbol_name());
 
     if(it!=current_names.end())
     {
       if (!is_nil_expr(it->second.constant))
         expr = it->second.constant; // sym is now invalid reference
       else
-        sym.name = name(sym.name, it->second.count);
+        expr = expr2tc(new symbol2t(sym.type,
+                                name(sym.get_symbol_name(), it->second.count)));
     }
     else
     {
-      std::string new_identifier = name(sym.name, 0);
-      sym.name = irep_idt(new_identifier);
+      std::string new_identifier = name(sym.get_symbol_name(), 0);
+      expr = expr2tc(new symbol2t(sym.type, new_identifier));
     }
   }
   else if (is_address_of2t(expr))
@@ -150,8 +154,8 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
   if (is_symbol2t(expr))
   {
     symbol2t &sym = to_symbol2t(expr);
-    irep_idt ident = get_original_name(sym.name);
-    sym.name = irep_idt(ident);
+    irep_idt ident = get_original_name(sym.get_symbol_name());
+    expr = expr2tc(new symbol2t(sym.type, irep_idt(ident)));
   }
 }
 

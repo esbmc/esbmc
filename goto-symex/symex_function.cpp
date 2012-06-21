@@ -143,7 +143,7 @@ void
 goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
-  const irep_idt &identifier = to_symbol2t(call.function).name;
+  const irep_idt &identifier = to_symbol2t(call.function).get_symbol_name();
 
   // find code in function map
 
@@ -307,8 +307,8 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   // Match the two varieties of failed symbol we can encounter,
   if (is_symbol2t(func_ptr) && (
-   has_prefix(to_symbol2t(func_ptr).name.as_string(), "symex::invalid_object")||
-   to_symbol2t(func_ptr).name.as_string().find("$object") != std::string::npos))
+   has_prefix(to_symbol2t(func_ptr).get_symbol_name(),"symex::invalid_object")||
+   to_symbol2t(func_ptr).get_symbol_name().find("$object") !=std::string::npos))
   {
 
     // Emit warning; perform no function call behaviour. Increment PC
@@ -326,10 +326,10 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
        it != l.end(); it++) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second->name);
+      goto_functions.function_map.find(it->second->get_symbol_name());
     if (fit == goto_functions.function_map.end() ||
         !fit->second.body_available) {
-      std::cerr << "Couldn't find symbol " << it->second->name;
+      std::cerr << "Couldn't find symbol " << it->second->get_symbol_name();
       std::cerr << " or body not available, during function ptr dereference";
       std::cerr << std::endl;
       abort();

@@ -15,7 +15,7 @@ static irep_idt get_object(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
   {
-    return to_symbol2t(expr).name;
+    return to_symbol2t(expr).get_symbol_name();
   }
   else if (is_member2t(expr))
   {

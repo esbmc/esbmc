@@ -1752,15 +1752,33 @@ public:
   irep_idt value;
 };
 
-class symbol_data : public expr2t
+class symbol_base : public expr2t
+{
+public:
+  symbol_base(const type2tc &t, expr2t::expr_ids id)
+    : expr2t(t, id) { }
+  symbol_base(const symbol_base &ref)
+    : expr2t(ref) { }
+
+  virtual std::string get_symbol_name(void) const = 0;
+};
+
+class symbol_data : public symbol_base
 {
 public:
   symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : expr2t(t, id), name(v) { }
+    : symbol_base(t, id), thename(v) { }
   symbol_data(const symbol_data &ref)
-    : expr2t(ref), name(ref.name) { }
+    : symbol_base(ref), thename(ref.thename) { }
 
-  irep_idt name;
+  virtual std::string get_symbol_name(void) const;
+
+  // So: I want to make this private, however then all the templates accessing
+  // it can't access it; and the typedef for symbol_expr_methods further down
+  // can't access it too, no matter how many friends I add.
+  //
+  // So, let's pretend that this is private, even though it can't be enforced.
+  irep_idt thename;
 };
 
 class typecast_data : public expr2t
@@ -2315,7 +2333,7 @@ typedef esbmct::expr_methods<constant_string2t, constant_string_data,
         irep_idt, constant_string_data, &constant_string_data::value>
         constant_string_expr_methods;
 typedef esbmct::expr_methods<symbol2t, symbol_data,
-        irep_idt, symbol_data, &symbol_data::name>
+        irep_idt, symbol_data, &symbol_data::thename>
         symbol_expr_methods;
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>

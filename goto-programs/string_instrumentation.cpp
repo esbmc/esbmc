@@ -265,7 +265,7 @@ void string_instrumentationt::do_function_call(
 
   if (is_symbol2t(function))
   {
-    const irep_idt &identifier = to_symbol2t(function).name;
+    irep_idt identifier = to_symbol2t(function).get_symbol_name();
 
     if (identifier=="c::strcoll")
     {

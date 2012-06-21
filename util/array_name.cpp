@@ -54,7 +54,7 @@ std::string array_name(
   }
   else if (is_symbol2t(expr))
   {
-    const symbolt &symbol=ns.lookup(to_symbol2t(expr).name);
+    const symbolt &symbol=ns.lookup(to_symbol2t(expr).get_symbol_name());
     return "array `"+id2string(symbol.base_name)+"'";
   }
   else if (is_constant_string2t(expr))

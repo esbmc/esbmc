@@ -343,7 +343,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   assert(is_address_of2t(addr));
   const address_of2t &addrof = to_address_of2t(addr);
   assert(is_symbol2t(addrof.ptr_obj));
-  const irep_idt &symname = to_symbol2t(addrof.ptr_obj).name;
+  irep_idt symname = to_symbol2t(addrof.ptr_obj).get_symbol_name();
 
   goto_functionst::function_mapt::const_iterator it =
     art.goto_functions.function_map.find(symname);

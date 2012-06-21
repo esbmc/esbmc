@@ -21,11 +21,13 @@ bool goto_program_dereferencet::has_failed_symbol(
 {
   if (is_symbol2t(expr))
   {
-    if (has_prefix(to_symbol2t(expr).name.as_string(), "symex::invalid_object"))
+    if (has_prefix(to_symbol2t(expr).get_symbol_name(),
+                   "symex::invalid_object"))
       return false;
 
     // Null and invalid name lookups will fail.
-    if (to_symbol2t(expr).name == "NULL" || to_symbol2t(expr).name == "INVALID")
+    if (to_symbol2t(expr).get_symbol_name() == "NULL" ||
+        to_symbol2t(expr).get_symbol_name() == "INVALID")
       return false;
 
     exprt tmp_sym = migrate_expr_back(expr);

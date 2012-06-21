@@ -256,7 +256,7 @@ void value_sett::get_value_set_rec(
   {
     const symbol2t &sym = to_symbol2t(expr);
 
-    if (sym.name.as_string() == "NULL" && is_pointer_type(expr->type))
+    if (sym.get_symbol_name() == "NULL" && is_pointer_type(expr->type))
     {
       // XXXjmorse - looks like there's no easy way to avoid this ns.follow
       // for getting the null objects type, without an internal pointer
@@ -272,7 +272,7 @@ void value_sett::get_value_set_rec(
     }
 
     // look it up
-    valuest::const_iterator v_it = values.find(sym.name.as_string() + suffix);
+    valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
       
     if(v_it!=values.end())
     {
@@ -829,7 +829,7 @@ void value_sett::assign_rec(
 
   if (is_symbol2t(lhs))
   {
-    const irep_idt &identifier = to_symbol2t(lhs).name;
+    irep_idt identifier = to_symbol2t(lhs).get_symbol_name();
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);

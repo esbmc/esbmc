@@ -459,10 +459,10 @@ execution_statet::execute_guard(void)
   parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
-  irep_idt new_name = state_level2->make_assignment(guard_exp.name,
+  irep_idt new_name = state_level2->make_assignment(guard_exp.get_symbol_name(),
                                                     expr2tc(), expr2tc());
 
-  guard_exp.name = new_name;
+  guard_expr = expr2tc(new symbol2t(guard_exp.type, new_name));
 
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
@@ -526,7 +526,7 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
   } else if (is_symbol2t(expr)) {
-    const irep_idt &id = to_symbol2t(expr).name;
+    irep_idt id = to_symbol2t(expr).get_symbol_name();
     const irep_idt &identifier = get_active_state().get_original_name(id);
     const symbolt &symbol = ns.lookup(identifier);
     if (identifier == "c::__ESBMC_alloc"
@@ -558,7 +558,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
   } else if (is_symbol2t(expr)) {
-    const irep_idt &id = to_symbol2t(expr).name;
+    irep_idt id = to_symbol2t(expr).get_symbol_name();
     const irep_idt &identifier = get_active_state().get_original_name(id);
 
     if (identifier == "goto_symex::\\guard!" +
