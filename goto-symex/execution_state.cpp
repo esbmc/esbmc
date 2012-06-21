@@ -460,9 +460,6 @@ execution_statet::is_cur_state_guard_false(void)
     tvt res = rte->ask_solver_question(parent_guard);
     if (res.is_false())
       return true;
-  } else {
-    if (threads_state[active_thread].guard.is_false())
-      return true;
   }
 
   return false;
