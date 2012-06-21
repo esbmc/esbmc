@@ -19,6 +19,7 @@ extern "C" {
 
 #include <namespace.h>
 
+#include <config.h>
 #include <goto-programs/goto_program.h>
 #include <solvers/prop/prop_conv.h>
 
@@ -33,7 +34,10 @@ extern "C" {
 class symex_target_equationt:public symex_targett
 {
 public:
-  symex_target_equationt(const namespacet &_ns):ns(_ns) { }
+  symex_target_equationt(const namespacet &_ns):ns(_ns)
+  {
+    debug_print = config.options.get_bool_option("symex-ssa-trace");
+  }
 
   // assignment to a variable - must be symbol
   // the value is destroyed
@@ -166,6 +170,7 @@ public:
 
 protected:
   const namespacet &ns;
+  bool debug_print;
 };
 
 extern inline bool operator<(

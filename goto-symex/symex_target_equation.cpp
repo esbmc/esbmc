@@ -40,6 +40,9 @@ void symex_target_equationt::assignment(
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;
   SSA_step.stack_trace = stack_trace;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
 }
 
 void symex_target_equationt::output(
@@ -57,6 +60,9 @@ void symex_target_equationt::output(
   SSA_step.source=source;
   SSA_step.output_args=args;
   SSA_step.format_string=fmt;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
 }
 
 void symex_target_equationt::assumption(
@@ -72,6 +78,9 @@ void symex_target_equationt::assumption(
   SSA_step.cond.swap(cond);
   SSA_step.type=goto_trace_stept::ASSUME;
   SSA_step.source=source;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
 }
 
 void symex_target_equationt::assertion(
@@ -91,6 +100,9 @@ void symex_target_equationt::assertion(
   SSA_step.source=source;
   SSA_step.comment=msg;
   SSA_step.stack_trace = stack_trace;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
 }
 
 void symex_target_equationt::convert(
