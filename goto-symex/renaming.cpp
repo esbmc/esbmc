@@ -99,14 +99,14 @@ void renaming::level2t::rename(expr2tc &expr)
 
     // first see if it's already an l2 name
 
-    if (sym.get_symbol_name().find("#") != std::string::npos)
+    if (sym.rlevel == symbol2t::level2)
       return;
 
-    if (sym.get_symbol_name() == "NULL")
+    if (sym.thename == "NULL")
       return;
-    if (sym.get_symbol_name() == "INVALID")
+    if (sym.thename == "INVALID")
       return;
-    if (has_prefix(sym.get_symbol_name(), "nondet$"))
+    if (has_prefix(sym.thename.as_string(), "nondet$"))
       return;
 
     const current_namest::const_iterator it =
@@ -117,8 +117,9 @@ void renaming::level2t::rename(expr2tc &expr)
       if (!is_nil_expr(it->second.constant))
         expr = it->second.constant; // sym is now invalid reference
       else
-        expr = expr2tc(new symbol2t(sym.type,
-                                name(sym.get_symbol_name(), it->second.count)));
+        expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level2,
+                                    sym.level1_num, it->second.count,
+                                    sym.thread_num, it->second.node_id));
     }
     else
     {
