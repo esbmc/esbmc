@@ -144,14 +144,6 @@ bool reachability_treet::analyse_for_cswitch_base(const expr2tc &expr)
   if (ex_state.check_if_ileaves_blocked())
     return false;
 
- // We're going to take a context switch; check whether or not the current state
- // guard is false or not; if it is, there's no possible progress from this
- // point because the context switch is unviable.
- if (get_cur_state().is_cur_state_guard_false()) {
-   get_cur_state().interleaving_unviable = true;
-   return false;
- }
-
   crypto_hash hash;
   if (state_hashing) {
     hash = ex_state.generate_hash();

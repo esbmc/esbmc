@@ -510,6 +510,11 @@ execution_statet::execute_guard(void)
     threads_state.at(i).guard -= old_guard;
     threads_state.at(i).guard.add(guard_expr);
   }
+
+  // Finally, if we've determined execution from here on is unviable, then
+  // mark this path as unviable.
+  if (is_cur_state_guard_false())
+    interleaving_unviable = true;
 }
 
 unsigned int
