@@ -1508,20 +1508,21 @@ do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 void
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::convert_smt(prop_convt &obj, void *&arg) const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::convert_smt(prop_convt &obj, void *&arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_expr(*new_this, arg);
@@ -1529,20 +1530,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 expr2tc
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::clone(void) const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::clone(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -1550,20 +1552,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 expr2t *
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::clone_raw(void) const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::clone_raw(void) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
@@ -1571,20 +1574,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 list_of_memberst
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::tostring(unsigned int indent) const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::tostring(unsigned int indent) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   list_of_memberst thevector;
@@ -1604,20 +1608,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 bool
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::cmp(const expr2t &ref)const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::cmp(const expr2t &ref)const
 {
   const derived *derived_this = static_cast<const derived*>(this);
   const derived *ref2 = static_cast<const derived *>(&ref);
@@ -1644,20 +1649,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 int
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::lt(const expr2t &ref)const
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::lt(const expr2t &ref)const
 {
   int tmp;
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1691,20 +1697,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 void
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::do_crc
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::do_crc
           (hacky_hash &hash) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1720,20 +1727,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 void
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::list_operands
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::list_operands
           (std::list<const expr2tc *> &inp) const
 {
   const derived *derived_this = static_cast<const derived*>(this);
@@ -1748,20 +1756,21 @@ esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, f
 }
 
 template <class derived, class subclass,
-        typename field1_type, class field1_class,
-        field1_type field1_class::*field1_ptr,
-        typename field2_type, class field2_class,
-        field2_type field2_class::*field2_ptr,
-        typename field3_type, class field3_class,
-        field3_type field3_class::*field3_ptr,
-        typename field4_type, class field4_class,
-        field4_type field4_class::*field4_ptr,
-        typename field5_type, class field5_class,
-        field5_type field5_class::*field5_ptr,
-        typename field6_type, class field6_class,
-        field6_type field6_class::*field6_ptr>
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 void
-esbmct::expr_methods<derived, subclass, field1_type, field1_class, field1_ptr, field2_type, field2_class, field2_ptr, field3_type, field3_class, field3_ptr, field4_type, field4_class, field4_ptr, field5_type, field5_class, field5_ptr, field6_type, field6_class, field6_ptr>::list_operands
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::list_operands
           (std::list<expr2tc*> &inp)
 {
   derived *derived_this = static_cast<derived*>(this);
