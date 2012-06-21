@@ -67,7 +67,7 @@ void renaming::level1t::rename(expr2tc &expr)
 
     // first see if it's already an l1 name
 
-    if (sym.get_symbol_name().find("@") != std::string::npos)
+    if (sym.rlevel != symbol2t::level0)
       return;
 
     const current_namest::const_iterator it =
