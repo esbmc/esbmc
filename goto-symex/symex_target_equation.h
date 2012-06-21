@@ -21,6 +21,7 @@ extern "C" {
 
 #include <namespace.h>
 
+#include <config.h>
 #include <goto-programs/goto_program.h>
 #include <solvers/prop/prop_conv.h>
 
@@ -37,7 +38,10 @@ class symex_target_equationt:public symex_targett
 public:
   class SSA_stept;
 
-  symex_target_equationt(const namespacet &_ns):ns(_ns) { }
+  symex_target_equationt(const namespacet &_ns):ns(_ns)
+  {
+    debug_print = config.options.get_bool_option("symex-ssa-trace");
+  }
 
   // assignment to a variable - must be symbol
   // the value is destroyed
@@ -118,10 +122,9 @@ public:
     SSA_stept() : ignore(false)
     {
     }
-    
-    void output(
-      const namespacet &ns,
-      std::ostream &out) const;
+
+    void output(const namespacet &ns, std::ostream &out) const;
+    void short_output(const namespacet &ns, std::ostream &out) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -167,6 +170,7 @@ public:
 
 protected:
   const namespacet &ns;
+  bool debug_print;
 };
 
 class runtime_encoded_equationt : public symex_target_equationt
