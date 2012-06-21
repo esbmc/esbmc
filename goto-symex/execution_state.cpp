@@ -216,7 +216,10 @@ execution_statet::symex_step(reachability_treet &art)
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      art.force_cswitch_point();
+
+      // Context switch if the state guard isn't false.
+      if (!state.guard.is_false())
+        art.force_cswitch_point();
       break;
     case RETURN:
       state.source.pc++;
