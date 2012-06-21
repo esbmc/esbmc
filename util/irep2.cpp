@@ -684,7 +684,18 @@ constant_bool2t::is_false(void) const
 std::string
 symbol_data::get_symbol_name(void) const
 {
-  return thename.as_string();
+  switch (rlevel) {
+  case level0:
+    return thename.as_string();
+  case level1:
+    return thename.as_string() + "@" + i2string(level1_num)
+                               + "!" + i2string(thread_num);
+  case level2:
+    return thename.as_string() + "@" + i2string(level1_num)
+                               + "!" + i2string(thread_num)
+                               + "&" + i2string(node_num)
+                               + "#" + i2string(level2_num);
+  }
 }
 
 expr2tc
