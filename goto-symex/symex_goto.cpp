@@ -223,16 +223,14 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       typet old_type = symbol.type;
       migrate_type(symbol.type, type);
 
-      exprt tmp_rhs;
       expr2tc rhs;
 
       if (cur_state->guard.is_false()) {
-	tmp_rhs = symbol_exprt(cur_state->current_name(goto_state, symbol.name),
-                               old_type);
-        migrate_expr(tmp_rhs, rhs);
+        std::string name = cur_state->current_name(goto_state, symbol.name);
+        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
       } else if (goto_state.guard.is_false())    {
-	tmp_rhs = symbol_exprt(cur_state->current_name(symbol.name), old_type);
-        migrate_expr(tmp_rhs, rhs);
+        std::string name = cur_state->current_name(symbol.name);
+        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
