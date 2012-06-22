@@ -36,8 +36,8 @@ else
 # linked up into esbmc to produce a library that /should/ work everywhere.
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
-	$(ESBMCDIR)/scripts/fetchlibc.sh .libc.a $(ESBMCDIR)/scripts/gpg-keyring
-	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) -print-file-name=libgcc.a` `$(CXX) -print-file-name=libgcc_eh.a` ./.libc.a
+	$(ESBMCDIR)/scripts/fetchlibc.sh libc${BITWIDTH_STR}.a .libc${BITWIDTH_STR}.a $(ESBMCDIR)/scripts/gpg-keyring
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) -print-file-name=libgcc.a` `$(CXX) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
 
