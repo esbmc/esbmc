@@ -1,2 +1,4 @@
 esbmc
 .libc.a
+.libc32.a
+.libc64.a
