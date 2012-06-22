@@ -110,73 +110,45 @@ public:
 
     std::set<targett> incoming_edges;
 
-    void make_goto()
+
+    //! clear the node    
+    inline void clear(goto_program_instruction_typet _type)
     {
-      type=GOTO;
+      type=_type;
       targets.clear();
       guard.make_true();
       event="";
       code.make_nil();
     }
+     
+    inline void make_goto() { clear(GOTO); }
+    inline void make_return() { clear(RETURN); }
+    inline void make_function_call(const codeT &_code) { clear(FUNCTION_CALL); code=_code; }
+    inline void make_skip() { clear(SKIP); }
+    inline void make_throw() { clear(THROW); }
+    inline void make_catch() { clear(CATCH); }
+    inline void make_assertion(const guardT &g) { clear(ASSERT); guard=g; }
+    inline void make_assumption(const guardT &g) { clear(ASSUME); guard=g; }
+    inline void make_assignment() { clear(ASSIGN); }
+    inline void make_other() { clear(OTHER); }
+    inline void make_decl() { clear(DECL); }
+    inline void make_dead() { clear(DEAD); }
+    inline void make_atomic_begin() { clear(ATOMIC_BEGIN); }
+    inline void make_atomic_end() { clear(ATOMIC_END); }
 
-    void make_return()
-    {
-      type=RETURN;
-      targets.clear();
-      guard.make_true();
-      event="";
-      code.make_nil();
-    }
-
-    void make_skip()
-    {
-      type=SKIP;
-      targets.clear();
-      guard.make_true();
-      event="";
-      code.make_nil();
-    }
-
-    void make_assertion(const guardT &g)
-    {
-      type=ASSERT;
-      targets.clear();
-      guard=g;
-      event="";
-      code.make_nil();
-    }
-
-    void make_assumption(const guardT &g)
-    {
-      type=ASSUME;
-      targets.clear();
-      guard=g;
-      event="";
-      code.make_nil();
-    }
-
-    void make_goto(typename std::list<class instructiont>::iterator _target)
+    inline void make_goto(
+      typename std::list<class instructiont>::iterator _target)
     {
       make_goto();
       targets.push_back(_target);
     }
-
-    void make_other()
+    
+    inline void make_goto(
+      typename std::list<class instructiont>::iterator _target,
+      const guardT &g)
     {
-      type=OTHER;
-      targets.clear();
-      guard.make_true();
-      event="";
-      code.make_nil();
-    }
-
-    void make_catch()
-    {
-      type=CATCH;
-      targets.clear();
-      guard.make_true();
-      event="";
-      code.make_nil();
+      make_goto(_target);
+      guard=g;
     }
 
     // valid local variables at this point
