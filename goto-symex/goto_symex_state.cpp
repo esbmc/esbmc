@@ -184,8 +184,11 @@ void goto_symex_statet::assignment(
          lhs_sym.rlevel != symbol2t::level2_global);
 
   std::string l1_identifier = identifier.as_string();
-  if (lhs_sym.rlevel == symbol2t::level0)
-    l1_identifier = top().level1.get_ident_name(identifier);
+  if (lhs_sym.rlevel == symbol2t::level0) {
+    expr2tc tmpirep = lhs;
+    top().level1.get_ident_name(tmpirep);
+    l1_identifier = to_symbol2t(tmpirep).get_symbol_name();
+  }
 
   expr2tc const_value;
   if(record_value && constant_propagation(rhs))
