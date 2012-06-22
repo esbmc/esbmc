@@ -54,17 +54,6 @@ renaming::level1t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-std::string renaming::level2t::get_ident_name(const irep_idt &identifier) const
-{
-  current_namest::const_iterator it=
-    current_names.find(identifier);
-
-  if(it==current_names.end())
-    return name(identifier, 0);
-
-  return name(identifier, it->second.count);
-}
-
 void
 renaming::level2t::get_ident_name(expr2tc &sym) const
 {
@@ -288,3 +277,5 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
 
   entry.constant = const_value;
 }
+
+std::string renaming::renaming_levelt::get_ident_name(const irep_idt &identifier __attribute__((unused))) const { abort();}
