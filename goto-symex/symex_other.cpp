@@ -81,7 +81,8 @@ void goto_symext::symex_other(void)
 
     if(it!=cur_state->level2.current_names.end())
     {
-      cur_state->level2.rename(l1_identifier, it->second.count+1);
+      expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), l1_identifier));
+      cur_state->level2.rename(tmp_sym, it->second.count+1);
       it->second.constant = expr2tc();
     }
   }

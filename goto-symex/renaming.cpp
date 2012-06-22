@@ -200,9 +200,9 @@ void renaming::level2t::rename(expr2tc &expr)
   }
 }
 
-void renaming::level2t::coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id)
+void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id)
 {
-  valuet &entry=current_names[identifier];
+  valuet &entry=current_names[to_symbol2t(lhs_sym).get_symbol_name()];
   entry.count=count;
   entry.node_id = node_id;
 }
@@ -265,21 +265,26 @@ void renaming::level2t::dump() const
   print(std::cout);
 }
 
-irep_idt
-renaming::level2t::make_assignment(irep_idt l1_ident,
+void
+renaming::level2t::make_assignment(expr2tc &lhs_symbol,
                                    const expr2tc &const_value,
                           const expr2tc &assigned_value __attribute__((unused)))
 {
   irep_idt new_name;
+  symbol2t &symbol = to_symbol2t(lhs_symbol);
 
-  valuet &entry = current_names[l1_ident];
+  valuet &entry = current_names[symbol.get_symbol_name()];
 
   // This'll update entry beneath our feet; could reengineer it in the future.
-  rename(l1_ident, entry.count + 1);
+  rename(lhs_symbol, entry.count + 1);
 
-  new_name = name(l1_ident, entry.count);
+  symbol2t::renaming_level lev = (symbol.rlevel == symbol2t::level0 ||
+                                  symbol.rlevel == symbol2t::level1_global)
+                                  ? symbol2t::level2_global : symbol2t::level2;
+  symbol.rlevel = lev;
+  // These fields were updated by the rename call,
+  symbol.level2_num = entry.count; 
+  symbol.node_num = entry.node_id;
 
   entry.constant = const_value;
-
-  return new_name;
 }

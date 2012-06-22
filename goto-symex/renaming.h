@@ -79,14 +79,14 @@ namespace renaming {
   struct level2t:public renaming_levelt
   {
   protected:
-    virtual void coveredinbees(const irep_idt &identifier, unsigned count, unsigned node_id);
+    virtual void coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
   public:
-    virtual irep_idt make_assignment(irep_idt ll1_identifier,
-                                     const expr2tc &constant_value,
-                                     const expr2tc &assigned_value);
+    virtual void make_assignment(expr2tc &lhs_symbol,
+                                 const expr2tc &constant_value,
+                                 const expr2tc &assigned_value);
 
     virtual void rename(expr2tc &expr);
-    virtual void rename(const irep_idt &identifier, unsigned count)=0;
+    virtual void rename(expr2tc &expr, unsigned count)=0;
 
     virtual std::string get_ident_name(const irep_idt &identifier) const;
     virtual void get_ident_name(expr2tc &symbol) const;

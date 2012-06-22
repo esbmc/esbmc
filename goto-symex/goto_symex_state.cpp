@@ -176,19 +176,15 @@ void goto_symex_statet::assignment(
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
 
-  irep_idt identifier = lhs_sym.get_symbol_name();
-
   // identifier should be l0 or l1, make sure it's l1
 
   assert(lhs_sym.rlevel != symbol2t::level2 &&
          lhs_sym.rlevel != symbol2t::level2_global);
 
-  std::string l1_identifier = identifier.as_string();
-  if (lhs_sym.rlevel == symbol2t::level0) {
-    expr2tc tmpirep = lhs;
-    top().level1.get_ident_name(tmpirep);
-    l1_identifier = to_symbol2t(tmpirep).get_symbol_name();
-  }
+  if (lhs_sym.rlevel == symbol2t::level0)
+    top().level1.get_ident_name(lhs);
+
+  expr2tc l1_lhs = lhs;
 
   expr2tc const_value;
   if(record_value && constant_propagation(rhs))
@@ -196,17 +192,13 @@ void goto_symex_statet::assignment(
   else
     const_value = expr2tc();
 
-  irep_idt new_name = level2.make_assignment(l1_identifier, const_value, rhs);
-  lhs = expr2tc(new symbol2t(lhs_sym.type, new_name));
-  symbol2t &new_sym_name = to_symbol2t(lhs);
+  level2.make_assignment(lhs, const_value, rhs);
 
   if(use_value_set)
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
-
-    expr2tc l1_lhs = expr2tc(new symbol2t(new_sym_name.type, l1_identifier));
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }

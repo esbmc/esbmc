@@ -115,7 +115,7 @@ class execution_statet : public goto_symext
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
-    virtual void rename(const irep_idt &identifier, unsigned count);
+    virtual void rename(expr2tc &lhs_symbol, unsigned count);
     virtual void rename(expr2tc &identifier);
 
     execution_statet *owner;
@@ -132,7 +132,7 @@ class execution_statet : public goto_symext
     state_hashing_level2t(execution_statet &ref);
     virtual ~state_hashing_level2t(void);
     virtual state_hashing_level2t *clone(void) const;
-    virtual irep_idt make_assignment(irep_idt l1_ident,
+    virtual void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
                                      const expr2tc &assigned_value);
     crypto_hash generate_l2_state_hash() const;

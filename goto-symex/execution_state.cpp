@@ -452,17 +452,13 @@ execution_statet::execute_guard(void)
   node_id = node_count++;
   expr2tc guard_expr = expr2tc(new symbol2t(type_pool.get_bool(),
                                             get_guard_identifier()));
-  symbol2t &guard_exp = to_symbol2t(guard_expr);
   exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
   parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
-  irep_idt new_name = state_level2->make_assignment(guard_exp.get_symbol_name(),
-                                                    expr2tc(), expr2tc());
-
-  guard_expr = expr2tc(new symbol2t(guard_exp.type, new_name));
+  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
 
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
@@ -871,9 +867,9 @@ execution_statet::ex_state_level2t::clone(void) const
 }
 
 void
-execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned count)
+execution_statet::ex_state_level2t::rename(expr2tc &lhs_sym, unsigned count)
 {
-  renaming::level2t::coveredinbees(identifier, count, owner->node_id);
+  renaming::level2t::coveredinbees(lhs_sym, count, owner->node_id);
 }
 
 void
@@ -966,16 +962,14 @@ execution_statet::state_hashing_level2t::clone(void) const
   return new state_hashing_level2t(*this);
 }
 
-irep_idt
-execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
+void
+execution_statet::state_hashing_level2t::make_assignment(expr2tc &lhs_sym,
                                        const expr2tc &const_value,
                                        const expr2tc &assigned_value)
 {
-  crypto_hash hash;
-  irep_idt new_name;
+//  crypto_hash hash;
 
-  new_name = renaming::level2t::make_assignment(l1_ident, const_value,
-                                                assigned_value);
+  renaming::level2t::make_assignment(lhs_sym, const_value, assigned_value);
 
   // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
 #if 0
@@ -985,8 +979,6 @@ execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
     owner->get_active_state().get_original_name(l1_ident).as_string();
   current_hashes[orig_name] = hash;
 #endif
-
-  return new_name;
 }
 
 crypto_hash
