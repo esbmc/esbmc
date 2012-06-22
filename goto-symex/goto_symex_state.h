@@ -205,40 +205,36 @@ public:
 
   /**
    *  Perform both levels of renaming.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol to perform renaming on.
    */
-  std::string
-  current_name(const irep_idt &identifier) const
+  void
+  current_name(expr2tc &symirep) const
   {
-    return current_name(level2, identifier);
+    current_name(level2, symirep);
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param plevel2 L2 renaming context to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const renaming::level2t &plevel2, const irep_idt &identifier) const
+  void
+  current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
   {
-    irep_idt temp = top().level1.get_ident_name(identifier);
-    return plevel2.get_ident_name(temp);
+    irep_idt temp = top().level1.get_ident_name(to_symbol2t(symirep).get_symbol_name());
+    std::string temp2 = plevel2.get_ident_name(temp);
+    symirep = expr2tc(new symbol2t(symirep->type, irep_idt(temp2)));
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param goto_state Detatched state containing L2 state to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const goto_statet &goto_state, const irep_idt &identifier) const
+  void
+  current_name(const goto_statet &goto_state, expr2tc &symirep) const
   {
-    return current_name(goto_state.level2, identifier);
+    current_name(goto_state.level2, symirep);
   }
 
   /**

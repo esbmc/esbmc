@@ -226,22 +226,21 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       expr2tc rhs;
 
       if (cur_state->guard.is_false()) {
-        std::string name = cur_state->current_name(goto_state, symbol.name);
-        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
+        rhs = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, rhs);
       } else if (goto_state.guard.is_false())    {
-        std::string name = cur_state->current_name(symbol.name);
-        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
+        rhs = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, rhs);
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
 	// this gets the diff between the guards
 	tmp_guard -= cur_state->guard;
 
-	expr2tc true_val =
-          expr2tc(new symbol2t(type,
-                             cur_state->current_name(goto_state, symbol.name)));
-        expr2tc false_val = expr2tc(new symbol2t(type,
-                                         cur_state->current_name(symbol.name)));
+	expr2tc true_val = expr2tc(new symbol2t(type, symbol.name));
+	expr2tc false_val = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, true_val);
+        cur_state->current_name(false_val);
         rhs = expr2tc(new if2t(type, tmp_guard.as_expr(), true_val, false_val));
       }
 
