@@ -180,7 +180,12 @@ void goto_symex_statet::assignment(
 
   // identifier should be l0 or l1, make sure it's l1
 
-  const std::string l1_identifier=top().level1.get_ident_name(identifier);
+  assert(lhs_sym.rlevel != symbol2t::level2 &&
+         lhs_sym.rlevel != symbol2t::level2_global);
+
+  std::string l1_identifier = identifier.as_string();
+  if (lhs_sym.rlevel == symbol2t::level0)
+    l1_identifier = top().level1.get_ident_name(identifier);
 
   expr2tc const_value;
   if(record_value && constant_propagation(rhs))
