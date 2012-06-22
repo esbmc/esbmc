@@ -57,7 +57,7 @@ enum _Ios_Seekdir
     __ios_seekdir_end = 1L << 16
   };
 
-struct ios_base {
+class ios_base {
   typedef int iostate;
   typedef int fmtflags;
   typedef int openmode;
@@ -66,6 +66,7 @@ struct ios_base {
   enum event { erase_event, imbue_event, copyfmt_event };
   typedef void (*event_callback) (event ev, ios_base& obj, int index);
 
+private:
   static const iostate goodbit  =  __goodbit;
   static const iostate badbit   =  __badbit;
   static const iostate eofbit   =  __eofbit;
@@ -102,17 +103,13 @@ struct ios_base {
   static const seekdir end  =  __end;
 
 
-//protected:
+public:
   streamsize __width;
   streamsize __precision;
   static fmtflags	 __flags = 0;
   iostate	__exception;
   iostate	 __streambuf_state;
 
-
-public:
-  ios_base ();
-  virtual ~ios_base();
   fmtflags flags ( ) const;
   fmtflags flags ( fmtflags fmtfl );
   fmtflags setf ( fmtflags fmtfl );
@@ -128,30 +125,30 @@ public:
 
   void register_callback ( event_callback fn, int index );
   bool sync_with_stdio ( bool sync = true );
-  struct Init {
+  class Init {
   public:
     Init();
     ~Init();
   };
-  struct failure {};
+  class failure {};
 
-private:
+  ios_base();
+  virtual ~ios_base();
   ios_base (const ios_base&);
   ios_base& operator= (const ios_base&);
 };
 
-struct ios: ios_base{
+class ios: public ios_base{
   //	typedef fpos<mbstate_t> streampos;
   //	typedef fpos<mbstate_t> streamoff;
   typedef int streampos;
   typedef int streamoff;
 
-  ios() : ios_base() {}
+public:
+  ios() {ios_base(); }
   virtual ~ios();
   mutable char  __fill;
   streambuf*    __streambuf;
-
-public:
   bool operator ! ( ) const;
   operator void * ( ) const;
   void clear ( iostate state = goodbit );
@@ -354,7 +351,7 @@ ios_base& fixed ( ios_base& str ){
 	return str;
 }
 ios_base& scientific ( ios_base& str ) {
-	str.setf(__scientific, __floatfield);
+	str.ios_base::setf(__scientific, __floatfield);
 	return str;
 }
 

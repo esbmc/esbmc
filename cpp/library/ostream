@@ -8,14 +8,19 @@
 
 namespace std
 {
-struct ostream
+class ostream: virtual public ios
 {
 	typedef int streampos;
 	typedef int streamoff;
-
+public:
 	ostream();
 	explicit ostream (streambuf * sb);
-	ostream(int id): id(id){}
+	ostream(int _id): id(_id){
+		_filesize = nondet_uint();
+		_filepos = 0;
+	}
+	ostream(const ostream&); // disabled
+
 	virtual ~ostream();
 
 	int id;
@@ -29,11 +34,11 @@ struct ostream
 	streampos tellp ( ); //model
 	ostream& seekp ( streampos pos ); //model
 	ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
-//	ostream& flush ( );
+	ostream& flush ( );
 	ios_base::fmtflags flags ( ) const;
 	ios_base::fmtflags flags ( ios_base::fmtflags fmtfl );
 
-	struct sentry {
+	class sentry {
 		public:
 		  explicit sentry ( ostream& os );
 		  ~sentry();
@@ -42,11 +47,8 @@ struct ostream
 		  sentry (const sentry&);             // not defined
 		  sentry& operator= (const sentry& ); // not defined
 	};
-
-private:
-	ostream(const ostream&); // disabled
 	ostream& operator=(const ostream&); // disabled
-	streamsize _filesize = nondet_uint();
+	static streamsize _filesize = nondet_uint();
 	static ios::streampos _filepos;
 };
 //ios::streampos ostream::_filepos = 0;

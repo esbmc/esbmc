@@ -9,7 +9,7 @@ namespace std
 
 class locale{};
 
-struct streambuf{
+class streambuf{
 
 	typedef int streampos;
 	typedef int streamoff;
@@ -18,7 +18,7 @@ struct streambuf{
 
 	static const openmode in     =  1L << 3;
 	static const openmode out    =  1L << 4;
-
+public:
 //  Locales
 	locale pubimbue ( const locale & loc );
 	locale getloc ( ) const;
