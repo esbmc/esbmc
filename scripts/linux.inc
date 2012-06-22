@@ -1,7 +1,7 @@
 CXXFLAGS += -Wall -Wextra -Wno-deprecated
 GCCFLAGS += -Wall -Wextra -Wno-deprecated
 OPTS ?= -O3
-PLATLIBS= -lgmp -ldl
+PLATLIBS= -lgmp -ldl -lgcc
 
 # Solvers
 ifdef USE_SOLVER_Z3
