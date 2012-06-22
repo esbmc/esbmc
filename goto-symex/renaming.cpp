@@ -33,6 +33,27 @@ std::string renaming::level1t::get_ident_name(const irep_idt &identifier) const
   return name(identifier, it->second);
 }
 
+void
+renaming::level1t::get_ident_name(expr2tc &sym) const
+{
+  symbol2t &symbol = to_symbol2t(sym);
+
+  current_namest::const_iterator it =
+    current_names.find(symbol.get_symbol_name());
+
+  if (it == current_names.end())
+  {
+    // can not find; it's a global symbol.
+    symbol.rlevel = symbol2t::level1_global;
+    return;
+  }
+
+  symbol.rlevel = symbol2t::level1;
+  symbol.level1_num = it->second;
+  symbol.thread_num = _thread_id;
+  return;
+}
+
 std::string renaming::level2t::get_ident_name(const irep_idt &identifier) const
 {
   current_namest::const_iterator it=
@@ -42,6 +63,32 @@ std::string renaming::level2t::get_ident_name(const irep_idt &identifier) const
     return name(identifier, 0);
 
   return name(identifier, it->second.count);
+}
+
+void
+renaming::level2t::get_ident_name(expr2tc &sym) const
+{
+  symbol2t &symbol = to_symbol2t(sym);
+
+  current_namest::const_iterator it =
+    current_names.find(symbol.get_symbol_name());
+
+  symbol2t::renaming_level lev = symbol.rlevel =
+              (symbol.rlevel == symbol2t::level1) ? symbol2t::level2
+                                                  : symbol2t::level2_global;
+
+  if (it == current_names.end()) {
+    // Un-numbered so far.
+    symbol.rlevel = lev;
+    symbol.level2_num = 0;
+    symbol.node_num = 0;
+    return;
+  }
+
+  symbol.rlevel = lev;
+  symbol.level2_num = it->second.count;
+  symbol.node_num = it->second.node_id;
+  return;
 }
 
 std::string
