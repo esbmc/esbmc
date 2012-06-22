@@ -38,7 +38,8 @@ esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(ESBMCDIR)/scripts/fetchlibc.sh libc${BITWIDTH_STR}.a .libc${BITWIDTH_STR}.a $(ESBMCDIR)/scripts/gpg-keyring
 	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) $(CXXFLAGS) -print-file-name=libgcc.a` `$(CXX) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
-clean:
-	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
 
 endif
+
+clean:
+	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps
