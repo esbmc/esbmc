@@ -213,7 +213,11 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (*it == guard_identifier())
       continue;  // just a guard
 
-    irep_idt original_identifier = cur_state->get_original_name(*it);
+    expr2tc tmpexpr = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+
+    cur_state->get_original_name(tmpexpr);
+    std::string original_identifier = to_symbol2t(tmpexpr).get_symbol_name();
+
     try
     {
       // changed!
