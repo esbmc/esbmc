@@ -53,9 +53,9 @@ namespace renaming {
       current_names.erase(to_symbol2t(symbol).get_symbol_name());
     }
 
-    void rename(const irep_idt &identifier, unsigned frame)
+    void rename(const expr2tc &symbol, unsigned frame)
     {
-      current_names[identifier]=frame;
+      current_names[to_symbol2t(symbol).get_symbol_name()]=frame;
     }
 
     virtual void get_original_name(expr2tc &expr) const

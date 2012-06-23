@@ -67,8 +67,8 @@ void goto_symext::symex_other(void)
           cur_state->top().declaration_history.end())
     {
       unsigned index=cur_state->top().level1.current_names[identifier];
-      cur_state->top().level1.rename(identifier, index+1);
-      l1_symbol.level1_num = index + 1; // XXX jmorse - call to rename should start taking an expr2tc.
+      cur_state->top().level1.rename(l1_sym, index+1);
+      l1_symbol.level1_num = index + 1;
     }
 
     std::string l1_identifier = l1_symbol.get_symbol_name();

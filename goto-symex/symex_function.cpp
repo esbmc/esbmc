@@ -467,9 +467,9 @@ goto_symext::locality(unsigned frame_nr,
        it != local_identifiers.end();
        it++)
   {
-    frame.level1.rename(*it, frame_nr);
     // Temporary, for symbol migration,
     expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+    frame.level1.rename(tmp_sym, frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(to_symbol2t(tmp_sym).get_symbol_name());
   }
