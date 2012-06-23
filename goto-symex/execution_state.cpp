@@ -522,14 +522,14 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
   } else if (is_symbol2t(expr)) {
-    irep_idt id = to_symbol2t(expr).get_symbol_name();
-    const irep_idt &identifier = get_active_state().get_original_name(id);
-    const symbolt &symbol = ns.lookup(identifier);
-    if (identifier == "c::__ESBMC_alloc"
-        || identifier == "c::__ESBMC_alloc_size")
+    expr2tc newexpr = expr;
+    get_active_state().get_original_name(newexpr);
+    std::string name = to_symbol2t(newexpr).get_symbol_name();
+    const symbolt &symbol = ns.lookup(name);
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).write_set.insert(identifier);
+      exprs_read_write.at(active_thread).write_set.insert(name);
       return 1;
     } else
       return 0;
