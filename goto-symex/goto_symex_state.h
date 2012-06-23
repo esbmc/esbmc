@@ -346,15 +346,6 @@ public:
   /**
    *  Fetch an original l0 identifer.
    *  Revokes both levels of renaming on an identifer, leaves us with the
-   *  original c-level identifier for a symbol.
-   *  @param identifier The identifier to reverse renaming on.
-   *  @return Renamed to l0 identifier.
-   */
-  const irep_idt get_original_name(const irep_idt &identifier) const;
-
-  /**
-   *  Fetch an original l0 identifer.
-   *  Revokes both levels of renaming on an identifer, leaves us with the
    *  original c-level identifier for a symbol. This method applies this to
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.

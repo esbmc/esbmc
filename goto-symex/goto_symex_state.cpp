@@ -264,14 +264,6 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
   }
 }
 
-const irep_idt goto_symex_statet::get_original_name(
-  const irep_idt &identifier) const
-{
-
-  return top().level1.get_original_name(
-         level2.get_original_name(identifier));
-}
-
 void goto_symex_statet::print_stack_trace(unsigned int indent) const
 {
   call_stackt::const_reverse_iterator it;
