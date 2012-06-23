@@ -181,7 +181,8 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
   entry.node_id = node_id;
 }
 
-void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
+void renaming::renaming_levelt::get_original_name(expr2tc &expr,
+                                            symbol2t::renaming_level lev) const
 {
 
   Forall_operands2(it, oper_list, expr)
@@ -190,26 +191,27 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr) const
   if (is_symbol2t(expr))
   {
     symbol2t &sym = to_symbol2t(expr);
-    irep_idt ident = get_original_name(sym.get_symbol_name());
-    expr = expr2tc(new symbol2t(sym.type, irep_idt(ident)));
+
+    // Wipe out some data with default values and set renaming level to whatever
+    // was requested.
+    switch (lev) {
+    case symbol2t::level1:
+      sym.rlevel = lev;
+      sym.node_num = 0;
+      sym.level2_num = 0;
+      return;
+    case symbol2t::level0:
+      sym.rlevel = lev;
+      sym.node_num = 0;
+      sym.level2_num = 0;
+      sym.thread_num = 0;
+      sym.level1_num = 0;
+      return;
+    default:
+      std::cerr << "get_original_nameing to invalid level " << lev << std::endl;
+      abort();
+    }
   }
-}
-
-const irep_idt renaming::renaming_levelt::get_original_name(
-  const irep_idt &identifier, std::string idxchar) const
-{
-  std::string namestr = identifier.as_string();
-
-  // If this is renamed at all, it'll have the suffix:
-  //   @x!y&z#n
-  // So to undo this, find and remove everything after @, if it exists.
-  size_t pos = namestr.find(idxchar);
-  if (pos == std::string::npos)
-    return identifier; // It's not named at all.
-
-  // Remove suffix
-  namestr = namestr.substr(0, pos);
-  return irep_idt(namestr);
 }
 
 void renaming::level1t::print(std::ostream &out) const
