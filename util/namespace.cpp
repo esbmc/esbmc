@@ -104,6 +104,37 @@ bool namespacet::lookup(
   return true;
 }
 
+bool namespacet::lookup(const expr2tc &name, const symbolt *&symbol) const  
+{
+  symbolst::const_iterator it;
+
+  std::string symname = to_symbol2t(name).get_symbol_name();
+
+  if(context1!=NULL)
+  {
+    it=context1->symbols.find(symname);
+
+    if(it!=context1->symbols.end())
+    {
+      symbol=&(it->second);
+      return false;
+    }
+  }
+
+  if(context2!=NULL)
+  {
+    it=context2->symbols.find(symname);
+
+    if(it!=context2->symbols.end())
+    {
+      symbol=&(it->second);
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /*******************************************************************\
 
 Function: namespacet::follow_symbol
