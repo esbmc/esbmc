@@ -221,8 +221,7 @@ public:
   void
   current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
   {
-    irep_idt temp = top().level1.get_ident_name(to_symbol2t(symirep).get_symbol_name());
-    symirep = expr2tc(new symbol2t(symirep->type, temp));
+    top().level1.get_ident_name(symirep);
     plevel2.get_ident_name(symirep);
   }
 
