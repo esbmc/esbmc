@@ -24,7 +24,9 @@ public:
    
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const
   {
-    return namespacet::lookup(state.get_original_name(name), symbol);
+    expr2tc tmp = expr2tc(new symbol2t(type_pool.get_empty(), name));
+    state.get_original_name(tmp);
+    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name(), symbol);
   }
   
   virtual bool lookup(const expr2tc &name, const symbolt *&symbol) const
