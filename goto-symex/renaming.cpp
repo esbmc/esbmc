@@ -192,10 +192,15 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
   {
     symbol2t &sym = to_symbol2t(expr);
 
+    // Rename level2_global down to level1_global, not level1
+    if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
+      lev = symbol2t::level1_global;
+
     // Wipe out some data with default values and set renaming level to whatever
     // was requested.
     switch (lev) {
     case symbol2t::level1:
+    case symbol2t::level1_global:
       sym.rlevel = lev;
       sym.node_num = 0;
       sym.level2_num = 0;
