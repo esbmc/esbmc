@@ -428,8 +428,9 @@ goto_symext::pop_frame(void)
       it!=frame.local_variables.end();
       it++) {
     cur_state->level2.remove(*it);
-    irep_idt orig_name = cur_state->level2.get_original_name(*it);
-    cur_state->value_set.erase(orig_name);
+    expr2tc tmpsym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+    cur_state->level2.get_original_name(tmpsym);
+    cur_state->value_set.erase(to_symbol2t(tmpsym).get_symbol_name());
   }
 
   // decrease recursion unwinding counter
