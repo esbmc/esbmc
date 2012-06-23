@@ -196,6 +196,10 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
     if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
       lev = symbol2t::level1_global;
 
+    // Can't rename any lower,
+    if (sym.rlevel == symbol2t::level0)
+      return;
+
     // Wipe out some data with default values and set renaming level to whatever
     // was requested.
     switch (lev) {
