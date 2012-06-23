@@ -25,7 +25,7 @@ namespace renaming {
   public:
     virtual void get_original_name(expr2tc &expr) const = 0;
     virtual void rename(expr2tc &expr)=0;
-    virtual void remove(const irep_idt &identifier)=0;
+    virtual void remove(const expr2tc &symbol)=0;
 
     virtual void get_ident_name(expr2tc &symbol) const=0;
 
@@ -48,7 +48,10 @@ namespace renaming {
 
     virtual void rename(expr2tc &expr);
     virtual void get_ident_name(expr2tc &symbol) const;
-    virtual void remove(const irep_idt &identifier) { current_names.erase(identifier); }
+    virtual void remove(const expr2tc &symbol)
+    {
+      current_names.erase(to_symbol2t(symbol).get_symbol_name());
+    }
 
     void rename(const irep_idt &identifier, unsigned frame)
     {
@@ -83,9 +86,9 @@ namespace renaming {
     virtual void get_ident_name(expr2tc &symbol) const;
     virtual std::string name( const irep_idt &identifier, unsigned count) const;
 
-    virtual void remove(const irep_idt &identifier)
+    virtual void remove(const expr2tc &symbol)
     {
-        current_names.erase(identifier);
+        current_names.erase(to_symbol2t(symbol).get_symbol_name());
     }
 
     virtual void get_original_name(expr2tc &expr) const
