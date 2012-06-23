@@ -27,6 +27,13 @@ public:
     return namespacet::lookup(state.get_original_name(name), symbol);
   }
   
+  virtual bool lookup(const expr2tc &name, const symbolt *&symbol) const
+  {
+    expr2tc tmp = name;
+    state.get_original_name(tmp);
+    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name(), symbol);
+  }
+
   const symbolt &lookup(const irep_idt &name) const
   {
     return namespacet::lookup(state.get_original_name(name));
