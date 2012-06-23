@@ -18,21 +18,6 @@ unsigned renaming::level2t::current_number(
   return it->second.count;
 }
 
-std::string renaming::level1t::get_ident_name(const irep_idt &identifier) const
-{
-
-  current_namest::const_iterator it=
-    current_names.find(identifier);
-
-  if(it==current_names.end())
-  {
-    // can not find
-    return id2string(identifier); // means global value ?
-  }
-
-  return name(identifier, it->second);
-}
-
 void
 renaming::level1t::get_ident_name(expr2tc &sym) const
 {
@@ -277,5 +262,3 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
 
   entry.constant = const_value;
 }
-
-std::string renaming::renaming_levelt::get_ident_name(const irep_idt &identifier __attribute__((unused))) const { abort();}
