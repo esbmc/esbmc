@@ -38,7 +38,9 @@ public:
 
   const symbolt &lookup(const irep_idt &name) const
   {
-    return namespacet::lookup(state.get_original_name(name));
+    expr2tc tmp = expr2tc(new symbol2t(type_pool.get_empty(), name));
+    state.get_original_name(tmp);
+    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name());
   }
   
 protected:
