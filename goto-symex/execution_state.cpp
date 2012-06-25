@@ -613,17 +613,21 @@ static std::string state_to_ignore[8] =
 };
 
 std::string
-execution_statet::serialise_expr(const exprt &rhs)
+execution_statet::serialise_expr(const exprt &rhs __attribute__((unused)))
 {
-  std::string str;
-  uint64_t val;
-  int i;
-
   // FIXME: some way to disambiguate what's part of a hash / const /whatever,
   // and what's part of an operator
 
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
+  std::cerr << "Serialise expr is a victim of string migration" << std::endl;
+  abort();
+#if 0
+
+  std::string str;
+  uint64_t val;
+  int i;
+
   if (rhs.id() == exprt::symbol) {
 
     str = rhs.identifier().as_string();
@@ -757,6 +761,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   }
 
   return str;
+#endif
 }
 
 // If we have a normal expression, either arithmatic, binary, comparision,

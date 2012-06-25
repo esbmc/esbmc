@@ -10,10 +10,9 @@ std::string renaming::level1t::name(const irep_idt &identifier,
   return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);
 }
 
-unsigned renaming::level2t::current_number(
-  const irep_idt &identifier) const
+unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
-  current_namest::const_iterator it=current_names.find(identifier);
+  current_namest::const_iterator it=current_names.find(symbol);
   if(it==current_names.end()) return 0;
   return it->second.count;
 }
@@ -44,8 +43,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
-  current_namest::const_iterator it =
-    current_names.find(symbol.get_symbol_name());
+  current_namest::const_iterator it = current_names.find(sym);
 
   symbol2t::renaming_level lev = symbol.rlevel =
               (symbol.rlevel == symbol2t::level1) ? symbol2t::level2
@@ -66,13 +64,10 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
 }
 
 std::string
-renaming::level2t::name(const irep_idt &identifier, unsigned count) const
+renaming::level2t::name(const irep_idt &identifier __attribute__((unused)), unsigned count __attribute__((unused))) const
 {
-  unsigned int n_id = 0;
-  current_namest::const_iterator it =current_names.find(identifier);
-  if(it != current_names.end())
-    n_id = it->second.node_id;
-  return id2string(identifier)+"&"+i2string(n_id)+"#"+i2string(count);
+  std::cerr << "renaming::level2t::name now dying" << std::endl;
+  abort();
 }
 
 void renaming::level1t::rename(expr2tc &expr)
@@ -130,8 +125,7 @@ void renaming::level2t::rename(expr2tc &expr)
     if (has_prefix(sym.thename.as_string(), "nondet$"))
       return;
 
-    const current_namest::const_iterator it =
-      current_names.find(sym.get_symbol_name());
+    const current_namest::const_iterator it = current_names.find(expr);
 
     if(it!=current_names.end())
     {
@@ -176,7 +170,13 @@ void renaming::level2t::rename(expr2tc &expr)
 
 void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id)
 {
-  valuet &entry=current_names[to_symbol2t(lhs_sym).get_symbol_name()];
+#ifndef NDEBUG
+  symbol2t &sym = to_symbol2t(lhs_sym);
+  assert(sym.rlevel == symbol2t::level1 ||
+         sym.rlevel == symbol2t::level1_global);
+#endif
+
+  valuet &entry=current_names[lhs_sym];
   entry.count=count;
   entry.node_id = node_id;
 }
@@ -233,18 +233,20 @@ void renaming::level1t::print(std::ostream &out) const
         << name(it->first, it->second) << std::endl;
 }
 
-void renaming::level2t::print(std::ostream &out) const
+void renaming::level2t::print(std::ostream &out)
 {
   for(current_namest::const_iterator
       it=current_names.begin();
       it!=current_names.end();
-      it++)
-    out << it->first << " --> "
-        << name(it->first, it->second.count) << std::endl;
+      it++) {
+    assert(to_symbol2t(it->first).rlevel == symbol2t::level1 || to_symbol2t(it->first).rlevel == symbol2t::level1_global);
+    out << to_symbol2t(it->first).get_symbol_name() << " --> ";
+    expr2tc tmp = it->first;
+    rename(tmp);
+    out << to_symbol2t(tmp).get_symbol_name() << std::endl;
+  } }
 
-}
-
-void renaming::level2t::dump() const
+void renaming::level2t::dump()
 {
 
   print(std::cout);
@@ -256,13 +258,15 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
                           const expr2tc &assigned_value __attribute__((unused)))
 {
   irep_idt new_name;
-  symbol2t &symbol = to_symbol2t(lhs_symbol);
 
-  valuet &entry = current_names[symbol.get_symbol_name()];
+  assert(to_symbol2t(lhs_symbol).rlevel == symbol2t::level1 ||
+         to_symbol2t(lhs_symbol).rlevel == symbol2t::level1_global);
+  valuet &entry = current_names[lhs_symbol];
 
   // This'll update entry beneath our feet; could reengineer it in the future.
   rename(lhs_symbol, entry.count + 1);
 
+  symbol2t &symbol = to_symbol2t(lhs_symbol);
   symbol2t::renaming_level lev = (symbol.rlevel == symbol2t::level0 ||
                                   symbol.rlevel == symbol2t::level1_global)
                                   ? symbol2t::level2_global : symbol2t::level2;

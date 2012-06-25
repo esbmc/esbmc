@@ -77,13 +77,12 @@ void goto_symext::symex_other(void)
 
     // seen it before?
     // it should get a fresh value
-    renaming::level2t::current_namest::iterator it=
-      cur_state->level2.current_names.find(l1_identifier);
-
-    if(it!=cur_state->level2.current_names.end())
+    if (cur_state->level2.current_number(l1_sym) != 0)
     {
-      cur_state->level2.rename(l1_sym, it->second.count+1);
-      it->second.constant = expr2tc();
+      // Dummy assignment - blank constant value isn't considered for const
+      // propagation, variable number will be bumped to result in a new free
+      // variable. Invalidates l1_symbol reference?
+      cur_state->level2.make_assignment(l1_sym, expr2tc(), expr2tc());
     }
   }
   else if (is_code_asm2t(code2))

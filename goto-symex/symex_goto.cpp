@@ -196,12 +196,14 @@ void
 goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
-  std::set<irep_idt> variables;
+  std::set<expr2tc> variables;
 
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
-  for (std::set<irep_idt>::const_iterator
+  expr2tc tmp_guard_ident(new symbol2t(type_pool.get_empty(), guard_identifier()));
+
+  for (std::set<expr2tc>::const_iterator
        it = variables.begin();
        it != variables.end();
        it++)
@@ -210,13 +212,13 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
         cur_state->level2.current_number(*it))
       continue;  // not changed
 
-    if (*it == guard_identifier())
+    if (*it == tmp_guard_ident)
       continue;  // just a guard
 
-    expr2tc tmpexpr = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+    expr2tc orig_name = *it;
 
-    cur_state->get_original_name(tmpexpr);
-    std::string original_identifier = to_symbol2t(tmpexpr).get_symbol_name();
+    cur_state->get_original_name(orig_name);
+    std::string original_identifier = to_symbol2t(orig_name).get_symbol_name();
 
     try
     {

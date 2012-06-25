@@ -89,7 +89,7 @@ namespace renaming {
 
     virtual void remove(const expr2tc &symbol)
     {
-        current_names.erase(to_symbol2t(symbol).get_symbol_name());
+        current_names.erase(symbol);
     }
 
     virtual void get_original_name(expr2tc &expr) const
@@ -110,12 +110,7 @@ namespace renaming {
       }
     };
 
-    typedef std::map<irep_idt, valuet> current_namest;
-    current_namest current_names;
-    typedef std::map<irep_idt, crypto_hash> current_state_hashest;
-    current_state_hashest current_hashes;
-
-    void get_variables(std::set<irep_idt> &vars) const
+    void get_variables(std::set<expr2tc> &vars) const
     {
       for(current_namest::const_iterator it=current_names.begin();
           it!=current_names.end();
@@ -125,14 +120,20 @@ namespace renaming {
       }
     }
 
-    unsigned current_number(const irep_idt &identifier) const;
+    unsigned current_number(const expr2tc &sym) const;
 
     level2t() { };
     virtual ~level2t() { };
     virtual level2t *clone(void) const = 0;
 
-    virtual void print(std::ostream &out) const;
-    virtual void dump() const;
+    virtual void print(std::ostream &out);
+    virtual void dump();
+
+  protected:
+    typedef std::map<const expr2tc, valuet> current_namest;
+    current_namest current_names;
+    typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
+    current_state_hashest current_hashes;
   };
 }
 
