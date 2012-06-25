@@ -70,7 +70,7 @@ renaming::level2t::name(const irep_idt &identifier __attribute__((unused)), unsi
   abort();
 }
 
-void renaming::level1t::rename(expr2tc &expr)
+void renaming::level1t::rename(expr2tc &expr) const
 {
   // rename all the symbols with their last known value
 
@@ -105,7 +105,7 @@ void renaming::level1t::rename(expr2tc &expr)
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr)
+void renaming::level2t::rename(expr2tc &expr) const
 {
   // rename all the symbols with their last known value
 
@@ -233,7 +233,7 @@ void renaming::level1t::print(std::ostream &out) const
         << name(it->first, it->second) << std::endl;
 }
 
-void renaming::level2t::print(std::ostream &out)
+void renaming::level2t::print(std::ostream &out) const
 {
   for(current_namest::const_iterator
       it=current_names.begin();
@@ -246,7 +246,7 @@ void renaming::level2t::print(std::ostream &out)
     out << to_symbol2t(tmp).get_symbol_name() << std::endl;
   } }
 
-void renaming::level2t::dump()
+void renaming::level2t::dump() const
 {
 
   print(std::cout);
