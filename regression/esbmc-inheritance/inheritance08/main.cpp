@@ -58,7 +58,7 @@ int main(void)
    Rect.setHeight(7);
 
 	Rect.setNumber();
-	assert(Rect.getNumber() == 2);
+	assert(Rect.getNumber() == 19);
 
    area = Rect.getArea();
    
