@@ -251,6 +251,17 @@ public:
 
       return false;
     }
+
+    bool operator<(const class instructiont i1) const
+    {
+      if (function < i1.function)
+        return true;
+
+      if (location_number < i1.location_number)
+        return true;
+
+      return false;
+    }
   };
 
   typedef std::list<class instructiont> instructionst;
@@ -708,13 +719,7 @@ void goto_program_templatet<codeT, guardT>::compute_incoming_edges()
 }
 
 template <class codeT, class guardT>
-inline bool order_const_target(
-  const typename goto_program_templatet<codeT, guardT>::const_targett i1,
-  const typename goto_program_templatet<codeT, guardT>::const_targett i2)
-{
-  const typename goto_program_templatet<codeT, guardT>::instructiont &_i1=*i1;
-  const typename goto_program_templatet<codeT, guardT>::instructiont &_i2=*i2;
-  return &_i1<&_i2;
-}
+bool operator<(const typename goto_program_templatet<codeT, guardT>::const_targett i1,
+               const typename goto_program_templatet<codeT, guardT>::const_targett i2);
 
 #endif
