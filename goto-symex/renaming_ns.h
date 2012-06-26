@@ -25,22 +25,19 @@ public:
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const
   {
     expr2tc tmp = expr2tc(new symbol2t(type_pool.get_empty(), name));
-    state.get_original_name(tmp);
-    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name(), symbol);
+    return namespacet::lookup(to_symbol2t(tmp).thename, symbol);
   }
   
   virtual bool lookup(const expr2tc &name, const symbolt *&symbol) const
   {
     expr2tc tmp = name;
-    state.get_original_name(tmp);
-    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name(), symbol);
+    return namespacet::lookup(to_symbol2t(tmp).thename, symbol);
   }
 
   const symbolt &lookup(const irep_idt &name) const
   {
     expr2tc tmp = expr2tc(new symbol2t(type_pool.get_empty(), name));
-    state.get_original_name(tmp);
-    return namespacet::lookup(to_symbol2t(tmp).get_symbol_name());
+    return namespacet::lookup(to_symbol2t(tmp).thename);
   }
   
 protected:
