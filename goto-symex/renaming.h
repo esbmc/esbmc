@@ -40,6 +40,53 @@ namespace renaming {
   struct level1t:public renaming_levelt
   {
   public:
+    struct name_rec_hash;
+    class name_record {
+    public:
+      name_record(const symbol2t &sym) : base_name(sym.thename) { }
+
+      int compare(const name_record &ref) const
+      {
+        if (base_name.get_no() < ref.base_name.get_no())
+          return -1;
+        else if (base_name.get_no() > ref.base_name.get_no())
+          return 1;
+
+        return 0;
+      }
+
+      bool operator<(const name_record &ref) const
+      {
+        if (compare(ref) == -1)
+          return true;
+        return false;
+      }
+
+      bool operator==(const name_record &ref) const
+      {
+        if (compare(ref) == 0)
+          return true;
+        return false;
+      }
+
+      irep_idt base_name;
+
+      friend class renaming::level1t::name_rec_hash;
+    };
+
+    struct name_rec_hash
+    {
+      size_t operator()(const name_record &ref) const
+      {
+        return ref.base_name.get_no();
+      }
+
+      bool operator()(const name_record &ref, const name_record &ref2) const
+      {
+        return ref < ref2;
+      }
+    };
+
     virtual std::string name(const irep_idt &identifier, unsigned frame) const;
 
     typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
