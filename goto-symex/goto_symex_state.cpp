@@ -77,7 +77,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_constant_expr(expr)) {
     return true;
   }
-  else if (is_symbol2t(expr) && to_symbol2t(expr).get_symbol_name() == "NULL")
+  else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
   {
     // Null is also essentially a constant.
     return true;
