@@ -112,22 +112,19 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       new_rhs = expr2tc(new not2t(new_rhs));
       do_simplify(new_rhs);
 
-      expr2tc new_lhs = guard_expr;
-
-      cur_state->assignment(new_lhs, new_rhs, false);
+      cur_state->assignment(guard_expr, new_rhs, false);
 
       guardt guard;
 
       target->assignment(
         guard.as_expr(),
-        new_lhs, guard_expr,
+        guard_expr, guard_expr,
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
       guard_expr = expr2tc(new not2t(guard_expr));
-      cur_state->rename(guard_expr);
     }
 
     expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
