@@ -251,8 +251,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   if(targets.return_value)
     add_return(f, end_location);
 
-  // add end of function
-
+  // add "end of function"
   goto_programt::targett t=f.body.add_instruction();
   t->type=END_FUNCTION;
   t->location=end_location;
@@ -269,8 +268,8 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     i_it->function=identifier;
   }
 
-  f.body.compute_targets();
-  f.body.number_targets();
+  // remove_skip depends on the target numbers
+  f.body.compute_target_numbers();
 
   remove_skip(f.body);
 

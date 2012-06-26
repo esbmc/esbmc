@@ -24,7 +24,7 @@ Function: convert
 
 \*******************************************************************/
 
-void convert( const goto_programt::instructiont &instruction, irept &irep )
+void convert(const goto_programt::instructiont &instruction, irept &irep)
 {
   irep.code(instruction.code);
 
@@ -38,7 +38,7 @@ void convert( const goto_programt::instructiont &instruction, irept &irep )
 
   irep.guard(instruction.guard);
 
-  if(! instruction.targets.empty())
+  if(!instruction.targets.empty())
   {
     irept tgts;
     for(goto_programt::targetst::const_iterator it=
@@ -228,7 +228,6 @@ void convert( const irept &irep, goto_programt &program )
       }
     }
   }
-
-  program.compute_targets();
-  program.number_targets();
+  
+  program.update();
 }

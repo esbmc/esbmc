@@ -124,12 +124,11 @@ void remove_skip(goto_programt &goto_program)
     }
 
   // remove the last skip statement unless it's a target
-  goto_program.compute_targets();
+  goto_program.compute_incoming_edges();
 
   if(!goto_program.instructions.empty() &&
      is_skip(--goto_program.instructions.end()) &&
-     goto_program.target_numbers.find(--goto_program.instructions.end())==
-     goto_program.target_numbers.end())
+     !goto_program.instructions.back().is_target())
     goto_program.instructions.pop_back();
 }
 

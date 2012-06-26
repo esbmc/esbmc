@@ -30,17 +30,15 @@ std::ostream& goto_programt::output_instruction(
   bool show_location,
   bool show_variables) const
 {
-  target_numberst::const_iterator t_it=target_numbers.find(it);
-
   if (show_location) {
-    out << "        // " << it->location_number << " ";
+  out << "        // " << it->location_number << " ";
 
-    if(!it->location.is_nil())
-      out << it->location.as_string();
-    else
-      out << "no location";
+  if(!it->location.is_nil())
+    out << it->location.as_string();
+  else
+    out << "no location";
 
-    out << "\n";
+  out << "\n";
   }
 
   if(show_variables && !it->local_variables.empty())
@@ -69,10 +67,10 @@ std::ostream& goto_programt::output_instruction(
     out << std::endl;
   }
 
-  if(t_it==target_numbers.end())
-    out << "        ";
+  if(it->is_target())
+    out << std::setw(6) << it->target_number << ": ";
   else
-    out << std::setw(6) << t_it->second << ": ";
+    out << "        ";
 
   switch(it->type)
   {
@@ -96,14 +94,7 @@ std::ostream& goto_programt::output_instruction(
         gt_it++)
     {
       if(gt_it!=it->targets.begin()) out << ", ";
-
-      target_numberst::const_iterator t_it2=
-        target_numbers.find(*gt_it);
-
-      if(t_it2==target_numbers.end())
-        out << "unknown";
-      else
-        out << t_it2->second;
+      out << (*gt_it)->target_number;
     }
 
     out << std::endl;
@@ -131,6 +122,18 @@ std::ostream& goto_programt::output_instruction(
     }
 
     out << std::endl;
+    break;
+
+  case SKIP:
+    out << "SKIP" << std::endl;
+    break;
+
+  case END_FUNCTION:
+    out << "END_FUNCTION" << std::endl;
+    break;
+
+  case LOCATION:
+    out << "LOCATION" << std::endl;
     break;
 
   case THROW:
@@ -169,31 +172,12 @@ std::ostream& goto_programt::output_instruction(
           i++)
       {
         if(gt_it!=it->targets.begin()) out << ", ";
-        out << exception_list[i].id() << "->";
-
-        target_numberst::const_iterator t_it=
-          target_numbers.find(*gt_it);
-
-        if(t_it==target_numbers.end())
-          out << "unknown";
-        else
-          out << t_it->second;
+        out << exception_list[i].id() << "->"
+            << (*gt_it)->target_number;
       }
     }
 
     out << std::endl;
-    break;
-
-  case SKIP:
-    out << "SKIP" << std::endl;
-    break;
-
-  case END_FUNCTION:
-    out << "END_FUNCTION" << std::endl;
-    break;
-
-  case LOCATION:
-    out << "LOCATION" << std::endl;
     break;
 
   case ATOMIC_BEGIN:
