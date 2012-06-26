@@ -75,6 +75,8 @@ namespace renaming {
   struct level2t:public renaming_levelt
   {
   protected:
+    virtual void coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
+  public:
     class name_record {
     public:
       name_record(const symbol2t &sym)
@@ -142,8 +144,19 @@ namespace renaming {
       size_t hash;
     };
 
+    struct name_rec_hash
+    {
+      size_t operator()(const name_record &ref) const
+      {
+        return ref.hash;
+      }
 
-    virtual void coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
+      bool operator()(const name_record &ref, const name_record &ref2) const
+      { 
+        return ref < ref2;
+      }
+    };
+
   public:
     virtual void make_assignment(expr2tc &lhs_symbol,
                                  const expr2tc &constant_value,
@@ -157,7 +170,7 @@ namespace renaming {
 
     virtual void remove(const expr2tc &symbol)
     {
-        current_names.erase(symbol);
+        current_names.erase(name_record(to_symbol2t(symbol)));
     }
 
     virtual void get_original_name(expr2tc &expr) const
@@ -178,17 +191,18 @@ namespace renaming {
       }
     };
 
-    void get_variables(std::set<expr2tc> &vars) const
+    void get_variables(std::set<name_record> &vars) const
     {
       for(current_namest::const_iterator it=current_names.begin();
           it!=current_names.end();
           it++)
       {
-                  vars.insert(it->first);
+        vars.insert(it->first);
       }
     }
 
     unsigned current_number(const expr2tc &sym) const;
+    unsigned current_number(const name_record &rec) const;
 
     level2t() { };
     virtual ~level2t() { };
@@ -198,11 +212,12 @@ namespace renaming {
     virtual void dump() const;
 
   protected:
-    typedef std::map<const expr2tc, valuet> current_namest;
+    typedef std::map<const name_record, valuet, name_rec_hash> current_namest;
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
   };
+
 }
 
 #endif /* _GOTO_SYMEX_RENAMING_H_ */

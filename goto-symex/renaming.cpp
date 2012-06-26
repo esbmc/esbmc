@@ -14,8 +14,13 @@ std::string renaming::level1t::name(const irep_idt &identifier,
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
-  current_namest::const_iterator it=current_names.find(symbol);
-  if(it==current_names.end()) return 0;
+  return current_number(name_record(to_symbol2t(symbol)));
+}
+
+unsigned renaming::level2t::current_number(const name_record &symbol) const
+{
+  current_namest::const_iterator it = current_names.find(symbol);
+  if (it == current_names.end()) return 0;
   return it->second.count;
 }
 
@@ -45,7 +50,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
-  current_namest::const_iterator it = current_names.find(sym);
+  current_namest::const_iterator it = current_names.find(name_record(symbol));
 
   symbol2t::renaming_level lev = symbol.rlevel =
               (symbol.rlevel == symbol2t::level1) ? symbol2t::level2
@@ -131,7 +136,8 @@ void renaming::level2t::rename(expr2tc &expr) const
     if (has_prefix(sym.thename.as_string(), "nondet$"))
       return;
 
-    const current_namest::const_iterator it = current_names.find(expr);
+    const current_namest::const_iterator it =
+      current_names.find(name_record(sym));
 
     if(it!=current_names.end())
     {
@@ -183,7 +189,7 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
          sym.rlevel == symbol2t::level1_global);
 #endif
 
-  valuet &entry=current_names[lhs_sym];
+  valuet &entry=current_names[name_record(to_symbol2t(lhs_sym))];
   entry.count=count;
   entry.node_id = node_id;
 }
@@ -249,16 +255,21 @@ void renaming::level2t::print(std::ostream &out) const
       it=current_names.begin();
       it!=current_names.end();
       it++) {
-    assert(to_symbol2t(it->first).rlevel == symbol2t::level1 || to_symbol2t(it->first).rlevel == symbol2t::level1_global);
-    out << to_symbol2t(it->first).get_symbol_name() << " --> ";
+    out << it->first.base_name;
+
+    if (it->first.lev == symbol2t::level1)
+      out << "@" << it->first.l1_num <<  "!" << it->first.t_num;
+
+    out <<  " --> ";
+
     if (!is_nil_expr(it->second.constant)) {
       out << from_expr(it->second.constant) << std::endl;
     } else {
-      expr2tc tmp = it->first;
-      rename(tmp);
-      out << to_symbol2t(tmp).get_symbol_name() << std::endl;
+      out << "node " << it->second.node_id << " num " << it->second.count;
+      out  << std::endl;
     }
-  } }
+  }
+}
 
 void renaming::level2t::dump() const
 {
@@ -275,7 +286,7 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
 
   assert(to_symbol2t(lhs_symbol).rlevel == symbol2t::level1 ||
          to_symbol2t(lhs_symbol).rlevel == symbol2t::level1_global);
-  valuet &entry = current_names[lhs_symbol];
+  valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
 
   // This'll update entry beneath our feet; could reengineer it in the future.
   rename(lhs_symbol, entry.count + 1);

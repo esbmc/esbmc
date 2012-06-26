@@ -193,14 +193,14 @@ void
 goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
-  std::set<expr2tc> variables;
+  std::set<renaming::level2t::name_record> variables;
 
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
   irep_idt tmp_guard = guard_identifier();
 
-  for (std::set<expr2tc>::const_iterator
+  for (std::set<renaming::level2t::name_record>::const_iterator
        it = variables.begin();
        it != variables.end();
        it++)
@@ -209,18 +209,13 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
         cur_state->level2.current_number(*it))
       continue;  // not changed
 
-    if (to_symbol2t(*it).thename == tmp_guard)
+    if (it->base_name == tmp_guard)
       continue;  // just a guard
-
-    expr2tc orig_name = *it;
-
-    cur_state->get_original_name(orig_name);
-    std::string original_identifier = to_symbol2t(orig_name).get_symbol_name();
 
     try
     {
       // changed!
-      const symbolt &symbol = ns.lookup(original_identifier);
+      const symbolt &symbol = ns.lookup(it->base_name);
 
       type2tc type;
       typet old_type = symbol.type;
