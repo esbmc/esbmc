@@ -91,6 +91,11 @@ namespace renaming {
 
       int compare(const name_record &ref) const
       {
+        if (hash < ref.hash)
+          return -1;
+        else if (hash > ref.hash)
+          return 1;
+
         if (base_name < ref.base_name)
           return -1;
         else if (ref.base_name < base_name)
