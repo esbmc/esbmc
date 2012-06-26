@@ -24,13 +24,21 @@ unsigned renaming::level2t::current_number(const name_record &symbol) const
   return it->second.count;
 }
 
+unsigned int
+renaming::level1t::current_number(const irep_idt &name) const
+{
+  current_namest::const_iterator it = current_names.find(name_record(name));
+  if (it == current_names.end()) return 0;
+  return it->second;
+}
+
 void
 renaming::level1t::get_ident_name(expr2tc &sym) const
 {
   symbol2t &symbol = to_symbol2t(sym);
 
   current_namest::const_iterator it =
-    current_names.find(symbol.get_symbol_name());
+    current_names.find(name_record(to_symbol2t(sym)));
 
   if (it == current_names.end())
   {
@@ -87,7 +95,7 @@ void renaming::level1t::rename(expr2tc &expr) const
       return;
 
     const current_namest::const_iterator it =
-      current_names.find(sym.get_symbol_name());
+      current_names.find(name_record(sym));
 
     if (it != current_names.end()) {
       expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level1,
@@ -238,8 +246,8 @@ void renaming::level1t::print(std::ostream &out) const
       it=current_names.begin();
       it!=current_names.end();
       it++)
-    out << it->first << " --> "
-        << name(it->first, it->second) << std::endl;
+    out << it->first.base_name << " --> "
+        << "thread " << thread_id << " count " << it->second << std::endl;
 }
 
 void renaming::level2t::print(std::ostream &out) const

@@ -91,7 +91,7 @@ namespace renaming {
 
     virtual std::string name(const irep_idt &identifier, unsigned frame) const;
 
-    typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
+    typedef hash_map_cont<name_record, unsigned, name_rec_hash> current_namest;
     current_namest current_names;
     unsigned int thread_id;
 
@@ -99,19 +99,21 @@ namespace renaming {
     virtual void get_ident_name(expr2tc &symbol) const;
     virtual void remove(const expr2tc &symbol)
     {
-      current_names.erase(to_symbol2t(symbol).get_symbol_name());
+      current_names.erase(name_record(to_symbol2t(symbol)));
     }
 
     void rename(const expr2tc &symbol, unsigned frame)
     {
       // Given that this is level1, use base symbol.
-      current_names[to_symbol2t(symbol).thename]=frame;
+      current_names[name_record(to_symbol2t(symbol))]=frame;
     }
 
     virtual void get_original_name(expr2tc &expr) const
     {
       renaming_levelt::get_original_name(expr, symbol2t::level0);
     }
+
+    unsigned int current_number(const irep_idt &name) const;
 
     level1t() {}
     virtual ~level1t() { }
