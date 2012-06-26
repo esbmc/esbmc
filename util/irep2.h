@@ -2846,7 +2846,7 @@ public:
 
     // Temporary: undo all renaming.
     const std::string &thestr = init.as_string();
-    if (thestr.find("!") == std::string::npos) {
+    if (thestr.find("@") == std::string::npos) {
       rlevel = level0;
       return;
     }
