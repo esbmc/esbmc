@@ -6,12 +6,6 @@
 
 #include "renaming.h"
 
-std::string renaming::level1t::name(const irep_idt &identifier,
-                                    unsigned frame) const
-{
-  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(thread_id);
-}
-
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
 {
   return current_number(name_record(to_symbol2t(symbol)));

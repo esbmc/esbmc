@@ -89,8 +89,6 @@ namespace renaming {
       }
     };
 
-    virtual std::string name(const irep_idt &identifier, unsigned frame) const;
-
     typedef hash_map_cont<name_record, unsigned, name_rec_hash> current_namest;
     current_namest current_names;
     unsigned int thread_id;
