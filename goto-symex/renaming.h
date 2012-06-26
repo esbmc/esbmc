@@ -166,7 +166,6 @@ namespace renaming {
     virtual void rename(expr2tc &expr, unsigned count)=0;
 
     virtual void get_ident_name(expr2tc &symbol) const;
-    virtual std::string name( const irep_idt &identifier, unsigned count) const;
 
     virtual void remove(const expr2tc &symbol)
     {

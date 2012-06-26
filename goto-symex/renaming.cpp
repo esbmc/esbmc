@@ -70,13 +70,6 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-std::string
-renaming::level2t::name(const irep_idt &identifier __attribute__((unused)), unsigned count __attribute__((unused))) const
-{
-  std::cerr << "renaming::level2t::name now dying" << std::endl;
-  abort();
-}
-
 void renaming::level1t::rename(expr2tc &expr) const
 {
   // rename all the symbols with their last known value
