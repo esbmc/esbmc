@@ -75,6 +75,60 @@ namespace renaming {
   struct level2t:public renaming_levelt
   {
   protected:
+    class name_record {
+    public:
+      name_record(const symbol2t &sym)
+        : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
+          t_num(sym.thread_num)
+      {
+      }
+
+      int compare(const name_record &ref) const
+      {
+        if (base_name < ref.base_name)
+          return -1;
+        else if (ref.base_name < base_name)
+          return 1;
+
+        if (lev < ref.lev)
+          return -1;
+        else if (lev > ref.lev)
+          return 1;
+
+        if (l1_num < ref.l1_num)
+          return -1;
+        else if (l1_num > ref.l1_num)
+          return 1;
+
+        if (t_num < ref.t_num)
+          return -1;
+        else if (t_num > ref.t_num)
+          return 1;
+
+        return 0;
+      }
+
+      bool operator<(const name_record &ref) const
+      {
+        if (compare(ref) == -1)
+          return true;
+        return false;
+      }
+
+      bool operator==(const name_record &ref) const
+      {
+        if (compare(ref) == 0)
+          return true;
+        return false;
+      }
+
+      irep_idt base_name;
+      symbol2t::renaming_level lev;
+      unsigned int l1_num;
+      unsigned int t_num;
+    };
+
+
     virtual void coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned node_id);
   public:
     virtual void make_assignment(expr2tc &lhs_symbol,
