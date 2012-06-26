@@ -81,6 +81,12 @@ namespace renaming {
         : base_name(sym.thename), lev(sym.rlevel), l1_num(sym.level1_num),
           t_num(sym.thread_num)
       {
+        hacky_hash h;
+        h.ingest(base_name.get_no());
+        h.ingest((uint8_t)lev);
+        h.ingest(l1_num);
+        h.ingest(t_num);
+        hash = h.result();
       }
 
       int compare(const name_record &ref) const
@@ -126,6 +132,9 @@ namespace renaming {
       symbol2t::renaming_level lev;
       unsigned int l1_num;
       unsigned int t_num;
+
+      // Not a part of comparisons etc,
+      size_t hash;
     };
 
 
