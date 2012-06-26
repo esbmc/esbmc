@@ -137,7 +137,8 @@ void renaming::level2t::rename(expr2tc &expr) const
     {
       // Is this a global symbol? Gets renamed differently.
       symbol2t::renaming_level lev;
-      if (sym.rlevel == symbol2t::level0)
+      if (sym.rlevel == symbol2t::level0 ||
+          sym.rlevel == symbol2t::level1_global)
         lev = symbol2t::level2_global;
       else
         lev = symbol2t::level2;
