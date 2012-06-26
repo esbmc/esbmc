@@ -202,6 +202,9 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
     // Rename level2_global down to level1_global, not level1
     if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level2_global)
       lev = symbol2t::level1_global;
+    // level1 and level1_global are equivalent.
+    else if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
+      return;
 
     // Can't rename any lower,
     if (sym.rlevel == symbol2t::level0)
