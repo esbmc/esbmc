@@ -45,6 +45,8 @@ namespace renaming {
     public:
       name_record(const symbol2t &sym) : base_name(sym.thename) { }
 
+      name_record(const irep_idt &name) : base_name(name) { }
+
       int compare(const name_record &ref) const
       {
         if (base_name.get_no() < ref.base_name.get_no())
