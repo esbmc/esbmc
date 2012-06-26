@@ -299,7 +299,7 @@ void string_abstractiont::abstract(irep_idt name,
       is_char_type(to_pointer_type(ret_type).subtype)) {
     code_typet::argumentt new_arg;
 
-    type2tc fintype = type2tc(new pointer_type2t(string_struct));
+    type2tc fintype = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
     new_args.push_back(fintype);
     new_arg_names.push_back(name.as_string() + "::__strabs::returned_str\\str");
 
