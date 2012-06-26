@@ -1099,3 +1099,9 @@ expr2tc value_sett::make_member(
   expr2tc memb = expr2tc(new member2t(subtype, src, component_name));
   return memb;
 }
+
+void
+value_sett::dump(const namespacet &ns) const
+{
+  output(ns, std::cout);
+}

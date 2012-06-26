@@ -207,6 +207,8 @@ public:
     const namespacet &ns,
     std::ostream &out) const;
 
+  void dump(const namespacet &ns) const;
+
   valuest values;
 
   // true = added s.th. new
