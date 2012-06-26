@@ -197,7 +197,7 @@ public:
 
     framet(unsigned int thread_id)
     {
-      level1._thread_id = thread_id;
+      level1.thread_id = thread_id;
     }
   };
 

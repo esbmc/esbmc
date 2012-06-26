@@ -9,7 +9,7 @@
 std::string renaming::level1t::name(const irep_idt &identifier,
                                     unsigned frame) const
 {
-  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(_thread_id);
+  return id2string(identifier)+"@"+i2string(frame)+"!"+i2string(thread_id);
 }
 
 unsigned renaming::level2t::current_number(const expr2tc &symbol) const
@@ -41,7 +41,7 @@ renaming::level1t::get_ident_name(expr2tc &sym) const
 
   symbol.rlevel = symbol2t::level1;
   symbol.level1_num = it->second;
-  symbol.thread_num = _thread_id;
+  symbol.thread_num = thread_id;
   return;
 }
 
@@ -91,7 +91,7 @@ void renaming::level1t::rename(expr2tc &expr) const
 
     if (it != current_names.end()) {
       expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level1,
-                                  it->second, 0, _thread_id, 0));
+                                  it->second, 0, thread_id, 0));
     } else {
       // This isn't an l1 declared name, so it's a global.
       to_symbol2t(expr).rlevel = symbol2t::level1_global;

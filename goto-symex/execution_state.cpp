@@ -559,7 +559,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
     std::string name = to_symbol2t(newexpr).get_symbol_name();
 
     if (name == "goto_symex::\\guard!" +
-        i2string(get_active_state().top().level1._thread_id))
+        i2string(get_active_state().top().level1.thread_id))
       return 0;
 
     const symbolt *symbol;

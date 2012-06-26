@@ -91,7 +91,7 @@ namespace renaming {
 
     typedef std::map<irep_idt, unsigned> current_namest; // variables and its function frame number
     current_namest current_names;
-    unsigned int _thread_id;
+    unsigned int thread_id;
 
     virtual void rename(expr2tc &expr) const;
     virtual void get_ident_name(expr2tc &symbol) const;
