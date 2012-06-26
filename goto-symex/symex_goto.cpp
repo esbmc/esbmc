@@ -201,7 +201,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
-  expr2tc tmp_guard_ident(new symbol2t(type_pool.get_empty(), guard_identifier()));
+  irep_idt tmp_guard = guard_identifier();
 
   for (std::set<expr2tc>::const_iterator
        it = variables.begin();
@@ -212,7 +212,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
         cur_state->level2.current_number(*it))
       continue;  // not changed
 
-    if (*it == tmp_guard_ident)
+    if (to_symbol2t(*it).thename == tmp_guard)
       continue;  // just a guard
 
     expr2tc orig_name = *it;
