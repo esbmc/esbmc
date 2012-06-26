@@ -524,7 +524,7 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;
     get_active_state().get_original_name(newexpr);
-    std::string name = to_symbol2t(newexpr).get_symbol_name();
+    const std::string &name = to_symbol2t(newexpr).thename.as_string();
     const symbolt &symbol = ns.lookup(name);
     if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
@@ -556,7 +556,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;
     get_active_state().get_original_name(newexpr);
-    std::string name = to_symbol2t(newexpr).get_symbol_name();
+    const std::string &name = to_symbol2t(newexpr).thename.as_string();
 
     if (name == "goto_symex::\\guard!" +
         i2string(get_active_state().top().level1.thread_id))
