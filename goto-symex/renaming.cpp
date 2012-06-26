@@ -91,9 +91,13 @@ void renaming::level1t::rename(expr2tc &expr) const
     const current_namest::const_iterator it =
       current_names.find(sym.get_symbol_name());
 
-    if(it!=current_names.end())
+    if (it != current_names.end()) {
       expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level1,
                                   it->second, 0, _thread_id, 0));
+    } else {
+      // This isn't an l1 declared name, so it's a global.
+      to_symbol2t(expr).rlevel = symbol2t::level1_global;
+    }
   }
   else if (is_address_of2t(expr))
   {
