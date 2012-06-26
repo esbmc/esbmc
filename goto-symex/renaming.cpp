@@ -2,6 +2,8 @@
 #include <migrate.h>
 #include <prefix.h>
 
+#include <langapi/language_util.h>
+
 #include "renaming.h"
 
 std::string renaming::level1t::name(const irep_idt &identifier,
@@ -241,9 +243,13 @@ void renaming::level2t::print(std::ostream &out) const
       it++) {
     assert(to_symbol2t(it->first).rlevel == symbol2t::level1 || to_symbol2t(it->first).rlevel == symbol2t::level1_global);
     out << to_symbol2t(it->first).get_symbol_name() << " --> ";
-    expr2tc tmp = it->first;
-    rename(tmp);
-    out << to_symbol2t(tmp).get_symbol_name() << std::endl;
+    if (!is_nil_expr(it->second.constant)) {
+      out << from_expr(it->second.constant) << std::endl;
+    } else {
+      expr2tc tmp = it->first;
+      rename(tmp);
+      out << to_symbol2t(tmp).get_symbol_name() << std::endl;
+    }
   } }
 
 void renaming::level2t::dump() const
