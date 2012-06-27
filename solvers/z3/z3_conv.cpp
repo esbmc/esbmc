@@ -2669,7 +2669,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
-    if (sym.get_symbol_name() == "NULL" || sym.get_symbol_name() == "0") {
+    if (sym.thename == "NULL" || sym.thename == "0") {
       obj_num = pointer_logic.get_null_object();
       got_obj_num = true;
     }
