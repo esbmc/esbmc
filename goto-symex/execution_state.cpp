@@ -334,12 +334,13 @@ execution_statet::decrement_active_atomic_number()
   atomic_numbers.at(active_thread)--;
 }
 
-irep_idt
+expr2tc
 execution_statet::get_guard_identifier()
 {
 
-  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id);
+  return expr2tc(new symbol2t(type_pool.get_bool(), guard_execution,
+                              symbol2t::level2, last_active_thread, CS_number,
+                              0, node_id));
 }
 
 void
@@ -450,8 +451,7 @@ execution_statet::execute_guard(void)
 {
 
   node_id = node_count++;
-  expr2tc guard_expr = expr2tc(new symbol2t(type_pool.get_bool(),
-                                            get_guard_identifier()));
+  expr2tc guard_expr = get_guard_identifier();
   exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 

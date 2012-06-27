@@ -293,10 +293,9 @@ class execution_statet : public goto_symext
    *  The execution guard being the guard of the interleavings up to this point
    *  being true and feasable. This is a symbolic name for it.
    *  @see execute_guard
-   *  @return Name of current execution state guard
+   *  @return Symbol of current execution state guard
    */
-
-  irep_idt get_guard_identifier();
+  expr2tc get_guard_identifier();
 
   /**
    *  Get reference to current thread state.
