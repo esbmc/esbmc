@@ -339,8 +339,7 @@ execution_statet::get_guard_identifier()
 {
 
   return expr2tc(new symbol2t(type_pool.get_bool(), guard_execution,
-                              symbol2t::level2, last_active_thread, CS_number,
-                              0, node_id));
+                              symbol2t::level1, CS_number, 0, node_id, 0));
 }
 
 void
