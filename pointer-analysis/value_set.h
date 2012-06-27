@@ -27,8 +27,7 @@ public:
   {
   }
 
-  unsigned location_number;
-  static object_numberingt object_numbering;
+//*********************************** Types ************************************
 
   typedef irep_idt idt;
   typedef std::set<expr2tc> expr_sett;
@@ -78,6 +77,8 @@ public:
   };
 
   typedef hash_map_cont<idt, entryt, dstring_hash> valuest;
+
+//********************************** Methods ***********************************
 
   expr2tc to_expr(object_map_dt::const_iterator it) const;
 
@@ -204,8 +205,6 @@ public:
 
   void dump(const namespacet &ns) const;
 
-  valuest values;
-
   // true = added s.th. new
   bool make_union(object_mapt &dest, const object_mapt &src) const;
 
@@ -284,6 +283,13 @@ protected:
     const expr2tc &src,
     const irep_idt &component_name,
     const namespacet &ns);
+
+public:
+//********************************** Members ***********************************
+  unsigned location_number;
+  static object_numberingt object_numbering;
+
+  valuest values;
 };
 
 #endif
