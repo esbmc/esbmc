@@ -54,7 +54,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
         expr2tc base_ident = *identifier;
         cur_state->get_original_name(base_ident);
 
-        const symbolt &symbol=ns.lookup(to_symbol2t(base_ident).get_symbol_name());
+        const symbolt &symbol=ns.lookup(to_symbol2t(*identifier).thename);
         
         // dynamic?
         if(symbol.type.dynamic())
