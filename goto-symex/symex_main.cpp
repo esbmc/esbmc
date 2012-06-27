@@ -205,9 +205,9 @@ goto_symext::symex_step(reachability_treet & art)
           dereference(*it, false);
 
       if (is_symbol2t(call.function) &&
-        has_prefix(to_symbol2t(call.function).get_symbol_name(), "c::__ESBMC")){
+        has_prefix(to_symbol2t(call.function).thename.as_string(), "c::__ESBMC")){
 	cur_state->source.pc++;
-	run_intrinsic(call, art, to_symbol2t(call.function).get_symbol_name());
+	run_intrinsic(call, art, to_symbol2t(call.function).thename.as_string());
 	return;
       }
 
