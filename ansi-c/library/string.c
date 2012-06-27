@@ -175,7 +175,7 @@ char *strdup_strabs(const char *str)
 void *memcpy(void *dst, const void *src, size_t n)
 {
   __ESBMC_HIDE:
-  for(size_t i=0; i<n ; i++) dst[i]=src[i];
+  for(size_t i=0; i<n ; i++) ((char*)dst)[i]=((char*)src)[i];
   return dst;
 }
 
