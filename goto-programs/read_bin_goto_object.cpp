@@ -104,8 +104,8 @@ bool read_bin_goto_object(
       // makes sure there is an empty function
       // for every function symbol and fixes
       // the function types.
-      code_typet type = functions.function_map[symbol.name].type;
-        tyto_code_type(symbol.type);
+      code_typet type = functions.function_map[symbol.name].type=
+        to_code_type(symbol.type);
     }
     // std::cout << "Adding Symbol: " << symbol.name << std::endl;
     context.add(symbol);
