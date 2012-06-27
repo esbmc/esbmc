@@ -29,7 +29,6 @@ public:
 
 //*********************************** Types ************************************
 
-  typedef irep_idt idt;
   typedef std::set<expr2tc> expr_sett;
 
   class objectt
@@ -62,21 +61,21 @@ public:
   struct entryt
   {
     object_mapt object_map;
-    idt identifier;
+    irep_idt identifier;
     std::string suffix;
 
     entryt()
     {
     }
 
-    entryt(const idt &_identifier, const std::string _suffix):
+    entryt(const irep_idt &_identifier, const std::string _suffix):
       identifier(_identifier),
       suffix(_suffix)
     {
     }
   };
 
-  typedef hash_map_cont<idt, entryt, dstring_hash> valuest;
+  typedef hash_map_cont<irep_idt, entryt, dstring_hash> valuest;
 
 //********************************** Methods ***********************************
 
@@ -139,7 +138,7 @@ public:
     return insert(dest, object_numbering.number(expr), object);
   }
 
-  bool erase(idt name)
+  bool erase(irep_idt name)
   {
     return (values.erase(name) == 1);
   }
@@ -152,7 +151,7 @@ public:
     const namespacet &ns) const;
 
   expr_sett &get(
-    const idt &identifier,
+    const irep_idt &identifier,
     const std::string &suffix);
 
   void make_any()
@@ -165,7 +164,7 @@ public:
     values.clear();
   }
 
-  void add_var(const idt &id, const std::string &suffix)
+  void add_var(const irep_idt &id, const std::string &suffix)
   {
     get_entry(id, suffix);
   }
@@ -175,7 +174,7 @@ public:
     get_entry(e.identifier, e.suffix);
   }
 
-  entryt &get_entry(const idt &id, const std::string &suffix)
+  entryt &get_entry(const irep_idt &id, const std::string &suffix)
   {
     return get_entry(entryt(id, suffix));
   }
@@ -185,7 +184,7 @@ public:
     std::string index=id2string(e.identifier)+e.suffix;
 
     std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<idt, entryt>(index, e));
+      values.insert(std::pair<irep_idt, entryt>(index, e));
 
     return r.first->second;
   }
