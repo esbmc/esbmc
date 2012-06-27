@@ -143,17 +143,10 @@ public:
     return (values.erase(name) == 1);
   }
 
-  static void add_objects(const entryt &src, expr_sett &dest);
-
   void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &dest,
     const namespacet &ns) const;
-
-  void make_any()
-  {
-    values.clear();
-  }
 
   void clear()
   {
