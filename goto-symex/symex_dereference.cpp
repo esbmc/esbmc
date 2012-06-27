@@ -13,7 +13,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <langapi/language_util.h>
 
 #include "goto_symex.h"
-#include "renaming_ns.h"
 
 class symex_dereference_statet:
   public dereference_callbackt
@@ -65,22 +64,22 @@ bool symex_dereference_statet::has_failed_symbol(
   const expr2tc &expr,
   const symbolt *&symbol)
 {
-  renaming_nst renaming_ns(goto_symex.ns, state);
 
   if (is_symbol2t(expr))
   {
     // Null and invalid name lookups will fail.
-    if (to_symbol2t(expr).name == "NULL" || to_symbol2t(expr).name == "INVALID")
+    if (to_symbol2t(expr).thename == "NULL" ||
+        to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol = renaming_ns.lookup(to_symbol2t(expr).name);
+    const symbolt &ptr_symbol = goto_symex.ns.lookup(to_symbol2t(expr).thename);
 
     const irep_idt &failed_symbol=
       ptr_symbol.type.failed_symbol();
 
     if(failed_symbol=="") return false;
 
-    return !renaming_ns.lookup(failed_symbol, symbol);
+    return !goto_symex.ns.lookup(failed_symbol, symbol);
   }
 
   return false;
@@ -90,9 +89,8 @@ void symex_dereference_statet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &value_set)
 {
-  renaming_nst renaming_ns(goto_symex.ns, state);
 
-  state.value_set.get_value_set(expr, value_set, renaming_ns);
+  state.value_set.get_value_set(expr, value_set, goto_symex.ns);
 }
 
 void goto_symext::dereference_rec(
@@ -137,10 +135,9 @@ void goto_symext::dereference_rec(
 void goto_symext::dereference(expr2tc &expr, const bool write)
 {
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
-  renaming_nst renaming_ns(ns, *cur_state);
 
   dereferencet dereference(
-    renaming_ns,
+    ns,
     new_context,
     options,
     symex_dereference_state);

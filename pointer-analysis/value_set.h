@@ -27,10 +27,9 @@ public:
   {
   }
 
-  unsigned location_number;
-  static object_numberingt object_numbering;
+//*********************************** Types ************************************
 
-  typedef irep_idt idt;
+  typedef std::set<expr2tc> expr_sett;
 
   class objectt
   {
@@ -57,9 +56,30 @@ public:
     const static object_map_dt empty;
   };
 
-  expr2tc to_expr(object_map_dt::const_iterator it) const;
-
   typedef reference_counting<object_map_dt> object_mapt;
+
+  struct entryt
+  {
+    object_mapt object_map;
+    std::string identifier;
+    std::string suffix;
+
+    entryt()
+    {
+    }
+
+    entryt(const std::string &_identifier, const std::string _suffix):
+      identifier(_identifier),
+      suffix(_suffix)
+    {
+    }
+  };
+
+  typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
+
+//********************************** Methods ***********************************
+
+  expr2tc to_expr(object_map_dt::const_iterator it) const;
 
   void set(object_mapt &dest, object_map_dt::const_iterator it) const
   {
@@ -118,58 +138,22 @@ public:
     return insert(dest, object_numbering.number(expr), object);
   }
 
-  bool erase(idt name)
+  bool erase(const std::string &name)
   {
-    return (values.erase(name) == 1);
+    return (values.erase(string_wrapper(name)) == 1);
   }
-
-  struct entryt
-  {
-    object_mapt object_map;
-    idt identifier;
-    std::string suffix;
-
-    entryt()
-    {
-    }
-
-    entryt(const idt &_identifier, const std::string _suffix):
-      identifier(_identifier),
-      suffix(_suffix)
-    {
-    }
-  };
-
-  typedef std::set<expr2tc> expr_sett;
-
-  static void add_objects(const entryt &src, expr_sett &dest);
-
-  #ifdef USE_DSTRING
-  typedef std::map<idt, entryt> valuest;
-  #else
-  typedef hash_map_cont<idt, entryt, string_hash> valuest;
-  #endif
 
   void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &dest,
     const namespacet &ns) const;
 
-  expr_sett &get(
-    const idt &identifier,
-    const std::string &suffix);
-
-  void make_any()
-  {
-    values.clear();
-  }
-
   void clear()
   {
     values.clear();
   }
 
-  void add_var(const idt &id, const std::string &suffix)
+  void add_var(const std::string &id, const std::string &suffix)
   {
     get_entry(id, suffix);
   }
@@ -179,7 +163,7 @@ public:
     get_entry(e.identifier, e.suffix);
   }
 
-  entryt &get_entry(const idt &id, const std::string &suffix)
+  entryt &get_entry(const std::string &id, const std::string &suffix)
   {
     return get_entry(entryt(id, suffix));
   }
@@ -189,7 +173,8 @@ public:
     std::string index=id2string(e.identifier)+e.suffix;
 
     std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<idt, entryt>(index, e));
+      values.insert(std::pair<string_wrapper, entryt>
+                             (string_wrapper(index), e));
 
     return r.first->second;
   }
@@ -207,7 +192,7 @@ public:
     const namespacet &ns,
     std::ostream &out) const;
 
-  valuest values;
+  void dump(const namespacet &ns) const;
 
   // true = added s.th. new
   bool make_union(object_mapt &dest, const object_mapt &src) const;
@@ -287,6 +272,13 @@ protected:
     const expr2tc &src,
     const irep_idt &component_name,
     const namespacet &ns);
+
+public:
+//********************************** Members ***********************************
+  unsigned location_number;
+  static object_numberingt object_numbering;
+
+  valuest values;
 };
 
 #endif

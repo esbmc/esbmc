@@ -11,6 +11,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "context.h"
 
+#include <irep2.h>
+
 // second: true <=> not found
 
 class namespacet
@@ -23,16 +25,16 @@ public:
       throw "identifier "+id2string(name)+" not found";
     return *symbol;
   }
-  
+
   const symbolt &lookup(const irept &irep) const
   {
     return lookup(irep.identifier());
   }
-  
+
   virtual ~namespacet()
   {
   }
-   
+
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const;
   void follow_symbol(irept &irep) const;
   void follow_macros(exprt &expr) const;

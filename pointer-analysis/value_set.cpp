@@ -43,13 +43,13 @@ void value_sett::output(
       v_it!=values.end();
       v_it++)
   {
-    irep_idt identifier, display_name;
+    std::string identifier, display_name;
     
     const entryt &e=v_it->second;
   
-    if(has_prefix(id2string(e.identifier), "value_set::dynamic_object"))
+    if(has_prefix(e.identifier, "value_set::dynamic_object"))
     {
-      display_name=id2string(e.identifier)+e.suffix;
+      display_name=e.identifier + e.suffix;
       identifier="";
     }
     else if(e.identifier=="value_set::return_value")
@@ -64,8 +64,8 @@ void value_sett::output(
       display_name=symbol.display_name()+e.suffix;
       identifier=symbol.name;
       #else
-      identifier=id2string(e.identifier);
-      display_name=id2string(identifier)+e.suffix;
+      identifier = e.identifier;
+      display_name = identifier + e.suffix;
       #endif
     }
     
@@ -256,7 +256,7 @@ void value_sett::get_value_set_rec(
   {
     const symbol2t &sym = to_symbol2t(expr);
 
-    if (sym.name.as_string() == "NULL" && is_pointer_type(expr->type))
+    if (sym.thename == "NULL" && is_pointer_type(expr->type))
     {
       // XXXjmorse - looks like there's no easy way to avoid this ns.follow
       // for getting the null objects type, without an internal pointer
@@ -272,7 +272,7 @@ void value_sett::get_value_set_rec(
     }
 
     // look it up
-    valuest::const_iterator v_it = values.find(sym.name.as_string() + suffix);
+    valuest::const_iterator v_it = values.find(string_wrapper(sym.get_symbol_name() + suffix));
       
     if(v_it!=values.end())
     {
@@ -453,7 +453,7 @@ void value_sett::get_value_set_rec(
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
   
     // look it up
-    valuest::const_iterator v_it=values.find(name);
+    valuest::const_iterator v_it=values.find(string_wrapper(name));
 
     if(v_it!=values.end())
     {
@@ -829,7 +829,7 @@ void value_sett::assign_rec(
 
   if (is_symbol2t(lhs))
   {
-    const irep_idt &identifier = to_symbol2t(lhs).name;
+    std::string identifier = to_symbol2t(lhs).get_symbol_name();
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
@@ -960,7 +960,7 @@ void value_sett::do_function_call(
   for (std::vector<irep_idt>::const_iterator it = argument_names.begin();
       it != argument_names.end(); it++, it2++)
   {
-    const irep_idt &identifier = *it;
+    const std::string &identifier = it->as_string();
     if(identifier=="") continue;
 
     add_var(identifier, "");
@@ -1098,4 +1098,10 @@ expr2tc value_sett::make_member(
   const type2tc &subtype = members[no];
   expr2tc memb = expr2tc(new member2t(subtype, src, component_name));
   return memb;
+}
+
+void
+value_sett::dump(const namespacet &ns) const
+{
+  output(ns, std::cout);
 }

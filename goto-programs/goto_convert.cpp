@@ -1269,7 +1269,7 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
   	return 0;
   else if (is_symbol2t(expr))
   {
-    const irep_idt &identifier = to_symbol2t(expr).name;
+    irep_idt identifier = to_symbol2t(expr).get_symbol_name();
     const symbolt &symbol = lookup(identifier);
 
     if (identifier == "c::__ESBMC_alloc"

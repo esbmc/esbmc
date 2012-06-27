@@ -759,14 +759,14 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *&_bv)
   // otherwise the solver is free to assign negative nums to it.
   if (is_unsignedbv_type(sym.type) && int_encoding) {
     Z3_ast formula;
-    bv = z3_api.mk_int_var(sym.name.c_str());
+    bv = z3_api.mk_int_var(sym.get_symbol_name().c_str());
     formula = Z3_mk_ge(z3_ctx, bv, z3_api.mk_int(0));
     assert_formula(formula);
     return;
   }
 
   convert_type(sym.type, sort);
-  bv = z3_api.mk_var(sym.name.c_str(), sort);
+  bv = z3_api.mk_var(sym.get_symbol_name().c_str(), sort);
 }
 
 void
@@ -1569,7 +1569,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 
     const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
-    convert_identifier_pointer(obj.ptr_obj, symbol.name.as_string(), bv);
+    convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), bv);
   } else if (is_constant_string2t(obj.ptr_obj)) {
     // XXXjmorse - we should avoid encoding invalid characters in the symbol,
     // but this works for now.
@@ -1826,7 +1826,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
 
     if (is_symbol2t(member.source_value)) {
       const symbol2t &sym = to_symbol2t(member.source_value);
-      cache_result = union_vars.find(sym.name.as_string().c_str());
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
     } else {
       cache_result = union_vars.end();
     }
@@ -2673,7 +2673,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
-    if (sym.name.as_string() == "NULL" || sym.name.as_string() == "0") {
+    if (sym.thename == "NULL" || sym.thename == "0") {
       obj_num = pointer_logic.back().get_null_object();
       got_obj_num = true;
     }
@@ -2777,7 +2777,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
-    expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name.as_string()));
+    expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name));
     Z3_ast allocarray;
     convert_bv(allocarr, allocarray);
 
@@ -2800,7 +2800,7 @@ z3_convt::set_to(const expr2tc &expr, bool value)
       const symbol2t sym = to_symbol2t(eq.side_1);
       const with2t with = to_with2t(eq.side_2);
       const union_type2t &type = to_union_type(eq.side_1->type);
-      const std::string &ref = sym.name.as_string();
+      const std::string &ref = sym.get_symbol_name();
       const constant_string2t &str = to_constant_string2t(with.update_field);
 
       unsigned int idx = 0;

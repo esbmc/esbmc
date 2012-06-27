@@ -84,11 +84,14 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @return Name of the guard
+   *  @return Symbol of the guard
    */
-  irep_idt guard_identifier(void)
+  expr2tc
+  guard_identifier(void)
   {
-    return irep_idt(id2string(guard_identifier_s) + "!" + i2string(cur_state->top().level1._thread_id));
+    return expr2tc(new symbol2t(type_pool.get_bool(),
+                                id2string(guard_identifier_s), symbol2t::level1,
+                                0, 0, cur_state->top().level1.thread_id, 0));
   };
 
   // Methods

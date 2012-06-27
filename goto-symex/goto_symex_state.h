@@ -166,7 +166,9 @@ public:
      *  assigns the result of this function call to at a higher level. */
     expr2tc return_value;
 
-    typedef std::set<irep_idt> local_variablest;
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            local_variablest;
     /** Set of local variable l1 names. */
     local_variablest local_variables;
 
@@ -188,8 +190,10 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    typedef std::set<std::string> declaration_historyt;
-    /** List of variables names that have been declared. Used to detect when we
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            declaration_historyt;
+    /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
      *  already seen names in a function for making that decision. */
@@ -197,7 +201,7 @@ public:
 
     framet(unsigned int thread_id)
     {
-      level1._thread_id = thread_id;
+      level1.thread_id = thread_id;
     }
   };
 
@@ -205,40 +209,35 @@ public:
 
   /**
    *  Perform both levels of renaming.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol to perform renaming on.
    */
-  std::string
-  current_name(const irep_idt &identifier) const
+  void
+  current_name(expr2tc &symirep) const
   {
-    return current_name(level2, identifier);
+    current_name(level2, symirep);
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param plevel2 L2 renaming context to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const renaming::level2t &plevel2, const irep_idt &identifier) const
+  void
+  current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
   {
-    irep_idt temp = top().level1.get_ident_name(identifier);
-    return plevel2.get_ident_name(temp);
+    top().level1.get_ident_name(symirep);
+    plevel2.get_ident_name(symirep);
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param goto_state Detatched state containing L2 state to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const goto_statet &goto_state, const irep_idt &identifier) const
+  void
+  current_name(const goto_statet &goto_state, expr2tc &symirep) const
   {
-    return current_name(goto_state.level2, identifier);
+    current_name(goto_state.level2, symirep);
   }
 
   /**
@@ -347,15 +346,6 @@ public:
    *  @return True if constant propagation should be enabled.
    */
   bool constant_propagation_reference(const expr2tc &expr) const;
-
-  /**
-   *  Fetch an original l0 identifer.
-   *  Revokes both levels of renaming on an identifer, leaves us with the
-   *  original c-level identifier for a symbol.
-   *  @param identifier The identifier to reverse renaming on.
-   *  @return Renamed to l0 identifier.
-   */
-  const irep_idt get_original_name(const irep_idt &identifier) const;
 
   /**
    *  Fetch an original l0 identifer.

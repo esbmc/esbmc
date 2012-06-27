@@ -71,7 +71,7 @@ z3_convt::get(const expr2tc &expr) const
     Z3_func_decl func;
 
     const symbol2t sym = to_symbol2t(expr);
-    identifier = sym.name.as_string();
+    identifier = sym.get_symbol_name();
 
     sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
     if (cache_res != sort_cache.end()) {

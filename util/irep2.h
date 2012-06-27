@@ -759,6 +759,44 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
+class expr_hash_record {
+public:
+  expr_hash_record(const expr2tc &ref) : expr(ref), hash(ref->crc()) { }
+
+  bool operator<(const expr_hash_record &ref) const
+  {
+    if (hash < ref.hash)
+      return true;
+    else if (hash > ref.hash)
+      return false;
+
+    if (expr < ref.expr)
+      return true;
+    return false;
+  }
+
+  bool operator==(const expr_hash_record &ref) const
+  {
+    if (hash != ref.hash)
+      return false;
+
+    if (expr != ref.expr)
+      return false;
+
+    return true;
+  }
+
+  expr2tc expr;
+  size_t hash;
+};
+
+class expr_record_hash
+{
+public:
+  size_t operator()(const expr_hash_record &ref) const {return ref.hash;}
+  bool operator()(const expr_hash_record &ref, const expr_hash_record &ref2) const {return ref.expr < ref2.expr;}
+};
+
 /** A namespace for "ESBMC templates".
  *  This means anything designed to mess with expressions or types declared in
  *  this header, via the medium of templates. */
@@ -771,7 +809,7 @@ namespace esbmct {
    *  controls the types of any arrays that need to consider the number of
    *  fields. Unfortunately it can't control template parameters, because
    *  vardic templates are C++11. */
-  const unsigned int num_type_fields = 5;
+  const unsigned int num_type_fields = 6;
 
   /** Template for providing templated methods to expr2t classes.
    *
@@ -850,7 +888,9 @@ namespace esbmct {
      typename field4_type = const expr2t::expr_ids, class field4_class = expr2t,
      field4_type field4_class::*field4_ptr = &field4_class::expr_id,
      typename field5_type = const expr2t::expr_ids, class field5_class = expr2t,
-     field5_type field5_class::*field5_ptr = &field5_class::expr_id>
+     field5_type field5_class::*field5_ptr = &field5_class::expr_id,
+     typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
+     field6_type field6_class::*field6_ptr = &field6_class::expr_id>
   class expr_methods : public subclass
   {
     // Dummy type tag - exists to be an arbitary, local class, for use in some
@@ -908,20 +948,30 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1, arg2, arg3, arg4) { }
 
+    template <class arbitary = dummy_type_tag>
+    expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 const field4_type &arg4, const field5_type &arg5,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : subclass(t, id, arg1, arg2, arg3, arg4, arg5) { }
+
 
     template <class arbitary = dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids>, arbitary >::type* = NULL)
-      : subclass(t, id, arg1, arg2, arg3, arg4, arg5) { }
+                 const field6_type &arg6,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids>, arbitary >::type* = NULL)
+      : subclass(t, id, arg1, arg2, arg3, arg4, arg5, arg6) { }
 
     expr_methods(const expr_methods<derived, subclass,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
                                     field4_type, field4_class, field4_ptr,
-                                    field5_type, field5_class, field5_ptr> &ref)
+                                    field5_type, field5_class, field5_ptr,
+                                    field6_type, field6_class, field6_ptr> &ref)
       : subclass(ref) { }
 
     // Override expr2t methods that we're going to be generating automagically
@@ -952,7 +1002,9 @@ namespace esbmct {
           typename field4_type = type2t::type_ids, class field4_class = type2t,
           field4_type field4_class::*field4_ptr = &field4_class::type_id,
           typename field5_type = type2t::type_ids, class field5_class = type2t,
-          field5_type field5_class::*field5_ptr = &field5_class::type_id>
+          field5_type field5_class::*field5_ptr = &field5_class::type_id,
+          typename field6_type = type2t::type_ids, class field6_class = type2t,
+          field6_type field6_class::*field6_ptr = &field6_class::type_id>
   class type_methods : public subclass
   {
   public:
@@ -999,15 +1051,25 @@ namespace esbmct {
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
-                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids>, arbitary >::type* = NULL)
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,type2t::type_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3, arg4, arg5) { }
+
+    template <class arbitary = dummy_type_tag>
+    type_methods(type2t::type_ids id, const field1_type &arg1,
+                 const field2_type &arg2, const field3_type &arg3,
+                 const field4_type &arg4, const field5_type &arg5,
+                 const field6_type &arg6,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,type2t::type_ids>, arbitary >::type* = NULL)
+      : subclass(id, arg1, arg2, arg3, arg4, arg5, arg6) { }
 
     type_methods(const type_methods<derived, subclass,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
                                     field4_type, field4_class, field4_ptr,
-                                    field5_type, field5_class, field5_ptr> &ref)
+                                    field5_type, field5_class, field5_ptr,
+                                    field6_type, field6_class, field6_ptr> &ref)
       : subclass(ref) { }
 
     virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
@@ -1762,12 +1824,37 @@ public:
 class symbol_data : public expr2t
 {
 public:
-  symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v)
-    : expr2t(t, id), name(v) { }
-  symbol_data(const symbol_data &ref)
-    : expr2t(ref), name(ref.name) { }
+  enum renaming_level {
+    level0,
+    level1,
+    level2,
+    level1_global,
+    level2_global
+  };
 
-  irep_idt name;
+  symbol_data(const type2tc &t, expr2t::expr_ids id, const irep_idt &v,
+              renaming_level lev, unsigned int l1, unsigned int l2,
+              unsigned int tr, unsigned int node)
+    : expr2t(t, id), thename(v), rlevel(lev), level1_num(l1), level2_num(l2),
+      thread_num(tr), node_num(node) { }
+  symbol_data(const symbol_data &ref)
+    : expr2t(ref), thename(ref.thename), rlevel(ref.rlevel),
+      level1_num(ref.level1_num), level2_num(ref.level2_num),
+      thread_num(ref.thread_num), node_num(ref.node_num) { }
+
+  virtual std::string get_symbol_name(void) const;
+
+  // So: I want to make this private, however then all the templates accessing
+  // it can't access it; and the typedef for symbol_expr_methods further down
+  // can't access it too, no matter how many friends I add.
+  //
+  // So, let's pretend that this is private, even though it can't be enforced.
+  irep_idt thename;
+  renaming_level rlevel;
+  unsigned int level1_num;
+  unsigned int level2_num;
+  unsigned int thread_num;
+  unsigned int node_num;
 };
 
 class typecast_data : public expr2t
@@ -2322,7 +2409,12 @@ typedef esbmct::expr_methods<constant_string2t, constant_string_data,
         irep_idt, constant_string_data, &constant_string_data::value>
         constant_string_expr_methods;
 typedef esbmct::expr_methods<symbol2t, symbol_data,
-        irep_idt, symbol_data, &symbol_data::name>
+        irep_idt, symbol_data, &symbol_data::thename,
+        symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
+        unsigned int, symbol_data, &symbol_data::level1_num,
+        unsigned int, symbol_data, &symbol_data::level2_num,
+        unsigned int, symbol_data, &symbol_data::thread_num,
+        unsigned int, symbol_data, &symbol_data::node_num>
         symbol_expr_methods;
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
@@ -2785,8 +2877,12 @@ public:
    *  @param type Type that this symbol has
    *  @param init Name of this symbol
    */
-  symbol2t(const type2tc &type, const irep_idt &init)
-    : symbol_expr_methods(type, symbol_id, init) { }
+
+  symbol2t(const type2tc &type, const irep_idt &init,
+           renaming_level lev = level0, unsigned int l1 = 0,
+           unsigned int l2 = 0, unsigned int trd = 0, unsigned int node = 0)
+    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node) { }
+
   symbol2t(const symbol2t &ref)
     : symbol_expr_methods(ref){}
 

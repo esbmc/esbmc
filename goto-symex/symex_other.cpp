@@ -56,33 +56,33 @@ void goto_symext::symex_other(void)
     // just do the L2 renaming to preseve locality
     const irep_idt &identifier = decl_code.value;
 
-    std::string l1_identifier =
-      cur_state->top().level1.get_ident_name(identifier);
+    // Generate dummy symbol as a vehicle for renaming.
+    expr2tc l1_sym = expr2tc(new symbol2t(type_pool.get_empty(), identifier));
 
-    const irep_idt &original_id =
-      cur_state->top().level1.get_original_name(l1_identifier);
+    cur_state->top().level1.get_ident_name(l1_sym);
+    symbol2t &l1_symbol = to_symbol2t(l1_sym);
 
     // increase the frame if we have seen this declaration before
-    while(cur_state->top().declaration_history.find(l1_identifier)!=
+    while(cur_state->top().declaration_history.find(renaming::level2t::name_record(l1_symbol))!=
           cur_state->top().declaration_history.end())
     {
-      unsigned index=cur_state->top().level1.current_names[original_id];
-      cur_state->top().level1.rename(original_id, index+1);
-      l1_identifier=cur_state->top().level1.get_ident_name(original_id);
+      unsigned index = cur_state->top().level1.current_number(identifier);
+      cur_state->top().level1.rename(l1_sym, index+1);
+      l1_symbol.level1_num = index + 1;
     }
 
-    cur_state->top().declaration_history.insert(l1_identifier);
-    cur_state->top().local_variables.insert(l1_identifier);
+    renaming::level2t::name_record tmp_name(l1_symbol);
+    cur_state->top().declaration_history.insert(tmp_name);
+    cur_state->top().local_variables.insert(tmp_name);
 
     // seen it before?
     // it should get a fresh value
-    renaming::level2t::current_namest::iterator it=
-      cur_state->level2.current_names.find(l1_identifier);
-
-    if(it!=cur_state->level2.current_names.end())
+    if (cur_state->level2.current_number(l1_sym) != 0)
     {
-      cur_state->level2.rename(l1_identifier, it->second.count+1);
-      it->second.constant = expr2tc();
+      // Dummy assignment - blank constant value isn't considered for const
+      // propagation, variable number will be bumped to result in a new free
+      // variable. Invalidates l1_symbol reference?
+      cur_state->level2.make_assignment(l1_sym, expr2tc(), expr2tc());
     }
   }
   else if (is_code_asm2t(code2))

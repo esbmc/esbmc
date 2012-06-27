@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 
 #include "slice.h"
+#include "renaming.h"
 
 class symex_slicet
 {
@@ -16,7 +17,8 @@ public:
   void slice(symex_target_equationt &equation);
 
 protected:
-  typedef hash_set_cont<irep_idt, irep_id_hash> symbol_sett;
+  typedef hash_set_cont<renaming::level2t::name_record,
+                        renaming::level2t::name_rec_hash> symbol_sett;
   
   symbol_sett depends;
   
@@ -33,7 +35,7 @@ void symex_slicet::get_symbols(const expr2tc &expr)
     get_symbols(**it);
 
   if (is_symbol2t(expr))
-    depends.insert(symbol2tc(expr)->name);
+    depends.insert(renaming::level2t::name_record(to_symbol2t(expr)));
 }
 
 void symex_slicet::slice(symex_target_equationt &equation)
@@ -78,7 +80,8 @@ void symex_slicet::slice_assignment(
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  if(depends.find(symbol2tc(SSA_step.lhs)->name) == depends.end())
+  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
+              == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;

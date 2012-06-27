@@ -83,8 +83,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
-
-  str_state = string_container.take_state_snapshot();
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
@@ -105,12 +103,6 @@ execution_statet::execution_statet(const execution_statet &ex) :
 
   // Reassign which state is currently being worked on.
   cur_state = &threads_state[active_thread];
-
-  // Take another snapshot to represent what string state was
-  // like when we began the exploration this execution_statet will
-  // perform.
-  str_state = string_container.take_state_snapshot();
-
 }
 
 execution_statet&
@@ -339,12 +331,12 @@ execution_statet::decrement_active_atomic_number()
   atomic_numbers.at(active_thread)--;
 }
 
-irep_idt
+expr2tc
 execution_statet::get_guard_identifier()
 {
 
-  return id2string(guard_execution) + '@' + i2string(CS_number) + '_' +
-         i2string(last_active_thread) + '_' + i2string(node_id);
+  return expr2tc(new symbol2t(type_pool.get_bool(), guard_execution,
+                              symbol2t::level1, CS_number, 0, node_id, 0));
 }
 
 void
@@ -473,19 +465,14 @@ execution_statet::execute_guard(void)
 {
 
   node_id = node_count++;
-  expr2tc guard_expr = expr2tc(new symbol2t(type_pool.get_bool(),
-                                            get_guard_identifier()));
-  symbol2t &guard_exp = to_symbol2t(guard_expr);
+  expr2tc guard_expr = get_guard_identifier();
   exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
   parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
-  irep_idt new_name = state_level2->make_assignment(guard_exp.name,
-                                                    expr2tc(), expr2tc());
-
-  guard_exp.name = new_name;
+  state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
 
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
@@ -554,14 +541,14 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
   } else if (is_symbol2t(expr)) {
-    const irep_idt &id = to_symbol2t(expr).name;
-    const irep_idt &identifier = get_active_state().get_original_name(id);
-    const symbolt &symbol = ns.lookup(identifier);
-    if (identifier == "c::__ESBMC_alloc"
-        || identifier == "c::__ESBMC_alloc_size")
+    expr2tc newexpr = expr;
+    get_active_state().get_original_name(newexpr);
+    const std::string &name = to_symbol2t(newexpr).thename.as_string();
+    const symbolt &symbol = ns.lookup(name);
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).write_set.insert(identifier);
+      exprs_read_write.at(active_thread).write_set.insert(name);
       return 1;
     } else
       return 0;
@@ -586,22 +573,22 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
   } else if (is_symbol2t(expr)) {
-    const irep_idt &id = to_symbol2t(expr).name;
-    const irep_idt &identifier = get_active_state().get_original_name(id);
+    expr2tc newexpr = expr;
+    get_active_state().get_original_name(newexpr);
+    const std::string &name = to_symbol2t(newexpr).thename.as_string();
 
-    if (identifier == "goto_symex::\\guard!" +
-        i2string(get_active_state().top().level1._thread_id))
+    if (name == "goto_symex::\\guard!" +
+        i2string(get_active_state().top().level1.thread_id))
       return 0;
 
     const symbolt *symbol;
-    if (ns.lookup(identifier, symbol))
+    if (ns.lookup(name, symbol))
       return 0;
 
-    if (identifier == "c::__ESBMC_alloc" || identifier ==
-        "c::__ESBMC_alloc_size")
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).read_set.insert(identifier);
+      exprs_read_write.at(active_thread).read_set.insert(name);
       return 1;
     } else
       return 0;
@@ -645,17 +632,21 @@ static std::string state_to_ignore[8] =
 };
 
 std::string
-execution_statet::serialise_expr(const exprt &rhs)
+execution_statet::serialise_expr(const exprt &rhs __attribute__((unused)))
 {
-  std::string str;
-  uint64_t val;
-  int i;
-
   // FIXME: some way to disambiguate what's part of a hash / const /whatever,
   // and what's part of an operator
 
   // The plan: serialise this expression into the identifiers of its operations,
   // replacing symbol names with the hash of their value.
+  std::cerr << "Serialise expr is a victim of string migration" << std::endl;
+  abort();
+#if 0
+
+  std::string str;
+  uint64_t val;
+  int i;
+
   if (rhs.id() == exprt::symbol) {
 
     str = rhs.identifier().as_string();
@@ -789,6 +780,7 @@ execution_statet::serialise_expr(const exprt &rhs)
   }
 
   return str;
+#endif
 }
 
 // If we have a normal expression, either arithmatic, binary, comparision,
@@ -899,9 +891,9 @@ execution_statet::ex_state_level2t::clone(void) const
 }
 
 void
-execution_statet::ex_state_level2t::rename(const irep_idt &identifier, unsigned count)
+execution_statet::ex_state_level2t::rename(expr2tc &lhs_sym, unsigned count)
 {
-  renaming::level2t::coveredinbees(identifier, count, owner->node_id);
+  renaming::level2t::coveredinbees(lhs_sym, count, owner->node_id);
 }
 
 void
@@ -918,10 +910,6 @@ dfs_execution_statet::~dfs_execution_statet(void)
     target->pop_ctx();
   else
     delete target;
-
-  // Free all name strings and suchlike we generated on this run
-  // and no longer require
-  string_container.restore_state_snapshot(str_state);
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const
@@ -948,7 +936,7 @@ dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
 
 schedule_execution_statet::~schedule_execution_statet(void)
 {
-  // Don't delete equation or snapshot state. Schedule requires all this data.
+  // Don't delete equation. Schedule requires all this data.
 }
 
 schedule_execution_statet* schedule_execution_statet::clone(void) const
@@ -1004,16 +992,14 @@ execution_statet::state_hashing_level2t::clone(void) const
   return new state_hashing_level2t(*this);
 }
 
-irep_idt
-execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
+void
+execution_statet::state_hashing_level2t::make_assignment(expr2tc &lhs_sym,
                                        const expr2tc &const_value,
                                        const expr2tc &assigned_value)
 {
-  crypto_hash hash;
-  irep_idt new_name;
+//  crypto_hash hash;
 
-  new_name = renaming::level2t::make_assignment(l1_ident, const_value,
-                                                assigned_value);
+  renaming::level2t::make_assignment(lhs_sym, const_value, assigned_value);
 
   // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
 #if 0
@@ -1023,8 +1009,6 @@ execution_statet::state_hashing_level2t::make_assignment(irep_idt l1_ident,
     owner->get_active_state().get_original_name(l1_ident).as_string();
   current_hashes[orig_name] = hash;
 #endif
-
-  return new_name;
 }
 
 crypto_hash

@@ -63,9 +63,9 @@ void convert(
         irep_idt identifier;
 
         if (!is_nil_expr(it->original_lhs))
-          identifier = to_symbol2t(it->original_lhs).name;
+          identifier = to_symbol2t(it->original_lhs).get_symbol_name();
         else
-          identifier = to_symbol2t(it->lhs).name;
+          identifier = to_symbol2t(it->lhs).get_symbol_name();
           
         xmlt &xml_assignment=xml.new_element("assignment");
 

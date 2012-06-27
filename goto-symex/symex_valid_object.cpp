@@ -11,11 +11,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex.h"
 #include "dynamic_allocation.h"
 
-static irep_idt get_object(const expr2tc &expr)
+static const expr2tc *get_object(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
   {
-    return to_symbol2t(expr).name;
+    return &expr;
   }
   else if (is_member2t(expr))
   {
@@ -26,7 +26,7 @@ static irep_idt get_object(const expr2tc &expr)
     return get_object(to_index2t(expr).source_value);
   }
 
-  return "";
+  return NULL;
 }
 
 void goto_symext::replace_dynamic_allocation(expr2tc &expr)
@@ -47,14 +47,14 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
       expr2tc &obj_operand = to_address_of2t(obj_ref).ptr_obj;
       
       // see if that is a good one!
-      const irep_idt identifier = get_object(obj_operand);
+      const expr2tc *identifier = get_object(obj_operand);
       
-      if(identifier!="")
+      if (identifier != NULL)
       {        
-        const irep_idt l0_identifier=
-          cur_state->get_original_name(identifier);
+        expr2tc base_ident = *identifier;
+        cur_state->get_original_name(base_ident);
 
-        const symbolt &symbol=ns.lookup(l0_identifier);
+        const symbolt &symbol=ns.lookup(to_symbol2t(*identifier).thename);
         
         // dynamic?
         if(symbol.type.dynamic())
@@ -94,6 +94,10 @@ goto_symext::is_valid_object(const symbolt &symbol)
     return false;
 
   // current location?
+#if 0
+  // XXX jmorse - disabled on moving local_variables to name records. It only
+  // ever contains l1 names; any lookup of symbol.name isn't going to work
+  // because that's a global name.
   if(cur_state->source.is_set &&
      cur_state->source.pc->local_variables.find(symbol.name)!=
      cur_state->source.pc->local_variables.end())
@@ -108,6 +112,7 @@ goto_symext::is_valid_object(const symbolt &symbol)
        it->calling_location.pc->local_variables.find(symbol.name)!=
        it->calling_location.pc->local_variables.end())
       return true;
+#endif
 
   return false;
 }

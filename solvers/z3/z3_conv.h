@@ -281,7 +281,7 @@ private:
   std::string filename;
 
   unsigned int array_of_count;
-  irep_idt dyn_info_arr_name;
+  std::string dyn_info_arr_name;
 
   uint64_t no_variables;
   std::list<Z3_ast> assumpt;

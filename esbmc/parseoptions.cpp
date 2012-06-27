@@ -897,7 +897,7 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
   if (is_symbol2t(e)) {
     symbol2t &thesym = to_symbol2t(e);
-    std::string sym = thesym.name.as_string();
+    std::string sym = thesym.get_symbol_name();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -966,7 +966,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
   // Is this actually an assignment that we're interested in?
   std::map<std::string, std::pair<std::set<std::string>, expr2tc> >::const_iterator it;
-  std::string sym_name = sym.name.as_string();
+  std::string sym_name = sym.get_symbol_name();
   std::set<std::pair<std::string, expr2tc> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
@@ -1039,7 +1039,7 @@ static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
     return globals;
   }
 
-  std::string identifier = to_symbol2t(expr).name.as_string();
+  std::string identifier = to_symbol2t(expr).get_symbol_name();
   const symbolt &sym = ns.lookup(identifier);
 
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
@@ -1076,7 +1076,8 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
               to_code_function_call2t(pit->code);
 
             if (is_symbol2t(deref_code.function) &&
-                to_symbol2t(deref_code.function).name == "c::__ESBMC_yield")
+                to_symbol2t(deref_code.function).get_symbol_name()
+                            == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;
@@ -1144,8 +1145,8 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
     return;
 
    if (is_symbol2t(irep)) {
-    if (to_symbol2t(irep).name == from_name)
-      to_symbol2t(irep).name = to_name;
+    if (to_symbol2t(irep).get_symbol_name() == from_name.as_string())
+      irep = expr2tc(new symbol2t(irep->type, to_name));
 
     return;
   } else {
