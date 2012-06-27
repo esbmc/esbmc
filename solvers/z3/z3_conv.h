@@ -276,7 +276,7 @@ private:
   union_varst union_vars;
 
   unsigned int array_of_count;
-  irep_idt dyn_info_arr_name;
+  std::string dyn_info_arr_name;
 
   unsigned _no_variables;
   std::list<Z3_ast> assumpt;

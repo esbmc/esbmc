@@ -2771,7 +2771,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
-    expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name.as_string()));
+    expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name));
     Z3_ast allocarray;
     convert_bv(allocarr, allocarray);
 
