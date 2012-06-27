@@ -43,13 +43,13 @@ void value_sett::output(
       v_it!=values.end();
       v_it++)
   {
-    irep_idt identifier, display_name;
+    std::string identifier, display_name;
     
     const entryt &e=v_it->second;
   
-    if(has_prefix(id2string(e.identifier), "value_set::dynamic_object"))
+    if(has_prefix(e.identifier, "value_set::dynamic_object"))
     {
-      display_name=id2string(e.identifier)+e.suffix;
+      display_name=e.identifier + e.suffix;
       identifier="";
     }
     else if(e.identifier=="value_set::return_value")
@@ -64,8 +64,8 @@ void value_sett::output(
       display_name=symbol.display_name()+e.suffix;
       identifier=symbol.name;
       #else
-      identifier=id2string(e.identifier);
-      display_name=id2string(identifier)+e.suffix;
+      identifier = e.identifier;
+      display_name = identifier + e.suffix;
       #endif
     }
     
