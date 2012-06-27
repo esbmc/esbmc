@@ -71,9 +71,9 @@ void goto_symext::symex_other(void)
       l1_symbol.level1_num = index + 1;
     }
 
-    cur_state->top().declaration_history.insert(renaming::level2t::name_record(l1_symbol));
-    std::string l1_identifier = l1_symbol.get_symbol_name();
-    cur_state->top().local_variables.insert(l1_identifier);
+    renaming::level2t::name_record tmp_name(l1_symbol);
+    cur_state->top().declaration_history.insert(tmp_name);
+    cur_state->top().local_variables.insert(tmp_name);
 
     // seen it before?
     // it should get a fresh value

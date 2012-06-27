@@ -221,6 +221,11 @@ namespace renaming {
         current_names.erase(name_record(to_symbol2t(symbol)));
     }
 
+    void remove(const name_record &rec)
+    {
+      current_names.erase(rec);
+    }
+
     virtual void get_original_name(expr2tc &expr) const
     {
       renaming_levelt::get_original_name(expr, symbol2t::level1);

@@ -166,7 +166,9 @@ public:
      *  assigns the result of this function call to at a higher level. */
     expr2tc return_value;
 
-    typedef std::set<irep_idt> local_variablest;
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            local_variablest;
     /** Set of local variable l1 names. */
     local_variablest local_variables;
 

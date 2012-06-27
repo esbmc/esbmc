@@ -427,10 +427,13 @@ goto_symext::pop_frame(void)
       it=frame.local_variables.begin();
       it!=frame.local_variables.end();
       it++) {
-    expr2tc tmpsym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
-    cur_state->level2.remove(tmpsym);
-    cur_state->level2.get_original_name(tmpsym);
-    cur_state->value_set.erase(to_symbol2t(tmpsym).get_symbol_name());
+    cur_state->level2.remove(*it);
+
+    // Construct an l1 name on the fly - this is a temporary hack for when
+    // the value set is storing things in a not-an-irep-idt form.
+    expr2tc tmp_expr(new symbol2t(type_pool.get_empty(), it->base_name,
+                                  it->lev, it->l1_num, 0, it->t_num, 0));
+    cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
 
   // decrease recursion unwinding counter
@@ -471,7 +474,7 @@ goto_symext::locality(unsigned frame_nr,
     expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
     frame.level1.rename(tmp_sym, frame_nr);
     frame.level1.get_ident_name(tmp_sym);
-    frame.local_variables.insert(to_symbol2t(tmp_sym).get_symbol_name());
+    frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));
   }
 }
 
