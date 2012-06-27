@@ -63,7 +63,7 @@ void goto_symext::symex_other(void)
     symbol2t &l1_symbol = to_symbol2t(l1_sym);
 
     // increase the frame if we have seen this declaration before
-    while(cur_state->top().declaration_history.find(l1_symbol.get_symbol_name())!=
+    while(cur_state->top().declaration_history.find(renaming::level2t::name_record(l1_symbol))!=
           cur_state->top().declaration_history.end())
     {
       unsigned index = cur_state->top().level1.current_number(identifier);
@@ -71,8 +71,8 @@ void goto_symext::symex_other(void)
       l1_symbol.level1_num = index + 1;
     }
 
+    cur_state->top().declaration_history.insert(renaming::level2t::name_record(l1_symbol));
     std::string l1_identifier = l1_symbol.get_symbol_name();
-    cur_state->top().declaration_history.insert(l1_identifier);
     cur_state->top().local_variables.insert(l1_identifier);
 
     // seen it before?

@@ -188,8 +188,10 @@ public:
      *  resulting function invocations with. */
     expr2tc orig_func_ptr_call;
 
-    typedef std::set<std::string> declaration_historyt;
-    /** List of variables names that have been declared. Used to detect when we
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            declaration_historyt;
+    /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
      *  already seen names in a function for making that decision. */
