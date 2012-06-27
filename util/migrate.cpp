@@ -340,6 +340,57 @@ convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
   migrate_expr(expr.op1(), arg2);
 }
 
+
+expr2tc
+sym_name_to_symbol(irep_idt init, type2tc type)
+{
+  symbol2t::renaming_level target_level;
+  unsigned int level1_num, thread_num, node_num, level2_num;
+
+  const std::string &thestr = init.as_string();
+  if (thestr.find("@") == std::string::npos) {
+    // This is a level0 name.
+    return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
+  }
+
+  // Renamed to at least level 1,
+  size_t at_pos = thestr.find("@");
+  size_t exm_pos = thestr.find("!");
+
+  size_t and_pos, hash_pos;
+  if (thestr.find("#") == std::string::npos) {
+    // We're level 1.
+    target_level = symbol2t::level1;
+    and_pos = thestr.size();
+    hash_pos = thestr.size();
+  } else {
+    target_level = symbol2t::level2;
+    and_pos = thestr.find("&");
+    hash_pos = thestr.find("#");
+  }
+
+  // Whatever level we're at, set the base name to be nonrenamed.
+  irep_idt thename = irep_idt(thestr.substr(0, at_pos));
+
+  std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
+  std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
+
+  level1_num = atoi(atstr.c_str());
+  thread_num = atoi(exmstr.c_str());
+  if (target_level == symbol2t::level1) {
+    return expr2tc(new symbol2t(type, thename, target_level, level1_num,
+                                0, thread_num, 0));
+  }
+
+  std::string andstr = thestr.substr(and_pos+1, hash_pos - and_pos - 1);
+  std::string hashstr = thestr.substr(hash_pos+1, thestr.size() - hash_pos - 1);
+
+  node_num = atoi(andstr.c_str());
+  level2_num = atoi(hashstr.c_str());
+  return expr2tc(new symbol2t(type, thename, target_level, level1_num,
+                              level2_num, thread_num, node_num));
+}
+
 void
 migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 {
@@ -349,13 +400,10 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc();
   } else if (expr.id() == irept::id_symbol) {
     migrate_type(expr.type(), type);
-    expr2t *new_expr = new symbol2t(type, expr.identifier().as_string());
-    new_expr_ref = expr2tc(new_expr);
+    new_expr_ref = sym_name_to_symbol(expr.identifier(), type);
   } else if (expr.id() == "nondet_symbol") {
     migrate_type(expr.type(), type);
-    expr2t *new_expr = new symbol2t(type,
-                                    "nondet$" + expr.identifier().as_string());
-    new_expr_ref = expr2tc(new_expr);
+    new_expr_ref = sym_name_to_symbol("nondet$" + expr.identifier().as_string(), type);
   } else if (expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
              expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
              expr.type().id() != typet::t_fixedbv && expr.type().id() != typet::t_array) {

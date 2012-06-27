@@ -2836,57 +2836,7 @@ public:
   symbol2t(const type2tc &type, const irep_idt &init,
            renaming_level lev = level0, unsigned int l1 = 0,
            unsigned int l2 = 0, unsigned int trd = 0, unsigned int node = 0)
-    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node)
-  {
-    if (lev != level0)
-      // User provided a renaming level; so they should actually have provided
-      // us with some useful data, no need to extract it from the string, which
-      // shouldn't contain it.
-      return;
-
-    // Temporary: undo all renaming.
-    const std::string &thestr = init.as_string();
-    if (thestr.find("@") == std::string::npos) {
-      rlevel = level0;
-      return;
-    }
-
-    // Renamed to at least level 1,
-    size_t at_pos = thestr.find("@");
-    size_t exm_pos = thestr.find("!");
-
-    size_t and_pos, hash_pos;
-    if (thestr.find("#") == std::string::npos) {
-      // We're level 1.
-      rlevel = level1;
-      and_pos = thestr.size();
-      hash_pos = thestr.size();
-    } else {
-      rlevel = level2;
-      and_pos = thestr.find("&");
-      hash_pos = thestr.find("#");
-    }
-
-    // Whatever level we're at, set the base name to be nonrenamed.
-    thename = irep_idt(thestr.substr(0, at_pos));
-
-    std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
-    std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
-
-    level1_num = atoi(atstr.c_str());
-    thread_num = atoi(exmstr.c_str());
-    if (rlevel == level1) {
-      node_num = 0;
-      level2_num = 0;
-      return;
-    }
-
-    std::string andstr = thestr.substr(and_pos+1, hash_pos - and_pos - 1);
-    std::string hashstr = thestr.substr(hash_pos+1, thestr.size() - hash_pos - 1);
-
-    node_num = atoi(andstr.c_str());
-    level2_num = atoi(hashstr.c_str());
-  }
+    : symbol_expr_methods(type, symbol_id, init, lev, l1, l2, trd, node) { }
 
   symbol2t(const symbol2t &ref)
     : symbol_expr_methods(ref){}
