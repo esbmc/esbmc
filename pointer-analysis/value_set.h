@@ -144,11 +144,7 @@ public:
 
   static void add_objects(const entryt &src, expr_sett &dest);
 
-  #ifdef USE_DSTRING
-  typedef std::map<idt, entryt> valuest;
-  #else
-  typedef hash_map_cont<idt, entryt, string_hash> valuest;
-  #endif
+  typedef hash_map_cont<idt, entryt, dstring_hash> valuest;
 
   void get_value_set(
     const expr2tc &expr,
