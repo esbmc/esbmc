@@ -26,14 +26,6 @@ public:
     return *symbol;
   }
 
-  const symbolt &lookup(const expr2tc &name) const
-  {
-    const symbolt *symbol;
-    if(lookup(name, symbol))
-      throw "identifier "+id2string(to_symbol2t(name).get_symbol_name())+" not found";
-    return *symbol;
-  }
-
   const symbolt &lookup(const irept &irep) const
   {
     return lookup(irep.identifier());
@@ -44,7 +36,6 @@ public:
   }
 
   virtual bool lookup(const irep_idt &name, const symbolt *&symbol) const;
-  virtual bool lookup(const expr2tc &name, const symbolt *&symbol) const;
   void follow_symbol(irept &irep) const;
   void follow_macros(exprt &expr) const;
   
