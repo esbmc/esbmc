@@ -1078,7 +1078,7 @@ typecast2t::do_simplify(bool second) const
     expr2tc eq = expr2tc(new equality2t(from, zero));
     expr2tc noteq = expr2tc(new not2t(eq));
     return noteq;
-  } else if (is_symbol2t(from) && to_symbol2t(from).get_symbol_name() == "NULL"
+  } else if (is_symbol2t(from) && to_symbol2t(from).thename == "NULL"
              && is_pointer_type(type)){
     // Casts of null can operate on null directly. So long as we're casting it
     // to a pointer. Code like 32_floppy casts it to an int though; were we to
@@ -1410,7 +1410,7 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
 {
 
   if (is_symbol2t(a) && is_symbol2t(b)) {
-    if (to_symbol2t(a).get_symbol_name() == to_symbol2t(b).get_symbol_name())
+    if (a == b)
       return true_expr;
   } else if (is_index2t(a) && is_index2t(b)) {
     return obj_equals_addr_of(to_index2t(a).source_value,
