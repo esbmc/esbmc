@@ -61,14 +61,14 @@ public:
   struct entryt
   {
     object_mapt object_map;
-    irep_idt identifier;
+    std::string identifier;
     std::string suffix;
 
     entryt()
     {
     }
 
-    entryt(const irep_idt &_identifier, const std::string _suffix):
+    entryt(const std::string &_identifier, const std::string _suffix):
       identifier(_identifier),
       suffix(_suffix)
     {
@@ -153,7 +153,7 @@ public:
     values.clear();
   }
 
-  void add_var(const irep_idt &id, const std::string &suffix)
+  void add_var(const std::string &id, const std::string &suffix)
   {
     get_entry(id, suffix);
   }
@@ -163,7 +163,7 @@ public:
     get_entry(e.identifier, e.suffix);
   }
 
-  entryt &get_entry(const irep_idt &id, const std::string &suffix)
+  entryt &get_entry(const std::string &id, const std::string &suffix)
   {
     return get_entry(entryt(id, suffix));
   }

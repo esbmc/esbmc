@@ -829,7 +829,7 @@ void value_sett::assign_rec(
 
   if (is_symbol2t(lhs))
   {
-    irep_idt identifier = to_symbol2t(lhs).get_symbol_name();
+    std::string identifier = to_symbol2t(lhs).get_symbol_name();
     
     if(add_to_sets)
       make_union(get_entry(identifier, suffix).object_map, values_rhs);
@@ -960,7 +960,7 @@ void value_sett::do_function_call(
   for (std::vector<irep_idt>::const_iterator it = argument_names.begin();
       it != argument_names.end(); it++, it2++)
   {
-    const irep_idt &identifier = *it;
+    const std::string &identifier = it->as_string();
     if(identifier=="") continue;
 
     add_var(identifier, "");
