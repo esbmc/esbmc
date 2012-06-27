@@ -272,7 +272,7 @@ void value_sett::get_value_set_rec(
     }
 
     // look it up
-    valuest::const_iterator v_it = values.find(sym.get_symbol_name() + suffix);
+    valuest::const_iterator v_it = values.find(string_wrapper(sym.get_symbol_name() + suffix));
       
     if(v_it!=values.end())
     {
@@ -453,7 +453,7 @@ void value_sett::get_value_set_rec(
     const std::string name = "value_set::dynamic_object" + idnum + suffix;
   
     // look it up
-    valuest::const_iterator v_it=values.find(name);
+    valuest::const_iterator v_it=values.find(string_wrapper(name));
 
     if(v_it!=values.end())
     {

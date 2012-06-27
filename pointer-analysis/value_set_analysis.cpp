@@ -217,8 +217,7 @@ void value_set_analysist::convert(
         v_it++)
     {
       xmlt &var=i.new_element("variable");
-      var.new_element("identifier").data=
-        id2string(v_it->first);
+      var.new_element("identifier").data = v_it->first.the_string;
 
       #if 0      
       const value_sett::expr_sett &expr_set=

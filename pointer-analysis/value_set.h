@@ -75,7 +75,7 @@ public:
     }
   };
 
-  typedef hash_map_cont<irep_idt, entryt, dstring_hash> valuest;
+  typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
 
 //********************************** Methods ***********************************
 
@@ -138,9 +138,9 @@ public:
     return insert(dest, object_numbering.number(expr), object);
   }
 
-  bool erase(irep_idt name)
+  bool erase(const std::string &name)
   {
-    return (values.erase(name) == 1);
+    return (values.erase(string_wrapper(name)) == 1);
   }
 
   void get_value_set(
@@ -173,7 +173,8 @@ public:
     std::string index=id2string(e.identifier)+e.suffix;
 
     std::pair<valuest::iterator, bool> r=
-      values.insert(std::pair<irep_idt, entryt>(index, e));
+      values.insert(std::pair<string_wrapper, entryt>
+                             (string_wrapper(index), e));
 
     return r.first->second;
   }
