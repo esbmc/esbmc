@@ -483,11 +483,10 @@ void dereferencet::valid_check(
   {
     // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
     // making dereferencet persistent.
-    if (has_prefix(to_symbol2t(symbol).get_symbol_name(),
-                   "symex::invalid_object"))
+    if (has_prefix(to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
       return;
 
-    if (dereference_callback.is_valid_object(to_symbol2t(symbol).get_symbol_name()))
+    if (dereference_callback.is_valid_object(to_symbol2t(symbol).thename))
       return; // always ok
   }
 }
