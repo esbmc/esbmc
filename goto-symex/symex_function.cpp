@@ -143,7 +143,7 @@ void
 goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
-  const irep_idt &identifier = to_symbol2t(call.function).get_symbol_name();
+  const irep_idt &identifier = to_symbol2t(call.function).thename;
 
   // find code in function map
 
