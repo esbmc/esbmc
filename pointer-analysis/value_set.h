@@ -150,10 +150,6 @@ public:
     value_setst::valuest &dest,
     const namespacet &ns) const;
 
-  expr_sett &get(
-    const irep_idt &identifier,
-    const std::string &suffix);
-
   void make_any()
   {
     values.clear();
