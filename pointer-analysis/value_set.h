@@ -31,6 +31,7 @@ public:
   static object_numberingt object_numbering;
 
   typedef irep_idt idt;
+  typedef std::set<expr2tc> expr_sett;
 
   class objectt
   {
@@ -57,9 +58,28 @@ public:
     const static object_map_dt empty;
   };
 
-  expr2tc to_expr(object_map_dt::const_iterator it) const;
-
   typedef reference_counting<object_map_dt> object_mapt;
+
+  struct entryt
+  {
+    object_mapt object_map;
+    idt identifier;
+    std::string suffix;
+
+    entryt()
+    {
+    }
+
+    entryt(const idt &_identifier, const std::string _suffix):
+      identifier(_identifier),
+      suffix(_suffix)
+    {
+    }
+  };
+
+  typedef hash_map_cont<idt, entryt, dstring_hash> valuest;
+
+  expr2tc to_expr(object_map_dt::const_iterator it) const;
 
   void set(object_mapt &dest, object_map_dt::const_iterator it) const
   {
@@ -123,28 +143,7 @@ public:
     return (values.erase(name) == 1);
   }
 
-  struct entryt
-  {
-    object_mapt object_map;
-    idt identifier;
-    std::string suffix;
-
-    entryt()
-    {
-    }
-
-    entryt(const idt &_identifier, const std::string _suffix):
-      identifier(_identifier),
-      suffix(_suffix)
-    {
-    }
-  };
-
-  typedef std::set<expr2tc> expr_sett;
-
   static void add_objects(const entryt &src, expr_sett &dest);
-
-  typedef hash_map_cont<idt, entryt, dstring_hash> valuest;
 
   void get_value_set(
     const expr2tc &expr,
