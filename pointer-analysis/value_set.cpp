@@ -256,7 +256,7 @@ void value_sett::get_value_set_rec(
   {
     const symbol2t &sym = to_symbol2t(expr);
 
-    if (sym.get_symbol_name() == "NULL" && is_pointer_type(expr->type))
+    if (sym.thename == "NULL" && is_pointer_type(expr->type))
     {
       // XXXjmorse - looks like there's no easy way to avoid this ns.follow
       // for getting the null objects type, without an internal pointer
