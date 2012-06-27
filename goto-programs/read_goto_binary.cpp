@@ -27,5 +27,5 @@ void read_goto_binary(
   goto_functionst &dest,
   message_handlert &message_handler)
 {
-  read_bin_goto_object(in, "", context, dest, message_handler);
+//  read_bin_goto_object(in, "", context, dest, message_handler);
 }

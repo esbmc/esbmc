@@ -393,7 +393,6 @@ void string_instrumentationt::do_snprintf(
   assertion->location.comment("snprintf buffer overflow");
   assertion->local_variables=target->local_variables;
 
-
   exprt bufsize = buffer_size(arguments[0]);
   assertion->make_assertion(binary_relation_exprt(bufsize, ">=", arguments[1]));
 

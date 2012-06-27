@@ -228,6 +228,6 @@ void convert( const irept &irep, goto_programt &program )
       }
     }
   }
-  
+
   program.update();
 }
