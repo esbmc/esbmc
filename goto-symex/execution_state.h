@@ -83,11 +83,7 @@ class execution_statet : public goto_symext
    *  Default copy constructor.
    *  Used each time we duplicate an execution_statet in reachability_treet.
    *  Does what you might expect, but also updates any ex_state_level2t objects
-   *  in the new execution_statet to point at the right object. It also takes a
-   *  snapshot of the current string pool state - this is so that when we
-   *  finish all exploration proceeding from this state, we can free the
-   *  contents of the string pool that are no-longer needed.
-   */
+   *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
   execution_statet &operator=(const execution_statet &ex);
 
@@ -486,8 +482,6 @@ class execution_statet : public goto_symext
   protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
-  /** Snapshot of global string pool. @see dfs_execution_statet */
-  string_containert::str_snapshot str_state;
 
   // Static stuff:
 
@@ -534,8 +528,7 @@ class dfs_execution_statet : public execution_statet
 /**
  *  Execution state class for --schedule exploration.
  *  Provides additional storage for tracking the number of claims that have
- *  been made, and doesn't either reset the string pool snapshot or delete the
- *  trace/equation on destruction.
+ *  been made, doesn't delete the trace/equation on destruction.
  */
 
 class schedule_execution_statet : public execution_statet

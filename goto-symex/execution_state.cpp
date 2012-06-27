@@ -82,8 +82,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
-
-  str_state = string_container.take_state_snapshot();
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
@@ -104,12 +102,6 @@ execution_statet::execution_statet(const execution_statet &ex) :
 
   // Reassign which state is currently being worked on.
   cur_state = &threads_state[active_thread];
-
-  // Take another snapshot to represent what string state was
-  // like when we began the exploration this execution_statet will
-  // perform.
-  str_state = string_container.take_state_snapshot();
-
 }
 
 execution_statet&
@@ -886,10 +878,6 @@ dfs_execution_statet::~dfs_execution_statet(void)
 {
 
   delete target;
-
-  // Free all name strings and suchlike we generated on this run
-  // and no longer require
-  string_container.restore_state_snapshot(str_state);
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const
@@ -910,7 +898,7 @@ dfs_execution_statet::dfs_execution_statet(const dfs_execution_statet &ref)
 
 schedule_execution_statet::~schedule_execution_statet(void)
 {
-  // Don't delete equation or snapshot state. Schedule requires all this data.
+  // Don't delete equation. Schedule requires all this data.
 }
 
 schedule_execution_statet* schedule_execution_statet::clone(void) const
