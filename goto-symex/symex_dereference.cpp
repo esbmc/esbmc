@@ -70,12 +70,11 @@ bool symex_dereference_statet::has_failed_symbol(
   if (is_symbol2t(expr))
   {
     // Null and invalid name lookups will fail.
-    if (to_symbol2t(expr).get_symbol_name() == "NULL" ||
-        to_symbol2t(expr).get_symbol_name() == "INVALID")
+    if (to_symbol2t(expr).thename == "NULL" ||
+        to_symbol2t(expr).thename == "INVALID")
       return false;
 
-    const symbolt &ptr_symbol =
-      renaming_ns.lookup(to_symbol2t(expr).get_symbol_name());
+    const symbolt &ptr_symbol = renaming_ns.lookup(to_symbol2t(expr).thename);
 
     const irep_idt &failed_symbol=
       ptr_symbol.type.failed_symbol();
