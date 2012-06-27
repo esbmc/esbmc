@@ -143,7 +143,7 @@ void
 goto_symext::symex_function_call_code(const expr2tc &expr)
 {
   const code_function_call2t &call = to_code_function_call2t(expr);
-  const irep_idt &identifier = to_symbol2t(call.function).name;
+  const irep_idt &identifier = to_symbol2t(call.function).thename;
 
   // find code in function map
 
@@ -212,7 +212,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // copy L1 renaming from previous frame
   frame.level1 = cur_state->previous_frame().level1;
-  frame.level1._thread_id = cur_state->source.thread_nr;
+  frame.level1.thread_id = cur_state->source.thread_nr;
 
   unsigned &frame_nr = cur_state->function_frame[identifier];
   frame_nr++;
@@ -307,8 +307,8 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
 
   // Match the two varieties of failed symbol we can encounter,
   if (is_symbol2t(func_ptr) && (
-   has_prefix(to_symbol2t(func_ptr).name.as_string(), "symex::invalid_object")||
-   to_symbol2t(func_ptr).name.as_string().find("$object") != std::string::npos))
+   has_prefix(to_symbol2t(func_ptr).thename.as_string(), "symex::invalid_object") ||
+   to_symbol2t(func_ptr).thename.as_string().find("$object") !=std::string::npos))
   {
 
     // Emit warning; perform no function call behaviour. Increment PC
@@ -326,10 +326,10 @@ goto_symext::symex_function_call_deref(const expr2tc &expr)
        it != l.end(); it++) {
 
     goto_functionst::function_mapt::const_iterator fit =
-      goto_functions.function_map.find(it->second->name);
+      goto_functions.function_map.find(it->second->thename);
     if (fit == goto_functions.function_map.end() ||
         !fit->second.body_available) {
-      std::cerr << "Couldn't find symbol " << it->second->name;
+      std::cerr << "Couldn't find symbol " << it->second->get_symbol_name();
       std::cerr << " or body not available, during function ptr dereference";
       std::cerr << std::endl;
       abort();
@@ -428,8 +428,12 @@ goto_symext::pop_frame(void)
       it!=frame.local_variables.end();
       it++) {
     cur_state->level2.remove(*it);
-    irep_idt orig_name = cur_state->level2.get_original_name(*it);
-    cur_state->value_set.erase(orig_name);
+
+    // Construct an l1 name on the fly - this is a temporary hack for when
+    // the value set is storing things in a not-an-irep-idt form.
+    expr2tc tmp_expr(new symbol2t(type_pool.get_empty(), it->base_name,
+                                  it->lev, it->l1_num, 0, it->t_num, 0));
+    cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
 
   // decrease recursion unwinding counter
@@ -466,9 +470,11 @@ goto_symext::locality(unsigned frame_nr,
        it != local_identifiers.end();
        it++)
   {
-    frame.level1.rename(*it, frame_nr);
-    irep_idt l1_name = frame.level1.get_ident_name(*it);
-    frame.local_variables.insert(l1_name);
+    // Temporary, for symbol migration,
+    expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+    frame.level1.rename(tmp_sym, frame_nr);
+    frame.level1.get_ident_name(tmp_sym);
+    frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));
   }
 }
 

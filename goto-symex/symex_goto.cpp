@@ -105,29 +105,25 @@ goto_symext::symex_goto(const expr2tc &old_guard)
         (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value))) {
       guard_expr = new_guard;
     } else {
-      guard_expr =
-        expr2tc(new symbol2t(type_pool.get_bool(), guard_identifier()));
+      guard_expr = guard_identifier();
 
       expr2tc new_rhs = new_guard;
       new_rhs = expr2tc(new not2t(new_rhs));
       do_simplify(new_rhs);
 
-      expr2tc new_lhs = guard_expr;
-
-      cur_state->assignment(new_lhs, new_rhs, false);
+      cur_state->assignment(guard_expr, new_rhs, false);
 
       guardt guard;
 
       target->assignment(
         guard.as_expr(),
-        new_lhs, guard_expr,
+        guard_expr, guard_expr,
         new_rhs,
         cur_state->source,
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
       guard_expr = expr2tc(new not2t(guard_expr));
-      cur_state->rename(guard_expr);
     }
 
     expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
@@ -196,12 +192,12 @@ void
 goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
-  std::set<irep_idt> variables;
+  std::set<renaming::level2t::name_record> variables;
 
   goto_state.level2.get_variables(variables);
   cur_state->level2.get_variables(variables);
 
-  for (std::set<irep_idt>::const_iterator
+  for (std::set<renaming::level2t::name_record>::const_iterator
        it = variables.begin();
        it != variables.end();
        it++)
@@ -210,14 +206,13 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
         cur_state->level2.current_number(*it))
       continue;  // not changed
 
-    if (*it == guard_identifier())
+    if (it->base_name == guard_identifier_s)
       continue;  // just a guard
 
-    irep_idt original_identifier = cur_state->get_original_name(*it);
     try
     {
       // changed!
-      const symbolt &symbol = ns.lookup(original_identifier);
+      const symbolt &symbol = ns.lookup(it->base_name);
 
       type2tc type;
       typet old_type = symbol.type;
@@ -226,22 +221,21 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       expr2tc rhs;
 
       if (cur_state->guard.is_false()) {
-        std::string name = cur_state->current_name(goto_state, symbol.name);
-        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
+        rhs = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, rhs);
       } else if (goto_state.guard.is_false())    {
-        std::string name = cur_state->current_name(symbol.name);
-        rhs = expr2tc(new symbol2t(type, irep_idt(name)));
+        rhs = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, rhs);
       } else   {
 	guardt tmp_guard(goto_state.guard);
 
 	// this gets the diff between the guards
 	tmp_guard -= cur_state->guard;
 
-	expr2tc true_val =
-          expr2tc(new symbol2t(type,
-                             cur_state->current_name(goto_state, symbol.name)));
-        expr2tc false_val = expr2tc(new symbol2t(type,
-                                         cur_state->current_name(symbol.name)));
+	expr2tc true_val = expr2tc(new symbol2t(type, symbol.name));
+	expr2tc false_val = expr2tc(new symbol2t(type, symbol.name));
+        cur_state->current_name(goto_state, true_val);
+        cur_state->current_name(false_val);
         rhs = expr2tc(new if2t(type, tmp_guard.as_expr(), true_val, false_val));
       }
 

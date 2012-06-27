@@ -77,7 +77,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   if (is_constant_expr(expr)) {
     return true;
   }
-  else if (is_symbol2t(expr) && to_symbol2t(expr).name == "NULL")
+  else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
   {
     // Null is also essentially a constant.
     return true;
@@ -176,11 +176,15 @@ void goto_symex_statet::assignment(
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
 
-  const irep_idt &identifier = lhs_sym.name;
-
   // identifier should be l0 or l1, make sure it's l1
 
-  const std::string l1_identifier=top().level1.get_ident_name(identifier);
+  assert(lhs_sym.rlevel != symbol2t::level2 &&
+         lhs_sym.rlevel != symbol2t::level2_global);
+
+  if (lhs_sym.rlevel == symbol2t::level0)
+    top().level1.get_ident_name(lhs);
+
+  expr2tc l1_lhs = lhs;
 
   expr2tc const_value;
   if(record_value && constant_propagation(rhs))
@@ -188,16 +192,13 @@ void goto_symex_statet::assignment(
   else
     const_value = expr2tc();
 
-  irep_idt new_name = level2.make_assignment(l1_identifier, const_value, rhs);
-  lhs_sym.name = new_name;
+  level2.make_assignment(lhs, const_value, rhs);
 
   if(use_value_set)
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
-
-    expr2tc l1_lhs = expr2tc(new symbol2t(lhs_sym.type, l1_identifier));
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
@@ -261,14 +262,6 @@ void goto_symex_statet::get_original_name(expr2tc &expr) const
     level2.get_original_name(expr);
     top().level1.get_original_name(expr);
   }
-}
-
-const irep_idt goto_symex_statet::get_original_name(
-  const irep_idt &identifier) const
-{
-
-  return top().level1.get_original_name(
-         level2.get_original_name(identifier));
 }
 
 void goto_symex_statet::print_stack_trace(unsigned int indent) const

@@ -83,11 +83,7 @@ class execution_statet : public goto_symext
    *  Default copy constructor.
    *  Used each time we duplicate an execution_statet in reachability_treet.
    *  Does what you might expect, but also updates any ex_state_level2t objects
-   *  in the new execution_statet to point at the right object. It also takes a
-   *  snapshot of the current string pool state - this is so that when we
-   *  finish all exploration proceeding from this state, we can free the
-   *  contents of the string pool that are no-longer needed.
-   */
+   *  in the new execution_statet to point at the right object. */
   execution_statet(const execution_statet &ex);
   execution_statet &operator=(const execution_statet &ex);
 
@@ -115,7 +111,7 @@ class execution_statet : public goto_symext
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
-    virtual void rename(const irep_idt &identifier, unsigned count);
+    virtual void rename(expr2tc &lhs_symbol, unsigned count);
     virtual void rename(expr2tc &identifier);
 
     execution_statet *owner;
@@ -132,7 +128,7 @@ class execution_statet : public goto_symext
     state_hashing_level2t(execution_statet &ref);
     virtual ~state_hashing_level2t(void);
     virtual state_hashing_level2t *clone(void) const;
-    virtual irep_idt make_assignment(irep_idt l1_ident,
+    virtual void make_assignment(expr2tc &lhs_symbol,
                                      const expr2tc &const_value,
                                      const expr2tc &assigned_value);
     crypto_hash generate_l2_state_hash() const;
@@ -293,10 +289,9 @@ class execution_statet : public goto_symext
    *  The execution guard being the guard of the interleavings up to this point
    *  being true and feasable. This is a symbolic name for it.
    *  @see execute_guard
-   *  @return Name of current execution state guard
+   *  @return Symbol of current execution state guard
    */
-
-  irep_idt get_guard_identifier();
+  expr2tc get_guard_identifier();
 
   /**
    *  Get reference to current thread state.
@@ -487,8 +482,6 @@ class execution_statet : public goto_symext
   protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
-  /** Snapshot of global string pool. @see dfs_execution_statet */
-  string_containert::str_snapshot str_state;
 
   // Static stuff:
 
@@ -535,8 +528,7 @@ class dfs_execution_statet : public execution_statet
 /**
  *  Execution state class for --schedule exploration.
  *  Provides additional storage for tracking the number of claims that have
- *  been made, and doesn't either reset the string pool snapshot or delete the
- *  trace/equation on destruction.
+ *  been made, doesn't delete the trace/equation on destruction.
  */
 
 class schedule_execution_statet : public execution_statet

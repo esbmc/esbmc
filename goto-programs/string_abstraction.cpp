@@ -299,7 +299,7 @@ void string_abstractiont::abstract(irep_idt name,
       is_char_type(to_pointer_type(ret_type).subtype)) {
     code_typet::argumentt new_arg;
 
-    type2tc fintype = type2tc(new pointer_type2t(string_struct));
+    type2tc fintype = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
     new_args.push_back(fintype);
     new_arg_names.push_back(name.as_string() + "::__strabs::returned_str\\str");
 
@@ -763,12 +763,12 @@ expr2tc string_abstractiont::build_symbol_ptr(const expr2tc &object)
     obj = to_member2t(obj).source_value;
   }
 
-  if (!is_symbol2t(obj) || to_symbol2t(obj).name == "NULL")
+  if (!is_symbol2t(obj) || to_symbol2t(obj).get_symbol_name() == "NULL")
     return expr2tc();
 
   const symbol2t &expr_symbol = to_symbol2t(obj);
 
-  const symbolt &symbol = ns.lookup(expr_symbol.name);
+  const symbolt &symbol = ns.lookup(expr_symbol.get_symbol_name());
   irep_idt identifier = symbol.name.as_string() + suffix;
 
   type2tc type = type2tc(new pointer_type2t(string_struct));
@@ -939,7 +939,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
     const symbol2t &expr_symbol = to_symbol2t(idx.source_value);
     const array_type2t &arr_type = to_array_type(expr_symbol.type);
 
-    const symbolt &symbol = ns.lookup(expr_symbol.name);
+    const symbolt &symbol = ns.lookup(expr_symbol.get_symbol_name());
     std::string suffix="\\str_array";
     irep_idt identifier=id2string(symbol.name)+suffix;
 
@@ -1021,7 +1021,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 
   const symbol2t thesym = to_symbol2t(p);
 
-  const symbolt &symbol = ns.lookup(thesym.name);
+  const symbolt &symbol = ns.lookup(thesym.get_symbol_name());
   irep_idt identifier=id2string(symbol.name) + suffix;
 
   if(context.symbols.find(identifier)==
@@ -1390,7 +1390,7 @@ void string_abstractiont::abstract_function_call(
     return;
 
   symbolst::const_iterator f_it = 
-    context.symbols.find(to_symbol2t(call.function).name);
+    context.symbols.find(to_symbol2t(call.function).get_symbol_name());
   if(f_it==context.symbols.end())
     // XXXjmorse - handle function pointer strabs at symex time?
     return;

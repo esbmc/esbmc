@@ -82,9 +82,9 @@ goto_trace_stept::output(
     irep_idt identifier;
 
     if (!is_nil_expr(original_lhs))
-      identifier = to_symbol2t(original_lhs).name;
+      identifier = to_symbol2t(original_lhs).get_symbol_name();
     else
-      identifier = to_symbol2t(lhs).name;
+      identifier = to_symbol2t(lhs).get_symbol_name();
 
     out << "  " << identifier
         << " = " << from_expr(ns, identifier, value)
@@ -110,7 +110,7 @@ counterexample_value(
   std::ostream &out, const namespacet &ns, const expr2tc &lhs,
   const expr2tc &value)
 {
-  const irep_idt &identifier = to_symbol2t(lhs).name;
+  const irep_idt &identifier = to_symbol2t(lhs).get_symbol_name();
   std::string value_string;
 
   if (is_nil_expr(value))
@@ -167,9 +167,9 @@ show_goto_trace_gui(
       irep_idt identifier;
 
       if (!is_nil_expr(it->original_lhs))
-	identifier = to_symbol2t(it->original_lhs).name;
+	identifier = to_symbol2t(it->original_lhs).get_symbol_name();
       else
-	identifier = to_symbol2t(it->lhs).name;
+	identifier = to_symbol2t(it->lhs).get_symbol_name();
 
       std::string value_string = from_expr(ns, identifier, it->value);
 
@@ -269,7 +269,7 @@ get_metada_from_llvm(
     struct_type2t &struct_type =
       const_cast<struct_type2t&>(to_struct_type(it->original_lhs->type));
 
-    std::string ident = to_symbol2t(it->original_lhs).name.as_string();
+    std::string ident = to_symbol2t(it->original_lhs).get_symbol_name();
     std::string struct_name = ident.substr(ident.find_last_of(":") + 1);
 
     u_int i = 0, j = 0;
@@ -308,8 +308,8 @@ get_metada_from_llvm(
     //********************change indentifier***********************************/
     if (!is_nil_expr(it->original_lhs) && is_symbol2t(it->original_lhs)) {
       expr2tc &lhs = const_cast<expr2tc&>(it->original_lhs);
-      char identstr[to_symbol2t(it->original_lhs).name.as_string().size()];
-      strcpy(identstr, to_symbol2t(it->original_lhs).name.as_string().c_str());
+      char identstr[to_symbol2t(it->original_lhs).get_symbol_name().size()];
+      strcpy(identstr, to_symbol2t(it->original_lhs).get_symbol_name().c_str());
       int j = 0;
       char * tok;
       tok = strtok(identstr, "::");
@@ -327,7 +327,7 @@ get_metada_from_llvm(
 	tok = strtok(NULL, "::");
 	j++;
       }
-      to_symbol2t(lhs).name = irep_idt(newidentifier);
+      lhs = expr2tc(new symbol2t(lhs->type, irep_idt(newidentifier)));
     }
     //**********************************************************************/
 
