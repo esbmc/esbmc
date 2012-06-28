@@ -9,11 +9,12 @@
 
 namespace std
 {
-struct istream: ios
+class istream: virtual public ios
 {
+public:
   virtual ~istream ();
-  istream(int id = 0): ios(), id(id) {_gcount = 0;};
-  istream (streambuf * sb) {_gcount=0;};
+  istream(int _id = 0): id(_id) { ios();_gcount = 0;};
+  istream (streambuf * sb) {ios();_gcount=0;};
   int id;
   istream& ignore(int i = 1, int delim = EOF);
 
@@ -42,7 +43,7 @@ struct istream: ios
 
   int sync ( );
 
-  struct sentry {
+  class sentry {
 	  public:
 		explicit sentry ( istream& is, bool noskipws = false );
 		~sentry();
@@ -54,7 +55,6 @@ struct istream: ios
 
   static streamsize _gcount;
 
-private:
   istream(const istream&); // disabled
   istream& operator=(const istream&); // disabled
   streamsize _filesize = nondet_uint();
@@ -174,7 +174,7 @@ istream& istream::getline (char* s, streamsize n ) {
 	_gcount = n;
 	return *this;
 }
- istream& istream::getline (char* s, streamsize n, char delim ) {
+istream& istream::getline (char* s, streamsize n, char delim ) {
 	_gcount = n;
 	return *this;
  }

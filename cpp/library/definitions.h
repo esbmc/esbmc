@@ -31,7 +31,7 @@ float nondet_float();
 bool nondet_bool();
 char* nondet_charPointer();
 char nondet_char();
-struct smanip {};
+class smanip {};
 
 typedef unsigned int size_t;
 typedef int ptrdiff_t;

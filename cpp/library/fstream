@@ -11,7 +11,8 @@
 namespace std
 {
 
-struct filebuf: streambuf{
+class filebuf: public streambuf{
+public:
 	  filebuf () {_fileopen = false; _filesize = nondet_uint();}
 	  virtual ~filebuf ();
 
@@ -31,12 +32,14 @@ struct filebuf: streambuf{
 	  void close ( ) { _fileopen = false;}
 
 private:
-	  bool _fileopen = false;
-	  streamsize _filesize = nondet_uint();
-	  ios::streampos _filepos = 0;
+	  static bool _fileopen = false;
+	  static streamsize _filesize = nondet_uint();
+	  static ios::streampos _filepos = 0;
 };
 
-struct fstream: istream, ostream {
+class fstream: public istream, public ostream {
+
+public:
   fstream ();
   explicit fstream ( const char * filename,
                      openmode mode = in | out );
@@ -52,7 +55,8 @@ struct fstream: istream, ostream {
 //  ios::streampos _filepos = 0;
 };
 
-struct ofstream:  ostream, ios {
+class ofstream: public ostream {
+public:
   ofstream();
   explicit ofstream ( const char * filename, ios_base::openmode mode = ios_base::out );
   filebuf* rdbuf ( ) const;
@@ -65,13 +69,14 @@ struct ofstream:  ostream, ios {
   filebuf* _m_filebuf;
 };
 
-struct ifstream: istream{
+class ifstream: public istream{
+public:
   ifstream ( );
   explicit ifstream ( const char * filename, ios_base::openmode mode = ios_base::in );
   filebuf* rdbuf ( ) const;
   bool is_open ( );
   void open ( const char * filename, ios_base::openmode mode = ios_base::in );
-  void close ( );
+  void close();
 
   inline bool operator&& (bool other);
 
@@ -83,17 +88,17 @@ struct ifstream: istream{
 
 //=====================fstream===================
 fstream::fstream() {
+	istream(); ostream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
+	_m_filebuf = NULL;
 	ostream::_filesize = NULL;
 	ostream::_filepos = 0;
 }
 fstream::fstream ( const char * filename,
-  ios_base::openmode mode = ios_base::in | ios_base::out )
-  : istream(0), ostream(0)
-{
+  ios_base::openmode mode = ios_base::in | ios_base::out ) {
+	istream(); ostream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
+	_m_filebuf = NULL;
 	ostream::_filepos = 0;
 	this->open(filename, mode);
 }
@@ -119,16 +124,18 @@ void fstream::close ( ) {
 //=======================================================
 //===================ofstream============================
 ofstream::ofstream() {
+	ostream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
-	_filesize = NULL;
-	_filepos = 0;
+	_m_filebuf = NULL;//new filebuf;
+	ostream::_filesize = NULL;
+	ostream::_filepos = 0;
 }
 ofstream::ofstream ( const char * filename, ios_base::openmode mode = ios_base::out )
 {
+	ostream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
-	_filepos = 0;
+	_m_filebuf = NULL;//new filebuf;
+	ostream::_filepos = 0;
 	this->open(filename, mode);
 }
 filebuf* ofstream::rdbuf ( ) const {
@@ -140,28 +147,30 @@ bool ofstream::is_open ( ) {
 void ofstream::open ( const char * filename, ios_base::openmode mode) {
 //	__ESBMC_assert (!strcmp(filename,""),"Error! filename is empty");
 	__ESBMC_assert (_fileopen==false, "File is open");
-	_filesize = nondet_uint();
+	ostream::_filesize = nondet_uint();
 	if (_fileopen == true) setstate(ios_base::failbit);
 	else _fileopen = true;
 }
 void ofstream::close ( ) {
 	_fileopen = false;
-	_filesize = NULL;
-	_filepos = 0;
+	ostream::_filesize = NULL;
+	ostream::_filepos = 0;
 }
 //======================================================
 
 //===================ifstream============================
 ifstream::ifstream() {
+	istream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
+	_m_filebuf = NULL;//new filebuf;
 	_filesize = NULL;
 	_filepos = 0;
 }
 ifstream::ifstream ( const char * filename, ios_base::openmode mode = ios_base::in )
 {
+	istream();
 	_fileopen = false;
-	_m_filebuf = new filebuf;
+	_m_filebuf = NULL;//new filebuf;
 	_filepos = 0;
 	this->open(filename, mode);
 }
