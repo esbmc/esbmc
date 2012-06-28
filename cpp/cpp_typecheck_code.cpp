@@ -78,7 +78,7 @@ void cpp_typecheckt::typecheck_catch(codet &code)
     typet &catch_type = block.op0().op0().op0().type();
     if(catch_type.get_bool("#reference"))
     {
-      typet catch_type_nil;
+      typet catch_type_nil("nil");
       block.op0().op0().op0().type().swap(catch_type_nil);
     }
 
