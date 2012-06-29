@@ -752,44 +752,6 @@ static inline std::string get_expr_id(const expr2tc &expr)
   return get_expr_id(*expr);
 }
 
-class expr_hash_record {
-public:
-  expr_hash_record(const expr2tc &ref) : expr(ref), hash(ref->crc()) { }
-
-  bool operator<(const expr_hash_record &ref) const
-  {
-    if (hash < ref.hash)
-      return true;
-    else if (hash > ref.hash)
-      return false;
-
-    if (expr < ref.expr)
-      return true;
-    return false;
-  }
-
-  bool operator==(const expr_hash_record &ref) const
-  {
-    if (hash != ref.hash)
-      return false;
-
-    if (expr != ref.expr)
-      return false;
-
-    return true;
-  }
-
-  expr2tc expr;
-  size_t hash;
-};
-
-class expr_record_hash
-{
-public:
-  size_t operator()(const expr_hash_record &ref) const {return ref.hash;}
-  bool operator()(const expr_hash_record &ref, const expr_hash_record &ref2) const {return ref.expr < ref2.expr;}
-};
-
 /** A namespace for "ESBMC templates".
  *  This means anything designed to mess with expressions or types declared in
  *  this header, via the medium of templates. */
