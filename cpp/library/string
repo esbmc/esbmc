@@ -1514,13 +1514,18 @@ namespace std
 		__ESBMC_assert( c != NULL, "The parameter must to be different than NULL");
 	    int rhsLen = n;
 	    int totalLen = this->_size + rhsLen;
-	    string temp(totalLen);
+	    char* temp = new char[totalLen+1];
 	    int i, j, k;
+
 	    for (i=0; i<this->_size; i++)
 	        temp[i] = this->str[i];
-	    for(j=i, k=0; j<temp._size; j++, k++)
-	    	temp.str[j] = c;
-	    *this = temp;
+
+	    for(k=0; i<totalLen; i++, k++)
+	    	temp[i] = c;
+	    temp[i] = '\0';
+
+	    string tmp(temp);
+	    *this = tmp;
 	    return *this;
 	}
 
