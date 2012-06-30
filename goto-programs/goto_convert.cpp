@@ -1625,7 +1625,8 @@ void goto_convertt::convert_for(
   // do the t label
   if(inductive_step)
   {
-    assert(cond.operands().size()==2);
+    //std::cout << cond.pretty() << std::endl;
+    //assert(cond.operands().size()==2);
     get_struct_components(cond, state);
     get_struct_components(code.op3(), state);
     make_nondet_assign(dest);
@@ -2130,7 +2131,7 @@ void goto_convertt::replace_cond(
   
   if (tmp.is_true())
   {
-    replace_infinite_loop(tmp, dest);
+    //replace_infinite_loop(tmp, dest);
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
@@ -2360,7 +2361,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (base_case /*|| inductive_step*/)
+  if (base_case || (inductive_step && tmp.is_true()))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
