@@ -39,6 +39,7 @@ CXXFLAGS+= -I$(MINGWROOTDIR)/include -DWINVER=0x0501
 CXXFLAGS += -Wall -Wextra -Wno-deprecated
 GCCFLAGS += -Wall -Wextra -Wno-deprecated
 OPTS ?= -O3
+DEPCXX = $(CXX)
 
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
