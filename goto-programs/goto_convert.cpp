@@ -1932,6 +1932,7 @@ void goto_convertt::assume_cond(
   const bool &neg,
   goto_programt &dest)
 {
+  //std::cout << "cond.pretty(): " << cond.pretty() << std::endl;
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   exprt result_expr = cond;
@@ -1966,7 +1967,6 @@ void goto_convertt::assert_cond(
   e->guard.swap(result_expr);
   dest.destructive_append(tmp_e);
 }
-
 
 /*******************************************************************\
 
@@ -2361,7 +2361,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (base_case || (inductive_step && tmp.is_true()))
+  if (base_case || (inductive_step && cond.id()!="and"))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
