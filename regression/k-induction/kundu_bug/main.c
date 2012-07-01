@@ -11,7 +11,6 @@ void error(void)
 
 void immediate_notify(void) ;
 int max_loop ;
-int clk ;
 int num ;
 int i  ;
 int e  ;
@@ -105,74 +104,6 @@ int is_P_1_triggered(void)
   {
   if ((int )P_1_pc == 1) {
     if ((int )P_1_ev == 1) {
-      __retres1 = 1;
-      goto return_label;
-    } else {
-
-    }
-  } else {
-
-  }
-  __retres1 = 0;
-  return_label: /* CIL Label */ 
-  return (__retres1);
-}
-}
-int P_2_pc  ;
-int P_2_st  ;
-int P_2_i  ;
-int P_2_ev  ;
-void P_2(void) 
-{ 
-
-  {
-  if ((int )P_2_pc == 0) {
-    goto P_2_ENTRY_LOC;
-  } else {
-    if ((int )P_2_pc == 1) {
-      goto P_2_WAIT_LOC;
-    } else {
-
-    }
-  }
-  P_2_ENTRY_LOC: 
-  {
-  while (i < max_loop) {
-    while_1_continue: /* CIL Label */ ;
-    {
-    write_data(num, 'B');
-    num += 1;
-    }
-    if (timer) {
-      {
-      timer = 0;
-      e = 1;
-      immediate_notify();
-      e = 2;
-      }
-    } else {
-
-    }
-    P_2_pc = 1;
-    P_2_st = 2;
-
-    goto return_label;
-    P_2_WAIT_LOC: ;
-  }
-  while_1_break: /* CIL Label */ ;
-  }
-  P_2_st = 2;
-
-  return_label: /* CIL Label */ 
-  return;
-}
-}
-int is_P_2_triggered(void) 
-{ int __retres1 ;
-
-  {
-  if ((int )P_2_pc == 1) {
-    if ((int )P_2_ev == 1) {
       __retres1 = 1;
       goto return_label;
     } else {
@@ -295,11 +226,6 @@ void init_threads(void)
   } else {
     P_1_st = 2;
   }
-  if ((int )P_2_i == 1) {
-    P_2_st = 0;
-  } else {
-    P_2_st = 2;
-  }
   if ((int )C_1_i == 1) {
     C_1_st = 0;
   } else {
@@ -317,10 +243,6 @@ int exists_runnable_thread(void)
     __retres1 = 1;
     goto return_label;
   } else {
-    if ((int )P_2_st == 0) {
-      __retres1 = 1;
-      goto return_label;
-    } else {
       if ((int )C_1_st == 0) {
         __retres1 = 1;
         goto return_label;
@@ -333,7 +255,7 @@ int exists_runnable_thread(void)
   return_label: /* CIL Label */ 
   return (__retres1);
 }
-}
+
 void eval(void) 
 { int tmp ;
   int tmp___0 ;
@@ -361,21 +283,6 @@ void eval(void)
         {
         P_1_st = 1;
         P_1();
-        }
-      } else {
-
-      }
-    } else {
-
-    }
-    if ((int )P_2_st == 0) {
-      {
-      tmp___0 = __VERIFIER_nondet_int();
-      }
-      if (tmp___0) {
-        {
-        P_2_st = 1;
-        P_2();
         }
       } else {
 
@@ -427,18 +334,8 @@ void fire_time_events(void)
   {
   C_1_ev = 1;
   
-  if (clk == 1) {
-
-    P_1_ev = 1;
-    P_2_ev = 1;
-
-    clk = 0;
+  P_1_ev = 1;
   
-  } else {
-    {
-      clk = clk + 1;
-    }
-  }
 
 
 
@@ -451,11 +348,6 @@ void reset_time_events(void)
   {
   if ((int )P_1_ev == 1) {
     P_1_ev = 2;
-  } else {
-
-  }
-  if ((int )P_2_ev == 1) {
-    P_2_ev = 2;
   } else {
 
   }
@@ -479,14 +371,6 @@ void activate_threads(void)
   }
   if (tmp) {
     P_1_st = 0;
-  } else {
-
-  }
-  {
-  tmp___0 = is_P_2_triggered();
-  }
-  if (tmp___0) {
-    P_2_st = 0;
   } else {
 
   }
@@ -596,7 +480,6 @@ void init_model(void)
 
   {
   P_1_i = 1;
-  P_2_i = 1;
   C_1_i = 1;
 
   return;
@@ -610,12 +493,10 @@ int main(void)
   {
   num  =    0;
   i  =    0;
-  clk = 0;
-  max_loop = 8;
+  max_loop = 2;
   e  ;
   timer  =    0;
   P_1_pc  =    0;
-  P_2_pc  =    0;
   C_1_pc  =    0;
 
   count = 0;

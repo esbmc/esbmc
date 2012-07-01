@@ -31,6 +31,7 @@ namespace std
 		class iterator{
 		public:
 				char* pointer;
+				char* it_str;
 				int pos;
 
 				iterator(iterator& i){
@@ -85,6 +86,7 @@ namespace std
 					iterator buffer;
 					buffer.pointer = pointer + sizeof(char)*n;
 					buffer.pos = pos + n;
+					buffer.it_str = it_str;
 					return buffer;
 				}
 
@@ -400,13 +402,52 @@ namespace std
 		string& assign ( string& s, size_t pos = 0, size_t n );
 		string& assign ( const char* s );
 		string& assign ( size_t n, char c );
-		string& assign ( const_iterator one, const_iterator two );
+		string& assign ( iterator one, iterator two )
+		{
+			__ESBMC_HIDE:
+			char* s = one.it_str;
+			int pos = one.pos;
+			int n = two.pos,i,k;
+			//__ESBMC_assert( (pos >= 0) && (pos < s.length()) && ((pos+n) < s.length()) && (n > 0), "string overflow");
+			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
+			this->_size=n-pos+1;
+			this->str=new char[this->_size+1];
+			for(k=0,i=pos;i<=n;i++,k++)
+				this->str[k] = s[i];
+			this->str[k] = '\0';
+			return *this;
+		}
 		string& append ( string& s );
 		string& append ( const char* s, size_t n );
 		string& append ( string& s, size_t pos, size_t n );
 		string& append ( const char* s );
 		string& append ( size_t n, char c );
-		string& append ( const_iterator one, const_iterator two );
+		string& append ( iterator one, iterator two )
+		{
+			__ESBMC_HIDE:
+			char * s = one.it_str;
+			int sLen = strlen(s);
+			int pos = one.pos;
+			int n = two.pos;
+			__ESBMC_assert( pos >= 0, "string overflow");
+			__ESBMC_assert( pos < sLen, "string overflow");
+			__ESBMC_assert( n <= sLen, "string overflow");
+			__ESBMC_assert(n > 0, "string overflow");
+			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
+			if( (pos > sLen) || (n > (sLen-pos)) )
+				throw("out_of_range");
+
+		    int rhsLen = n;
+		    int totalLen = this->_size + rhsLen;
+		    string temp(totalLen);
+		    int i, j, k;
+		    for (i=0; i<this->_size; i++)
+		        temp[i] = this->str[i];
+		    for(j=i, k=pos; j<temp._size; j++, k++)
+		    	temp.str[j] = s[k];
+		    *this = temp;
+		    return *this;
+		}
 		void swap ( string& s );
 		void resize ( size_t n, char c );
 		void resize ( size_t n );
@@ -507,7 +548,45 @@ namespace std
 		string& insert ( size_t pos1, const char* s, size_t n);
 		string& insert ( size_t pos1, const char* s );
 		string& insert ( size_t pos1, size_t n, char c );
-		string& insert (iterator it_one, iterator it_two , iterator it_three);
+		string& insert (iterator it_one, iterator it_two , iterator it_three)
+		{
+			__ESBMC_HIDE:
+			int pos1 = it_one.pos;
+			char* s = it_two.pointer;
+			int n = it_three.pos;
+			int len  = this->length(),i,k;
+			int lim = n;
+			int sLen = strlen(s);
+			__ESBMC_assert( (pos1 >= 0) && (pos1 < len) , "string overflow");
+			__ESBMC_assert( n > 0 , "string overflow");
+			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
+			__ESBMC_assert( lim < sLen, "string overflow");
+			int lenOne = pos1 +1;
+			char* one = new char[lenOne];
+			for(i=0;i<pos1;i++){
+				one[i] = this->str[i];
+			}
+			int lenTwo = (len-pos1)+1;
+			char* two = new char[lenTwo];
+			for(k=0,i=pos1;i<len;i++,k++){
+				two[k] = this->str[i];
+			}
+			int totalLen = n + len;
+			this->str = new char[totalLen+1];
+			this->_size = totalLen;
+
+			for(i=0;i<lenOne-1;i++){
+				this->str[i] = one[i];
+			}
+			for(k=0;k<lim;k++,i++){
+				this->str[i] = s[k];
+			}
+			for(k=0;k<lenTwo-1;k++,i++){
+				this->str[i] = two[k];
+			}
+			this->str[i] = '\0';
+			return *this;
+		}
 		iterator insert ( iterator p, char c )
 		{
 			__ESBMC_assert(p.pos >= 0, "The first parameter must to be greater than zero");
@@ -547,7 +626,7 @@ namespace std
 			}
 			this->str[i] = '\0';
 			string::iterator it(this->str);
-			it.pos = 0;
+			it.pos = p.pos;
 			return it;
 		}
 		string& insert ( const_iterator p, size_t n, char c )
@@ -648,8 +727,10 @@ namespace std
 		}
 
 	    string::iterator& begin() const{
-	    	    	string::iterator first(this->str);
+	    	    	int i;
+	    			string::iterator first(this->str);
 	    	    	first.pos = 0;
+	    	    	first.it_str = this->str;
 	    	    	return first;
 	    	    }
 
@@ -738,13 +819,14 @@ namespace std
 			__ESBMC_assert( first >= 0, "The first parameter must to be greater than zero");
 			__ESBMC_assert( last >= 0, "The second parameter must to be greater than zero");
 		    int rhsLen = first;
+		    char c = last;
 		    int totalLen = this->_size + rhsLen;
 		    string temp(totalLen);
 		    int i, j, k;
 		    for (i=0; i<this->_size; i++)
 		        temp[i] = this->str[i];
 		    for(j=i, k=0; j<temp._size; j++, k++)
-		    	temp.str[j] = last;
+		    	temp.str[j] = c;
 		    *this = temp;
 		    return *this;
 		}

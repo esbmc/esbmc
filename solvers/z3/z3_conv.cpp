@@ -2768,29 +2768,14 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
        it != components.end();
        it++, i++)
   {
-    //std::cout << "it->is_typecast(): " << it->is_typecast() << std::endl;
-    //std::cout << "name: " << it->get("name") << std::endl;
-    //std::cout << "component_name: " << rhs.get_string("component_name") << std::endl;
-    //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-    //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
-    //std::cout << "it->type().id(): " << it->type().id() << std::endl;
-
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
       return i;
     else if (it->is_typecast())
     {
-      //std::cout << "dentro do typecast it->pretty(): " << it->pretty() << std::endl;
-      //std::cout << "name: " << it->op0().get_string("identifier") << std::endl;
-      //std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
-      //std::cout << "rhs.type().id(): " << rhs.type().id() << std::endl;
-      //std::cout << "it->type().id(): " << it->type().id() << std::endl;
-      //std::cout << "component name do rhs: " << rhs.get_string("component_name") << std::endl;
       if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
         return i;
     }
-
   }
-
   throw new conv_error("component name not found in struct", lhs);
 }
 
@@ -2818,11 +2803,6 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
   convert_bv(expr.op0(), struct_var);
 
   j = convert_member_name(expr.op0(), expr);
-
-    //std::cout << "j: " << j << std::endl;
-    //std::cout << "expr.op0(): " << expr.op0().pretty() << std::endl;
-    //std::cout << "expr.op0(): " << expr.op0().components()[j] << std::endl;
-    //std::cout << "expr: " << expr.type().id() << std::endl;
 
   if (expr.op0().type().id() == "union") {
     union_varst::const_iterator cache_result = union_vars.find(
@@ -2860,7 +2840,6 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       Z3_ast cond;
       unsigned width;
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
-      //std::cout << "struct_type.components[j].pretty(): " << struct_type.components()[j].pretty() << std::endl;
 
       get_type_width(struct_type.components()[j].type(), width);
 
@@ -2868,8 +2847,14 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
         cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, true));
       else if (struct_type.components()[j].type().id() == "unsignedbv")
         cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, false));
+      else if (struct_type.components()[j].type().id() == "bool")
+        cond = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
       else
+      {
+        std::cout << "we do not support `" << struct_type.components()[j].type().id() 
+                  << "' in the state vector" << std::endl;
         assert(0);
+      }
 
       bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_false(z3_ctx), Z3_mk_true(z3_ctx));
     }
