@@ -1627,65 +1627,33 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
   convert_bv(data.source_value, source);
 
-  if (int_encoding) {
-    if (is_fixedbv_type(data.source_value->type)) {
-      if (is_bv_type(data.type)) {
-	Z3_ast tmp;
-	source = Z3_mk_real2int(z3_ctx, source);
-	tmp = Z3_mk_int2bv(z3_ctx, width, source);
-	bv = Z3_mk_extract(z3_ctx, upper, lower, tmp);
-	if (is_signedbv_type(data.type))
-	  bv = Z3_mk_bv2int(z3_ctx, bv, 1);
-	else
-	  bv = Z3_mk_bv2int(z3_ctx, bv, 0);
-      } else {
-	throw new conv_error("unsupported type for byte_extract");
-      }
-    } else if (is_bv_type(data.source_value->type)) {
-      Z3_ast tmp;
-      tmp = Z3_mk_int2bv(z3_ctx, width, source);
+  if (is_struct_type(data.source_value->type)) {
+    const struct_type2t &struct_type =to_struct_type(data.source_value->type);
+    unsigned i = 0, num_elems = struct_type.members.size();
+    Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
 
-      if (width >= upper)
-	bv = Z3_mk_extract(z3_ctx, upper, lower, tmp);
-      else
-	bv = Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
-
-      if (is_signedbv_type(data.source_value->type))
-	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
-      else
-	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
-    } else {
-      throw new conv_error("unsupported type for byte_extract");
-    }
-  } else {
-    if (is_struct_type(data.source_value->type)) {
-      const struct_type2t &struct_type =to_struct_type(data.source_value->type);
-      unsigned i = 0, num_elems = struct_type.members.size();
-      Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
-
-      forall_types(it, struct_type.members) {
-        struct_elem[i] = z3_api.mk_tuple_select(source, i);
-        i++;
-      }
-
-      for (unsigned k = 0; k < num_elems; k++)
-        struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
-
-      for (unsigned k = 0; k < num_elems; k++)
-      {
-        if (k == 1)
-          struct_elem_inv[num_elems] = Z3_mk_concat(
-            z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
-        else if (k > 1)
-          struct_elem_inv[num_elems] = Z3_mk_concat(
-            z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
-      }
-
-      source = struct_elem_inv[num_elems];
+    forall_types(it, struct_type.members) {
+      struct_elem[i] = z3_api.mk_tuple_select(source, i);
+      i++;
     }
 
-    bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+    for (unsigned k = 0; k < num_elems; k++)
+      struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
+
+    for (unsigned k = 0; k < num_elems; k++)
+    {
+      if (k == 1)
+        struct_elem_inv[num_elems] = Z3_mk_concat(
+          z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+      else if (k > 1)
+        struct_elem_inv[num_elems] = Z3_mk_concat(
+          z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
+    }
+
+    source = struct_elem_inv[num_elems];
   }
+
+  bv = Z3_mk_extract(z3_ctx, upper, lower, source);
 }
 
 void
