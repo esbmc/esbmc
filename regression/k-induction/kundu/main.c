@@ -79,9 +79,7 @@ void P_1(void)
   }
   P_1_ENTRY_LOC: 
   {
-  unsigned int loop1=0, n1=nondet_uint();
-  while (loop1<n1/*i < max_loop*/) {
-    loop1++;
+  while (i < max_loop) {
     while_0_continue: /* CIL Label */ ;
     {
     write_data(num, 'A');
@@ -139,9 +137,7 @@ void P_2(void)
   }
   P_2_ENTRY_LOC: 
   {
-  unsigned int loop2=0, n2=nondet_uint();
-  while (loop2<n2/*i < max_loop*/) {
-    loop2++;
+  while (i < max_loop) {
     while_1_continue: /* CIL Label */ ;
     {
     write_data(num, 'B');
@@ -214,9 +210,7 @@ void C_1(void)
   }
   C_1_ENTRY_LOC: 
   {
-  unsigned int loop3=0, n3=nondet_uint();
-  while (loop3<n3/*i < max_loop*/) {
-    loop3++;
+  while (i < max_loop) {
     while_2_continue: /* CIL Label */ ;
     if (num == 0) {
       timer = 1;
@@ -345,12 +339,11 @@ void eval(void)
   int tmp___0 ;
   int tmp___1 ;
   int tmp___2 ;
-  int __VERIFIER_nondet_int();
+//  int __VERIFIER_nondet_int();
+
   {
   {
-  unsigned int loop4=0, n4=nondet_uint();
-  while (loop4<n4/*1*/) {
-    loop4++;
+  while (1) {
     while_3_continue: /* CIL Label */ ;
     {
     tmp___2 = exists_runnable_thread();
@@ -554,9 +547,7 @@ void start_simulation(void)
   reset_delta_events();
   }
   {
-  unsigned int loop5=0, n5=nondet_uint();
-  while (loop5<n5/*1*/) {
-    loop5++;
+  while (1) {
     while_4_continue: /* CIL Label */ ;
     {
     kernel_st = 1;
