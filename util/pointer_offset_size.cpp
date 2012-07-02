@@ -164,8 +164,17 @@ compute_pointer_offset(const namespacet &ns, const expr2tc &expr)
   else if (is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
-    const array_type2t &arr_type = to_array_type(index.source_value->type);
-    mp_integer sub_size = pointer_offset_size(*arr_type.subtype.get());
+    mp_integer sub_size;
+    if (is_array_type(index.source_value->type)) {
+      const array_type2t &arr_type = to_array_type(index.source_value->type);
+      sub_size = pointer_offset_size(*arr_type.subtype.get());
+    } else if (is_string_type(index.source_value->type)) {
+      sub_size = 8;
+    } else {
+      std::cerr << "Unexpected index type in computer_pointer_offset";
+      std::cerr << std::endl;
+      abort();
+    }
 
     expr2tc result;
     if (is_constant_int2t(index.index)) {
