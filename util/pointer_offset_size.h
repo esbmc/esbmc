@@ -26,6 +26,6 @@ mp_integer member_offset(
 mp_integer pointer_offset_size(const typet &type);
 mp_integer pointer_offset_size(const type2t &type);
 
-expr2tc compute_pointer_offset(const namespacet &ns, const expr2tc &expr);
+expr2tc compute_pointer_offset(const expr2tc &expr);
 
 #endif

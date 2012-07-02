@@ -157,7 +157,7 @@ mp_integer pointer_offset_size(const type2t &type)
 }
 
 expr2tc
-compute_pointer_offset(const namespacet &ns, const expr2tc &expr)
+compute_pointer_offset(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return expr2tc(new constant_int2t(uint_type2(), BigInt(0)));
