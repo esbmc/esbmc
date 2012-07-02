@@ -1651,9 +1651,26 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
     }
 
     source = struct_elem_inv[num_elems];
-  }
+    bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+  } else if (is_array_type(data.source_value->type)) {
+    // We have an array; pick an element.
+    const array_type2t &array = to_array_type(data.source_value->type);
+    uint64_t elem_size = array.subtype->get_width();
+    uint64_t offset = intref.constant_value.to_ulong();
+    uint64_t elem = offset / elem_size;
+    uint64_t sub_offs = offset % elem_size;
 
-  bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+    // We know where to pick from; fetch it.
+    expr2tc the_elem(new index2t(array.subtype, data.source_value,
+                     expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+    // And the remaining offset...
+    expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
+    expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
+                                        the_elem, remainder));
+    convert_bv(subfetch, bv);
+  } else {
+    throw new conv_error("Unexpected irep type in byte_extract");
+  }
 }
 
 void
