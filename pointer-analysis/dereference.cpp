@@ -650,6 +650,11 @@ bool dereferencet::memory_model_bytes(
     bool is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
+    // Take existing pointer offset, add to the pointer offset produced by
+    // this dereference. It'll get simplified at some point in the future.
+    new_offset = expr2tc(new add2t(new_offset->type, new_offset,
+                                   compute_pointer_offset(ns, value)));
+
     // Byte extract currently produced one byte, regardless of given type.
     value = expr2tc(new byte_extract2t(type_pool.get_uint(8), is_big_endian,
                                        value, new_offset));
