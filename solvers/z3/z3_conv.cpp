@@ -1628,30 +1628,39 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
   convert_bv(data.source_value, source);
 
   if (is_struct_type(data.source_value->type)) {
-    const struct_type2t &struct_type =to_struct_type(data.source_value->type);
-    unsigned i = 0, num_elems = struct_type.members.size();
-    Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+    const struct_type2t &struct_type = to_struct_type(data.source_value->type);
+    uint64_t offs = intref.constant_value.to_ulong();
+    uint64_t total_sz = 0, cur_item_sz = 0;
+    unsigned int idx = 0;
 
-    forall_types(it, struct_type.members) {
-      struct_elem[i] = z3_api.mk_tuple_select(source, i);
-      i++;
+    std::vector<type2tc>::const_iterator it;
+    for (it = struct_type.members.begin(); it != struct_type.members.end();
+         it++, idx++) {
+      cur_item_sz = (*it)->get_width() / 8;
+      if (total_sz + cur_item_sz > offs)
+        break;
+      total_sz += cur_item_sz;
     }
 
-    for (unsigned k = 0; k < num_elems; k++)
-      struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
-
-    for (unsigned k = 0; k < num_elems; k++)
-    {
-      if (k == 1)
-        struct_elem_inv[num_elems] = Z3_mk_concat(
-          z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
-      else if (k > 1)
-        struct_elem_inv[num_elems] = Z3_mk_concat(
-          z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
+    if (it == struct_type.members.end()) {
+      // Offset does in fact pass the end of this struct.
+      bv = Z3_mk_fresh_const(z3_ctx, "", Z3_mk_bv_sort(z3_ctx, 8));
+      return;
     }
 
-    source = struct_elem_inv[num_elems];
-    bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+    // Make offs the offset into this item.
+    offs -= total_sz;
+    expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(offs)));
+
+    // Select it out of the source
+    expr2tc item(new member2t(*it, data.source_value,
+                              struct_type.member_names[idx]));
+
+    // And select a byte out of that.
+    expr2tc new_extract(new byte_extract2t(char_type2(), data.big_endian,
+                                           item, new_offs));
+
+    convert_bv(new_extract, bv);
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
     const array_type2t &array = to_array_type(data.source_value->type);
