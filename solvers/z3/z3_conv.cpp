@@ -1668,6 +1668,19 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
     expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
                                         the_elem, remainder));
     convert_bv(subfetch, bv);
+  } else if (is_bv_type(data.type)) {
+    // First, is the size within the size of this type?
+    uint64_t typesize = data.source_value->type->get_width();
+    uint64_t offset = intref.constant_value.to_ulong();
+    if (offset * 8 >= typesize) {
+      // Error at dereference; should (TM) be caught by an assertion failure
+      // elsewhere.
+      bv = Z3_mk_fresh_const(z3_ctx, "", Z3_mk_bv_sort(z3_ctx, 8));
+      return;
+    }
+
+    // We can just extract out of the converted source.
+    bv = Z3_mk_extract(z3_ctx, upper, lower, source);
   } else {
     throw new conv_error("Unexpected irep type in byte_extract");
   }
