@@ -343,7 +343,13 @@ runtime_encoded_equationt::convert(prop_convt &prop_conv)
 symex_targett *
 runtime_encoded_equationt::clone(void) const
 {
-  assert(0 && "runtime_encoded_equationt should never be cloned");
+  // Only permit cloning at the start of a run - there should never be any data
+  // in this formula when it happens. Cloning needs to be supported so that a
+  // reachability_treet can take a template equation and clone it ever time it
+  // sets up a new exploration.
+  assert(SSA_steps.size() == 0 && "runtime_encoded_equationt shouldn't be "
+         "cloned when it contains data");
+  return new runtime_encoded_equationt(*this);
 }
 
 tvt
