@@ -16,43 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "pointer_offset_size.h"
 
 mp_integer member_offset(
-  const struct_typet &type,
-  const irep_idt &member)
-{
-  const struct_typet::componentst &components=type.components();
-
-  mp_integer result=0;
-  unsigned bit_field_bits=0;
-
-  for(struct_typet::componentst::const_iterator
-      it=components.begin();
-      it!=components.end();
-      it++)
-  {
-    if(it->get_name()==member) break;
-    if(it->get_bool("#is_bit_field"))
-    {
-      bit_field_bits+=binary2integer(it->type().get("width").as_string(), 2).to_long();
-    }
-    else
-    {
-      if(bit_field_bits!=0)
-      {
-        result+=bit_field_bits/8;
-        bit_field_bits=0;
-      }
-
-      const typet &subtype=it->type();
-      mp_integer sub_size=pointer_offset_size(subtype);
-      if(sub_size==-1) return -1; // give up
-      result+=sub_size;
-    }
-  }
-
-  return result;
-}
-
-mp_integer member_offset(
   const struct_type2t &type,
   const irep_idt &member)
 {
@@ -77,43 +40,6 @@ mp_integer member_offset(
   }
 
   return result;
-}
-
-mp_integer pointer_offset_size(const typet &type)
-{
-  if(type.is_array())
-  {
-    mp_integer sub=pointer_offset_size(type.subtype());
-  
-    // get size
-    const exprt &size=(const exprt &)type.size_irep();
-
-    // constant?
-    mp_integer i;
-    
-    if(to_integer(size, i))
-      return mp_integer(1); // we cannot distinguish the elements
-    
-    return sub*i;
-  }
-  else if(type.id()=="struct" ||
-          type.id()=="union")
-  {
-    const irept::subt &components=type.components().get_sub();
-    
-    mp_integer result=1; // for the struct itself
-
-    forall_irep(it, components)
-    {
-      const typet &subtype=it->type();
-      mp_integer sub_size=pointer_offset_size(subtype);
-      result+=sub_size;
-    }
-    
-    return result;
-  }
-  else
-    return mp_integer(1);
 }
 
 mp_integer pointer_offset_size(const type2t &type)
