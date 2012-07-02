@@ -15,18 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "pointer_offset_size.h"
 
-/*******************************************************************\
-
-Function: member_offset
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 mp_integer member_offset(
   const struct_typet &type,
   const irep_idt &member)
@@ -90,18 +78,6 @@ mp_integer member_offset(
 
   return result;
 }
-
-/*******************************************************************\
-
-Function: pointer_offset_size
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 mp_integer pointer_offset_size(const typet &type)
 {
@@ -179,18 +155,6 @@ mp_integer pointer_offset_size(const type2t &type)
   return bees;
 #endif
 }
-
-/*******************************************************************\
-
-Function: compute_pointer_offset
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 expr2tc
 compute_pointer_offset(const namespacet &ns, const expr2tc &expr)
