@@ -40,11 +40,96 @@ public:
 
 class stringstream:public istream, public ostream{
 public:
+	string _string;
 	explicit stringstream ( openmode which = ios_base::out|ios_base::in ) {istream();ostream();}
 	explicit stringstream ( const string & str, openmode which = ios_base::out|ios_base::in ) {istream();ostream();}
 	stringbuf* rdbuf ( ) const;
-	string str ( ) const;
-	void str ( const string & s );
+	string str ( ) const{
+		return _string;
+	}
+	void str ( const string & s );/*
+	ostream& operator<< (string& val) {
+		_string.append(val);
+		return new ostream;
+	}
+
+	ostream& operator<< (bool& val) {
+		char* temp;
+
+	}
+
+	ostream& operator<< (int& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (unsigned int& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (long& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (unsigned long& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (float& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (double& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (long double& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (void*& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (char& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (signed char& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (unsigned char& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (char*& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (signed char*& val) {
+		_string.clear();
+		_string = val;
+	}
+
+	ostream& operator<< (unsigned char*& val) {
+		_string.clear();
+		_string = val;
+	}
+
+
+	*/
 };
 
 class ostringstream:public ostream{
