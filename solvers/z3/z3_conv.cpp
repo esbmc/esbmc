@@ -23,6 +23,7 @@
 #include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>
+#include <base_type.h>
 
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
@@ -2274,6 +2275,11 @@ z3_convt::convert_smt_expr(const typecast2t &cast, void *&_bv)
     convert_typecast_to_ints(cast, bv);
   } else if (is_struct_type(cast.type))     {
     convert_typecast_struct(cast, bv);
+  } else if (is_union_type(cast.type)) {
+    if (base_type_eq(cast.type, cast.from->type, namespacet(contextt())))
+      return; // No additional conversion required
+    else
+      throw new conv_error("Can't typecast between unions");
   } else {
     // XXXjmorse -- what about all other types, eh?
     throw new conv_error("Typecast for unexpected type");
