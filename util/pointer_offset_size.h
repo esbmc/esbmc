@@ -23,4 +23,6 @@ mp_integer pointer_offset_size(const type2t &type);
 
 expr2tc compute_pointer_offset(const expr2tc &expr);
 
+const expr2tc & get_base_object(const expr2tc &expr);
+
 #endif

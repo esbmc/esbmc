@@ -136,3 +136,16 @@ compute_pointer_offset(const expr2tc &expr)
     abort();
   }
 }
+
+const expr2tc &
+get_base_object(const expr2tc &expr)
+{
+
+  if (is_index2t(expr)) {
+    return get_base_object(to_index2t(expr).source_value);
+  } else if (is_member2t(expr)) {
+    return get_base_object(to_member2t(expr).source_value);
+  } else {
+    return expr;
+  }
+}
