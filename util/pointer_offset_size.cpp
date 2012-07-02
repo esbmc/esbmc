@@ -11,6 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <expr.h>
 #include <arith_tools.h>
 #include <std_types.h>
+#include <ansi-c/c_types.h>
 
 #include "pointer_offset_size.h"
 
@@ -191,60 +192,48 @@ Function: compute_pointer_offset
 
 \*******************************************************************/
 
-mp_integer compute_pointer_offset(
-  const namespacet &ns,
-  const exprt &expr)
+expr2tc
+compute_pointer_offset(const namespacet &ns, const expr2tc &expr)
 {
-  if(expr.id()=="symbol")
-    return 0;
-  else if(expr.id()=="index")
+  if (is_symbol2t(expr))
+    return expr2tc(new constant_int2t(uint_type2(), BigInt(0)));
+  else if (is_index2t(expr))
   {
-    assert(expr.operands().size()==2);
-    assert(expr.op0().type().is_array());
-    mp_integer sub_size=pointer_offset_size(expr.op0().type().subtype());
+    const index2t &index = to_index2t(expr);
+    const array_type2t &arr_type = to_array_type(index.source_value->type);
+    mp_integer sub_size = pointer_offset_size(*arr_type.subtype.get());
 
-    mp_integer i;
-
-    if(!to_integer(expr.op1(), i))
-      return i*sub_size+1;
-    
-    return 0; // TODO
-  }
-  else if(expr.id()=="member")
-  {
-    assert(expr.operands().size()==1);
-    const typet &type=ns.follow(expr.op0().type());
-    
-    assert(type.id()=="struct" ||
-           type.id()=="union");
-
-    const irep_idt &component_name=expr.component_name();
-    const struct_union_typet::componentst &components=
-      to_struct_union_type(type).components();
-    
-    mp_integer result=1; // for the struct itself
-
-    for(struct_union_typet::componentst::const_iterator
-        it=components.begin();
-        it!=components.end();
-        it++)
-    {
-      if(it->get_name()==component_name) return result;
-      const typet &subtype=it->type();
-      result+=pointer_offset_size(subtype);
+    expr2tc result;
+    if (is_constant_int2t(index.index)) {
+      const constant_int2t &index_val = to_constant_int2t(index.index);
+      result = expr2tc(new constant_int2t(uint_type2(),
+                                        sub_size * index_val.constant_value));
+    } else {
+      // Non constant, create multiply.
+      expr2tc tmp_size(new constant_int2t(uint_type2(), sub_size));
+      result = expr2tc(new mul2t(uint_type2(), tmp_size, index.index));
     }
-    
-    assert(false);
+
+    return result;
   }
-  else if(expr.id()=="string-constant")
+  else if (is_member2t(expr))
   {
-    return 0;
+    const member2t &memb = to_member2t(expr);
+
+    mp_integer result;
+    if (is_struct_type(expr->type)) {
+      const struct_type2t &type = to_struct_type(expr->type);
+      result = member_offset(type, memb.member);
+    } else {
+      result = 0; // Union offsets are always 0.
+    }
+
+    return expr2tc(new constant_int2t(uint_type2(), result));
   }
   else
   {
-    std::cout << expr.pretty() << std::endl;
-    assert(false);
+    std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
+    std::cerr << expr->pretty() << std::endl;
+    abort();
   }
-  
-  return 0;
 }
