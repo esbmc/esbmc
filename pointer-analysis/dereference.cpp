@@ -656,8 +656,9 @@ bool dereferencet::memory_model_bytes(
                                    compute_pointer_offset(value)));
 
     // Byte extract currently produced one byte, regardless of given type.
+    const expr2tc &base_object = get_base_object(value);
     value = expr2tc(new byte_extract2t(type_pool.get_uint(8), is_big_endian,
-                                       value, new_offset));
+                                       base_object, new_offset));
 
     // XXX jmorse - upcast the extracted byte to whatever type we're supposed to
     // have. In a correct world, we'd be stitching together the type from a
