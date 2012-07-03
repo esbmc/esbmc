@@ -1,12 +1,20 @@
-char nondet_char();
-unsigned int nondet_uint();
+#include <assert.h>
 
+char nondet_char()
+{
+  char c;
+  return c;
+}
+
+unsigned int nondet_uint()
+{
+  unsigned int ui;
+  return ui;
+}
 
 int main() {
-    unsigned int max = 3;
-    //__ESBMC_assume(max>0 && max<2);
+    unsigned int max = nondet_uint()%5;
     char str1[max], str2[max];
-    //unsigned int i, j;
     int i, j;
 
     for (i=0; i<max; i++) {
@@ -17,7 +25,6 @@ int main() {
 
     j = 0;
    
-    // Copia str1 inversa para str2
     for (i = max - 1; i >= 0; i--) {
         str2[j] = str1[i];
         j++;
@@ -29,3 +36,4 @@ int main() {
       j--;
     }   
 }
+
