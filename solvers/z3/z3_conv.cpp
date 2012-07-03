@@ -1688,6 +1688,15 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
 
     // We can just extract out of the converted source.
     bv = Z3_mk_extract(z3_ctx, upper, lower, source);
+  } else if (is_pointer_type(data.source_value->type)) {
+    // We want an integer representation of this pointer; that code lives
+    // elsewhere, so perform a cast.
+    expr2tc cast_to_intrep(new
+                     typecast2t(type_pool.get_uint(config.ansi_c.pointer_width),
+                                data.source_value));
+    expr2tc extract(new byte_extract2t(type_pool.get_uint8(), data.big_endian,
+                                       cast_to_intrep, data.source_offset));
+    convert_bv(extract, bv);
   } else {
     throw new conv_error("Unexpected irep type in byte_extract");
   }
