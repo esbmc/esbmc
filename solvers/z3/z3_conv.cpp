@@ -1698,6 +1698,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
                                        cast_to_intrep, data.source_offset));
     convert_bv(extract, bv);
   } else {
+    // Missing: bools, unions.
     throw new conv_error("Unexpected irep type in byte_extract");
   }
 }
