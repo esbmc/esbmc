@@ -69,7 +69,7 @@ public:
 		return m;
 
 	}
-
+/*
 	ostream& operator<< (int& val) {
 		char* temp = new char[33];
 		itoa(val, temp, 10);
@@ -85,17 +85,24 @@ public:
 		ostream m;
 		return m;
 	}
-/*
+*/
 	ostream& operator<< (long& val) {
-		_string.clear();
-		_string = val;
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
 	}
 
 	ostream& operator<< (unsigned long& val) {
-		_string.clear();
-		_string = val;
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
 	}
 
+/*
 	ostream& operator<< (float& val) {
 		_string.clear();
 		_string = val;
