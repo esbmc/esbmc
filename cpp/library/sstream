@@ -5,6 +5,9 @@
 #include "definitions.h"
 #include "ostream"
 #include "ios"
+#include "string"
+#include "cstdio"
+
 
 namespace std
 {
@@ -47,17 +50,25 @@ public:
 	string str ( ) const{
 		return _string;
 	}
-	void str ( const string & s );/*
+	//void str ( const string & s );
 	ostream& operator<< (string& val) {
+		ostream m;
 		_string.append(val);
-		return new ostream;
+		return m;
 	}
 
 	ostream& operator<< (bool& val) {
-		char* temp;
+		char temp;
+		if(val)
+			_string.append("1");
+		else
+			_string.append("0");
+
+		ostream m;
+		return m;
 
 	}
-
+/*
 	ostream& operator<< (int& val) {
 		_string.clear();
 		_string = val;

@@ -13,8 +13,6 @@ int main () {
   oss << val;
   assert(oss.str() == "1");
   
-  oss << boolalpha << val;
-  assert(oss.str() == "1true");
   
   return 0;
 }
