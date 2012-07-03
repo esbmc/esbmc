@@ -1625,7 +1625,7 @@ void goto_convertt::convert_for(
   // do the t label
   if(inductive_step)
   {
-    assert(cond.operands().size()==2);
+    //assert(cond.operands().size()==2);
     get_struct_components(cond, state);
     get_struct_components(code.op3(), state);
     make_nondet_assign(dest);
@@ -2130,7 +2130,7 @@ void goto_convertt::replace_cond(
   
   if (tmp.is_true())
   {
-    replace_infinite_loop(tmp, dest);
+    //replace_infinite_loop(tmp, dest);
   }
   else if (exprid == ">" ||  exprid == ">=")
   {
@@ -2261,6 +2261,8 @@ void goto_convertt::convert_while(
   const codet &code,
   goto_programt &dest)
 {
+  static bool is_infinite_loop=false;
+
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -2268,6 +2270,8 @@ void goto_convertt::convert_while(
   }
 
   exprt tmp=code.op0();
+
+  is_infinite_loop = tmp.is_true();
 
   set_while_block(true);
 
@@ -2360,15 +2364,18 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (base_case /*|| inductive_step*/)
+  if (!is_break() && !is_goto() && (base_case || (inductive_step && cond.id()!="and")))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
+
   state_counter++;
   set_while_block(false);
+  set_break(false);
+  set_goto(false);
 }
 
 /*******************************************************************\
@@ -2674,6 +2681,10 @@ void goto_convertt::convert_break(
   goto_programt::targett t=dest.add_instruction();
   t->make_goto(targets.break_target);
   t->location=code.location();
+
+  if ((base_case || inductive_step) && 
+	(is_while_block()))
+    set_break(true);  
 }
 
 /*******************************************************************\
@@ -2795,6 +2806,10 @@ void goto_convertt::convert_goto(
 
   // remember it to do target later
   targets.gotos.insert(t);
+
+  if ((base_case || inductive_step) && 
+	(is_while_block()))
+    set_goto(true);  
 }
 
 /*******************************************************************\
