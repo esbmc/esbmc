@@ -7,6 +7,7 @@
 #include "ios"
 #include "string"
 #include "cstdio"
+#include "cstdlib"
 
 
 namespace std
@@ -68,17 +69,23 @@ public:
 		return m;
 
 	}
-/*
+
 	ostream& operator<< (int& val) {
-		_string.clear();
-		_string = val;
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
 	}
 
 	ostream& operator<< (unsigned int& val) {
-		_string.clear();
-		_string = val;
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
 	}
-
+/*
 	ostream& operator<< (long& val) {
 		_string.clear();
 		_string = val;
