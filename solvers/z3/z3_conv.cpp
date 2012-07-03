@@ -1675,7 +1675,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *&_bv)
     expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
                                         the_elem, remainder));
     convert_bv(subfetch, bv);
-  } else if (is_bv_type(data.source_value->type)) {
+  } else if (is_number_type(data.source_value->type)) {
     // First, is the size within the size of this type?
     uint64_t typesize = data.source_value->type->get_width();
     uint64_t offset = intref.constant_value.to_ulong();
