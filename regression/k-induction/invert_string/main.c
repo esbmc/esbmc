@@ -13,7 +13,7 @@ unsigned int nondet_uint()
 }
 
 int main() {
-    unsigned int max = nondet_uint()%5;
+    unsigned int max = 5;
     char str1[max], str2[max];
     int i, j;
 
