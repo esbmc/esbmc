@@ -1,4 +1,5 @@
-#include<stdlib.h>
+#include <assert.h>
+#include <stdlib.h>
 typedef struct list {
 	int key;
 	struct list *next;
@@ -11,7 +12,6 @@ mlist* search_list(mlist *l, int k){
   while(l!=NULL && l->key!=k) {
     l = l->next;
   }
-  //__ESBMC_assume((l != NULL && l->key != k));
   return l;
 }
 
@@ -38,3 +38,4 @@ int main(void){
   temp = search_list(head,2);
   assert(temp->key==1);
 }
+

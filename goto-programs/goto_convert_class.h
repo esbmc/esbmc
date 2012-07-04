@@ -38,6 +38,8 @@ public:
     temporary_counter(0),
     tmp_symbol_prefix("goto_convertt::")
   {
+    goto_stmt=false;
+    break_stmt=false;
     is_thread=false;
     for_block=false;
     while_block=false;
@@ -198,6 +200,10 @@ protected:
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
   void get_new_expr(exprt &expr, exprt &new_expr1, bool &found);
+  void set_goto(bool opt) {goto_stmt=opt;}
+  bool is_goto() const {return goto_stmt;}
+  void set_break(bool opt) {break_stmt=opt;}
+  bool is_break() const {return break_stmt;}
   void set_for_block(bool opt) {for_block=opt;}
   bool is_for_block() const {return for_block;}
   void set_while_block(bool opt) {while_block=opt;}
@@ -368,14 +374,13 @@ protected:
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   private:
-    bool is_thread;
-    bool for_block, while_block;
+    bool is_thread, for_block, break_stmt, 
+	 goto_stmt, while_block;
     unsigned int state_counter;
     struct_typet state;
     bool k_induction, inductive_step, base_case;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
-
 };
 
 #endif

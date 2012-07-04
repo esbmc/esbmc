@@ -1,6 +1,10 @@
-int nondet_int();
+int nondet_int()
+{
+  int i;
+  return i;
+}
 
-main()
+int main()
 {
   int x=nondet_int();
   int *p = &x;
@@ -9,6 +13,6 @@ main()
    (*p)++;
   }                       
     
-  //  assert(array[0]>=menor);    
+  return 0;
 }
 
