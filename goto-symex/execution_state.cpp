@@ -848,8 +848,7 @@ execution_statet::init_expr_id_map()
 }
 
 void
-execution_statet::print_stack_traces(const namespacet &ns,
-  unsigned int indent) const
+execution_statet::print_stack_traces(unsigned int indent) const
 {
   std::vector<goto_symex_statet>::const_iterator it;
   std::string spaces = std::string("");
