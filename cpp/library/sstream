@@ -122,27 +122,34 @@ public:
 		_string.clear();
 		_string = val;
 	}
-
+*/
 	ostream& operator<< (char& val) {
-		_string.clear();
-		_string = val;
+		_string.append(val, 1);
+		ostream m;
+		return m;
 	}
-
+/*
 	ostream& operator<< (signed char& val) {
-		_string.clear();
-		_string = val;
+		char temp = (char) val;
+		_string = _string + temp;
+		ostream m;
+		return m;
 	}
 
 	ostream& operator<< (unsigned char& val) {
 		_string.clear();
 		_string = val;
 	}
-
+*/
 	ostream& operator<< (char*& val) {
-		_string.clear();
-		_string = val;
+		char* temp = new char[256];
+		strcpy(temp, val);
+		assert(0);
+		_string.append(temp);
+		ostream m;
+		return m;
 	}
-
+/*
 	ostream& operator<< (signed char*& val) {
 		_string.clear();
 		_string = val;
