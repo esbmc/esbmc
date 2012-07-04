@@ -14,7 +14,7 @@ int main () {
   
   oss << val1;
   assert(oss.str() == "X");
-  
+ 
   oss << val2;
   assert(oss.str() == "XY");
   
