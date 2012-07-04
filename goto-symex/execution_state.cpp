@@ -746,10 +746,22 @@ execution_statet::serialise_expr(const exprt &rhs)
     string2array(rhs, tmp);
     return serialise_expr(tmp);
   } else if (rhs.id() == "same-object") {
+    str = "same-obj((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_extract_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "byte_extract_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "infinity") {
     return "inf";
   } else if (rhs.id() == "nil") {
