@@ -1,7 +1,7 @@
 CXXFLAGS += -Wall -Wextra -Wno-deprecated
 GCCFLAGS += -Wall -Wextra -Wno-deprecated
 OPTS ?= -O3
-PLATLIBS= -lgmp -ldl
+PLATLIBS= -lgmp -ldl -lgcc
 
 # Solvers
 ifdef USE_SOLVER_Z3
@@ -39,7 +39,7 @@ CC=gcc34
 CXX=g++34
 FINLINKBIN=g++
 FINLINKTAIL+= -Wl,--defsym=memcpy=memmove
-STATICLIBCPPPATH:=$(shell g++ -print-file-name=libstdc++.a)
+STATICLIBCPPPATH:=$(shell g++ $(CXXFLAGS) -print-file-name=libstdc++.a)
 LIBS+= $(STATICLIBCPPPATH)
 
 # Link statically against Z3.
@@ -50,7 +50,7 @@ endif
 else
 # If not in compat mode, link against libgomp. Can't do it with g++34 for
 # an unknown reason.
-PLATLIBS+= -lgomp
+PLATLIBS+= -lgomp -pthread -lrt -lpthread
 endif
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)

@@ -81,7 +81,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
 
-  str_state = string_container.take_state_snapshot();
+//  str_state = string_container.take_state_snapshot();
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
@@ -106,7 +106,7 @@ execution_statet::execution_statet(const execution_statet &ex) :
   // Take another snapshot to represent what string state was
   // like when we began the exploration this execution_statet will
   // perform.
-  str_state = string_container.take_state_snapshot();
+//  str_state = string_container.take_state_snapshot();
 
 }
 
@@ -893,7 +893,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
 
   // Free all name strings and suchlike we generated on this run
   // and no longer require
-  string_container.restore_state_snapshot(str_state);
+//  string_container.restore_state_snapshot(str_state);
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const
