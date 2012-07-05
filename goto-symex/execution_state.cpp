@@ -452,7 +452,10 @@ execution_statet::is_cur_state_guard_false(void)
 
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target);
-    tvt res = rte->ask_solver_question(parent_guard);
+
+    expr2tc the_question(new equality2t(true_expr, parent_guard));
+
+    tvt res = rte->ask_solver_question(the_question);
     if (res.is_false())
       return true;
   }
