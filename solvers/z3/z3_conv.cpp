@@ -2932,20 +2932,6 @@ z3_convt::new_variable()
   return l;
 }
 
-void
-z3_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
-{
-  std::set<literalt> s;
-
-  dest.reserve(bv.size());
-
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++)
-  {
-    if (s.insert(*it).second)
-      dest.push_back(*it);
-  }
-}
-
 bool
 z3_convt::process_clause(const bvt &bv, bvt &dest)
 {
@@ -3083,21 +3069,6 @@ z3_convt::assert_formula(Z3_ast ast)
     assumpt.push_back(ast);
   else
     assumpt.push_back(z3_literal(l));
-
-  return;
-}
-
-void
-z3_convt::assert_literal(literalt l, Z3_ast formula)
-{
-
-  Z3_assert_cnstr(z3_ctx, formula);
-  if (store_assumptions) {
-    if (smtlib)
-      assumpt.push_back(formula);
-    else
-      assumpt.push_back(z3_literal(l));
-  }
 
   return;
 }

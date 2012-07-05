@@ -176,7 +176,6 @@ private:
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
   void assert_formula(Z3_ast ast);
-  void assert_literal(literalt l, Z3_ast ast);
 
   std::string double2string(double d) const;
 
@@ -257,8 +256,6 @@ private:
   virtual uint64_t get_no_variables() const { return no_variables; }
   virtual void set_no_variables(uint64_t no) { no_variables = no; }
   virtual void lcnf(const bvt &bv);
-
-  static void eliminate_duplicates(const bvt &bv, bvt &dest);
 
   virtual const std::string solver_text()
   { return "Z3"; }
