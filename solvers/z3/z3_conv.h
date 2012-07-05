@@ -207,7 +207,7 @@ private:
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
-  void assert_formula(Z3_ast ast, bool needs_literal = true);
+  void assert_formula(Z3_ast ast);
 
   std::string double2string(double d) const;
 
