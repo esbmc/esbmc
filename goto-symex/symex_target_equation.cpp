@@ -366,38 +366,46 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   assert(is_bool_type(question->type));
   literalt q = conv.convert(question);
 
-  // Now, how to ask the question? Encode as (q | !q), which is always true,
-  // and see which one the solver picks to be true. Then assume that it's false,
-  // and see if the other one is satisfiable. If it is, the result can be either
-  // value, so unknown. If it's not satisfiable, we have a single result.
-  literalt not_q = conv.lnot(q);
-  literalt full_q = conv.lor(q, not_q);
-  conv.l_set_to(full_q, true);
-  prop_convt::resultt res = conv.dec_solve();
-  assert(res == prop_convt::P_SATISFIABLE && "Initial in ask_solver_question "
-         "should always be satisfiable");
+  // The proposition also needs to be guarded with the in-program assumptions,
+  // which are not necessarily going to be part of the state guard.
+  conv.l_set_to(assumpt_chain.back(), true);
+
+  // Now, how to ask the question? Unfortunately the clever solver stuff won't
+  // negate the condition, it'll only give us a handle to it that it negates
+  // when we access. So, we have to make an assertion, check it, pop it, then
+  // check another.
+  // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
+  // results are true, false, both.
+  push_ctx();
+  conv.l_set_to(q, true);
+  prop_convt::resultt res1 = conv.dec_solve();
+  pop_ctx();
+  push_ctx();
+  conv.l_set_to(q, false);
+  prop_convt::resultt res2 = conv.dec_solve();
+  pop_ctx();
 
   // So; which result?
-  tvt res1 = conv.l_get(q);
-  if (res1.is_unknown() || res1.is_false()) {
-    // Then not_q is true. So assume that it's false.
-    conv.l_set_to(not_q, false);
-  } else {
-    // q is true. Assume it isn't.
-    assert(res1.is_true());
-    conv.l_set_to(q, false);
-  }
-
-  res = conv.dec_solve();
-  if (res == prop_convt::P_SATISFIABLE) {
+  if (res1 == prop_convt::P_ERROR || res1 == prop_convt::P_SMTLIB ||
+      res2 == prop_convt::P_ERROR || res2 == prop_convt::P_SMTLIB) {
+    std::cerr << "Solver returned error while asking question" << std::endl;
+    abort();
+  } else if (res1 == prop_convt::P_SATISFIABLE &&
+             res2 == prop_convt::P_SATISFIABLE) {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
-  } else if (res1.is_true()) {
-    // Unsatisfiable; and originally q was true, so the question is true.
-    final_res = res1;
-  } else {
-    // Unsatisfiable; and originally q wasn't true, so it's overall false.
+  } else if (res1 == prop_convt::P_SATISFIABLE &&
+             res2 == prop_convt::P_UNSATISFIABLE) {
+    // Truth of question is satisfiable; other not; so we're true.
+    final_res = tvt(tvt::TV_TRUE);
+  } else if (res1 == prop_convt::P_UNSATISFIABLE &&
+             res2 == prop_convt::P_SATISFIABLE) {
+    // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
+  } else {
+    // Both are unsat
+    std::cerr << "Dual-unsat outcome when asking solver question" << std::endl;
+    abort();
   }
 
   // We have our result; pop off the questions / formula we've asked.
