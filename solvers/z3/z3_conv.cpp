@@ -460,8 +460,6 @@ z3_convt::dec_solve(void)
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
 
-  bv_cache.clear();
-
   if (smtlib)
     return prop_convt::P_SMTLIB;
 
