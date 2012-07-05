@@ -44,6 +44,13 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
+  // Soft push and pop - everything that we do in a normal push and pop, but
+  // don't tell the solver. The purpose of this is to avoid a Z3_pop or likewise
+  // in another solver. That way, in combination with assumption retraction we
+  // can get some lemma reuse.
+  virtual void soft_push_ctx();
+  virtual void soft_pop_ctx();
+
   // overloading
   virtual void set_to(const expr2tc &expr, bool value) = 0;
   virtual resultt dec_solve() = 0;

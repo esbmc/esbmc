@@ -123,7 +123,40 @@ z3_convt::~z3_convt()
 void
 z3_convt::push_ctx(void)
 {
+
   prop_convt::push_ctx();
+  intr_push_ctx();
+  Z3_push(z3_ctx);
+}
+
+void
+z3_convt::pop_ctx(void)
+{
+
+  Z3_pop(z3_ctx, 1);
+  intr_pop_ctx();
+  prop_convt::pop_ctx();;
+}
+
+void
+z3_convt::soft_push_ctx(void)
+{
+
+  prop_convt::soft_push_ctx();
+  intr_push_ctx();
+}
+
+void
+z3_convt::soft_pop_ctx(void)
+{
+
+  intr_pop_ctx();
+  prop_convt::soft_pop_ctx();;
+}
+
+void
+z3_convt::intr_push_ctx(void)
+{
 
   level_ctx++;
 
@@ -137,14 +170,11 @@ z3_convt::push_ctx(void)
   std::list<Z3_ast>::iterator it = assumpt.end();
   it--;
   assumpt_ctx_stack.push_back(it);
-
-  Z3_push(z3_ctx);
 }
 
 void
-z3_convt::pop_ctx(void)
+z3_convt::intr_pop_ctx(void)
 {
-  Z3_pop(z3_ctx, 1);
 
   // Erase everything on stack since last push_ctx
   std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
@@ -164,8 +194,6 @@ z3_convt::pop_ctx(void)
   total_mem_space.pop_back();
 
   level_ctx--;
-
-  prop_convt::pop_ctx();;
 }
 
 void

@@ -37,8 +37,14 @@ class z3_convt: public prop_convt
 public:
   z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp);
   virtual ~z3_convt();
+private:
+  void intr_push_ctx(void);
+  void intr_pop_ctx(void);
+public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
+  virtual void soft_push_ctx(void);
+  virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
