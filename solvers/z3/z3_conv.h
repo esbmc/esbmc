@@ -250,8 +250,6 @@ private:
   virtual void set_no_variables(unsigned no) { _no_variables=no; }
   virtual void lcnf(const bvt &bv);
 
-  static void eliminate_duplicates(const bvt &bv, bvt &dest);
-
   virtual const std::string solver_text()
   { return "Z3"; }
 
