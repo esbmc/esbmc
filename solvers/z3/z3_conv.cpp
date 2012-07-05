@@ -142,6 +142,12 @@ void
 z3_convt::soft_push_ctx(void)
 {
 
+  if (!uw) {
+    std::cerr << "z3_convt::soft_push_ctx - called without assumption based Z3";
+    std::cerr << " enabled. Invalid configuration." << std::endl;
+    abort();
+  }
+
   prop_convt::soft_push_ctx();
   intr_push_ctx();
 }
