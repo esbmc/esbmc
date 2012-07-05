@@ -26,8 +26,11 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  bool new_guard_false = false;
+  bool new_guard_false = false, new_guard_true = false;
+
   new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
+  new_guard_true = is_true(new_guard);
+
   if (!new_guard_false && options.get_bool_option("smt-symex-guard")) {
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target);
@@ -36,6 +39,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
     if (res.is_false())
       new_guard_false = true;
+    else if (res.is_true())
+      new_guard_true = true;
   }
 
   if (new_guard_false) {
@@ -80,7 +85,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       return;
     }
 
-    if (is_true(new_guard)) {
+    if (new_guard_true) {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -108,7 +113,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
-  if (is_true(new_guard)) {
+  if (new_guard_true) {
     cur_state->guard.make_false();
   } else   {
     // produce new guard symbol
