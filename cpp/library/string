@@ -884,7 +884,7 @@ namespace std
 
 	string::string(int len)
 	{
-		__ESBMC_assert(len > 0 ,"the parameter must be greater than zero");
+		__ESBMC_assert(len >= 0 ,"the parameter must be greater or equal than zero");
 	    str = new char [len+1];
 	    _size = len;
 	}
@@ -1452,7 +1452,7 @@ namespace std
 	string& string::append ( const char* s, size_t n )
 	{
 		__ESBMC_HIDE:
-		__ESBMC_assert( n > 0 , "string overflow");
+		__ESBMC_assert( n >= 0 , "string overflow");
 		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
 		if( n > strlen(s) )
 			throw("out_of_range");
