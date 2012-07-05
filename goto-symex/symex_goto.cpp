@@ -15,6 +15,7 @@
 #include <std_expr.h>
 
 #include "goto_symex.h"
+#include "symex_target_equation.h"
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)
@@ -25,7 +26,19 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  if ((is_false(new_guard)) || cur_state->guard.is_false()) {
+  bool new_guard_false = false;
+  new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
+  if (!new_guard_false && options.get_bool_option("smt-symex-guard")) {
+    runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
+                                                 (target);
+    expr2tc question(new equality2t(true_expr, new_guard));
+    tvt res = rte->ask_solver_question(question);
+
+    if (res.is_false())
+      new_guard_false = true;
+  }
+
+  if (new_guard_false) {
 
     // reset unwinding counter
     cur_state->unwind_map[cur_state->source] = 0;
