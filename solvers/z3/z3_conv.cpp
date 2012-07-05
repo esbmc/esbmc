@@ -3073,21 +3073,6 @@ z3_convt::assert_formula(Z3_ast ast, bool needs_literal)
   return;
 }
 
-void
-z3_convt::assert_literal(literalt l, Z3_ast formula)
-{
-
-  Z3_assert_cnstr(z3_ctx, formula);
-  if (store_assumptions) {
-    if (smtlib)
-      assumpt.push_front(formula);
-    else
-      assumpt.push_front(z3_literal(l));
-  }
-
-  return;
-}
-
 Z3_context z3_convt::z3_ctx = NULL;
 
 unsigned int z3_convt::num_ctx_ileaves = 0;
