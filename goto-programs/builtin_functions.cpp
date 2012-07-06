@@ -337,6 +337,10 @@ void goto_convertt::do_malloc(
   if (options.get_bool_option("memory-leak-check")
 	  && allocated_object.type().id()=="pointer")
     allocated_objects.push(allocated_object);
+
+  //the k-induction does not support dynamic memory allocation yet
+  if (inductive_step)
+    print_msg_mem_alloc(lhs);
 }
 
 /*******************************************************************\
