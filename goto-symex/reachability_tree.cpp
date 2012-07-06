@@ -52,6 +52,7 @@ reachability_treet::reachability_treet(
 void
 reachability_treet::setup_for_new_explore(void)
 {
+  symex_targett *targ;
 
   execution_states.clear();
 
@@ -61,6 +62,7 @@ reachability_treet::setup_for_new_explore(void)
   execution_statet *s;
   if (options.get_bool_option("schedule")) {
     schedule_target = target_template->clone();
+    targ = schedule_target;
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
                                                this, schedule_target,
@@ -68,15 +70,17 @@ reachability_treet::setup_for_new_explore(void)
                                                options, &schedule_total_claims,
                                                &schedule_remaining_claims));
   } else {
+    targ = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target_template->clone(),
+                                               targ,
                                                permanent_context, options));
     schedule_target = NULL;
   }
 
   execution_states.push_back(s);
   cur_state_it = execution_states.begin();
+  targ->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet & reachability_treet::get_cur_state()
@@ -669,6 +673,9 @@ reachability_treet::get_next_formula()
     create_next_state();
 
     switch_to_next_execution_state();
+
+    if (get_cur_state().interleaving_unviable)
+      break;
   }
 
   has_complete_formula = false;

@@ -36,6 +36,53 @@ static u_int assumptions_status = 0;
 
 extern void finalize_symbols(void);
 
+z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
+: prop_convt()
+{
+  z3_ctx = z3_api.mk_proof_context(uw);
+
+  this->int_encoding = int_encoding;
+  smtlib = smt;
+  store_assumptions = (smt || uw);
+  s_is_uw = uw;
+  this->uw = uw;
+  model = NULL;
+  array_of_count = 0;
+  no_variables = 1;
+
+  Z3_push(z3_ctx);
+  max_core_size=Z3_UNSAT_CORE_LIMIT;
+  level_ctx = 0;
+
+  z3_api.set_z3_ctx(z3_ctx);
+
+  pointer_logic.push_back(pointer_logict());
+  addr_space_sym_num.push_back(0);
+  addr_space_data.push_back(std::map<unsigned, unsigned>());
+  total_mem_space.push_back(0);
+
+  assumpt_ctx_stack.push_back(assumpt.begin());
+
+  init_addr_space_array();
+
+  // Pick a modelling array to shoehorn initialization data into. Because
+  // we don't yet have complete data for whether pointers are dynamic or not,
+  // this is the one modelling array that absolutely _has_ to be initialized
+  // to false for each element, which is going to be shoved into
+  // convert_identifier_pointer.
+  if (is_cpp) {
+    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
+  } else {
+    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+  }
+
+  // Pre-seed type cache with a few values that might not go in due to
+  // specialised code paths.
+  sort_cache.insert(std::pair<const type2tc, Z3_sort>(type_pool.get_bool(),
+                    Z3_mk_bool_sort(z3_ctx)));
+}
+
+
 z3_convt::~z3_convt()
 {
 
@@ -70,29 +117,89 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  if (!uw)
-    Z3_pop(z3_ctx, 1);
+  Z3_del_context(z3_ctx);
+}
 
-  // Experimental: if we're handled say, 10,000 ileaves, refresh the z3 ctx.
-  num_ctx_ileaves++;
+void
+z3_convt::push_ctx(void)
+{
 
-  if (num_ctx_ileaves == 10000) {
-    num_ctx_ileaves = 0;
-    Z3_del_context(z3_ctx);
-#ifndef _WIN32
-    // This call is an undocumented internal api of Z3's: it causes Z3 to free its
-    // internal symbol table, which it otherwise doesn't, leading to vast
-    // quantities of leaked memory. This will stop work/linking when Microsoft
-    // eventually work out they should be stripping the linux binaries they
-    // release.
-    // Unfortnately it doesn't work like that on Windows, so only try this if
-    // we're on another platform. And hope that perhaps Windows' Z3_reset_memory
-    // works as advertised.
-    finalize_symbols();
-#endif
-    Z3_reset_memory();
-    z3_ctx = z3_api.mk_proof_context(s_is_uw);
+  prop_convt::push_ctx();
+  intr_push_ctx();
+  Z3_push(z3_ctx);
+}
+
+void
+z3_convt::pop_ctx(void)
+{
+
+  Z3_pop(z3_ctx, 1);
+  intr_pop_ctx();
+  prop_convt::pop_ctx();;
+}
+
+void
+z3_convt::soft_push_ctx(void)
+{
+
+  if (!uw) {
+    std::cerr << "z3_convt::soft_push_ctx - called without assumption based Z3";
+    std::cerr << " enabled. Invalid configuration." << std::endl;
+    abort();
   }
+
+  prop_convt::soft_push_ctx();
+  intr_push_ctx();
+}
+
+void
+z3_convt::soft_pop_ctx(void)
+{
+
+  intr_pop_ctx();
+  prop_convt::soft_pop_ctx();;
+}
+
+void
+z3_convt::intr_push_ctx(void)
+{
+
+  level_ctx++;
+
+  // Also push/duplicate pointer logic state.
+  pointer_logic.push_back(pointer_logic.back());
+  addr_space_sym_num.push_back(addr_space_sym_num.back());
+  addr_space_data.push_back(addr_space_data.back());
+  total_mem_space.push_back(total_mem_space.back());
+
+  // Store where we are in the list of assumpts.
+  std::list<Z3_ast>::iterator it = assumpt.end();
+  it--;
+  assumpt_ctx_stack.push_back(it);
+}
+
+void
+z3_convt::intr_pop_ctx(void)
+{
+
+  // Erase everything on stack since last push_ctx
+  std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
+  ++it;
+  assumpt.erase(it, assumpt.end());
+  assumpt_ctx_stack.pop_back();
+
+  bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
+  cache_numindex.erase(ctx_level);
+
+  union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
+  union_numindex.erase(ctx_level);
+
+  pointer_logic.pop_back();
+  addr_space_sym_num.pop_back();
+  addr_space_data.pop_back();
+  total_mem_space.pop_back();
+
+  level_ctx--;
 }
 
 void
@@ -103,7 +210,7 @@ z3_convt::init_addr_space_array(void)
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
-  addr_space_sym_num = 1;
+  addr_space_sym_num.back() = 1;
 
   if (int_encoding) {
     native_int_sort = Z3_mk_int_type(z3_ctx);
@@ -163,7 +270,7 @@ z3_convt::init_addr_space_array(void)
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
-  bump_addrspace_array(pointer_logic.get_null_object(), range_tuple);
+  bump_addrspace_array(pointer_logic.back().get_null_object(), range_tuple);
 
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
@@ -174,7 +281,7 @@ z3_convt::init_addr_space_array(void)
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
-  bump_addrspace_array(pointer_logic.get_invalid_object(), range_tuple);
+  bump_addrspace_array(pointer_logic.back().get_invalid_object(), range_tuple);
 
   // Associate the symbol "0" with the null object; this is necessary because
   // of the situation where 0 is valid as a representation of null, but the
@@ -209,8 +316,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data[0] = 0;
-  addr_space_data[1] = 0;
+  addr_space_data.back()[0] = 0;
+  addr_space_data.back()[1] = 0;
 
   return;
 }
@@ -220,13 +327,13 @@ z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
 {
   std::string str, new_str;
 
-  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num++);
+  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
   Z3_ast addr_sym = z3_api.mk_var(str.c_str(), addr_space_arr_sort);
   Z3_ast obj_idx = convert_number(idx, config.ansi_c.int_width, true);
 
   Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
 
-  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
+  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
   Z3_ast new_addr_sym = z3_api.mk_var(new_str.c_str(),
                                       addr_space_arr_sort);
 
@@ -240,7 +347,7 @@ std::string
 z3_convt::get_cur_addrspace_ident(void)
 {
 
-  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num);
+  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
   return str;
 }
 
@@ -322,10 +429,9 @@ z3_convt::fixed_point(std::string v, unsigned width)
 }
 
 void
-z3_convt::finalize_pointer_chain(void)
+z3_convt::finalize_pointer_chain(unsigned int objnum)
 {
-  bool fixed_model = false;
-  unsigned int offs, num_ptrs = addr_space_data.size();
+  unsigned int num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
     return;
 
@@ -335,94 +441,45 @@ z3_convt::finalize_pointer_chain(void)
   else
     native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
 
-  // Work out which pointer model to take
-  if (config.options.get_bool_option("fixed-pointer-model"))
-    fixed_model = true;
-  else if (config.options.get_bool_option("floating-pointer-model"))
-    fixed_model = false;
-  // Default - false, non-fixed model.
+  // Floating model - we assert that all objects don't overlap each other,
+  // but otherwise their locations are entirely defined by Z3. Inefficient,
+  // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
 
-  if (fixed_model) {
-    // Generate fixed model - take each pointer object and ensure that the end
-    // of one is immediatetly followed by the start of another. The ordering is
-    // in whatever order we originally created the pointer objects. (Or rather,
-    // the order that they reached the Z3 backend in).
-    offs = 2;
-    std::map<unsigned,unsigned>::const_iterator it;
-    for (it = addr_space_data.begin(); it != addr_space_data.end(); it++) {
+  // Implementation: iterate through all objects; assert that those with lower
+  // object nums don't overlap the current one. So for every particular pair
+  // of object numbers in the set there'll be a doesn't-overlap clause.
 
-      // The invalid object overlaps everything; it exists to catch anything
-      // that slip through the cracks. Don't make the assumption that objects
-      // don't overlap it.
-      if (it->first == 1)
-        continue;
+   Z3_ast i_start = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
+                       native_int_sort);
+  Z3_ast i_end = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
+                       native_int_sort);
 
-      Z3_ast start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(it->first)).c_str(),
-                           native_int_sort);
-      Z3_ast start_num = convert_number(offs, config.ansi_c.int_width, true);
-      Z3_ast eq = Z3_mk_eq(z3_ctx, start, start_num);
-      assert_formula(eq);
+  for (unsigned j = 0; j < objnum; j++) {
+    // Obj 1 is designed to overlap
+    if (j == 1)
+      continue;
 
-      offs += it->second - 1;
+    Z3_ast j_start = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
+                       native_int_sort);
+    Z3_ast j_end = z3_api.mk_var(
+                       ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
+                       native_int_sort);
 
-      Z3_ast end = z3_api.mk_var(
-                             ("__ESBMC_ptr_obj_end_" + itos(it->first)).c_str(),
-                             native_int_sort);
-      Z3_ast end_num = convert_number(offs, config.ansi_c.int_width, true);
-      eq = Z3_mk_eq(z3_ctx, end, end_num);
-      assert_formula(eq);
-
-      offs++;
+    // Formula: (i_end < j_start) || (i_start > j_end)
+    // Previous assertions ensure start < end for all objs.
+    Z3_ast args[2], formula;
+    if (int_encoding) {
+      args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
+      args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
+    } else {
+      args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
+      args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
     }
-  } else {
-    // Floating model - we assert that all objects don't overlap each other,
-    // but otherwise their locations are entirely defined by Z3. Inefficient,
-    // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
-
-    // Implementation: iterate through all objects; assert that those with lower
-    // object nums don't overlap the current one. So for every particular pair
-    // of object numbers in the set there'll be a doesn't-overlap clause.
-
-    unsigned num_objs = addr_space_data.size();
-    for (unsigned i = 0; i < num_objs; i++) {
-      // Obj 1 is designed to overlap
-      if (i == 1)
-        continue;
-
-       Z3_ast i_start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(i)).c_str(),
-                           native_int_sort);
-      Z3_ast i_end = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_end_" + itos(i)).c_str(),
-                           native_int_sort);
-
-      for (unsigned j = 0; j < i; j++) {
-        // Obj 1 is designed to overlap
-        if (j == 1)
-          continue;
-
-        Z3_ast j_start = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                           native_int_sort);
-        Z3_ast j_end = z3_api.mk_var(
-                           ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                           native_int_sort);
-
-        // Formula: (i_end < j_start) || (i_start > j_end)
-        // Previous assertions ensure start < end for all objs.
-        Z3_ast args[2], formula;
-        if (int_encoding) {
-          args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
-          args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
-        } else {
-          args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
-          args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
-        }
-        formula = Z3_mk_or(z3_ctx, 2, args);
-        assert_formula(formula);
-      }
-    }
+    formula = Z3_mk_or(z3_ctx, 2, args);
+    assert_formula(formula);
   }
 
   return;
@@ -435,15 +492,7 @@ z3_convt::dec_solve(void)
   Z3_lbool result;
   Z3_get_version(&major, &minor, &build, &revision);
 
-  // Add assumptions that link up literals to symbols - connections that are
-  // made at high level by prop_conv, rather than by the Z3 backend
-  link_syms_to_literals();
-
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
-
-  finalize_pointer_chain();
-
-  bv_cache.clear();
 
   if (smtlib)
     return prop_convt::P_SMTLIB;
@@ -525,20 +574,6 @@ z3_convt::check2_z3_properties(void)
   }
 
   return result;
-}
-
-void
-z3_convt::link_syms_to_literals(void)
-{
-
-  symbolst::const_iterator it;
-  for (it = symbols.begin(); it != symbols.end(); it++) {
-    // Generate an equivalence between the symbol and the literal
-    Z3_ast sym = z3_api.mk_var(it->first.as_string().c_str(),
-                                Z3_mk_bool_sort(z3_ctx));
-    Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(it->second), sym);
-    assert_formula(formula);
- }
 }
 
 void
@@ -1832,10 +1867,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *&_bv)
     if (cache_result != union_vars.end()) {
       const std::vector<type2tc> &members = data_ref.get_structure_members();
 
-      const type2tc source_type = members[cache_result->second];
+      const type2tc source_type = members[cache_result->idx];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
-        bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
+        bv = z3_api.mk_tuple_select(struct_var, cache_result->idx);
         return;
       }
 
@@ -2120,9 +2155,9 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
-  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
-  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
-  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.size());
+  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
 
   Z3_sort native_int_sort;
   if (int_encoding) {
@@ -2133,8 +2168,8 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
-  for (it = addr_space_data.begin(), i = 0;
-       it != addr_space_data.end(); it++, i++)
+  for (it = addr_space_data.back().begin(), i = 0;
+       it != addr_space_data.back().end(); it++, i++)
   {
     Z3_ast args[2];
 
@@ -2174,7 +2209,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   // eventually can be converted back via some mechanism to a valid pointer.
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_sort);
   Z3_ast args[2];
-  args[0] = convert_number(pointer_logic.get_invalid_object(),
+  args[0] = convert_number(pointer_logic.back().get_invalid_object(),
                            config.ansi_c.int_width, true);
 
   // Calculate ptr offset - target minus start of invalid range, ie 1
@@ -2191,7 +2226,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
 
   // Now that big ite chain,
-  for (i = 0; i < addr_space_data.size(); i++) {
+  for (i = 0; i < addr_space_data.back().size(); i++) {
     args[0] = obj_ids[i];
 
     // Calculate ptr offset were it this
@@ -2598,14 +2633,15 @@ z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
 
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
-    bv = cache_result->second;
+    bv = cache_result->output;
     return;
   }
 
   expr->convert_smt(*this, (void *&)bv);
 
   // insert into cache
-  bv_cache.insert(std::pair<const expr2tc, Z3_ast>(expr, bv));
+  struct bv_cache_entryt cacheentry = { expr, bv, level_ctx };
+  bv_cache.insert(cacheentry);
   return;
 }
 
@@ -2676,21 +2712,21 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
     if (sym.thename == "NULL" || sym.thename == "0") {
-      obj_num = pointer_logic.get_null_object();
+      obj_num = pointer_logic.back().get_null_object();
       got_obj_num = true;
     }
   }
 
   if (!got_obj_num)
     // add object won't duplicate objs for identical exprs (it's a map)
-    obj_num = pointer_logic.add_object(expr);
+    obj_num = pointer_logic.back().add_object(expr);
 
   bv = z3_api.mk_var(symbol.c_str(), tuple_type);
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
-  if (addr_space_data.find(obj_num) == addr_space_data.end()) {
+  if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
     Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
 
@@ -2735,7 +2771,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     }
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space += pointer_offset_size(*expr->type.get()).to_long() + 1;
+    total_mem_space.back() +=
+      pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
     Z3_ast offs_eq;
@@ -2750,9 +2787,10 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     convert_bv(wraparound, wraparound_eq);
     assert_formula(wraparound_eq);
 
-    // We'll place constraints on those addresses later, in finalize_pointer_chain
+    // Generate address space layout constraints.
+    finalize_pointer_chain(obj_num);
 
-    addr_space_data[obj_num] =
+    addr_space_data.back()[obj_num] =
           pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     Z3_ast start_ast, end_ast;
@@ -2813,7 +2851,8 @@ z3_convt::set_to(const expr2tc &expr, bool value)
       assert(idx != type.member_names.size() &&
              "Member name of with expr not found in struct/union type");
 
-      union_vars.insert(std::pair<std::string, unsigned int>(ref, idx));
+      union_var_mapt mapentry = { ref, idx, 0 };
+      union_vars.insert(mapentry);
     }
   }
 }
@@ -2920,9 +2959,9 @@ z3_convt::new_variable()
 {
   literalt l;
 
-  l.set(_no_variables, false);
+  l.set(no_variables, false);
 
-  set_no_variables(_no_variables + 1);
+  set_no_variables(no_variables + 1);
 
   return l;
 }
@@ -2955,7 +2994,7 @@ z3_convt::process_clause(const bvt &bv, bvt &dest)
     if (l.is_false())
       continue;
 
-    assert(l.var_no() < _no_variables);
+    assert(l.var_no() < no_variables);
 
     // prevent duplicate literals
     if (s.insert(l).second)
@@ -3061,14 +3100,11 @@ z3_convt::assert_formula(Z3_ast ast)
   Z3_assert_cnstr(z3_ctx, formula);
 
   if (smtlib)
-    assumpt.push_front(ast);
+    assumpt.push_back(ast);
   else
-    assumpt.push_front(z3_literal(l));
+    assumpt.push_back(z3_literal(l));
 
   return;
 }
 
-Z3_context z3_convt::z3_ctx = NULL;
-
-unsigned int z3_convt::num_ctx_ileaves = 0;
 bool z3_convt::s_is_uw = false;

@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_PROPDEC_LITERAL_H
 
 #include <vector>
+#include <stdint.h>
 
 class literalt
 {
@@ -141,7 +142,7 @@ public:
   }
 
 protected:
-  unsigned l;  
+  uint64_t l;
 };
 
 // constants

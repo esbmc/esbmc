@@ -47,6 +47,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   TS_number = 0;
   node_id = 0;
   guard_execution = "execution_statet::\\guard_exec";
+  interleaving_unviable = false;
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("main");
@@ -123,6 +124,7 @@ execution_statet::operator=(const execution_statet &ex)
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
+  interleaving_unviable = ex.interleaving_unviable;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -206,7 +208,10 @@ execution_statet::symex_step(reachability_treet &art)
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      art.force_cswitch_point();
+
+      // Context switch if the state guard isn't false.
+      if (!state.guard.is_false())
+        art.force_cswitch_point();
       break;
     case RETURN:
       state.source.pc++;
@@ -437,6 +442,27 @@ execution_statet::end_thread(void)
   atomic_numbers[active_thread] = 0;
 }
 
+bool
+execution_statet::is_cur_state_guard_false(void)
+{
+
+  // So, can the assumption actually be true? If enabled, ask the solver.
+  if (options.get_bool_option("smt-thread-guard")) {
+    expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
+
+    runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
+                                                 (target);
+
+    expr2tc the_question(new equality2t(true_expr, parent_guard));
+
+    tvt res = rte->ask_solver_question(the_question);
+    if (res.is_false())
+      return true;
+  }
+
+  return false;
+}
+
 void
 execution_statet::execute_guard(void)
 {
@@ -474,6 +500,11 @@ execution_statet::execute_guard(void)
     threads_state.at(i).guard -= old_guard;
     threads_state.at(i).guard.add(guard_expr);
   }
+
+  // Finally, if we've determined execution from here on is unviable, then
+  // mark this path as unviable.
+  if (is_cur_state_guard_false())
+    interleaving_unviable = true;
 }
 
 unsigned int
@@ -877,7 +908,11 @@ execution_statet::ex_state_level2t::rename(expr2tc &identifier)
 dfs_execution_statet::~dfs_execution_statet(void)
 {
 
-  delete target;
+  // Delete target; or if we're encoding at runtime, pop a context.
+  if (options.get_bool_option("smt-during-symex"))
+    target->pop_ctx();
+  else
+    delete target;
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const
@@ -886,8 +921,14 @@ dfs_execution_statet* dfs_execution_statet::clone(void) const
 
   d = new dfs_execution_statet(*this);
 
-  // Duplicate target equation.
-  d->target = target->clone();
+  // Duplicate target equation; or if we're encoding at runtime, push a context.
+  if (options.get_bool_option("smt-during-symex")) {
+    d->target = target;
+    d->target->push_ctx();
+  } else {
+    d->target = target->clone();
+  }
+
   return d;
 }
 

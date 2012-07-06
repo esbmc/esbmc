@@ -21,6 +21,11 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <vector>
 #include <string.h>
 
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+
 #include "z3_capi.h"
 
 #define Z3_UNSAT_CORE_LIMIT 10000
@@ -30,47 +35,16 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
-  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp) : prop_convt()
-  {
-    if (z3_ctx == NULL) {
-      z3_ctx = z3_api.mk_proof_context(uw);
-    }
-
-    this->int_encoding = int_encoding;
-    smtlib = smt;
-    store_assumptions = (smt || uw);
-    s_is_uw = uw;
-    this->uw = uw;
-    total_mem_space = 0;
-    model = NULL;
-    array_of_count = 0;
-    _no_variables = 1;
-
-    Z3_push(z3_ctx);
-    max_core_size=Z3_UNSAT_CORE_LIMIT;
-
-    z3_api.set_z3_ctx(z3_ctx);
-
-    init_addr_space_array();
-
-    // Pick a modelling array to shoehorn initialization data into. Because
-    // we don't yet have complete data for whether pointers are dynamic or not,
-    // this is the one modelling array that absolutely _has_ to be initialized
-    // to false for each element, which is going to be shoved into
-    // convert_identifier_pointer.
-    if (is_cpp) {
-      dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
-    } else {
-      dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
-    }
-
-    // Pre-seed type cache with a few values that might not go in due to
-    // specialised code paths.
-    sort_cache.insert(std::pair<const type2tc, Z3_sort>(type_pool.get_bool(),
-                      Z3_mk_bool_sort(z3_ctx)));
-  }
-
+  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp);
   virtual ~z3_convt();
+private:
+  void intr_push_ctx(void);
+  void intr_pop_ctx(void);
+public:
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+  virtual void soft_push_ctx(void);
+  virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
   bool get_z3_encoding(void) const;
@@ -217,10 +191,51 @@ private:
 
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type) const;
 
-  pointer_logict pointer_logic;
+  std::list<pointer_logict> pointer_logic;
 
-  typedef hash_map_cont<const expr2tc, Z3_ast, irep2_hash> bv_cachet;
+  // Types for bv_cache.
+
+  struct bv_cache_entryt {
+    const expr2tc val;
+    Z3_ast output;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    bv_cache_entryt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > bv_cachet;
+
+  // Types for union map.
+  struct union_var_mapt {
+    std::string ident;
+    unsigned int idx;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    union_var_mapt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, std::string, ident)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > union_varst;
+
   bv_cachet bv_cache;
+  union_varst union_vars;
   typedef hash_map_cont<const type2tc, Z3_sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
@@ -234,8 +249,7 @@ private:
   Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
   void bump_addrspace_array(unsigned int idx, Z3_ast val);
   std::string get_cur_addrspace_ident(void);
-  void link_syms_to_literals(void);
-  void finalize_pointer_chain(void);
+  void finalize_pointer_chain(unsigned int objnum);
   void init_addr_space_array(void);
 
   virtual literalt land(literalt a, literalt b);
@@ -245,8 +259,8 @@ private:
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
   virtual literalt new_variable();
-  virtual unsigned no_variables() const { return _no_variables; }
-  virtual void set_no_variables(unsigned no) { _no_variables=no; }
+  virtual uint64_t get_no_variables() const { return no_variables; }
+  virtual void set_no_variables(uint64_t no) { no_variables = no; }
   virtual void lcnf(const bvt &bv);
 
   virtual const std::string solver_text()
@@ -265,25 +279,23 @@ private:
 
   z3_capi z3_api;
 
+  unsigned int level_ctx;
   bool int_encoding, smtlib, store_assumptions, uw;
-  std::list<Z3_ast> assumptions;
   std::string filename;
-
-  typedef std::map<std::string, unsigned int> union_varst;
-  union_varst union_vars;
 
   unsigned int array_of_count;
   std::string dyn_info_arr_name;
 
-  unsigned _no_variables;
+  uint64_t no_variables;
   std::list<Z3_ast> assumpt;
+  std::list<std::list<Z3_ast>::iterator> assumpt_ctx_stack;
 
   // Array of obj ID -> address range tuples
-  unsigned int addr_space_sym_num;
+  std::list<unsigned int> addr_space_sym_num;
   Z3_sort addr_space_tuple_sort;
   Z3_sort addr_space_arr_sort;
-  std::map<unsigned,unsigned> addr_space_data; // Obj id, size
-  unsigned long total_mem_space;
+  std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
+  std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
@@ -306,9 +318,8 @@ public:
   };
 
 public:
-  static Z3_context z3_ctx;
+  Z3_context z3_ctx;
   static bool s_is_uw;
-  static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
 };
 
 #endif

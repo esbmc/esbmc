@@ -734,6 +734,13 @@ public:
   type2tc type;
 };
 
+// For boost multi-index hashing,
+inline std::size_t
+hash_value(const expr2tc &expr)
+{
+  return expr->crc();
+}
+
 /** Fetch string identifier for an expression.
  *  Returns the class name of the expr passed in - this is equivalent to the
  *  result of expr.id() in old stringy irep. Should ideally be a method of

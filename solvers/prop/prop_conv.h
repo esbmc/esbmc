@@ -22,15 +22,34 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <message.h>
 #include <threeval.h>
 
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
+
 #include "literal.h"
 
 class prop_convt : public messaget
 {
 public:
-  explicit prop_convt() { }
+  explicit prop_convt()
+  {
+    ctx_level = 0;
+  }
   virtual ~prop_convt() { }
 
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+
+  // Methods to push and pop currently converted solver state
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
+  // Soft push and pop - everything that we do in a normal push and pop, but
+  // don't tell the solver. The purpose of this is to avoid a Z3_pop or likewise
+  // in another solver. That way, in combination with assumption retraction we
+  // can get some lemma reuse.
+  virtual void soft_push_ctx();
+  virtual void soft_pop_ctx();
 
   // overloading
   virtual void set_to(const expr2tc &expr, bool value) = 0;
@@ -65,7 +84,7 @@ public:
 
   // variables
   virtual literalt new_variable()=0;
-  virtual unsigned no_variables() const=0;
+  virtual uint64_t get_no_variables() const=0;
 
   // solving
   virtual const std::string solver_text()=0;
@@ -76,12 +95,28 @@ public:
 protected:
   virtual literalt convert_expr(const expr2tc &expr) = 0;
   
-  // symbols
-  typedef std::map<irep_idt, literalt> symbolst;
-  symbolst symbols;
+  unsigned int ctx_level;
 
   // cache
-  typedef hash_map_cont<expr2tc, literalt, irep2_hash> cachet;
+  struct lit_cachet {
+    const expr2tc val;
+    literalt l;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    lit_cachet,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > cachet;
+
   cachet cache;
   
   virtual void ignoring(const expr2tc &expr);

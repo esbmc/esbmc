@@ -323,6 +323,15 @@ class execution_statet : public goto_symext
   void switch_to_thread(unsigned int i);
 
   /**
+   *  Determines if current state guard is false.
+   *  Used to check whether the interleaving we're exploring has a false guard,
+   *  meaning that any further interleaving we take is unviable. If
+   *  --smt-thread-guard is enabled, we ask the solver.
+   *  @return True when state guard is false
+   */
+  bool is_cur_state_guard_false(void);
+
+  /**
    *  Generates execution guard that's true if this interleaving can be reached.
    *  We can context switch between many points in many threads; not all of
    *  them are feasible though, and some of them place later constraints on the
@@ -478,6 +487,10 @@ class execution_statet : public goto_symext
   /** Identifying number for this execution state. Used to distinguish runs
    *  in --schedule mode. */
   unsigned int node_id;
+  /** True if the guard on this interleaving becomes false.
+   *  Means that there is no path from here on where any assertion may
+   *  become satisfiable. */
+  bool interleaving_unviable;
 
   protected:
   /** Number of context switches performed by this ex_state */

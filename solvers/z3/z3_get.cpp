@@ -270,7 +270,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
       return expr2tc(new symbol2t(type, "NULL"));
     }
 
-    return pointer_logic.pointer_expr(pointer, type);
+    return pointer_logic.back().pointer_expr(pointer, type);
   } else if (is_bv_type(type)) {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return expr2tc();

@@ -220,6 +220,21 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
 
+  if (cmdline.isset("smt-during-symex")) {
+    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
+    std::cout << std::endl;
+    options.set_option("no-slice", true);
+  }
+
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard")) {
+    if (!cmdline.isset("smt-during-symex")) {
+      std::cerr << "Please explicitly specify --smt-during-symex if you want "
+                   "to use features that involve encoding SMT during symex"
+                   << std::endl;
+      abort();
+    }
+  }
+
   if(cmdline.isset("base-case") ||
      options.get_bool_option("base-case"))
   {

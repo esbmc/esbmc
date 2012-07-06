@@ -72,12 +72,6 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 
   equation.convert(solver);
 
-  forall_expr_list(it, bmc_constraints) {
-    expr2tc new_expr;
-    migrate_expr(*it, new_expr);
-    solver.set_to(new_expr, true);
-  }
-
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
   solver.clear_cache();
@@ -357,7 +351,7 @@ bool bmct::run(void)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
-  symex.setup_for_new_explore();
+  symex->setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))
   {
@@ -386,7 +380,7 @@ bool bmct::run(void)
 
       reachability_treet::dfs_position pos(
                                          options.get_option("checkpoint-file"));
-      symex.restore_from_dfs_state((void*)&pos);
+      symex->restore_from_dfs_state((void*)&pos);
     }
 
     do
@@ -420,7 +414,7 @@ bool bmct::run(void)
       if (options.get_bool_option("interactive-ileaves"))
         return false;
 
-    } while(symex.setup_next_formula());
+    } while(symex->setup_next_formula());
   }
 
   if (options.get_bool_option("all-runs"))
@@ -443,11 +437,11 @@ bool bmct::run_thread()
   {
     if(options.get_bool_option("schedule"))
     {
-      result = symex.generate_schedule_formula();
+      result = symex->generate_schedule_formula();
     }
     else
     {
-      result = symex.get_next_formula();
+      result = symex->get_next_formula();
     }
   }
 
@@ -527,13 +521,17 @@ bool bmct::run_thread()
           strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if(options.get_bool_option("z3"))
+    if(options.get_bool_option("z3")) {
 #ifdef Z3
-      solver = new z3_solver(*this, is_cpp);
+      if (options.get_bool_option("smt-during-symex")) {
+        solver = new z3_runtime_solver(*this, is_cpp, runtime_z3_conv);
+      } else {
+        solver = new z3_solver(*this, is_cpp);
+      }
 #else
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
-    else
+    } else {
       // If we have Z3, default to Z3. Otherwise, user needs to explicitly
       // select an SMT solver
 #ifdef Z3
@@ -541,6 +539,7 @@ bool bmct::run_thread()
 #else
       throw "Please specify a SAT/SMT solver to use";
 #endif
+    }
 
     ret = solver->run_solver(*equation);
     delete solver;
@@ -616,6 +615,23 @@ bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
   bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
+
+bmct::z3_runtime_solver::z3_runtime_solver(bmct &bmc,
+                                           bool is_cpp __attribute__((unused)),
+                                           z3_convt *c)
+  : solver_base(bmc), z3_conv(c)
+{
+  conv = c;
+}
+
+bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
+{
+  bool result = bmct::solver_base::run_solver(equation);
+  bmc._unsat_core = z3_conv->get_z3_core_size();
+  bmc._number_of_assumptions = z3_conv->get_z3_number_of_assumptions();
+  return result;
+}
+
 #endif
 
 bmct::output_solver::output_solver(bmct &bmc)
@@ -678,6 +694,6 @@ void bmct::write_checkpoint(void)
     f = options.get_option("checkpoint-file");
   }
 
-  symex.save_checkpoint(f);
+  symex->save_checkpoint(f);
   return;
 }
