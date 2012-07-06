@@ -1,5 +1,6 @@
-#include <assert.h>
 #include <stdlib.h>
+#include <assert.h>
+
 typedef struct list {
 	int key;
 	struct list *next;
