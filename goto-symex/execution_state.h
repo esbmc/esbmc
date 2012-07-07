@@ -478,10 +478,12 @@ class execution_statet : public goto_symext
   /** Number of context switches performed by this ex_state */
   int CS_number;
   /** For each thread, a set of symbols that were read by the thread in the
-   *  last transition (run). */
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
   std::vector<std::set<expr2tc> > thread_last_reads;
   /** For each thread, a set of symbols that were written by the thread in the
-   *  last transition (run). */
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
   std::vector<std::set<expr2tc> > thread_last_writes;
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependancy_chain[i][j] here. */
