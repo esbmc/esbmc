@@ -232,7 +232,7 @@ execution_statet::symex_step(reachability_treet &art)
         symex_return();
 
         if (!is_nil_expr(assign))
-          owning_rt->analyse_for_cswitch_after_assign(assign);
+          analyze_assign(assign);
       }
       break;
     default:
@@ -249,7 +249,7 @@ execution_statet::symex_assign(const expr2tc &code)
   goto_symext::symex_assign(code);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_assign(code);
+    analyze_assign(code);
 
   return;
 }
@@ -261,7 +261,7 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
   goto_symext::claim(expr, msg);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_read(expr);
+    analyze_read(expr);
 
   return;
 }
@@ -274,7 +274,7 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 
   if (!is_nil_expr(old_guard)) {
     if (threads_state.size() > 1)
-      owning_rt->analyse_for_cswitch_after_read(old_guard);
+      analyze_read(old_guard);
   }
 
   return;
@@ -287,7 +287,7 @@ execution_statet::assume(const expr2tc &assumption)
   goto_symext::assume(assumption);
 
   if (threads_state.size() > 1)
-    owning_rt->analyse_for_cswitch_after_read(assumption);
+    analyze_read(assumption);
 
   return;
 }
@@ -518,6 +518,48 @@ execution_statet::add_thread(const goto_programt *prog)
     dependancy_chain.back().push_back(0);
 
   return threads_state.size() - 1; // thread ID, zero based
+}
+
+void
+execution_statet::analyze_assign(const expr2tc &code)
+{
+
+  std::set<expr2tc> global_reads, global_writes;
+  const code_assign2t &assign = to_code_assign2t(code);
+  get_expr_globals(ns, assign.target, global_reads);
+  get_expr_globals(ns, assign.source, global_writes);
+
+  if (global_reads.size() > 0 || global_writes.size() > 0) {
+    // Record read/written data
+    thread_last_reads[active_thread].insert(global_reads.begin(),
+                                            global_reads.end());
+    thread_last_writes[active_thread].insert(global_writes.begin(),
+                                             global_writes.end());
+
+    // Tell RT about this
+    owning_rt->analyse_for_cswitch_base(global_reads, global_writes);
+  }
+
+  return;
+}
+
+void
+execution_statet::analyze_read(const expr2tc &code)
+{
+
+  std::set<expr2tc> global_reads, global_writes;
+  get_expr_globals(ns, code, global_reads);
+
+  if (global_reads.size() > 0) {
+    // Record read/written data
+    thread_last_reads[active_thread].insert(global_reads.begin(),
+                                            global_reads.end());
+
+    // Tell RT about this
+    owning_rt->analyse_for_cswitch_base(global_reads, global_writes);
+  }
+
+  return;
 }
 
 void

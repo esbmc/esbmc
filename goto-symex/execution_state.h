@@ -386,6 +386,24 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
+   *  Analyze the contents of an assignment for threading.
+   *  If the assignment touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param assign Container of code_assign2t object.
+   */
+  void analyze_assign(const expr2tc &assign);
+
+  /**
+   *  Analyze the contents of a read for threading.
+   *  If the read touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param expr Container of expression possibly touching global state.
+   */
+  void analyze_read(const expr2tc &expr);
+
+  /**
    *  Get list of globals accessed by expr.
    *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
