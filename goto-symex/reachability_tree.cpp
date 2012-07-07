@@ -294,10 +294,13 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (step_next_state())
+    if (step_next_state()) {
       cur_state_it++;
-    else
+    } else {
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       has_complete_formula = true;
+    }
   }
 
   at_end_of_run = false;

@@ -103,6 +103,15 @@ endif
 
 endif
 
+# Set a string for makefile scripts to use that tells them what arch we're
+# building on.
+
+ifdef TARGET64
+BITWIDTH_STR='64'
+else
+BITWIDTH_STR='32'
+endif
+
 ifdef LINUX
 include $(ESBMCDIR)/scripts/linux.inc
 endif

@@ -209,9 +209,13 @@ execution_statet::symex_step(reachability_treet &art)
       decrement_active_atomic_number();
       state.source.pc++;
 
-      // Context switch if the state guard isn't false.
+      // Don't context switch if the guard is false. This instruction hasn't
+      // actually been executed, so context switching achieves nothing. (We
+      // don't do this for the active_atomic_number though, because it's cheap,
+      // and should be balanced under all circumstances anyway).
       if (!state.guard.is_false())
         art.force_cswitch_point();
+
       break;
     case RETURN:
       state.source.pc++;
@@ -765,12 +769,26 @@ execution_statet::serialise_expr(const exprt &rhs __attribute__((unused)))
     string2array(rhs, tmp);
     return serialise_expr(tmp);
   } else if (rhs.id() == "same-object") {
+    str = "same-obj((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_extract_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "byte_extract_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "infinity") {
     return "inf";
+  } else if (rhs.id() == "nil") {
+    return "nil";
   } else {
     execution_statet::expr_id_map_t::const_iterator it;
     it = expr_id_map.find(rhs.id());

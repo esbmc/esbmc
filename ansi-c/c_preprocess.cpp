@@ -267,6 +267,7 @@ bool c_preprocess(
   std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
+  bool is_cpp,
   message_handlert &message_handler)
 {
   int err, ret;
