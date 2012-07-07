@@ -108,10 +108,10 @@ int reachability_treet::get_CS_bound() const
 bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
 {
 
-  std::set<expr2tc> global_list;
-  get_cur_state().get_expr_globals(ns, code, global_list);
-  if (global_list.size() > 0)
-    return analyse_for_cswitch_base(code);
+  std::set<expr2tc> global_reads, global_writes;
+  get_cur_state().get_expr_globals(ns, code, global_reads);
+  if (global_reads.size() > 0)
+    return analyse_for_cswitch_base(global_reads, global_writes);
   else
     return false;
 }
@@ -119,13 +119,13 @@ bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
 bool reachability_treet::analyse_for_cswitch_after_assign(const expr2tc &code)
 {
 
-  std::set<expr2tc> global_list;
+  std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
-  get_cur_state().get_expr_globals(ns, assign.target, global_list);
-  get_cur_state().get_expr_globals(ns, assign.source, global_list);
+  get_cur_state().get_expr_globals(ns, assign.target, global_reads);
+  get_cur_state().get_expr_globals(ns, assign.source, global_writes);
 
-  if (global_list.size() > 0)
-    return analyse_for_cswitch_base(code);
+  if (global_reads.size() > 0 || global_writes.size() > 0)
+    return analyse_for_cswitch_base(global_reads, global_writes);
 
   return false;
 }
@@ -134,10 +134,13 @@ bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
-  return analyse_for_cswitch_base(expr2tc());
+  std::set<expr2tc> global_reads, global_writes;
+  return analyse_for_cswitch_base(global_reads, global_writes);
 }
 
-bool reachability_treet::analyse_for_cswitch_base(const expr2tc &expr)
+bool reachability_treet::analyse_for_cswitch_base(
+                                  const std::set<expr2tc> &global_reads,
+                                  const std::set<expr2tc> &global_writes)
 {
 
   execution_statet &ex_state = get_cur_state();
@@ -154,7 +157,7 @@ bool reachability_treet::analyse_for_cswitch_base(const expr2tc &expr)
 
   unsigned int tid = 0;
 
-  tid = decide_ileave_direction(ex_state, expr);
+  tid = decide_ileave_direction(ex_state, global_reads, global_writes);
 
   at_end_of_run = true;
   next_thread_id = tid;
@@ -221,17 +224,20 @@ reachability_treet::step_next_state(void)
 
 unsigned int
 reachability_treet::decide_ileave_direction(execution_statet &ex_state,
-                                            const expr2tc &expr)
+                                        const std::set<expr2tc> &global_reads,
+                                        const std::set<expr2tc> &global_writes)
 {
   unsigned int tid = 0, user_tid = 0;
 
   if (config.options.get_bool_option("interactive-ileaves")) {
-    user_tid = tid = get_ileave_direction_from_user(expr);
+    tid = get_ileave_direction_from_user(global_reads, global_writes);
+    user_tid = tid;
   }
   //begin - H.Savino
   else if (config.options.get_bool_option("round-robin")) {
 
-    user_tid = tid = get_ileave_direction_from_scheduling(expr);
+    tid = get_ileave_direction_from_scheduling(global_reads, global_writes);
+    user_tid = tid;
     if(tid != ex_state.active_thread){
         ex_state.DFS_traversed.at(ex_state.active_thread)=true;
     }
@@ -537,7 +543,9 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
+reachability_treet::get_ileave_direction_from_user(
+                                  const std::set<expr2tc> &global_reads,
+                                  const std::set<expr2tc> &global_writes) const
 {
   std::string input;
   unsigned int tid;
@@ -547,7 +555,7 @@ reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
 
   // First of all, are there actually any valid context switch targets?
   for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-    if (check_thread_viable(tid, expr, true))
+    if (check_thread_viable(tid, global_reads, global_writes, true))
       break;
   }
 
@@ -576,7 +584,7 @@ reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
       } else if (tid >= get_cur_state().threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        if (check_thread_viable(tid, expr, false))
+        if (check_thread_viable(tid, global_reads, global_writes, false))
           break;
       }
     }
@@ -592,22 +600,23 @@ reachability_treet::get_ileave_direction_from_user(const expr2tc &expr) const
 
 //begin - H.Savino
 int
-reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) const
+reachability_treet::get_ileave_direction_from_scheduling(
+                                  const std::set<expr2tc> &global_reads,
+                                  const std::set<expr2tc> &global_writes) const
 {
   unsigned int tid;
 
     // If the guard on this execution trace is false, no context switches are
     // going to be run over in the future and just general randomness is going to
     // occur. So there's absolutely no reason exploring further.
-    if (!is_nil_expr(expr) &&
-       get_cur_state().get_active_state().guard.is_false()) {
+    if (get_cur_state().get_active_state().guard.is_false()) {
           std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
           exit(1);
     }
 
     // First of all, are there actually any valid context switch targets?
     for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-      if (check_thread_viable(tid, expr, true))
+      if (check_thread_viable(tid, global_reads, global_writes, true))
         break;
     }
 
@@ -618,12 +627,12 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
   tid=get_cur_state().active_thread;
 
   if(get_cur_state().TS_number < this->TS_slice-1){
-      if (check_thread_viable(tid, expr, true))
+      if (check_thread_viable(tid, global_reads, global_writes, true))
           return tid;
   }
       while(1){
         tid=(tid + 1)%get_cur_state().threads_state.size();
-        if (check_thread_viable(tid, expr, true)){
+        if (check_thread_viable(tid, global_reads, global_writes, true)){
             break;
         }
       }
@@ -632,7 +641,10 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
 //end - H.Savino
 
 bool
-reachability_treet::check_thread_viable(int tid, const expr2tc &expr __attribute__((unused)), bool quiet) const
+reachability_treet::check_thread_viable(int tid,
+                __attribute__((unused)) const std::set<expr2tc> &global_reads,
+                __attribute__((unused)) const std::set<expr2tc> &global_writes,
+                                        bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
