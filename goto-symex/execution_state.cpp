@@ -75,6 +75,13 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 
   thread_start_data.push_back(expr2tc());
 
+  // Initial mpor tracking.
+  thread_last_reads.push_back(std::set<expr2tc>());
+  thread_last_writes.push_back(std::set<expr2tc>());
+  // One thread with one dependancy relation.
+  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.back().push_back(0);
+
   active_thread = 0;
   last_active_thread = 0;
   node_count = 0;
@@ -494,6 +501,21 @@ execution_statet::add_thread(const goto_programt *prog)
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
   cur_state = &threads_state[active_thread];
+
+  // Update MPOR tracking data with newly initialized thread
+  thread_last_reads.push_back(std::set<expr2tc>());
+  thread_last_writes.push_back(std::set<expr2tc>());
+  // Unfortunately as each thread has a depenancy relation with every other
+  // thread we have to do a lot of work to initialize a new one. And initially
+  // all relations are '0', no transitions yet.
+  for (std::vector<std::vector<int> >::iterator it = dependancy_chain.begin();
+       it != dependancy_chain.end(); it++) {
+    it->push_back(0);
+  }
+  // And the new threads dependancies,
+  dependancy_chain.push_back(std::vector<int>());
+  for (unsigned int i = 0; i < dependancy_chain.size(); i++)
+    dependancy_chain.back().push_back(0);
 
   return threads_state.size() - 1; // thread ID, zero based
 }
