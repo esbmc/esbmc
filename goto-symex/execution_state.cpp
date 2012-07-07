@@ -498,15 +498,15 @@ execution_statet::add_thread(const goto_programt *prog)
   return threads_state.size() - 1; // thread ID, zero based
 }
 
-unsigned int
-execution_statet::get_expr_globals(const namespacet &ns,
-  const expr2tc &expr)
+void
+execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
+                                   std::set<expr2tc> &globals_list)
 {
 
   if (is_address_of2t(expr) || is_valid_object2t(expr) ||
       is_dynamic_size2t(expr) || is_zero_string2t(expr) ||
       is_zero_length_string2t(expr)) {
-    return 0;
+    return;
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;
     get_active_state().get_original_name(newexpr);
@@ -514,26 +514,24 @@ execution_statet::get_expr_globals(const namespacet &ns,
 
     if (name == "goto_symex::\\guard!" +
         i2string(get_active_state().top().level1.thread_id))
-      return 0;
+      return;
 
     const symbolt *symbol;
     if (ns.lookup(name, symbol))
-      return 0;
+      return;
 
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      return 1;
-    } else
-      return 0;
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size") {
+      return;
+    } else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
+      globals_list.insert(expr);
+    } else {
+      return;
+    }
   }
-  unsigned int globals = 0;
 
   forall_operands2(it, op_list, expr) {
-    globals += get_expr_globals(ns, **it);
+    get_expr_globals(ns, **it, globals_list);
   }
-
-  return globals;
 }
 
 crypto_hash
