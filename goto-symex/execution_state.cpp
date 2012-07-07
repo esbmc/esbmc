@@ -73,7 +73,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     DFS_traversed[state.source.thread_nr] = false;
   }
 
-  exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(expr2tc());
 
   active_thread = 0;
@@ -114,9 +113,7 @@ execution_statet::operator=(const execution_statet &ex)
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
-  exprs_read_write = ex.exprs_read_write;
   thread_start_data = ex.thread_start_data;
-  last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
@@ -399,42 +396,6 @@ execution_statet::check_if_ileaves_blocked(void)
   return false;
 }
 
-bool
-execution_statet::apply_static_por(const expr2tc &expr, unsigned int i) const
-{
-  bool consider = true;
-
-  if (!is_nil_expr(expr))
-  {
-    if(i < active_thread)
-    {
-      if(last_global_read_write.write_set.empty() &&
-         exprs_read_write.at(i+1).write_set.empty() &&
-         exprs_read_write.at(active_thread).write_set.empty())
-      {
-        return false;
-      }
-
-      consider = false;
-
-      if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).write_set))
-      {
-        consider = true;
-      }
-      else if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).read_set))
-      {
-        consider = true;
-      }
-      else if(last_global_read_write.has_read_intersect(exprs_read_write.at(i+1).write_set))
-      {
-        consider = true;
-      }
-    }
-  }
-
-  return consider;
-}
-
 void
 execution_statet::end_thread(void)
 {
@@ -529,7 +490,6 @@ execution_statet::add_thread(const goto_programt *prog)
     DFS_traversed[new_state.source.thread_nr] = false;
   }
 
-  exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(expr2tc());
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
@@ -555,7 +515,6 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
     if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).write_set.insert(name);
       return 1;
     } else
       return 0;
@@ -595,7 +554,6 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
     if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
       return 0;
     else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).read_set.insert(name);
       return 1;
     } else
       return 0;

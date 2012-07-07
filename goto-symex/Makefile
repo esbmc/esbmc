@@ -9,7 +9,7 @@ SRCS= symex_target.cpp symex_target_equation.cpp symex_assign.cpp \
       symex_goto.cpp builtin_functions.cpp slice.cpp symex_other.cpp \
       slice_by_trace.cpp xml_goto_trace.cpp symex_valid_object.cpp \
       dynamic_allocation.cpp symex_catch.cpp renaming.cpp \
-      execution_state.cpp reachability_tree.cpp read_write_set.cpp \
+      execution_state.cpp reachability_tree.cpp \
       crypto_hash.cpp VarMap.cpp
 
 clean:

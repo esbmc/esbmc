@@ -24,7 +24,6 @@
 #include "symex_target.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "read_write_set.h"
 #include "renaming.h"
 
 class reachability_treet;
@@ -368,14 +367,6 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
 
   /**
-   *  Apply a partial order reduction.
-   *  @param expr Assignment or read to consider in this analysis.
-   *  @param i Thread id of the currently executing thread.
-   *  @return False if we should skip this interleaving.
-   */
-  bool apply_static_por(const expr2tc &expr, unsigned int i) const;
-
-  /**
    *  Create a new thread.
    *  Creates and initializes a new thread, running at the start of the GOTO
    *  program prog.
@@ -458,15 +449,11 @@ class execution_statet : public goto_symext
    *  Every time a context switch is taken, the bool in this vector is set to
    *  true at the corresponding thread IDs index. */
   std::vector<bool> DFS_traversed;
-  /** Unknown, something POR related. */
-  std::vector<read_write_set> exprs_read_write;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
    *  thread starting process. */
   std::vector<expr2tc> thread_start_data;
-  /** Unknown, Something POR related. */
-  read_write_set last_global_read_write;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
   /** Global L2 state of this execution_statet. It's also copied as a reference
