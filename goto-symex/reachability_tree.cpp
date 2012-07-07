@@ -108,7 +108,7 @@ int reachability_treet::get_CS_bound() const
 bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
 {
 
-  if (get_cur_state().get_expr_read_globals(ns, code) > 0)
+  if (get_cur_state().get_expr_globals(ns, code) > 0)
     return analyse_for_cswitch_base(code);
   else
     return false;
@@ -119,9 +119,9 @@ bool reachability_treet::analyse_for_cswitch_after_assign(const expr2tc &code)
 
   const code_assign2t &assign = to_code_assign2t(code);
   int num_write_globals =
-    get_cur_state().get_expr_write_globals(ns, assign.target);
+    get_cur_state().get_expr_globals(ns, assign.target);
   int num_read_globals =
-    get_cur_state().get_expr_read_globals(ns, assign.source);
+    get_cur_state().get_expr_globals(ns, assign.source);
 
   if(num_read_globals + num_write_globals > 0)
     return analyse_for_cswitch_base(code);

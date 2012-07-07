@@ -386,19 +386,13 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
-   *  Get number of globals written by expr.
+   *  Get number of globals accessed by expr.
    *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.
    */
-  unsigned int get_expr_write_globals(const namespacet &ns,
-                                      const expr2tc &expr);
-
-  /**
-   *  See get_expr_write_globals.
-   */
-  unsigned int get_expr_read_globals(const namespacet &ns, const expr2tc &expr);
+  unsigned int get_expr_globals(const namespacet &ns, const expr2tc &expr);
 
   /**
    *  Generate hash of entire execution state.

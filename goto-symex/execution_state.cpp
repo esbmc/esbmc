@@ -499,38 +499,7 @@ execution_statet::add_thread(const goto_programt *prog)
 }
 
 unsigned int
-execution_statet::get_expr_write_globals(const namespacet &ns,
-                                         const expr2tc &expr)
-{
-
-  if (is_address_of2t(expr) || is_valid_object2t(expr) ||
-      is_dynamic_size2t(expr) || is_valid_object2t(expr) ||
-      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
-    return 0;
-  } else if (is_symbol2t(expr)) {
-    expr2tc newexpr = expr;
-    get_active_state().get_original_name(newexpr);
-    const std::string &name = to_symbol2t(newexpr).thename.as_string();
-    const symbolt &symbol = ns.lookup(name);
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      return 1;
-    } else
-      return 0;
-  }
-
-  unsigned int globals = 0;
-
-  forall_operands2(it, op_list, expr) {
-    globals += get_expr_write_globals(ns, **it);
-  }
-
-  return globals;
-}
-
-unsigned int
-execution_statet::get_expr_read_globals(const namespacet &ns,
+execution_statet::get_expr_globals(const namespacet &ns,
   const expr2tc &expr)
 {
 
@@ -561,7 +530,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
   unsigned int globals = 0;
 
   forall_operands2(it, op_list, expr) {
-    globals += get_expr_read_globals(ns, **it);
+    globals += get_expr_globals(ns, **it);
   }
 
   return globals;
