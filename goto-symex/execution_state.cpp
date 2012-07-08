@@ -728,7 +728,7 @@ execution_statet::calculate_mpor_constraints(void)
     }
   }
 
-  mpor_says_no = can_run;
+  mpor_says_no = !can_run;
 
   dependancy_chain = new_dep_chain;
 }
