@@ -739,8 +739,7 @@ bool
 execution_statet::has_cswitch_point_occured(void) const
 {
 
-  // Context switches can occur due to being forced, global state access, thread
-  // ended.
+  // Context switches can occur due to being forced, or by global state access
 
   if (cswitch_forced)
     return true;
@@ -749,13 +748,20 @@ execution_statet::has_cswitch_point_occured(void) const
       thread_last_writes[active_thread].size() != 0)
     return true;
 
+  return false;
+}
+
+bool
+execution_statet::can_execution_continue(void) const
+{
+
   if (threads_state[active_thread].thread_ended)
-    return true;
+    return false;
 
   if (threads_state[active_thread].call_stack.empty())
-    return true;
+    return false;
 
-  return false;
+  return true;
 }
 
 crypto_hash

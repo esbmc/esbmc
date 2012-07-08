@@ -629,8 +629,9 @@ reachability_treet::get_next_formula()
 
   while(!is_has_complete_formula())
   {
-    while (!get_cur_state().has_cswitch_point_occured() ||
-           get_cur_state().check_if_ileaves_blocked())
+    while ((!get_cur_state().has_cswitch_point_occured() ||
+           get_cur_state().check_if_ileaves_blocked()) &&
+           get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
 
     if (check_for_hash_collision()) {
@@ -670,8 +671,9 @@ reachability_treet::generate_schedule_formula()
   while (has_more_states())
   {
     total_states++;
-    while (!get_cur_state().has_cswitch_point_occured() ||
-           get_cur_state().check_if_ileaves_blocked())
+    while ((!get_cur_state().has_cswitch_point_occured() ||
+           get_cur_state().check_if_ileaves_blocked()) &&
+           get_cur_state().can_execution_continue())
     {
       get_cur_state().symex_step(*this);
     }

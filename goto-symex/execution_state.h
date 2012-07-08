@@ -454,11 +454,16 @@ class execution_statet : public goto_symext
    *  Four things can justify this:
    *   1. cswitch forced by atomic end or yield.
    *   2. Global data read/written.
-   *   3. Thread ended.
-   *   4. No data in call stack (same as thread ended?)
    *  @return True if context switch is now triggered
    */
   bool has_cswitch_point_occured(void) const;
+
+  /**
+   *  Can execution continue in this thread?
+   *  Answer is no if the thread has ended or there's nothing on the call stack
+   *  @return False if there are no further instructions to execute.
+   */
+  bool can_execution_continue(void) const;
 
   /**
    *  Generate hash of entire execution state.
