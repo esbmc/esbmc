@@ -665,6 +665,8 @@ reachability_treet::generate_schedule_formula()
       get_cur_state().symex_step(*this);
     }
 
+    next_thread_id = decide_ileave_direction(get_cur_state());
+
     create_next_state();
 
     go_next_state();
