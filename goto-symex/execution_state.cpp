@@ -693,7 +693,7 @@ execution_statet::calculate_mpor_constraints(void)
           continue; // No dependancy relation here
 
         // Now check for variable dependancy.
-        if (!check_mpor_dependancy(j, l))
+        if (!check_mpor_dependancy(active_thread, l))
           continue;
 
         res = 1;
