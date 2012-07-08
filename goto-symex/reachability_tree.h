@@ -155,6 +155,12 @@ public:
   bool check_for_hash_collision(void) const;
 
   /**
+   *  Perform various pieces of accounting after a hash collision - primarily,
+   *  ensuring that no further paths from this cswitch are explored.
+   */
+  void post_hash_collision_cleanup(void);
+
+  /**
    *  Update seen state hashes to contain current state.
    */
   void update_hash_collision_set(void);

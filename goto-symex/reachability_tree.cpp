@@ -122,6 +122,17 @@ reachability_treet::check_for_hash_collision(void) const
 }
 
 void
+reachability_treet::post_hash_collision_cleanup(void)
+{
+
+  for (std::vector<bool>::iterator it = get_cur_state().DFS_traversed.begin();
+       it != get_cur_state().DFS_traversed.end(); it++ )
+    *it = true;
+
+  return;
+}
+
+void
 reachability_treet::update_hash_collision_set(void)
 {
 
@@ -622,6 +633,11 @@ reachability_treet::get_next_formula()
            get_cur_state().check_if_ileaves_blocked())
       get_cur_state().symex_step(*this);
 
+    if (check_for_hash_collision()) {
+      post_hash_collision_cleanup();
+      break;
+    }
+
     next_thread_id = decide_ileave_direction(get_cur_state());
 
     create_next_state();
@@ -656,6 +672,12 @@ reachability_treet::generate_schedule_formula()
            get_cur_state().check_if_ileaves_blocked())
     {
       get_cur_state().symex_step(*this);
+    }
+
+    if (check_for_hash_collision()) {
+      post_hash_collision_cleanup();
+      go_next_state();
+      continue;
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
