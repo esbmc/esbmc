@@ -547,8 +547,8 @@ execution_statet::analyze_assign(const expr2tc &code)
 
   std::set<expr2tc> global_reads, global_writes;
   const code_assign2t &assign = to_code_assign2t(code);
-  get_expr_globals(ns, assign.target, global_reads);
-  get_expr_globals(ns, assign.source, global_writes);
+  get_expr_globals(ns, assign.target, global_writes);
+  get_expr_globals(ns, assign.source, global_reads);
 
   if (global_reads.size() > 0 || global_writes.size() > 0) {
     // Record read/written data
