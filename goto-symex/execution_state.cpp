@@ -560,9 +560,6 @@ execution_statet::analyze_assign(const expr2tc &code)
                                             global_reads.end());
     thread_last_writes[active_thread].insert(global_writes.begin(),
                                              global_writes.end());
-
-    // Tell RT about this
-    owning_rt->analyse_for_cswitch_base();
   }
 
   return;
@@ -579,9 +576,6 @@ execution_statet::analyze_read(const expr2tc &code)
     // Record read/written data
     thread_last_reads[active_thread].insert(global_reads.begin(),
                                             global_reads.end());
-
-    // Tell RT about this
-    owning_rt->analyse_for_cswitch_base();
   }
 
   return;

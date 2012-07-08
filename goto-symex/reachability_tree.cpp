@@ -136,48 +136,6 @@ reachability_treet::update_hash_collision_set(void)
   return;
 }
 
-bool reachability_treet::force_cswitch_point()
-{
-
-  // do analysis here
-  return analyse_for_cswitch_base();
-}
-
-bool reachability_treet::analyse_for_cswitch_base(void) {
-
-  execution_statet &ex_state = get_cur_state();
-
-  if (ex_state.check_if_ileaves_blocked())
-    return false;
-
-  crypto_hash hash;
-  if (state_hashing) {
-    hash = ex_state.generate_hash();
-    if (hit_hashes.find(hash) != hit_hashes.end())
-      return false;
-  }
-
-  unsigned int tid = 0;
-
-  if (por)
-    ex_state.calculate_mpor_constraints();
-
-  tid = decide_ileave_direction(ex_state);
-
-  next_thread_id = tid;
-
-  if (tid == ex_state.threads_state.size()) {
-    /* Once we've generated all interleavings from this state, increment hit
-     * count so that we don't come back here again */
-    if (state_hashing)
-      hit_hashes.insert(hash);
-
-    return false;
-  } else {
-    return true;
-  }
-}
-
 void
 reachability_treet::create_next_state(void)
 {
@@ -211,13 +169,14 @@ reachability_treet::create_next_state(void)
 bool
 reachability_treet::step_next_state(void)
 {
-  bool res;
 
-  res = force_cswitch_point();
-  if (res)
+  next_thread_id = decide_ileave_direction(get_cur_state());
+  if (next_thread_id != get_cur_state().threads_state.size()) {
     create_next_state();
+    return true;
+  }
 
-  return res;
+  return false;
 }
 
 unsigned int

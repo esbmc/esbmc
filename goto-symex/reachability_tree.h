@@ -160,26 +160,6 @@ public:
   void update_hash_collision_set(void);
 
   /**
-   *  Analyze context switch point.
-   *  Inspects current state of execution, and whether or not a context switch
-   *  can be taken right now. If it can, pick a thread to switch to next.
-   *  Actual state switch isn't taken at this point in time, allowing whatever
-   *  caused it to complete.
-   *  @return True if context switch is to be taken.
-   */
-  bool analyse_for_cswitch_base(void);
-
-  /**
-   *  Force context switch, regardless of state.
-   *  Cause a context switch to happen, no matter what we're executing right
-   *  now. This prevents POR from rejecting a switch. Certain other factors can
-   *  still prohibit a context switch at this time, for example the code is in
-   *  an atomic block, or all threads have ended.
-   *  @return True if context switch is to be taken.
-   */
-  bool force_cswitch_point();
-
-  /**
    *  Perform context switch operation triggered elsewhere.
    *  The analyse_* functions make a decision on whether or not to take a
    *  context switch, but defer the actual taking of this switch until later,
