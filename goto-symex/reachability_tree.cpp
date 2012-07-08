@@ -636,6 +636,8 @@ reachability_treet::get_next_formula()
     if (check_for_hash_collision()) {
       post_hash_collision_cleanup();
       break;
+    } else {
+      update_hash_collision_set();
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
@@ -678,6 +680,8 @@ reachability_treet::generate_schedule_formula()
       post_hash_collision_cleanup();
       go_next_state();
       continue;
+    } else {
+      update_hash_collision_set();
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
