@@ -81,6 +81,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   // One thread with one dependancy relation.
   dependancy_chain.push_back(std::vector<int>());
   dependancy_chain.back().push_back(0);
+  mpor_schedulable.push_back(true);
 
   active_thread = 0;
   last_active_thread = 0;
@@ -534,6 +535,8 @@ execution_statet::add_thread(const goto_programt *prog)
   dependancy_chain.push_back(std::vector<int>());
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
+
+  mpor_schedulable.push_back(true); // Has highest TID, so always schedulable.
 
   return threads_state.size() - 1; // thread ID, zero based
 }
