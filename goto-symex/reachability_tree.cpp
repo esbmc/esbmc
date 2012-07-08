@@ -105,31 +105,6 @@ int reachability_treet::get_CS_bound() const
   return CS_bound;
 }
 
-bool reachability_treet::analyse_for_cswitch_after_read(const expr2tc &code)
-{
-
-  std::set<expr2tc> global_reads, global_writes;
-  get_cur_state().get_expr_globals(ns, code, global_reads);
-  if (global_reads.size() > 0)
-    return analyse_for_cswitch_base(global_reads, global_writes);
-  else
-    return false;
-}
-
-bool reachability_treet::analyse_for_cswitch_after_assign(const expr2tc &code)
-{
-
-  std::set<expr2tc> global_reads, global_writes;
-  const code_assign2t &assign = to_code_assign2t(code);
-  get_cur_state().get_expr_globals(ns, assign.target, global_reads);
-  get_cur_state().get_expr_globals(ns, assign.source, global_writes);
-
-  if (global_reads.size() > 0 || global_writes.size() > 0)
-    return analyse_for_cswitch_base(global_reads, global_writes);
-
-  return false;
-}
-
 bool reachability_treet::force_cswitch_point()
 {
 

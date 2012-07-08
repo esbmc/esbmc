@@ -182,27 +182,6 @@ public:
   bool force_cswitch_point();
 
   /**
-   *  Analyse context switch point cause by a read.
-   *  Inspect a read expression and decide whether or not to take a context
-   *  switch from this point. A read is something like a guarded branch, a
-   *  return, a function call argument assignment or something that. If the
-   *  thing being read is global state, or something otherwise that makes this
-   *  a visible instruction, a context switch is taken.
-   *  @param code Expression being read that might touch global state.
-   *  @return True if context switch is to be taken.
-   */
-  bool analyse_for_cswitch_after_read(const expr2tc &code);
-
-  /**
-   *  Analyse context switch point cause by an assign.
-   *  Same as analyse_for_cswitch_after_read, but also considers a potential
-   *  assignment to global (or otherwise) visible state.
-   *  @param code Assignment being made that might touch global state.
-   *  @return True if context switch is to be taken.
-   */
-  bool analyse_for_cswitch_after_assign(const expr2tc &code);
-
-  /**
    *  Perform context switch operation triggered elsewhere.
    *  The analyse_* functions make a decision on whether or not to take a
    *  context switch, but defer the actual taking of this switch until later,
