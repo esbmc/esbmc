@@ -700,7 +700,9 @@ execution_statet::calculate_mpor_constraints(void)
         break;
       }
 
-      new_dep_chain[j][active_thread] = res;
+      // Don't overwrite if no match
+      if (res != 0)
+        new_dep_chain[j][active_thread] = res;
     }
   }
 
