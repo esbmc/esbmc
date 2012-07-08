@@ -645,6 +645,13 @@ reachability_treet::get_next_formula()
       update_hash_collision_set();
     }
 
+    if (por) {
+      get_cur_state().calculate_mpor_constraints();
+      if (get_cur_state().is_transition_blocked_by_mpor())
+        break;
+    }
+
+
     next_thread_id = decide_ileave_direction(get_cur_state());
 
     create_next_state();
