@@ -630,6 +630,8 @@ reachability_treet::get_next_formula()
     while (!get_cur_state().has_cswitch_point_occured())
       get_cur_state().symex_step(*this);
 
+    next_thread_id = decide_ileave_direction(get_cur_state());
+
     create_next_state();
 
     switch_to_next_execution_state();
