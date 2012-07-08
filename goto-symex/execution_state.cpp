@@ -418,6 +418,19 @@ execution_statet::end_thread(void)
   atomic_numbers[active_thread] = 0;
 }
 
+void
+execution_statet::update_after_switch_point(void)
+{
+
+  execute_guard();
+  resetDFS_traversed();
+
+  // MPOR records the variables accessed in last transition taken; we're
+  // starting a new transition, so for the current thread, clear records.
+  thread_last_reads[active_thread].clear();
+  thread_last_writes[active_thread].clear();
+}
+
 bool
 execution_statet::is_cur_state_guard_false(void)
 {

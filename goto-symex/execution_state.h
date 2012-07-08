@@ -386,6 +386,12 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
+   *  Perform any necessary steps after a context switch point. Whether or not
+   *  it was taken. Resets DFS record, POR records, executes thread guard.
+   */
+  void update_after_switch_point(void);
+
+  /**
    *  Analyze the contents of an assignment for threading.
    *  If the assignment touches any kind of shared state, we track the accessed
    *  variables for POR decisions made in the future, and also ask the RT obj
