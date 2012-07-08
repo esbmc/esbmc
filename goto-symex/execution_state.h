@@ -435,6 +435,14 @@ class execution_statet : public goto_symext
    */
   void calculate_mpor_constraints(void);
 
+  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
+   *  and is read-only. */
+  bool is_thread_mpor_schedulable(unsigned int tid) const
+  {
+    assert(tid < threads_state.size());
+    return mpor_schedulable[tid];
+  }
+
   /**
    *  Generate hash of entire execution state.
    *  This takes all current symbolic assignments to variables contained in the

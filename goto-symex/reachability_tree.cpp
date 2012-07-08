@@ -128,6 +128,9 @@ bool reachability_treet::analyse_for_cswitch_base(void) {
 
   unsigned int tid = 0;
 
+  if (por)
+    ex_state.calculate_mpor_constraints();
+
   tid = decide_ileave_direction(ex_state);
 
   at_end_of_run = true;
@@ -228,11 +231,9 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
     if (!ex_state.dfs_explore_thread(tid))
       continue;
 
-#if 0
     //apply static partial-order reduction
-    if(por && !ex_state.apply_static_por(expr, tid))
+    if (por && !ex_state.is_thread_mpor_schedulable(tid))
       continue;
-#endif
 
     break;
   }
@@ -625,13 +626,11 @@ reachability_treet::check_thread_viable(int tid, bool quiet) const
     return false;
   }
 
-#if 0
-  if (por && !ex.apply_static_por(expr, tid)) {
+  if (por && !ex.is_thread_mpor_schedulable(tid)) {
     if (!quiet)
       std::cout << "Thread unschedulable due to POR" << std::endl;
     return false;
   }
-#endif
 
   return true;
 }
