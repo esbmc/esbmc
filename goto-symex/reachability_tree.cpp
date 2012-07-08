@@ -104,6 +104,38 @@ int reachability_treet::get_CS_bound() const
   return CS_bound;
 }
 
+bool
+reachability_treet::check_for_hash_collision(void) const
+{
+
+  if (!state_hashing)
+    return false;
+
+  const execution_statet &ex_state = get_cur_state();
+
+  crypto_hash hash;
+  hash = ex_state.generate_hash();
+  if (hit_hashes.find(hash) != hit_hashes.end())
+    return true;
+
+  return false;
+}
+
+void
+reachability_treet::update_hash_collision_set(void)
+{
+
+  if (!state_hashing)
+    return;
+
+  execution_statet &ex_state = get_cur_state();
+
+  crypto_hash hash;
+  hash = ex_state.generate_hash();
+  hit_hashes.insert(hash);
+  return;
+}
+
 bool reachability_treet::force_cswitch_point()
 {
 

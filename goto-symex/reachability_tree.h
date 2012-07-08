@@ -149,6 +149,17 @@ public:
   bool check_thread_viable(int tid, bool quiet) const;
 
   /**
+   *  Check whether current ex_state is a state hash collision.
+   *  @return True if this state has already been visited
+   */
+  bool check_for_hash_collision(void) const;
+
+  /**
+   *  Update seen state hashes to contain current state.
+   */
+  void update_hash_collision_set(void);
+
+  /**
    *  Analyze context switch point.
    *  Inspects current state of execution, and whether or not a context switch
    *  can be taken right now. If it can, pick a thread to switch to next.
