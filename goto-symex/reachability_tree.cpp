@@ -56,7 +56,6 @@ reachability_treet::setup_for_new_explore(void)
 
   execution_states.clear();
 
-  at_end_of_run = false;
   has_complete_formula = false;
 
   execution_statet *s;
@@ -133,7 +132,6 @@ bool reachability_treet::analyse_for_cswitch_base(void) {
 
   tid = decide_ileave_direction(ex_state);
 
-  at_end_of_run = true;
   next_thread_id = tid;
 
   if (tid == ex_state.threads_state.size()) {
@@ -152,9 +150,6 @@ void
 reachability_treet::create_next_state(void)
 {
   execution_statet &ex_state = get_cur_state();
-
-  if (!at_end_of_run)
-    return;
 
   if (next_thread_id != ex_state.threads_state.size()) {
     execution_statet *new_state = ex_state.clone();
@@ -269,8 +264,6 @@ void reachability_treet::switch_to_next_execution_state()
       has_complete_formula = true;
     }
   }
-
-  at_end_of_run = false;
 }
 
 bool reachability_treet::reset_to_unexplored_state()
@@ -298,7 +291,6 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
-  at_end_of_run = false;
   return execution_states.size() != 0;
 }
 
@@ -322,8 +314,6 @@ void reachability_treet::go_next_state()
     if(execution_states.size() > 0)
       cur_state_it++;
   }
-
-  at_end_of_run = false;
 }
 
 reachability_treet::dfs_position::dfs_position(const reachability_treet &rt)

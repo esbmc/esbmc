@@ -324,10 +324,6 @@ public:
    *  That is; for this particular interleaving. There may still be other
    *  interleavings to explore */
   bool has_complete_formula;
-  /** Flag indicating we've reached a context switch point.
-   *  A "run" is an stretch of symbolic execution between two context switch
-   *  points. */
-  bool at_end_of_run;
   /** State hashing is enabled */
   bool state_hashing;
   /** Functions dictate interleavings; perform no exploration.
