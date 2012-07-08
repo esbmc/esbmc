@@ -615,6 +615,109 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
   }
 }
 
+bool
+execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l) const
+{
+
+  assert(j < threads_state.size());
+  assert(l < threads_state.size());
+
+  // Rules given on page 13 of MPOR paper, although they don't appear to
+  // distinguish which thread is which correctly. Essentially, check that
+  // the write(s) of the previous transition (l) don't intersect with this
+  // transitions (j) reads or writes; and that the previous transitions reads
+  // don't intersect with this transitions write(s).
+
+  // Double write intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
+       it != thread_last_writes[j].end(); it++)
+    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+      return true;
+
+  // This read what that wrote intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
+       it != thread_last_reads[j].end(); it++)
+    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+      return true;
+
+  // We wrote what that reads intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
+       it != thread_last_writes[j].end(); it++)
+    if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
+      return true;
+
+  // No check for read-read intersection, it doesn't affect anything
+  return false;
+}
+
+void
+execution_statet::calculate_mpor_constraints(void)
+{
+
+  std::vector<std::vector<int> > new_dep_chain;
+  // Primary bit of MPOR logic - to be executed at the end of a transition to
+  // update dependancy tracking and suchlike.
+
+  // MPOR paper, page 12, create new dependancy chain record for this time step.
+
+  // Start new dependancy chain for this thread
+  for (unsigned int i = 0; i < new_dep_chain.size(); i++)
+    new_dep_chain[active_thread][i] = -1;
+
+  // This thread depends on this thread.
+  new_dep_chain[active_thread][active_thread] = 1;
+
+  // Mark un-run threads as continuing to be un-run. Otherwise, look for a
+  // dependancy chain from each thread to the run thread.
+  for (unsigned int j = 0; j < new_dep_chain.size(); j++) {
+    if (j == active_thread)
+      continue;
+
+    if (dependancy_chain[j][active_thread] == 0) {
+      // This thread hasn't been run; continue not having been run.
+      new_dep_chain[j][active_thread] = 0;
+    } else {
+      // This is where the beef is. If there is any other thread (including
+      // the active thread) that we depend on, that depends on the active
+      // thread, then record a dependancy.
+      // A direct dependancy occurs when l = j, as DCjj always = 1, and DEPji
+      // is true.
+      int res = 0;
+
+      for (unsigned int l = 0; l < new_dep_chain.size(); l++) {
+        if (dependancy_chain[j][l] != 1)
+          continue; // No dependancy relation here
+
+        // Now check for variable dependancy.
+        if (!check_mpor_dependancy(j, l))
+          continue;
+
+        res = 1;
+        break;
+      }
+
+      new_dep_chain[j][active_thread] = res;
+    }
+  }
+
+  // For /all other relations/, just propagate the dependancy it already has.
+  for (unsigned int p = 0; p < new_dep_chain.size(); p++) {
+    for (unsigned int q = 0; q < new_dep_chain.size(); q++) {
+      if (q == active_thread)
+        continue;
+
+      new_dep_chain[p][q] = dependancy_chain[p][q];
+    }
+    if (p == active_thread)
+      continue;
+  }
+
+  // Voila, new dependancy chain.
+  dependancy_chain = new_dep_chain;
+
+  // Insert here calculations of what threads are runnable, do that soon.
+}
+
 crypto_hash
 execution_statet::generate_hash(void) const
 {

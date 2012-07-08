@@ -420,6 +420,22 @@ class execution_statet : public goto_symext
                         std::set<expr2tc> &global_list);
 
   /**
+   *  Check for scheduling dependancies. Whether it exists between the variables
+   *  accessed by the last transition of thread j and the last transition of
+   *  thread l.
+   *  @param j Most recently executed thread id
+   *  @param l Other thread id to check dependancy with
+   *  @return True if scheduling dependancy exists between threads j and l
+   */
+  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+
+  /**
+   *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
+   *  right now without violating the "quasi-monotonic" property.
+   */
+  void calculate_mpor_constraints(void);
+
+  /**
    *  Generate hash of entire execution state.
    *  This takes all current symbolic assignments to variables contained in the
    *  l2 renaming object, and their precomputed hashes, concatonates them with
