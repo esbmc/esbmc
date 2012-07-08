@@ -206,7 +206,7 @@ execution_statet::symex_step(reachability_treet &art)
     case END_FUNCTION:
       if (instruction.function == "main") {
         end_thread();
-        art.force_cswitch_point();
+        force_cswitch();
       } else {
         // Fall through to base class
         goto_symext::symex_step(art);
@@ -225,7 +225,7 @@ execution_statet::symex_step(reachability_treet &art)
       // don't do this for the active_atomic_number though, because it's cheap,
       // and should be balanced under all circumstances anyway).
       if (!state.guard.is_false())
-        art.force_cswitch_point();
+        force_cswitch();
 
       break;
     case RETURN:

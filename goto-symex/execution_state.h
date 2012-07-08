@@ -443,6 +443,12 @@ class execution_statet : public goto_symext
     return mpor_schedulable[tid];
   }
 
+  /** Accessor method for cswitch_forced. Sets it to true. */
+  void force_cswitch(void)
+  {
+    cswitch_forced = true;
+  }
+
   /**
    *  Generate hash of entire execution state.
    *  This takes all current symbolic assignments to variables contained in the

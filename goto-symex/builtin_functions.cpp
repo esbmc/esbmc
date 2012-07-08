@@ -229,7 +229,7 @@ void
 goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -263,7 +263,7 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
   art.get_cur_state().DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
 
   // And force a context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -375,7 +375,7 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
   // Otherwise, this will cause the required context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
 
   return;
 }
