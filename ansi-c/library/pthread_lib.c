@@ -37,17 +37,18 @@ static unsigned int join_wait = 0;
 void
 pthread_start_main_hook(void)
 {
-__ESBMC_ATOMIC:
+  __ESBMC_atomic_begin();
   num_total_threads++;
-__ESBMC_ATOMIC:
   num_threads_running++;
+  __ESBMC_atomic_end();
 }
 
 void
 pthread_end_main_hook(void)
 {
-__ESBMC_ATOMIC:
+  __ESBMC_atomic_begin();
   num_threads_running--;
+  __ESBMC_atomic_end();
 }
 
 void
