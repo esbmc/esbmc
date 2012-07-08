@@ -603,7 +603,8 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     if (ns.lookup(name, symbol))
       return;
 
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size") {
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
+        name == "c::__ESBMC_is_dynamic") {
       return;
     } else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
       globals_list.insert(expr);
