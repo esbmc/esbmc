@@ -83,6 +83,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   dependancy_chain.back().push_back(0);
   mpor_schedulable.push_back(true);
 
+  cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
   node_count = 0;
