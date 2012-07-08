@@ -188,34 +188,41 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case FUNCTION_CALL:
+  {
+    expr2tc deref_code = instruction.code;
+    replace_dynamic_allocation(deref_code);
+    replace_nondet(deref_code);
+
+    code_function_call2t &call = to_code_function_call2t(deref_code);
+
+    if (!is_nil_expr(call.ret)) {
+      dereference(call.ret, true);
+    }
+
+    for (std::vector<expr2tc>::iterator it = call.operands.begin();
+         it != call.operands.end(); it++)
+      if (!is_nil_expr(*it))
+        dereference(*it, false);
+
+    // Always run intrinsics, whether guard is false or not. This is due to the
+    // unfortunate circumstance where a thread starts with false guard due to
+    // decision taken in another thread in this trace. In that case the
+    // terminate intrinsic _has_ to run, or we explode.
+    if (is_symbol2t(call.function) &&
+      has_prefix(to_symbol2t(call.function).thename.as_string(), "c::__ESBMC")){
+      cur_state->source.pc++;
+      run_intrinsic(call, art, to_symbol2t(call.function).thename.as_string());
+      return;
+    }
+
+    // Don't run a function call if the guard is false.
     if (!cur_state->guard.is_false()) {
-      expr2tc deref_code = instruction.code;
-      replace_dynamic_allocation(deref_code);
-      replace_nondet(deref_code);
-
-      code_function_call2t &call = to_code_function_call2t(deref_code);
-
-      if (!is_nil_expr(call.ret)) {
-	dereference(call.ret, true);
-      }
-
-      for (std::vector<expr2tc>::iterator it = call.operands.begin();
-           it != call.operands.end(); it++)
-        if (!is_nil_expr(*it))
-          dereference(*it, false);
-
-      if (is_symbol2t(call.function) &&
-        has_prefix(to_symbol2t(call.function).thename.as_string(), "c::__ESBMC")){
-	cur_state->source.pc++;
-	run_intrinsic(call, art, to_symbol2t(call.function).thename.as_string());
-	return;
-      }
-
       symex_function_call(deref_code);
-    } else   {
+    } else {
       cur_state->source.pc++;
     }
-    break;
+  }
+  break;
 
   case OTHER:
     if (!cur_state->guard.is_false()) {
