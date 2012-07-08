@@ -46,9 +46,12 @@ pthread_start_main_hook(void)
 void
 pthread_end_main_hook(void)
 {
+  // So, we want to be able to access this internal accounting data atomically,
+  // but that'll never be permitted by POR, which will see the access and try
+  // to generate context switches as a result. So, end the main thread in an
+  // atomic state, which will prevent everything but the final from-main switch.
   __ESBMC_atomic_begin();
   num_threads_running--;
-  __ESBMC_atomic_end();
 }
 
 void
