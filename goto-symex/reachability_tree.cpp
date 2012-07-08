@@ -690,8 +690,10 @@ reachability_treet::generate_schedule_formula()
 }
 
 bool
-reachability_treet::restore_from_dfs_state(void *_dfs)
+reachability_treet::restore_from_dfs_state(void *_dfs __attribute__((unused)))
 {
+  abort();
+#if 0
   std::vector<reachability_treet::dfs_position::dfs_state>::const_iterator it;
   unsigned int i;
 
@@ -746,16 +748,20 @@ reachability_treet::restore_from_dfs_state(void *_dfs)
     }
 #endif
   }
-
+#endif
   return false;
 }
 
-void reachability_treet::save_checkpoint(const std::string fname) const
+void reachability_treet::save_checkpoint(const std::string fname __attribute__((unused))) const
 {
 
+#if 0
   reachability_treet::dfs_position pos(*this);
   if (pos.write_to_file(fname))
     std::cerr << "Couldn't save checkpoint; continuing" << std::endl;
+#endif
+
+  abort();
 
   return;
 }
