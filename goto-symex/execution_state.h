@@ -450,6 +450,17 @@ class execution_statet : public goto_symext
   }
 
   /**
+   *  Has a context switch point occured.
+   *  Four things can justify this:
+   *   1. cswitch forced by atomic end or yield.
+   *   2. Global data read/written.
+   *   3. Thread ended.
+   *   4. No data in call stack (same as thread ended?)
+   *  @return True if context switch is now triggered
+   */
+  bool has_cswitch_point_occured(void) const;
+
+  /**
    *  Generate hash of entire execution state.
    *  This takes all current symbolic assignments to variables contained in the
    *  l2 renaming object, and their precomputed hashes, concatonates them with

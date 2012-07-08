@@ -246,13 +246,6 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   return tid;
 }
 
-bool reachability_treet::is_at_end_of_run()
-{
-  return at_end_of_run ||
-         get_cur_state().get_active_state().thread_ended ||
-         get_cur_state().get_active_state().call_stack.empty();
-}
-
 bool reachability_treet::is_has_complete_formula()
 {
 
@@ -644,7 +637,7 @@ reachability_treet::get_next_formula()
 
   while(!is_has_complete_formula())
   {
-    while (!is_at_end_of_run())
+    while (!get_cur_state().has_cswitch_point_occured())
       get_cur_state().symex_step(*this);
 
     create_next_state();
@@ -675,7 +668,7 @@ reachability_treet::generate_schedule_formula()
   while (has_more_states())
   {
     total_states++;
-    while (!is_at_end_of_run())
+    while (!get_cur_state().has_cswitch_point_occured())
     {
       get_cur_state().symex_step(*this);
     }

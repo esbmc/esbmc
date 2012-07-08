@@ -209,15 +209,6 @@ public:
   void print_ileave_trace(void) const;
 
   /**
-   *  Has a context switch been triggered.
-   *  If an analyze function has decided that a context switch has to occur at
-   *  this point, or if the current thread has ended, then a context switch has
-   *  been triggered.
-   *  @return True if context switch is now triggered
-   */
-  bool is_at_end_of_run();
-
-  /**
    *  Have we generated a full program trace.
    *  @return True if all threads have run to completion
    */

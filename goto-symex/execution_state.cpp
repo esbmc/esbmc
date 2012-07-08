@@ -743,6 +743,29 @@ execution_statet::calculate_mpor_constraints(void)
   dependancy_chain = new_dep_chain;
 }
 
+bool
+execution_statet::has_cswitch_point_occured(void) const
+{
+
+  // Context switches can occur due to being forced, global state access, thread
+  // ended.
+
+  if (cswitch_forced)
+    return true;
+
+  if (thread_last_reads[active_thread].size() != 0 ||
+      thread_last_writes[active_thread].size() != 0)
+    return true;
+
+  if (threads_state[active_thread].thread_ended)
+    return true;
+
+  if (threads_state[active_thread].call_stack.empty())
+    return true;
+
+  return false;
+}
+
 crypto_hash
 execution_statet::generate_hash(void) const
 {
