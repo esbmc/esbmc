@@ -81,7 +81,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   // One thread with one dependancy relation.
   dependancy_chain.push_back(std::vector<int>());
   dependancy_chain.back().push_back(0);
-  mpor_schedulable.push_back(true);
+  mpor_says_no = false;
 
   cswitch_forced = false;
   active_thread = 0;
@@ -138,7 +138,7 @@ execution_statet::operator=(const execution_statet &ex)
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
   dependancy_chain = ex.dependancy_chain;
-  mpor_schedulable = ex.mpor_schedulable;
+  mpor_says_no = ex.mpor_says_no;
   cswitch_forced = ex.cswitch_forced;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
@@ -534,8 +534,6 @@ execution_statet::add_thread(const goto_programt *prog)
   for (unsigned int i = 0; i < dependancy_chain.size(); i++)
     dependancy_chain.back().push_back(0);
 
-  mpor_schedulable.push_back(true); // Has highest TID, so always schedulable.
-
   return threads_state.size() - 1; // thread ID, zero based
 }
 
@@ -704,33 +702,33 @@ execution_statet::calculate_mpor_constraints(void)
 
   // Voila, new dependancy chain.
 
-  // Calculations of what threads are runnable. No need to consider first case,
-  // because we always start with one thread, and it always starts without
-  // considering POR.
-  for (unsigned int i = 0; i < threads_state.size(); i++) {
-    bool can_run = true;
-    for (unsigned int j = i + 1; j < threads_state.size(); j++) {
-      if (new_dep_chain[j][i] != -1)
-        // Either no higher threads have been run, or a dependancy relation in
-        // a higher thread justifies our out-of-order execution.
-        continue;
+  // Calculate whether or not the transition we just took, in active_thread,
+  // was in fact schedulable. We can't tell whether or not a transition is
+  // allowed in advance because we don't know what it is. So instead, check
+  // whether or not a transition /would/ have been allowed, once we've taken
+  // it.
+  bool can_run = true;
+  for (unsigned int j = active_thread + 1; j < threads_state.size(); j++) {
+    if (new_dep_chain[j][active_thread] != -1)
+      // Either no higher threads have been run, or a dependancy relation in
+      // a higher thread justifies our out-of-order execution.
+      continue;
 
-      // Search for a dependancy chain in a lower thread that links us back to
-      // a higher thread, justifying this order.
-      bool dep_exists = false;
-      for (unsigned int l = 0; l < i; l++) {
-        if (dependancy_chain[j][l] == 1)
-          dep_exists = true;
-      }
-
-      if (!dep_exists) {
-        can_run = false;
-        break;
-      }
+    // Search for a dependancy chain in a lower thread that links us back to
+    // a higher thread, justifying this order.
+    bool dep_exists = false;
+    for (unsigned int l = 0; l < active_thread; l++) {
+      if (dependancy_chain[j][l] == 1)
+        dep_exists = true;
     }
 
-    mpor_schedulable[i] = can_run;
+    if (!dep_exists) {
+      can_run = false;
+      break;
+    }
   }
+
+  mpor_says_no = can_run;
 
   dependancy_chain = new_dep_chain;
 }

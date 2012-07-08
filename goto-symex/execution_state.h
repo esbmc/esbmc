@@ -437,10 +437,9 @@ class execution_statet : public goto_symext
 
   /** Accessor method for mpor_schedulable. Ensures its access is within bounds
    *  and is read-only. */
-  bool is_thread_mpor_schedulable(unsigned int tid) const
+  bool is_transition_blocked_by_mpor(void) const
   {
-    assert(tid < threads_state.size());
-    return mpor_schedulable[tid];
+    return mpor_says_no;
   }
 
   /** Accessor method for cswitch_forced. Sets it to true. */
@@ -558,11 +557,10 @@ class execution_statet : public goto_symext
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependancy_chain[i][j] here. */
   std::vector<std::vector<int> > dependancy_chain;
-  /** MPOR scheduling outcomes. Records which threads may be scheduled according
-   *  to MPOR analysis. It's valid for no threads to be schedulable - this means
-   *  that this interleaving violates "quasi-monoticity" and thus is to be
-   *  stripped. */
-  std::vector<bool> mpor_schedulable;
+  /** MPOR scheduling outcome. If we've just taken a transition that MPOR
+   *  rejects, this becomes true. For various reasons, we can't tell whether or
+   *  not MPOR rejects a transition in advance. */
+  bool mpor_says_no;
   /** Indicates a manatory context switch should occur. Can happen when an
    *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
   bool cswitch_forced;
