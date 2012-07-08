@@ -655,7 +655,7 @@ void
 execution_statet::calculate_mpor_constraints(void)
 {
 
-  std::vector<std::vector<int> > new_dep_chain;
+  std::vector<std::vector<int> > new_dep_chain = dependancy_chain;
   // Primary bit of MPOR logic - to be executed at the end of a transition to
   // update dependancy tracking and suchlike.
 
@@ -702,16 +702,7 @@ execution_statet::calculate_mpor_constraints(void)
   }
 
   // For /all other relations/, just propagate the dependancy it already has.
-  for (unsigned int p = 0; p < new_dep_chain.size(); p++) {
-    for (unsigned int q = 0; q < new_dep_chain.size(); q++) {
-      if (q == active_thread)
-        continue;
-
-      new_dep_chain[p][q] = dependancy_chain[p][q];
-    }
-    if (p == active_thread)
-      continue;
-  }
+  // Achieved by initial duplication of dependancy_chain.
 
   // Voila, new dependancy chain.
 
