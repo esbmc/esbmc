@@ -541,6 +541,9 @@ class execution_statet : public goto_symext
    *  that this interleaving violates "quasi-monoticity" and thus is to be
    *  stripped. */
   std::vector<bool> mpor_schedulable;
+  /** Indicates a manatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
+  bool cswitch_forced;
 
   // Static stuff:
 
