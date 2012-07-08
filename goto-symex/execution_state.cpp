@@ -554,7 +554,7 @@ execution_statet::analyze_assign(const expr2tc &code)
                                              global_writes.end());
 
     // Tell RT about this
-    owning_rt->analyse_for_cswitch_base(global_reads, global_writes);
+    owning_rt->analyse_for_cswitch_base();
   }
 
   return;
@@ -573,7 +573,7 @@ execution_statet::analyze_read(const expr2tc &code)
                                             global_reads.end());
 
     // Tell RT about this
-    owning_rt->analyse_for_cswitch_base(global_reads, global_writes);
+    owning_rt->analyse_for_cswitch_base();
   }
 
   return;

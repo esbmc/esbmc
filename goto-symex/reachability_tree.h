@@ -125,24 +125,17 @@ public:
    *  states, their stack traces and the current instruction being executed.
    *  Then ask the user what thread to switch to; giving feedback and asking
    *  again if that switch is blocked somehow.
-   *  @param global_reads Set of global exprs read causing cswitch; for POR
-   *  @param global_writes Set of global exprs written causing cswitch; for POR
    *  @return Thread ID user desires us to switch to
    */
-  int get_ileave_direction_from_user(const std::set<expr2tc> &global_reads,
-                                 const std::set<expr2tc> &global_writes) const;
+  int get_ileave_direction_from_user(void) const;
 
   /**
    *  Decide context switch from --round-robin.
    *  Called when --round-robin scheduling is picked. Decides which context
    *  switch to take on that basis.
-   *  @param global_reads Set of global exprs read causing cswitch; for POR
-   *  @param global_writes Set of global exprs written causing cswitch; for POR
    *  @return Thread ID to switch to according to scheduling
    */
-  int get_ileave_direction_from_scheduling(
-                                  const std::set<expr2tc> &global_reads,
-                                  const std::set<expr2tc> &global_writes) const;
+  int get_ileave_direction_from_scheduling(void) const;
 
   /**
    *  Determine if a thread can be run.
@@ -150,13 +143,10 @@ public:
    *  POR and so forth etc. Potentially prints a comment as to why the thread
    *  is blocked, for user feedback from get_ileave_direction_from_user
    *  @param tid Thread ID to switch to
-   *  @param global_reads Set of global exprs read causing cswitch; for POR
-   *  @param global_writes Set of global exprs written causing cswitch; for POR
    *  @param quiet If false, will print to stdout why this thread is blocked
    *  @return True if thread is viable; false otherwise.
    */
-  bool check_thread_viable(int tid, const std::set<expr2tc> &global_reads,
-                      const std::set<expr2tc> &global_writes, bool quiet) const;
+  bool check_thread_viable(int tid, bool quiet) const;
 
   /**
    *  Analyze context switch point.
@@ -164,12 +154,9 @@ public:
    *  can be taken right now. If it can, pick a thread to switch to next.
    *  Actual state switch isn't taken at this point in time, allowing whatever
    *  caused it to complete.
-   *  @param global_reads Set of global exprs read causing cswitch; for POR
-   *  @param global_writes Set of global exprs written causing cswitch; for POR
    *  @return True if context switch is to be taken.
    */
-  bool analyse_for_cswitch_base(const std::set<expr2tc> &read_set,
-                                const std::set<expr2tc> &write_set);
+  bool analyse_for_cswitch_base(void);
 
   /**
    *  Force context switch, regardless of state.
@@ -208,13 +195,9 @@ public:
    *  scheduling method/option is enabled. Called internally by various
    *  analysis routines.
    *  @param ex_state Execution state to analyse for switch direction
-   *  @param global_reads Set of global exprs read causing cswitch; for POR
-   *  @param global_writes Set of global exprs written causing cswitch; for POR
    *  @return Thread ID of what thread to switch to next.
    */
-  unsigned int decide_ileave_direction(execution_statet &ex_state,
-                                       const std::set<expr2tc> &global_reads,
-                                       const std::set<expr2tc> &global_writes);
+  unsigned int decide_ileave_direction(execution_statet &ex_state);
 
   /**
    *  Prints state of execution_statet stack.

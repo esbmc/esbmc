@@ -109,14 +109,10 @@ bool reachability_treet::force_cswitch_point()
 {
 
   // do analysis here
-  std::set<expr2tc> global_reads, global_writes;
-  return analyse_for_cswitch_base(global_reads, global_writes);
+  return analyse_for_cswitch_base();
 }
 
-bool reachability_treet::analyse_for_cswitch_base(
-                                  const std::set<expr2tc> &global_reads,
-                                  const std::set<expr2tc> &global_writes)
-{
+bool reachability_treet::analyse_for_cswitch_base(void) {
 
   execution_statet &ex_state = get_cur_state();
 
@@ -132,7 +128,7 @@ bool reachability_treet::analyse_for_cswitch_base(
 
   unsigned int tid = 0;
 
-  tid = decide_ileave_direction(ex_state, global_reads, global_writes);
+  tid = decide_ileave_direction(ex_state);
 
   at_end_of_run = true;
   next_thread_id = tid;
@@ -195,20 +191,18 @@ reachability_treet::step_next_state(void)
 }
 
 unsigned int
-reachability_treet::decide_ileave_direction(execution_statet &ex_state,
-                                        const std::set<expr2tc> &global_reads,
-                                        const std::set<expr2tc> &global_writes)
+reachability_treet::decide_ileave_direction(execution_statet &ex_state)
 {
   unsigned int tid = 0, user_tid = 0;
 
   if (config.options.get_bool_option("interactive-ileaves")) {
-    tid = get_ileave_direction_from_user(global_reads, global_writes);
+    tid = get_ileave_direction_from_user();
     user_tid = tid;
   }
   //begin - H.Savino
   else if (config.options.get_bool_option("round-robin")) {
 
-    tid = get_ileave_direction_from_scheduling(global_reads, global_writes);
+    tid = get_ileave_direction_from_scheduling();
     user_tid = tid;
     if(tid != ex_state.active_thread){
         ex_state.DFS_traversed.at(ex_state.active_thread)=true;
@@ -515,9 +509,7 @@ reachability_treet::print_ileave_trace(void) const
 }
 
 int
-reachability_treet::get_ileave_direction_from_user(
-                                  const std::set<expr2tc> &global_reads,
-                                  const std::set<expr2tc> &global_writes) const
+reachability_treet::get_ileave_direction_from_user(void) const
 {
   std::string input;
   unsigned int tid;
@@ -527,7 +519,7 @@ reachability_treet::get_ileave_direction_from_user(
 
   // First of all, are there actually any valid context switch targets?
   for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-    if (check_thread_viable(tid, global_reads, global_writes, true))
+    if (check_thread_viable(tid, true))
       break;
   }
 
@@ -556,7 +548,7 @@ reachability_treet::get_ileave_direction_from_user(
       } else if (tid >= get_cur_state().threads_state.size()) {
         std::cout << "Number out of range";
       } else {
-        if (check_thread_viable(tid, global_reads, global_writes, false))
+        if (check_thread_viable(tid, false))
           break;
       }
     }
@@ -572,9 +564,7 @@ reachability_treet::get_ileave_direction_from_user(
 
 //begin - H.Savino
 int
-reachability_treet::get_ileave_direction_from_scheduling(
-                                  const std::set<expr2tc> &global_reads,
-                                  const std::set<expr2tc> &global_writes) const
+reachability_treet::get_ileave_direction_from_scheduling(void) const
 {
   unsigned int tid;
 
@@ -588,7 +578,7 @@ reachability_treet::get_ileave_direction_from_scheduling(
 
     // First of all, are there actually any valid context switch targets?
     for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
-      if (check_thread_viable(tid, global_reads, global_writes, true))
+      if (check_thread_viable(tid, true))
         break;
     }
 
@@ -599,12 +589,12 @@ reachability_treet::get_ileave_direction_from_scheduling(
   tid=get_cur_state().active_thread;
 
   if(get_cur_state().TS_number < this->TS_slice-1){
-      if (check_thread_viable(tid, global_reads, global_writes, true))
+      if (check_thread_viable(tid, true))
           return tid;
   }
       while(1){
         tid=(tid + 1)%get_cur_state().threads_state.size();
-        if (check_thread_viable(tid, global_reads, global_writes, true)){
+        if (check_thread_viable(tid, true)){
             break;
         }
       }
@@ -613,10 +603,7 @@ reachability_treet::get_ileave_direction_from_scheduling(
 //end - H.Savino
 
 bool
-reachability_treet::check_thread_viable(int tid,
-                __attribute__((unused)) const std::set<expr2tc> &global_reads,
-                __attribute__((unused)) const std::set<expr2tc> &global_writes,
-                                        bool quiet) const
+reachability_treet::check_thread_viable(int tid, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
