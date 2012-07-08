@@ -751,6 +751,10 @@ execution_statet::has_cswitch_point_occured(void) const
   // Context switches can occur due to being forced, global state access, thread
   // ended.
 
+  // Can't cswitch if there's only one thread.
+  if (threads_state.size() == 1)
+    return false;
+
   if (cswitch_forced)
     return true;
 
