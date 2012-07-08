@@ -528,6 +528,11 @@ class execution_statet : public goto_symext
   /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
    *  to dependancy_chain[i][j] here. */
   std::vector<std::vector<int> > dependancy_chain;
+  /** MPOR scheduling outcomes. Records which threads may be scheduled according
+   *  to MPOR analysis. It's valid for no threads to be schedulable - this means
+   *  that this interleaving violates "quasi-monoticity" and thus is to be
+   *  stripped. */
+  std::vector<bool> mpor_schedulable;
 
   // Static stuff:
 

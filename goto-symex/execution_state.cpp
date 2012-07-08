@@ -136,6 +136,7 @@ execution_statet::operator=(const execution_statet &ex)
   thread_last_reads = ex.thread_last_reads;
   thread_last_writes = ex.thread_last_writes;
   dependancy_chain = ex.dependancy_chain;
+  mpor_schedulable = ex.mpor_schedulable;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
