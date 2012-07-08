@@ -433,6 +433,8 @@ execution_statet::update_after_switch_point(void)
   // starting a new transition, so for the current thread, clear records.
   thread_last_reads[active_thread].clear();
   thread_last_writes[active_thread].clear();
+
+  cswitch_forced = false;
 }
 
 bool
