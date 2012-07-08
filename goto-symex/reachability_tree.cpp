@@ -322,6 +322,7 @@ void reachability_treet::go_next_state()
     {
       it = cur_state_it;
       cur_state_it--;
+      delete *it;
       execution_states.erase(it);
     }
 
