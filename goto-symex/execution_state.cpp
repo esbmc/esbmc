@@ -714,9 +714,36 @@ execution_statet::calculate_mpor_constraints(void)
   }
 
   // Voila, new dependancy chain.
-  dependancy_chain = new_dep_chain;
 
-  // Insert here calculations of what threads are runnable, do that soon.
+  // Calculations of what threads are runnable. No need to consider first case,
+  // because we always start with one thread, and it always starts without
+  // considering POR.
+  for (unsigned int i = 0; i < threads_state.size(); i++) {
+    bool can_run = true;
+    for (unsigned int j = i + 1; j < threads_state.size(); j++) {
+      if (new_dep_chain[j][i] != -1)
+        // Either no higher threads have been run, or a dependancy relation in
+        // a higher thread justifies our out-of-order execution.
+        continue;
+
+      // Search for a dependancy chain in a lower thread that links us back to
+      // a higher thread, justifying this order.
+      bool dep_exists = false;
+      for (unsigned int l = 0; l < i; l++) {
+        if (dependancy_chain[j][l] == 1)
+          dep_exists = true;
+      }
+
+      if (!dep_exists) {
+        can_run = false;
+        break;
+      }
+    }
+
+    mpor_schedulable[i] = can_run;
+  }
+
+  dependancy_chain = new_dep_chain;
 }
 
 crypto_hash
