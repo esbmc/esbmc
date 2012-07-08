@@ -133,6 +133,10 @@ execution_statet::operator=(const execution_statet &ex)
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
 
+  thread_last_reads = ex.thread_last_reads;
+  thread_last_writes = ex.thread_last_writes;
+  dependancy_chain = ex.dependancy_chain;
+
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
   // them, it seems, while keeping the symex stuff ignorant of ex_state.
