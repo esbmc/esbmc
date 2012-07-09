@@ -9,21 +9,12 @@ using namespace std;
 int main () {
 
   stringstream oss;
-  char* val1 = new char[256];
-  signed char* val2;
-  unsigned char* val3;
-  strcpy(val1, "test");
-  *val2 = 'A';
-  *val3 = 'B';
-  
+  char* val1 = new char[10];
+  strcpy(val1, "testasd");
+
   oss << val1;
-  assert(oss.str() == "test");
+  assert(oss.str() == "testasd");
   
-  oss << val2;
-  assert(oss.str() == "testA");
- 
-  oss << val3;
-  assert(oss.str() == "testAB");
   
   return 0;
 }

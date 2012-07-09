@@ -1068,7 +1068,6 @@ void goto_convertt::convert_assign(
   //std::cout << "lhs: " << lhs.pretty() << std::endl;
   if (inductive_step)
     get_struct_components(lhs, state);
-
 }
 
 /*******************************************************************\
@@ -1738,7 +1737,8 @@ void goto_convertt::convert_for(
   //std::cout << "k_induction" << k_induction << std::endl;
 
   //do the g label
-  if (base_case || inductive_step)
+  if (!is_break() && !is_goto() 
+			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -1770,6 +1770,7 @@ void goto_convertt::make_nondet_assign(
     exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
+   
     if (state.components()[j].type().is_array())
     {
       rhs_expr=exprt("array_of", state.components()[j].type());
@@ -1996,6 +1997,28 @@ void goto_convertt::disable_k_induction()
   base_case=0;
 }
 
+
+/*******************************************************************\
+
+Function: goto_convertt::print_msg_mem_alloc
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::print_msg_mem_alloc(
+  const exprt &tmp)
+{
+  std::cerr << "warning: this program contains dynamic memory allocation,"
+            << " so we are not applying the inductive step to this program!" 
+            << std::endl;
+  disable_k_induction();
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::print_msg
@@ -2211,7 +2234,10 @@ void goto_convertt::replace_cond(
   }
   else if (exprid == "notequal")
   {
-    print_msg(tmp);
+    //std::cout << tmp.pretty() << std::endl;
+    if (!tmp.op0().is_symbol())
+      print_msg(tmp);
+	  
   }
   else
   {
@@ -2374,7 +2400,8 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() && (base_case || (inductive_step && cond.id()!="and")))
+  if (!is_break() && !is_goto() 
+			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2513,7 +2540,8 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (base_case /*|| inductive_step*/)
+  if (!is_break() && !is_goto() 
+			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
