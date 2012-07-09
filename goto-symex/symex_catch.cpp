@@ -23,9 +23,9 @@ Function: goto_symext::symex_catch
 void goto_symext::symex_catch(statet &state)
 {
   // there are two variants: 'push' and 'pop'
- 
-  #if 0 
   const goto_programt::instructiont &instruction=*state.source.pc;
+
+  std::cout << std::boolalpha << std::endl;
 
   if(instruction.targets.empty()) // pop
   {
@@ -40,24 +40,23 @@ void goto_symext::symex_catch(statet &state)
   }
   else // push
   {
-    state.catch_stack.push_back(goto_symex_statet::catch_framet());
-    goto_symex_statet::catch_framet &frame=state.catch_stack.back();
-    
+//    state.call_stack.push_back(goto_symex_statet::framet());
+    goto_symex_statet::framet &frame=state.call_stack.back();
+
     // copy targets
     const irept::subt &exception_list=
       instruction.code.find("exception_list").get_sub();
-    
+
     assert(exception_list.size()==instruction.targets.size());
-    
+
     unsigned i=0;
-    
+
     for(goto_programt::targetst::const_iterator
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
-      frame.target_map[exception_list[i].id()]=*it;
+      frame.catch_map[exception_list[i].id()]=*it;
   }
-  #endif
 }
 
 /*******************************************************************\
@@ -74,7 +73,6 @@ Function: goto_symext::symex_throw
 
 void goto_symext::symex_throw(statet &state)
 {
-  #if 0  
   const goto_programt::instructiont &instruction=*state.source.pc;
 
   // get the list of exceptions thrown
@@ -89,27 +87,33 @@ void goto_symext::symex_throw(statet &state)
       s_it++)
   {
     const goto_symex_statet::framet &frame=*s_it;
-    
+
+//    std::cout << "### throw instruction.targets.empty(): " << instruction.targets.empty() << std::endl;
+//    std::cout << "### throw frame.catch_map.empty(): " << frame.catch_map.empty() << std::endl;
+
     if(frame.catch_map.empty()) continue;
-  
-    for(irept::subt::const_iterator 
+
+//    std::cout << "### throw " << instruction.code.pretty() << std::endl;
+
+    for(irept::subt::const_iterator
         e_it=exceptions_thrown.begin();
         e_it!=exceptions_thrown.end();
         e_it++)
     {
       goto_symex_statet::framet::catch_mapt::const_iterator
-        c_it=frame.catch_map.find(e_it->id());
-        
+      c_it=frame.catch_map.find(e_it->id());
+
       if(c_it!=frame.catch_map.end())
       {
-        // found -- these are always forward gotos
+//        std::cout << "### throw (*c_it).first: " << (*c_it).first << std::endl;
+//        std::cout << "### throw (*c_it).second: " << (*c_it).second->code.pretty() << std::endl;
+        instruction.make_goto((*c_it).second);
       }
     }
   }
-  #endif
-  
+
   // An un-caught exception. Behaves like assume(0);
-  state.guard.add(false_exprt());
-  exprt tmp=state.guard.as_expr();
-  target->assumption(state.guard, tmp, state.source);
+//  state.guard.add(false_exprt());
+//  exprt tmp=state.guard.as_expr();
+//  target->assumption(state.guard, tmp, state.source);
 }
