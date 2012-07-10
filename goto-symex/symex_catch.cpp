@@ -25,8 +25,6 @@ void goto_symext::symex_catch(statet &state)
   // there are two variants: 'push' and 'pop'
   const goto_programt::instructiont &instruction=*state.source.pc;
 
-  std::cout << std::boolalpha << std::endl;
-
   if(instruction.targets.empty()) // pop
   {
     if(state.call_stack.empty())
@@ -40,7 +38,7 @@ void goto_symext::symex_catch(statet &state)
   }
   else // push
   {
-//    state.call_stack.push_back(goto_symex_statet::framet());
+    state.call_stack.push_back(goto_symex_statet::framet(state.source.thread_nr));
     goto_symex_statet::framet &frame=state.call_stack.back();
 
     // copy targets
@@ -88,12 +86,7 @@ void goto_symext::symex_throw(statet &state)
   {
     const goto_symex_statet::framet &frame=*s_it;
 
-//    std::cout << "### throw instruction.targets.empty(): " << instruction.targets.empty() << std::endl;
-//    std::cout << "### throw frame.catch_map.empty(): " << frame.catch_map.empty() << std::endl;
-
     if(frame.catch_map.empty()) continue;
-
-//    std::cout << "### throw " << instruction.code.pretty() << std::endl;
 
     for(irept::subt::const_iterator
         e_it=exceptions_thrown.begin();
@@ -105,15 +98,15 @@ void goto_symext::symex_throw(statet &state)
 
       if(c_it!=frame.catch_map.end())
       {
-//        std::cout << "### throw (*c_it).first: " << (*c_it).first << std::endl;
-//        std::cout << "### throw (*c_it).second: " << (*c_it).second->code.pretty() << std::endl;
-        instruction.make_goto((*c_it).second);
+        // found -- these are always forward gotos
+      }
+      else
+      {
+        // An un-caught exception. Behaves like assume(0);
+        state.guard.add(false_exprt());
+        exprt tmp=state.guard.as_expr();
+        target->assumption(state.guard, tmp, state.source);
       }
     }
   }
-
-  // An un-caught exception. Behaves like assume(0);
-//  state.guard.add(false_exprt());
-//  exprt tmp=state.guard.as_expr();
-//  target->assumption(state.guard, tmp, state.source);
 }
