@@ -1737,7 +1737,7 @@ void goto_convertt::convert_for(
   //std::cout << "k_induction" << k_induction << std::endl;
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -1770,7 +1770,7 @@ void goto_convertt::make_nondet_assign(
     exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
-   
+
     if (state.components()[j].type().is_array())
     {
       rhs_expr=exprt("array_of", state.components()[j].type());
@@ -2014,7 +2014,7 @@ void goto_convertt::print_msg_mem_alloc(
   const exprt &tmp)
 {
   std::cerr << "warning: this program contains dynamic memory allocation,"
-            << " so we are not applying the inductive step to this program!" 
+            << " so we are not applying the inductive step to this program!"
             << std::endl;
   disable_k_induction();
 }
@@ -2237,7 +2237,7 @@ void goto_convertt::replace_cond(
     //std::cout << tmp.pretty() << std::endl;
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
-	  
+
   }
   else
   {
@@ -2400,7 +2400,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -2540,7 +2540,7 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -2720,9 +2720,9 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 
-  if ((base_case || inductive_step) && 
+  if ((base_case || inductive_step) &&
 	(is_while_block()))
-    set_break(true);  
+    set_break(true);
 }
 
 /*******************************************************************\
@@ -2845,9 +2845,9 @@ void goto_convertt::convert_goto(
   // remember it to do target later
   targets.gotos.insert(t);
 
-  if ((base_case || inductive_step) && 
+  if ((base_case || inductive_step) &&
 	(is_while_block()))
-    set_goto(true);  
+    set_goto(true);
 }
 
 /*******************************************************************\
