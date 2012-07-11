@@ -5924,6 +5924,7 @@ bool Parser::rTryStatement(codet &statement)
       {
         irept name("name");
         name.identifier("#anon");
+        name.set("#location", declaration.type().location());
         declaration.declarators().front().name()=cpp_namet();
         declaration.declarators().front().name().get_sub().push_back(name);
       }
