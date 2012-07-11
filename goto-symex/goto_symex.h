@@ -206,7 +206,7 @@ protected:
    *  Join together a previous jump state into thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
-   *  states being joined. 
+   *  states being joined.
    *  @param goto_state The previous jumps state to be merged into the current
    */
   void phi_function(const statet::goto_statet &goto_state);
@@ -251,7 +251,7 @@ protected:
    */
   bool make_return_assignment(code_assignt &assign, const code_returnt &code);
 
-  /** 
+  /**
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
@@ -368,10 +368,10 @@ protected:
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw(statet &state);
+  void symex_throw();
 
   /** Register exception handler on stack. */
-  void symex_catch(statet &state);
+  void symex_catch();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.

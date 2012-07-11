@@ -20,26 +20,26 @@ Function: goto_symext::symex_catch
 
 \*******************************************************************/
 
-void goto_symext::symex_catch(statet &state)
+void goto_symext::symex_catch()
 {
   // there are two variants: 'push' and 'pop'
-  const goto_programt::instructiont &instruction=*state.source.pc;
+  const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   if(instruction.targets.empty()) // pop
   {
-    if(state.call_stack.empty())
+    if(cur_state->call_stack.empty())
       throw "catch-pop on empty call stack";
 
-    if(state.top().catch_map.empty())
+    if(cur_state->top().catch_map.empty())
       throw "catch-pop on function frame";
 
     // pop the stack frame
-    state.call_stack.pop_back();
+    cur_state->call_stack.pop_back();
   }
   else // push
   {
-    state.call_stack.push_back(goto_symex_statet::framet(state.source.thread_nr));
-    goto_symex_statet::framet &frame=state.call_stack.back();
+    cur_state->call_stack.push_back(goto_symex_statet::framet(cur_state->source.thread_nr));
+    goto_symex_statet::framet &frame=cur_state->call_stack.back();
 
     // copy targets
     const irept::subt &exception_list=
@@ -69,9 +69,9 @@ Function: goto_symext::symex_throw
 
 \*******************************************************************/
 
-void goto_symext::symex_throw(statet &state)
+void goto_symext::symex_throw()
 {
-  const goto_programt::instructiont &instruction=*state.source.pc;
+  const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
   const irept::subt &exceptions_thrown=
@@ -80,8 +80,8 @@ void goto_symext::symex_throw(statet &state)
   // go through the call stack, beginning with the top
 
   for(goto_symex_statet::call_stackt::const_reverse_iterator
-      s_it=state.call_stack.rbegin();
-      s_it!=state.call_stack.rend();
+      s_it=cur_state->call_stack.rbegin();
+      s_it!=cur_state->call_stack.rend();
       s_it++)
   {
     const goto_symex_statet::framet &frame=*s_it;
@@ -103,9 +103,9 @@ void goto_symext::symex_throw(statet &state)
       else
       {
         // An un-caught exception. Behaves like assume(0);
-        state.guard.add(false_exprt());
-        exprt tmp=state.guard.as_expr();
-        target->assumption(state.guard, tmp, state.source);
+        cur_state->guard.add(false_exprt());
+        exprt tmp=cur_state->guard.as_expr();
+        target->assumption(cur_state->guard, tmp, cur_state->source);
       }
     }
   }

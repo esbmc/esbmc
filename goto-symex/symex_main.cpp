@@ -222,12 +222,12 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case CATCH:
-    symex_catch(*cur_state);
+    symex_catch();
     cur_state->source.pc++;
     break;
 
   case THROW:
-    symex_throw(*cur_state);
+    symex_throw();
     cur_state->source.pc++;
     break;
 
