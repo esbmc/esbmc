@@ -2902,10 +2902,11 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     return;
   }
 
-  Z3_ast tuple, value;
+  Z3_ast tuple, index, value;
   uint width_op0, width_op2;
 
   convert_bv(expr.op0(), tuple);
+  convert_bv(expr.op1(), index);
   convert_bv(expr.op2(), value);
 
   get_type_width(expr.op2().type(), width_op2);
@@ -2953,6 +2954,9 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
     else
       throw new conv_error("unsupported irep for conver_byte_update", expr);
+  } else if (expr.op0().type().id()=="array")
+    {
+      bv = Z3_mk_store(z3_ctx, tuple, index, value);
   } else {
     throw new conv_error("unsupported irep for conver_byte_update", expr);
   }
@@ -2998,7 +3002,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   }
 
   Z3_ast op0;
-
+  DEBUGLOC;
   convert_bv(expr.op0(), op0);
 
   if (int_encoding) {
@@ -3023,20 +3027,22 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       tmp = Z3_mk_int2bv(z3_ctx, width, op0);
 
       if (width >= upper)
-	bv =
-	  Z3_mk_extract(z3_ctx, upper, lower, tmp);
+	    bv =
+	      Z3_mk_extract(z3_ctx, upper, lower, tmp);
       else
-	bv =
-	  Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
+	    bv =
+	      Z3_mk_extract(z3_ctx, upper - lower, 0, tmp);
 
       if (expr.op0().type().id() == "signedbv")
-	bv = Z3_mk_bv2int(z3_ctx, bv, 1);
+	    bv = Z3_mk_bv2int(z3_ctx, bv, 1);
       else
-	bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+	    bv = Z3_mk_bv2int(z3_ctx, bv, 0);
+
     } else {
       throw new conv_error("unsupported type for byte_extract", expr);
     }
   } else   {
+	DEBUGLOC;
     if (expr.op0().type().id() == "struct") {
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
       const struct_typet::componentst &components = struct_type.components();
@@ -3051,7 +3057,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       {
 	convert_bv(expr.op0().operands()[i], struct_elem[i]);
       }
-
+      DEBUGLOC;
       for (unsigned k = 0; k < components.size(); k++)
         struct_elem_inv[(components.size() - 1) - k] = struct_elem[k];
 
@@ -3065,10 +3071,15 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    z3_ctx, struct_elem_inv[components.size()], struct_elem_inv[k]);
       }
       op0 = struct_elem_inv[components.size()];
+    } else if (expr.op0().type().id()=="array") {
+      Z3_ast op1;
+      convert_bv(expr.op1(), op1);
+      bv = Z3_mk_select(z3_ctx, op0, op1);
+      return ;
     }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
-
+    DEBUGLOC;
     if (expr.op0().id() == "index") {
       Z3_ast args[2];
 
@@ -3089,7 +3100,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	    }
       }
     }
-
+    DEBUGLOC;
     if (expr.op1().id()=="constant") {
       unsigned width0, width1;
    	  get_type_width(expr.op0().type(), width0);
