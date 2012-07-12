@@ -34,6 +34,7 @@ void goto_symext::symex_catch()
       throw "catch-pop on function frame";
 
     // pop the stack frame
+    has_throw_target = true;
     cur_state->call_stack.pop_back();
   }
   else // push
@@ -98,7 +99,7 @@ void goto_symext::symex_throw()
 
       if(c_it!=frame.catch_map.end())
       {
-        // found -- these are always forward gotos
+        throw_target = (*c_it).second;
       }
       else
       {

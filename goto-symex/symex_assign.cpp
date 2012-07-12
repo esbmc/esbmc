@@ -32,7 +32,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   new_context(_new_context),
   goto_functions(_goto_functions),
   target(_target),
-  cur_state(NULL)
+  cur_state(NULL),
+  has_throw_target(false)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -71,7 +72,8 @@ goto_symext::goto_symext(const goto_symext &sym) :
   ns(sym.ns),
   options(sym.options),
   new_context(sym.new_context),
-  goto_functions(sym.goto_functions)
+  goto_functions(sym.goto_functions),
+  has_throw_target(false)
 {
   *this = sym;
 }
