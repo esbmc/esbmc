@@ -95,7 +95,7 @@ goto_symext::symex_goto(const exprt &old_guard)
   // adjust guards
   if (new_guard.is_true()) {
     cur_state->guard.make_false();
-  } else   {
+  } else {
     // produce new guard symbol
     exprt guard_expr;
 
