@@ -51,7 +51,6 @@ public:
 	string str ( ) const{
 		return _string;
 	}
-	//void str ( const string & s );
 	ostream& operator<< (string& val) {
 		ostream m;
 		_string.append(val);
@@ -69,15 +68,6 @@ public:
 		return m;
 
 	}
-/*
-	ostream& operator<< (int& val) {
-		char* temp = new char[33];
-		itoa(val, temp, 10);
-		_string.append(temp);
-		ostream m;
-		return m;
-	}
-*/
 	ostream& operator<< (short& val) {
 		char* temp = new char[33];
 		itoa(val, temp, 10);
@@ -146,61 +136,19 @@ public:
 		ostream m;
 		return m;
 	}
-/*
-	ostream& operator<< (long double& val) {
-		_string.clear();
-		_string = val;
-	}
-
-	ostream& operator<< (void*& val) {
-		_string.clear();
-		_string = val;
-	}
-*/
 	ostream& operator<< (char& val) {
 		_string.append(val, 1);
 		ostream m;
 		return m;
 	}
-/*
-	ostream& operator<< (signed char& val) {
-		char temp = (char) val;
-		_string = _string + temp;
-		ostream m;
-		return m;
-	}
 
-	ostream& operator<< (unsigned char& val) {
-		_string.clear();
-		_string = val;
-	}
-*/
 	ostream& operator<< (char*& val) {
 
-//		char* temp = new char[256];
-
-//		strcpy(temp, val);
-		//_string.append(val);
 		int tam = strlen(val);
 		_string.append(val, tam);
-
-
 		ostream m;
 		return m;
 	}
-/*
-	ostream& operator<< (signed char*& val) {
-		_string.clear();
-		_string = val;
-	}
-
-	ostream& operator<< (unsigned char*& val) {
-		_string.clear();
-		_string = val;
-	}
-
-
-	*/
 };
 
 class ostringstream:public ostream{
