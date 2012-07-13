@@ -3195,7 +3195,7 @@ Function: goto_convertt::get_new_expr
 
 \*******************************************************************/
 
-void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
+void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
 {
   DEBUGLOC;
   //std::cout << "get_new_expr: " << expr.pretty() << std::endl;
@@ -3204,11 +3204,11 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
 
   if (expr.is_symbol())
   {
-    get_cs_member(expr, new_expr1, expr.type(), found);
+    get_cs_member(expr, new_expr, expr.type(), found);
   }
   else if (expr.is_constant())
   {
-    new_expr1 = expr;
+    new_expr = expr;
     found=true;
   }
   else if (expr.is_index())
@@ -3228,11 +3228,11 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     tmp.reserve_operands(2);
     tmp.copy_to_operands(array);
     tmp.copy_to_operands(index);
-    new_expr1 = tmp;
+    new_expr = tmp;
   }
   else if (expr.operands().size() == 1)
   {
-    get_new_expr(expr.op0(), new_expr1, found);
+    get_new_expr(expr.op0(), new_expr, found);
   }
   else if (expr.operands().size() == 2)
   {
@@ -3240,16 +3240,16 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     get_new_expr(expr.op0(), operand0, found);
     get_new_expr(expr.op1(), operand1, found);
 
-    new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
+    new_expr = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
 
     //std::cout << "antes get_new_expr new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
 
-    if (new_expr1.op0().is_index())
-      assert(new_expr1.op0().type().id() == expr.op0().op0().type().id());
-    else if (new_expr1.op0().type()!=new_expr1.op1().type())
-   	  new_expr1.op1().make_typecast(new_expr1.op0().type());
+    if (new_expr.op0().is_index())
+      assert(new_expr.op0().type().id() == expr.op0().op0().type().id());
+    else if (new_expr.op0().type()!=new_expr.op1().type())
+   	  new_expr.op1().make_typecast(new_expr.op0().type());
     else
-      assert(new_expr1.op0().type()==new_expr1.op1().type());
+      assert(new_expr.op0().type()==new_expr.op1().type());
   }
   else
   {
@@ -3258,7 +3258,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     assert(0);
   }
 
-  if (!found) new_expr1 = expr;
+  if (!found) new_expr = expr;
 }
 
 /*******************************************************************\
