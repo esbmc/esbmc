@@ -2302,10 +2302,15 @@ void goto_convertt::convert_while(
   set_while_block(true);
 
   if(inductive_step)
-    replace_cond(tmp, dest);
+  {
+	//std::cout << "antes tmp.pretty():" <<  tmp.pretty() << std::endl;
+    //replace_cond(tmp, dest);
+	replace_ifthenelse(tmp);
+    //std::cout << "depois tmp.pretty():" <<  tmp.pretty() << std::endl;
+  }
 
   array_typet state_vector;
-  const exprt &cond=tmp;
+  const exprt &cond=code.op0();
   const locationt &location=code.location();
 
 
@@ -2339,7 +2344,7 @@ void goto_convertt::convert_while(
   z->make_skip();
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(tmp), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v=tmp_branch.instructions.begin();
@@ -3198,7 +3203,9 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
   irep_idt exprid = expr.id();
 
   if (expr.is_symbol())
+  {
     get_cs_member(expr, new_expr1, expr.type(), found);
+  }
   else if (expr.is_constant())
   {
     new_expr1 = expr;
@@ -3216,6 +3223,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
       get_cs_member(expr.op0(), array, expr.op0().type(), found); //we have one index only
 
     get_cs_member(expr.op1(), index, expr.op1().type(), found);
+
     exprt tmp(exprt::index, expr.op0().type());
     tmp.reserve_operands(2);
     tmp.copy_to_operands(array);
@@ -3231,7 +3239,17 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     exprt operand0, operand1;
     get_new_expr(expr.op0(), operand0, found);
     get_new_expr(expr.op1(), operand1, found);
+
     new_expr1 = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
+
+    //std::cout << "antes get_new_expr new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
+
+    if (new_expr1.op0().is_index())
+      assert(new_expr1.op0().type().id() == expr.op0().op0().type().id());
+    else if (new_expr1.op0().type()!=new_expr1.op1().type())
+   	  new_expr1.op1().make_typecast(new_expr1.op0().type());
+    else
+      assert(new_expr1.op0().type()==new_expr1.op1().type());
   }
   else
   {
@@ -3240,6 +3258,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr1, bool &found)
     assert(0);
   }
 
+  if (!found) new_expr1 = expr;
 }
 
 /*******************************************************************\
@@ -3273,6 +3292,7 @@ DEBUGLOC;
     if (!new_expr.type().is_bool())
       new_expr.make_typecast(bool_typet());
     expr = new_expr;
+    //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
   }
   else
   {
@@ -3292,7 +3312,11 @@ DEBUGLOC;
     else if (new_expr1.type().id() != new_expr2.type().id())
       new_expr2.make_typecast(new_expr1.type());
 
+    //std::cout << "replace_ifthenelse new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
+    //std::cout << "replace_ifthenelse new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
+
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
+    //std::cout << "replace_ifthenelse expr2: " << expr.pretty() << std::endl;
   }
 }
 
