@@ -206,7 +206,7 @@ void
 z3_convt::init_addr_space_array(void)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_type_ast proj_types[2];
+  Z3_sort proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
@@ -580,7 +580,7 @@ void
 z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
                            void *&_bv)
 {
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   bv = Z3_mk_bool_type(z3_ctx);
   return;
@@ -589,7 +589,7 @@ z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
 void
 z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
 {
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
     bv = Z3_mk_int_type(z3_ctx);
@@ -604,7 +604,7 @@ z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
 void
 z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
 {
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
     bv = Z3_mk_int_type(z3_ctx);
@@ -620,7 +620,7 @@ void
 z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
 {
   Z3_sort elem_sort, idx_sort;
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
     idx_sort = Z3_mk_int_type(z3_ctx);
@@ -639,10 +639,10 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
                            void *&_bv)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_type_ast proj_types[2];
+  Z3_sort proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
     native_int_sort = Z3_mk_int_type(z3_ctx);
@@ -669,17 +669,17 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
 {
   Z3_symbol mk_tuple_name, *proj_names;
   std::string name;
-  Z3_type_ast *proj_types;
+  Z3_sort *proj_types;
   Z3_const_decl_ast mk_tuple_decl, *proj_decls;
   u_int num_elems;
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   num_elems = members.size();
   if (uni)
     num_elems++;
 
   proj_names = new Z3_symbol[num_elems];
-  proj_types = new Z3_type_ast[num_elems];
+  proj_types = new Z3_sort[num_elems];
   proj_decls = new Z3_const_decl_ast[num_elems];
 
   name = ((uni) ? "union" : "struct" );
@@ -743,7 +743,7 @@ z3_convt::convert_smt_type(const union_type2t &type, void *&_bv)
 void
 z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
 {
-  Z3_type_ast &bv = (Z3_type_ast &)_bv;
+  Z3_sort &bv = (Z3_sort &)_bv;
 
   unsigned int width = type.get_width();
 
@@ -756,10 +756,10 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
 }
 
 void
-z3_convt::create_pointer_type(Z3_type_ast &bv) const
+z3_convt::create_pointer_type(Z3_sort &bv) const
 {
   Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_type_ast proj_types[2];
+  Z3_sort proj_types[2];
   Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
@@ -935,7 +935,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 
   u_int i = 0;
   Z3_sort native_int_sort;
-  Z3_type_ast z3_array_type, elem_type;
+  Z3_sort z3_array_type, elem_type;
   Z3_ast int_cte, val_cte;
 
   native_int_sort = (int_encoding) ? Z3_mk_int_sort(z3_ctx)
@@ -962,7 +962,7 @@ void
 z3_convt::convert_smt_expr(const constant_array_of2t &array, void *&_bv)
 {
   Z3_ast value, index;
-  Z3_type_ast array_type = 0;
+  Z3_sort array_type = 0;
   std::string tmp, identifier;
   int64_t size;
   u_int j;
@@ -1556,7 +1556,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *&_bv)
 {
   Z3_ast &bv = cast_to_z3(_bv);
 
-  Z3_type_ast pointer_type;
+  Z3_sort pointer_type;
   std::string symbol_name, out;
 
   convert_type(obj.type, pointer_type);
@@ -2341,7 +2341,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *&_bv)
   // XXXjmorse - this method appears to just return a free variable. Surely
   // it should be selecting the zero_string field out of the referenced
   // string?
-  Z3_type_ast array_type;
+  Z3_sort array_type;
 
   convert_type(zstr.type, array_type);
 
@@ -2696,7 +2696,7 @@ void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      Z3_ast &bv)
 {
-  Z3_type_ast tuple_type;
+  Z3_sort tuple_type;
   Z3_sort native_int_sort;
   std::string cte, identifier;
   unsigned int obj_num;

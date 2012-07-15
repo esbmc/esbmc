@@ -62,7 +62,7 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  void create_pointer_type(Z3_type_ast &bv) const;
+  void create_pointer_type(Z3_sort &bv) const;
   void convert_type(const type2tc &type, Z3_sort &outtype);
 
   void convert_bv(const expr2tc &expr, Z3_ast &bv);

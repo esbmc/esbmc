@@ -332,7 +332,7 @@ z3_capi::check2(Z3_lbool expected_result)
 Z3_ast
 z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
 {
-  Z3_type_ast ty;
+  Z3_sort ty;
   unsigned num_fields;
 
   ty = Z3_get_type(z3_ctx, t);
