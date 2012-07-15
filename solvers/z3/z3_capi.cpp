@@ -341,12 +341,12 @@ z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
     throw new z3_convt::conv_error("argument must be a tuple");
   }
 
-  num_fields = Z3_get_tuple_type_num_fields(z3_ctx, ty);
+  num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
 
   if (i >= num_fields) {
     throw new z3_convt::conv_error("invalid tuple select, index is too big");
   }
 
-  Z3_func_decl proj_decl = Z3_get_tuple_type_field_decl(z3_ctx, ty, i);
+  Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(z3_ctx, ty, i);
   return mk_unary_app(proj_decl, t);
 }
