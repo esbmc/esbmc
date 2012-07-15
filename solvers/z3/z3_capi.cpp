@@ -1,11 +1,3 @@
-/*******************************************************************\
-
-   Module:
-
-   Author:
-
-\*******************************************************************/
-
 #include <global.h>
 #include <stdio.h>
 #include <string>
@@ -15,18 +7,6 @@
 #include "z3_conv.h"
 #include "z3_capi.h"
 
-/**
-   \defgroup capi_ex C API examples
- */
-/*@{*/
-/**
-   @name Auxiliary Functions
- */
-/*@{*/
-
-/**
-   \brief exit gracefully in case of error.
- */
 void
 exitf(const char* message)
 {
@@ -34,11 +14,6 @@ exitf(const char* message)
   exit(1);
 }
 
-/**
-   \brief Low tech exceptions.
-
-   In high-level programming languages, an error handler can throw an exception.
- */
 void
 throw_z3_error(Z3_context c __attribute__((unused)), Z3_error_code code)
 {
@@ -51,14 +26,6 @@ throw_z3_error(Z3_context c __attribute__((unused)), Z3_error_code code)
   abort();
 }
 
-/**
-   \brief Create a logical context.
-
-   Enable model construction. Other configuration parameters can be passed in
-      the cfg variable.
-
-   Also enable tracing to stderr and register custom error handler.
- */
 Z3_context
 z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
 {
@@ -98,13 +65,6 @@ z3_capi::mk_proof_context(unsigned int is_uw)
   return ctx;
 }
 
-/**
-   \brief Create a logical context.
-
-   Enable model construction only.
-
-   Also enable tracing to stderr and register standard error handler.
- */
 Z3_context
 z3_capi::mk_context(char *solver)
 {
@@ -120,9 +80,6 @@ z3_capi::mk_context(char *solver)
   return ctx;
 }
 
-/**
-   \brief Create a variable using the given name and type.
- */
 Z3_ast
 z3_capi::mk_var(const char * name, Z3_sort ty) const
 {
@@ -130,9 +87,6 @@ z3_capi::mk_var(const char * name, Z3_sort ty) const
   return Z3_mk_const(z3_ctx, s, ty);
 }
 
-/**
-   \brief Create a boolean variable using the given name.
- */
 Z3_ast
 z3_capi::mk_bool_var(const char * name)
 {
@@ -140,9 +94,6 @@ z3_capi::mk_bool_var(const char * name)
   return mk_var(name, ty);
 }
 
-/**
-   \brief Create an integer variable using the given name.
- */
 Z3_ast
 z3_capi::mk_int_var(const char * name)
 {
@@ -150,9 +101,6 @@ z3_capi::mk_int_var(const char * name)
   return mk_var(name, ty);
 }
 
-/**
-   \brief Create a Z3 integer node using a C int.
- */
 Z3_ast
 z3_capi::mk_unsigned_int(unsigned int v)
 {
@@ -160,9 +108,6 @@ z3_capi::mk_unsigned_int(unsigned int v)
   return Z3_mk_unsigned_int(z3_ctx, v, ty);
 }
 
-/**
-   \brief Create a Z3 integer node using a C int.
- */
 Z3_ast
 z3_capi::mk_int(int v)
 {
@@ -170,9 +115,6 @@ z3_capi::mk_int(int v)
   return Z3_mk_int(z3_ctx, v, ty);
 }
 
-/**
-   \brief Create a real variable using the given name.
- */
 Z3_ast
 z3_capi::mk_real_var(const char * name)
 {
@@ -180,9 +122,6 @@ z3_capi::mk_real_var(const char * name)
   return mk_var(name, ty);
 }
 
-/**
-   \brief Create the unary function application: <tt>(f x)</tt>.
- */
 Z3_ast
 z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
 {
@@ -192,9 +131,6 @@ z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
   return Z3_mk_app(z3_ctx, f, 1, args);
 }
 
-/**
-   \brief Create the binary function application: <tt>(f x y)</tt>.
- */
 Z3_ast
 z3_capi::mk_binary_app(Z3_func_decl f, Z3_ast x, Z3_ast y)
 {
@@ -243,15 +179,6 @@ z3_capi::mk_tuple(Z3_sort sort, Z3_ast *args, unsigned int num)
   return val;
 }
 
-/**
-   \brief Z3 does not support explicitly tuple updates. They can be easily
-      implemented as macros. The argument \c t must have tuple type. A tuple
-      update is a new tuple where field \c i has value \c new_val, and all other
-      fields have the value of the respective field of \c t.
-
-   <tt>update(t, i, new_val)</tt> is equivalent to
-   <tt>mk_tuple(proj_0(t), ..., new_val, ..., proj_n(t))</tt>
- */
 Z3_ast
 z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
 {
@@ -290,10 +217,6 @@ z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
   return result;
 }
 
-/**
-   \brief Similar to #check, but uses #display_model instead of
-      #Z3_model_to_string.
- */
 Z3_lbool
 z3_capi::check2(Z3_lbool expected_result)
 {
