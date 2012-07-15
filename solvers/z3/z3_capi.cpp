@@ -50,11 +50,11 @@ error_handler(Z3_error_code e)
    In high-level programming languages, an error handler can throw an exception.
  */
 void
-throw_z3_error(Z3_error_code c)
+throw_z3_error(Z3_context c __attribute__((unused)), Z3_error_code code)
 {
   char buffer[16];
 
-  snprintf(buffer, 15, "%d", c);
+  snprintf(buffer, 15, "%d", code);
   buffer[15] = '\0';
 
   std::cout << "Z3 Error " << buffer << std::endl;
