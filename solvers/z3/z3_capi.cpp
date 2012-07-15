@@ -8,10 +8,10 @@
 #include "z3_capi.h"
 
 void
-exitf(const char* message)
+abortf(const char* message)
 {
   fprintf(stderr, "%s\n", message);
-  exit(1);
+  abort();
 }
 
 void
@@ -191,13 +191,13 @@ z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
   ty = Z3_get_sort(z3_ctx, t);
 
   if (Z3_get_sort_kind(z3_ctx, ty) != Z3_DATATYPE_SORT) {
-    exitf("argument must be a tuple");
+    abortf("argument must be a tuple");
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(z3_ctx, ty);
 
   if (i >= num_fields) {
-    exitf("invalid tuple update, index is too big");
+    abortf("invalid tuple update, index is too big");
   }
 
   new_fields = (Z3_ast*) malloc(sizeof(Z3_ast) * num_fields);
@@ -236,7 +236,7 @@ z3_capi::check2(Z3_lbool expected_result)
     Z3_del_model(z3_ctx, m);
   }
   if (result != expected_result) {
-    exitf("unexpected result");
+    abortf("unexpected result");
   }
 
   return result;
