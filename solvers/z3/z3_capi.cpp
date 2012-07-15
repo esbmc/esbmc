@@ -347,6 +347,6 @@ z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
     throw new z3_convt::conv_error("invalid tuple select, index is too big");
   }
 
-  Z3_const_decl_ast proj_decl = Z3_get_tuple_type_field_decl(z3_ctx, ty, i);
+  Z3_func_decl proj_decl = Z3_get_tuple_type_field_decl(z3_ctx, ty, i);
   return mk_unary_app(proj_decl, t);
 }

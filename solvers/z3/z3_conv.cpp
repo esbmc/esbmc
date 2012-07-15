@@ -207,7 +207,7 @@ z3_convt::init_addr_space_array(void)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_sort proj_types[2];
-  Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_func_decl mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
   addr_space_sym_num.back() = 1;
@@ -640,7 +640,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_sort proj_types[2];
-  Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_func_decl mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
   Z3_sort &bv = (Z3_sort &)_bv;
 
@@ -670,7 +670,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   Z3_symbol mk_tuple_name, *proj_names;
   std::string name;
   Z3_sort *proj_types;
-  Z3_const_decl_ast mk_tuple_decl, *proj_decls;
+  Z3_func_decl mk_tuple_decl, *proj_decls;
   u_int num_elems;
   Z3_sort &bv = (Z3_sort &)_bv;
 
@@ -680,7 +680,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
 
   proj_names = new Z3_symbol[num_elems];
   proj_types = new Z3_sort[num_elems];
-  proj_decls = new Z3_const_decl_ast[num_elems];
+  proj_decls = new Z3_func_decl[num_elems];
 
   name = ((uni) ? "union" : "struct" );
   name += "_type_" + struct_name.as_string();
@@ -760,7 +760,7 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_sort proj_types[2];
-  Z3_const_decl_ast mk_tuple_decl, proj_decls[2];
+  Z3_func_decl mk_tuple_decl, proj_decls[2];
   Z3_sort native_int_sort;
 
   if (int_encoding) {
