@@ -213,9 +213,9 @@ z3_convt::init_addr_space_array(void)
   addr_space_sym_num.back() = 1;
 
   if (int_encoding) {
-    native_int_sort = Z3_mk_int_type(z3_ctx);
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
   } else {
-    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   }
 
   // Place locations of numerical addresses for null and invalid_obj.
@@ -247,12 +247,12 @@ z3_convt::init_addr_space_array(void)
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "end");
 
-  addr_space_tuple_sort = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2,
+  addr_space_tuple_sort = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2,
                                            proj_names, proj_types,
                                            &mk_tuple_decl, proj_decls);
 
   // Generate initial array with all zeros for all fields.
-  addr_space_arr_sort = Z3_mk_array_type(z3_ctx, native_int_sort,
+  addr_space_arr_sort = Z3_mk_array_sort(z3_ctx, native_int_sort,
                                          addr_space_tuple_sort);
 
   num = convert_number(0, config.ansi_c.int_width, true);
@@ -582,7 +582,7 @@ z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
 {
   Z3_sort &bv = (Z3_sort &)_bv;
 
-  bv = Z3_mk_bool_type(z3_ctx);
+  bv = Z3_mk_bool_sort(z3_ctx);
   return;
 }
 
@@ -592,10 +592,10 @@ z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    bv = Z3_mk_int_type(z3_ctx);
+    bv = Z3_mk_int_sort(z3_ctx);
   } else {
     unsigned int width = type.get_width();
-    bv = Z3_mk_bv_type(z3_ctx, width);
+    bv = Z3_mk_bv_sort(z3_ctx, width);
   }
 
   return;
@@ -607,10 +607,10 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    bv = Z3_mk_int_type(z3_ctx);
+    bv = Z3_mk_int_sort(z3_ctx);
   } else {
     unsigned int width = type.get_width();
-    bv = Z3_mk_bv_type(z3_ctx, width);
+    bv = Z3_mk_bv_sort(z3_ctx, width);
   }
 
   return;
@@ -623,13 +623,13 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    idx_sort = Z3_mk_int_type(z3_ctx);
+    idx_sort = Z3_mk_int_sort(z3_ctx);
   } else {
-    idx_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    idx_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   }
 
   convert_type(type.subtype, elem_sort);
-  bv = Z3_mk_array_type(z3_ctx, idx_sort, elem_sort);
+  bv = Z3_mk_array_sort(z3_ctx, idx_sort, elem_sort);
 
   return;
 }
@@ -645,9 +645,9 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    native_int_sort = Z3_mk_int_type(z3_ctx);
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
   } else {
-    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   }
 
   proj_types[0] = proj_types[1] = native_int_sort;
@@ -656,7 +656,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
   return;
 }
@@ -687,7 +687,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   if (!members.size()) {
-    bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
+    bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
     return;
   }
 
@@ -706,13 +706,13 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
     // XXXjmorse - must this field really become a bitfield, ever? It's internal
     // tracking data, not program data.
     if (int_encoding)
-      proj_types[num_elems - 1] = Z3_mk_int_type(z3_ctx);
+      proj_types[num_elems - 1] = Z3_mk_int_sort(z3_ctx);
     else
-      proj_types[num_elems - 1] = Z3_mk_bv_type(z3_ctx,
+      proj_types[num_elems - 1] = Z3_mk_bv_sort(z3_ctx,
                                                 config.ansi_c.int_width);
   }
 
-  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, num_elems, proj_names,
+  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, num_elems, proj_names,
                         proj_types, &mk_tuple_decl, proj_decls);
 
   delete[] proj_names;
@@ -748,9 +748,9 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
   unsigned int width = type.get_width();
 
   if (int_encoding)
-    bv = Z3_mk_real_type(z3_ctx);
+    bv = Z3_mk_real_sort(z3_ctx);
   else
-    bv = Z3_mk_bv_type(z3_ctx, width);
+    bv = Z3_mk_bv_sort(z3_ctx, width);
 
   return;
 }
@@ -764,9 +764,9 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   Z3_sort native_int_sort;
 
   if (int_encoding) {
-    native_int_sort = Z3_mk_int_type(z3_ctx);
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
   } else {
-    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   }
 
   proj_types[0] = proj_types[1] = native_int_sort;
@@ -775,7 +775,7 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_type(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
 
   return;
@@ -813,7 +813,7 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
   if (int_encoding)
     int_sort = Z3_mk_int_sort(z3_ctx);
   else
-    int_sort = Z3_mk_bv_type(z3_ctx, bitwidth);
+    int_sort = Z3_mk_bv_sort(z3_ctx, bitwidth);
 
   if (is_unsignedbv_type(sym.type)) {
     bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
@@ -838,16 +838,16 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 
   if (int_encoding) {
     std::string result = fixed_point(theval, bitwidth);
-    bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_type(z3_ctx));
+    bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_sort(z3_ctx));
   } else {
     Z3_ast magnitude, fraction;
     std::string m, f, c;
     m = extract_magnitude(theval, bitwidth);
     f = extract_fraction(theval, bitwidth);
     magnitude =
-      Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
+      Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_sort(z3_ctx, bitwidth / 2));
     fraction =
-      Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_type(z3_ctx, bitwidth / 2));
+      Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_sort(z3_ctx, bitwidth / 2));
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   }
 
@@ -943,7 +943,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
-  z3_array_type = Z3_mk_array_type(z3_ctx, native_int_sort, elem_type);
+  z3_array_type = Z3_mk_array_sort(z3_ctx, native_int_sort, elem_type);
 
   bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
 
@@ -1258,7 +1258,7 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
       args[1] = z3_api.mk_int(-1);
     } else {
       assert(is_fixedbv_type(neg.type));
-      args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_type(z3_ctx));
+      args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_sort(z3_ctx));
     }
     bv = Z3_mk_mul(z3_ctx, 2, args);
   } else   {
@@ -1898,7 +1898,7 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
       args[1] = z3_api.mk_int(0);
     else
       args[1] =
-        Z3_mk_int(z3_ctx, 0, Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width));
+        Z3_mk_int(z3_ctx, 0, Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width));
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
@@ -2046,23 +2046,23 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 
     if (is_signedbv_type(cast.type)) {
       if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
-	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
+	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_sort(z3_ctx));
+	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_sort(z3_ctx));
       } else   {
 	zero = convert_number(0, width, true);
 	one =  convert_number(1, width, true);
       }
     } else if (is_unsignedbv_type(cast.type)) {
       if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_type(z3_ctx));
-	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_type(z3_ctx));
+	zero = Z3_mk_int(z3_ctx, 0, Z3_mk_int_sort(z3_ctx));
+	one = Z3_mk_int(z3_ctx, 1, Z3_mk_int_sort(z3_ctx));
       } else   {
 	zero = convert_number(0, width, false);
 	one =  convert_number(1, width, false);
       }
     } else if (is_fixedbv_type(cast.type)) {
-      zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_type(z3_ctx));
-      one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_type(z3_ctx));
+      zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_sort(z3_ctx));
+      one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_sort(z3_ctx));
     } else {
       throw new conv_error("Unexpected type in typecast of bool");
     }
@@ -2161,9 +2161,9 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
 
   Z3_sort native_int_sort;
   if (int_encoding) {
-    native_int_sort = Z3_mk_int_type(z3_ctx);
+    native_int_sort = Z3_mk_int_sort(z3_ctx);
   } else {
-    native_int_sort = Z3_mk_bv_type(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
   }
 
   std::map<unsigned,unsigned>::const_iterator it;

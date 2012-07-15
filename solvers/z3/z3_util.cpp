@@ -34,9 +34,9 @@ Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
 {
 
   if (type)
-    return Z3_mk_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+    return Z3_mk_int(z3_ctx, value, Z3_mk_bv_sort(z3_ctx, width));
   else
-    return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
+    return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_sort(z3_ctx, width));
 }
 
 std::string z3_convt::itos(int i)
