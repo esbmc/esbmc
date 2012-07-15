@@ -57,9 +57,6 @@ z3_capi::mk_proof_context(unsigned int is_uw)
 
   ctx = mk_context_custom(cfg, throw_z3_error);
 
-  //Z3_open_log(ctx, "adpcm_encode_nopointer.log");
-  //Z3_trace_to_file(ctx, "adpcm_encode_nopointer.trace");
-
   Z3_del_config(cfg);
 
   return ctx;
@@ -74,8 +71,6 @@ z3_capi::mk_context(char *solver)
   Z3_set_param_value(cfg, "RELEVANCY", "0");
   Z3_set_param_value(cfg, "SOLVER", solver);
   ctx = mk_context_custom(cfg, throw_z3_error);
-  //Z3_open_log(ctx, "01_pthread10.log");
-  //Z3_trace_to_file(ctx, "01_pthread10.trace");
   Z3_del_config(cfg);
   return ctx;
 }
