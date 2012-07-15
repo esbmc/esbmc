@@ -335,9 +335,9 @@ z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
   Z3_sort ty;
   unsigned num_fields;
 
-  ty = Z3_get_type(z3_ctx, t);
+  ty = Z3_get_sort(z3_ctx, t);
 
-  if (Z3_get_type_kind(z3_ctx, ty) != Z3_TUPLE_TYPE) {
+  if (Z3_get_sort_kind(z3_ctx, ty) != Z3_TUPLE_TYPE) {
     throw new z3_convt::conv_error("argument must be a tuple");
   }
 
