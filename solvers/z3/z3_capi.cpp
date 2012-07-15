@@ -62,19 +62,6 @@ z3_capi::mk_proof_context(unsigned int is_uw)
   return ctx;
 }
 
-Z3_context
-z3_capi::mk_context(char *solver)
-{
-  Z3_config cfg;
-  Z3_context ctx;
-  cfg = Z3_mk_config();
-  Z3_set_param_value(cfg, "RELEVANCY", "0");
-  Z3_set_param_value(cfg, "SOLVER", solver);
-  ctx = mk_context_custom(cfg, throw_z3_error);
-  Z3_del_config(cfg);
-  return ctx;
-}
-
 Z3_ast
 z3_capi::mk_var(const char * name, Z3_sort ty) const
 {
