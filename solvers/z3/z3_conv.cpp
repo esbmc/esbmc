@@ -39,7 +39,7 @@ extern void finalize_symbols(void);
 z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 : prop_convt()
 {
-  z3_ctx = z3_api.mk_proof_context(uw);
+  z3_ctx = z3_api.mk_proof_context();
 
   this->int_encoding = int_encoding;
   smtlib = smt;

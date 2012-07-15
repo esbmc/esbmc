@@ -26,7 +26,7 @@ class z3_capi {
 
     void set_z3_ctx(Z3_context _ctx) { this->z3_ctx = _ctx; }
 
-    Z3_context mk_proof_context(unsigned int is_uw);
+    Z3_context mk_proof_context(void);
     Z3_ast mk_var(const char * name, Z3_sort ty) const;
     Z3_ast mk_bool_var(const char * name);
     Z3_ast mk_int_var(const char * name);
