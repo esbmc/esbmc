@@ -35,16 +35,6 @@ exitf(const char* message)
 }
 
 /**
-   \brief Simpler error handler.
- */
-void
-error_handler(Z3_error_code e)
-{
-  printf("Error code: %d\n", e);
-  exitf("incorrect use of Z3");
-}
-
-/**
    \brief Low tech exceptions.
 
    In high-level programming languages, an error handler can throw an exception.
@@ -123,7 +113,7 @@ z3_capi::mk_context(char *solver)
   cfg = Z3_mk_config();
   Z3_set_param_value(cfg, "RELEVANCY", "0");
   Z3_set_param_value(cfg, "SOLVER", solver);
-  ctx = mk_context_custom(cfg, error_handler);
+  ctx = mk_context_custom(cfg, throw_z3_error);
   //Z3_open_log(ctx, "01_pthread10.log");
   //Z3_trace_to_file(ctx, "01_pthread10.trace");
   Z3_del_config(cfg);
