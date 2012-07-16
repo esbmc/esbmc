@@ -33,6 +33,9 @@ Notes:
 #include<z3.h>
 #include<limits.h>
 
+// jmorse
+#include <config.h>
+
 namespace z3 {
 
     class exception;
@@ -94,18 +97,14 @@ namespace z3 {
     */
     class context {
         Z3_context m_ctx;
+        sort *esbmc_int_sort; // Added by jmorse
+
         static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
-        void init(config & c) {
-          // XXXjmorse - should be context_rc, disabled for migration period.
-            m_ctx = Z3_mk_context(c);
-            Z3_set_error_handler(m_ctx, error_handler);
-            Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
-        }
+        void init(config & c, bool int_encoding);
         context(context const & s);
         context & operator=(context const & s);
     public:
-        context() { config c; init(c); }
-        context(config & c) { init(c); }
+        context(config & c, bool int_encoding) { init(c, int_encoding); }
         ~context() { Z3_del_context(m_ctx); }
         operator Z3_context() const { return m_ctx; }
 
@@ -1122,11 +1121,30 @@ namespace z3 {
         return tactic(t1.ctx(), r);
     }
 
+    inline void context::init(config & c, bool int_encoding) {
+      // XXXjmorse - should be context_rc, disabled for migration period.
+        m_ctx = Z3_mk_context(c);
+        Z3_set_error_handler(m_ctx, error_handler);
+        Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
+
+        // jmorse
+        if (int_encoding) {
+          Z3_sort s = Z3_mk_int_sort(m_ctx);
+          check_error();
+          esbmc_int_sort = new sort(*this, s);
+        } else {
+          Z3_sort s = Z3_mk_bv_sort(m_ctx, ::config.ansi_c.int_width);
+          check_error();
+          esbmc_int_sort = new sort(*this, s);
+        }
+    }
+
+
     inline symbol context::str_symbol(char const * s) { Z3_symbol r = Z3_mk_string_symbol(m_ctx, s); check_error(); return symbol(*this, r); }
     inline symbol context::int_symbol(int n) { Z3_symbol r = Z3_mk_int_symbol(m_ctx, n); check_error(); return symbol(*this, r); }
 
     inline sort context::bool_sort() { Z3_sort s = Z3_mk_bool_sort(m_ctx); check_error(); return sort(*this, s); }
-    inline sort context::int_sort() { Z3_sort s = Z3_mk_int_sort(m_ctx); check_error(); return sort(*this, s); }
+    inline sort context::int_sort() { return *esbmc_int_sort; }
     inline sort context::real_sort() { Z3_sort s = Z3_mk_real_sort(m_ctx); check_error(); return sort(*this, s); }
     inline sort context::bv_sort(unsigned sz) { Z3_sort s = Z3_mk_bv_sort(m_ctx, sz); check_error(); return sort(*this, s); }
     inline sort context::array_sort(sort d, sort r) { Z3_sort s = Z3_mk_array_sort(m_ctx, d, r); check_error(); return sort(*this, s); }
