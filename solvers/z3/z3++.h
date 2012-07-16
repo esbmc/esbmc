@@ -1332,7 +1332,7 @@ namespace z3 {
         check_context(d, v);
         Z3_ast r = Z3_mk_const_array(d.ctx(), d, v);
         d.check_error();
-        return expr(d.ctx(), v);
+        return expr(d.ctx(), r);
     }
     
 
