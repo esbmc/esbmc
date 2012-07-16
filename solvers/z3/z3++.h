@@ -239,7 +239,7 @@ namespace z3 {
         void set(char const * k, unsigned n) { Z3_params_set_uint(ctx(), m_params, ctx().str_symbol(k), n); }
         void set(char const * k, double n) { Z3_params_set_double(ctx(), m_params, ctx().str_symbol(k), n); }
         void set(char const * k, symbol const & s) { Z3_params_set_symbol(ctx(), m_params, ctx().str_symbol(k), s); }
-        friend std::ostream & operator<<(std::ostream & out, params const & p) { out << Z3_params_to_string(p.ctx(), p); }
+        friend std::ostream & operator<<(std::ostream & out, params const & p) { out << Z3_params_to_string(p.ctx(), p); return out; }
     };
     
     class ast : public object {
