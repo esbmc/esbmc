@@ -1121,16 +1121,16 @@ namespace z3 {
         return tactic(t1.ctx(), r);
     }
 
-    symbol context::str_symbol(char const * s) { Z3_symbol r = Z3_mk_string_symbol(m_ctx, s); check_error(); return symbol(*this, r); }
-    symbol context::int_symbol(int n) { Z3_symbol r = Z3_mk_int_symbol(m_ctx, n); check_error(); return symbol(*this, r); }
+    inline symbol context::str_symbol(char const * s) { Z3_symbol r = Z3_mk_string_symbol(m_ctx, s); check_error(); return symbol(*this, r); }
+    inline symbol context::int_symbol(int n) { Z3_symbol r = Z3_mk_int_symbol(m_ctx, n); check_error(); return symbol(*this, r); }
 
-    sort context::bool_sort() { Z3_sort s = Z3_mk_bool_sort(m_ctx); check_error(); return sort(*this, s); }
-    sort context::int_sort() { Z3_sort s = Z3_mk_int_sort(m_ctx); check_error(); return sort(*this, s); }
-    sort context::real_sort() { Z3_sort s = Z3_mk_real_sort(m_ctx); check_error(); return sort(*this, s); }
-    sort context::bv_sort(unsigned sz) { Z3_sort s = Z3_mk_bv_sort(m_ctx, sz); check_error(); return sort(*this, s); }
-    sort context::array_sort(sort d, sort r) { Z3_sort s = Z3_mk_array_sort(m_ctx, d, r); check_error(); return sort(*this, s); }
+    inline sort context::bool_sort() { Z3_sort s = Z3_mk_bool_sort(m_ctx); check_error(); return sort(*this, s); }
+    inline sort context::int_sort() { Z3_sort s = Z3_mk_int_sort(m_ctx); check_error(); return sort(*this, s); }
+    inline sort context::real_sort() { Z3_sort s = Z3_mk_real_sort(m_ctx); check_error(); return sort(*this, s); }
+    inline sort context::bv_sort(unsigned sz) { Z3_sort s = Z3_mk_bv_sort(m_ctx, sz); check_error(); return sort(*this, s); }
+    inline sort context::array_sort(sort d, sort r) { Z3_sort s = Z3_mk_array_sort(m_ctx, d, r); check_error(); return sort(*this, s); }
 
-    func_decl context::function(symbol const & name, unsigned arity, sort const * domain, sort const & range) {
+    inline func_decl context::function(symbol const & name, unsigned arity, sort const * domain, sort const & range) {
         array<Z3_sort> args(arity);
         for (unsigned i = 0; i < arity; i++) {
             check_context(domain[i], range);
@@ -1141,11 +1141,11 @@ namespace z3 {
         return func_decl(*this, f);
     }
 
-    func_decl context::function(char const * name, unsigned arity, sort const * domain, sort const & range) {
+    inline func_decl context::function(char const * name, unsigned arity, sort const * domain, sort const & range) {
         return function(range.ctx().str_symbol(name), arity, domain, range);
     }
     
-    func_decl context::function(char const * name, sort const & domain, sort const & range) {
+    inline func_decl context::function(char const * name, sort const & domain, sort const & range) {
         check_context(domain, range);
         Z3_sort args[1] = { domain };
         Z3_func_decl f = Z3_mk_func_decl(m_ctx, str_symbol(name), 1, args, range);
@@ -1153,7 +1153,7 @@ namespace z3 {
         return func_decl(*this, f);
     }
 
-    func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & range) {
+    inline func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & range) {
         check_context(d1, range); check_context(d2, range);
         Z3_sort args[2] = { d1, d2 };
         Z3_func_decl f = Z3_mk_func_decl(m_ctx, str_symbol(name), 2, args, range);
@@ -1161,7 +1161,7 @@ namespace z3 {
         return func_decl(*this, f);
     }
 
-    func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & range) {
+    inline func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & range) {
         check_context(d1, range); check_context(d2, range); check_context(d3, range);
         Z3_sort args[3] = { d1, d2, d3 };
         Z3_func_decl f = Z3_mk_func_decl(m_ctx, str_symbol(name), 3, args, range);
@@ -1169,7 +1169,7 @@ namespace z3 {
         return func_decl(*this, f);
     }
 
-    func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & range) {
+    inline func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & range) {
         check_context(d1, range); check_context(d2, range); check_context(d3, range); check_context(d4, range);
         Z3_sort args[4] = { d1, d2, d3, d4 };
         Z3_func_decl f = Z3_mk_func_decl(m_ctx, str_symbol(name), 4, args, range);
@@ -1177,7 +1177,7 @@ namespace z3 {
         return func_decl(*this, f);
     }
     
-    func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & d5, sort const & range) {
+    inline func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & d5, sort const & range) {
         check_context(d1, range); check_context(d2, range); check_context(d3, range); check_context(d4, range); check_context(d5, range);
         Z3_sort args[5] = { d1, d2, d3, d4, d5 };
         Z3_func_decl f = Z3_mk_func_decl(m_ctx, str_symbol(name), 5, args, range);
@@ -1185,41 +1185,41 @@ namespace z3 {
         return func_decl(*this, f);
     }
 
-    expr context::constant(symbol const & name, sort const & s) {
+    inline expr context::constant(symbol const & name, sort const & s) {
         Z3_ast r = Z3_mk_const(m_ctx, name, s); 
         check_error(); 
         return expr(*this, r); 
     }
-    expr context::constant(char const * name, sort const & s) { return constant(str_symbol(name), s); }
-    expr context::bool_const(char const * name) { return constant(name, bool_sort()); }
-    expr context::int_const(char const * name) { return constant(name, int_sort()); }
-    expr context::real_const(char const * name) { return constant(name, real_sort()); }
-    expr context::bv_const(char const * name, unsigned sz) { return constant(name, bv_sort(sz)); }
+    inline expr context::constant(char const * name, sort const & s) { return constant(str_symbol(name), s); }
+    inline expr context::bool_const(char const * name) { return constant(name, bool_sort()); }
+    inline expr context::int_const(char const * name) { return constant(name, int_sort()); }
+    inline expr context::real_const(char const * name) { return constant(name, real_sort()); }
+    inline expr context::bv_const(char const * name, unsigned sz) { return constant(name, bv_sort(sz)); }
 
-    expr context::bool_val(bool b) { return b ? expr(*this, Z3_mk_true(m_ctx)) : expr(*this, Z3_mk_false(m_ctx)); }
+    inline expr context::bool_val(bool b) { return b ? expr(*this, Z3_mk_true(m_ctx)) : expr(*this, Z3_mk_false(m_ctx)); }
 
-    expr context::int_val(int n) { Z3_ast r = Z3_mk_int(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
-    expr context::int_val(unsigned n) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
-    expr context::int_val(__int64 n) { Z3_ast r = Z3_mk_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
-    expr context::int_val(__uint64 n) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
-    expr context::int_val(char const * n) { Z3_ast r = Z3_mk_numeral(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+    inline expr context::int_val(int n) { Z3_ast r = Z3_mk_int(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+    inline expr context::int_val(unsigned n) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+    inline expr context::int_val(__int64 n) { Z3_ast r = Z3_mk_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+    inline expr context::int_val(__uint64 n) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+    inline expr context::int_val(char const * n) { Z3_ast r = Z3_mk_numeral(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
 
-    expr context::real_val(int n, int d) { Z3_ast r = Z3_mk_real(m_ctx, n, d); check_error(); return expr(*this, r); }
-    expr context::real_val(int n) { Z3_ast r = Z3_mk_int(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
-    expr context::real_val(unsigned n) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
-    expr context::real_val(__int64 n) { Z3_ast r = Z3_mk_int64(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
-    expr context::real_val(__uint64 n) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
-    expr context::real_val(char const * n) { Z3_ast r = Z3_mk_numeral(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
+    inline expr context::real_val(int n, int d) { Z3_ast r = Z3_mk_real(m_ctx, n, d); check_error(); return expr(*this, r); }
+    inline expr context::real_val(int n) { Z3_ast r = Z3_mk_int(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
+    inline expr context::real_val(unsigned n) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
+    inline expr context::real_val(__int64 n) { Z3_ast r = Z3_mk_int64(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
+    inline expr context::real_val(__uint64 n) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
+    inline expr context::real_val(char const * n) { Z3_ast r = Z3_mk_numeral(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
 
-    expr context::bv_val(int n, unsigned sz) { Z3_ast r = Z3_mk_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-    expr context::bv_val(unsigned n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-    expr context::bv_val(__int64 n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-    expr context::bv_val(__uint64 n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-    expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(int n, unsigned sz) { Z3_ast r = Z3_mk_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(unsigned n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(__int64 n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(__uint64 n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
 
-    expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
+    inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
 
-    expr func_decl::operator()(unsigned n, expr const * args) const {
+    inline expr func_decl::operator()(unsigned n, expr const * args) const {
         array<Z3_ast> _args(n);
         for (unsigned i = 0; i < n; i++) {
             check_context(*this, args[i]);
@@ -1230,55 +1230,55 @@ namespace z3 {
         return expr(ctx(), r);
     
     }
-    expr func_decl::operator()(expr const & a) const {
+    inline expr func_decl::operator()(expr const & a) const {
         check_context(*this, a);
         Z3_ast args[1] = { a };
         Z3_ast r = Z3_mk_app(ctx(), *this, 1, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(int a) const {
+    inline expr func_decl::operator()(int a) const {
         Z3_ast args[1] = { ctx().num_val(a, domain(0)) };
         Z3_ast r = Z3_mk_app(ctx(), *this, 1, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(expr const & a1, expr const & a2) const {
+    inline expr func_decl::operator()(expr const & a1, expr const & a2) const {
         check_context(*this, a1); check_context(*this, a2);
         Z3_ast args[2] = { a1, a2 };
         Z3_ast r = Z3_mk_app(ctx(), *this, 2, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(expr const & a1, int a2) const {
+    inline expr func_decl::operator()(expr const & a1, int a2) const {
         check_context(*this, a1); 
         Z3_ast args[2] = { a1, ctx().num_val(a2, domain(1)) };
         Z3_ast r = Z3_mk_app(ctx(), *this, 2, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(int a1, expr const & a2) const {
+    inline expr func_decl::operator()(int a1, expr const & a2) const {
         check_context(*this, a2);
         Z3_ast args[2] = { ctx().num_val(a1, domain(0)), a2 };
         Z3_ast r = Z3_mk_app(ctx(), *this, 2, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3) const {
+    inline expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3) const {
         check_context(*this, a1); check_context(*this, a2); check_context(*this, a3);
         Z3_ast args[3] = { a1, a2, a3 };
         Z3_ast r = Z3_mk_app(ctx(), *this, 3, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3, expr const & a4) const {
+    inline expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3, expr const & a4) const {
         check_context(*this, a1); check_context(*this, a2); check_context(*this, a3); check_context(*this, a4);
         Z3_ast args[4] = { a1, a2, a3, a4 };
         Z3_ast r = Z3_mk_app(ctx(), *this, 4, args);
         ctx().check_error();
         return expr(ctx(), r);
     }
-    expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3, expr const & a4, expr const & a5) const {
+    inline expr func_decl::operator()(expr const & a1, expr const & a2, expr const & a3, expr const & a4, expr const & a5) const {
         check_context(*this, a1); check_context(*this, a2); check_context(*this, a3); check_context(*this, a4); check_context(*this, a5);
         Z3_ast args[5] = { a1, a2, a3, a4, a5 };
         Z3_ast r = Z3_mk_app(ctx(), *this, 5, args);
@@ -1286,7 +1286,7 @@ namespace z3 {
         return expr(ctx(), r);
     }
 
-    expr to_real(expr const & a) { Z3_ast r = Z3_mk_int2real(a.ctx(), a); a.check_error(); return expr(a.ctx(), r); }
+    inline expr to_real(expr const & a) { Z3_ast r = Z3_mk_int2real(a.ctx(), a); a.check_error(); return expr(a.ctx(), r); }
 
     inline func_decl function(symbol const & name, unsigned arity, sort const * domain, sort const & range) {
         return range.ctx().function(name, arity, domain, range);
