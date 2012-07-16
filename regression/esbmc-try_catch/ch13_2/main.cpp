@@ -1,57 +1,46 @@
 // Fig. 13.2: fig13_02.cpp
 // Demonstrating exception rethrowing.
 #include <iostream>
-
 using std::cout;
 using std::endl;
 
 #include <exception>
-
 using std::exception;
 
 // throw, catch and rethrow exception
-void throwException() 
+void throwException()
 {
-   // throw exception and catch it immediately
-   try {
-      cout << "  Function throwException throws an exception\n";
-      throw exception();  // generate exception
+  // throw exception and catch it immediately
+  try {
+    cout << "  Function throwException throws an exception\n";
+    throw exception();  // generate exception
+  } // end try
 
-   } // end try
-
-   // handle exception
-   catch ( exception &caughtException ) {
-      cout << "  Exception handled in function throwException"
-           << "\n  Function throwException rethrows exception";
-
-      throw;  // rethrow exception for further processing
-
-   } // end catch
-
-   cout << "This also should not print\n";
-
+  // handle exception
+  catch ( exception &caughtException ) {
+    cout << "  Exception handled in function throwException"
+        << "\n  Function throwException rethrows exception";
+    assert(0);
+    throw;  // rethrow exception for further processing
+  } // end catch
+  cout << "This also should not print\n";
 }  // end function throwException
 
 int main()
 {
-   // throw exception
-   try {
-      cout << "\nmain invokes function throwException\n";
-      throwException();
-      cout << "This should not print\n";
+  // throw exception
+  try {
+    cout << "\nmain invokes function throwException\n";
+    throwException();
+    cout << "This should not print\n";
+  } // end try
+  // handle exception
+  catch ( exception &caughtException ) {
+    cout << "\n\nException handled in main\n";
+  } // end catch
 
-   } // end try
-
-   // handle exception
-   catch ( exception &caughtException ) {
-      cout << "\n\nException handled in main\n";
-
-   } // end catch
-
-   cout << "Program control continues after catch in main\n";
-
-   return 0;
-
+  cout << "Program control continues after catch in main\n";
+  return 0;
 }  // end main
 
 

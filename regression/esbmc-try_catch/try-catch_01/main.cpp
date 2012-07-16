@@ -14,4 +14,3 @@ int main (void) {
   catch (int) { cerr << "caught int\n"; }
   return 0;
 }
-
