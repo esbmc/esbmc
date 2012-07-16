@@ -622,17 +622,11 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
 void
 z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
 {
-  Z3_sort elem_sort, idx_sort;
+  Z3_sort elem_sort;
   Z3_sort &bv = (Z3_sort &)_bv;
 
-  if (int_encoding) {
-    idx_sort = ctx->int_sort();
-  } else {
-    idx_sort = ctx->bv_sort(config.ansi_c.int_width);
-  }
-
   convert_type(type.subtype, elem_sort);
-  bv = Z3_mk_array_sort(z3_ctx, idx_sort, elem_sort);
+  bv = ctx->array_sort(*native_int_sort, to_sort(*ctx, elem_sort));
 
   return;
 }
