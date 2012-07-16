@@ -39,6 +39,15 @@ extern void finalize_symbols(void);
 z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 : prop_convt()
 {
+  z3::config conf;
+  conf.set("MODEL", true);
+  conf.set("RELEVANCY", 0);
+  conf.set("SOLVER", true);
+
+  z3::context ctx(conf);
+  // We can't do anything with _this_ context yet though, because it's reference
+  // counting and the rest of our code isn't.
+
   z3_ctx = z3_api.mk_proof_context();
 
   this->int_encoding = int_encoding;
