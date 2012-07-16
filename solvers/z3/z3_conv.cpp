@@ -2116,9 +2116,7 @@ void
 z3_convt::convert_equality(const exprt &expr, Z3_ast &bv)
 {
   DEBUGLOC;
-  //std::cout << "expr.pretty(): " << expr.pretty() << std::endl;
-  //std::cout << "expr.op0().type(): " << expr.op0().type() << std::endl;
-  //std::cout << "expr.op1().type(): " << expr.op1().type() << std::endl;
+
   assert(expr.operands().size() == 2);
   assert((expr.op0().type().id() == "pointer" &&
           expr.op1().type().id() == "pointer") ||
@@ -2714,7 +2712,6 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
 
     idx = convert_member_name(expr.op0(), expr.op1());
 
-    //DEBUGLOC;
     bv = z3_api.mk_tuple_update(array_var, idx, array_val);
     //DEBUGLOC;
     // Update last-updated-field field if it's a union
@@ -2734,6 +2731,8 @@ z3_convt::convert_with(const exprt &expr, Z3_ast &bv)
   } else {
     throw new conv_error("with applied to non-struct/union/array obj", expr);
   }
+
+  DEBUGLOC;
 }
 
 void
@@ -2762,21 +2761,30 @@ z3_convt::convert_member_name(const exprt &lhs, const exprt &rhs)
   const struct_typet &struct_type = to_struct_type(lhs.type());
   const struct_typet::componentst &components = struct_type.components();
   u_int i = 0;
-
+  DEBUGLOC;
   for (struct_typet::componentst::const_iterator
        it = components.begin();
        it != components.end();
        it++, i++)
   {
+	DEBUGLOC;
     if (it->get("name").compare(rhs.get_string("component_name")) == 0)
+    {
+      DEBUGLOC;
       return i;
+    }
     else if (it->is_typecast())
     {
       if (it->op0().get_string("identifier").compare(rhs.get_string("component_name")) == 0)
+      {
+    	DEBUGLOC;
         return i;
+      }
     }
   }
   throw new conv_error("component name not found in struct", lhs);
+
+  DEBUGLOC;
 }
 
 void
@@ -3006,6 +3014,8 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   convert_bv(expr.op0(), op0);
 
   if (int_encoding) {
+	DEBUGLOC;
+
     if (expr.op0().type().id() == "fixedbv") {
       if (expr.type().id() == "signedbv" ||
           expr.type().id() == "unsignedbv") {

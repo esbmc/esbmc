@@ -1039,7 +1039,7 @@ bool dereferencet::memory_model_bytes(
 
     return true;
   }
-  else if (to_type.id()=="struct")
+  else if (to_type.id()=="struct" && value.type().id()=="struct")
   {
     if (ns.follow(from_type).id()=="array" &&
        pointer_offset_size(ns.follow(from_type).subtype())==1 &&
@@ -1101,83 +1101,6 @@ bool dereferencet::memory_model_bytes(
   }
 
   return false;
-#endif
-#if 0
-  const typet from_type=value.type();
-
-  // We simply refuse to convert to/from code.
-  if(from_type.id()=="code" || to_type.id()=="code")
-    return false;
-
-  // We won't do this without a committment to an endianness.
-  if(config.ansi_c.endianess==configt::ansi_ct::NO_ENDIANESS)
-    return false;
-
-  // But everything else we will try!
-  // We just rely on byte_extract to do the job!
-
-  exprt result;
-
-  // See if we have an array of bytes already,
-  // and we want something byte-sized.
-  if(ns.follow(from_type).id()=="array" &&
-     pointer_offset_size(ns.follow(from_type).subtype())==1 &&
-     pointer_offset_size(to_type)==1 &&
-     is_a_bv_type(ns.follow(from_type).subtype()) &&
-     is_a_bv_type(to_type))
-  {
-    // yes, can use 'index'
-    result=index_exprt(value, new_offset, ns.follow(from_type).subtype());
-
-    // possibly need to convert
-    if(!base_type_eq(result.type(), to_type, ns))
-      result.make_typecast(to_type);
-    assert(0);
-  }
-  else
-  {
-    // no, use 'byte_extract'
-    result=exprt(byte_extract_id(), to_type);
-    result.copy_to_operands(value, new_offset);
-  }
-
-  value=result;
-
-  // are we within the bounds?
-  if(!options.get_bool_option("no-pointer-check"))
-  {
-    // upper bound
-    {
-      mp_integer from_width=pointer_offset_size(from_type);
-      mp_integer to_width=pointer_offset_size(to_type);
-
-      exprt bound=from_integer(from_width-to_width, new_offset.type());
-
-      binary_relation_exprt
-        offset_upper_bound(new_offset, exprt::i_gt, bound);
-
-      guardt tmp_guard(guard);
-      tmp_guard.add(offset_upper_bound);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "object upper bound", tmp_guard);
-    }
-
-    // lower bound is easy
-    if(!new_offset.is_zero())
-    {
-      binary_relation_exprt
-        offset_lower_bound(new_offset, exprt::i_lt,
-                           gen_zero(new_offset.type()));
-
-      guardt tmp_guard(guard);
-      tmp_guard.add(offset_lower_bound);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "object lower bound", tmp_guard);
-    }
-  }
-  return true;
 #endif
 }
 

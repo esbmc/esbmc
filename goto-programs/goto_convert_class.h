@@ -199,7 +199,7 @@ protected:
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
   void replace_ifthenelse(exprt &expr);
   void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
-  void get_new_expr(exprt &expr, exprt &new_expr1, bool &found);
+  void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
   void set_goto(bool opt) {goto_stmt=opt;}
   bool is_goto() const {return goto_stmt;}
   void set_break(bool opt) {break_stmt=opt;}
