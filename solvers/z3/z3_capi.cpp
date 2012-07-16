@@ -32,6 +32,8 @@ z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
   Z3_context ctx;
 
   Z3_set_param_value(cfg, "MODEL", "true");
+  Z3_set_param_value(cfg, "RELEVANCY", "0");
+  Z3_set_param_value(cfg, "SOLVER", "true");
   ctx = Z3_mk_context(cfg);
 #ifdef TRACING
   Z3_trace_to_stderr(ctx);
