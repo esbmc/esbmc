@@ -14,48 +14,6 @@ abortf(const char* message)
   abort();
 }
 
-void
-throw_z3_error(Z3_context c __attribute__((unused)), Z3_error_code code)
-{
-  char buffer[16];
-
-  snprintf(buffer, 15, "%d", code);
-  buffer[15] = '\0';
-
-  std::cout << "Z3 Error " << buffer << std::endl;
-  abort();
-}
-
-Z3_context
-z3_capi::mk_context_custom(Z3_config cfg, Z3_error_handler err)
-{
-  Z3_context ctx;
-
-  Z3_set_param_value(cfg, "MODEL", "true");
-  Z3_set_param_value(cfg, "RELEVANCY", "0");
-  Z3_set_param_value(cfg, "SOLVER", "true");
-  ctx = Z3_mk_context(cfg);
-#ifdef TRACING
-  Z3_trace_to_stderr(ctx);
-#endif
-  Z3_set_error_handler(ctx, err);
-
-  return ctx;
-}
-
-Z3_context
-z3_capi::mk_proof_context(void)
-{
-  Z3_config cfg = Z3_mk_config();
-  Z3_context ctx;
-
-  ctx = mk_context_custom(cfg, throw_z3_error);
-
-  Z3_del_config(cfg);
-
-  return ctx;
-}
-
 Z3_ast
 z3_capi::mk_var(const char * name, Z3_sort ty) const
 {

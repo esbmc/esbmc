@@ -25,7 +25,6 @@ class z3_capi {
 
     void set_z3_ctx(Z3_context _ctx) { this->z3_ctx = _ctx; }
 
-    Z3_context mk_proof_context(void);
     Z3_ast mk_var(const char * name, Z3_sort ty) const;
     Z3_ast mk_bool_var(const char * name);
     Z3_ast mk_int_var(const char * name);
@@ -42,7 +41,6 @@ class z3_capi {
     Z3_ast mk_tuple_select(Z3_ast t, unsigned i);
 
   private:
-    Z3_context mk_context_custom(Z3_config cfg, Z3_error_handler err);
     Z3_context z3_ctx;
 };
 
