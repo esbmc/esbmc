@@ -94,7 +94,7 @@ namespace z3 {
     */
     class context {
         Z3_context m_ctx;
-        static void error_handler(Z3_context c, Z3_error_code e) { /* do nothing */ }
+        static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
         void init(config & c) {
             m_ctx = Z3_mk_context_rc(c);
             Z3_set_error_handler(m_ctx, error_handler);
