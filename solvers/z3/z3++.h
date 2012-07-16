@@ -950,7 +950,7 @@ namespace z3 {
         bool inconsistent() const { return Z3_goal_inconsistent(ctx(), m_goal) != 0; }
         unsigned depth() const { return Z3_goal_depth(ctx(), m_goal); } 
         void reset() { Z3_goal_reset(ctx(), m_goal); }
-        unsigned num_exprs() const { Z3_goal_num_exprs(ctx(), m_goal); }
+        unsigned num_exprs() const { return Z3_goal_num_exprs(ctx(), m_goal); }
         bool is_decided_sat() const { return Z3_goal_is_decided_sat(ctx(), m_goal) != 0; }        
         bool is_decided_unsat() const { return Z3_goal_is_decided_unsat(ctx(), m_goal) != 0; }        
         friend std::ostream & operator<<(std::ostream & out, goal const & g) { out << Z3_goal_to_string(g.ctx(), g); return out; }
