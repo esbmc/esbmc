@@ -737,7 +737,7 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
   unsigned int width = type.get_width();
 
   if (int_encoding)
-    bv = Z3_mk_real_sort(z3_ctx);
+    bv = ctx->real_sort();
   else
     bv = ctx->bv_sort(width);
 
@@ -820,7 +820,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
 
   if (int_encoding) {
     std::string result = fixed_point(theval, bitwidth);
-    bv = Z3_mk_numeral(z3_ctx, result.c_str(), Z3_mk_real_sort(z3_ctx));
+    bv = Z3_mk_numeral(z3_ctx, result.c_str(), ctx->real_sort());
   } else {
     Z3_ast magnitude, fraction;
     std::string m, f, c;
@@ -1236,7 +1236,7 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
       args[1] = z3_api.mk_int(-1);
     } else {
       assert(is_fixedbv_type(neg.type));
-      args[1] = Z3_mk_int(z3_ctx, -1, Z3_mk_real_sort(z3_ctx));
+      args[1] = Z3_mk_int(z3_ctx, -1, ctx->real_sort());
     }
     bv = Z3_mk_mul(z3_ctx, 2, args);
   } else   {
@@ -2039,8 +2039,8 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 	one =  convert_number(1, width, false);
       }
     } else if (is_fixedbv_type(cast.type)) {
-      zero = Z3_mk_numeral(z3_ctx, "0", Z3_mk_real_sort(z3_ctx));
-      one = Z3_mk_numeral(z3_ctx, "1", Z3_mk_real_sort(z3_ctx));
+      zero = Z3_mk_numeral(z3_ctx, "0", ctx->real_sort());
+      one = Z3_mk_numeral(z3_ctx, "1", ctx->real_sort());
     } else {
       throw new conv_error("Unexpected type in typecast of bool");
     }
