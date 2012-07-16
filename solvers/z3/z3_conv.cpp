@@ -129,7 +129,8 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  Z3_del_context(z3_ctx);
+  delete native_int_sort;
+  delete ctx;
 }
 
 void
