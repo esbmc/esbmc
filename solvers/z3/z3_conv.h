@@ -319,7 +319,7 @@ public:
   };
 
 public:
-  z3::context *newctx;
+  z3::context *ctx;
   Z3_context z3_ctx;
   static bool s_is_uw;
 };

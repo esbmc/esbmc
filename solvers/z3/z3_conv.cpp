@@ -44,9 +44,9 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   conf.set("RELEVANCY", 0);
   conf.set("SOLVER", true);
 
-  newctx = new z3::context(conf);
+  ctx = new z3::context(conf);
 
-  z3_ctx = *newctx;
+  z3_ctx = *ctx;
 
   this->int_encoding = int_encoding;
   smtlib = smt;
