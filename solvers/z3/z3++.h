@@ -96,7 +96,8 @@ namespace z3 {
         Z3_context m_ctx;
         static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
         void init(config & c) {
-            m_ctx = Z3_mk_context_rc(c);
+          // XXXjmorse - should be context_rc, disabled for migration period.
+            m_ctx = Z3_mk_context(c);
             Z3_set_error_handler(m_ctx, error_handler);
             Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
         }
