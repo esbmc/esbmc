@@ -254,7 +254,7 @@ z3_convt::init_addr_space_array(void)
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "end");
 
-  addr_space_tuple_sort = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2,
+  addr_space_tuple_sort = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2,
                                            proj_names, proj_types,
                                            &mk_tuple_decl, proj_decls);
 
@@ -663,7 +663,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
   return;
 }
@@ -694,7 +694,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   if (!members.size()) {
-    bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
+    bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
     return;
   }
 
@@ -718,7 +718,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
       proj_types[num_elems - 1] = ctx->bv_sort(config.ansi_c.int_width);
   }
 
-  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, num_elems, proj_names,
+  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, num_elems, proj_names,
                         proj_types, &mk_tuple_decl, proj_decls);
 
   delete[] proj_names;
@@ -781,7 +781,7 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, 2, proj_names, proj_types,
+  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
                         &mk_tuple_decl, proj_decls);
 
   return;
