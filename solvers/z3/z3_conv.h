@@ -320,6 +320,7 @@ public:
 
 public:
   z3::context *ctx;
+  z3::sort *native_int_sort;
   Z3_context z3_ctx;
   static bool s_is_uw;
 };
