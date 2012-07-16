@@ -16,6 +16,11 @@ Author:
     Leonardo (leonardo) 2012-03-28
 
 Notes:
+    Imported into ESBMC with Z3 4.0 release, so that I can hack in a series of
+    compilation fixes so that GCC with -Wall -Wextra -Werror will accept this
+    file. If z3++.h is updated in future releases, create a diff against the
+    initial version (see ff69f41f) and then apply that diff to the current
+    version.
 
 --*/
 #ifndef __Z3PP_H_
