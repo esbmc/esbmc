@@ -222,7 +222,7 @@ z3_convt::init_addr_space_array(void)
   if (int_encoding) {
     native_int_sort = ctx->int_sort();
   } else {
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   // Place locations of numerical addresses for null and invalid_obj.
@@ -446,7 +446,7 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
   if (int_encoding)
     native_int_sort = ctx->int_sort();
   else
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
 
   // Floating model - we assert that all objects don't overlap each other,
   // but otherwise their locations are entirely defined by Z3. Inefficient,
@@ -602,7 +602,7 @@ z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
     bv = ctx->int_sort();
   } else {
     unsigned int width = type.get_width();
-    bv = Z3_mk_bv_sort(z3_ctx, width);
+    bv = ctx->bv_sort(width);
   }
 
   return;
@@ -617,7 +617,7 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
     bv = ctx->int_sort();
   } else {
     unsigned int width = type.get_width();
-    bv = Z3_mk_bv_sort(z3_ctx, width);
+    bv = ctx->bv_sort(width);
   }
 
   return;
@@ -632,7 +632,7 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
   if (int_encoding) {
     idx_sort = ctx->int_sort();
   } else {
-    idx_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    idx_sort = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   convert_type(type.subtype, elem_sort);
@@ -654,7 +654,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   if (int_encoding) {
     native_int_sort = ctx->int_sort();
   } else {
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   proj_types[0] = proj_types[1] = native_int_sort;
@@ -715,8 +715,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
     if (int_encoding)
       proj_types[num_elems - 1] = ctx->int_sort();
     else
-      proj_types[num_elems - 1] = Z3_mk_bv_sort(z3_ctx,
-                                                config.ansi_c.int_width);
+      proj_types[num_elems - 1] = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   bv = Z3_mk_tuple_sort(z3_ctx, mk_tuple_name, num_elems, proj_names,
@@ -757,7 +756,7 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
   if (int_encoding)
     bv = Z3_mk_real_sort(z3_ctx);
   else
-    bv = Z3_mk_bv_sort(z3_ctx, width);
+    bv = ctx->bv_sort(width);
 
   return;
 }
@@ -773,7 +772,7 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   if (int_encoding) {
     native_int_sort = ctx->int_sort();
   } else {
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   proj_types[0] = proj_types[1] = native_int_sort;
@@ -820,7 +819,7 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
   if (int_encoding)
     int_sort = ctx->int_sort();
   else
-    int_sort = Z3_mk_bv_sort(z3_ctx, bitwidth);
+    int_sort = ctx->bv_sort(bitwidth);
 
   if (is_unsignedbv_type(sym.type)) {
     bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
@@ -852,9 +851,9 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
     m = extract_magnitude(theval, bitwidth);
     f = extract_fraction(theval, bitwidth);
     magnitude =
-      Z3_mk_int(z3_ctx, atoi(m.c_str()), Z3_mk_bv_sort(z3_ctx, bitwidth / 2));
+      Z3_mk_int(z3_ctx, atoi(m.c_str()), ctx->bv_sort(bitwidth / 2));
     fraction =
-      Z3_mk_int(z3_ctx, atoi(f.c_str()), Z3_mk_bv_sort(z3_ctx, bitwidth / 2));
+      Z3_mk_int(z3_ctx, atoi(f.c_str()), ctx->bv_sort(bitwidth / 2));
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   }
 
@@ -946,7 +945,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
   Z3_ast int_cte, val_cte;
 
   native_int_sort = (int_encoding) ? ctx->int_sort()
-                              : Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+                              : ctx->bv_sort(config.ansi_c.int_width);
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
@@ -1905,7 +1904,7 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
       args[1] = z3_api.mk_int(0);
     else
       args[1] =
-        Z3_mk_int(z3_ctx, 0, Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width));
+        Z3_mk_int(z3_ctx, 0, ctx->bv_sort(config.ansi_c.int_width));
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
@@ -2170,7 +2169,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
   if (int_encoding) {
     native_int_sort = ctx->int_sort();
   } else {
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
   }
 
   std::map<unsigned,unsigned>::const_iterator it;
@@ -2712,7 +2711,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   if (int_encoding)
     native_int_sort = ctx->int_sort();
   else
-    native_int_sort = Z3_mk_bv_sort(z3_ctx, config.ansi_c.int_width);
+    native_int_sort = ctx->bv_sort(config.ansi_c.int_width);
 
   create_pointer_type(tuple_type);
 
