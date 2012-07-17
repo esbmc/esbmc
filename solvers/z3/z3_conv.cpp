@@ -223,28 +223,28 @@ z3_convt::init_addr_space_array(void)
 
   // Place locations of numerical addresses for null and invalid_obj.
 
-  Z3_ast tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_0", ctx->int_sort());
+  Z3_ast tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_0", ctx->esbmc_int_sort());
   Z3_ast num = convert_number(0, config.ansi_c.int_width, true);
   Z3_ast eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_0", ctx->int_sort());
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_0", ctx->esbmc_int_sort());
   num = convert_number(0, config.ansi_c.int_width, true);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_1", ctx->int_sort());
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_1", ctx->esbmc_int_sort());
   num = convert_number(1, config.ansi_c.int_width, true);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_1", ctx->int_sort());
+  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_1", ctx->esbmc_int_sort());
   num = convert_number(0xFFFFFFFFFFFFFFFFULL,
                               config.ansi_c.int_width, true);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  proj_types[0] = proj_types[1] = ctx->int_sort();
+  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "struct_type_addr_space_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
@@ -257,12 +257,12 @@ z3_convt::init_addr_space_array(void)
 
   // Generate initial array with all zeros for all fields.
   addr_space_arr_sort = new z3::sort(
-                     ctx->array_sort(ctx->int_sort(), *addr_space_tuple_sort));
+                     ctx->array_sort(ctx->esbmc_int_sort(), *addr_space_tuple_sort));
 
   num = convert_number(0, config.ansi_c.int_width, true);
   Z3_ast initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
 
-  Z3_ast initial_const = Z3_mk_const_array(z3_ctx, ctx->int_sort(), initial_val);
+  Z3_ast initial_const = Z3_mk_const_array(z3_ctx, ctx->esbmc_int_sort(), initial_val);
   Z3_ast first_name = z3_api.mk_var("__ESBMC_addrspace_arr_0",
                                     *addr_space_arr_sort);
   eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
@@ -297,8 +297,8 @@ z3_convt::init_addr_space_array(void)
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_type);
 
   Z3_ast args[2];
-  args[0] = Z3_mk_int(z3_ctx, 0, ctx->int_sort());
-  args[1] = Z3_mk_int(z3_ctx, 0, ctx->int_sort());
+  args[0] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
+  args[1] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
   Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
   Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
   assert_formula(constraint);
@@ -312,7 +312,7 @@ z3_convt::init_addr_space_array(void)
   // a pointer object num of 1, and a free pointer offset. Anything of worth
   // using this should extract only the object number.
 
-  args[0] = Z3_mk_int(z3_ctx, 1, ctx->int_sort());
+  args[0] = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
   args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
   Z3_ast invalid = z3_api.mk_tuple_update(args[1], 0, args[0]);
   Z3_ast invalid_name = z3_api.mk_var("INVALID", pointer_type);
@@ -449,10 +449,10 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
 
    Z3_ast i_start = z3_api.mk_var(
                        ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
-                       ctx->int_sort());
+                       ctx->esbmc_int_sort());
   Z3_ast i_end = z3_api.mk_var(
                        ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
-                       ctx->int_sort());
+                       ctx->esbmc_int_sort());
 
   for (unsigned j = 0; j < objnum; j++) {
     // Obj 1 is designed to overlap
@@ -461,10 +461,10 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
 
     Z3_ast j_start = z3_api.mk_var(
                        ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                       ctx->int_sort());
+                       ctx->esbmc_int_sort());
     Z3_ast j_end = z3_api.mk_var(
                        ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                       ctx->int_sort());
+                       ctx->esbmc_int_sort());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
     // Previous assertions ensure start < end for all objs.
@@ -590,7 +590,7 @@ z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    bv = ctx->int_sort();
+    bv = ctx->esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
     bv = ctx->bv_sort(width);
@@ -605,7 +605,7 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   if (int_encoding) {
-    bv = ctx->int_sort();
+    bv = ctx->esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
     bv = ctx->bv_sort(width);
@@ -621,7 +621,7 @@ z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
   Z3_sort &bv = (Z3_sort &)_bv;
 
   convert_type(type.subtype, elem_sort);
-  bv = ctx->array_sort(ctx->int_sort(), to_sort(*ctx, elem_sort));
+  bv = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_sort));
 
   return;
 }
@@ -635,7 +635,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   Z3_func_decl mk_tuple_decl, proj_decls[2];
   Z3_sort &bv = (Z3_sort &)_bv;
 
-  proj_types[0] = proj_types[1] = ctx->int_sort();
+  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
@@ -691,7 +691,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
     // XXXjmorse - must this field really become a bitfield, ever? It's internal
     // tracking data, not program data.
     if (int_encoding)
-      proj_types[num_elems - 1] = ctx->int_sort();
+      proj_types[num_elems - 1] = ctx->esbmc_int_sort();
     else
       proj_types[num_elems - 1] = ctx->bv_sort(config.ansi_c.int_width);
   }
@@ -746,7 +746,7 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   Z3_sort proj_types[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
 
-  proj_types[0] = proj_types[1] = ctx->int_sort();
+  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
@@ -788,7 +788,7 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 
   Z3_sort int_sort;
   if (int_encoding)
-    int_sort = ctx->int_sort();
+    int_sort = ctx->esbmc_int_sort();
   else
     int_sort = ctx->bv_sort(bitwidth);
 
@@ -916,13 +916,13 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
-  z3_array_type = ctx->array_sort(ctx->int_sort(), to_sort(*ctx, elem_type));
+  z3_array_type = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_type));
 
   bv = Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type);
 
   i = 0;
   forall_exprs(it, array.datatype_members) {
-    int_cte = Z3_mk_int(z3_ctx, i, ctx->int_sort());
+    int_cte = Z3_mk_int(z3_ctx, i, ctx->esbmc_int_sort());
 
     convert_bv(*it, val_cte);
 
@@ -2019,16 +2019,16 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
 
     if (is_signedbv_type(cast.type)) {
       if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, ctx->int_sort());
-	one = Z3_mk_int(z3_ctx, 1, ctx->int_sort());
+	zero = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
+	one = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
       } else   {
 	zero = convert_number(0, width, true);
 	one =  convert_number(1, width, true);
       }
     } else if (is_unsignedbv_type(cast.type)) {
       if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, ctx->int_sort());
-	one = Z3_mk_int(z3_ctx, 1, ctx->int_sort());
+	zero = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
+	one = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
       } else   {
 	zero = convert_number(0, width, false);
 	one =  convert_number(1, width, false);
@@ -2144,10 +2144,10 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, Z3_ast &bv)
     obj_ids[i] = idx;
     Z3_ast start = z3_api.mk_var(
                                  ("__ESBMC_ptr_obj_start_" + itos(id)).c_str(),
-                                 ctx->int_sort());
+                                 ctx->esbmc_int_sort());
     Z3_ast end = z3_api.mk_var(
                                  ("__ESBMC_ptr_obj_end_" + itos(id)).c_str(),
-                                 ctx->int_sort());
+                                 ctx->esbmc_int_sort());
     obj_starts[i] = start;
 
     if (int_encoding) {
@@ -2691,8 +2691,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
 
     Z3_ast args[2];
-    args[0] = Z3_mk_int(z3_ctx, obj_num, ctx->int_sort());
-    args[1] = Z3_mk_int(z3_ctx, 0, ctx->int_sort());
+    args[0] = Z3_mk_int(z3_ctx, obj_num, ctx->esbmc_int_sort());
+    args[1] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
 
     Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
     Z3_ast constraint = Z3_mk_eq(z3_ctx, bv, ptr_val);
@@ -2779,7 +2779,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     Z3_ast allocarray;
     convert_bv(allocarr, allocarray);
 
-    Z3_ast idxnum = Z3_mk_int(z3_ctx, obj_num, ctx->int_sort());
+    Z3_ast idxnum = Z3_mk_int(z3_ctx, obj_num, ctx->esbmc_int_sort());
     Z3_ast select = Z3_mk_select(z3_ctx, allocarray, idxnum);
     Z3_ast isfalse = Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), select);
     assert_formula(isfalse);
