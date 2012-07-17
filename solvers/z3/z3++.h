@@ -100,13 +100,14 @@ namespace z3 {
     class context {
         Z3_context m_ctx;
         sort *m_esbmc_int_sort; // Added by jmorse
+        bool int_encoding;
 
         static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
         void init(config & c, bool int_encoding);
         context(context const & s);
         context & operator=(context const & s);
     public:
-        context(config & c, bool int_encoding) { init(c, int_encoding); }
+        context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
         ~context() { Z3_del_context(m_ctx); }
         operator Z3_context() const { return m_ctx; }
 
@@ -155,6 +156,12 @@ namespace z3 {
         expr bv_const(char const * name, unsigned sz);
 
         expr bool_val(bool b);
+
+        expr esbmc_int_val(int n, unsigned int width = 0);
+        expr esbmc_int_val(unsigned n, unsigned int width = 0);
+        expr esbmc_int_val(int64_t n, unsigned int width = 0);
+        expr esbmc_int_val(uint64_t n, unsigned int width = 0);
+        expr esbmc_int_val(char const * n, unsigned int width = 0);
 
         expr int_val(int n);
         expr int_val(unsigned n);
@@ -1226,6 +1233,52 @@ namespace z3 {
     inline expr context::int_val(int64_t n) { Z3_ast r = Z3_mk_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
     inline expr context::int_val(uint64_t n) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
     inline expr context::int_val(char const * n) { Z3_ast r = Z3_mk_numeral(m_ctx, n, int_sort()); check_error(); return expr(*this, r); }
+
+    inline expr context::esbmc_int_val(int n, unsigned int width) {
+      if (width == 0 || int_encoding) {
+        Z3_ast r = Z3_mk_int(m_ctx, n, *m_esbmc_int_sort);
+        check_error();
+        return expr(*this, r);
+      } else {
+        return bv_val(n, width);
+      }
+    }
+    inline expr context::esbmc_int_val(unsigned n, unsigned int width) {
+      if (width == 0 || int_encoding) {
+        Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, *m_esbmc_int_sort);
+        check_error();
+        return expr(*this, r);
+      } else {
+        return bv_val(n, width);
+      }
+    }
+    inline expr context::esbmc_int_val(int64_t n, unsigned int width) {
+      if (width == 0 || int_encoding) {
+        Z3_ast r = Z3_mk_int64(m_ctx, n, *m_esbmc_int_sort);
+        check_error();
+        return expr(*this, r);
+      } else {
+        return bv_val(n, width);
+      }
+    }
+    inline expr context::esbmc_int_val(uint64_t n, unsigned int width) {
+      if (width == 0 || int_encoding) {
+        Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, *m_esbmc_int_sort);
+        check_error();
+        return expr(*this, r);
+      } else {
+        return bv_val(n, width);
+      }
+    }
+    inline expr context::esbmc_int_val(char const * n, unsigned int width) {
+      if (width == 0 || int_encoding) {
+        Z3_ast r = Z3_mk_numeral(m_ctx, n, *m_esbmc_int_sort);
+        check_error();
+        return expr(*this, r);
+      } else {
+        return bv_val(n, width);
+      }
+    }
 
     inline expr context::real_val(int n, int d) { Z3_ast r = Z3_mk_real(m_ctx, n, d); check_error(); return expr(*this, r); }
     inline expr context::real_val(int n) { Z3_ast r = Z3_mk_int(m_ctx, n, real_sort()); check_error(); return expr(*this, r); }
