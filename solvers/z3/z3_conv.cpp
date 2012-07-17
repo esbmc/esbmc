@@ -814,10 +814,8 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *&_bv)
     std::string m, f, c;
     m = extract_magnitude(theval, bitwidth);
     f = extract_fraction(theval, bitwidth);
-    magnitude =
-      Z3_mk_int(z3_ctx, atoi(m.c_str()), ctx->bv_sort(bitwidth / 2));
-    fraction =
-      Z3_mk_int(z3_ctx, atoi(f.c_str()), ctx->bv_sort(bitwidth / 2));
+    magnitude = ctx->esbmc_int_val(m.c_str(), bitwidth / 2);
+    fraction = ctx->esbmc_int_val(f.c_str(), bitwidth / 2);
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   }
 
@@ -915,7 +913,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *&_bv)
 
   i = 0;
   forall_exprs(it, array.datatype_members) {
-    int_cte = Z3_mk_int(z3_ctx, i, ctx->esbmc_int_sort());
+    int_cte = ctx->esbmc_int_val(i);
 
     convert_bv(*it, val_cte);
 
@@ -1224,7 +1222,7 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *&_bv)
       args[1] = z3_api.mk_int(-1);
     } else {
       assert(is_fixedbv_type(neg.type));
-      args[1] = Z3_mk_int(z3_ctx, -1, ctx->real_sort());
+      args[1] = ctx->real_val(-1);
     }
     bv = Z3_mk_mul(z3_ctx, 2, args);
   } else   {
@@ -1860,11 +1858,7 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, Z3_ast &bv)
   if (is_bv_type(cast.from->type) ||
       is_pointer_type(cast.from->type)) {
     args[0] = bv;
-    if (int_encoding)
-      args[1] = z3_api.mk_int(0);
-    else
-      args[1] =
-        Z3_mk_int(z3_ctx, 0, ctx->bv_sort(config.ansi_c.int_width));
+    args[1] = ctx->esbmc_int_val(0);
 
     bv = Z3_mk_distinct(z3_ctx, 2, args);
   } else {
