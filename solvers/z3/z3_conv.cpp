@@ -297,8 +297,7 @@ z3_convt::init_addr_space_array(void)
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_type);
 
   Z3_ast args[2];
-  args[0] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
-  args[1] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
+  args[1] = args[0] = ctx->esbmc_int_val(0);
   Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
   Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
   assert_formula(constraint);
@@ -312,7 +311,7 @@ z3_convt::init_addr_space_array(void)
   // a pointer object num of 1, and a free pointer offset. Anything of worth
   // using this should extract only the object number.
 
-  args[0] = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
+  args[0] = ctx->esbmc_int_val(1);
   args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
   Z3_ast invalid = z3_api.mk_tuple_update(args[1], 0, args[0]);
   Z3_ast invalid_name = z3_api.mk_var("INVALID", pointer_type);
@@ -786,17 +785,11 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *&_bv)
 
   unsigned int bitwidth = sym.type->get_width();
 
-  Z3_sort int_sort;
-  if (int_encoding)
-    int_sort = ctx->esbmc_int_sort();
-  else
-    int_sort = ctx->bv_sort(bitwidth);
-
   if (is_unsignedbv_type(sym.type)) {
-    bv = Z3_mk_unsigned_int64(z3_ctx, sym.as_ulong(), int_sort);
+    bv = ctx->esbmc_int_val(sym.as_ulong(), bitwidth);
   } else {
     assert(is_signedbv_type(sym.type));
-    bv = Z3_mk_int64(z3_ctx, sym.as_long(), int_sort);
+    bv = ctx->esbmc_int_val(sym.as_long(), bitwidth);
   }
 
   return;
