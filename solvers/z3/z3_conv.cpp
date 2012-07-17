@@ -2004,25 +2004,12 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, Z3_ast &bv)
     Z3_ast zero = 0, one = 0;
     unsigned width = cast.type->get_width();
 
-    if (is_signedbv_type(cast.type)) {
-      if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
-	one = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
-      } else   {
-	zero = convert_number(0, width, true);
-	one =  convert_number(1, width, true);
-      }
-    } else if (is_unsignedbv_type(cast.type)) {
-      if (int_encoding) {
-	zero = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
-	one = Z3_mk_int(z3_ctx, 1, ctx->esbmc_int_sort());
-      } else   {
-	zero = convert_number(0, width, false);
-	one =  convert_number(1, width, false);
-      }
+    if (is_bv_type(cast.type)) {
+      zero = ctx->esbmc_int_val(0, width);
+      one = ctx->esbmc_int_val(1, width);
     } else if (is_fixedbv_type(cast.type)) {
-      zero = Z3_mk_numeral(z3_ctx, "0", ctx->real_sort());
-      one = Z3_mk_numeral(z3_ctx, "1", ctx->real_sort());
+      zero = ctx->real_val(0);
+      one = ctx->real_val(1);
     } else {
       throw new conv_error("Unexpected type in typecast of bool");
     }
@@ -2678,8 +2665,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
 
     Z3_ast args[2];
-    args[0] = Z3_mk_int(z3_ctx, obj_num, ctx->esbmc_int_sort());
-    args[1] = Z3_mk_int(z3_ctx, 0, ctx->esbmc_int_sort());
+    args[0] = ctx->esbmc_int_val(obj_num);
+    args[1] = ctx->esbmc_int_val(0);
 
     Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
     Z3_ast constraint = Z3_mk_eq(z3_ctx, bv, ptr_val);
@@ -2766,7 +2753,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     Z3_ast allocarray;
     convert_bv(allocarr, allocarray);
 
-    Z3_ast idxnum = Z3_mk_int(z3_ctx, obj_num, ctx->esbmc_int_sort());
+    Z3_ast idxnum = ctx->esbmc_int_val(obj_num);
     Z3_ast select = Z3_mk_select(z3_ctx, allocarray, idxnum);
     Z3_ast isfalse = Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), select);
     assert_formula(isfalse);
