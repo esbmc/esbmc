@@ -153,9 +153,9 @@ namespace z3 {
         expr int_const(char const * name);
         expr real_const(char const * name);
         expr bv_const(char const * name, unsigned sz);
-        
+
         expr bool_val(bool b);
-        
+
         expr int_val(int n);
         expr int_val(unsigned n);
         expr int_val(int64_t n);
