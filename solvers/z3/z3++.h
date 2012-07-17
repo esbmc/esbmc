@@ -99,7 +99,7 @@ namespace z3 {
     */
     class context {
         Z3_context m_ctx;
-        sort *esbmc_int_sort; // Added by jmorse
+        sort *m_esbmc_int_sort; // Added by jmorse
 
         static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
         void init(config & c, bool int_encoding);
@@ -132,6 +132,7 @@ namespace z3 {
         symbol str_symbol(char const * s);
         symbol int_symbol(int n);
 
+        sort esbmc_int_sort();
         sort bool_sort();
         sort int_sort();
         sort real_sort();
@@ -1133,11 +1134,11 @@ namespace z3 {
         if (int_encoding) {
           Z3_sort s = Z3_mk_int_sort(m_ctx);
           check_error();
-          esbmc_int_sort = new sort(*this, s);
+          m_esbmc_int_sort = new sort(*this, s);
         } else {
           Z3_sort s = Z3_mk_bv_sort(m_ctx, ::config.ansi_c.int_width);
           check_error();
-          esbmc_int_sort = new sort(*this, s);
+          m_esbmc_int_sort = new sort(*this, s);
         }
     }
 
@@ -1145,8 +1146,9 @@ namespace z3 {
     inline symbol context::str_symbol(char const * s) { Z3_symbol r = Z3_mk_string_symbol(m_ctx, s); check_error(); return symbol(*this, r); }
     inline symbol context::int_symbol(int n) { Z3_symbol r = Z3_mk_int_symbol(m_ctx, n); check_error(); return symbol(*this, r); }
 
+    inline sort context::esbmc_int_sort() { return *m_esbmc_int_sort; }
     inline sort context::bool_sort() { Z3_sort s = Z3_mk_bool_sort(m_ctx); check_error(); return sort(*this, s); }
-    inline sort context::int_sort() { return *esbmc_int_sort; }
+    inline sort context::int_sort() { Z3_sort s = Z3_mk_int_sort(m_ctx); check_error(); return sort(*this, s); }
     inline sort context::real_sort() { Z3_sort s = Z3_mk_real_sort(m_ctx); check_error(); return sort(*this, s); }
     inline sort context::bv_sort(unsigned sz) { Z3_sort s = Z3_mk_bv_sort(m_ctx, sz); check_error(); return sort(*this, s); }
     inline sort context::array_sort(sort d, sort r) { Z3_sort s = Z3_mk_array_sort(m_ctx, d, r); check_error(); return sort(*this, s); }
