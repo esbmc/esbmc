@@ -102,7 +102,10 @@ namespace z3 {
         sort *m_esbmc_int_sort; // Added by jmorse
         bool int_encoding;
 
-        static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e __attribute__((unused))) { /* do nothing */ }
+        static void error_handler(Z3_context c __attribute__((unused)), Z3_error_code e) {
+            std::cerr << "Z3 error " << e << " encountered" << std::endl;
+            abort();
+          }
         void init(config & c, bool int_encoding);
         context(context const & s);
         context & operator=(context const & s);
