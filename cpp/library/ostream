@@ -72,30 +72,61 @@ namespace std{
 
 
 
-ostream& operator<< (ostream& out, bool val);
-ostream& operator<< (ostream& out, short val);
-ostream& operator<< (ostream& out, unsigned short val);
-ostream& operator<< (ostream& out, int val);
-ostream& operator<< (ostream& out, unsigned int val);
+ostream& operator<< (ostream& out, bool val) {
+	return out;
+}
+ostream& operator<< (ostream& out, short val) {
+	return out;
+}
+ostream& operator<< (ostream& out, unsigned short val) {
+	return out;
+}
+ostream& operator<< (ostream& out, int val) {
+	return out;
+}
+ostream& operator<< (ostream& out, unsigned int val) {
+	return out;
+}
 
-ostream& operator<< (ostream& out, float val);
-ostream& operator<< (ostream& out, double val);
+ostream& operator<< (ostream& out, float val) {
+	return out;
+}
+ostream& operator<< (ostream& out, double val) {
+	return out;
+}
 
 
 ostream& operator<< (ostream& out, streambuf* sb);
 
-ostream& operator<< (ostream& out, ostream& ( *pf )(ostream&));
-ostream& operator<< (ostream& out, ios& ( *pf )(ios&));
-ostream& operator<< (ostream& out, ios_base& ( *pf )(ios_base&));
+ostream& operator<< (ostream& out, ostream& ( *pf )(ostream&)) {
+	return pf(out);
+}
+ostream& operator<< (ostream& out, ios& ( *pf )(ios&)) {
+	pf(out);
+	return out;
+}
+ostream& operator<< (ostream& out, ios_base& ( *pf )(ios_base&)){
+	pf(out);
+	return out;
+}
 
 
-ostream& operator<< (ostream& out, char c );
+ostream& operator<< (ostream& out, char c ) {
+	return out;
+}
 
-ostream& operator<< (ostream& out, unsigned char c );
+ostream& operator<< (ostream& out, unsigned char c ) {
+	return out;
+}
 
-ostream& operator<< (ostream& out, const char* s );
+ostream& operator<< (ostream& out, const char* s ) {
+//	esbmc::esbmc_print_cstr(out.id,s);
+	return out;
+}
 
-ostream& operator<< (ostream& out, const unsigned char* s );
+ostream& operator<< (ostream& out, const unsigned char* s ) {
+	return out;
+}
 
 
 template < typename T >
@@ -148,8 +179,8 @@ namespace std
 
 namespace std {
 	//Output manipulators
-	ostream& endl ( ostream& os );
-	ostream& ends ( ostream& os );
+	ostream& endl ( ostream& os ) { return os; }
+	ostream& ends ( ostream& os ) {  }
 	ostream& flush ( ostream& os );
 }
 

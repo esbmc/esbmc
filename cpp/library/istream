@@ -107,7 +107,9 @@ istream& operator>> (istream& is, void*& val ) {
 	return is;
 }
 
-istream& operator>> (istream& is, streambuf* sb );
+istream& operator>> (istream& is, streambuf* sb ) {
+	return is;
+}
 
 istream& operator>> (istream& is, istream& ( *pf )(istream&)) {
 	return pf(is);
