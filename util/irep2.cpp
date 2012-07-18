@@ -1820,7 +1820,7 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
                                         field4_type, field4_class, field4_ptr,
                                         field5_type, field5_class, field5_ptr,
                                         field6_type, field6_class, field6_ptr>
-      ::convert_smt_type(prop_convt &obj, void *&arg) const
+      ::convert_smt_type(prop_convt &obj, void *arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_type(*new_this, arg);

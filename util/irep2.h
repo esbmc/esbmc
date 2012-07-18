@@ -311,9 +311,9 @@ public:
    *  template.
    *  @see type_methods
    *  @param prop_convt Object to perform SMT conversion with.
-   *  @param arg Reference to pointer to assign output to.
+   *  @param arg Pointer to assign output to.
    */
-  virtual void convert_smt_type(prop_convt &obj, void *&arg) const = 0;
+  virtual void convert_smt_type(prop_convt &obj, void *arg) const = 0;
 
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
@@ -1034,7 +1034,7 @@ namespace esbmct {
                                     field6_type, field6_class, field6_ptr> &ref)
       : subclass(ref) { }
 
-    virtual void convert_smt_type(prop_convt &obj, void *&arg) const;
+    virtual void convert_smt_type(prop_convt &obj, void *arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;

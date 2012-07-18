@@ -41,7 +41,7 @@ void prop_convt::ignoring(const expr2tc &expr)
 }
 
 void prop_convt::convert_smt_type(const type2t &type,
-                                  void *&arg __attribute__((unused)))
+                                  void *arg __attribute__((unused)))
 {
   std::cerr << "Unhandled SMT conversion for type \""
             << get_type_id(type) << std::endl;

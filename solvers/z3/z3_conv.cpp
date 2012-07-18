@@ -29,6 +29,7 @@
 #include "../ansi-c/c_types.h"
 
 #define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *>((arg))))
+#define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
 
 static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
@@ -575,64 +576,64 @@ z3_convt::check2_z3_properties(void)
 
 void
 z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
-                           void *&_bv)
+                           void *_bv)
 {
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
-  bv = ctx->bool_sort();
+  sort = ctx->bool_sort();
   return;
 }
 
 void
-z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *_bv)
 {
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   if (int_encoding) {
-    bv = ctx->esbmc_int_sort();
+    sort = ctx->esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
-    bv = ctx->bv_sort(width);
+    sort = ctx->bv_sort(width);
   }
 
   return;
 }
 
 void
-z3_convt::convert_smt_type(const signedbv_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const signedbv_type2t &type, void *_bv)
 {
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   if (int_encoding) {
-    bv = ctx->esbmc_int_sort();
+    sort = ctx->esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
-    bv = ctx->bv_sort(width);
+    sort = ctx->bv_sort(width);
   }
 
   return;
 }
 
 void
-z3_convt::convert_smt_type(const array_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const array_type2t &type, void *_bv)
 {
   Z3_sort elem_sort;
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   convert_type(type.subtype, elem_sort);
-  bv = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_sort));
+  sort = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_sort));
 
   return;
 }
 
 void
 z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
-                           void *&_bv)
+                           void *_bv)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_sort proj_types[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
 
@@ -640,8 +641,8 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
-                        &mk_tuple_decl, proj_decls);
+  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names,
+                                       proj_types, &mk_tuple_decl, proj_decls));
   return;
 }
 
@@ -649,14 +650,14 @@ void
 z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
                                     const std::vector<irep_idt> &member_names,
                                     const irep_idt &struct_name, bool uni,
-                                    void *&_bv)
+                                    void *_bv)
 {
   Z3_symbol mk_tuple_name, *proj_names;
   std::string name;
   Z3_sort *proj_types;
   Z3_func_decl mk_tuple_decl, *proj_decls;
   u_int num_elems;
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   num_elems = members.size();
   if (uni)
@@ -671,7 +672,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
 
   if (!members.size()) {
-    bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls);
+    sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls));
     return;
   }
 
@@ -695,8 +696,8 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
       proj_types[num_elems - 1] = ctx->bv_sort(config.ansi_c.int_width);
   }
 
-  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, num_elems, proj_names,
-                        proj_types, &mk_tuple_decl, proj_decls);
+  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, num_elems,
+                           proj_names, proj_types, &mk_tuple_decl, proj_decls));
 
   delete[] proj_names;
   delete[] proj_types;
@@ -706,7 +707,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
 }
 
 void
-z3_convt::convert_smt_type(const struct_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const struct_type2t &type, void *_bv)
 {
 
   convert_struct_union_type(type.members, type.member_names, type.name,
@@ -715,7 +716,7 @@ z3_convt::convert_smt_type(const struct_type2t &type, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_type(const union_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const union_type2t &type, void *_bv)
 {
 
   convert_struct_union_type(type.members, type.member_names, type.name,
@@ -724,16 +725,16 @@ z3_convt::convert_smt_type(const union_type2t &type, void *&_bv)
 }
 
 void
-z3_convt::convert_smt_type(const fixedbv_type2t &type, void *&_bv)
+z3_convt::convert_smt_type(const fixedbv_type2t &type, void *_bv)
 {
-  Z3_sort &bv = (Z3_sort &)_bv;
+  z3::sort &sort = cast_to_z3_sort(_bv);
 
   unsigned int width = type.get_width();
 
   if (int_encoding)
-    bv = ctx->real_sort();
+    sort = ctx->real_sort();
   else
-    bv = ctx->bv_sort(width);
+    sort = ctx->bv_sort(width);
 
   return;
 }
@@ -2059,9 +2060,9 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   }
 
   struct_type2t newstruct(new_members, new_names, struct_type_to.name);
-  Z3_sort sort;
+  z3::sort sort;
   // Can't cache this type as it's constructed on the fly.
-  newstruct.convert_smt_type(*this, (void*&)sort);
+  newstruct.convert_smt_type(*this, reinterpret_cast<void*>(&sort));
 
   freshval = Z3_mk_fresh_const(z3_ctx, NULL, sort);
 
@@ -2615,7 +2616,9 @@ z3_convt::convert_type(const type2tc &type, Z3_sort &outtype)
     return;
   }
 
-  type->convert_smt_type(*this, (void *&)outtype);
+  z3::sort sort;
+  type->convert_smt_type(*this, reinterpret_cast<void*>(&sort));
+  outtype = sort;
 
   // insert into cache
   sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
