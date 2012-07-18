@@ -205,6 +205,7 @@ namespace z3 {
     protected:
         context * m_ctx;
     public:
+        object(void) : m_ctx(NULL) { }  // jmorse - uninitialized cons
         object(context & c):m_ctx(&c) {}
         object(object const & s):m_ctx(s.m_ctx) {}
         context & ctx() const { return *m_ctx; }
@@ -256,6 +257,7 @@ namespace z3 {
     protected:
         Z3_ast    m_ast;
     public:
+        ast(void) : object(), m_ast(NULL) { } // jmorse: uninitialized cons
         ast(context & c):object(c), m_ast(0) {}
         ast(context & c, Z3_ast n):object(c), m_ast(n) { Z3_inc_ref(ctx(), m_ast); }
         ast(ast const & s):object(s), m_ast(s.m_ast) { Z3_inc_ref(ctx(), m_ast); }
@@ -274,6 +276,7 @@ namespace z3 {
 
     class sort : public ast {
     public:
+        sort(void) : ast() { } // jmorse - uninitialized cons
         sort(context & c):ast(c) {}
         sort(context & c, Z3_sort s):ast(c, reinterpret_cast<Z3_ast>(s)) {}
         sort(sort const & s):ast(s) {}
@@ -326,6 +329,7 @@ namespace z3 {
 
     class expr : public ast {
     public:
+        expr(void) : ast() { } // jmorse - uninitialized cons
         expr(context & c):ast(c) {}
         expr(context & c, Z3_ast n):ast(c, reinterpret_cast<Z3_ast>(n)) {}
         expr(expr const & n):ast(n) {}
