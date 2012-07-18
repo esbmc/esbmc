@@ -66,7 +66,7 @@ z3_convt::get(const expr2tc &expr) const
 
   if (is_symbol2t(expr)) {
     std::string identifier, tmp;
-    Z3_sort sort;
+    z3::sort sort;
     Z3_ast bv;
     Z3_func_decl func;
 
@@ -75,11 +75,11 @@ z3_convt::get(const expr2tc &expr) const
 
     sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
     if (cache_res != sort_cache.end()) {
-      sort = cache_res->second;
+      sort = z3::to_sort(*ctx, cache_res->second);
     } else if (int_encoding && is_bv_type(expr->type)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
-      sort = Z3_mk_int_sort(z3_ctx);
+      sort = ctx->int_sort();
     } else {
       // This doesn't work; can't be bothered to debug it either.
       //assert(cache_res != sort_cache.end() && "No cached copy of type when "

@@ -617,11 +617,10 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *_bv)
 void
 z3_convt::convert_smt_type(const array_type2t &type, void *_bv)
 {
-  Z3_sort elem_sort;
-  z3::sort &sort = cast_to_z3_sort(_bv);
+  z3::sort &sort = cast_to_z3_sort(_bv), elem_sort;
 
   convert_type(type.subtype, elem_sort);
-  sort = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_sort));
+  sort = ctx->array_sort(ctx->esbmc_int_sort(), elem_sort);
 
   return;
 }
@@ -682,7 +681,9 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
        it != members.end(); it++, mname++, i++)
   {
     proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->as_string().c_str());
-    convert_type(*it, proj_types[i]);
+    z3::sort tmpsort;
+    convert_type(*it, tmpsort);
+    proj_types[i] = tmpsort;
   }
 
   if (uni) {
@@ -762,7 +763,6 @@ void
 z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_sort sort;
 
   // References to unsigned int identifiers need to be assumed to be > 0,
   // otherwise the solver is free to assign negative nums to it.
@@ -774,8 +774,9 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
     return;
   }
 
+  z3::sort sort;
   convert_type(sym.type, sort);
-  output = z3::to_expr(*ctx, z3_api.mk_var(sym.get_symbol_name().c_str(), sort));
+  output = z3::to_expr(*ctx, z3_api.mk_var(sym.get_symbol_name().c_str(),sort));
 }
 
 void
@@ -842,7 +843,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   // propagation.
   u_int i = 0;
 
-  Z3_sort sort;
+  z3::sort sort;
   convert_type(type, sort);
 
   unsigned size = member_types.size();
@@ -859,7 +860,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
     } else {
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
-      Z3_sort s;
+      z3::sort s;
       convert_type(*it, s);
       args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
     }
@@ -899,12 +900,13 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   u_int i = 0;
-  Z3_sort z3_array_type, elem_type;
+  Z3_sort z3_array_type;
   Z3_ast int_cte, val_cte;
+  z3::sort elem_type;
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
-  z3_array_type = ctx->array_sort(ctx->esbmc_int_sort(), to_sort(*ctx, elem_type));
+  z3_array_type = ctx->array_sort(ctx->esbmc_int_sort(), elem_type);
 
   output = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type));
 
@@ -923,7 +925,7 @@ void
 z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
 {
   Z3_ast value, index;
-  Z3_sort array_type = 0;
+  z3::sort array_type;
   std::string tmp, identifier;
   int64_t size;
   u_int j;
@@ -1519,10 +1521,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_sort pointer_type;
   std::string symbol_name, out;
-
-  convert_type(obj.type, pointer_type);
 
   if (is_index2t(obj.ptr_obj)) {
     const index2t &idx = to_index2t(obj.ptr_obj);
@@ -2281,7 +2280,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *_bv)
   // XXXjmorse - this method appears to just return a free variable. Surely
   // it should be selecting the zero_string field out of the referenced
   // string?
-  Z3_sort array_type;
+  z3::sort array_type;
 
   convert_type(zstr.type, array_type);
 
@@ -2607,18 +2606,16 @@ z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
 }
 
 void
-z3_convt::convert_type(const type2tc &type, Z3_sort &outtype)
+z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
 {
 
   sort_cachet::const_iterator cache_result = sort_cache.find(type);
   if (cache_result != sort_cache.end()) {
-    outtype = cache_result->second;
+    outtype = z3::to_sort(*ctx, cache_result->second);
     return;
   }
 
-  z3::sort sort;
-  type->convert_smt_type(*this, reinterpret_cast<void*>(&sort));
-  outtype = sort;
+  type->convert_smt_type(*this, reinterpret_cast<void*>(&outtype));
 
   // insert into cache
   sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
