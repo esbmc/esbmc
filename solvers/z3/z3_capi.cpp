@@ -29,13 +29,6 @@ z3_capi::mk_unsigned_int(unsigned int v)
 }
 
 Z3_ast
-z3_capi::mk_real_var(const char * name)
-{
-  Z3_sort ty = Z3_mk_real_sort(z3_ctx);
-  return mk_var(name, ty);
-}
-
-Z3_ast
 z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
 {
   Z3_ast args[1] = {

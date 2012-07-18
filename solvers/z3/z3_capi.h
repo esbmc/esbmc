@@ -27,7 +27,6 @@ class z3_capi {
 
     Z3_ast mk_var(const char * name, Z3_sort ty) const;
     Z3_ast mk_unsigned_int(unsigned int v);
-    Z3_ast mk_real_var(const char * name);
     Z3_ast mk_unary_app(Z3_func_decl f, Z3_ast x);
     Z3_ast mk_binary_app(Z3_func_decl f, Z3_ast x, Z3_ast y);
     Z3_ast mk_tuple(Z3_sort tuple_sort, ...);
