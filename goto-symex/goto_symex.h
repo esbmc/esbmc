@@ -540,7 +540,6 @@ protected:
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
 
   // exception
-  goto_programt::targett throw_target;
   bool has_throw_target;
 };
 
