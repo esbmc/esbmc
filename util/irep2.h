@@ -568,7 +568,7 @@ public:
    *  @param obj SMT converter object to use to convert this expr
    *  @param arg Pointer that will receive converted piece of AST.
    */
-  virtual void convert_smt(prop_convt &obj, void *&arg) const = 0;
+  virtual void convert_smt(prop_convt &obj, void *arg) const = 0;
 
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
@@ -938,7 +938,7 @@ namespace esbmct {
 
     // Override expr2t methods that we're going to be generating automagically
 
-    virtual void convert_smt(prop_convt &obj, void *&arg) const;
+    virtual void convert_smt(prop_convt &obj, void *arg) const;
     virtual expr2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const expr2t &ref) const;

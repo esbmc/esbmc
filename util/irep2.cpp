@@ -352,7 +352,7 @@ expr2t::expr2t(const expr2t &ref)
 {
 }
 
-void expr2t::convert_smt(prop_convt &obj, void *&arg) const
+void expr2t::convert_smt(prop_convt &obj, void *arg) const
 { obj.convert_smt_expr(*this, arg); }
 
 
@@ -1544,7 +1544,7 @@ esbmct::expr_methods<derived, subclass,
   field4_type, field4_class, field4_ptr,
   field5_type, field5_class, field5_ptr,
   field6_type, field6_class, field6_ptr>
-  ::convert_smt(prop_convt &obj, void *&arg) const
+  ::convert_smt(prop_convt &obj, void *arg) const
 {
   const derived *new_this = static_cast<const derived*>(this);
   obj.convert_smt_expr(*new_this, arg);
