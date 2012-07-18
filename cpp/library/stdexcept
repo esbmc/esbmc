@@ -16,6 +16,19 @@ public:
   }
 };
 
+class logic_error : public exception {
+public:
+  explicit logic_error (const string& what_arg);
+  virtual ~logic_error();
+};
+
+class length_error : public logic_error {
+public:
+  explicit length_error ();
+  explicit length_error (const string& what_arg);
+  virtual ~length_error();
+};
+
 }
 
 #endif
