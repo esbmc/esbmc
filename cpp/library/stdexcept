@@ -1,3 +1,13 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
 #ifndef STL_STDEXCEPT
 #define STL_STDEXCEPT
 
@@ -7,27 +17,36 @@
 
 namespace std {
 
-struct runtime_error : public exception {
-public:
-  runtime_error();
-  runtime_error(const char* what_arg) {
-	  message = (char *)what_arg;
-    __ESBMC_assert(0, "runtime_error");
-  }
-};
+  struct runtime_error : public exception {
+  public:
+    runtime_error();
+    runtime_error(const char* what_arg) {
+      message = (char *)what_arg;
+      __ESBMC_assert(0, "runtime_error");
+    }
+  };
 
-class logic_error : public exception {
-public:
-  explicit logic_error (const string& what_arg);
-  virtual ~logic_error();
-};
+  class logic_error : public exception {
+  public:
+    explicit logic_error (const string& what_arg);
+    virtual ~logic_error();
+  };
 
-class length_error : public logic_error {
-public:
-  explicit length_error ();
-  explicit length_error (const string& what_arg);
-  virtual ~length_error();
-};
+  class length_error : public logic_error {
+  public:
+    explicit length_error ();
+    explicit length_error (const string& what_arg);
+    virtual ~length_error();
+  };
+
+  class out_of_range : public logic_error 
+  {
+  public:
+    explicit out_of_range();
+    explicit out_of_range(const string& __arg);
+    virtual ~out_of_range();
+  };
+
 
 }
 
