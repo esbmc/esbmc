@@ -29,13 +29,6 @@ z3_capi::mk_unsigned_int(unsigned int v)
 }
 
 Z3_ast
-z3_capi::mk_int(int v)
-{
-  Z3_sort ty = Z3_mk_int_sort(z3_ctx);
-  return Z3_mk_int(z3_ctx, v, ty);
-}
-
-Z3_ast
 z3_capi::mk_real_var(const char * name)
 {
   Z3_sort ty = Z3_mk_real_sort(z3_ctx);

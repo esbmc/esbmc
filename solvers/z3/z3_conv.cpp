@@ -769,7 +769,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
   if (is_unsignedbv_type(sym.type) && int_encoding) {
     Z3_ast formula;
     output = ctx->constant((sym.get_symbol_name().c_str()), ctx->int_sort());
-    formula = Z3_mk_ge(z3_ctx, output, z3_api.mk_int(0));
+    formula = Z3_mk_ge(z3_ctx, output, ctx->int_val(0));
     assert_formula(formula);
     return;
   }
@@ -1218,7 +1218,7 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *_bv)
 
   if (int_encoding) {
     if (is_bv_type(neg.type)) {
-      args[1] = z3_api.mk_int(-1);
+      args[1] = ctx->int_val(-1);
     } else {
       assert(is_fixedbv_type(neg.type));
       args[1] = ctx->real_val(-1);

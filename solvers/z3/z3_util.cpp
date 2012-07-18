@@ -25,7 +25,7 @@ Z3_ast z3_convt::convert_number_int(int64_t value,
 {
 
   if (type)
-    return z3_api.mk_int(value);
+    return ctx->int_val(value);
   else
     return z3_api.mk_unsigned_int(value);
 }

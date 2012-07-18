@@ -26,7 +26,6 @@ class z3_capi {
     void set_z3_ctx(Z3_context _ctx) { this->z3_ctx = _ctx; }
 
     Z3_ast mk_var(const char * name, Z3_sort ty) const;
-    Z3_ast mk_int(int v);
     Z3_ast mk_unsigned_int(unsigned int v);
     Z3_ast mk_real_var(const char * name);
     Z3_ast mk_unary_app(Z3_func_decl f, Z3_ast x);
