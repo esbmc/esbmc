@@ -2991,7 +2991,7 @@ Z3_ast
 z3_convt::z3_literal(literalt l)
 {
 
-  Z3_ast literal_l;
+  z3::expr literal_l;
   std::string literal_s;
 
   if (l == const_literal(false))
@@ -3000,7 +3000,7 @@ z3_convt::z3_literal(literalt l)
     return Z3_mk_true(z3_ctx);
 
   literal_s = "l" + i2string(l.var_no());
-  literal_l = z3_api.mk_bool_var(literal_s.c_str());
+  literal_l = ctx->constant(literal_s.c_str(), ctx->bool_sort());
 
   if (l.sign()) {
     return Z3_mk_not(z3_ctx, literal_l);
