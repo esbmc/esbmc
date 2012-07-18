@@ -768,7 +768,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
   // otherwise the solver is free to assign negative nums to it.
   if (is_unsignedbv_type(sym.type) && int_encoding) {
     Z3_ast formula;
-    output = z3::to_expr(*ctx, z3_api.mk_int_var(sym.get_symbol_name().c_str()));
+    output = ctx->constant((sym.get_symbol_name().c_str()), ctx->int_sort());
     formula = Z3_mk_ge(z3_ctx, output, z3_api.mk_int(0));
     assert_formula(formula);
     return;
