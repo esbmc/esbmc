@@ -34,7 +34,6 @@ void goto_symext::symex_catch()
       throw "catch-pop on function frame";
 
     // pop the stack frame
-    has_throw_target = true;
     cur_state->call_stack.pop_back();
   }
   else // push
@@ -99,7 +98,29 @@ void goto_symext::symex_throw()
 
       if(c_it!=frame.catch_map.end())
       {
-        throw_target = (*c_it).second;
+        goto_programt::const_targett goto_target =
+        		(*c_it).second;
+
+        goto_programt::const_targett new_state_pc, state_pc;
+
+        new_state_pc = goto_target; // goto target instruction
+        state_pc = cur_state->source.pc;
+        state_pc++; // next instruction
+
+        cur_state->source.pc = state_pc;
+
+        new_state_pc->guard.make_false();
+
+        // put into state-queue
+        statet::goto_state_listt &goto_state_list =
+          cur_state->top().goto_state_map[new_state_pc];
+
+        goto_state_list.push_back(statet::goto_statet(*cur_state));
+        statet::goto_statet &new_state = goto_state_list.back();
+
+        cur_state->guard.make_true();
+        has_throw_target = true;
+        return ;
       }
       else
       {
@@ -110,4 +131,5 @@ void goto_symext::symex_throw()
       }
     }
   }
+  cur_state->source.pc++;
 }
