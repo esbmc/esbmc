@@ -48,6 +48,11 @@ void cpp_exception_list_rec(
     irep_idt identifier = src.identifier();
     dest.push_back(id2string(identifier)+suffix);
   }
+  else if(src.id()=="ellipsis")
+  {
+    irep_idt identifier = "...";
+    dest.push_back(id2string(identifier)+suffix);
+  }
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
