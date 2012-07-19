@@ -63,6 +63,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
 
+  setup_pointer_sort();
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
   addr_space_data.push_back(std::map<unsigned, unsigned>());
@@ -124,6 +125,8 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
+  delete pointer_decl;
+  delete pointer_sort;
   delete addr_space_tuple_decl;
   delete addr_space_arr_sort;
   delete addr_space_tuple_sort;
@@ -300,20 +303,15 @@ z3_convt::init_addr_space_array(void)
   // of the situation where 0 is valid as a representation of null, but the
   // frontend (for whatever reasons) converts it to a symbol rather than the
   // way it handles NULL (constant with val "NULL")
-  Z3_sort pointer_type;
-  create_pointer_type(pointer_type);
-  z3::sort tmpptrtype = z3::to_sort(*ctx, pointer_type);
-  Z3_ast zero_sym = ctx->constant("0", tmpptrtype);
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_type);
+  Z3_ast zero_sym = ctx->constant("0", *pointer_sort);
 
-  Z3_ast args[2];
-  args[1] = args[0] = ctx->esbmc_int_val(0);
-  Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
+  z3::expr zero_int= ctx->esbmc_int_val(0);
+  Z3_ast ptr_val = (*pointer_decl)(zero_int, zero_int);
   Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
   assert_formula(constraint);
 
   // Do the same thing, for the name "NULL".
-  Z3_ast null_sym = ctx->constant("NULL", tmpptrtype);
+  Z3_ast null_sym = ctx->constant("NULL", *pointer_sort);
   constraint = Z3_mk_eq(z3_ctx, null_sym, ptr_val);
   assert_formula(constraint);
 
@@ -321,10 +319,11 @@ z3_convt::init_addr_space_array(void)
   // a pointer object num of 1, and a free pointer offset. Anything of worth
   // using this should extract only the object number.
 
+  Z3_ast args[2];
   args[0] = ctx->esbmc_int_val(1);
-  args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
+  args[1] = Z3_mk_fresh_const(z3_ctx, NULL, *pointer_sort);
   Z3_ast invalid = mk_tuple_update(args[1], 0, args[0]);
-  Z3_ast invalid_name = ctx->constant("INVALID", tmpptrtype);
+  Z3_ast invalid_name = ctx->constant("INVALID", *pointer_sort);
   constraint = Z3_mk_eq(z3_ctx, invalid, invalid_name);
   assert_formula(constraint);
 
@@ -748,7 +747,7 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *_bv)
 }
 
 void
-z3_convt::create_pointer_type(Z3_sort &bv) const
+z3_convt::setup_pointer_sort(void)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
   Z3_sort proj_types[2];
@@ -760,9 +759,12 @@ z3_convt::create_pointer_type(Z3_sort &bv) const
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
   proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
 
-  bv = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
-                        &mk_tuple_decl, proj_decls);
+  Z3_sort s = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
+                               &mk_tuple_decl, proj_decls);
 
+  pointer_sort = new z3::sort(z3::to_sort(*ctx, s));
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, s);
+  pointer_decl = new z3::func_decl(z3::func_decl(*ctx, decl));
   return;
 }
 
@@ -2105,15 +2107,15 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // is expensive, but here we are.
 
   // First cast it to an unsignedbv
-  Z3_ast target;
+  z3::expr target;
   type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
   expr2tc cast_to_unsigned(new typecast2t(int_type, cast.from));
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
   Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
-  Z3_ast *obj_ids = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
-  Z3_ast *obj_starts = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  z3::expr *obj_ids = new z3::expr[addr_space_data.back().size()];
+  z3::expr *obj_starts = new z3::expr[addr_space_data.back().size()];
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
@@ -2123,12 +2125,11 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
     Z3_ast args[2];
 
     unsigned id = it->first;
-    Z3_ast idx = ctx->esbmc_int_val(id);
-    obj_ids[i] = idx;
-    Z3_ast start = ctx->constant(
+    obj_ids[i] = ctx->esbmc_int_val(id);
+    z3::expr start = ctx->constant(
                                  ("__ESBMC_ptr_obj_start_" + itos(id)).c_str(),
                                  ctx->esbmc_int_sort());
-    Z3_ast end = ctx->constant(
+    z3::expr end = ctx->constant(
                                  ("__ESBMC_ptr_obj_end_" + itos(id)).c_str(),
                                  ctx->esbmc_int_sort());
     obj_starts[i] = start;
@@ -2148,46 +2149,28 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // significant question is what happens when it's neither; in which case I
   // suggest the ptr becomes invalid_object. However, this needs frontend
   // support to check for invalid_object after all dereferences XXXjmorse.
-  Z3_sort pointer_sort;
-  create_pointer_type(pointer_sort);
 
   // So, what's the default value going to be if it doesn't match any existing
   // pointers? Answer, it's going to be the invalid object identifier, but with
   // an offset that calculates to the integer address of this object.
   // That's so that we can store an invalid pointer in a pointer type, that
   // eventually can be converted back via some mechanism to a valid pointer.
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_sort);
-  Z3_ast args[2];
+  z3::expr args[2];
   args[0] = ctx->esbmc_int_val(pointer_logic.back().get_invalid_object());
 
   // Calculate ptr offset - target minus start of invalid range, ie 1
-  Z3_ast subargs[2];
-  subargs[0] = target;
-  subargs[1] = ctx->esbmc_int_val(1);
+  args[1] = target - ctx->esbmc_int_val(1);
 
-  if (int_encoding) {
-    args[1] = Z3_mk_sub(z3_ctx, 2, subargs);
-  } else {
-    args[1] = Z3_mk_bvsub(z3_ctx, subargs[0], subargs[1]);
-  }
-
-  Z3_ast prev_in_chain = Z3_mk_app(z3_ctx, decl, 2, args);
+  Z3_ast prev_in_chain = (*pointer_decl)(args[0], args[1]);
 
   // Now that big ite chain,
   for (i = 0; i < addr_space_data.back().size(); i++) {
     args[0] = obj_ids[i];
 
     // Calculate ptr offset were it this
-    if (int_encoding) {
-      Z3_ast tmp_args[2];
-      tmp_args[0] = target;
-      tmp_args[1] = obj_starts[i];
-      args[1] = Z3_mk_sub(z3_ctx, 2, tmp_args);
-    } else {
-      args[1] = Z3_mk_bvsub(z3_ctx, target, obj_starts[i]);
-    }
+    args[1] = target - obj_starts[i];
 
-    Z3_ast selected_tuple = Z3_mk_app(z3_ctx, decl, 2, args);
+    Z3_ast selected_tuple = (*pointer_decl)(args[0], args[1]);
 
     prev_in_chain =
       Z3_mk_ite(z3_ctx, is_in_range[i], selected_tuple, prev_in_chain);
@@ -2196,6 +2179,8 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // Finally, we're now at the point where prev_in_chain represents a pointer
   // object. Hurrah.
   output = z3::to_expr(*ctx, prev_in_chain);
+  delete[] obj_starts;
+  delete[] obj_ids;
 }
 
 void
@@ -2668,12 +2653,9 @@ void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      z3::expr &output)
 {
-  Z3_sort tuple_type;
   std::string cte, identifier;
   unsigned int obj_num;
   bool got_obj_num = false;
-
-  create_pointer_type(tuple_type);
 
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
@@ -2687,22 +2669,17 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
 
-  z3::sort tmpptrsort = z3::to_sort(*ctx, tuple_type);
-  output = z3::to_expr(*ctx, ctx->constant(symbol.c_str(), tmpptrsort));
+  output = z3::to_expr(*ctx, ctx->constant(symbol.c_str(), *pointer_sort));
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
-    Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, tuple_type);
+    z3::expr ptr_val = (*pointer_decl)(ctx->esbmc_int_val(obj_num),
+                                       ctx->esbmc_int_val(0));
 
-    Z3_ast args[2];
-    args[0] = ctx->esbmc_int_val(obj_num);
-    args[1] = ctx->esbmc_int_val(0);
-
-    Z3_ast ptr_val = Z3_mk_app(z3_ctx, decl, 2, args);
-    Z3_ast constraint = Z3_mk_eq(z3_ctx, output, ptr_val);
+    z3::expr constraint = output == ptr_val;
     assert_formula(constraint);
 
     type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));

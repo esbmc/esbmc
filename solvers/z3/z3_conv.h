@@ -62,7 +62,7 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  void create_pointer_type(Z3_sort &bv) const;
+  void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
   void convert_bv(const expr2tc &expr, Z3_ast &bv);
@@ -302,6 +302,9 @@ private:
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
+
+  z3::sort *pointer_sort;
+  z3::func_decl *pointer_decl;
 
 public:
   class conv_error {
