@@ -26,7 +26,6 @@ class z3_capi {
     void set_z3_ctx(Z3_context _ctx) { this->z3_ctx = _ctx; }
 
     Z3_ast mk_unary_app(Z3_func_decl f, Z3_ast x);
-    Z3_ast mk_binary_app(Z3_func_decl f, Z3_ast x, Z3_ast y);
     Z3_ast mk_tuple(Z3_sort tuple_sort, ...);
     Z3_ast mk_tuple(Z3_sort tuple_sort, Z3_ast *args,
                     unsigned int num);

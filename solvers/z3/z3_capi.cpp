@@ -24,15 +24,6 @@ z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
 }
 
 Z3_ast
-z3_capi::mk_binary_app(Z3_func_decl f, Z3_ast x, Z3_ast y)
-{
-  Z3_ast args[2] = {
-    x, y
-  };
-  return Z3_mk_app(z3_ctx, f, 2, args);
-}
-
-Z3_ast
 z3_capi::mk_tuple(Z3_sort sort, ...)
 {
   va_list args;
