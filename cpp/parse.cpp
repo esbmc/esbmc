@@ -5910,24 +5910,35 @@ bool Parser::rTryStatement(codet &statement)
     if(lex->LookAhead(0)==TOK_ELLIPSIS)
     {
       lex->GetToken(cp);
-      // TODO
+
+      declaration = cpp_declarationt();
+
+      typet kw=typet("ellipsis");
+      set_location(kw, cp);
+      declaration.type().swap(kw);
+
+      cpp_declaratort arg_declarator;
+      if(!rDeclarator(arg_declarator, kArgDeclarator, false, true))
+      	return false;
+
+      declaration.declarators().push_back(arg_declarator);
     }
     else
     {
       if(!rArgDeclaration(declaration))
         return false;
+    }
 
-      // No name in the declarator? Make one.
-      assert(declaration.declarators().size()==1);
+    // No name in the declarator? Make one.
+    assert(declaration.declarators().size()==1);
 
-      if(declaration.declarators().front().name().is_nil())
-      {
-        irept name("name");
-        name.identifier("#anon");
-        name.set("#location", declaration.type().location());
-        declaration.declarators().front().name()=cpp_namet();
-        declaration.declarators().front().name().get_sub().push_back(name);
-      }
+    if(declaration.declarators().front().name().is_nil())
+    {
+      irept name("name");
+      name.identifier("#anon");
+      name.set("#location", declaration.type().location());
+      declaration.declarators().front().name()=cpp_namet();
+      declaration.declarators().front().name().get_sub().push_back(name);
     }
 
     if(lex->GetToken(cp)!=')')
