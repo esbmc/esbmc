@@ -179,6 +179,9 @@ private:
                                  const std::vector<irep_idt> &member_names,
                                  const irep_idt &name, bool uni, void *_bv);
 
+  Z3_ast mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val);
+  Z3_ast mk_tuple_select(Z3_ast t, unsigned i);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate

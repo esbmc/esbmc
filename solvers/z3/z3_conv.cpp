@@ -319,7 +319,7 @@ z3_convt::init_addr_space_array(void)
 
   args[0] = ctx->esbmc_int_val(1);
   args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
-  Z3_ast invalid = z3_api.mk_tuple_update(args[1], 0, args[0]);
+  Z3_ast invalid = mk_tuple_update(args[1], 0, args[0]);
   Z3_ast invalid_name = ctx->constant("INVALID", tmpptrtype);
   constraint = Z3_mk_eq(z3_ctx, invalid, invalid_name);
   assert_formula(constraint);
@@ -1037,10 +1037,10 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
 
   // XXXjmorse -- pointer comparisons are still broken.
   if (is_pointer_type(side1->type))
-    args[0] = z3_api.mk_tuple_select(args[0], 1);
+    args[0] = mk_tuple_select(args[0], 1);
 
   if (is_pointer_type(side2->type))
-    args[1] = z3_api.mk_tuple_select(args[1], 1);
+    args[1] = mk_tuple_select(args[1], 1);
 
   if (int_encoding) {
     output = z3::to_expr(*ctx, intmode(z3_ctx, args[0], args[1]));
@@ -1482,8 +1482,8 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *_bv)
   convert_bv(same.side_1, pointer[0]);
   convert_bv(same.side_2, pointer[1]);
 
-  objs[0] = z3_api.mk_tuple_select(pointer[0], 0);
-  objs[1] = z3_api.mk_tuple_select(pointer[1], 0);
+  objs[0] = mk_tuple_select(pointer[0], 0);
+  objs[1] = mk_tuple_select(pointer[1], 0);
   output = z3::to_expr(*ctx, Z3_mk_eq(z3_ctx, objs[0], objs[1]));
 }
 
@@ -1500,7 +1500,7 @@ z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *_bv)
 
   convert_bv(*ptr, pointer);
 
-  output = z3::to_expr(*ctx, z3_api.mk_tuple_select(pointer, 1)); //select pointer offset
+  output = z3::to_expr(*ctx, mk_tuple_select(pointer, 1)); //select pointer offset
 }
 
 void
@@ -1520,7 +1520,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *_bv)
 
   convert_bv(*ptr, pointer);
 
-  output = z3::to_expr(*ctx, z3_api.mk_tuple_select(pointer, 0)); //select pointer offset
+  output = z3::to_expr(*ctx, mk_tuple_select(pointer, 0)); //select pointer offset
 }
 
 void
@@ -1566,7 +1566,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
 
     // Update pointer offset to offset to that field.
     Z3_ast num = ctx->esbmc_int_val(offs);
-    output = z3::to_expr(*ctx, z3_api.mk_tuple_update(output, 1, num));
+    output = z3::to_expr(*ctx, mk_tuple_update(output, 1, num));
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 
@@ -1669,7 +1669,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
 
       forall_types(it, struct_type.members) {
-        struct_elem[i] = z3_api.mk_tuple_select(source, i);
+        struct_elem[i] = mk_tuple_select(source, i);
         i++;
       }
 
@@ -1730,7 +1730,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     }
 
     if (has_field)
-      output = z3::to_expr(*ctx, z3_api.mk_tuple_update(tuple, intref.constant_value.to_long(), value));
+      output = z3::to_expr(*ctx, mk_tuple_update(tuple, intref.constant_value.to_long(), value));
     else
       output = z3::to_expr(*ctx, tuple);
   } else if (is_signedbv_type(data.source_value->type)) {
@@ -1782,13 +1782,13 @@ z3_convt::convert_smt_expr(const with2t &with, void *_bv)
     assert(idx != names.size() &&
            "Member name of with expr not found in struct/union type");
 
-    output = to_expr(*ctx, z3_api.mk_tuple_update(tuple, idx, value));
+    output = to_expr(*ctx, mk_tuple_update(tuple, idx, value));
 
     // Update last-updated-field field if it's a union
     if (is_union_type(with.type)) {
       const union_type2t &unionref = to_union_type(with.type);
        unsigned int components_size = unionref.members.size();
-       output = z3::to_expr(*ctx, z3_api.mk_tuple_update(output, components_size,
+       output = z3::to_expr(*ctx, mk_tuple_update(output, components_size,
                               ctx->esbmc_int_val(idx)));
     }
   } else if (is_array_type(with.type)) {
@@ -1839,7 +1839,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
       const type2tc source_type = members[cache_result->idx];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
-        output = z3::to_expr(*ctx, z3_api.mk_tuple_select(struct_var, cache_result->idx));
+        output = z3::to_expr(*ctx, mk_tuple_select(struct_var, cache_result->idx));
         return;
       }
 
@@ -1852,7 +1852,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
     }
   }
 
-  output = z3::to_expr(*ctx, z3_api.mk_tuple_select(struct_var, j));
+  output = z3::to_expr(*ctx, mk_tuple_select(struct_var, j));
 }
 
 void
@@ -2075,8 +2075,8 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   i2 = 0;
   forall_types(it, newstruct.members) {
     Z3_ast formula;
-    formula = Z3_mk_eq(z3_ctx, z3_api.mk_tuple_select(freshval, i2),
-                       z3_api.mk_tuple_select(output, i2));
+    formula = Z3_mk_eq(z3_ctx, mk_tuple_select(freshval, i2),
+                       mk_tuple_select(output, i2));
     assert_formula(formula);
     i2++;
   }
@@ -2300,7 +2300,7 @@ z3_convt::convert_smt_expr(const zero_length_string2t &s, void *_bv)
   Z3_ast operand;
 
   convert_bv(s.string, operand);
-  output = z3::to_expr(*ctx, z3_api.mk_tuple_select(operand, 0));
+  output = z3::to_expr(*ctx, mk_tuple_select(operand, 0));
 }
 
 void
@@ -2472,7 +2472,7 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
 
   // XXX jmorse - clearly wrong. Neg of pointer?
   if (is_pointer_type(neg.operand->type))
-    operand = z3_api.mk_tuple_select(operand, 1);
+    operand = mk_tuple_select(operand, 1);
 
   width = neg.operand->type->get_width();
 
@@ -2569,7 +2569,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // That calculated the offset; update field in pointer.
       Z3_ast the_ptr;
       convert_bv(ptr_op, the_ptr);
-      output = z3::to_expr(*ctx, z3_api.mk_tuple_update(the_ptr, 1, output));
+      output = z3::to_expr(*ctx, mk_tuple_update(the_ptr, 1, output));
 
       break;
       }
@@ -3069,6 +3069,70 @@ z3_convt::assert_formula(Z3_ast ast)
     assumpt.push_back(z3_literal(l));
 
   return;
+}
+
+Z3_ast
+z3_convt::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
+{
+  Z3_sort ty;
+  Z3_func_decl mk_tuple_decl;
+  unsigned num_fields, j;
+  Z3_ast *            new_fields;
+  Z3_ast result;
+
+  ty = Z3_get_sort(*ctx, t);
+
+  if (Z3_get_sort_kind(*ctx, ty) != Z3_DATATYPE_SORT) {
+    std::cerr << "argument must be a tuple";
+    abort();
+  }
+
+  num_fields = Z3_get_tuple_sort_num_fields(*ctx, ty);
+
+  if (i >= num_fields) {
+    std::cerr << "invalid tuple update, index is too big";
+    abort();
+  }
+
+  new_fields = (Z3_ast*) malloc(sizeof(Z3_ast) * num_fields);
+  for (j = 0; j < num_fields; j++) {
+    if (i == j) {
+      /* use new_val at position i */
+      new_fields[j] = new_val;
+    } else   {
+      /* use field j of t */
+      Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(*ctx, ty, j);
+      Z3_ast args[1] = { t };
+      new_fields[j] = Z3_mk_app(*ctx, proj_decl, 1, args);
+    }
+  }
+  mk_tuple_decl = Z3_get_tuple_sort_mk_decl(*ctx, ty);
+  result = Z3_mk_app(*ctx, mk_tuple_decl, num_fields, new_fields);
+  free(new_fields);
+  return result;
+}
+
+Z3_ast
+z3_convt::mk_tuple_select(Z3_ast t, unsigned i)
+{
+  Z3_sort ty;
+  unsigned num_fields;
+
+  ty = Z3_get_sort(*ctx, t);
+
+  if (Z3_get_sort_kind(*ctx, ty) != Z3_DATATYPE_SORT) {
+    throw new z3_convt::conv_error("argument must be a tuple");
+  }
+
+  num_fields = Z3_get_tuple_sort_num_fields(*ctx, ty);
+
+  if (i >= num_fields) {
+    throw new z3_convt::conv_error("invalid tuple select, index is too big");
+  }
+
+  Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(*ctx, ty, i);
+  Z3_ast args[1] = { t };
+  return Z3_mk_app(*ctx, proj_decl, 1, args);
 }
 
 bool z3_convt::s_is_uw = false;
