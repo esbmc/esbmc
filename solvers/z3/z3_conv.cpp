@@ -224,22 +224,22 @@ z3_convt::init_addr_space_array(void)
 
   // Place locations of numerical addresses for null and invalid_obj.
 
-  Z3_ast tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_0", ctx->esbmc_int_sort());
+  Z3_ast tmp = ctx->constant("__ESBMC_ptr_obj_start_0", ctx->esbmc_int_sort());
   Z3_ast num = ctx->esbmc_int_val(0);
   Z3_ast eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_0", ctx->esbmc_int_sort());
+  tmp = ctx->constant("__ESBMC_ptr_obj_end_0", ctx->esbmc_int_sort());
   num = ctx->esbmc_int_val(0);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_start_1", ctx->esbmc_int_sort());
+  tmp = ctx->constant("__ESBMC_ptr_obj_start_1", ctx->esbmc_int_sort());
   num = ctx->esbmc_int_val(1);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
 
-  tmp = z3_api.mk_var("__ESBMC_ptr_obj_end_1", ctx->esbmc_int_sort());
+  tmp = ctx->constant("__ESBMC_ptr_obj_end_1", ctx->esbmc_int_sort());
   num = ctx->esbmc_int_val((uint64_t)0xFFFFFFFFFFFFFFFFULL);
   eq = Z3_mk_eq(z3_ctx, tmp, num);
   assert_formula(eq);
@@ -263,12 +263,12 @@ z3_convt::init_addr_space_array(void)
   Z3_ast initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
 
   Z3_ast initial_const = Z3_mk_const_array(z3_ctx, ctx->esbmc_int_sort(), initial_val);
-  Z3_ast first_name = z3_api.mk_var("__ESBMC_addrspace_arr_0",
+  Z3_ast first_name = ctx->constant("__ESBMC_addrspace_arr_0",
                                     *addr_space_arr_sort);
   eq = Z3_mk_eq(z3_ctx, first_name, initial_const);
   assert_formula(eq);
 
-  Z3_ast range_tuple = z3_api.mk_var("__ESBMC_ptr_addr_range_0",
+  Z3_ast range_tuple = ctx->constant("__ESBMC_ptr_addr_range_0",
                                      *addr_space_tuple_sort);
   initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
@@ -279,7 +279,7 @@ z3_convt::init_addr_space_array(void)
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
   num = ctx->esbmc_int_val(1);
-  range_tuple = z3_api.mk_var("__ESBMC_ptr_addr_range_1",
+  range_tuple = ctx->constant("__ESBMC_ptr_addr_range_1",
                               *addr_space_tuple_sort);
   initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
@@ -293,7 +293,8 @@ z3_convt::init_addr_space_array(void)
   // way it handles NULL (constant with val "NULL")
   Z3_sort pointer_type;
   create_pointer_type(pointer_type);
-  Z3_ast zero_sym = z3_api.mk_var("0", pointer_type);
+  z3::sort tmpptrtype = z3::to_sort(*ctx, pointer_type);
+  Z3_ast zero_sym = ctx->constant("0", tmpptrtype);
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, pointer_type);
 
   Z3_ast args[2];
@@ -303,7 +304,7 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Do the same thing, for the name "NULL".
-  Z3_ast null_sym = z3_api.mk_var("NULL", pointer_type);
+  Z3_ast null_sym = ctx->constant("NULL", tmpptrtype);
   constraint = Z3_mk_eq(z3_ctx, null_sym, ptr_val);
   assert_formula(constraint);
 
@@ -314,7 +315,7 @@ z3_convt::init_addr_space_array(void)
   args[0] = ctx->esbmc_int_val(1);
   args[1] = Z3_mk_fresh_const(z3_ctx, NULL, pointer_type);
   Z3_ast invalid = z3_api.mk_tuple_update(args[1], 0, args[0]);
-  Z3_ast invalid_name = z3_api.mk_var("INVALID", pointer_type);
+  Z3_ast invalid_name = ctx->constant("INVALID", tmpptrtype);
   constraint = Z3_mk_eq(z3_ctx, invalid, invalid_name);
   assert_formula(constraint);
 
@@ -331,14 +332,13 @@ z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
   std::string str, new_str;
 
   str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
-  Z3_ast addr_sym = z3_api.mk_var(str.c_str(), *addr_space_arr_sort);
+  Z3_ast addr_sym = ctx->constant(str.c_str(), *addr_space_arr_sort);
   Z3_ast obj_idx = ctx->esbmc_int_val(idx);
 
   Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
 
   new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
-  Z3_ast new_addr_sym = z3_api.mk_var(new_str.c_str(),
-                                      *addr_space_arr_sort);
+  Z3_ast new_addr_sym = ctx->constant(new_str.c_str(), *addr_space_arr_sort);
 
   Z3_ast eq = Z3_mk_eq(z3_ctx, new_addr_sym, store);
   assert_formula(eq);
@@ -446,10 +446,10 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
   // object nums don't overlap the current one. So for every particular pair
   // of object numbers in the set there'll be a doesn't-overlap clause.
 
-   Z3_ast i_start = z3_api.mk_var(
+   Z3_ast i_start = ctx->constant(
                        ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
                        ctx->esbmc_int_sort());
-  Z3_ast i_end = z3_api.mk_var(
+  Z3_ast i_end = ctx->constant(
                        ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
                        ctx->esbmc_int_sort());
 
@@ -458,10 +458,10 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
     if (j == 1)
       continue;
 
-    Z3_ast j_start = z3_api.mk_var(
+    Z3_ast j_start = ctx->constant(
                        ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
                        ctx->esbmc_int_sort());
-    Z3_ast j_end = z3_api.mk_var(
+    Z3_ast j_end = ctx->constant(
                        ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
                        ctx->esbmc_int_sort());
 
@@ -775,7 +775,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
 
   z3::sort sort;
   convert_type(sym.type, sort);
-  output = z3::to_expr(*ctx, z3_api.mk_var(sym.get_symbol_name().c_str(),sort));
+  output = z3::to_expr(*ctx, ctx->constant(sym.get_symbol_name().c_str(),sort));
 }
 
 void
@@ -2114,10 +2114,10 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
     unsigned id = it->first;
     Z3_ast idx = ctx->esbmc_int_val(id);
     obj_ids[i] = idx;
-    Z3_ast start = z3_api.mk_var(
+    Z3_ast start = ctx->constant(
                                  ("__ESBMC_ptr_obj_start_" + itos(id)).c_str(),
                                  ctx->esbmc_int_sort());
-    Z3_ast end = z3_api.mk_var(
+    Z3_ast end = ctx->constant(
                                  ("__ESBMC_ptr_obj_end_" + itos(id)).c_str(),
                                  ctx->esbmc_int_sort());
     obj_starts[i] = start;
@@ -2282,7 +2282,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *_bv)
 
   convert_type(zstr.type, array_type);
 
-  output = z3::to_expr(*ctx, z3_api.mk_var("zero_string", array_type));
+  output = z3::to_expr(*ctx, ctx->constant("zero_string", array_type));
 }
 
 void
@@ -2676,7 +2676,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
 
-  output = z3::to_expr(*ctx, z3_api.mk_var(symbol.c_str(), tuple_type));
+  z3::sort tmpptrsort = z3::to_sort(*ctx, tuple_type);
+  output = z3::to_expr(*ctx, ctx->constant(symbol.c_str(), tmpptrsort));
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
@@ -2753,7 +2754,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     convert_bv(end_sym, end_ast);
 
     // Actually store into array
-    Z3_ast range_tuple = z3_api.mk_var(
+    Z3_ast range_tuple = ctx->constant(
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        *addr_space_tuple_sort);
     Z3_ast init_val = z3_api.mk_tuple(*addr_space_tuple_sort, start_ast,

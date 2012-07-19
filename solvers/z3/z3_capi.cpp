@@ -15,13 +15,6 @@ abortf(const char* message)
 }
 
 Z3_ast
-z3_capi::mk_var(const char * name, Z3_sort ty) const
-{
-  Z3_symbol s  = Z3_mk_string_symbol(z3_ctx, name);
-  return Z3_mk_const(z3_ctx, s, ty);
-}
-
-Z3_ast
 z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
 {
   Z3_ast args[1] = {

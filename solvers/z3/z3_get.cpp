@@ -88,7 +88,7 @@ z3_convt::get(const expr2tc &expr) const
       ourselves->convert_type(expr->type, sort);
     }
 
-    bv = z3_api.mk_var(identifier.c_str(), sort);
+    bv = ctx->constant(identifier.c_str(), sort);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
 
     if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
