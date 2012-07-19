@@ -63,8 +63,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
 
-  z3_api.set_z3_ctx(z3_ctx);
-
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
   addr_space_data.push_back(std::map<unsigned, unsigned>());

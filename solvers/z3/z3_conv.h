@@ -27,7 +27,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <boost/multi_index/ordered_index.hpp>
 
 #include "z3++.h"
-#include "z3_capi.h"
 
 #define Z3_UNSAT_CORE_LIMIT 10000
 
@@ -281,8 +280,6 @@ private:
 	    max_core_size;
 
   Z3_model model; // Model of satisfying program.
-
-  z3_capi z3_api;
 
   unsigned int level_ctx;
   bool int_encoding, smtlib, store_assumptions, uw;
