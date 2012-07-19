@@ -159,6 +159,9 @@ namespace z3 {
         expr real_const(char const * name);
         expr bv_const(char const * name, unsigned sz);
 
+        expr fresh_const(symbol const & name, sort const & s);
+        expr fresh_const(char const * name, sort const & s);
+
         expr bool_val(bool b);
 
         expr esbmc_int_val(int n, unsigned int width = 0);
@@ -1235,6 +1238,17 @@ namespace z3 {
     inline expr context::int_const(char const * name) { return constant(name, int_sort()); }
     inline expr context::real_const(char const * name) { return constant(name, real_sort()); }
     inline expr context::bv_const(char const * name, unsigned sz) { return constant(name, bv_sort(sz)); }
+
+    inline expr context::fresh_const(symbol const & name, sort const & s) {
+      Z3_ast r = Z3_mk_fresh_const(m_ctx, name.str().c_str(), s);
+      check_error();
+      return expr(*this, r);
+    }
+    inline expr context::fresh_const(char const * name, sort const & s) {
+      Z3_ast r = Z3_mk_fresh_const(m_ctx, name, s);
+      check_error();
+      return expr(*this, r);
+    }
 
     inline expr context::bool_val(bool b) { return b ? expr(*this, Z3_mk_true(m_ctx)) : expr(*this, Z3_mk_false(m_ctx)); }
 
