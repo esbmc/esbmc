@@ -24,45 +24,6 @@ z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
 }
 
 Z3_ast
-z3_capi::mk_tuple(Z3_sort sort, ...)
-{
-  va_list args;
-  unsigned int num, i;
-
-  // Count number of arguments
-  va_start(args, sort);
-  for (num = 0;; num++) {
-    Z3_ast a = va_arg(args, Z3_ast);
-    if (a == NULL)
-      break;
-  }
-  va_end(args);
-
-  // Generate array of args
-  Z3_ast *arg_list = (Z3_ast*)alloca(sizeof(Z3_ast) * num);
-  va_start(args, sort);
-  for (i = 0;; i++) {
-    Z3_ast a = va_arg(args, Z3_ast);
-    if (a == NULL)
-      break;
-    arg_list[i] = a;
-  }
-  va_end(args);
-
-  return mk_tuple(sort, arg_list, num);
-}
-
-Z3_ast
-z3_capi::mk_tuple(Z3_sort sort, Z3_ast *args, unsigned int num)
-{
-
-  // Create appl
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(z3_ctx, sort);
-  Z3_ast val = Z3_mk_app(z3_ctx, decl, num, args);
-  return val;
-}
-
-Z3_ast
 z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
 {
   Z3_sort ty;
