@@ -15,15 +15,6 @@ abortf(const char* message)
 }
 
 Z3_ast
-z3_capi::mk_unary_app(Z3_func_decl f, Z3_ast x)
-{
-  Z3_ast args[1] = {
-    x
-  };
-  return Z3_mk_app(z3_ctx, f, 1, args);
-}
-
-Z3_ast
 z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
 {
   Z3_sort ty;
@@ -52,7 +43,8 @@ z3_capi::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
     } else   {
       /* use field j of t */
       Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(z3_ctx, ty, j);
-      new_fields[j] = mk_unary_app(proj_decl, t);
+      Z3_ast args[1] = { t };
+      new_fields[j] = Z3_mk_app(z3_ctx, proj_decl, 1, args);
     }
   }
   mk_tuple_decl = Z3_get_tuple_sort_mk_decl(z3_ctx, ty);
@@ -105,5 +97,6 @@ z3_capi::mk_tuple_select(Z3_ast t, unsigned i)
   }
 
   Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(z3_ctx, ty, i);
-  return mk_unary_app(proj_decl, t);
+  Z3_ast args[1] = { t };
+  return Z3_mk_app(z3_ctx, proj_decl, 1, args);
 }
