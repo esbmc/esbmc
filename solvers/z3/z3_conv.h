@@ -251,7 +251,7 @@ private:
   Z3_ast convert_number(int64_t value, u_int width, bool type);
   Z3_ast convert_number_int(int64_t value, u_int width, bool type);
   Z3_ast convert_number_bv(int64_t value, u_int width, bool type);
-  void bump_addrspace_array(unsigned int idx, Z3_ast val);
+  void bump_addrspace_array(unsigned int idx, const z3::expr &val);
   std::string get_cur_addrspace_ident(void);
   void finalize_pointer_chain(unsigned int objnum);
   void init_addr_space_array(void);

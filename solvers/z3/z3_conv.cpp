@@ -335,20 +335,20 @@ z3_convt::init_addr_space_array(void)
 }
 
 void
-z3_convt::bump_addrspace_array(unsigned int idx, Z3_ast val)
+z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
 {
   std::string str, new_str;
 
   str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
-  Z3_ast addr_sym = ctx->constant(str.c_str(), *addr_space_arr_sort);
-  Z3_ast obj_idx = ctx->esbmc_int_val(idx);
+  z3::expr addr_sym = ctx->constant(str.c_str(), *addr_space_arr_sort);
+  z3::expr obj_idx = ctx->esbmc_int_val(idx);
 
-  Z3_ast store = Z3_mk_store(z3_ctx, addr_sym, obj_idx, val);
+  z3::expr store = z3::store(addr_sym, obj_idx, val);
 
   new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
-  Z3_ast new_addr_sym = ctx->constant(new_str.c_str(), *addr_space_arr_sort);
+  z3::expr new_addr_sym = ctx->constant(new_str.c_str(), *addr_space_arr_sort);
 
-  Z3_ast eq = Z3_mk_eq(z3_ctx, new_addr_sym, store);
+  z3::expr eq = new_addr_sym == store;
   assert_formula(eq);
 
   return;
@@ -2742,7 +2742,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     convert_bv(end_sym, end_ast);
 
     // Actually store into array
-    Z3_ast range_tuple = ctx->constant(
+    z3::expr range_tuple = ctx->constant(
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        *addr_space_tuple_sort);
     Z3_ast init_val =
