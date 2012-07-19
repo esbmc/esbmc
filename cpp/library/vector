@@ -12,6 +12,7 @@ Date: Feb 2012
 #define __STL_VECTOR
 
 #include "iterator"
+#include "stdexcept"
 
 #define VECTOR_CAPACITY 20
 
@@ -260,7 +261,12 @@ namespace std{
     }
 
     const_reference at(size_type n) const;
-    reference at(size_type n);
+    reference at(size_type n)
+    {
+      __ESBMC_assert(n >= 0, "the index must be a positive number");
+      if (n >= _size)
+        out_of_range();
+    }
     reference front();
     const_reference front() const;
 

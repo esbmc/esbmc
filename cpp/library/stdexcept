@@ -28,6 +28,7 @@ namespace std {
 
   class logic_error : public exception {
   public:
+    explicit logic_error ();
     explicit logic_error (const string& what_arg);
     virtual ~logic_error();
   };
@@ -42,7 +43,10 @@ namespace std {
   class out_of_range : public logic_error 
   {
   public:
-    explicit out_of_range();
+    explicit out_of_range()
+    {
+      __ESBMC_assert(0, "out-of-range");
+    }
     explicit out_of_range(const string& __arg);
     virtual ~out_of_range();
   };
