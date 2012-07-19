@@ -630,11 +630,13 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
                            void *_bv)
 {
   Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_sort proj_types[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
+  Z3_sort proj_types[2];
+  z3::sort int_sort;
   z3::sort &sort = cast_to_z3_sort(_bv);
 
-  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
+  int_sort = ctx->esbmc_int_sort();
+  proj_types[0] = proj_types[1] = int_sort;
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
