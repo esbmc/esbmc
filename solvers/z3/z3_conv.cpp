@@ -2395,7 +2395,6 @@ void
 z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_ast operand[3], mid, overflow[2], tmp, minus_one, two;
   uint64_t result;
   u_int width;
 
@@ -2407,46 +2406,51 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
   assert(ocast.bits <= 32 && ocast.bits != 0);
   result = 1 << ocast.bits;
 
-  convert_bv(ocast.operand, operand[0]);
+  expr2tc oper = ocast.operand;
 
-  // XXXjmorse - int2bv trainwreck.
-  if (int_encoding)
-    operand[0] = Z3_mk_int2bv(z3_ctx, width, operand[0]);
-
-  // XXXjmorse - fixedbv is /not/ always partitioned at width/2
+  // Cast fixedbv to its integer form.
   if (is_fixedbv_type(ocast.operand->type)) {
-    unsigned size = (width / 2) + 1;
-    operand[0] = Z3_mk_extract(z3_ctx, width - 1, size - 1, operand[0]);
+    const fixedbv_type2t &fbvt = to_fixedbv_type(ocast.operand->type);
+    type2tc signedbv(new signedbv_type2t(fbvt.integer_bits));
+    oper = expr2tc(new typecast2t(signedbv, oper));
   }
 
+  expr2tc lessthan, greaterthan;
   if (is_signedbv_type(ocast.operand->type) ||
       is_fixedbv_type(ocast.operand->type)) {
     // Produce some useful constants
     unsigned int nums_width = (is_signedbv_type(ocast.operand->type))
                                ? width : width / 2;
-    tmp = ctx->esbmc_int_val(result, nums_width);
-    two = ctx->esbmc_int_val(2, nums_width);
-    minus_one = ctx->esbmc_int_val(-1, nums_width);
+    type2tc signedbv(new signedbv_type2t(nums_width));
+    expr2tc result_val(new constant_int2t(signedbv, BigInt(result / 2)));
+    expr2tc two(new constant_int2t(signedbv, BigInt(2)));
+    expr2tc minus_one(new constant_int2t(signedbv, BigInt(-1)));
 
     // Now produce numbers that bracket the selected bitwidth. So for 16 bis
     // we would generate 2^15-1 and -2^15
-    mid = Z3_mk_bvsdiv(z3_ctx, tmp, two);
-    operand[1] = Z3_mk_bvsub(z3_ctx, mid, minus_one);
-    operand[2] = Z3_mk_bvmul(z3_ctx, operand[1], minus_one);
+    expr2tc upper(new sub2t(signedbv, result_val, minus_one));
+    expr2tc lower(new mul2t(signedbv, result_val, minus_one));
 
     // Ensure operand lies between these braces
-    overflow[0] = Z3_mk_bvslt(z3_ctx, operand[0], operand[1]);
-    overflow[1] = Z3_mk_bvsgt(z3_ctx, operand[0], operand[2]);
+    lessthan = expr2tc(new lessthan2t(oper, upper));
+    greaterthan = expr2tc(new greaterthan2t(oper, lower));
   } else if (is_unsignedbv_type(ocast.operand->type)) {
     // Create zero and 2^bitwidth,
-    operand[2] = ctx->esbmc_int_val(0, width);
-    operand[1] = ctx->esbmc_int_val(result, width);
+    type2tc unsignedbv(new unsignedbv_type2t(width));
+
+    expr2tc zero(new constant_int2t(unsignedbv, BigInt(0)));
+    expr2tc the_width(new constant_int2t(unsignedbv, BigInt(result)));
+
     // Ensure operand lies between those numbers.
-    overflow[0] = Z3_mk_bvult(z3_ctx, operand[0], operand[1]);
-    overflow[1] = Z3_mk_bvuge(z3_ctx, operand[0], operand[2]);
+    lessthan = expr2tc(new lessthan2t(oper, the_width));
+    greaterthan = expr2tc(new greaterthanequal2t(oper, zero));
   }
 
-  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, overflow)));
+  Z3_ast ops[2];
+  convert_bv(lessthan, ops[0]);
+  convert_bv(greaterthan, ops[1]);
+
+  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, ops)));
 }
 
 void
