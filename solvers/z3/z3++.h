@@ -223,6 +223,7 @@ namespace z3 {
     class symbol : public object {
         Z3_symbol m_sym;
     public:
+        symbol(void) : object(), m_sym(NULL) { }
         symbol(context & c, const char *s):object(c), m_sym(NULL) {
           m_sym = Z3_mk_string_symbol(*m_ctx, s);
         }
