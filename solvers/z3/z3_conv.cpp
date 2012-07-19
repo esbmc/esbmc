@@ -854,7 +854,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   if (is_union)
     size++;
 
-  Z3_ast *args = (Z3_ast*)alloca(sizeof(Z3_ast) * size);
+  z3::expr *args = (z3::expr*)alloca(sizeof(z3::expr) * size);
 
   unsigned int numoperands = members.size();
   // Populate tuple with members of that struct/union
@@ -866,7 +866,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
       // If no initialization give, use free (fresh) variable.
       z3::sort s;
       convert_type(*it, s);
-      args[i] = Z3_mk_fresh_const(z3_ctx, NULL, s);
+      args[i] = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, s));
     }
 
     i++;
@@ -878,7 +878,9 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
   // need to bind it to a name or symbol.
-  output = z3::to_expr(*ctx, z3_api.mk_tuple(sort, args, size));
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, sort);
+  z3::func_decl d(*ctx, decl);
+  output = d.make_tuple_from_array(size, args);
 }
 
 void

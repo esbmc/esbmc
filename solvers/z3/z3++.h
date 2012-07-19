@@ -321,6 +321,7 @@ namespace z3 {
         bool is_const() const { return arity() == 0; }
 
         expr make_tuple(const char *dummy, ...) const;
+        expr make_tuple_from_array(unsigned int n, const expr *exprs) const;
         expr operator()(unsigned n, expr const * args) const;
         expr operator()(expr const & a) const;
         expr operator()(int a) const;
@@ -1332,6 +1333,18 @@ namespace z3 {
         check_error();
         return expr(ctx(), r);
       }
+
+    inline expr func_decl::make_tuple_from_array(unsigned int n,
+                                                 const expr *exprs) const {
+      array<Z3_ast> _args(n);
+      for (unsigned i = 0; i < n; i++) {
+          check_context(*this, exprs[i]);
+          _args[i] = exprs[i];
+      }
+      Z3_ast r = Z3_mk_app(ctx(), *this, n, _args.ptr());
+      check_error();
+      return expr(ctx(), r);
+    }
 
     inline expr func_decl::operator()(unsigned n, expr const * args) const {
         array<Z3_ast> _args(n);
