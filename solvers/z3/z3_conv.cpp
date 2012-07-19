@@ -854,7 +854,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   if (is_union)
     size++;
 
-  z3::expr *args = (z3::expr*)alloca(sizeof(z3::expr) * size);
+  z3::expr *args = new z3::expr[size];
 
   unsigned int numoperands = members.size();
   // Populate tuple with members of that struct/union
@@ -881,6 +881,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, sort);
   z3::func_decl d(*ctx, decl);
   output = d.make_tuple_from_array(size, args);
+  delete[] args;
 }
 
 void
