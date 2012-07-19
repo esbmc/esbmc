@@ -321,7 +321,7 @@ z3_convt::init_addr_space_array(void)
 
   z3::expr args[2];
   args[0] = ctx->esbmc_int_val(1);
-  args[1] = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, *pointer_sort));
+  args[1] = ctx->fresh_const(NULL, *pointer_sort);
   z3::expr invalid = to_expr(*ctx, mk_tuple_update(args[1], 0, args[0]));
   z3::expr invalid_name = ctx->constant("INVALID", *pointer_sort);
   constraint = invalid == invalid_name;
