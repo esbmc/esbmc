@@ -303,28 +303,28 @@ z3_convt::init_addr_space_array(void)
   // of the situation where 0 is valid as a representation of null, but the
   // frontend (for whatever reasons) converts it to a symbol rather than the
   // way it handles NULL (constant with val "NULL")
-  Z3_ast zero_sym = ctx->constant("0", *pointer_sort);
+  z3::expr zero_sym = ctx->constant("0", *pointer_sort);
 
   z3::expr zero_int= ctx->esbmc_int_val(0);
-  Z3_ast ptr_val = (*pointer_decl)(zero_int, zero_int);
-  Z3_ast constraint = Z3_mk_eq(z3_ctx, zero_sym, ptr_val);
+  z3::expr ptr_val = (*pointer_decl)(zero_int, zero_int);
+  z3::expr constraint = zero_sym == ptr_val;
   assert_formula(constraint);
 
   // Do the same thing, for the name "NULL".
-  Z3_ast null_sym = ctx->constant("NULL", *pointer_sort);
-  constraint = Z3_mk_eq(z3_ctx, null_sym, ptr_val);
+  z3::expr null_sym = ctx->constant("NULL", *pointer_sort);
+  constraint = null_sym == ptr_val;
   assert_formula(constraint);
 
   // And for the "INVALID" object (which we're issuing with a name now), have
   // a pointer object num of 1, and a free pointer offset. Anything of worth
   // using this should extract only the object number.
 
-  Z3_ast args[2];
+  z3::expr args[2];
   args[0] = ctx->esbmc_int_val(1);
-  args[1] = Z3_mk_fresh_const(z3_ctx, NULL, *pointer_sort);
-  Z3_ast invalid = mk_tuple_update(args[1], 0, args[0]);
-  Z3_ast invalid_name = ctx->constant("INVALID", *pointer_sort);
-  constraint = Z3_mk_eq(z3_ctx, invalid, invalid_name);
+  args[1] = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, *pointer_sort));
+  z3::expr invalid = to_expr(*ctx, mk_tuple_update(args[1], 0, args[0]));
+  z3::expr invalid_name = ctx->constant("INVALID", *pointer_sort);
+  constraint = invalid == invalid_name;
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
