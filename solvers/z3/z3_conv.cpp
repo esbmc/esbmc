@@ -454,10 +454,10 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
   // object nums don't overlap the current one. So for every particular pair
   // of object numbers in the set there'll be a doesn't-overlap clause.
 
-   Z3_ast i_start = ctx->constant(
+  z3::expr i_start = ctx->constant(
                        ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
                        ctx->esbmc_int_sort());
-  Z3_ast i_end = ctx->constant(
+  z3::expr i_end = ctx->constant(
                        ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
                        ctx->esbmc_int_sort());
 
@@ -466,24 +466,18 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
     if (j == 1)
       continue;
 
-    Z3_ast j_start = ctx->constant(
+    z3::expr j_start = ctx->constant(
                        ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
                        ctx->esbmc_int_sort());
-    Z3_ast j_end = ctx->constant(
+    z3::expr j_end = ctx->constant(
                        ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
                        ctx->esbmc_int_sort());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
     // Previous assertions ensure start < end for all objs.
-    Z3_ast args[2], formula;
-    if (int_encoding) {
-      args[0] = Z3_mk_lt(z3_ctx, i_end, j_start);
-      args[1] = Z3_mk_gt(z3_ctx, i_start, j_end);
-    } else {
-      args[0] = Z3_mk_bvult(z3_ctx, i_end, j_start);
-      args[1] = Z3_mk_bvugt(z3_ctx, i_start, j_end);
-    }
-    formula = Z3_mk_or(z3_ctx, 2, args);
+    // Hey hey, I can just write that with the C++y api!
+    z3::expr formula;
+    formula = (i_end < j_start) || (i_start > j_end);
     assert_formula(formula);
   }
 
