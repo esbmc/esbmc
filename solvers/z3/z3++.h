@@ -223,6 +223,9 @@ namespace z3 {
     class symbol : public object {
         Z3_symbol m_sym;
     public:
+        symbol(context & c, const char *s):object(c), m_sym(NULL) {
+          m_sym = Z3_mk_string_symbol(*m_ctx, s);
+        }
         symbol(context & c, Z3_symbol s):object(c), m_sym(s) {}
         symbol(symbol const & s):object(s), m_sym(s.m_sym) {}
         symbol & operator=(symbol const & s) { m_ctx = s.m_ctx; m_sym = s.m_sym; return *this; }
