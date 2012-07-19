@@ -567,7 +567,6 @@ z3_convt::check2_z3_properties(void)
     {
       std::string id = Z3_ast_to_string(z3_ctx, core[i]);
       if (id.find("false") != std::string::npos) {
-	result = z3_api.check2(Z3_L_TRUE);
 	unsat_core_size = 0;
 	return result;
       }

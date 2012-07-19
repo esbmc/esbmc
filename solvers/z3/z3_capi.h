@@ -25,8 +25,6 @@ class z3_capi {
 
     void set_z3_ctx(Z3_context _ctx) { this->z3_ctx = _ctx; }
 
-    Z3_lbool check2(Z3_lbool expected_result);
-
   private:
     Z3_context z3_ctx;
 };
