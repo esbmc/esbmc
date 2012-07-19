@@ -126,6 +126,7 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
+  delete addr_space_tuple_decl;
   delete addr_space_arr_sort;
   delete addr_space_tuple_sort;
   delete ctx;
@@ -254,13 +255,17 @@ z3_convt::init_addr_space_array(void)
                                                  *ctx, mk_tuple_name, 2,
                                                  proj_names, proj_types,
                                                  &mk_tuple_decl, proj_decls)));
+  Z3_func_decl tmp_addr_space_decl =
+    Z3_get_tuple_sort_mk_decl(*ctx, *addr_space_tuple_sort);
+  addr_space_tuple_decl = new z3::func_decl(*ctx, tmp_addr_space_decl);
 
   // Generate initial array with all zeros for all fields.
   addr_space_arr_sort = new z3::sort(
                      ctx->array_sort(ctx->esbmc_int_sort(), *addr_space_tuple_sort));
 
   num = ctx->esbmc_int_val(0);
-  Z3_ast initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
+
+  Z3_ast initial_val = (*addr_space_tuple_decl)(2, num, num);
 
   Z3_ast initial_const = Z3_mk_const_array(z3_ctx, ctx->esbmc_int_sort(), initial_val);
   Z3_ast first_name = ctx->constant("__ESBMC_addrspace_arr_0",
@@ -270,7 +275,7 @@ z3_convt::init_addr_space_array(void)
 
   Z3_ast range_tuple = ctx->constant("__ESBMC_ptr_addr_range_0",
                                      *addr_space_tuple_sort);
-  initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
+  initial_val = (*addr_space_tuple_decl)(2, num, num);
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
@@ -281,7 +286,7 @@ z3_convt::init_addr_space_array(void)
   num = ctx->esbmc_int_val(1);
   range_tuple = ctx->constant("__ESBMC_ptr_addr_range_1",
                               *addr_space_tuple_sort);
-  initial_val = z3_api.mk_tuple(*addr_space_tuple_sort, num, num, NULL);
+  initial_val = (*addr_space_tuple_decl)(2, num, num);
   eq = Z3_mk_eq(z3_ctx, initial_val, range_tuple);
   assert_formula(eq);
 
@@ -2757,8 +2762,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     Z3_ast range_tuple = ctx->constant(
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        *addr_space_tuple_sort);
-    Z3_ast init_val = z3_api.mk_tuple(*addr_space_tuple_sort, start_ast,
-                                      end_ast, NULL);
+    Z3_ast init_val = (*addr_space_tuple_decl)(2, start_ast, end_ast);
     Z3_ast eq = Z3_mk_eq(z3_ctx, range_tuple, init_val);
     assert_formula(eq);
 

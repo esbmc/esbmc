@@ -296,6 +296,7 @@ private:
   std::list<unsigned int> addr_space_sym_num;
   z3::sort *addr_space_tuple_sort;
   z3::sort *addr_space_arr_sort;
+  z3::func_decl *addr_space_tuple_decl;
   std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
   std::list<unsigned long> total_mem_space;
 
