@@ -26,6 +26,7 @@ Notes:
 #ifndef __Z3PP_H_
 #define __Z3PP_H_
 
+#include <stdarg.h>
 #include <stdint.h>
 
 #include<cassert>
@@ -319,6 +320,7 @@ namespace z3 {
 
         bool is_const() const { return arity() == 0; }
 
+        expr operator()(unsigned n, ...) const;
         expr operator()(unsigned n, expr const * args) const;
         expr operator()(expr const & a) const;
         expr operator()(int a) const;
@@ -1301,6 +1303,21 @@ namespace z3 {
     inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
 
     inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
+
+    inline expr func_decl::operator()(unsigned int n, ...) const {
+        va_list args;
+        unsigned int i;
+
+        // Generate array of args
+        Z3_ast *arg_list = (Z3_ast*)alloca(sizeof(Z3_ast) * n);
+        va_start(args, n);
+        for (i = 0; i < n; i++) {
+          Z3_ast a = va_arg(args, Z3_ast);
+          arg_list[i] = a;
+        }
+        va_end(args);
+        return (*this)(n, arg_list);
+      }
 
     inline expr func_decl::operator()(unsigned n, expr const * args) const {
         array<Z3_ast> _args(n);
