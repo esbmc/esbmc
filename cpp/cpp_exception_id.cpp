@@ -50,7 +50,7 @@ void cpp_exception_list_rec(
   }
   else if(src.id()=="ellipsis")
   {
-    irep_idt identifier = "...";
+    irep_idt identifier = "ellipsis";
     dest.push_back(id2string(identifier)+suffix);
   }
 
