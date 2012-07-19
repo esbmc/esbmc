@@ -320,7 +320,7 @@ namespace z3 {
 
         bool is_const() const { return arity() == 0; }
 
-        expr operator()(unsigned n, ...) const;
+        expr make_tuple(const char *dummy, ...) const;
         expr operator()(unsigned n, expr const * args) const;
         expr operator()(expr const & a) const;
         expr operator()(int a) const;
@@ -1304,19 +1304,33 @@ namespace z3 {
 
     inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
 
-    inline expr func_decl::operator()(unsigned int n, ...) const {
+    inline expr func_decl::make_tuple(const char *dummy, ...) const {
         va_list args;
-        unsigned int i;
+        unsigned int i, num;
 
-        // Generate array of args
-        Z3_ast *arg_list = (Z3_ast*)alloca(sizeof(Z3_ast) * n);
-        va_start(args, n);
-        for (i = 0; i < n; i++) {
-          Z3_ast a = va_arg(args, Z3_ast);
-          arg_list[i] = a;
+        // Count number of arguments
+        va_start(args, dummy);
+        for (num = 0;; num++) {
+          const expr *a = va_arg(args, const expr*);
+          if (a == NULL)
+            break;
         }
         va_end(args);
-        return (*this)(n, arg_list);
+
+        array<Z3_ast> _args(num);
+
+        // Generate array of args
+        va_start(args, dummy);
+        for (i = 0; i < num; i++) {
+          const expr *a = va_arg(args, const expr*);
+          check_context(*this, *a);
+          _args[i] = *a;
+        }
+        va_end(args);
+
+        Z3_ast r = Z3_mk_app(ctx(), *this, num, _args.ptr());
+        check_error();
+        return expr(ctx(), r);
       }
 
     inline expr func_decl::operator()(unsigned n, expr const * args) const {
