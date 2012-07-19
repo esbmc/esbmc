@@ -629,20 +629,28 @@ void
 z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
                            void *_bv)
 {
-  Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_func_decl mk_tuple_decl, proj_decls[2];
-  Z3_sort proj_types[2];
+  // Storage for Z3 objects that keep a reference,
   z3::sort int_sort;
   z3::sort &sort = cast_to_z3_sort(_bv);
+  z3::symbol tuple_name;
+  z3::symbol proj_name_refs[2];
+  z3::sort int_sort;
+  z3::sort &sort = cast_to_z3_sort(_bv);
+  // Copies of the above, in a form that can be passed directly the the C api.
+  Z3_func_decl mk_tuple_decl, proj_decls[2];
+  Z3_symbol proj_names[2];
+  Z3_sort proj_types[2];
 
+  tuple_name = z3::symbol(*ctx, "pointer_tuple");
   int_sort = ctx->esbmc_int_sort();
   proj_types[0] = proj_types[1] = int_sort;
 
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
-  proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
-  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
+  proj_name_refs[0] = z3::symbol(*ctx, "object");
+  proj_name_refs[1] = z3::symbol(*ctx, "index");
+  proj_names[0] = proj_name_refs[0];
+  proj_names[1] = proj_name_refs[1];
 
-  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names,
+  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, tuple_name, 2, proj_names,
                                        proj_types, &mk_tuple_decl, proj_decls));
   return;
 }
