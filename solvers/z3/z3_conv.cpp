@@ -789,16 +789,15 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
   // References to unsigned int identifiers need to be assumed to be > 0,
   // otherwise the solver is free to assign negative nums to it.
   if (is_unsignedbv_type(sym.type) && int_encoding) {
-    Z3_ast formula;
     output = ctx->constant((sym.get_symbol_name().c_str()), ctx->int_sort());
-    formula = Z3_mk_ge(z3_ctx, output, ctx->int_val(0));
+    z3::expr formula = output >= ctx->int_val(0);
     assert_formula(formula);
     return;
   }
 
   z3::sort sort;
   convert_type(sym.type, sort);
-  output = z3::to_expr(*ctx, ctx->constant(sym.get_symbol_name().c_str(),sort));
+  output = ctx->constant(sym.get_symbol_name().c_str(), sort);
 }
 
 void
