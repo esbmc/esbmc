@@ -830,7 +830,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *_bv)
 
   if (int_encoding) {
     std::string result = fixed_point(theval, bitwidth);
-    output = z3::to_expr(*ctx, Z3_mk_numeral(z3_ctx, result.c_str(), ctx->real_sort()));
+    output = ctx->real_val(result.c_str());
   } else {
     Z3_ast magnitude, fraction;
     std::string m, f, c;
@@ -883,7 +883,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
       // If no initialization give, use free (fresh) variable.
       z3::sort s;
       convert_type(*it, s);
-      args[i] = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, s));
+      args[i] = ctx->fresh_const(NULL, s);
     }
 
     i++;
@@ -924,15 +924,15 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   u_int i = 0;
-  Z3_sort z3_array_type;
-  Z3_ast int_cte, val_cte;
+  z3::sort z3_array_type;
+  z3::expr int_cte, val_cte;
   z3::sort elem_type;
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
   z3_array_type = ctx->array_sort(ctx->esbmc_int_sort(), elem_type);
 
-  output = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, z3_array_type));
+  output = ctx->fresh_const(NULL, z3_array_type);
 
   i = 0;
   forall_exprs(it, array.datatype_members) {
@@ -940,7 +940,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *_bv)
 
     convert_bv(*it, val_cte);
 
-    output = z3::to_expr(*ctx, Z3_mk_store(z3_ctx, output, int_cte, val_cte));
+    output = z3::store(output, int_cte, val_cte);
     ++i;
   }
 }
