@@ -1480,6 +1480,12 @@ namespace z3 {
         return expr(d.ctx(), r);
     }
     
+    inline expr ite(expr const & c, expr const & t, expr const & f) {
+        check_context(c, t); check_context(c, f);
+        Z3_ast r = Z3_mk_ite(c.ctx(), c, t, f);
+        c.check_error();
+        return expr(c.ctx(), r);
+    }
 
 };
 
