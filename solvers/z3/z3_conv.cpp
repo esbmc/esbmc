@@ -1017,12 +1017,12 @@ z3_convt::convert_smt_expr(const equality2t &equality, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast args[2];
+  z3::expr side1, side2;
 
-  convert_bv(equality.side_1, args[0]);
-  convert_bv(equality.side_2, args[1]);
+  convert_bv(equality.side_1, side1);
+  convert_bv(equality.side_2, side2);
 
-  output = z3::to_expr(*ctx, Z3_mk_eq(z3_ctx, args[0], args[1]));
+  output = side1 == side2;
 }
 
 void
@@ -1030,12 +1030,12 @@ z3_convt::convert_smt_expr(const notequal2t &notequal, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast args[2];
+  z3::expr side1, side2;
 
-  convert_bv(notequal.side_1, args[0]);
-  convert_bv(notequal.side_2, args[1]);
+  convert_bv(notequal.side_1, side1);
+  convert_bv(notequal.side_2, side2);
 
-  output = z3::to_expr(*ctx, Z3_mk_distinct(z3_ctx, 2, args));
+  output = side1 != side2;
 }
 
 void
