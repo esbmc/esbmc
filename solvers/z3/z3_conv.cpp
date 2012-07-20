@@ -634,8 +634,6 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   z3::sort &sort = cast_to_z3_sort(_bv);
   z3::symbol tuple_name;
   z3::symbol proj_name_refs[2];
-  z3::sort int_sort;
-  z3::sort &sort = cast_to_z3_sort(_bv);
   // Copies of the above, in a form that can be passed directly the the C api.
   Z3_func_decl mk_tuple_decl, proj_decls[2];
   Z3_symbol proj_names[2];
@@ -661,27 +659,27 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
                                     const irep_idt &struct_name, bool uni,
                                     void *_bv)
 {
-  Z3_symbol mk_tuple_name, *proj_names;
-  std::string name;
-  Z3_sort *proj_types;
-  Z3_func_decl mk_tuple_decl, *proj_decls;
-  u_int num_elems;
+  z3::symbol mk_tuple_name, *proj_names;
+  z3::sort *proj_types;
   z3::sort &sort = cast_to_z3_sort(_bv);
+  Z3_func_decl mk_tuple_decl, *proj_decls;
+  std::string name;
+  u_int num_elems;
 
   num_elems = members.size();
   if (uni)
     num_elems++;
 
-  proj_names = new Z3_symbol[num_elems];
-  proj_types = new Z3_sort[num_elems];
+  proj_names = new z3::symbol[num_elems];
+  proj_types = new z3::sort[num_elems];
   proj_decls = new Z3_func_decl[num_elems];
 
   name = ((uni) ? "union" : "struct" );
   name += "_type_" + struct_name.as_string();
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, name.c_str());
+  mk_tuple_name = z3::symbol(*ctx, name.c_str());
 
   if (!members.size()) {
-    sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, proj_decls));
+    sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, NULL));
     return;
   }
 
@@ -690,26 +688,32 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   for (std::vector<type2tc>::const_iterator it = members.begin();
        it != members.end(); it++, mname++, i++)
   {
-    proj_names[i] = Z3_mk_string_symbol(z3_ctx, mname->as_string().c_str());
-    z3::sort tmpsort;
-    convert_type(*it, tmpsort);
-    proj_types[i] = tmpsort;
+    proj_names[i] = z3::symbol(*ctx, mname->as_string().c_str());
+    convert_type(*it, proj_types[i]);
   }
 
   if (uni) {
     // ID field records last value written to union
-    proj_names[num_elems - 1] = Z3_mk_string_symbol(z3_ctx, "id");
+    proj_names[num_elems - 1] = z3::symbol(*ctx, "id");
     // XXXjmorse - must this field really become a bitfield, ever? It's internal
     // tracking data, not program data.
-    if (int_encoding)
-      proj_types[num_elems - 1] = ctx->esbmc_int_sort();
-    else
-      proj_types[num_elems - 1] = ctx->bv_sort(config.ansi_c.int_width);
+    proj_types[num_elems - 1] = ctx->esbmc_int_sort();
+  }
+
+  // Unpack pointers from Z3++ objects.
+  Z3_symbol *unpacked_symbols = new Z3_symbol[num_elems];
+  Z3_sort *unpacked_sorts = new Z3_sort[num_elems];
+  for (i = 0; i < num_elems; i++) {
+    unpacked_symbols[i] = proj_names[i];
+    unpacked_sorts[i] = proj_types[i];
   }
 
   sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, num_elems,
-                           proj_names, proj_types, &mk_tuple_decl, proj_decls));
+                           unpacked_symbols, unpacked_sorts, &mk_tuple_decl,
+                           proj_decls));
 
+  delete[] unpacked_symbols;
+  delete[] unpacked_sorts;
   delete[] proj_names;
   delete[] proj_types;
   delete[] proj_decls;
