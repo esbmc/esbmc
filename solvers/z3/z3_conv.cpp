@@ -757,17 +757,22 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *_bv)
 void
 z3_convt::setup_pointer_sort(void)
 {
-  Z3_symbol mk_tuple_name, proj_names[2];
-  Z3_sort proj_types[2];
+  z3::symbol proj_names[2], mk_tuple_name;
+  z3::sort proj_type;
+  Z3_symbol proj_names_ref[2];
+  Z3_sort sort_arr[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
 
-  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
+  proj_type = ctx->esbmc_int_sort();
+  sort_arr[0] = sort_arr[1] = proj_type;
 
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "pointer_tuple");
-  proj_names[0] = Z3_mk_string_symbol(z3_ctx, "object");
-  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "index");
+  mk_tuple_name = z3::symbol(*ctx, "pointer_tuple");
+  proj_names[0] = z3::symbol(*ctx, "object");
+  proj_names[1] = z3::symbol(*ctx, "index");
+  proj_names_ref[0] = proj_names[0];
+  proj_names_ref[1] = proj_names[1];
 
-  Z3_sort s = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names, proj_types,
+  Z3_sort s = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names_ref, sort_arr,
                                &mk_tuple_decl, proj_decls);
 
   pointer_sort = new z3::sort(z3::to_sort(*ctx, s));
