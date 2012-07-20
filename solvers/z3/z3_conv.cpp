@@ -1001,14 +1001,14 @@ z3_convt::convert_smt_expr(const constant_string2t &str, void *_bv)
 void
 z3_convt::convert_smt_expr(const if2t &ifirep, void *_bv)
 {
-  Z3_ast operand0, operand1, operand2;
+  z3::expr operand0, operand1, operand2;
   z3::expr &output = cast_to_z3(_bv);
 
   convert_bv(ifirep.cond, operand0);
   convert_bv(ifirep.true_value, operand1);
   convert_bv(ifirep.false_value, operand2);
 
-  output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, operand0, operand1, operand2));
+  output = z3::ite(operand0, operand1, operand2);
   return;
 }
 
