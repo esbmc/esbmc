@@ -948,7 +948,7 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *_bv)
 void
 z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
 {
-  Z3_ast value, index;
+  z3::expr value, index;
   z3::sort array_type;
   std::string tmp, identifier;
   int64_t size;
@@ -961,7 +961,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
 
   if (arr.size_is_infinite) {
     // Don't attempt to do anything with this. The user is on their own.
-    output = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, array_type));
+    output = ctx->fresh_const(NULL, array_type);
     return;
   }
 
@@ -974,16 +974,16 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
   convert_bv(array.initializer, value);
 
   if (is_bool_type(arr.subtype)) {
-    value = Z3_mk_false(z3_ctx);
+    value = ctx->bool_val(false);
   }
 
-  output = z3::to_expr(*ctx, Z3_mk_fresh_const(z3_ctx, NULL, array_type));
+  output = ctx->fresh_const(NULL, array_type);
 
   //update array
   for (j = 0; j < size; j++)
   {
     index = ctx->esbmc_int_val(j);
-    output = z3::to_expr(*ctx, Z3_mk_store(z3_ctx, output, index, value));
+    output = z3::store(output, index, value);
   }
 }
 
