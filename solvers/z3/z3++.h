@@ -542,6 +542,8 @@ namespace z3 {
 // Z3 api to detect whether or not a signed or unsigned BV comparison is
 // desired. And there's no way of detecting when a programmer accidentally uses
 // this without knowing that. Only way to fix that is to not use them.
+//
+// Instead, use methods provided further below.
 
 #if 0
         friend expr operator<=(expr const & a, expr const & b) {
@@ -620,6 +622,86 @@ namespace z3 {
         friend expr operator>(expr const & a, int b) { return a > a.ctx().num_val(b, a.get_sort()); }
         friend expr operator>(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) > a; }
 #endif
+
+        friend expr mk_lt(expr const &a, expr const &b, bool is_unsigned) {
+            check_context(a, b);
+            Z3_ast r;
+            if (a.is_arith() && b.is_arith()) {
+              r = Z3_mk_lt(a.ctx(), a, b);
+            }
+            else if (a.is_bv() && b.is_bv()) {
+              if (is_unsigned)
+                r = Z3_mk_bvult(a.ctx(), a, b);
+              else
+                r = Z3_mk_bvslt(a.ctx(), a, b);
+            }
+            else {
+                // operator is not supported by given arguments.
+                assert(false);
+            }
+            a.check_error();
+            return expr(a.ctx(), r);
+        }
+
+        friend expr mk_gt(expr const &a, expr const &b, bool is_unsigned) {
+            check_context(a, b);
+            Z3_ast r;
+            if (a.is_arith() && b.is_arith()) {
+              r = Z3_mk_gt(a.ctx(), a, b);
+            }
+            else if (a.is_bv() && b.is_bv()) {
+              if (is_unsigned)
+                r = Z3_mk_bvugt(a.ctx(), a, b);
+              else
+                r = Z3_mk_bvsgt(a.ctx(), a, b);
+            }
+            else {
+                // operator is not supported by given arguments.
+                assert(false);
+            }
+            a.check_error();
+            return expr(a.ctx(), r);
+        }
+
+        friend expr mk_le(expr const &a, expr const &b, bool is_unsigned) {
+            check_context(a, b);
+            Z3_ast r;
+            if (a.is_arith() && b.is_arith()) {
+              r = Z3_mk_le(a.ctx(), a, b);
+            }
+            else if (a.is_bv() && b.is_bv()) {
+              if (is_unsigned)
+                r = Z3_mk_bvule(a.ctx(), a, b);
+              else
+                r = Z3_mk_bvsle(a.ctx(), a, b);
+            }
+            else {
+                // operator is not supported by given arguments.
+                assert(false);
+            }
+            a.check_error();
+            return expr(a.ctx(), r);
+        }
+
+        friend expr mk_ge(expr const &a, expr const &b, bool is_unsigned) {
+            check_context(a, b);
+            Z3_ast r;
+            if (a.is_arith() && b.is_arith()) {
+              r = Z3_mk_ge(a.ctx(), a, b);
+            }
+            else if (a.is_bv() && b.is_bv()) {
+              if (is_unsigned)
+                r = Z3_mk_bvuge(a.ctx(), a, b);
+              else
+                r = Z3_mk_bvsge(a.ctx(), a, b);
+            }
+            else {
+                // operator is not supported by given arguments.
+                assert(false);
+            }
+            a.check_error();
+            return expr(a.ctx(), r);
+        }
 
         friend expr operator&(expr const & a, expr const & b) { check_context(a, b); Z3_ast r = Z3_mk_bvand(a.ctx(), a, b); return expr(a.ctx(), r); }
         friend expr operator&(expr const & a, int b) { return a & a.ctx().num_val(b, a.get_sort()); }

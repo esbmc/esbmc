@@ -477,7 +477,7 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
     // Previous assertions ensure start < end for all objs.
     // Hey hey, I can just write that with the C++y api!
     z3::expr formula;
-    formula = (i_end < j_start) || (i_start > j_end);
+    formula = (mk_lt(i_end, j_start, true)) || (mk_gt(i_start, j_end, true));
     assert_formula(formula);
   }
 
@@ -790,7 +790,7 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
   // otherwise the solver is free to assign negative nums to it.
   if (is_unsignedbv_type(sym.type) && int_encoding) {
     output = ctx->constant((sym.get_symbol_name().c_str()), ctx->int_sort());
-    z3::expr formula = output >= ctx->int_val(0);
+    z3::expr formula = mk_ge(output, ctx->int_val(0), true);
     assert_formula(formula);
     return;
   }
