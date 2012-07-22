@@ -538,6 +538,12 @@ namespace z3 {
         friend expr operator-(expr const & a, int b) { return a - a.ctx().num_val(b, a.get_sort()); }
         friend expr operator-(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) - a; }
 
+// jmorse: don't re-enable these operators. There's no way for anything in the
+// Z3 api to detect whether or not a signed or unsigned BV comparison is
+// desired. And there's no way of detecting when a programmer accidentally uses
+// this without knowing that. Only way to fix that is to not use them.
+
+#if 0
         friend expr operator<=(expr const & a, expr const & b) {
             check_context(a, b);
             Z3_ast r;
@@ -613,6 +619,7 @@ namespace z3 {
         }
         friend expr operator>(expr const & a, int b) { return a > a.ctx().num_val(b, a.get_sort()); }
         friend expr operator>(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) > a; }
+#endif
 
         friend expr operator&(expr const & a, expr const & b) { check_context(a, b); Z3_ast r = Z3_mk_bvand(a.ctx(), a, b); return expr(a.ctx(), r); }
         friend expr operator&(expr const & a, int b) { return a & a.ctx().num_val(b, a.get_sort()); }
