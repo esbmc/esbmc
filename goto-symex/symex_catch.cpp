@@ -33,6 +33,8 @@ void goto_symext::symex_catch()
     if(cur_state->top().catch_map.empty())
       throw "catch-pop on function frame";
 
+    has_catch=true;
+
     // pop the stack frame
     cur_state->call_stack.pop_back();
   }
@@ -53,7 +55,11 @@ void goto_symext::symex_catch()
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
+    {
       frame.catch_map[exception_list[i].id()]=*it;
+      //std::cout << "exception_list[i].id(): " << exception_list[i].id() << std::endl;
+      //std::cout << "(*it)->code: " << (*it)->code << std::endl;
+    }
   }
 }
 
@@ -73,6 +79,7 @@ void goto_symext::symex_throw()
 {
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
+  //std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
   // get the list of exceptions thrown
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
@@ -98,6 +105,9 @@ void goto_symext::symex_throw()
 
       if(c_it!=frame.catch_map.end())
       {
+    	  throw_target = (*c_it).second;
+    	  has_throw_target=true;
+#if 0
         goto_programt::const_targett goto_target =
         		(*c_it).second;
 
@@ -121,6 +131,7 @@ void goto_symext::symex_throw()
         cur_state->guard.make_true();
         has_throw_target = true;
         return ;
+#endif
       }
       else
       {
