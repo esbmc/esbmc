@@ -381,6 +381,8 @@ namespace std
 		string& operator+= ( string& s);
 		string& operator += (const char* s);
 		string& operator+= (char s);
+//TODO: operator+
+
 		char& operator[] ( size_t pos );
 		char at ( size_t pos ) const;
 		bool empty ( ) const;
@@ -739,62 +741,6 @@ namespace std
 	    	    	end.pos = this->length() - 1;
 	    	    	return end;
 	    	    }
-
-		string& operator+ ( string& s)
-		{
-			__ESBMC_assert( s.str != NULL, "The parameter must to be different than NULL");
-			int rhsLen = s._size;
-			int lhsLen = this->_size;
-		    int totalLen = lhsLen + rhsLen;
-		    char temp[totalLen+1];
-		    int i, j, k;
-		    for (i=0; i<lhsLen; i++)
-		        temp[i] = this->str[i];
-		    temp[i]='\0';
-		    for(j=i, k=0; j<totalLen; j++, k++)
-		    	temp[j] = s.str[k];
-		    temp[j]='\0';
-		    string next(totalLen);
-		    strcpy(next.str, temp);
-		    return next;
-		}
-
-		string& operator+ ( const char* s)
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
-		    int rhsLen = strlen(s);
-		    int totalLen = this->_size + rhsLen;
-		    char temp[totalLen+1];
-			int i, j, k;
-			for (i=0; i<this->_size; i++)
-				temp[i] = this->str[i];
-			temp[i]='\0';
-			for(j=i, k=0; j<totalLen; j++, k++)
-			  	temp[j] = s[k];
-			temp[j]='\0';
-			string next(totalLen);
-			strcpy(next.str, temp);
-			return next;
-		}
-
-		string& operator+ ( char s)
-		{
-			__ESBMC_HIDE:
-			__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
-		    int totalLen = this->_size +1;
-		    char temp[totalLen+1];
-		    int i=0, j, k;
-		    if(this->_size!=0)
-		    	for (i=0; i<this->_size; i++)
-		    		temp[i] = this->str[i];
-		    temp[i] = s;
-		    temp[i++] = '\0';
-		    string next(totalLen);
-		    strcpy(next.str, temp);
-		    return next;
-		}
-
 		template <class T>
 		string& assign ( T first, T last ){
 			__ESBMC_assert( first != NULL, "The first parameter must to be different than NULL");
@@ -1240,6 +1186,62 @@ namespace std
 		return *this;
 	}
 
+	//TODO: fix operator+ issues
+/*	string& string::operator+ ( string& lhs, string& rhs)
+	{
+		__ESBMC_assert( (lhs.str != NULL) || (rhs.str != NULL), "The parameter must to be different than NULL");
+		int rhsLen = rhs._size;
+		int lhsLen = lhs._size;
+	    int totalLen = lhsLen + rhsLen;
+	    char temp[totalLen+1];
+	    int i, j, k;
+	    for (i=0; i<lhsLen; i++)
+	        temp[i] = lhs.str[i];
+	    temp[i]='\0';
+	    for(j=i, k=0; j<totalLen; j++, k++)
+	    	temp[j] = rhs.str[k];
+	    temp[j]='\0';
+	    string next(totalLen);
+	    strcpy(next.str, temp);
+	    return next;
+	}
+
+	string& string::operator+ ( const char* s)
+	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
+	    int rhsLen = strlen(s);
+	    int totalLen = this->_size + rhsLen;
+	    char temp[totalLen+1];
+		int i, j, k;
+		for (i=0; i<this->_size; i++)
+			temp[i] = this->str[i];
+		temp[i]='\0';
+		for(j=i, k=0; j<totalLen; j++, k++)
+		  	temp[j] = s[k];
+		temp[j]='\0';
+		string next(totalLen);
+		strcpy(next.str, temp);
+		return next;
+	}
+
+	string& string::operator+ ( char s)
+	{
+		__ESBMC_HIDE:
+		__ESBMC_assert( s != NULL, "The parameter must to be different than NULL");
+	    int totalLen = this->_size +1;
+	    char temp[totalLen+1];
+	    int i=0, j, k;
+	    if(this->_size!=0)
+	    	for (i=0; i<this->_size; i++)
+	    		temp[i] = this->str[i];
+	    temp[i] = s;
+	    temp[i++] = '\0';
+	    string next(totalLen);
+	    strcpy(next.str, temp);
+	    return next;
+	}
+*/
 	string& string::operator+=( string& s)
 	{
 		__ESBMC_HIDE:
@@ -2493,5 +2495,55 @@ namespace std
 		}
 		return -1;
 	}
+
+	string& operator+ ( string& lhs, string& rhs )
+	{
+		lhs.append(rhs);
+		return lhs;
+	}
+	string& operator+ ( string& lhs, char * rhs )
+	{
+		int t = strlen(rhs);
+		lhs.append(rhs, t);
+		return lhs;
+	}
+	string& operator+ ( string& lhs, char rhc )
+	{
+		lhs.append(rhc, 1);
+		return lhs;
+	}
+
+	string& operator+ ( char * lhs, string& rhs )
+	{
+		string next(lhs);
+		next.append(rhs);
+		return next;
+	}
+	string& operator+ ( char * lhs, char rhc )
+	{
+		string next(lhs);
+		next.append(rhc, 1);
+		return next;
+	}
+
+	string& operator+ ( char lhc, string& rhs )
+	{
+		string next = lhc;
+		next.append(rhs);
+		return next;
+	}
+	string& operator+ ( char lhc, char * rhs )
+	{
+		string next = lhc;
+		next.append(rhs);
+		return next;
+	}
+	string& operator+ ( char lhc, char rhc )
+	{
+		string next = lhc;
+		next.append(rhc, 1);
+		return next;
+	}
+
 }
 #endif
