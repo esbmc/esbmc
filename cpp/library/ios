@@ -58,6 +58,8 @@ enum _Ios_Seekdir
   };
 
 class ios_base {
+
+public:
   typedef int iostate;
   typedef int fmtflags;
   typedef int openmode;
@@ -66,7 +68,6 @@ class ios_base {
   enum event { erase_event, imbue_event, copyfmt_event };
   typedef void (*event_callback) (event ev, ios_base& obj, int index);
 
-private:
   static const iostate goodbit  =  __goodbit;
   static const iostate badbit   =  __badbit;
   static const iostate eofbit   =  __eofbit;
@@ -102,11 +103,9 @@ private:
   static const seekdir cur  =  __cur;
   static const seekdir end  =  __end;
 
-
-public:
   streamsize __width;
   streamsize __precision;
-  static fmtflags	 __flags = 0;
+  static fmtflags	 __flags;
   iostate	__exception;
   iostate	 __streambuf_state;
 
@@ -139,19 +138,19 @@ public:
 };
 
 class ios: public ios_base{
+public:
   //	typedef fpos<mbstate_t> streampos;
   //	typedef fpos<mbstate_t> streamoff;
   typedef int streampos;
   typedef int streamoff;
 
-public:
   ios() {ios_base(); }
   virtual ~ios();
   mutable char  __fill;
   streambuf*    __streambuf;
   bool operator ! ( ) const;
   operator void * ( ) const;
-  void clear ( iostate state = goodbit );
+  void clear ( iostate state = ios_base::goodbit );
 
   bool fail() const;
   bool bad() const;
@@ -238,7 +237,7 @@ ios::operator void * ( ) const {
 	else return const_cast<ios*>(this);
 }
 
-void ios::clear ( ios::iostate state = ios_base::goodbit )
+void ios::clear ( ios::iostate state )
 {	ios_base::__streambuf_state = state;}
 
 bool ios::good() const

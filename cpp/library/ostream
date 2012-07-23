@@ -48,7 +48,7 @@ public:
 		  sentry& operator= (const sentry& ); // not defined
 	};
 	ostream& operator=(const ostream&); // disabled
-	static streamsize _filesize = nondet_uint();
+	static streamsize _filesize;
 	static ios::streampos _filepos;
 };
 //ios::streampos ostream::_filepos = 0;
