@@ -1432,7 +1432,12 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
 	} else if (it->type().id() == "bool")     {
 	  s.components()[j].set_name(it->name());
 	  s.components()[j].type() = bool_typet();
+	} else if (it->type().id() == "pointer") {
+	  s.components()[j].set_name(it->name());
+	  s.components()[j].type() = 	pointer_typet();
 	} else   {
+		  std::cerr << "width: " << width << std::endl;
+		  std::cerr << "it->type().id(): " << it->type().id() << std::endl;
           throw new conv_error("Unexpected type when casting struct", *it);
 	}
 	j++;
