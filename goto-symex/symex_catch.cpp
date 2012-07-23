@@ -50,7 +50,6 @@ void goto_symext::symex_catch()
     assert(exception_list.size()==instruction.targets.size());
 
     unsigned i=0;
-
     for(goto_programt::targetst::const_iterator
         it=instruction.targets.begin();
         it!=instruction.targets.end();
@@ -130,8 +129,8 @@ void goto_symext::symex_throw()
 
         cur_state->guard.make_true();
         has_throw_target = true;
-        return ;
 #endif
+        return;
       }
       else
       {
@@ -142,5 +141,4 @@ void goto_symext::symex_throw()
       }
     }
   }
-  cur_state->source.pc++;
 }

@@ -237,7 +237,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case THROW:
     symex_throw();
-    //cur_state->source.pc++;
+    cur_state->source.pc++;
     break;
 
   default:
