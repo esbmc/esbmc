@@ -134,6 +134,16 @@ void goto_symext::symex_throw()
       }
       else
       {
+        // Do we have an ellipsis?
+        c_it=frame.catch_map.find("ellipsis");
+
+        if(c_it!=frame.catch_map.end())
+        {
+          throw_target = (*c_it).second;
+          has_throw_target=true;
+          return;
+        }
+
         // An un-caught exception. Behaves like assume(0);
         cur_state->guard.add(false_exprt());
         exprt tmp=cur_state->guard.as_expr();
