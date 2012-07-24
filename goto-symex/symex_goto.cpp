@@ -95,10 +95,8 @@ goto_symext::symex_goto(const exprt &old_guard)
 //  std::cout << "########### new_guard.pretty(): " << new_guard.pretty() << std::endl;
   // adjust guards
   if (new_guard.is_true()) {
-	if (!has_throw_target)
       cur_state->guard.make_false();
-	else
-	  has_throw_target = false;
+
   } else {
     // produce new guard symbol
     exprt guard_expr;
