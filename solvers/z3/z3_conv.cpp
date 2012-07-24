@@ -1040,58 +1040,47 @@ z3_convt::convert_smt_expr(const notequal2t &notequal, void *_bv)
 
 void
 z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
-                      ast_convert_calltype intmode,
-                      ast_convert_calltype signedbv,
-                      ast_convert_calltype unsignedbv,
-                      void *_bv)
+                      ast_convert_calltype_new convert, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast args[2];
+  z3::expr args[2];
 
   convert_bv(side1, args[0]);
   convert_bv(side2, args[1]);
 
   // XXXjmorse -- pointer comparisons are still broken.
   if (is_pointer_type(side1->type))
-    args[0] = mk_tuple_select(args[0], 1);
+    args[0] = z3::to_expr(*ctx, mk_tuple_select(args[0], 1));
 
   if (is_pointer_type(side2->type))
-    args[1] = mk_tuple_select(args[1], 1);
+    args[1] = z3::to_expr(*ctx, mk_tuple_select(args[1], 1));
 
-  if (int_encoding) {
-    output = z3::to_expr(*ctx, intmode(z3_ctx, args[0], args[1]));
-  } else if (is_signedbv_type(side1->type)) {
-    output = z3::to_expr(*ctx, signedbv(z3_ctx, args[0], args[1]));
-  } else {
-    output = z3::to_expr(*ctx, unsignedbv(z3_ctx, args[0], args[1]));
-  }
+  output = convert(args[0], args[1], !is_signedbv_type(side1->type));
 }
 
 void
 z3_convt::convert_smt_expr(const lessthan2t &lessthan, void *_bv)
 {
-  convert_rel(lessthan.side_1, lessthan.side_2, Z3_mk_lt, Z3_mk_bvslt,
-              Z3_mk_bvult, _bv);
+  convert_rel(lessthan.side_1, lessthan.side_2, &z3::mk_lt, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const greaterthan2t &greaterthan, void *_bv)
 {
-  convert_rel(greaterthan.side_1, greaterthan.side_2, Z3_mk_gt, Z3_mk_bvsgt,
-              Z3_mk_bvugt, _bv);
+  convert_rel(greaterthan.side_1, greaterthan.side_2, &z3::mk_gt, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const lessthanequal2t &le, void *_bv)
 {
-  convert_rel(le.side_1, le.side_2, Z3_mk_le, Z3_mk_bvsle, Z3_mk_bvule, _bv);
+  convert_rel(le.side_1, le.side_2, &z3::mk_le, _bv);
 }
 
 void
 z3_convt::convert_smt_expr(const greaterthanequal2t &ge, void *_bv)
 {
-  convert_rel(ge.side_1, ge.side_2, Z3_mk_ge, Z3_mk_bvsge, Z3_mk_bvuge, _bv);
+  convert_rel(ge.side_1, ge.side_2, &z3::mk_ge, _bv);
 }
 
 void
