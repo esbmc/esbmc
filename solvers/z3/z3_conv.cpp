@@ -3070,15 +3070,18 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
            it != components.end();
            it++, i++)
       {
-    	if (i<expr.op0().operands().size())	{
+      	if (expr.op0().operands().size()==0) {
+      	  //the expression does not contain any element,
+      	  //so return only an empty struct
+      	  convert_bv(expr.op0(), bv);
+      	  return ;
+      	} else if (i<expr.op0().operands().size())	{
     	  convert_bv(expr.op0().operands()[i], struct_elem[i]);
     	}
     	else {
-    		//the expression does not contain any element,
-    		//so return only the empty struct
-    		convert_bv(expr.op0(), bv);
-    		return ;
+    	  throw new conv_error("the size of the expression operands is unknown", expr.op0());
     	}
+
       }
       DEBUGLOC;
       for (unsigned k = 0; k < components.size(); k++)
