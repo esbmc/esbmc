@@ -1432,7 +1432,12 @@ z3_convt::convert_typecast_struct(const exprt &expr, Z3_ast &bv)
 	} else if (it->type().id() == "bool")     {
 	  s.components()[j].set_name(it->name());
 	  s.components()[j].type() = bool_typet();
+	} else if (it->type().id() == "pointer") {
+	  s.components()[j].set_name(it->name());
+	  s.components()[j].type() = 	pointer_typet();
 	} else   {
+		  std::cerr << "width: " << width << std::endl;
+		  std::cerr << "it->type().id(): " << it->type().id() << std::endl;
           throw new conv_error("Unexpected type when casting struct", *it);
 	}
 	j++;
@@ -3065,7 +3070,18 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
            it != components.end();
            it++, i++)
       {
-	convert_bv(expr.op0().operands()[i], struct_elem[i]);
+      	if (expr.op0().operands().size()==0) {
+      	  //the expression does not contain any element,
+      	  //so return only an empty struct
+      	  convert_bv(expr.op0(), bv);
+      	  return ;
+      	} else if (i<expr.op0().operands().size())	{
+    	  convert_bv(expr.op0().operands()[i], struct_elem[i]);
+    	}
+    	else {
+    	  throw new conv_error("the size of the expression operands is unknown", expr.op0());
+    	}
+
       }
       DEBUGLOC;
       for (unsigned k = 0; k < components.size(); k++)
@@ -3073,12 +3089,14 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
       for (unsigned k = 0; k < components.size(); k++)
       {
-	if (k == 1)
-	  struct_elem_inv[components.size()] = Z3_mk_concat(
-	    z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
-	else if (k > 1)
-	  struct_elem_inv[components.size()] = Z3_mk_concat(
-	    z3_ctx, struct_elem_inv[components.size()], struct_elem_inv[k]);
+    	  if (k == 1) {
+    		struct_elem_inv[components.size()] = Z3_mk_concat(
+    		  z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+    	  }
+    	  else if (k > 1) {
+    		struct_elem_inv[components.size()] = Z3_mk_concat(
+    		  z3_ctx, struct_elem_inv[components.size()], struct_elem_inv[k]);
+    	  }
       }
       op0 = struct_elem_inv[components.size()];
     } else if (expr.op0().type().id()=="array") {
@@ -3089,6 +3107,10 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     }
 
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+    DEBUGLOC;
+
+    std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
+
     DEBUGLOC;
     if (expr.op0().id() == "index") {
       Z3_ast args[2];

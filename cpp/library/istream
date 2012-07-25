@@ -13,8 +13,18 @@ class istream: virtual public ios
 {
 public:
   virtual ~istream ();
-  istream(int _id = 0): id(_id) { ios();_gcount = 0;};
-  istream (streambuf * sb) {ios();_gcount=0;};
+  istream(int _id = 0): id(_id) {
+	  ios();
+	  _gcount = 0;
+	  _filesize = nondet_uint();
+	  _filepos = 0;
+  }
+  istream (streambuf * sb) {
+	  ios();
+	  _gcount = 0;
+	  _filesize = nondet_uint();
+	  _filepos = 0;
+}
   int id;
   istream& ignore(int i = 1, int delim = EOF);
 
@@ -57,8 +67,8 @@ public:
 
   istream(const istream&); // disabled
   istream& operator=(const istream&); // disabled
-  streamsize _filesize = nondet_uint();
-  static streampos _filepos = 0;
+  streamsize _filesize;
+  static streampos _filepos;
 };
 
 }
@@ -107,7 +117,9 @@ istream& operator>> (istream& is, void*& val ) {
 	return is;
 }
 
-istream& operator>> (istream& is, streambuf* sb );
+istream& operator>> (istream& is, streambuf* sb ) {
+	return is;
+}
 
 istream& operator>> (istream& is, istream& ( *pf )(istream&)) {
 	return pf(is);
@@ -192,9 +204,9 @@ istream& istream::read(char* s, streamsize n)
     return *this;
 }
 
-istream& ignore(int i = 1, int delim = EOF)
+istream& istream::ignore(int i, int delim)
 {
-  return istream();
+  return *this;
 }
 
 streamsize istream::gcount() const

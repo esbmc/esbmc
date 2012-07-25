@@ -2313,10 +2313,8 @@ void goto_convertt::convert_while(
 
   if(inductive_step)
   {
-	//std::cout << "antes tmp.pretty():" <<  tmp.pretty() << std::endl;
     //replace_cond(tmp, dest);
 	replace_ifthenelse(tmp);
-    //std::cout << "depois tmp.pretty():" <<  tmp.pretty() << std::endl;
   }
 
   array_typet state_vector;
