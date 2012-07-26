@@ -1202,10 +1202,10 @@ z3_convt::convert_smt_expr(const bitnxor2t &bitval, void *_bv)
 void
 z3_convt::convert_smt_expr(const bitnot2t &bitval, void *_bv)
 {
-  Z3_ast arg;
+  z3::expr arg;
   z3::expr &output = cast_to_z3(_bv);
   convert_bv(bitval.value, arg);
-  output = z3::to_expr(*ctx, Z3_mk_bvnot(z3_ctx, arg));
+  output = ~arg;
 }
 
 void
