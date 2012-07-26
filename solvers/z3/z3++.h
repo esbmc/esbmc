@@ -60,7 +60,7 @@ namespace z3 {
     class statistics;
     class apply_result;
     class fixedpoint;
-    
+
     /**
        \brief Exception used to sign API usage errors.
     */
@@ -263,7 +263,7 @@ namespace z3 {
         void set(char const * k, symbol const & s) { Z3_params_set_symbol(ctx(), m_params, ctx().str_symbol(k), s); }
         friend std::ostream & operator<<(std::ostream & out, params const & p) { out << Z3_params_to_string(p.ctx(), p); return out; }
     };
-    
+
     class ast : public object {
     protected:
         Z3_ast    m_ast;
@@ -318,7 +318,7 @@ namespace z3 {
         func_decl(func_decl const & s):ast(s) {}
         operator Z3_func_decl() const { return reinterpret_cast<Z3_func_decl>(m_ast); }
         func_decl & operator=(func_decl const & s) { return static_cast<func_decl&>(ast::operator=(s)); }
-        
+
         unsigned arity() const { return Z3_get_arity(ctx(), *this); }
         sort domain(unsigned i) const { assert(i < arity()); Z3_sort r = Z3_get_domain(ctx(), *this, i); check_error(); return sort(ctx(), r); }
         sort range() const { Z3_sort r = Z3_get_range(ctx(), *this); check_error(); return sort(ctx(), r); }
@@ -407,7 +407,7 @@ namespace z3 {
         }
         friend expr operator||(expr const & a, bool b) { return a || a.ctx().bool_val(b); }
         friend expr operator||(bool a, expr const & b) { return b.ctx().bool_val(a) || b; }
-        
+
         friend expr implies(expr const & a, expr const & b) {
             check_context(a, b);
             assert(a.is_bool() && b.is_bool());
@@ -607,7 +607,7 @@ namespace z3 {
         }
         friend expr operator<(expr const & a, int b) { return a < a.ctx().num_val(b, a.get_sort()); }
         friend expr operator<(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) < a; }
-        
+
         friend expr operator>(expr const & a, expr const & b) {
             check_context(a, b);
             Z3_ast r;
@@ -818,7 +818,7 @@ namespace z3 {
     inline expr udiv(expr const & a, expr const & b) { return to_expr(a.ctx(), Z3_mk_bvudiv(a.ctx(), a, b)); }
     inline expr udiv(expr const & a, int b) { return udiv(a, a.ctx().num_val(b, a.get_sort())); }
     inline expr udiv(int a, expr const & b) { return udiv(b.ctx().num_val(a, b.get_sort()), a); }
-    
+
     template<typename T> class cast_ast;
 
     template<> class cast_ast<ast> {
@@ -949,7 +949,7 @@ namespace z3 {
             m_model = s.m_model;
             return *this; 
         }
-        
+
         expr eval(expr const & n, bool model_completion=false) const {
             check_context(*this, n);
             Z3_ast r;
@@ -959,7 +959,7 @@ namespace z3 {
                 throw exception("failed to evaluate expression");
             return expr(ctx(), r);
         }
-        
+
         unsigned num_consts() const { return Z3_model_get_num_consts(ctx(), m_model); }
         unsigned num_funcs() const { return Z3_model_get_num_funcs(ctx(), m_model); }
         func_decl get_const_decl(unsigned i) const { Z3_func_decl r = Z3_model_get_const_decl(ctx(), m_model, i); check_error(); return func_decl(ctx(), r); }
@@ -1324,7 +1324,7 @@ namespace z3 {
     inline func_decl context::function(char const * name, unsigned arity, sort const * domain, sort const & range) {
         return function(range.ctx().str_symbol(name), arity, domain, range);
     }
-    
+
     inline func_decl context::function(char const * name, sort const & domain, sort const & range) {
         check_context(domain, range);
         Z3_sort args[1] = { domain };
@@ -1356,7 +1356,7 @@ namespace z3 {
         check_error();
         return func_decl(*this, f);
     }
-    
+
     inline func_decl context::function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & d5, sort const & range) {
         check_context(d1, range); check_context(d2, range); check_context(d3, range); check_context(d4, range); check_context(d5, range);
         Z3_sort args[5] = { d1, d2, d3, d4, d5 };
@@ -1506,7 +1506,7 @@ namespace z3 {
         Z3_ast r = Z3_mk_app(ctx(), *this, n, _args.ptr());
         check_error();
         return expr(ctx(), r);
-    
+
     }
     inline expr func_decl::operator()(expr const & a) const {
         check_context(*this, a);
@@ -1587,7 +1587,7 @@ namespace z3 {
     inline func_decl function(char const * name, sort const & d1, sort const & d2, sort const & d3, sort const & d4, sort const & d5, sort const & range) {
         return range.ctx().function(name, d1, d2, d3, d4, d5, range);
     }
-    
+
     inline expr select(expr const & a, expr const & i) {
         check_context(a, i);
         Z3_ast r = Z3_mk_select(a.ctx(), a, i);
@@ -1612,7 +1612,7 @@ namespace z3 {
         d.check_error();
         return expr(d.ctx(), r);
     }
-    
+
     inline expr ite(expr const & c, expr const & t, expr const & f) {
         check_context(c, t); check_context(c, f);
         Z3_ast r = Z3_mk_ite(c.ctx(), c, t, f);
