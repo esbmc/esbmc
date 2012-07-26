@@ -219,6 +219,7 @@ __except            { loc(); return MSC_Keyword(TOK_MSC_EXCEPT); }
 __leave             { loc(); return MSC_Keyword(TOK_MSC_LEAVE); }
 __finally           { loc(); return MSC_Keyword(TOK_MSC_FINALLY); }
 __uuidof 	    { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
+and                 { loc(); return TOK_ANDAND; }
 auto                { loc(); return TOK_AUTO; }
 bool                { loc(); return TOK_BOOL; }
 break               { loc(); return TOK_BREAK; }
@@ -250,6 +251,7 @@ namespace           { loc(); return TOK_NAMESPACE; }
 new                 { loc(); return TOK_NEW; }
 noreturn            { /* ignore */ }
 operator            { loc(); return TOK_OPERATOR; }
+or                  { loc(); return TOK_OROR; }
 private             { loc(); return TOK_PRIVATE; }
 protected           { loc(); return TOK_PROTECTED; }
 public              { loc(); return TOK_PUBLIC; }
