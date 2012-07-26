@@ -96,7 +96,7 @@ private:
   void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
                           ast_logic_convert convert, void *_bv);
   void convert_binop(const expr2tc &side1, const expr2tc &side2,
-                    const type2tc &type, ast_convert_calltype converter,
+                    const type2tc &type, ast_logic_convert convert,
                     void *_bv);
   void convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
                          ast_convert_calltype bvconvert,
