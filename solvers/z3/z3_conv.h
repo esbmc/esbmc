@@ -85,6 +85,8 @@ private:
                                             z3::expr const args[],
                                             bool is_unsigned);
 
+  typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
+
   typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
   typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,
                                           Z3_ast const args[]);
@@ -92,9 +94,7 @@ private:
   void convert_rel(const expr2tc &side1, const expr2tc &side2,
                    ast_convert_calltype_new convert, void *_bv);
   void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
-                          ast_convert_calltype converter,
-                          ast_convert_multiargs bulkconverter,
-                          void *_bv);
+                          ast_logic_convert convert, void *_bv);
   void convert_binop(const expr2tc &side1, const expr2tc &side2,
                     const type2tc &type, ast_convert_calltype converter,
                     void *_bv);
