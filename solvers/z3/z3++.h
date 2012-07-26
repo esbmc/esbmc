@@ -632,6 +632,12 @@ namespace z3 {
         friend expr z3::mk_gt(expr const &a, expr const &b, bool is_unsigned);
         friend expr z3::mk_le(expr const &a, expr const &b, bool is_unsigned);
         friend expr z3::mk_ge(expr const &a, expr const &b, bool is_unsigned);
+        friend expr z3::mk_bvand(expr const &a, expr const &b);
+        friend expr z3::mk_bvor(expr const &a, expr const &b);
+        friend expr z3::mk_bvxor(expr const &a, expr const &b);
+        friend expr z3::mk_bvnand(expr const &a, expr const &b);
+        friend expr z3::mk_bvnor(expr const &a, expr const &b);
+        friend expr z3::mk_bvxnor(expr const &a, expr const &b);
 
         friend expr operator&(expr const & a, expr const & b) { check_context(a, b); Z3_ast r = Z3_mk_bvand(a.ctx(), a, b); return expr(a.ctx(), r); }
         friend expr operator&(expr const & a, int b) { return a & a.ctx().num_val(b, a.get_sort()); }
@@ -761,6 +767,54 @@ namespace z3 {
       check_context(a, b);
       assert(a.is_bool() && b.is_bool());
       Z3_ast r = Z3_mk_implies(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvand(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvand(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvxor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvxor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvnand(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvnand(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvnor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvnor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_bvxnor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvxnor(a.ctx(), a, b);
       a.check_error();
       return expr(a.ctx(), r);
     }
