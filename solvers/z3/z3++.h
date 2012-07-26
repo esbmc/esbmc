@@ -381,6 +381,11 @@ namespace z3 {
             return expr(a.ctx(), r);
         }
 
+        friend expr z3::mk_and(expr const &a, expr const &b);
+        friend expr z3::mk_or(expr const &a, expr const &b);
+        friend expr z3::mk_xor(expr const &a, expr const &b);
+        friend expr z3::mk_implies(expr const &a, expr const &b);
+
         friend expr operator&&(expr const & a, expr const & b) {
             check_context(a, b);
             assert(a.is_bool() && b.is_bool());
@@ -722,6 +727,40 @@ namespace z3 {
           // operator is not supported by given arguments.
           assert(false);
       }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_and(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bool() && b.is_bool());
+      Z3_ast args[2] = { a, b };
+      Z3_ast r = Z3_mk_and(a.ctx(), 2, args);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_or(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bool() && b.is_bool());
+      Z3_ast args[2] = { a, b };
+      Z3_ast r = Z3_mk_or(a.ctx(), 2, args);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_xor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bool() && b.is_bool());
+      Z3_ast r = Z3_mk_xor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_implies(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bool() && b.is_bool());
+      Z3_ast r = Z3_mk_implies(a.ctx(), a, b);
       a.check_error();
       return expr(a.ctx(), r);
     }
