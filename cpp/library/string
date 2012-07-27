@@ -2498,52 +2498,37 @@ namespace std
 
 	string& operator+ ( string& lhs, string& rhs )
 	{
-		lhs.append(rhs);
-		return lhs;
+		return lhs += rhs;
 	}
 	string& operator+ ( string& lhs, char * rhs )
 	{
-		int t = strlen(rhs);
-		lhs.append(rhs, t);
-		return lhs;
+		return lhs + string(rhs);
 	}
 	string& operator+ ( string& lhs, char rhc )
 	{
-		lhs.append(rhc, 1);
-		return lhs;
+		return lhs + string(rhc,1);
 	}
 
 	string& operator+ ( char * lhs, string& rhs )
 	{
-		string next(lhs);
-		next.append(rhs);
-		return next;
+		return string(lhs) + rhs;
 	}
 	string& operator+ ( char * lhs, char rhc )
 	{
-		string next(lhs);
-		next.append(rhc, 1);
-		return next;
+		return string(lhs) + string(rhc, 1);
 	}
 
 	string& operator+ ( char lhc, string& rhs )
 	{
-		string next = lhc;
-		next.append(rhs);
-		return next;
+		return string(lhc, 1) + rhs;
 	}
 	string& operator+ ( char lhc, char * rhs )
 	{
-		string next = lhc;
-		next.append(rhs);
-		return next;
+		return string(lhc, 1) + string(rhs);
 	}
 	string& operator+ ( char lhc, char rhc )
 	{
-		string next = lhc;
-		next.append(rhc, 1);
-		return next;
+		return string(lhc) + string(rhc);
 	}
-
 }
 #endif
