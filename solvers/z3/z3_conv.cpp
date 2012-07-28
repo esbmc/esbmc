@@ -1219,21 +1219,11 @@ z3_convt::convert_smt_expr(const neg2t &neg, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast args[2];
+  z3::expr arg;
 
-  convert_bv(neg.value, args[0]);
+  convert_bv(neg.value, arg);
 
-  if (int_encoding) {
-    if (is_bv_type(neg.type)) {
-      args[1] = ctx->int_val(-1);
-    } else {
-      assert(is_fixedbv_type(neg.type));
-      args[1] = ctx->real_val(-1);
-    }
-    output = z3::to_expr(*ctx, Z3_mk_mul(z3_ctx, 2, args));
-  } else   {
-    output = z3::to_expr(*ctx, Z3_mk_bvneg(z3_ctx, args[0]));
-  }
+  output = -arg;
 }
 
 void
