@@ -1253,13 +1253,12 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *_bv)
 
 void
 z3_convt::convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
-                            ast_convert_calltype bvconvert,
-                            ast_convert_multiargs intmodeconvert,
+                            ast_logic_convert convert,
                             void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast args[2];
+  z3::expr args[2];
 
   if (is_pointer_type(side1->type) ||
       is_pointer_type(side2->type)) {
@@ -1270,10 +1269,7 @@ z3_convt::convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
   convert_bv(side1, args[0]);
   convert_bv(side2, args[1]);
 
-  if (int_encoding)
-    output = z3::to_expr(*ctx, intmodeconvert(z3_ctx, 2, args));
-  else
-    output = z3::to_expr(*ctx, bvconvert(z3_ctx, args[0], args[1]));
+  output = convert(args[0], args[1]);
 }
 
 void
@@ -1285,7 +1281,7 @@ z3_convt::convert_smt_expr(const add2t &add, void *_bv)
     return convert_pointer_arith(add.expr_id, add.side_1, add.side_2,
                                  add.type, cast_to_z3(_bv));
 
-  convert_arith2ops(add.side_1, add.side_2, Z3_mk_bvadd, Z3_mk_add, _bv);
+  convert_arith2ops(add.side_1, add.side_2, &z3::mk_add, _bv);
 }
 
 void
@@ -1299,7 +1295,7 @@ z3_convt::convert_smt_expr(const sub2t &sub, void *_bv)
     return convert_pointer_arith(sub.expr_id, sub.side_1, sub.side_2,
                                  sub.type, output);
 
-  convert_arith2ops(sub.side_1, sub.side_2, Z3_mk_bvsub, Z3_mk_sub, _bv);
+  convert_arith2ops(sub.side_1, sub.side_2, &z3::mk_sub, _bv);
 }
 
 void

@@ -99,9 +99,7 @@ private:
                     const type2tc &type, ast_logic_convert convert,
                     void *_bv);
   void convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
-                         ast_convert_calltype bvconvert,
-                         ast_convert_multiargs intmodeconvert,
-                         void *_bv);
+                         ast_logic_convert convert, void *_bv);
   void convert_shift(const expr2t &shift, const expr2tc &part1,
                      const expr2tc &part2, ast_convert_calltype convert,
                      void *_bv);
