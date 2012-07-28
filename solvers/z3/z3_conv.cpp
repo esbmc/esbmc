@@ -1309,25 +1309,24 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *_bv)
     abort();
   }
 
-  Z3_ast args[2];
+  z3::expr args[2];
   unsigned fraction_bits = 0;
 
   convert_bv(mul.side_1, args[0]);
   convert_bv(mul.side_2, args[1]);
 
-  if (int_encoding) {
-    output = z3::to_expr(*ctx, Z3_mk_mul(z3_ctx, 2, args));
-  } else if (!is_fixedbv_type(mul.type)) {
-    output = z3::to_expr(*ctx, Z3_mk_bvmul(z3_ctx, args[0], args[1]));
+  if (!is_fixedbv_type(mul.type) || !int_encoding) {
+    output = args[0] * args[1];
   } else {
     // fixedbv in bv mode. I've no idea if this actually works.
     const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
     fraction_bits = fbvt.width - fbvt.integer_bits;
-    args[0] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]);
-    args[1] = Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]);
-    output = z3::to_expr(*ctx, Z3_mk_bvmul(z3_ctx, args[0], args[1]));
-    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width + fraction_bits - 1,
-                                         fraction_bits, output));
+    args[0] = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]));
+    args[1] = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]));
+    output = args[0] * args[1];
+    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx,
+                                             fbvt.width + fraction_bits - 1,
+                                             fraction_bits, output));
   }
 }
 
