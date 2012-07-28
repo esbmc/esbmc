@@ -488,6 +488,9 @@ namespace z3 {
         friend expr pw(expr const & a, int b) { return pw(a, a.ctx().num_val(b, a.get_sort())); }
         friend expr pw(int a, expr const & b) { return pw(b.ctx().num_val(a, b.get_sort()), b); }
 
+// XXXjmorse - another disabled operator, again because it too easily leads to
+// ambiguity about sign. See comment around operator<= for more detail.
+#if 0
         friend expr operator/(expr const & a, expr const & b) {
             check_context(a, b);
             Z3_ast r;
@@ -506,6 +509,7 @@ namespace z3 {
         }
         friend expr operator/(expr const & a, int b) { return a / a.ctx().num_val(b, a.get_sort()); }
         friend expr operator/(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) / b; }
+#endif
 
         friend expr operator-(expr const & a) {
             Z3_ast r;
