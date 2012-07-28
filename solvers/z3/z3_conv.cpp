@@ -1263,7 +1263,7 @@ z3_convt::convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
 
   if (is_pointer_type(side1->type) ||
       is_pointer_type(side2->type)) {
-    std::cerr << "Pointer arithmetic not implemented for Z3 yet" << std::endl;
+    std::cerr << "Pointer arithmetic reached convert_arith2ops" << std::endl;
     abort();
   }
 
