@@ -2417,20 +2417,20 @@ void
 z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_ast operand;
+  z3::expr operand;
   unsigned width;
 
   convert_bv(neg.operand, operand);
 
   // XXX jmorse - clearly wrong. Neg of pointer?
   if (is_pointer_type(neg.operand->type))
-    operand = mk_tuple_select(operand, 1);
+    operand = to_expr(*ctx, mk_tuple_select(operand, 1));
 
   width = neg.operand->type->get_width();
 
   // XXX jmorse - int2bv trainwreck
   if (int_encoding)
-    operand = Z3_mk_int2bv(z3_ctx, width, operand);
+    operand = to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, operand));
 
   output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_bvneg_no_overflow(z3_ctx, operand)));
 }
