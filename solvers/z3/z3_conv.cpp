@@ -1344,26 +1344,22 @@ z3_convt::convert_smt_expr(const div2t &div, void *_bv)
   convert_bv(div.side_1, op0);
   convert_bv(div.side_2, op1);
 
-  if (int_encoding) {
-    output = z3::to_expr(*ctx, Z3_mk_div(z3_ctx, op0, op1));
-  } else   {
-    if (is_signedbv_type(div.type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bvsdiv(z3_ctx, op0, op1));
-    } else if (is_unsignedbv_type(div.type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bvudiv(z3_ctx, op0, op1));
-    } else {
-      // Not the foggiest. Copied from convert_div
-      assert(is_fixedbv_type(div.type));
-      const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
+  if (!is_fixedbv_type(div.type) || int_encoding) {
+    bool is_unsigned = is_unsignedbv_type(div.side_1->type) ||
+                       is_unsignedbv_type(div.side_2->type);
+    output = mk_div(op0, op1, is_unsigned);
+  } else {
+    // Not the foggiest. Copied from convert_div
+    assert(is_fixedbv_type(div.type));
+    const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
 
-      unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
+    unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
 
-      output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0,
-                             Z3_mk_bvsdiv(z3_ctx,
-                                  Z3_mk_concat(z3_ctx, op0,
-                                        ctx->esbmc_int_val(0, fraction_bits)), 
-                                  Z3_mk_sign_ext(z3_ctx, fraction_bits, op1))));
-    }
+    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0,
+                           Z3_mk_bvsdiv(z3_ctx,
+                                Z3_mk_concat(z3_ctx, op0,
+                                      ctx->esbmc_int_val(0, fraction_bits)),
+                                Z3_mk_sign_ext(z3_ctx, fraction_bits, op1))));
   }
 }
 
