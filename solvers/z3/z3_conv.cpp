@@ -2519,7 +2519,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       convert_bv(newexpr, output);
 
       // That calculated the offset; update field in pointer.
-      Z3_ast the_ptr;
+      z3::expr the_ptr;
       convert_bv(ptr_op, the_ptr);
       output = z3::to_expr(*ctx, mk_tuple_update(the_ptr, 1, output));
 
