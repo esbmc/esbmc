@@ -2528,7 +2528,7 @@ z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
 
   bv_cachet::const_iterator cache_result = bv_cache.find(expr);
   if (cache_result != bv_cache.end()) {
-    val = z3::to_expr(*ctx, cache_result->output);
+    val = cache_result->output;
     return;
   }
 

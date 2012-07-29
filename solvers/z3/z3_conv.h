@@ -201,7 +201,7 @@ private:
 
   struct bv_cache_entryt {
     const expr2tc val;
-    Z3_ast output;
+    z3::expr output;
     unsigned int level;
   };
 
