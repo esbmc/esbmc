@@ -1881,13 +1881,13 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
 
     output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, output, ctx->esbmc_int_val(0, to_fraction_bits)));
   } else if (is_bool_type(cast.from->type)) {
-    Z3_ast zero, one;
+    z3::expr zero, one;
     zero = ctx->esbmc_int_val(0, to_integer_bits);
     one = ctx->esbmc_int_val(1, to_integer_bits);
-    output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, output, one, zero));
+    output = z3::ite(output, one, zero);
     output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, output, ctx->esbmc_int_val(0, to_fraction_bits)));
   } else if (is_fixedbv_type(cast.from->type)) {
-    Z3_ast magnitude, fraction;
+    z3::expr magnitude, fraction;
 
     const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
 
@@ -1896,30 +1896,30 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     unsigned from_width = from_fbvt.width;
 
     if (to_integer_bits <= from_integer_bits) {
-      magnitude =
+      magnitude = z3::to_expr(*ctx,
         Z3_mk_extract(z3_ctx, (from_fraction_bits + to_integer_bits - 1),
-                      from_fraction_bits, output);
+                      from_fraction_bits, output));
     } else   {
       assert(to_integer_bits > from_integer_bits);
 
-      magnitude =
+      magnitude = z3::to_expr(*ctx,
         Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits),
                        Z3_mk_extract(z3_ctx, from_width - 1, from_fraction_bits,
-                                     output));
+                                     output)));
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
-      fraction =
+      fraction = z3::to_expr(*ctx,
         Z3_mk_extract(z3_ctx, (from_fraction_bits - 1),
                       from_fraction_bits - to_fraction_bits,
-                      output);
+                      output));
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
-      fraction =
+      fraction = z3::to_expr(*ctx,
         Z3_mk_concat(z3_ctx,
                      Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output),
                      ctx->esbmc_int_val(0, to_fraction_bits - from_fraction_bits
-                                    ));
+                                    )));
     }
     output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   } else {
