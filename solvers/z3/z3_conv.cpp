@@ -1793,8 +1793,8 @@ void
 z3_convt::convert_smt_expr(const member2t &member, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
+  z3::expr struct_var;
   u_int j = 0;
-  Z3_ast struct_var;
 
   const struct_union_data &data_ref =
     dynamic_cast<const struct_union_data &>(*member.source_value->type);
