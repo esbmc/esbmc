@@ -2013,7 +2013,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
   const struct_type2t &struct_type_to = to_struct_type(cast.type);
 
-  Z3_ast freshval;
+  z3::expr freshval;
   u_int i = 0, i2 = 0;
 
   std::vector<type2tc> new_members;
@@ -2052,18 +2052,18 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   // Can't cache this type as it's constructed on the fly.
   newstruct.convert_smt_type(*this, reinterpret_cast<void*>(&sort));
 
-  freshval = Z3_mk_fresh_const(z3_ctx, NULL, sort);
+  freshval = ctx->fresh_const(NULL, sort);
 
   i2 = 0;
   forall_types(it, newstruct.members) {
-    Z3_ast formula;
-    formula = Z3_mk_eq(z3_ctx, mk_tuple_select(freshval, i2),
-                       mk_tuple_select(output, i2));
+    z3::expr formula;
+    formula = z3::to_expr(*ctx, mk_tuple_select(freshval, i2)) ==
+                       z3::to_expr(*ctx, mk_tuple_select(output, i2));
     assert_formula(formula);
     i2++;
   }
 
-  output = z3::to_expr(*ctx, freshval);
+  output = freshval;
   return;
 }
 
