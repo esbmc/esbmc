@@ -2933,14 +2933,17 @@ z3_convt::lcnf(const bvt &bv)
   if (new_bv.size() == 0)
     return;
 
-  Z3_ast lor_var, *args = (Z3_ast*)alloca(new_bv.size() * sizeof(Z3_ast));
+  z3::expr lor_var, args[new_bv.size()];
+  Z3_ast args_ast[new_bv.size()];
   unsigned int i = 0;
 
-  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++)
-    args[i] = z3_literal(*it);
+  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++) {
+    args[i] = z3::to_expr(*ctx, z3_literal(*it));
+    args_ast[i] = args[i];
+  }
 
   if (i > 1) {
-    lor_var = Z3_mk_or(z3_ctx, i, args);
+    lor_var = z3::expr(*ctx, Z3_mk_or(z3_ctx, i, args_ast));
     assert_formula(lor_var);
   } else   {
     assert_formula(args[0]);
