@@ -180,7 +180,8 @@ private:
                                  const std::vector<irep_idt> &member_names,
                                  const irep_idt &name, bool uni, void *_bv);
 
-  Z3_ast mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val);
+  z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
+                           const z3::expr &new_val);
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated

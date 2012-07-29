@@ -321,7 +321,7 @@ z3_convt::init_addr_space_array(void)
   z3::expr args[2];
   args[0] = ctx->esbmc_int_val(1);
   args[1] = ctx->fresh_const(NULL, *pointer_sort);
-  z3::expr invalid = to_expr(*ctx, mk_tuple_update(args[1], 0, args[0]));
+  z3::expr invalid = mk_tuple_update(args[1], 0, args[0]);
   z3::expr invalid_name = ctx->constant("INVALID", *pointer_sort);
   constraint = invalid == invalid_name;
   assert_formula(constraint);
@@ -1552,8 +1552,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     convert_bv(addr, output);
 
     // Update pointer offset to offset to that field.
-    Z3_ast num = ctx->esbmc_int_val(offs);
-    output = z3::to_expr(*ctx, mk_tuple_update(output, 1, num));
+    z3::expr num = ctx->esbmc_int_val(offs);
+    output = mk_tuple_update(output, 1, num);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 
@@ -1715,7 +1715,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     }
 
     if (has_field)
-      output = z3::to_expr(*ctx, mk_tuple_update(tuple, intref.constant_value.to_long(), value));
+      output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
     else
       output = z3::to_expr(*ctx, tuple);
   } else if (is_signedbv_type(data.source_value->type)) {
@@ -1767,14 +1767,14 @@ z3_convt::convert_smt_expr(const with2t &with, void *_bv)
     assert(idx != names.size() &&
            "Member name of with expr not found in struct/union type");
 
-    output = to_expr(*ctx, mk_tuple_update(tuple, idx, value));
+    output = mk_tuple_update(tuple, idx, value);
 
     // Update last-updated-field field if it's a union
     if (is_union_type(with.type)) {
       const union_type2t &unionref = to_union_type(with.type);
        unsigned int components_size = unionref.members.size();
-       output = z3::to_expr(*ctx, mk_tuple_update(output, components_size,
-                              ctx->esbmc_int_val(idx)));
+       output = mk_tuple_update(output, components_size,
+                                ctx->esbmc_int_val(idx));
     }
   } else if (is_array_type(with.type)) {
 
@@ -2519,7 +2519,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // That calculated the offset; update field in pointer.
       z3::expr the_ptr;
       convert_bv(ptr_op, the_ptr);
-      output = z3::to_expr(*ctx, mk_tuple_update(the_ptr, 1, output));
+      output = mk_tuple_update(the_ptr, 1, output);
 
       break;
       }
@@ -3022,18 +3022,15 @@ z3_convt::assert_formula(const z3::expr &ast)
   return;
 }
 
-Z3_ast
-z3_convt::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
+z3::expr
+z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
 {
-  Z3_sort ty;
-  Z3_func_decl mk_tuple_decl;
+  z3::sort ty;
   unsigned num_fields, j;
-  Z3_ast *            new_fields;
-  Z3_ast result;
 
-  ty = Z3_get_sort(*ctx, t);
+  ty = t.get_sort();
 
-  if (Z3_get_sort_kind(*ctx, ty) != Z3_DATATYPE_SORT) {
+  if (!ty.is_datatype()) {
     std::cerr << "argument must be a tuple";
     abort();
   }
@@ -3045,22 +3042,23 @@ z3_convt::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
     abort();
   }
 
-  new_fields = (Z3_ast*) malloc(sizeof(Z3_ast) * num_fields);
+  z3::expr new_fields[num_fields];
   for (j = 0; j < num_fields; j++) {
     if (i == j) {
       /* use new_val at position i */
-      new_fields[j] = new_val;
+      new_fields[j] = newval;
     } else   {
       /* use field j of t */
-      Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(*ctx, ty, j);
-      Z3_ast args[1] = { t };
-      new_fields[j] = Z3_mk_app(*ctx, proj_decl, 1, args);
+      z3::func_decl proj_decl =
+        z3::to_func_decl(*ctx, Z3_get_tuple_sort_field_decl(*ctx, ty, j));
+      new_fields[j] = proj_decl(t);
     }
   }
-  mk_tuple_decl = Z3_get_tuple_sort_mk_decl(*ctx, ty);
-  result = Z3_mk_app(*ctx, mk_tuple_decl, num_fields, new_fields);
-  free(new_fields);
-  return result;
+
+  z3::func_decl mk_tuple_decl =
+    z3::to_func_decl(*ctx, Z3_get_tuple_sort_mk_decl(*ctx, ty));
+
+  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields);
 }
 
 z3::expr
