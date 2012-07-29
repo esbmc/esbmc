@@ -86,10 +86,6 @@ private:
 
   typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
 
-  typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
-  typedef Z3_ast (*ast_convert_multiargs)(Z3_context ctx, unsigned int numargs,
-                                          Z3_ast const args[]);
-
   void convert_rel(const expr2tc &side1, const expr2tc &side2,
                    ast_convert_calltype_new convert, void *_bv);
   void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
@@ -99,6 +95,8 @@ private:
                     void *_bv);
   void convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
                          ast_logic_convert convert, void *_bv);
+
+  typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
   void convert_shift(const expr2t &shift, const expr2tc &part1,
                      const expr2tc &part2, ast_convert_calltype convert,
                      void *_bv);
