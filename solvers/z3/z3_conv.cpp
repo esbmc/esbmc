@@ -1050,10 +1050,10 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
 
   // XXXjmorse -- pointer comparisons are still broken.
   if (is_pointer_type(side1->type))
-    args[0] = z3::to_expr(*ctx, mk_tuple_select(args[0], 1));
+    args[0] = mk_tuple_select(args[0], 1);
 
   if (is_pointer_type(side2->type))
-    args[1] = z3::to_expr(*ctx, mk_tuple_select(args[1], 1));
+    args[1] = mk_tuple_select(args[1], 1);
 
   output = convert(args[0], args[1], !is_signedbv_type(side1->type));
 }
@@ -1469,8 +1469,8 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *_bv)
   convert_bv(same.side_1, pointer[0]);
   convert_bv(same.side_2, pointer[1]);
 
-  objs[0] = z3::to_expr(*ctx, mk_tuple_select(pointer[0], 0));
-  objs[1] = z3::to_expr(*ctx, mk_tuple_select(pointer[1], 0));
+  objs[0] = mk_tuple_select(pointer[0], 0);
+  objs[1] = mk_tuple_select(pointer[1], 0);
   output = objs[0] == objs[1];
 }
 
@@ -1487,7 +1487,7 @@ z3_convt::convert_smt_expr(const pointer_offset2t &offs, void *_bv)
 
   convert_bv(*ptr, pointer);
 
-  output = z3::to_expr(*ctx, mk_tuple_select(pointer, 1)); //select pointer offset
+  output = mk_tuple_select(pointer, 1); //select pointer offset
 }
 
 void
@@ -1507,7 +1507,7 @@ z3_convt::convert_smt_expr(const pointer_object2t &obj, void *_bv)
 
   convert_bv(*ptr, pointer);
 
-  output = z3::to_expr(*ctx, mk_tuple_select(pointer, 0)); //select pointer offset
+  output = mk_tuple_select(pointer, 0); //select pointer offset
 }
 
 void
@@ -1654,7 +1654,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       z3::expr struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
 
       forall_types(it, struct_type.members) {
-        struct_elem[i] = z3::to_expr(*ctx, mk_tuple_select(source, i));
+        struct_elem[i] = mk_tuple_select(source, i);
         i++;
       }
 
@@ -1824,7 +1824,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
       const type2tc source_type = members[cache_result->idx];
       if (source_type == member.type) {
         // Type we're fetching from union matches expected type; just return it.
-        output = z3::to_expr(*ctx, mk_tuple_select(struct_var, cache_result->idx));
+        output = mk_tuple_select(struct_var, cache_result->idx);
         return;
       }
 
@@ -1837,7 +1837,7 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
     }
   }
 
-  output = z3::to_expr(*ctx, mk_tuple_select(struct_var, j));
+  output = mk_tuple_select(struct_var, j);
 }
 
 void
@@ -2056,8 +2056,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   i2 = 0;
   forall_types(it, newstruct.members) {
     z3::expr formula;
-    formula = z3::to_expr(*ctx, mk_tuple_select(freshval, i2)) ==
-                       z3::to_expr(*ctx, mk_tuple_select(output, i2));
+    formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i2);
     assert_formula(formula);
     i2++;
   }
@@ -2251,7 +2250,7 @@ z3_convt::convert_smt_expr(const zero_length_string2t &s, void *_bv)
   z3::expr operand;
 
   convert_bv(s.string, operand);
-  output = z3::to_expr(*ctx, mk_tuple_select(operand, 0));
+  output = mk_tuple_select(operand, 0);
 }
 
 void
@@ -2423,7 +2422,7 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
 
   // XXX jmorse - clearly wrong. Neg of pointer?
   if (is_pointer_type(neg.operand->type))
-    operand = to_expr(*ctx, mk_tuple_select(operand, 1));
+    operand = mk_tuple_select(operand, 1);
 
   width = neg.operand->type->get_width();
 
@@ -3064,15 +3063,15 @@ z3_convt::mk_tuple_update(Z3_ast t, unsigned i, Z3_ast new_val)
   return result;
 }
 
-Z3_ast
-z3_convt::mk_tuple_select(Z3_ast t, unsigned i)
+z3::expr
+z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 {
-  Z3_sort ty;
+  z3::sort ty;
   unsigned num_fields;
 
-  ty = Z3_get_sort(*ctx, t);
+  ty = t.get_sort();
 
-  if (Z3_get_sort_kind(*ctx, ty) != Z3_DATATYPE_SORT) {
+  if (!ty.is_datatype()) {
     throw new z3_convt::conv_error("argument must be a tuple");
   }
 
@@ -3082,9 +3081,9 @@ z3_convt::mk_tuple_select(Z3_ast t, unsigned i)
     throw new z3_convt::conv_error("invalid tuple select, index is too big");
   }
 
-  Z3_func_decl proj_decl = Z3_get_tuple_sort_field_decl(*ctx, ty, i);
-  Z3_ast args[1] = { t };
-  return Z3_mk_app(*ctx, proj_decl, 1, args);
+  z3::func_decl proj_decl =
+    z3::to_func_decl(*ctx, Z3_get_tuple_sort_field_decl(*ctx, ty, i));
+  return proj_decl(t);
 }
 
 bool z3_convt::s_is_uw = false;
