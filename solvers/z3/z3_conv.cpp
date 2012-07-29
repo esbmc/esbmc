@@ -124,6 +124,11 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
+
+  // Don't destruct with Z3 items still in existance.
+  bv_cache.clear();
+  assumpt.clear();
+
   delete pointer_decl;
   delete pointer_sort;
   delete addr_space_tuple_decl;
