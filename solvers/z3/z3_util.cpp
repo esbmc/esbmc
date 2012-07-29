@@ -26,8 +26,8 @@ z3_convt::debug_label_formula(std::string name, Z3_ast formula)
   num++;
 
   z3::expr expr = z3::to_expr(*ctx, formula);
-  Z3_ast sym = ctx->constant(the_name.c_str(), expr.get_sort());
-  Z3_ast eq = Z3_mk_eq(z3_ctx, sym, formula);
+  z3::expr sym = ctx->constant(the_name.c_str(), expr.get_sort());
+  z3::expr eq = sym == expr;
   assert_formula(eq);
   return;
 }
