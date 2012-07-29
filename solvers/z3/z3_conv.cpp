@@ -1315,7 +1315,7 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *_bv)
   convert_bv(mul.side_1, args[0]);
   convert_bv(mul.side_2, args[1]);
 
-  if (!is_fixedbv_type(mul.type) || !int_encoding) {
+  if (!is_fixedbv_type(mul.type) || int_encoding) {
     output = args[0] * args[1];
   } else {
     // fixedbv in bv mode. I've no idea if this actually works.
