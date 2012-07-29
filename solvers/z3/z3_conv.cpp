@@ -2842,12 +2842,12 @@ z3_convt::lor(literalt a, literalt b)
   if (a == b) return a;
 
   literalt l = new_variable();
-  Z3_ast result, operand[2], formula;
+  z3::expr result, operand[2], formula;
 
-  operand[0] = z3_literal(a);
-  operand[1] = z3_literal(b);
-  result = Z3_mk_or(z3_ctx, 2, operand);
-  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  operand[0] = z3::to_expr(*ctx, z3_literal(a));
+  operand[1] = z3::to_expr(*ctx, z3_literal(b));
+  result = operand[0] || operand[1];
+  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
   assert_formula(formula);
 
   return l;
