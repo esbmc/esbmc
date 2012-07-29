@@ -1403,7 +1403,7 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast op0, op1;
+  z3::expr op0, op1;
   unsigned width_expr, width_op0, width_op1;
 
   convert_bv(part1, op0);
@@ -1414,20 +1414,20 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
   width_op1 = part2->type->get_width();
 
   if (int_encoding) {
-    op0 = Z3_mk_int2bv(z3_ctx, width_op0, op0);
-    op1 = Z3_mk_int2bv(z3_ctx, width_op1, op1);
+    op0 = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op0, op0));
+    op1 = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op1, op1));
   }
 
   if (width_op0 > width_expr)
-    op0 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0);
+    op0 = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0));
   if (width_op1 > width_expr)
-    op1 = Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1);
+    op1 = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1));
 
   if (width_op0 > width_op1) {
     if (is_unsignedbv_type(part1->type))
-      op1 = Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1);
+      op1 = z3::to_expr(*ctx, Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1));
     else
-      op1 = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1);
+      op1 = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1));
   }
 
   output = z3::to_expr(*ctx, convert(z3_ctx, op0, op1));
