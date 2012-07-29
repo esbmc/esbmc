@@ -3061,3 +3061,10 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 }
 
 bool z3_convt::s_is_uw = false;
+
+// Gigantic hack, implement a method in z3::ast, so that we can call from gdb
+namespace z3 {
+  void ast::dump(void) const {
+    std::cout << Z3_ast_to_string(ctx(), m_ast) << std::endl;
+  }
+};
