@@ -100,8 +100,8 @@ z3_convt::~z3_convt()
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
     Z3_ast assumpt_array_ast[assumpt.size() + 1];
-    Z3_ast formula;
-    formula = Z3_mk_true(z3_ctx);
+    z3::expr formula;
+    formula = ctx->bool_val(true);
 
     std::list<z3::expr>::const_iterator it;
     unsigned int i;
