@@ -19,15 +19,14 @@ std::string z3_convt::itos(int i)
 }
 
 void
-z3_convt::debug_label_formula(std::string name, Z3_ast formula)
+z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
 {
   unsigned &num = debug_label_map[name];
   std::string the_name = "__ESBMC_" + name + itos(num);
   num++;
 
-  z3::expr expr = z3::to_expr(*ctx, formula);
-  z3::expr sym = ctx->constant(the_name.c_str(), expr.get_sort());
-  z3::expr eq = sym == expr;
+  z3::expr sym = ctx->constant(the_name.c_str(), formula.get_sort());
+  z3::expr eq = sym == formula;
   assert_formula(eq);
   return;
 }
