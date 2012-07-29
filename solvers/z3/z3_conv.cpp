@@ -1589,8 +1589,6 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
   }
 }
 
-
-
 void
 z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
