@@ -1693,7 +1693,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
-  Z3_ast tuple, value;
+  z3::expr tuple, value;
   uint width_op0, width_op2;
 
   convert_bv(data.source_value, tuple);
