@@ -1844,14 +1844,10 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
 void
 z3_convt::convert_typecast_bool(const typecast2t &cast, z3::expr &output)
 {
-  Z3_ast args[2];
 
   if (is_bv_type(cast.from->type) ||
       is_pointer_type(cast.from->type)) {
-    args[0] = output;
-    args[1] = ctx->esbmc_int_val(0);
-
-    output = z3::to_expr(*ctx, Z3_mk_distinct(z3_ctx, 2, args));
+    output = output != ctx->esbmc_int_val(0);
   } else {
     throw new conv_error("Unimplemented bool typecast");
   }
