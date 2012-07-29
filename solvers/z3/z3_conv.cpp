@@ -100,15 +100,14 @@ z3_convt::~z3_convt()
   if (smtlib) {
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
-    Z3_ast *assumpt_array =
-	          (Z3_ast *)alloca((assumpt.size() + 1) * sizeof(Z3_ast));
+    Z3_ast assumpt_array_ast[assumpt.size() + 1];
     Z3_ast formula;
     formula = Z3_mk_true(z3_ctx);
 
-    std::list<Z3_ast>::const_iterator it;
+    std::list<z3::expr>::const_iterator it;
     unsigned int i;
     for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumpt_array[i] = *it;
+      assumpt_array_ast[i] = *it;
     }
 
     if (int_encoding)
@@ -118,7 +117,7 @@ z3_convt::~z3_convt()
 
     smt_lib_str = Z3_benchmark_to_smtlib_string(z3_ctx, "ESBMC", logic,
                                     "unknown", "", assumpt.size(),
-                                    assumpt_array, formula);
+                                    assumpt_array_ast, formula);
 
     temp_out.open(filename.c_str(), std::ios_base::out | std::ios_base::trunc);
 
@@ -186,7 +185,7 @@ z3_convt::intr_push_ctx(void)
   total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
-  std::list<Z3_ast>::iterator it = assumpt.end();
+  std::list<z3::expr>::iterator it = assumpt.end();
   it--;
   assumpt_ctx_stack.push_back(it);
 }
@@ -196,7 +195,7 @@ z3_convt::intr_pop_ctx(void)
 {
 
   // Erase everything on stack since last push_ctx
-  std::list<Z3_ast>::iterator it = assumpt_ctx_stack.back();
+  std::list<z3::expr>::iterator it = assumpt_ctx_stack.back();
   ++it;
   assumpt.erase(it, assumpt.end());
   assumpt_ctx_stack.pop_back();
@@ -514,15 +513,15 @@ z3_convt::check2_z3_properties(void)
 
   assumptions_status = assumpt.size();
 
-  Z3_ast proof, *core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast)),
-         *assumptions_core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast));
+  Z3_ast proof, *core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast));
+  Z3_ast assumptions_ast[assumptions_status];
   std::string literal;
 
 
   if (uw) {
-    std::list<Z3_ast>::const_iterator it;
+    std::list<z3::expr>::const_iterator it;
     for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumptions_core[i] = *it;
+      assumptions_ast[i] = *it;
     }
   }
 
@@ -532,7 +531,7 @@ z3_convt::check2_z3_properties(void)
       unsat_core_size = assumpt.size();
       memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
       result = Z3_check_assumptions(z3_ctx, assumpt.size(),
-                             assumptions_core, &model, &proof, &unsat_core_size,
+                             assumptions_ast, &model, &proof, &unsat_core_size,
                              core);
     } else {
       result = Z3_check_and_get_model(z3_ctx, &model);
@@ -3002,7 +3001,7 @@ z3_convt::l_get(literalt a) const
 }
 
 void
-z3_convt::assert_formula(Z3_ast ast)
+z3_convt::assert_formula(const z3::expr &ast)
 {
 
   // If we're not going to be using the assumptions (ie, for unwidening and for
@@ -3013,13 +3012,13 @@ z3_convt::assert_formula(Z3_ast ast)
   }
 
   literalt l = new_variable();
-  Z3_ast formula = Z3_mk_iff(z3_ctx, z3_literal(l), ast);
+  z3::expr formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), ast));
   Z3_assert_cnstr(z3_ctx, formula);
 
   if (smtlib)
     assumpt.push_back(ast);
   else
-    assumpt.push_back(z3_literal(l));
+    assumpt.push_back(z3::to_expr(*ctx, z3_literal(l)));
 
   return;
 }

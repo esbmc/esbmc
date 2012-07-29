@@ -187,7 +187,7 @@ private:
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
-  void assert_formula(Z3_ast ast);
+  void assert_formula(const z3::expr &ast);
 
   std::string double2string(double d) const;
 
@@ -291,8 +291,8 @@ private:
   std::string dyn_info_arr_name;
 
   uint64_t no_variables;
-  std::list<Z3_ast> assumpt;
-  std::list<std::list<Z3_ast>::iterator> assumpt_ctx_stack;
+  std::list<z3::expr> assumpt;
+  std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;
