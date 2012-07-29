@@ -1614,16 +1614,16 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  Z3_ast source;
+  z3::expr source;
 
   convert_bv(data.source_value, source);
 
   if (int_encoding) {
     if (is_fixedbv_type(data.source_value->type)) {
       if (is_bv_type(data.type)) {
-	Z3_ast tmp;
-	source = Z3_mk_real2int(z3_ctx, source);
-	tmp = Z3_mk_int2bv(z3_ctx, width, source);
+        z3::expr tmp;
+	source = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, source));
+	tmp = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, source));
 	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
 	if (is_signedbv_type(data.type))
 	  output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, 1));
@@ -1633,8 +1633,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 	throw new conv_error("unsupported type for byte_extract");
       }
     } else if (is_bv_type(data.source_value->type)) {
-      Z3_ast tmp;
-      tmp = Z3_mk_int2bv(z3_ctx, width, source);
+      z3::expr tmp;
+      tmp = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, source));
 
       if (width >= upper)
 	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
@@ -1652,10 +1652,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (is_struct_type(data.source_value->type)) {
       const struct_type2t &struct_type =to_struct_type(data.source_value->type);
       unsigned i = 0, num_elems = struct_type.members.size();
-      Z3_ast struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+      z3::expr struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
 
       forall_types(it, struct_type.members) {
-        struct_elem[i] = mk_tuple_select(source, i);
+        struct_elem[i] = z3::to_expr(*ctx, mk_tuple_select(source, i));
         i++;
       }
 
@@ -1665,11 +1665,11 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       for (unsigned k = 0; k < num_elems; k++)
       {
         if (k == 1)
-          struct_elem_inv[num_elems] = Z3_mk_concat(
-            z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]);
+          struct_elem_inv[num_elems] = z3::to_expr(*ctx, Z3_mk_concat(
+            z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]));
         else if (k > 1)
-          struct_elem_inv[num_elems] = Z3_mk_concat(
-            z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]);
+          struct_elem_inv[num_elems] = z3::to_expr(*ctx, Z3_mk_concat(
+            z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]));
       }
 
       source = struct_elem_inv[num_elems];
