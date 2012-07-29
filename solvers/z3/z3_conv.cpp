@@ -2090,9 +2090,9 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
-  z3::expr *is_in_range = new z3::expr[addr_space_data.back().size()];
-  z3::expr *obj_ids = new z3::expr[addr_space_data.back().size()];
-  z3::expr *obj_starts = new z3::expr[addr_space_data.back().size()];
+  z3::expr is_in_range[addr_space_data.back().size()];
+  z3::expr obj_ids[addr_space_data.back().size()];
+  z3::expr obj_starts[addr_space_data.back().size()];
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
@@ -2145,9 +2145,6 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // Finally, we're now at the point where prev_in_chain represents a pointer
   // object. Hurrah.
   output = z3::to_expr(*ctx, prev_in_chain);
-  delete[] is_in_range;
-  delete[] obj_starts;
-  delete[] obj_ids;
 }
 
 void
