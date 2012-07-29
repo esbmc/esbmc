@@ -2261,7 +2261,7 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   if (is_fixedbv_type(isnan.value->type)) {
-    Z3_ast op0;
+    z3::expr op0;
     unsigned width = isnan.value->type->get_width();
 
     convert_bv(isnan.value, op0);
