@@ -2683,7 +2683,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
-    Z3_ast offs_eq;
+    z3::expr offs_eq;
     convert_bv(endisequal, offs_eq);
     assert_formula(offs_eq);
 
@@ -2691,7 +2691,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Z3 will try to be clever and arrange the pointer range to cross the end
     // of the address space (ie, wrap around). So, also assert that end > start
     expr2tc wraparound(new greaterthan2t(end_sym, start_sym));
-    Z3_ast wraparound_eq;
+    z3::expr wraparound_eq;
     convert_bv(wraparound, wraparound_eq);
     assert_formula(wraparound_eq);
 
@@ -2709,9 +2709,9 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr range_tuple = ctx->constant(
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
                        *addr_space_tuple_sort);
-    Z3_ast init_val =
+    z3::expr init_val =
       addr_space_tuple_decl->make_tuple("", &start_ast, &end_ast, NULL);
-    Z3_ast eq = Z3_mk_eq(z3_ctx, range_tuple, init_val);
+    z3::expr eq = range_tuple == init_val;
     assert_formula(eq);
 
     // Update array
@@ -2724,12 +2724,12 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
     expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name));
-    Z3_ast allocarray;
+    z3::expr allocarray;
     convert_bv(allocarr, allocarray);
 
-    Z3_ast idxnum = ctx->esbmc_int_val(obj_num);
-    Z3_ast select = Z3_mk_select(z3_ctx, allocarray, idxnum);
-    Z3_ast isfalse = Z3_mk_eq(z3_ctx, Z3_mk_false(z3_ctx), select);
+    z3::expr idxnum = ctx->esbmc_int_val(obj_num);
+    z3::expr select = z3::select(allocarray, idxnum);
+    z3::expr isfalse = ctx->bool_val(false) == select;
     assert_formula(isfalse);
   }
 }
