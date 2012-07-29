@@ -1378,7 +1378,7 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *_bv)
          !is_pointer_type(mod.side_2->type) &&
          "Can't modulus pointers");
 
-  Z3_ast op0, op1;
+  z3::expr op0, op1;
 
   convert_bv(mod.side_1, op0);
   convert_bv(mod.side_2, op1);
