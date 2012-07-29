@@ -2287,7 +2287,7 @@ void
 z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_ast result[2], operand[2];
+  z3::expr result[2], operand[2];
   unsigned width_op0, width_op1;
 
   // XXX jmorse - we can't tell whether or not we're supposed to be treating
@@ -2342,13 +2342,13 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
 
   // XXX jmorse - int2bv trainwreck.
   if (int_encoding) {
-    operand[0] = Z3_mk_int2bv(z3_ctx, width_op0, operand[0]);
-    operand[1] = Z3_mk_int2bv(z3_ctx, width_op1, operand[1]);
+    operand[0] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op0, operand[0]));
+    operand[1] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op1, operand[1]));
   }
 
-  result[0] = call1(z3_ctx, operand[0], operand[1], is_signed);
-  result[1] = call2(z3_ctx, operand[0], operand[1]);
-  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, result)));
+  result[0] = z3::to_expr(*ctx, call1(z3_ctx, operand[0], operand[1], is_signed));
+  result[1] = z3::to_expr(*ctx, call2(z3_ctx, operand[0], operand[1]));
+  output = !(result[0] && result[1]);
 }
 
 void
