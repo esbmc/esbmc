@@ -2249,7 +2249,7 @@ void
 z3_convt::convert_smt_expr(const zero_length_string2t &s, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_ast operand;
+  z3::expr operand;
 
   convert_bv(s.string, operand);
   output = z3::to_expr(*ctx, mk_tuple_select(operand, 0));
