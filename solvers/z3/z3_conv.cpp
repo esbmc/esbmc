@@ -2771,14 +2771,17 @@ z3_convt::land(const bvt &bv)
 
   literalt l = new_variable();
   uint size = bv.size();
-  Z3_ast *args = (Z3_ast*)alloca(size * sizeof(Z3_ast));
-  Z3_ast result, formula;
+  z3::expr args[size];
+  Z3_ast args_ast[size];
+  z3::expr result, formula;
 
-  for (unsigned int i = 0; i < bv.size(); i++)
-    args[i] = z3_literal(bv[i]);
+  for (unsigned int i = 0; i < bv.size(); i++) {
+    args[i] = z3::to_expr(*ctx ,z3_literal(bv[i]));
+    args_ast[i] = args[i];
+  }
 
-  result = Z3_mk_and(z3_ctx, bv.size(), args);
-  formula = Z3_mk_iff(z3_ctx, z3_literal(l), result);
+  result = to_expr(*ctx, Z3_mk_and(z3_ctx, bv.size(), args_ast));
+  formula = to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
   assert_formula(formula);
 
   return l;
