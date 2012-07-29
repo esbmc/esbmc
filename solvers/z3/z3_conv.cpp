@@ -1745,8 +1745,8 @@ void
 z3_convt::convert_smt_expr(const with2t &with, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
-  Z3_ast operand0, operand1, operand2;
-  Z3_ast tuple, value;
+  z3::expr operand0, operand1, operand2;
+  z3::expr tuple, value;
 
   if (is_structure_type(with.type)) {
     unsigned int idx = 0;
