@@ -823,7 +823,7 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *_bv)
     std::string result = fixed_point(theval, bitwidth);
     output = ctx->real_val(result.c_str());
   } else {
-    Z3_ast magnitude, fraction;
+    z3::expr magnitude, fraction;
     std::string m, f, c;
     m = extract_magnitude(theval, bitwidth);
     f = extract_fraction(theval, bitwidth);
