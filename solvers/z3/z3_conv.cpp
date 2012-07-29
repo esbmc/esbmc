@@ -2220,14 +2220,14 @@ z3_convt::convert_smt_expr(const index2t &index, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast source, idx;
+  z3::expr source, idx;
 
   convert_bv(index.source_value, source);
   convert_bv(index.index, idx);
 
   // XXXjmorse - consider situation where a pointer is indexed. Should it
   // give the address of ptroffset + (typesize * index)?
-  output = z3::to_expr(*ctx, Z3_mk_select(z3_ctx, source, idx));
+  output = select(source, idx);
 }
 
 void
