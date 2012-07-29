@@ -1462,7 +1462,7 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  Z3_ast pointer[2], objs[2];
+  z3::expr pointer[2], objs[2];
 
   assert(is_pointer_type(same.side_1->type));
   assert(is_pointer_type(same.side_2->type));
@@ -1470,9 +1470,9 @@ z3_convt::convert_smt_expr(const same_object2t &same, void *_bv)
   convert_bv(same.side_1, pointer[0]);
   convert_bv(same.side_2, pointer[1]);
 
-  objs[0] = mk_tuple_select(pointer[0], 0);
-  objs[1] = mk_tuple_select(pointer[1], 0);
-  output = z3::to_expr(*ctx, Z3_mk_eq(z3_ctx, objs[0], objs[1]));
+  objs[0] = z3::to_expr(*ctx, mk_tuple_select(pointer[0], 0));
+  objs[1] = z3::to_expr(*ctx, mk_tuple_select(pointer[1], 0));
+  output = objs[0] == objs[1];
 }
 
 void
