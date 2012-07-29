@@ -85,7 +85,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 
   // Pre-seed type cache with a few values that might not go in due to
   // specialised code paths.
-  sort_cache.insert(std::pair<const type2tc, Z3_sort>(type_pool.get_bool(),
+  sort_cache.insert(std::pair<const type2tc, z3::sort>(type_pool.get_bool(),
                     ctx->bool_sort()));
 }
 
@@ -252,7 +252,8 @@ z3_convt::init_addr_space_array(void)
   eq = tmp == num;
   assert_formula(eq);
 
-  proj_types[0] = proj_types[1] = ctx->esbmc_int_sort();
+  z3::sort tmp_proj_type = ctx->esbmc_int_sort();
+  proj_types[0] = proj_types[1] = tmp_proj_type;
 
   mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "struct_type_addr_space_tuple");
   proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
@@ -763,8 +764,9 @@ z3_convt::setup_pointer_sort(void)
   proj_names_ref[0] = proj_names[0];
   proj_names_ref[1] = proj_names[1];
 
-  Z3_sort s = Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names_ref, sort_arr,
-                               &mk_tuple_decl, proj_decls);
+  z3::sort s = z3::to_sort(*ctx,
+              Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names_ref, sort_arr,
+                               &mk_tuple_decl, proj_decls));
 
   pointer_sort = new z3::sort(z3::to_sort(*ctx, s));
   Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, s);
@@ -2545,7 +2547,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
   type->convert_smt_type(*this, reinterpret_cast<void*>(&outtype));
 
   // insert into cache
-  sort_cache.insert(std::pair<const type2tc, Z3_sort>(type, outtype));
+  sort_cache.insert(std::pair<const type2tc, z3::sort>(type, outtype));
   return;
 }
 

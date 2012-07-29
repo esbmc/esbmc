@@ -240,7 +240,7 @@ private:
 
   bv_cachet bv_cache;
   union_varst union_vars;
-  typedef hash_map_cont<const type2tc, Z3_sort, type2_hash> sort_cachet;
+  typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
   std::string itos(int i);

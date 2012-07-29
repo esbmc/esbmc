@@ -75,7 +75,7 @@ z3_convt::get(const expr2tc &expr) const
 
     sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
     if (cache_res != sort_cache.end()) {
-      sort = z3::to_sort(*ctx, cache_res->second);
+      sort = cache_res->second;
     } else if (int_encoding && is_bv_type(expr->type)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
