@@ -272,7 +272,7 @@ private:
 
   virtual tvt l_get(literalt a) const;
 
-  Z3_ast z3_literal(literalt l);
+  z3::expr z3_literal(literalt l);
 
   bool process_clause(const bvt &bv, bvt &dest);
 

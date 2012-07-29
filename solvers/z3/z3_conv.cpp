@@ -2601,7 +2601,8 @@ z3_convt::convert_expr(const expr2tc &expr)
     return l;
   }
 
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), constraint));
+  z3::expr thelit = z3_literal(l);
+  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, constraint));
 
   // While we have a literal, don't assert that it's true, only the link
   // between the formula and the literal. Otherwise, we risk asserting that a
@@ -2774,12 +2775,13 @@ z3_convt::land(const bvt &bv)
   z3::expr result, formula;
 
   for (unsigned int i = 0; i < bv.size(); i++) {
-    args[i] = z3::to_expr(*ctx ,z3_literal(bv[i]));
+    args[i] = z3_literal(bv[i]);
     args_ast[i] = args[i];
   }
 
   result = to_expr(*ctx, Z3_mk_and(z3_ctx, bv.size(), args_ast));
-  formula = to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
+  z3::expr thelit = z3_literal(l);
+  formula = to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2796,13 +2798,14 @@ z3_convt::lor(const bvt &bv)
   z3::expr result, formula;
 
   for (unsigned int i = 0; i < bv.size(); i++) {
-    args[i] = z3::expr(*ctx, z3_literal(bv[i]));
+    args[i] = z3_literal(bv[i]);
     args_ast[i] = args[i];
   }
 
   result = z3::to_expr(*ctx, Z3_mk_or(z3_ctx, bv.size(), args_ast));
 
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
+  z3::expr thelit = z3_literal(l);
+  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2820,10 +2823,11 @@ z3_convt::land(literalt a, literalt b)
   literalt l = new_variable();
   z3::expr result, operand[2], formula;
 
-  operand[0] = z3::to_expr(*ctx, z3_literal(a));
-  operand[1] = z3::to_expr(*ctx, z3_literal(b));
+  operand[0] = z3_literal(a);
+  operand[1] = z3_literal(b);
   result = operand[0] && operand[1];
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
+  z3::expr thelit = z3_literal(l);
+  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2842,10 +2846,11 @@ z3_convt::lor(literalt a, literalt b)
   literalt l = new_variable();
   z3::expr result, operand[2], formula;
 
-  operand[0] = z3::to_expr(*ctx, z3_literal(a));
-  operand[1] = z3::to_expr(*ctx, z3_literal(b));
+  operand[0] = z3_literal(a);
+  operand[1] = z3_literal(b);
   result = operand[0] || operand[1];
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), result));
+  z3::expr thelit = z3_literal(l);
+  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2936,7 +2941,7 @@ z3_convt::lcnf(const bvt &bv)
   unsigned int i = 0;
 
   for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++) {
-    args[i] = z3::to_expr(*ctx, z3_literal(*it));
+    args[i] = z3_literal(*it);
     args_ast[i] = args[i];
   }
 
@@ -2948,7 +2953,7 @@ z3_convt::lcnf(const bvt &bv)
   }
 }
 
-Z3_ast
+z3::expr
 z3_convt::z3_literal(literalt l)
 {
 
@@ -2956,15 +2961,15 @@ z3_convt::z3_literal(literalt l)
   std::string literal_s;
 
   if (l == const_literal(false))
-    return Z3_mk_false(z3_ctx);
+    return ctx->bool_val(false);
   else if (l == const_literal(true))
-    return Z3_mk_true(z3_ctx);
+    return ctx->bool_val(true);
 
   literal_s = "l" + i2string(l.var_no());
   literal_l = ctx->constant(literal_s.c_str(), ctx->bool_sort());
 
   if (l.sign()) {
-    return Z3_mk_not(z3_ctx, literal_l);
+    return !literal_l;
   }
 
   return literal_l;
@@ -3011,13 +3016,14 @@ z3_convt::assert_formula(const z3::expr &ast)
   }
 
   literalt l = new_variable();
-  z3::expr formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, z3_literal(l), ast));
+  z3::expr thelit = z3_literal(l);
+  z3::expr formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, ast));
   Z3_assert_cnstr(z3_ctx, formula);
 
   if (smtlib)
     assumpt.push_back(ast);
   else
-    assumpt.push_back(z3::to_expr(*ctx, z3_literal(l)));
+    assumpt.push_back(z3_literal(l));
 
   return;
 }
