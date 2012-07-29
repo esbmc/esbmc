@@ -1406,6 +1406,9 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
   z3::expr op0, op1;
   unsigned width_expr, width_op0, width_op1;
 
+  // XXX jmorse - this should feature real integer promotion, and spit out
+  // lshr if not in BV mode.
+
   convert_bv(part1, op0);
   convert_bv(part2, op1);
 
