@@ -1989,7 +1989,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
 	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
     }
   } else if (is_bool_type(cast.from->type)) {
-    Z3_ast zero = 0, one = 0;
+    z3::expr zero, one;
     unsigned width = cast.type->get_width();
 
     if (is_bv_type(cast.type)) {
@@ -2001,7 +2001,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
     } else {
       throw new conv_error("Unexpected type in typecast of bool");
     }
-    output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, output, one, zero));
+    output = z3::ite(output, one, zero);
   } else   {
     throw new conv_error("Unexpected type in int/ptr typecast");
   }
