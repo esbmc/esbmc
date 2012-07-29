@@ -89,14 +89,20 @@ z3_convt::get(const expr2tc &expr) const
     }
 
     bv = ctx->constant(identifier.c_str(), sort);
+    Z3_inc_ref(*ctx, bv);
     func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
 
-    if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
+    Z3_ast got_bv;
+    if(Z3_eval_func_decl(z3_ctx, model, func, &got_bv) == Z3_L_FALSE) {
       // This symbol doesn't have an assignment in this model
       return expr2tc();
     }
 
-    return bv_get_rec(bv, expr->type);
+    Z3_inc_ref(*ctx, got_bv);
+    expr2tc ret = bv_get_rec(bv, expr->type);
+    Z3_dec_ref(*ctx, got_bv);
+    Z3_dec_ref(*ctx, bv);
+    return ret;
   } else if (is_constant_expr(expr)) {
     return expr;
   } else {

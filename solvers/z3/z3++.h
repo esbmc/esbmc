@@ -1420,8 +1420,7 @@ namespace z3 {
     }
 
     inline void context::init(config & c, bool int_encoding) {
-      // XXXjmorse - should be context_rc, disabled for migration period.
-        m_ctx = Z3_mk_context(c);
+        m_ctx = Z3_mk_context_rc(c);
         Z3_set_error_handler(m_ctx, error_handler);
         Z3_set_ast_print_mode(m_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
 
