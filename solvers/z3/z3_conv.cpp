@@ -1339,7 +1339,7 @@ z3_convt::convert_smt_expr(const div2t &div, void *_bv)
          !is_pointer_type(div.side_2->type) &&
          "Can't divide pointers");
 
-  Z3_ast op0, op1;
+  z3::expr op0, op1;
 
   convert_bv(div.side_1, op0);
   convert_bv(div.side_2, op1);
@@ -2524,26 +2524,6 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       break;
       }
   }
-}
-
-void
-z3_convt::convert_bv(const expr2tc &expr, Z3_ast &bv)
-{
-
-  bv_cachet::const_iterator cache_result = bv_cache.find(expr);
-  if (cache_result != bv_cache.end()) {
-    bv = cache_result->output;
-    return;
-  }
-
-  z3::expr tmp;
-  expr->convert_smt(*this, reinterpret_cast<void*>(&tmp));
-  bv = tmp;
-
-  // insert into cache
-  struct bv_cache_entryt cacheentry = { expr, bv, level_ctx };
-  bv_cache.insert(cacheentry);
-  return;
 }
 
 void

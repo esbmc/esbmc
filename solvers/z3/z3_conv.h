@@ -65,7 +65,6 @@ private:
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
-  void convert_bv(const expr2tc &expr, Z3_ast &bv);
   void convert_bv(const expr2tc &expr, z3::expr &bv);
 
   void convert_typecast_bool(const typecast2t &cast, z3::expr &output);
