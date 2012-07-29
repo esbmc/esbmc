@@ -2090,7 +2090,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
-  Z3_ast *is_in_range = (Z3_ast*)alloca(sizeof(Z3_ast) * addr_space_data.back().size());
+  z3::expr *is_in_range = new z3::expr[addr_space_data.back().size()];
   z3::expr *obj_ids = new z3::expr[addr_space_data.back().size()];
   z3::expr *obj_starts = new z3::expr[addr_space_data.back().size()];
 
@@ -2099,8 +2099,6 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end(); it++, i++)
   {
-    Z3_ast args[2];
-
     unsigned id = it->first;
     obj_ids[i] = ctx->esbmc_int_val(id);
     z3::expr start = ctx->constant(
@@ -2111,15 +2109,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
                                  ctx->esbmc_int_sort());
     obj_starts[i] = start;
 
-    if (int_encoding) {
-      args[0] = Z3_mk_ge(z3_ctx, target, start);
-      args[1] = Z3_mk_le(z3_ctx, target, end);
-    } else {
-      args[0] = Z3_mk_bvuge(z3_ctx, target, start);
-      args[1] = Z3_mk_bvule(z3_ctx, target, end);
-    }
-
-    is_in_range[i] = Z3_mk_and(z3_ctx, 2, args);
+    is_in_range[i] = mk_ge(target, start, true) && mk_le(target, end, true);
   }
 
   // Generate a big ITE chain, selecing a particular pointer offset. A
@@ -2138,7 +2128,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // Calculate ptr offset - target minus start of invalid range, ie 1
   args[1] = target - ctx->esbmc_int_val(1);
 
-  Z3_ast prev_in_chain = (*pointer_decl)(args[0], args[1]);
+  z3::expr prev_in_chain = (*pointer_decl)(args[0], args[1]);
 
   // Now that big ite chain,
   for (i = 0; i < addr_space_data.back().size(); i++) {
@@ -2147,15 +2137,15 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
     // Calculate ptr offset were it this
     args[1] = target - obj_starts[i];
 
-    Z3_ast selected_tuple = (*pointer_decl)(args[0], args[1]);
+    z3::expr selected_tuple = (*pointer_decl)(args[0], args[1]);
 
-    prev_in_chain =
-      Z3_mk_ite(z3_ctx, is_in_range[i], selected_tuple, prev_in_chain);
+    prev_in_chain = z3::ite(is_in_range[i], selected_tuple, prev_in_chain);
   }
 
   // Finally, we're now at the point where prev_in_chain represents a pointer
   // object. Hurrah.
   output = z3::to_expr(*ctx, prev_in_chain);
+  delete[] is_in_range;
   delete[] obj_starts;
   delete[] obj_ids;
 }
