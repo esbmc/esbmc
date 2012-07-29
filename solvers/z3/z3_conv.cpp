@@ -2406,11 +2406,11 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
     greaterthan = expr2tc(new greaterthanequal2t(oper, zero));
   }
 
-  Z3_ast ops[2];
+  z3::expr ops[2];
   convert_bv(lessthan, ops[0]);
   convert_bv(greaterthan, ops[1]);
 
-  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_and(z3_ctx, 2, ops)));
+  output = !(ops[0] && ops[1]);
 }
 
 void
