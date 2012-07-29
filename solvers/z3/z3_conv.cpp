@@ -31,7 +31,6 @@
 #define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *>((arg))))
 #define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
 
-static std::vector<Z3_ast> core_vector;
 static u_int unsat_core_size = 0;
 static u_int assumptions_status = 0;
 
@@ -562,18 +561,6 @@ z3_convt::check2_z3_properties(void)
 
   if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
     std::cout << Z3_model_to_string(z3_ctx, model);
-
-  if (uw && result == Z3_L_FALSE)   {
-    for (i = 0; i < unsat_core_size; ++i)
-    {
-      std::string id = Z3_ast_to_string(z3_ctx, core[i]);
-      if (id.find("false") != std::string::npos) {
-	unsat_core_size = 0;
-	return result;
-      }
-      core_vector.push_back(core[i]);
-    }
-  }
 
   return result;
 }
