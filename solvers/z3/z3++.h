@@ -646,6 +646,7 @@ namespace z3 {
         friend expr z3::mk_add(expr const &a, expr const &b);
         friend expr z3::mk_sub(expr const &a, expr const &b);
         friend expr z3::mk_mul(expr const &a, expr const &b);
+        friend expr z3::mk_div(expr const &a, expr const &b, bool is_unsigned);
 
         friend expr operator&(expr const & a, expr const & b) { check_context(a, b); Z3_ast r = Z3_mk_bvand(a.ctx(), a, b); return expr(a.ctx(), r); }
         friend expr operator&(expr const & a, int b) { return a & a.ctx().num_val(b, a.get_sort()); }
@@ -876,6 +877,27 @@ namespace z3 {
       else {
           // operator is not supported by given arguments.
           assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    inline expr mk_div(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_div(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned) {
+          r = Z3_mk_bvudiv(a.ctx(), a, b);
+        } else {
+          r = Z3_mk_bvsdiv(a.ctx(), a, b);
+        }
+      }
+      else {
+        // operator is not supported by given arguments.
+        assert(false);
       }
       a.check_error();
       return expr(a.ctx(), r);
