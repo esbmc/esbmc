@@ -39,6 +39,9 @@ extern void finalize_symbols(void);
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
+Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
+Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
+                                          Z3_bool is_signed);
 z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 : prop_convt()
 {
@@ -2311,8 +2314,8 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
     convert_bv(to_sub2t(overflow.operand).side_2, operand[1]);
     width_op0 = to_sub2t(overflow.operand).side_1->type->get_width();
     width_op1 = to_sub2t(overflow.operand).side_2->type->get_width();
-    call1 = Z3_mk_bvsub_no_underflow;
-    call2 = Z3_mk_bvsub_no_overflow;
+    call1 = workaround_Z3_mk_bvsub_no_underflow;
+    call2 = workaround_Z3_mk_bvsub_no_overflow;
     if (is_signedbv_type(to_sub2t(overflow.operand).side_1->type) ||
         is_signedbv_type(to_sub2t(overflow.operand).side_2->type))
     is_signed = true;
@@ -3158,4 +3161,76 @@ workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
   Z3_dec_ref(ctx, zero);
   Z3_dec_ref(ctx, (Z3_ast)s);
   return imp;
+}
+
+Z3_ast
+workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
+                                    Z3_bool is_signed)
+{
+
+  if (is_signed) {
+    Z3_sort s = Z3_get_sort(ctx, a1);
+    Z3_inc_ref(ctx, (Z3_ast)s);
+    Z3_ast zero = Z3_mk_int(ctx, 0, s);
+    Z3_inc_ref(ctx, zero);
+    Z3_ast neg = Z3_mk_bvneg(ctx, a2);
+    Z3_inc_ref(ctx, neg);
+    Z3_ast no_under = workaround_Z3_mk_bvadd_no_underflow(ctx, a1, neg);
+    Z3_inc_ref(ctx, no_under);
+    Z3_ast lt1 = Z3_mk_bvslt(ctx, zero, a2);
+    Z3_inc_ref(ctx, lt1);
+    Z3_ast imp = Z3_mk_implies(ctx, lt1, no_under);
+    Z3_dec_ref(ctx, lt1);
+    Z3_dec_ref(ctx, no_under);
+    Z3_dec_ref(ctx, neg);
+    Z3_dec_ref(ctx, zero);
+    Z3_dec_ref(ctx, (Z3_ast)s);
+    return imp;
+  } else {
+    return Z3_mk_bvule(ctx, a2, a1);
+  }
+}
+
+extern "C" Z3_ast Z3_mk_bvsmin(Z3_context, Z3_sort);
+
+Z3_ast
+workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
+{
+
+  Z3_sort s = Z3_get_sort(ctx, a2);
+  Z3_inc_ref(ctx, (Z3_ast)s);
+  Z3_ast neg = Z3_mk_bvneg(ctx, a2);
+  Z3_inc_ref(ctx, neg);
+//  Z3_ast min = Z3_mk_bvsmin(ctx, s);
+//  Z3_inc_ref(ctx, min);
+  Z3_ast min;
+  {
+    unsigned int width = Z3_get_bv_sort_size(ctx, s);
+    Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
+    Z3_inc_ref(ctx, sz);
+    Z3_ast one = Z3_mk_int64(ctx, width, s);
+    Z3_inc_ref(ctx, one);
+    Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
+    Z3_inc_ref(ctx, msb);
+    min = msb;
+    Z3_dec_ref(ctx, one);
+    Z3_dec_ref(ctx, sz);
+  }
+  Z3_ast no_over = workaround_Z3_mk_bvadd_no_overflow(ctx, a1, neg, 1);
+  Z3_inc_ref(ctx, no_over);
+  Z3_ast zero = Z3_mk_int(ctx, 0, s);
+  Z3_inc_ref(ctx, zero);
+  Z3_ast lt = Z3_mk_bvslt(ctx, a1, zero);
+  Z3_inc_ref(ctx, lt);
+  Z3_ast eq = Z3_mk_eq(ctx, a2, min);
+  Z3_inc_ref(ctx, eq);
+  Z3_ast ite = Z3_mk_ite(ctx, eq, lt, no_over);
+  Z3_dec_ref(ctx, eq);
+  Z3_dec_ref(ctx, lt);
+  Z3_dec_ref(ctx, zero);
+  Z3_dec_ref(ctx, no_over);
+  Z3_dec_ref(ctx, min);
+  Z3_dec_ref(ctx, neg);
+  Z3_dec_ref(ctx, (Z3_ast)s);
+  return ite;
 }
