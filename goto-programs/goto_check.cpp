@@ -684,13 +684,6 @@ void goto_checkt::check_rec(
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", false);
   }
-
-  if (options.get_bool_option("qf_auflira"))
-  {
-    options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
-    options.set_option("int-encoding", true);
-  }
-
 }
 
 /*******************************************************************\
