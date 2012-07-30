@@ -68,7 +68,6 @@ z3_convt::get(const expr2tc &expr) const
     std::string identifier, tmp;
     z3::sort sort;
     Z3_ast bv;
-    Z3_func_decl func;
 
     const symbol2t sym = to_symbol2t(expr);
     identifier = sym.get_symbol_name();
@@ -90,19 +89,17 @@ z3_convt::get(const expr2tc &expr) const
 
     bv = ctx->constant(identifier.c_str(), sort);
     Z3_inc_ref(*ctx, bv);
-    func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
-    Z3_inc_ref(*ctx, (Z3_ast)func);
 
     Z3_ast got_bv;
-    if(Z3_eval_func_decl(z3_ctx, model, func, &got_bv) == Z3_L_FALSE) {
+    Z3_bool res = Z3_model_eval(z3_ctx, model, bv, false, &got_bv);
+    if (!res) {
       // This symbol doesn't have an assignment in this model
       return expr2tc();
     }
 
     Z3_inc_ref(*ctx, got_bv);
-    expr2tc ret = bv_get_rec(bv, expr->type);
+    expr2tc ret = bv_get_rec(got_bv, expr->type);
     Z3_dec_ref(*ctx, got_bv);
-    Z3_dec_ref(*ctx, (Z3_ast)func);
     Z3_dec_ref(*ctx, bv);
     return ret;
   } else if (is_constant_expr(expr)) {
