@@ -109,11 +109,20 @@ namespace z3 {
           }
         void init(config & c, bool int_encoding);
         context(context const & s);
-        context & operator=(context const & s);
+
     public:
+        context(void) : m_ctx(NULL), m_esbmc_int_sort(NULL), int_encoding(false) { }
         context(config & c, bool use_ints) : int_encoding(use_ints) { init(c, use_ints); }
         ~context() { Z3_del_context(m_ctx); }
         operator Z3_context() const { return m_ctx; }
+
+        // XXX jmorse - use with extreme caution. This is effectively a copy
+        // constructor, but in disguise so that it isn't accidentally used.
+        void copyin(context const & s) {
+          m_ctx = s.m_ctx;
+          m_esbmc_int_sort = s.m_esbmc_int_sort;
+          int_encoding = s.int_encoding;
+        }
 
         /**
            \brief Auxiliary method used to check for API usage errors.
