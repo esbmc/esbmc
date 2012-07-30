@@ -2977,7 +2977,7 @@ z3_convt::l_get(literalt a) const
                            irep_idt("l" + i2string(a.var_no()))));
   expr2tc res = get(sym);
 
-  if (is_constant_bool2t(res)) {
+  if (!is_nil_expr(res) && is_constant_bool2t(res)) {
     result = (to_constant_bool2t(res).is_true())
              ? tvt(tvt::TV_TRUE) : tvt(tvt::TV_FALSE);
   } else {
