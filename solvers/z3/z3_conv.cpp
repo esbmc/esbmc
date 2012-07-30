@@ -28,7 +28,7 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
-#define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *>((arg))))
+#define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *&>((arg))))
 #define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
 
 static u_int unsat_core_size = 0;
