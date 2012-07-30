@@ -1911,10 +1911,11 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     } else   {
       assert(to_integer_bits > from_integer_bits);
 
+      z3::expr ext = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, from_width - 1,
+                                                     from_fraction_bits,
+                                                     output));
       magnitude = z3::to_expr(*ctx,
-        Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits),
-                       Z3_mk_extract(z3_ctx, from_width - 1, from_fraction_bits,
-                                     output)));
+        Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits), ext));
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
