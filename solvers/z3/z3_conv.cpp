@@ -229,7 +229,8 @@ z3_convt::intr_pop_ctx(void)
 void
 z3_convt::init_addr_space_array(void)
 {
-  Z3_symbol mk_tuple_name, proj_names[2];
+  z3::symbol mk_tuple_name, proj_names[2];
+  Z3_symbol proj_names_sym[2];
   Z3_sort proj_types[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
 
@@ -263,13 +264,15 @@ z3_convt::init_addr_space_array(void)
   z3::sort tmp_proj_type = ctx->esbmc_int_sort();
   proj_types[0] = proj_types[1] = tmp_proj_type;
 
-  mk_tuple_name = Z3_mk_string_symbol(z3_ctx, "struct_type_addr_space_tuple");
-  proj_names[0] = Z3_mk_string_symbol(z3_ctx, "start");
-  proj_names[1] = Z3_mk_string_symbol(z3_ctx, "end");
+  mk_tuple_name = z3::symbol(*ctx, "struct_type_addr_space_tuple");
+  proj_names[0] = z3::symbol(*ctx, "start");
+  proj_names[1] = z3::symbol(*ctx, "end");
+  proj_names_sym[0] = proj_names[0];
+  proj_names_sym[1] = proj_names[1];
 
   addr_space_tuple_sort = new z3::sort(z3::to_sort(*ctx, Z3_mk_tuple_sort(
                                                  *ctx, mk_tuple_name, 2,
-                                                 proj_names, proj_types,
+                                                 proj_names_sym, proj_types,
                                                  &mk_tuple_decl, proj_decls)));
   Z3_func_decl tmp_addr_space_decl =
     Z3_get_tuple_sort_mk_decl(*ctx, *addr_space_tuple_sort);
