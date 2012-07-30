@@ -132,7 +132,9 @@ z3_convt::~z3_convt()
 
   // Don't destruct with Z3 items still in existance.
   bv_cache.clear();
+  assumpt_ctx_stack.clear();
   assumpt.clear();
+  sort_cache.clear();
 
   delete pointer_decl;
   delete pointer_sort;
