@@ -59,7 +59,7 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
 }
 
 expr2tc
-z3_convt::get(const expr2tc &expr) const
+z3_convt::get(const expr2tc &expr)
 {
 
   try {
@@ -118,7 +118,7 @@ z3_convt::get(const expr2tc &expr) const
 }
 
 expr2tc
-z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
+z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
 {
   Z3_app app;
   unsigned width;

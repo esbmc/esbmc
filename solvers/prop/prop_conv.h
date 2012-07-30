@@ -58,7 +58,7 @@ public:
   virtual literalt convert(const expr2tc &expr);
 
   // get a value from counterexample if not valid
-  virtual expr2tc get(const expr2tc &expr) const = 0;
+  virtual expr2tc get(const expr2tc &expr) = 0;
   
   virtual void clear_cache()
   {
@@ -90,7 +90,7 @@ public:
   virtual const std::string solver_text()=0;
 
   // satisfying assignment
-  virtual tvt l_get(literalt a) const=0;
+  virtual tvt l_get(literalt a)=0;
 
 protected:
   virtual literalt convert_expr(const expr2tc &expr) = 0;

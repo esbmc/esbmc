@@ -17,7 +17,7 @@ Date: July 2005
 
 void build_goto_trace(
   const symex_target_equationt &target,
-  const prop_convt &prop_conv,
+  prop_convt &prop_conv,
   goto_tracet &goto_trace);
 
 #endif

@@ -54,7 +54,7 @@ public:
   void set_z3_core_size(uint val);
 
   // overloading
-  virtual expr2tc get(const expr2tc &expr) const;
+  virtual expr2tc get(const expr2tc &expr);
 
 private:
   virtual literalt convert_expr(const expr2tc &expr);
@@ -193,7 +193,7 @@ private:
 	const unsigned width,
     std::string value) const;
 
-  expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type) const;
+  expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
   std::list<pointer_logict> pointer_logic;
 
@@ -267,7 +267,7 @@ private:
   virtual const std::string solver_text()
   { return "Z3"; }
 
-  virtual tvt l_get(literalt a) const;
+  virtual tvt l_get(literalt a);
 
   z3::expr z3_literal(literalt l);
 

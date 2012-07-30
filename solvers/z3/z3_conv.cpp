@@ -2969,7 +2969,7 @@ z3_convt::z3_literal(literalt l)
 }
 
 tvt
-z3_convt::l_get(literalt a) const
+z3_convt::l_get(literalt a)
 {
   tvt result = tvt(tvt::TV_ASSUME);
   std::string literal;

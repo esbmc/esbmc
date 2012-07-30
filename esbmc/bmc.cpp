@@ -89,7 +89,7 @@ Function: bmct::error_trace
 
 \*******************************************************************/
 
-void bmct::error_trace(const prop_convt &prop_conv,
+void bmct::error_trace(prop_convt &prop_conv,
                        symex_target_equationt &equation)
 {
   status("Building error trace");

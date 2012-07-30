@@ -14,7 +14,7 @@ Author: Daniel Kroening
 
 void build_goto_trace(
   const symex_target_equationt &target,
-  const prop_convt &prop_conv,
+  prop_convt &prop_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
