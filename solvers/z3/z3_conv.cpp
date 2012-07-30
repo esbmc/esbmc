@@ -2444,7 +2444,9 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
   if (int_encoding)
     operand = to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, operand));
 
-  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, Z3_mk_bvneg_no_overflow(z3_ctx, operand)));
+  z3::expr no_over = z3::to_expr(*ctx,
+                                 Z3_mk_bvneg_no_overflow(z3_ctx, operand));
+  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, no_over));
 }
 
 void
