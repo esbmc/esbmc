@@ -1357,11 +1357,12 @@ z3_convt::convert_smt_expr(const div2t &div, void *_bv)
 
     unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
 
-    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0,
-                           Z3_mk_bvsdiv(z3_ctx,
-                                Z3_mk_concat(z3_ctx, op0,
-                                      ctx->esbmc_int_val(0, fraction_bits)),
-                                Z3_mk_sign_ext(z3_ctx, fraction_bits, op1))));
+    z3::expr zero = ctx->esbmc_int_val(0, fraction_bits);
+    z3::expr cat = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, op0, zero));
+    z3::expr sext = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits,
+                                op1));
+    z3::expr div = mk_div(cat, sext, false);
+    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0, div));
   }
 }
 
