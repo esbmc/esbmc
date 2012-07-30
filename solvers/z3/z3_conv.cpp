@@ -42,6 +42,7 @@ Z3_ast workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
 Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
 Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
+Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 : prop_convt()
 {
@@ -2445,7 +2446,7 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
     operand = to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, operand));
 
   z3::expr no_over = z3::to_expr(*ctx,
-                                 Z3_mk_bvneg_no_overflow(z3_ctx, operand));
+                           workaround_Z3_mk_bvneg_no_overflow(z3_ctx, operand));
   output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, no_over));
 }
 
@@ -3267,4 +3268,32 @@ workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
   Z3_dec_ref(ctx, neg);
   Z3_dec_ref(ctx, (Z3_ast)s);
   return ite;
+}
+
+Z3_ast
+workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a)
+{
+
+  Z3_sort s = Z3_get_sort(ctx, a);
+  Z3_inc_ref(ctx, (Z3_ast)s);
+  Z3_ast min;
+  {
+    unsigned int width = Z3_get_bv_sort_size(ctx, s);
+    Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
+    Z3_inc_ref(ctx, sz);
+    Z3_ast one = Z3_mk_int64(ctx, width, s);
+    Z3_inc_ref(ctx, one);
+    Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
+    Z3_inc_ref(ctx, msb);
+    min = msb;
+    Z3_dec_ref(ctx, one);
+    Z3_dec_ref(ctx, sz);
+  }
+  Z3_ast eq = Z3_mk_eq(ctx, a, min);
+  Z3_inc_ref(ctx, eq);
+  Z3_ast thenot = Z3_mk_not(ctx, eq);
+  Z3_dec_ref(ctx, eq);
+  Z3_dec_ref(ctx, min);
+  Z3_dec_ref(ctx, (Z3_ast)s);
+  return thenot;
 }
