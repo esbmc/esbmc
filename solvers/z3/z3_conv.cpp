@@ -3076,6 +3076,20 @@ namespace z3 {
   }
 };
 
+// Caution: these workaround functions are a derived work from disassembling
+// Z3 and adding reference counting to them. Technically they're derivative
+// works that the microsoft research license demands be licensed under the
+// microsoft research license, which puts us in a tricky copyright situation.
+//
+// Section 50C of the copyright act states that I can fix their software if
+// necessary, but says nothing of distribution, and says that I can't ignore
+// terms in MS' license restricting its lawful use.
+//
+// So, don't distribute this.
+#ifdef NDEBUG
+#error Don't distribute/release shadily licensed MS workaround code. And don't delete this error without asking jmorse.
+#endif
+
 Z3_ast
 workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                    Z3_bool is_signed)
