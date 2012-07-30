@@ -2343,6 +2343,9 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
     convert_bv(to_mul2t(overflow.operand).side_2, operand[1]);
     width_op0 = to_mul2t(overflow.operand).side_1->type->get_width();
     width_op1 = to_mul2t(overflow.operand).side_2->type->get_width();
+    // XXX jmorse - no reference counting workaround for this; disassembling
+    // these Z3 routines show that they've been touched by reference count
+    // switchover, and so are likely actually reference counting correctly.
     call1 = Z3_mk_bvmul_no_overflow;
     call2 = Z3_mk_bvmul_no_underflow;
     if (is_signedbv_type(to_mul2t(overflow.operand).side_1->type) ||
