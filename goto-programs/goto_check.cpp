@@ -671,10 +671,6 @@ void goto_checkt::check_rec(
   }
   else if (expr.type().id()=="fixedbv")
   {
-	options.set_option("z3", true);
-	if (!options.get_bool_option("z3-bv"))
-          options.set_option("int-encoding", true);
-
 	if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
   }
