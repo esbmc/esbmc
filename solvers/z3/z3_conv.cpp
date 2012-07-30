@@ -2277,18 +2277,19 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *_bv)
 
     convert_bv(isnan.value, op0);
 
-    if (int_encoding)
-      output = z3::to_expr(*ctx,
-        Z3_mk_ite(z3_ctx,
-                  Z3_mk_ge(z3_ctx,
-                           Z3_mk_real2int(z3_ctx,
-                                          op0), ctx->esbmc_int_val(0, width)),
-                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx))
-        );
-    else
-      output = z3::to_expr(*ctx,
-        Z3_mk_ite(z3_ctx, Z3_mk_bvsge(z3_ctx, op0, ctx->esbmc_int_val(0, width)),
-                  Z3_mk_true(z3_ctx), Z3_mk_false(z3_ctx)));
+    z3::expr t = ctx->bool_val(true);
+    z3::expr f = ctx->bool_val(false);
+    if (int_encoding) {
+      z3::expr zero = ctx->esbmc_int_val(0, width);
+      z3::expr r2int = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, op0));
+      z3::expr ge = mk_ge(r2int, zero, true); // sign unimportant in int mode
+
+      output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, ge, t, f));
+    } else {
+      z3::expr zero = ctx->esbmc_int_val(0, width);
+      z3::expr ge = mk_ge(op0, zero, false); // In original, always signed ge?
+      output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, ge, t, f));
+    }
   } else {
     throw new conv_error("isnan with unsupported operand type");
   }
