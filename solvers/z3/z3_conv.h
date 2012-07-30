@@ -291,17 +291,17 @@ private:
 
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;
-  z3::sort *addr_space_tuple_sort;
-  z3::sort *addr_space_arr_sort;
-  z3::func_decl *addr_space_tuple_decl;
+  z3::sort addr_space_tuple_sort;
+  z3::sort addr_space_arr_sort;
+  z3::func_decl addr_space_tuple_decl;
   std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
   std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
 
-  z3::sort *pointer_sort;
-  z3::func_decl *pointer_decl;
+  z3::sort pointer_sort;
+  z3::func_decl pointer_decl;
 
 public:
   class conv_error {
@@ -321,7 +321,7 @@ public:
   };
 
 public:
-  z3::context *ctx;
+  z3::context ctx;
   Z3_context z3_ctx;
   static bool s_is_uw;
 };

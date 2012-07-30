@@ -78,7 +78,7 @@ z3_convt::get(const expr2tc &expr) const
     } else if (int_encoding && is_bv_type(expr->type)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
-      sort = ctx->int_sort();
+      sort = ctx.int_sort();
     } else {
       // This doesn't work; can't be bothered to debug it either.
       //assert(cache_res != sort_cache.end() && "No cached copy of type when "
@@ -87,8 +87,8 @@ z3_convt::get(const expr2tc &expr) const
       ourselves->convert_type(expr->type, sort);
     }
 
-    bv = ctx->constant(identifier.c_str(), sort);
-    Z3_inc_ref(*ctx, bv);
+    bv = ctx.constant(identifier.c_str(), sort);
+    Z3_inc_ref(ctx, bv);
 
     Z3_ast got_bv;
     Z3_bool res = Z3_model_eval(z3_ctx, model, bv, false, &got_bv);
@@ -97,10 +97,10 @@ z3_convt::get(const expr2tc &expr) const
       return expr2tc();
     }
 
-    Z3_inc_ref(*ctx, got_bv);
+    Z3_inc_ref(ctx, got_bv);
     expr2tc ret = bv_get_rec(got_bv, expr->type);
-    Z3_dec_ref(*ctx, got_bv);
-    Z3_dec_ref(*ctx, bv);
+    Z3_dec_ref(ctx, got_bv);
+    Z3_dec_ref(ctx, bv);
     return ret;
   } else if (is_constant_expr(expr)) {
     return expr;

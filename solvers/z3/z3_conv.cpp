@@ -51,9 +51,9 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   conf.set("RELEVANCY", 0);
   conf.set("SOLVER", true);
 
-  ctx = new z3::context(conf, int_encoding);
+  ctx.init(conf, int_encoding);
 
-  z3_ctx = *ctx;
+  z3_ctx = ctx;
 
   this->int_encoding = int_encoding;
 
@@ -93,7 +93,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   // Pre-seed type cache with a few values that might not go in due to
   // specialised code paths.
   sort_cache.insert(std::pair<const type2tc, z3::sort>(type_pool.get_bool(),
-                    ctx->bool_sort()));
+                    ctx.bool_sort()));
 }
 
 
@@ -108,7 +108,7 @@ z3_convt::~z3_convt()
     Z3_string smt_lib_str, logic;
     Z3_ast assumpt_array_ast[assumpt.size() + 1];
     z3::expr formula;
-    formula = ctx->bool_val(true);
+    formula = ctx.bool_val(true);
 
     std::list<z3::expr>::const_iterator it;
     unsigned int i;
@@ -136,13 +136,6 @@ z3_convt::~z3_convt()
   assumpt_ctx_stack.clear();
   assumpt.clear();
   sort_cache.clear();
-
-  delete pointer_decl;
-  delete pointer_sort;
-  delete addr_space_tuple_decl;
-  delete addr_space_arr_sort;
-  delete addr_space_tuple_sort;
-  delete ctx;
 }
 
 void
@@ -240,64 +233,64 @@ z3_convt::init_addr_space_array(void)
   // Place locations of numerical addresses for null and invalid_obj.
 
   z3::expr tmp =
-    ctx->constant("__ESBMC_ptr_obj_start_0", ctx->esbmc_int_sort());
-  z3::expr num = ctx->esbmc_int_val(0);
+    ctx.constant("__ESBMC_ptr_obj_start_0", ctx.esbmc_int_sort());
+  z3::expr num = ctx.esbmc_int_val(0);
   z3::expr eq = tmp == num;
 
   assert_formula(eq);
 
-  tmp = ctx->constant("__ESBMC_ptr_obj_end_0", ctx->esbmc_int_sort());
-  num = ctx->esbmc_int_val(0);
+  tmp = ctx.constant("__ESBMC_ptr_obj_end_0", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val(0);
   eq = tmp == num;
 
   assert_formula(eq);
 
-  tmp = ctx->constant("__ESBMC_ptr_obj_start_1", ctx->esbmc_int_sort());
-  num = ctx->esbmc_int_val(1);
+  tmp = ctx.constant("__ESBMC_ptr_obj_start_1", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val(1);
   eq = tmp == num;
   assert_formula(eq);
 
-  tmp = ctx->constant("__ESBMC_ptr_obj_end_1", ctx->esbmc_int_sort());
-  num = ctx->esbmc_int_val((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+  tmp = ctx.constant("__ESBMC_ptr_obj_end_1", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val((uint64_t)0xFFFFFFFFFFFFFFFFULL);
   eq = tmp == num;
   assert_formula(eq);
 
-  z3::sort tmp_proj_type = ctx->esbmc_int_sort();
+  z3::sort tmp_proj_type = ctx.esbmc_int_sort();
   proj_types[0] = proj_types[1] = tmp_proj_type;
 
-  mk_tuple_name = z3::symbol(*ctx, "struct_type_addr_space_tuple");
-  proj_names[0] = z3::symbol(*ctx, "start");
-  proj_names[1] = z3::symbol(*ctx, "end");
+  mk_tuple_name = z3::symbol(ctx, "struct_type_addr_space_tuple");
+  proj_names[0] = z3::symbol(ctx, "start");
+  proj_names[1] = z3::symbol(ctx, "end");
   proj_names_sym[0] = proj_names[0];
   proj_names_sym[1] = proj_names[1];
 
-  addr_space_tuple_sort = new z3::sort(z3::to_sort(*ctx, Z3_mk_tuple_sort(
-                                                 *ctx, mk_tuple_name, 2,
-                                                 proj_names_sym, proj_types,
-                                                 &mk_tuple_decl, proj_decls)));
+  addr_space_tuple_sort = z3::to_sort(ctx, Z3_mk_tuple_sort(
+                                      ctx, mk_tuple_name, 2,
+                                      proj_names_sym, proj_types,
+                                      &mk_tuple_decl, proj_decls));
   Z3_func_decl tmp_addr_space_decl =
-    Z3_get_tuple_sort_mk_decl(*ctx, *addr_space_tuple_sort);
-  addr_space_tuple_decl = new z3::func_decl(*ctx, tmp_addr_space_decl);
+    Z3_get_tuple_sort_mk_decl(ctx, addr_space_tuple_sort);
+  addr_space_tuple_decl = z3::func_decl(ctx, tmp_addr_space_decl);
 
   // Generate initial array with all zeros for all fields.
-  addr_space_arr_sort = new z3::sort(
-                     ctx->array_sort(ctx->esbmc_int_sort(), *addr_space_tuple_sort));
+  addr_space_arr_sort = 
+                  ctx.array_sort(ctx.esbmc_int_sort(), addr_space_tuple_sort);
 
-  num = ctx->esbmc_int_val(0);
+  num = ctx.esbmc_int_val(0);
 
   z3::expr initial_val =
-    addr_space_tuple_decl->make_tuple("", &num, &num, NULL);
+    addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
 
-  z3::expr initial_const = z3::const_array(ctx->esbmc_int_sort(), initial_val);
+  z3::expr initial_const = z3::const_array(ctx.esbmc_int_sort(), initial_val);
   z3::expr first_name =
-    ctx->constant("__ESBMC_addrspace_arr_0", *addr_space_arr_sort);
+    ctx.constant("__ESBMC_addrspace_arr_0", addr_space_arr_sort);
 
   eq = first_name == initial_const;
   assert_formula(eq);
 
   z3::expr range_tuple =
-    ctx->constant("__ESBMC_ptr_addr_range_0", *addr_space_tuple_sort);
-  initial_val = addr_space_tuple_decl->make_tuple("", &num, &num, NULL);
+    ctx.constant("__ESBMC_ptr_addr_range_0", addr_space_tuple_sort);
+  initial_val = addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
 
   eq = initial_val == range_tuple;
   assert_formula(eq);
@@ -306,10 +299,10 @@ z3_convt::init_addr_space_array(void)
 
   // We also have to initialize the invalid object... however, I've no idea
   // what it /means/ yet, so go for some arbitary value.
-  num = ctx->esbmc_int_val(1);
-  range_tuple = ctx->constant("__ESBMC_ptr_addr_range_1",
-                              *addr_space_tuple_sort);
-  initial_val = addr_space_tuple_decl->make_tuple("", &num, &num, NULL);
+  num = ctx.esbmc_int_val(1);
+  range_tuple = ctx.constant("__ESBMC_ptr_addr_range_1",
+                              addr_space_tuple_sort);
+  initial_val = addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
   eq = initial_val == range_tuple;
   assert_formula(eq);
 
@@ -319,15 +312,15 @@ z3_convt::init_addr_space_array(void)
   // of the situation where 0 is valid as a representation of null, but the
   // frontend (for whatever reasons) converts it to a symbol rather than the
   // way it handles NULL (constant with val "NULL")
-  z3::expr zero_sym = ctx->constant("0", *pointer_sort);
+  z3::expr zero_sym = ctx.constant("0", pointer_sort);
 
-  z3::expr zero_int= ctx->esbmc_int_val(0);
-  z3::expr ptr_val = (*pointer_decl)(zero_int, zero_int);
+  z3::expr zero_int= ctx.esbmc_int_val(0);
+  z3::expr ptr_val = pointer_decl(zero_int, zero_int);
   z3::expr constraint = zero_sym == ptr_val;
   assert_formula(constraint);
 
   // Do the same thing, for the name "NULL".
-  z3::expr null_sym = ctx->constant("NULL", *pointer_sort);
+  z3::expr null_sym = ctx.constant("NULL", pointer_sort);
   constraint = null_sym == ptr_val;
   assert_formula(constraint);
 
@@ -336,10 +329,10 @@ z3_convt::init_addr_space_array(void)
   // using this should extract only the object number.
 
   z3::expr args[2];
-  args[0] = ctx->esbmc_int_val(1);
-  args[1] = ctx->fresh_const(NULL, *pointer_sort);
+  args[0] = ctx.esbmc_int_val(1);
+  args[1] = ctx.fresh_const(NULL, pointer_sort);
   z3::expr invalid = mk_tuple_update(args[1], 0, args[0]);
-  z3::expr invalid_name = ctx->constant("INVALID", *pointer_sort);
+  z3::expr invalid_name = ctx.constant("INVALID", pointer_sort);
   constraint = invalid == invalid_name;
   assert_formula(constraint);
 
@@ -356,13 +349,13 @@ z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
   std::string str, new_str;
 
   str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
-  z3::expr addr_sym = ctx->constant(str.c_str(), *addr_space_arr_sort);
-  z3::expr obj_idx = ctx->esbmc_int_val(idx);
+  z3::expr addr_sym = ctx.constant(str.c_str(), addr_space_arr_sort);
+  z3::expr obj_idx = ctx.esbmc_int_val(idx);
 
   z3::expr store = z3::store(addr_sym, obj_idx, val);
 
   new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
-  z3::expr new_addr_sym = ctx->constant(new_str.c_str(), *addr_space_arr_sort);
+  z3::expr new_addr_sym = ctx.constant(new_str.c_str(), addr_space_arr_sort);
 
   z3::expr eq = new_addr_sym == store;
   assert_formula(eq);
@@ -470,24 +463,24 @@ z3_convt::finalize_pointer_chain(unsigned int objnum)
   // object nums don't overlap the current one. So for every particular pair
   // of object numbers in the set there'll be a doesn't-overlap clause.
 
-  z3::expr i_start = ctx->constant(
+  z3::expr i_start = ctx.constant(
                        ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
-                       ctx->esbmc_int_sort());
-  z3::expr i_end = ctx->constant(
+                       ctx.esbmc_int_sort());
+  z3::expr i_end = ctx.constant(
                        ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
-                       ctx->esbmc_int_sort());
+                       ctx.esbmc_int_sort());
 
   for (unsigned j = 0; j < objnum; j++) {
     // Obj 1 is designed to overlap
     if (j == 1)
       continue;
 
-    z3::expr j_start = ctx->constant(
+    z3::expr j_start = ctx.constant(
                        ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                       ctx->esbmc_int_sort());
-    z3::expr j_end = ctx->constant(
+                       ctx.esbmc_int_sort());
+    z3::expr j_end = ctx.constant(
                        ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                       ctx->esbmc_int_sort());
+                       ctx.esbmc_int_sort());
 
     // Formula: (i_end < j_start) || (i_start > j_end)
     // Previous assertions ensure start < end for all objs.
@@ -584,7 +577,7 @@ z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
 {
   z3::sort &sort = cast_to_z3_sort(_bv);
 
-  sort = ctx->bool_sort();
+  sort = ctx.bool_sort();
   return;
 }
 
@@ -594,10 +587,10 @@ z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *_bv)
   z3::sort &sort = cast_to_z3_sort(_bv);
 
   if (int_encoding) {
-    sort = ctx->esbmc_int_sort();
+    sort = ctx.esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
-    sort = ctx->bv_sort(width);
+    sort = ctx.bv_sort(width);
   }
 
   return;
@@ -609,10 +602,10 @@ z3_convt::convert_smt_type(const signedbv_type2t &type, void *_bv)
   z3::sort &sort = cast_to_z3_sort(_bv);
 
   if (int_encoding) {
-    sort = ctx->esbmc_int_sort();
+    sort = ctx.esbmc_int_sort();
   } else {
     unsigned int width = type.get_width();
-    sort = ctx->bv_sort(width);
+    sort = ctx.bv_sort(width);
   }
 
   return;
@@ -624,7 +617,7 @@ z3_convt::convert_smt_type(const array_type2t &type, void *_bv)
   z3::sort &sort = cast_to_z3_sort(_bv), elem_sort;
 
   convert_type(type.subtype, elem_sort);
-  sort = ctx->array_sort(ctx->esbmc_int_sort(), elem_sort);
+  sort = ctx.array_sort(ctx.esbmc_int_sort(), elem_sort);
 
   return;
 }
@@ -643,16 +636,16 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   Z3_symbol proj_names[2];
   Z3_sort proj_types[2];
 
-  tuple_name = z3::symbol(*ctx, "pointer_tuple");
-  int_sort = ctx->esbmc_int_sort();
+  tuple_name = z3::symbol(ctx, "pointer_tuple");
+  int_sort = ctx.esbmc_int_sort();
   proj_types[0] = proj_types[1] = int_sort;
 
-  proj_name_refs[0] = z3::symbol(*ctx, "object");
-  proj_name_refs[1] = z3::symbol(*ctx, "index");
+  proj_name_refs[0] = z3::symbol(ctx, "object");
+  proj_name_refs[1] = z3::symbol(ctx, "index");
   proj_names[0] = proj_name_refs[0];
   proj_names[1] = proj_name_refs[1];
 
-  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, tuple_name, 2, proj_names,
+  sort = z3::to_sort(ctx, Z3_mk_tuple_sort(ctx, tuple_name, 2, proj_names,
                                        proj_types, &mk_tuple_decl, proj_decls));
   return;
 }
@@ -680,10 +673,10 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
 
   name = ((uni) ? "union" : "struct" );
   name += "_type_" + struct_name.as_string();
-  mk_tuple_name = z3::symbol(*ctx, name.c_str());
+  mk_tuple_name = z3::symbol(ctx, name.c_str());
 
   if (!members.size()) {
-    sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, NULL));
+    sort = z3::to_sort(ctx, Z3_mk_tuple_sort(ctx, mk_tuple_name, 0, NULL, NULL, &mk_tuple_decl, NULL));
     return;
   }
 
@@ -692,16 +685,16 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   for (std::vector<type2tc>::const_iterator it = members.begin();
        it != members.end(); it++, mname++, i++)
   {
-    proj_names[i] = z3::symbol(*ctx, mname->as_string().c_str());
+    proj_names[i] = z3::symbol(ctx, mname->as_string().c_str());
     convert_type(*it, proj_types[i]);
   }
 
   if (uni) {
     // ID field records last value written to union
-    proj_names[num_elems - 1] = z3::symbol(*ctx, "id");
+    proj_names[num_elems - 1] = z3::symbol(ctx, "id");
     // XXXjmorse - must this field really become a bitfield, ever? It's internal
     // tracking data, not program data.
-    proj_types[num_elems - 1] = ctx->esbmc_int_sort();
+    proj_types[num_elems - 1] = ctx.esbmc_int_sort();
   }
 
   // Unpack pointers from Z3++ objects.
@@ -712,7 +705,7 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
     unpacked_sorts[i] = proj_types[i];
   }
 
-  sort = z3::to_sort(*ctx, Z3_mk_tuple_sort(*ctx, mk_tuple_name, num_elems,
+  sort = z3::to_sort(ctx, Z3_mk_tuple_sort(ctx, mk_tuple_name, num_elems,
                            unpacked_symbols, unpacked_sorts, &mk_tuple_decl,
                            proj_decls));
 
@@ -751,9 +744,9 @@ z3_convt::convert_smt_type(const fixedbv_type2t &type, void *_bv)
   unsigned int width = type.get_width();
 
   if (int_encoding)
-    sort = ctx->real_sort();
+    sort = ctx.real_sort();
   else
-    sort = ctx->bv_sort(width);
+    sort = ctx.bv_sort(width);
 
   return;
 }
@@ -767,22 +760,22 @@ z3_convt::setup_pointer_sort(void)
   Z3_sort sort_arr[2];
   Z3_func_decl mk_tuple_decl, proj_decls[2];
 
-  proj_type = ctx->esbmc_int_sort();
+  proj_type = ctx.esbmc_int_sort();
   sort_arr[0] = sort_arr[1] = proj_type;
 
-  mk_tuple_name = z3::symbol(*ctx, "pointer_tuple");
-  proj_names[0] = z3::symbol(*ctx, "object");
-  proj_names[1] = z3::symbol(*ctx, "index");
+  mk_tuple_name = z3::symbol(ctx, "pointer_tuple");
+  proj_names[0] = z3::symbol(ctx, "object");
+  proj_names[1] = z3::symbol(ctx, "index");
   proj_names_ref[0] = proj_names[0];
   proj_names_ref[1] = proj_names[1];
 
-  z3::sort s = z3::to_sort(*ctx,
-              Z3_mk_tuple_sort(*ctx, mk_tuple_name, 2, proj_names_ref, sort_arr,
+  z3::sort s = z3::to_sort(ctx,
+              Z3_mk_tuple_sort(ctx, mk_tuple_name, 2, proj_names_ref, sort_arr,
                                &mk_tuple_decl, proj_decls));
 
-  pointer_sort = new z3::sort(z3::to_sort(*ctx, s));
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, s);
-  pointer_decl = new z3::func_decl(z3::func_decl(*ctx, decl));
+  pointer_sort = z3::to_sort(ctx, s);
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, s);
+  pointer_decl = z3::func_decl(ctx, decl);
   return;
 }
 
@@ -794,15 +787,15 @@ z3_convt::convert_smt_expr(const symbol2t &sym, void *_bv)
   // References to unsigned int identifiers need to be assumed to be > 0,
   // otherwise the solver is free to assign negative nums to it.
   if (is_unsignedbv_type(sym.type) && int_encoding) {
-    output = ctx->constant((sym.get_symbol_name().c_str()), ctx->int_sort());
-    z3::expr formula = mk_ge(output, ctx->int_val(0), true);
+    output = ctx.constant((sym.get_symbol_name().c_str()), ctx.int_sort());
+    z3::expr formula = mk_ge(output, ctx.int_val(0), true);
     assert_formula(formula);
     return;
   }
 
   z3::sort sort;
   convert_type(sym.type, sort);
-  output = ctx->constant(sym.get_symbol_name().c_str(), sort);
+  output = ctx.constant(sym.get_symbol_name().c_str(), sort);
 }
 
 void
@@ -813,10 +806,10 @@ z3_convt::convert_smt_expr(const constant_int2t &sym, void *_bv)
   unsigned int bitwidth = sym.type->get_width();
 
   if (is_unsignedbv_type(sym.type)) {
-    output = ctx->esbmc_int_val(sym.as_ulong(), bitwidth);
+    output = ctx.esbmc_int_val(sym.as_ulong(), bitwidth);
   } else {
     assert(is_signedbv_type(sym.type));
-    output = ctx->esbmc_int_val(sym.as_long(), bitwidth);
+    output = ctx.esbmc_int_val(sym.as_long(), bitwidth);
   }
 
   return;
@@ -835,15 +828,15 @@ z3_convt::convert_smt_expr(const constant_fixedbv2t &sym, void *_bv)
 
   if (int_encoding) {
     std::string result = fixed_point(theval, bitwidth);
-    output = ctx->real_val(result.c_str());
+    output = ctx.real_val(result.c_str());
   } else {
     z3::expr magnitude, fraction;
     std::string m, f, c;
     m = extract_magnitude(theval, bitwidth);
     f = extract_fraction(theval, bitwidth);
-    magnitude = ctx->esbmc_int_val(m.c_str(), bitwidth / 2);
-    fraction = ctx->esbmc_int_val(f.c_str(), bitwidth / 2);
-    output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
+    magnitude = ctx.esbmc_int_val(m.c_str(), bitwidth / 2);
+    fraction = ctx.esbmc_int_val(f.c_str(), bitwidth / 2);
+    output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   }
 
   return;
@@ -854,7 +847,7 @@ z3_convt::convert_smt_expr(const constant_bool2t &b, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  output = ctx->bool_val(b.constant_value);
+  output = ctx.bool_val(b.constant_value);
 }
 
 void
@@ -888,7 +881,7 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
       // If no initialization give, use free (fresh) variable.
       z3::sort s;
       convert_type(*it, s);
-      args[i] = ctx->fresh_const(NULL, s);
+      args[i] = ctx.fresh_const(NULL, s);
     }
 
     i++;
@@ -896,12 +889,12 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 
   // Update unions "last-set" member to be the last field
   if (is_union)
-    args[size-1] = ctx->esbmc_int_val(i);
+    args[size-1] = ctx.esbmc_int_val(i);
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
   // need to bind it to a name or symbol.
-  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(*ctx, sort);
-  z3::func_decl d(*ctx, decl);
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, sort);
+  z3::func_decl d(ctx, decl);
   output = d.make_tuple_from_array(size, args);
   delete[] args;
 }
@@ -935,13 +928,13 @@ z3_convt::convert_smt_expr(const constant_array2t &array, void *_bv)
 
   const array_type2t &arr_type = to_array_type(array.type);
   convert_type(arr_type.subtype, elem_type);
-  z3_array_type = ctx->array_sort(ctx->esbmc_int_sort(), elem_type);
+  z3_array_type = ctx.array_sort(ctx.esbmc_int_sort(), elem_type);
 
-  output = ctx->fresh_const(NULL, z3_array_type);
+  output = ctx.fresh_const(NULL, z3_array_type);
 
   i = 0;
   forall_exprs(it, array.datatype_members) {
-    int_cte = ctx->esbmc_int_val(i);
+    int_cte = ctx.esbmc_int_val(i);
 
     convert_bv(*it, val_cte);
 
@@ -966,7 +959,7 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
 
   if (arr.size_is_infinite) {
     // Don't attempt to do anything with this. The user is on their own.
-    output = ctx->fresh_const(NULL, array_type);
+    output = ctx.fresh_const(NULL, array_type);
     return;
   }
 
@@ -979,15 +972,15 @@ z3_convt::convert_smt_expr(const constant_array_of2t &array, void *_bv)
   convert_bv(array.initializer, value);
 
   if (is_bool_type(arr.subtype)) {
-    value = ctx->bool_val(false);
+    value = ctx.bool_val(false);
   }
 
-  output = ctx->fresh_const(NULL, array_type);
+  output = ctx.fresh_const(NULL, array_type);
 
   //update array
   for (j = 0; j < size; j++)
   {
-    index = ctx->esbmc_int_val(j);
+    index = ctx.esbmc_int_val(j);
     output = z3::store(output, index, value);
   }
 }
@@ -1151,19 +1144,19 @@ z3_convt::convert_binop(const expr2tc &side1, const expr2tc &side2,
   // XXXjmorse - int2bv trainwreck.
   if (int_encoding) {
     unsigned int width = side1->type->get_width();
-    args[0] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, args[0]));
+    args[0] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, args[0]));
     width = side1->type->get_width();
-    args[1] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, args[1]));
+    args[1] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, args[1]));
   }
 
   output = convert(args[0], args[1]);
 
   if (int_encoding) {
     if (is_signedbv_type(type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, true));
+      output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, true));
     } else {
       assert(is_unsignedbv_type(type));
-      output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, false));
+      output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, false));
     }
   }
 }
@@ -1326,10 +1319,10 @@ z3_convt::convert_smt_expr(const mul2t &mul, void *_bv)
     // fixedbv in bv mode. I've no idea if this actually works.
     const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
     fraction_bits = fbvt.width - fbvt.integer_bits;
-    args[0] = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]));
-    args[1] = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]));
+    args[0] = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[0]));
+    args[1] = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits, args[1]));
     output = args[0] * args[1];
-    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx,
+    output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx,
                                              fbvt.width + fraction_bits - 1,
                                              fraction_bits, output));
   }
@@ -1361,12 +1354,12 @@ z3_convt::convert_smt_expr(const div2t &div, void *_bv)
 
     unsigned fraction_bits = fbvt.width - fbvt.integer_bits;
 
-    z3::expr zero = ctx->esbmc_int_val(0, fraction_bits);
-    z3::expr cat = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, op0, zero));
-    z3::expr sext = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits,
+    z3::expr zero = ctx.esbmc_int_val(0, fraction_bits);
+    z3::expr cat = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, op0, zero));
+    z3::expr sext = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, fraction_bits,
                                 op1));
     z3::expr div = mk_div(cat, sext, false);
-    output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0, div));
+    output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, fbvt.width - 1, 0, div));
   }
 }
 
@@ -1388,12 +1381,12 @@ z3_convt::convert_smt_expr(const modulus2t &mod, void *_bv)
   assert(is_bv_type(mod.type) && "Can only modulus integers");
 
   if (int_encoding) {
-    output = z3::to_expr(*ctx, Z3_mk_mod(z3_ctx, op0, op0));
+    output = z3::to_expr(ctx, Z3_mk_mod(z3_ctx, op0, op0));
   } else   {
     if (is_signedbv_type(mod.type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bvsrem(z3_ctx, op0, op1));
+      output = z3::to_expr(ctx, Z3_mk_bvsrem(z3_ctx, op0, op1));
     } else if (is_unsignedbv_type(mod.type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bvurem(z3_ctx, op0, op1));
+      output = z3::to_expr(ctx, Z3_mk_bvurem(z3_ctx, op0, op1));
     }
   }
 }
@@ -1419,30 +1412,30 @@ z3_convt::convert_shift(const expr2t &shift, const expr2tc &part1,
   width_op1 = part2->type->get_width();
 
   if (int_encoding) {
-    op0 = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op0, op0));
-    op1 = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op1, op1));
+    op0 = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op0, op0));
+    op1 = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op1, op1));
   }
 
   if (width_op0 > width_expr)
-    op0 = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0));
+    op0 = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op0));
   if (width_op1 > width_expr)
-    op1 = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1));
+    op1 = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (width_expr - 1), 0, op1));
 
   if (width_op0 > width_op1) {
     if (is_unsignedbv_type(part1->type))
-      op1 = z3::to_expr(*ctx, Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1));
+      op1 = z3::to_expr(ctx, Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op1), op1));
     else
-      op1 = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1));
+      op1 = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op1), op1));
   }
 
-  output = z3::to_expr(*ctx, convert(z3_ctx, op0, op1));
+  output = z3::to_expr(ctx, convert(z3_ctx, op0, op1));
 
   if (int_encoding) {
     if (is_signedbv_type(shift.type)) {
-      output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, true));
+      output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, true));
     } else {
       assert(is_unsignedbv_type(shift.type));
-      output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, false));
+      output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, false));
     }
   }
 }
@@ -1555,7 +1548,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     convert_bv(addr, output);
 
     // Update pointer offset to offset to that field.
-    z3::expr num = ctx->esbmc_int_val(offs);
+    z3::expr num = ctx.esbmc_int_val(offs);
     output = mk_tuple_update(output, 1, num);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
@@ -1624,29 +1617,29 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (is_fixedbv_type(data.source_value->type)) {
       if (is_bv_type(data.type)) {
         z3::expr tmp;
-	source = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, source));
-	tmp = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, source));
-	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
+	source = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, source));
+	tmp = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, source));
+	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
 	if (is_signedbv_type(data.type))
-	  output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, 1));
+	  output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 1));
 	else
-	  output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, 0));
+	  output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 0));
       } else {
 	throw new conv_error("unsupported type for byte_extract");
       }
     } else if (is_bv_type(data.source_value->type)) {
       z3::expr tmp;
-      tmp = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, source));
+      tmp = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, source));
 
       if (width >= upper)
-	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
+	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
       else
-	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper - lower, 0, tmp));
+	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper - lower, 0, tmp));
 
       if (is_signedbv_type(data.source_value->type))
-	output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, 1));
+	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 1));
       else
-	output = z3::to_expr(*ctx, Z3_mk_bv2int(z3_ctx, output, 0));
+	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 0));
     } else {
       throw new conv_error("unsupported type for byte_extract");
     }
@@ -1667,24 +1660,24 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       for (unsigned k = 0; k < num_elems; k++)
       {
         if (k == 1)
-          struct_elem_inv[num_elems] = z3::to_expr(*ctx, Z3_mk_concat(
+          struct_elem_inv[num_elems] = z3::to_expr(ctx, Z3_mk_concat(
             z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]));
         else if (k > 1)
-          struct_elem_inv[num_elems] = z3::to_expr(*ctx, Z3_mk_concat(
+          struct_elem_inv[num_elems] = z3::to_expr(ctx, Z3_mk_concat(
             z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]));
       }
 
       source = struct_elem_inv[num_elems];
     }
 
-    unsigned int sort_sz =Z3_get_bv_sort_size(*ctx, Z3_get_sort(*ctx, source));
+    unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, source));
     if (sort_sz < upper) {
       // Extends past the end of this data item. Should be fixed in some other
       // dedicated feature branch, in the meantime stop Z3 from crashing
-      z3::sort s = ctx->bv_sort(8);
-      output = ctx->fresh_const(NULL, s);
+      z3::sort s = ctx.bv_sort(8);
+      output = ctx.fresh_const(NULL, s);
     } else {
-      output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
+      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
     }
   }
 }
@@ -1728,10 +1721,10 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     if (has_field)
       output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
     else
-      output = z3::to_expr(*ctx, tuple);
+      output = z3::to_expr(ctx, tuple);
   } else if (is_signedbv_type(data.source_value->type)) {
     if (int_encoding) {
-      output = z3::to_expr(*ctx, value);
+      output = z3::to_expr(ctx, value);
       return;
     }
 
@@ -1742,7 +1735,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       throw new conv_error("failed to get width of byte_update operand");
 
     if (width_op0 > width_op2)
-      output = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
+      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
     else
       throw new conv_error("unsupported irep for conver_byte_update");
   } else {
@@ -1785,7 +1778,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *_bv)
       const union_type2t &unionref = to_union_type(with.type);
        unsigned int components_size = unionref.members.size();
        output = mk_tuple_update(output, components_size,
-                                ctx->esbmc_int_val(idx));
+                                ctx.esbmc_int_val(idx));
     }
   } else if (is_array_type(with.type)) {
 
@@ -1793,7 +1786,7 @@ z3_convt::convert_smt_expr(const with2t &with, void *_bv)
     convert_bv(with.update_field, operand1);
     convert_bv(with.update_value, operand2);
 
-    output = z3::to_expr(*ctx, Z3_mk_store(z3_ctx, operand0, operand1, operand2));
+    output = z3::to_expr(ctx, Z3_mk_store(z3_ctx, operand0, operand1, operand2));
   } else {
     throw new conv_error("with applied to non-struct/union/array obj");
   }
@@ -1857,7 +1850,7 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, z3::expr &output)
 
   if (is_bv_type(cast.from->type) ||
       is_pointer_type(cast.from->type)) {
-    output = output != ctx->esbmc_int_val(0);
+    output = output != ctx.esbmc_int_val(0);
   } else {
     throw new conv_error("Unimplemented bool typecast");
   }
@@ -1883,19 +1876,19 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     if (from_width == to_integer_bits) {
       ; // No-op, already converted by higher caller
     } else if (from_width > to_integer_bits) {
-      output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, output));
+      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, output));
     } else {
       assert(from_width < to_integer_bits);
-      output = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), output));
+      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), output));
     }
 
-    output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, output, ctx->esbmc_int_val(0, to_fraction_bits)));
+    output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, ctx.esbmc_int_val(0, to_fraction_bits)));
   } else if (is_bool_type(cast.from->type)) {
     z3::expr zero, one;
-    zero = ctx->esbmc_int_val(0, to_integer_bits);
-    one = ctx->esbmc_int_val(1, to_integer_bits);
+    zero = ctx.esbmc_int_val(0, to_integer_bits);
+    one = ctx.esbmc_int_val(1, to_integer_bits);
     output = z3::ite(output, one, zero);
-    output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, output, ctx->esbmc_int_val(0, to_fraction_bits)));
+    output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, ctx.esbmc_int_val(0, to_fraction_bits)));
   } else if (is_fixedbv_type(cast.from->type)) {
     z3::expr magnitude, fraction;
 
@@ -1906,35 +1899,35 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     unsigned from_width = from_fbvt.width;
 
     if (to_integer_bits <= from_integer_bits) {
-      magnitude = z3::to_expr(*ctx,
+      magnitude = z3::to_expr(ctx,
         Z3_mk_extract(z3_ctx, (from_fraction_bits + to_integer_bits - 1),
                       from_fraction_bits, output));
     } else   {
       assert(to_integer_bits > from_integer_bits);
 
-      z3::expr ext = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, from_width - 1,
+      z3::expr ext = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, from_width - 1,
                                                      from_fraction_bits,
                                                      output));
-      magnitude = z3::to_expr(*ctx,
+      magnitude = z3::to_expr(ctx,
         Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits), ext));
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
-      fraction = z3::to_expr(*ctx,
+      fraction = z3::to_expr(ctx,
         Z3_mk_extract(z3_ctx, (from_fraction_bits - 1),
                       from_fraction_bits - to_fraction_bits,
                       output));
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
 
-      z3::expr ext = z3::to_expr(*ctx,
+      z3::expr ext = z3::to_expr(ctx,
           Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output));
       z3::expr zero =
-        ctx->esbmc_int_val(0, to_fraction_bits - from_fraction_bits);
+        ctx.esbmc_int_val(0, to_fraction_bits - from_fraction_bits);
 
-      fraction = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, ext, zero));
+      fraction = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, ext, zero));
     }
-    output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
+    output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   } else {
     throw new conv_error("unexpected typecast to fixedbv");
   }
@@ -1954,35 +1947,35 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
     if (from_width == to_width) {
       if (int_encoding && is_signedbv_type(cast.from->type) &&
                is_fixedbv_type(cast.type))
-	output = z3::to_expr(*ctx, Z3_mk_int2real(z3_ctx, output));
+	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding && is_fixedbv_type(cast.from->type) &&
                is_signedbv_type(cast.type))
-	output = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, output));
+	output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
       // XXXjmorse - there isn't a case here for if !int_encoding
 
     } else if (from_width < to_width)      {
       if (int_encoding &&
           ((is_fixedbv_type(cast.type) &&
             is_signedbv_type(cast.from->type))))
-	output = z3::to_expr(*ctx, Z3_mk_int2real(z3_ctx, output));
+	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding)
 	; // output = output
       else
-	output = z3::to_expr(*ctx, Z3_mk_sign_ext(z3_ctx, (to_width - from_width), output));
+	output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (to_width - from_width), output));
     } else if (from_width > to_width)     {
       if (int_encoding &&
           ((is_signedbv_type(cast.from->type) &&
             is_fixedbv_type(cast.type))))
-	output = z3::to_expr(*ctx, Z3_mk_int2real(z3_ctx, output));
+	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding &&
                (is_fixedbv_type(cast.from->type) &&
                 is_signedbv_type(cast.type)))
-	output = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, output));
+	output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
       else if (int_encoding)
 	; // output = output
       else {
 	if (!to_width) to_width = config.ansi_c.int_width;
-	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
+	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
       }
     }
   } else if (is_unsignedbv_type(cast.from->type)) {
@@ -1994,23 +1987,23 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
       if (int_encoding)
 	; // output = output
       else
-	output = z3::to_expr(*ctx, Z3_mk_zero_ext(z3_ctx, (to_width - from_width), output));
+	output = z3::to_expr(ctx, Z3_mk_zero_ext(z3_ctx, (to_width - from_width), output));
     } else if (from_width > to_width)     {
       if (int_encoding)
 	; // output = output
       else
-	output = z3::to_expr(*ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
+	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
     }
   } else if (is_bool_type(cast.from->type)) {
     z3::expr zero, one;
     unsigned width = cast.type->get_width();
 
     if (is_bv_type(cast.type)) {
-      zero = ctx->esbmc_int_val(0, width);
-      one = ctx->esbmc_int_val(1, width);
+      zero = ctx.esbmc_int_val(0, width);
+      one = ctx.esbmc_int_val(1, width);
     } else if (is_fixedbv_type(cast.type)) {
-      zero = ctx->real_val(0);
-      one = ctx->real_val(1);
+      zero = ctx.real_val(0);
+      one = ctx.real_val(1);
     } else {
       throw new conv_error("Unexpected type in typecast of bool");
     }
@@ -2065,7 +2058,7 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   // Can't cache this type as it's constructed on the fly.
   newstruct.convert_smt_type(*this, reinterpret_cast<void*>(&sort));
 
-  freshval = ctx->fresh_const(NULL, sort);
+  freshval = ctx.fresh_const(NULL, sort);
 
   i2 = 0;
   forall_types(it, newstruct.members) {
@@ -2112,13 +2105,13 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
        it != addr_space_data.back().end(); it++, i++)
   {
     unsigned id = it->first;
-    obj_ids[i] = ctx->esbmc_int_val(id);
-    z3::expr start = ctx->constant(
+    obj_ids[i] = ctx.esbmc_int_val(id);
+    z3::expr start = ctx.constant(
                                  ("__ESBMC_ptr_obj_start_" + itos(id)).c_str(),
-                                 ctx->esbmc_int_sort());
-    z3::expr end = ctx->constant(
+                                 ctx.esbmc_int_sort());
+    z3::expr end = ctx.constant(
                                  ("__ESBMC_ptr_obj_end_" + itos(id)).c_str(),
-                                 ctx->esbmc_int_sort());
+                                 ctx.esbmc_int_sort());
     obj_starts[i] = start;
 
     is_in_range[i] = mk_ge(target, start, true) && mk_le(target, end, true);
@@ -2135,12 +2128,12 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // That's so that we can store an invalid pointer in a pointer type, that
   // eventually can be converted back via some mechanism to a valid pointer.
   z3::expr args[2];
-  args[0] = ctx->esbmc_int_val(pointer_logic.back().get_invalid_object());
+  args[0] = ctx.esbmc_int_val(pointer_logic.back().get_invalid_object());
 
   // Calculate ptr offset - target minus start of invalid range, ie 1
-  args[1] = target - ctx->esbmc_int_val(1);
+  args[1] = target - ctx.esbmc_int_val(1);
 
-  z3::expr prev_in_chain = (*pointer_decl)(args[0], args[1]);
+  z3::expr prev_in_chain = pointer_decl(args[0], args[1]);
 
   // Now that big ite chain,
   for (i = 0; i < addr_space_data.back().size(); i++) {
@@ -2149,14 +2142,14 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
     // Calculate ptr offset were it this
     args[1] = target - obj_starts[i];
 
-    z3::expr selected_tuple = (*pointer_decl)(args[0], args[1]);
+    z3::expr selected_tuple = pointer_decl(args[0], args[1]);
 
     prev_in_chain = z3::ite(is_in_range[i], selected_tuple, prev_in_chain);
   }
 
   // Finally, we're now at the point where prev_in_chain represents a pointer
   // object. Hurrah.
-  output = z3::to_expr(*ctx, prev_in_chain);
+  output = z3::to_expr(ctx, prev_in_chain);
 }
 
 void
@@ -2254,7 +2247,7 @@ z3_convt::convert_smt_expr(const zero_string2t &zstr, void *_bv)
 
   convert_type(zstr.type, array_type);
 
-  output = z3::to_expr(*ctx, ctx->constant("zero_string", array_type));
+  output = z3::to_expr(ctx, ctx.constant("zero_string", array_type));
 }
 
 void
@@ -2278,18 +2271,18 @@ z3_convt::convert_smt_expr(const isnan2t &isnan, void *_bv)
 
     convert_bv(isnan.value, op0);
 
-    z3::expr t = ctx->bool_val(true);
-    z3::expr f = ctx->bool_val(false);
+    z3::expr t = ctx.bool_val(true);
+    z3::expr f = ctx.bool_val(false);
     if (int_encoding) {
-      z3::expr zero = ctx->esbmc_int_val(0, width);
-      z3::expr r2int = z3::to_expr(*ctx, Z3_mk_real2int(z3_ctx, op0));
+      z3::expr zero = ctx.esbmc_int_val(0, width);
+      z3::expr r2int = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, op0));
       z3::expr ge = mk_ge(r2int, zero, true); // sign unimportant in int mode
 
-      output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, ge, t, f));
+      output = z3::to_expr(ctx, Z3_mk_ite(z3_ctx, ge, t, f));
     } else {
-      z3::expr zero = ctx->esbmc_int_val(0, width);
+      z3::expr zero = ctx.esbmc_int_val(0, width);
       z3::expr ge = mk_ge(op0, zero, false); // In original, always signed ge?
-      output = z3::to_expr(*ctx, Z3_mk_ite(z3_ctx, ge, t, f));
+      output = z3::to_expr(ctx, Z3_mk_ite(z3_ctx, ge, t, f));
     }
   } else {
     throw new conv_error("isnan with unsupported operand type");
@@ -2358,12 +2351,12 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
 
   // XXX jmorse - int2bv trainwreck.
   if (int_encoding) {
-    operand[0] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op0, operand[0]));
-    operand[1] = z3::to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width_op1, operand[1]));
+    operand[0] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op0, operand[0]));
+    operand[1] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op1, operand[1]));
   }
 
-  result[0] = z3::to_expr(*ctx, call1(z3_ctx, operand[0], operand[1], is_signed));
-  result[1] = z3::to_expr(*ctx, call2(z3_ctx, operand[0], operand[1]));
+  result[0] = z3::to_expr(ctx, call1(z3_ctx, operand[0], operand[1], is_signed));
+  result[1] = z3::to_expr(ctx, call2(z3_ctx, operand[0], operand[1]));
   output = !(result[0] && result[1]);
 }
 
@@ -2446,11 +2439,11 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
 
   // XXX jmorse - int2bv trainwreck
   if (int_encoding)
-    operand = to_expr(*ctx, Z3_mk_int2bv(z3_ctx, width, operand));
+    operand = to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, operand));
 
-  z3::expr no_over = z3::to_expr(*ctx,
+  z3::expr no_over = z3::to_expr(ctx,
                            workaround_Z3_mk_bvneg_no_overflow(z3_ctx, operand));
-  output = z3::to_expr(*ctx, Z3_mk_not(z3_ctx, no_over));
+  output = z3::to_expr(ctx, Z3_mk_not(z3_ctx, no_over));
 }
 
 void
@@ -2570,7 +2563,7 @@ z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
 
   sort_cachet::const_iterator cache_result = sort_cache.find(type);
   if (cache_result != sort_cache.end()) {
-    outtype = z3::to_sort(*ctx, cache_result->second);
+    outtype = z3::to_sort(ctx, cache_result->second);
     return;
   }
 
@@ -2602,7 +2595,7 @@ z3_convt::convert_expr(const expr2tc &expr)
   }
 
   z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, constraint));
+  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, constraint));
 
   // While we have a literal, don't assert that it's true, only the link
   // between the formula and the literal. Otherwise, we risk asserting that a
@@ -2632,15 +2625,15 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
 
-  output = z3::to_expr(*ctx, ctx->constant(symbol.c_str(), *pointer_sort));
+  output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
-    z3::expr ptr_val = (*pointer_decl)(ctx->esbmc_int_val(obj_num),
-                                       ctx->esbmc_int_val(0));
+    z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
+                                       ctx.esbmc_int_val(0));
 
     z3::expr constraint = output == ptr_val;
     assert_formula(constraint);
@@ -2705,11 +2698,11 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     convert_bv(end_sym, end_ast);
 
     // Actually store into array
-    z3::expr range_tuple = ctx->constant(
+    z3::expr range_tuple = ctx.constant(
                        ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
-                       *addr_space_tuple_sort);
+                       addr_space_tuple_sort);
     z3::expr init_val =
-      addr_space_tuple_decl->make_tuple("", &start_ast, &end_ast, NULL);
+      addr_space_tuple_decl.make_tuple("", &start_ast, &end_ast, NULL);
     z3::expr eq = range_tuple == init_val;
     assert_formula(eq);
 
@@ -2726,9 +2719,9 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr allocarray;
     convert_bv(allocarr, allocarray);
 
-    z3::expr idxnum = ctx->esbmc_int_val(obj_num);
+    z3::expr idxnum = ctx.esbmc_int_val(obj_num);
     z3::expr select = z3::select(allocarray, idxnum);
-    z3::expr isfalse = ctx->bool_val(false) == select;
+    z3::expr isfalse = ctx.bool_val(false) == select;
     assert_formula(isfalse);
   }
 }
@@ -2779,9 +2772,9 @@ z3_convt::land(const bvt &bv)
     args_ast[i] = args[i];
   }
 
-  result = to_expr(*ctx, Z3_mk_and(z3_ctx, bv.size(), args_ast));
+  result = to_expr(ctx, Z3_mk_and(z3_ctx, bv.size(), args_ast));
   z3::expr thelit = z3_literal(l);
-  formula = to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
+  formula = to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2802,10 +2795,10 @@ z3_convt::lor(const bvt &bv)
     args_ast[i] = args[i];
   }
 
-  result = z3::to_expr(*ctx, Z3_mk_or(z3_ctx, bv.size(), args_ast));
+  result = z3::to_expr(ctx, Z3_mk_or(z3_ctx, bv.size(), args_ast));
 
   z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
+  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2827,7 +2820,7 @@ z3_convt::land(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = operand[0] && operand[1];
   z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
+  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2850,7 +2843,7 @@ z3_convt::lor(literalt a, literalt b)
   operand[1] = z3_literal(b);
   result = operand[0] || operand[1];
   z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, result));
+  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
   assert_formula(formula);
 
   return l;
@@ -2946,7 +2939,7 @@ z3_convt::lcnf(const bvt &bv)
   }
 
   if (i > 1) {
-    lor_var = z3::expr(*ctx, Z3_mk_or(z3_ctx, i, args_ast));
+    lor_var = z3::expr(ctx, Z3_mk_or(z3_ctx, i, args_ast));
     assert_formula(lor_var);
   } else   {
     assert_formula(args[0]);
@@ -2961,12 +2954,12 @@ z3_convt::z3_literal(literalt l)
   std::string literal_s;
 
   if (l == const_literal(false))
-    return ctx->bool_val(false);
+    return ctx.bool_val(false);
   else if (l == const_literal(true))
-    return ctx->bool_val(true);
+    return ctx.bool_val(true);
 
   literal_s = "l" + i2string(l.var_no());
-  literal_l = ctx->constant(literal_s.c_str(), ctx->bool_sort());
+  literal_l = ctx.constant(literal_s.c_str(), ctx.bool_sort());
 
   if (l.sign()) {
     return !literal_l;
@@ -3017,7 +3010,7 @@ z3_convt::assert_formula(const z3::expr &ast)
 
   literalt l = new_variable();
   z3::expr thelit = z3_literal(l);
-  z3::expr formula = z3::to_expr(*ctx, Z3_mk_iff(z3_ctx, thelit, ast));
+  z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, ast));
   Z3_assert_cnstr(z3_ctx, formula);
 
   if (smtlib)
@@ -3041,7 +3034,7 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
     abort();
   }
 
-  num_fields = Z3_get_tuple_sort_num_fields(*ctx, ty);
+  num_fields = Z3_get_tuple_sort_num_fields(ctx, ty);
 
   if (i >= num_fields) {
     std::cerr << "invalid tuple update, index is too big";
@@ -3056,13 +3049,13 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
     } else   {
       /* use field j of t */
       z3::func_decl proj_decl =
-        z3::to_func_decl(*ctx, Z3_get_tuple_sort_field_decl(*ctx, ty, j));
+        z3::to_func_decl(ctx, Z3_get_tuple_sort_field_decl(ctx, ty, j));
       new_fields[j] = proj_decl(t);
     }
   }
 
   z3::func_decl mk_tuple_decl =
-    z3::to_func_decl(*ctx, Z3_get_tuple_sort_mk_decl(*ctx, ty));
+    z3::to_func_decl(ctx, Z3_get_tuple_sort_mk_decl(ctx, ty));
 
   return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields);
 }
@@ -3079,14 +3072,14 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
     throw new z3_convt::conv_error("argument must be a tuple");
   }
 
-  num_fields = Z3_get_tuple_sort_num_fields(*ctx, ty);
+  num_fields = Z3_get_tuple_sort_num_fields(ctx, ty);
 
   if (i >= num_fields) {
     throw new z3_convt::conv_error("invalid tuple select, index is too big");
   }
 
   z3::func_decl proj_decl =
-    z3::to_func_decl(*ctx, Z3_get_tuple_sort_field_decl(*ctx, ty, i));
+    z3::to_func_decl(ctx, Z3_get_tuple_sort_field_decl(ctx, ty, i));
   return proj_decl(t);
 }
 

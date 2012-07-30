@@ -25,7 +25,7 @@ z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
   std::string the_name = "__ESBMC_" + name + itos(num);
   num++;
 
-  z3::expr sym = ctx->constant(the_name.c_str(), formula.get_sort());
+  z3::expr sym = ctx.constant(the_name.c_str(), formula.get_sort());
   z3::expr eq = sym == formula;
   assert_formula(eq);
   return;
