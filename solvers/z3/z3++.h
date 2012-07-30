@@ -314,6 +314,7 @@ namespace z3 {
 
     class func_decl : public ast {
     public:
+        func_decl() : ast() {} // jmorse - uninitialized cons
         func_decl(context & c):ast(c) {}
         func_decl(context & c, Z3_func_decl n):ast(c, reinterpret_cast<Z3_ast>(n)) {}
         func_decl(func_decl const & s):ast(s) {}
