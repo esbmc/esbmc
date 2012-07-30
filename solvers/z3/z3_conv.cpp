@@ -1925,11 +1925,13 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
                       output));
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
-      fraction = z3::to_expr(*ctx,
-        Z3_mk_concat(z3_ctx,
-                     Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output),
-                     ctx->esbmc_int_val(0, to_fraction_bits - from_fraction_bits
-                                    )));
+
+      z3::expr ext = z3::to_expr(*ctx,
+          Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output));
+      z3::expr zero =
+        ctx->esbmc_int_val(0, to_fraction_bits - from_fraction_bits);
+
+      fraction = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, ext, zero));
     }
     output = z3::to_expr(*ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   } else {
