@@ -227,6 +227,24 @@ private:
 
   std::list<pointer_logict> pointer_logic;
 
+  // Some useful types
+public:
+  class conv_error {
+    std::string msg;
+
+  public:
+    conv_error(std::string msg) {
+      this->msg = msg;
+      return;
+    }
+
+    std::string to_string(void) {
+      std::string out;
+      out = "Encountered Z3 conversion error: \"" + msg + "\"\n";
+      return out;
+    }
+  };
+
   // Types for bv_cache.
 
   struct bv_cache_entryt {
@@ -301,24 +319,6 @@ private:
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
 
-public:
-  class conv_error {
-    std::string msg;
-
-  public:
-    conv_error(std::string msg) {
-      this->msg = msg;
-      return;
-    }
-
-    std::string to_string(void) {
-      std::string out;
-      out = "Encountered Z3 conversion error: \"" + msg + "\"\n";
-      return out;
-    }
-  };
-
-public:
   Z3_context z3_ctx;
   static bool s_is_uw;
 };
