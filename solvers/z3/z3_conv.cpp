@@ -3239,7 +3239,7 @@ workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2)
     unsigned int width = Z3_get_bv_sort_size(ctx, s);
     Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
     Z3_inc_ref(ctx, sz);
-    Z3_ast one = Z3_mk_int64(ctx, width, s);
+    Z3_ast one = Z3_mk_int64(ctx, 1, s);
     Z3_inc_ref(ctx, one);
     Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
     Z3_inc_ref(ctx, msb);
@@ -3277,7 +3277,7 @@ workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a)
     unsigned int width = Z3_get_bv_sort_size(ctx, s);
     Z3_ast sz = Z3_mk_int64(ctx, width - 1, s);
     Z3_inc_ref(ctx, sz);
-    Z3_ast one = Z3_mk_int64(ctx, width, s);
+    Z3_ast one = Z3_mk_int64(ctx, 1, s);
     Z3_inc_ref(ctx, one);
     Z3_ast msb = Z3_mk_bvshl(ctx, one, sz);
     Z3_inc_ref(ctx, msb);
