@@ -2994,6 +2994,7 @@ z3_convt::assert_formula(const z3::expr &ast)
   // smtlib) then just assert the fact to be true.
   if (!store_assumptions) {
     Z3_assert_cnstr(z3_ctx, ast);
+    solver.add(ast);
     return;
   }
 
@@ -3001,6 +3002,7 @@ z3_convt::assert_formula(const z3::expr &ast)
   z3::expr thelit = z3_literal(l);
   z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, ast));
   Z3_assert_cnstr(z3_ctx, formula);
+  solver.add(formula);
 
   if (smtlib)
     assumpt.push_back(ast);
