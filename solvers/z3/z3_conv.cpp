@@ -46,6 +46,16 @@ Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 : prop_convt()
 {
+  this->int_encoding = int_encoding;
+
+  smtlib = smt;
+  store_assumptions = (smt || uw);
+  s_is_uw = uw;
+  this->uw = uw;
+  model = NULL;
+  no_variables = 1;
+  max_core_size=Z3_UNSAT_CORE_LIMIT;
+
   z3::config conf;
   conf.set("MODEL", true);
   conf.set("RELEVANCY", 0);
@@ -56,17 +66,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   z3_ctx = ctx;
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
 
-  this->int_encoding = int_encoding;
-
-  smtlib = smt;
-  store_assumptions = (smt || uw);
-  s_is_uw = uw;
-  this->uw = uw;
-  model = NULL;
-  no_variables = 1;
-
   Z3_push(z3_ctx);
-  max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
 
   setup_pointer_sort();
