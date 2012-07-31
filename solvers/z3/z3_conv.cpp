@@ -515,30 +515,10 @@ z3_convt::check2_z3_properties(void)
     }
   }
 
-  try
-  {
-    if (uw) {
-      result = solver.check(assumptions);
-    } else {
-      result = solver.check();
-    }
-  }
-  catch (std::string &error_str)
-  {
-    error(error_str);
-    return Z3_L_UNDEF;
-  }
-
-  catch (const char *error_str)
-  {
-    error(error_str);
-    return Z3_L_UNDEF;
-  }
-
-  catch (std::bad_alloc)
-  {
-    error("Out of memory");
-    abort();
+  if (uw) {
+    result = solver.check(assumptions);
+  } else {
+    result = solver.check();
   }
 
   if (result == z3::sat)
