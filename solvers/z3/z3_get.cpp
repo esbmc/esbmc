@@ -83,8 +83,7 @@ z3_convt::get(const expr2tc &expr)
       // This doesn't work; can't be bothered to debug it either.
       //assert(cache_res != sort_cache.end() && "No cached copy of type when "
       //       "fetching cex data");
-      z3_convt *ourselves = const_cast<z3_convt *>(this);
-      ourselves->convert_type(expr->type, sort);
+      convert_type(expr->type, sort);
     }
 
     bv = ctx.constant(identifier.c_str(), sort);
