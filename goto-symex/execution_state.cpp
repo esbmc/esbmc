@@ -485,7 +485,15 @@ execution_statet::execute_guard(void)
   exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
-  parent_guard = threads_state[last_active_thread].guard.as_expr();
+  // Parent guard of this context switch - if a assign/claim/assume, just use
+  // the current thread guard. However if we just executed a goto, use the
+  // pre-goto thread guard that we stored at that time. This is so that the
+  // thread we context switch to gets the guard of that context switch happening
+  // rather than the guard of either branch of the GOTO.
+  if (!is_nil_expr(pre_goto_guard))
+    parent_guard = pre_goto_guard;
+  else
+    parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
   state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
