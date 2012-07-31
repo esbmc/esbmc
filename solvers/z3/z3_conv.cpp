@@ -509,33 +509,26 @@ z3_convt::dec_solve(void)
 Z3_lbool
 z3_convt::check2_z3_properties(void)
 {
-  Z3_lbool result;
+  z3::check_result result;
   unsigned i;
+  std::string literal;
+  z3::expr_vector assumptions(ctx);
 
   assumptions_status = assumpt.size();
-
-  Z3_ast proof, *core = (Z3_ast *)alloca(assumptions_status * sizeof(Z3_ast));
-  Z3_ast assumptions_ast[assumptions_status];
-  std::string literal;
-
 
   if (uw) {
     std::list<z3::expr>::const_iterator it;
     for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumptions_ast[i] = *it;
+      assumptions.push_back(*it);
     }
   }
 
   try
   {
     if (uw) {
-      unsat_core_size = assumpt.size();
-      memset(core, 0, sizeof(Z3_ast) * unsat_core_size);
-      result = Z3_check_assumptions(z3_ctx, assumpt.size(),
-                             assumptions_ast, &model, &proof, &unsat_core_size,
-                             core);
+      result = solver.check(assumptions);
     } else {
-      result = Z3_check_and_get_model(z3_ctx, &model);
+      result = solver.check();
     }
   }
   catch (std::string &error_str)
@@ -556,10 +549,18 @@ z3_convt::check2_z3_properties(void)
     abort();
   }
 
+  if (result == z3::sat)
+    model = solver.get_model();
+
   if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
     std::cout << Z3_model_to_string(z3_ctx, model);
 
-  return result;
+  if (result == z3::sat)
+    return Z3_L_TRUE;
+  else if (result == z3::unsat)
+    return Z3_L_FALSE;
+  else
+    return Z3_L_UNDEF;
 }
 
 void
