@@ -94,6 +94,22 @@ void goto_symext::symex_throw()
 
     if(frame.catch_map.empty()) continue;
 
+    if(!exceptions_thrown.size()) // throw without argument, we must rethrow last exception
+    {
+      if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
+      {
+        // get exception from last throw
+        irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
+
+        // update current state exception list
+        instruction.code.find("exception_list").get_sub().push_back((*e_it));
+      }
+      else
+      {
+
+      }
+    }
+
     for(irept::subt::const_iterator
         e_it=exceptions_thrown.begin();
         e_it!=exceptions_thrown.end();
@@ -130,6 +146,7 @@ void goto_symext::symex_throw()
         cur_state->guard.make_true();
         has_throw_target = true;
 #endif
+        last_throw = &instruction; // save last throw
         return;
       }
       else
@@ -141,6 +158,7 @@ void goto_symext::symex_throw()
         {
           throw_target = (*c_it).second;
           has_throw_target=true;
+          last_throw = &instruction; // save last throw
           return;
         }
 
@@ -150,5 +168,6 @@ void goto_symext::symex_throw()
         target->assumption(cur_state->guard, tmp, cur_state->source);
       }
     }
+    last_throw = &instruction; // save last throw
   }
 }

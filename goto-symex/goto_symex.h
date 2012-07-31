@@ -542,6 +542,7 @@ protected:
   // exception
   bool has_throw_target, has_catch;
   goto_programt::targett throw_target;
+  goto_programt::instructiont *last_throw;
 };
 
 #endif
