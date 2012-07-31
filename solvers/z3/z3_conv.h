@@ -287,6 +287,7 @@ public:
 
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
+  z3::solver solver;
 
   bv_cachet bv_cache;
   union_varst union_vars;

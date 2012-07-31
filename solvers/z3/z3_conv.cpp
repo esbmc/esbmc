@@ -69,6 +69,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   Z3_push(z3_ctx);
   level_ctx = 0;
 
+  solver = z3::solver(ctx);
+
   setup_pointer_sort();
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
