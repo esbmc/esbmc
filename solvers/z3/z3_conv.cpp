@@ -55,6 +55,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   model = NULL;
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
+  level_ctx = 0;
 
   z3::config conf;
   conf.set("MODEL", true);
@@ -65,9 +66,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 
   z3_ctx = ctx;
   Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
-
-  Z3_push(z3_ctx);
-  level_ctx = 0;
 
   solver = z3::solver(ctx);
 
@@ -139,7 +137,6 @@ z3_convt::push_ctx(void)
 
   prop_convt::push_ctx();
   intr_push_ctx();
-  Z3_push(z3_ctx);
   solver.push();
 }
 
@@ -148,7 +145,6 @@ z3_convt::pop_ctx(void)
 {
 
   solver.pop();
-  Z3_pop(z3_ctx, 1);
   intr_pop_ctx();
   prop_convt::pop_ctx();;
 }
@@ -2996,7 +2992,6 @@ z3_convt::assert_formula(const z3::expr &ast)
   // If we're not going to be using the assumptions (ie, for unwidening and for
   // smtlib) then just assert the fact to be true.
   if (!store_assumptions) {
-    Z3_assert_cnstr(z3_ctx, ast);
     solver.add(ast);
     return;
   }
@@ -3004,7 +2999,6 @@ z3_convt::assert_formula(const z3::expr &ast)
   literalt l = new_variable();
   z3::expr thelit = z3_literal(l);
   z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, ast));
-  Z3_assert_cnstr(z3_ctx, formula);
   solver.add(formula);
 
   if (smtlib)
