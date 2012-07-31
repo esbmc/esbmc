@@ -140,12 +140,14 @@ z3_convt::push_ctx(void)
   prop_convt::push_ctx();
   intr_push_ctx();
   Z3_push(z3_ctx);
+  solver.push();
 }
 
 void
 z3_convt::pop_ctx(void)
 {
 
+  solver.pop();
   Z3_pop(z3_ctx, 1);
   intr_pop_ctx();
   prop_convt::pop_ctx();;
