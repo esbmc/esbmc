@@ -54,6 +54,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   ctx.init(conf, int_encoding);
 
   z3_ctx = ctx;
+  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
 
   this->int_encoding = int_encoding;
 
