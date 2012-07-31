@@ -273,8 +273,7 @@ private:
   typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
-  u_int number_variables_z3, set_to_counter, number_vcs_z3,
-	    max_core_size;
+  u_int max_core_size;
 
   Z3_model model; // Model of satisfying program.
 
