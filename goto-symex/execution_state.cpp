@@ -241,6 +241,7 @@ execution_statet::symex_step(reachability_treet &art)
 void
 execution_statet::symex_assign(const expr2tc &code)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::symex_assign(code);
 
@@ -253,6 +254,7 @@ execution_statet::symex_assign(const expr2tc &code)
 void
 execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::claim(expr, msg);
 
@@ -265,6 +267,7 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
+  pre_goto_guard = expr2tc();
   expr2tc pre_goto_state_guard = threads_state[active_thread].guard.as_expr();
 
   goto_symext::symex_goto(old_guard);
@@ -286,6 +289,7 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 void
 execution_statet::assume(const expr2tc &assumption)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::assume(assumption);
 
