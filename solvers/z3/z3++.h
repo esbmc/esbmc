@@ -1176,6 +1176,7 @@ namespace z3 {
             Z3_solver_inc_ref(ctx(), s);
         }
     public:
+        solver(void) : object() { } // jmorse - uninitialized cons
         solver(context & c):object(c) { init(Z3_mk_solver(c)); }
         solver(context & c, Z3_solver s):object(c) { init(s); }
         solver(context & c, char const * logic):object(c) { init(Z3_mk_solver_for_logic(c, c.str_symbol(logic))); }
