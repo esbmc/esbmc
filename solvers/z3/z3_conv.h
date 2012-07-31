@@ -195,6 +195,36 @@ private:
 
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
+  std::string itos(int i);
+  std::string fixed_point(std::string v, unsigned width);
+  std::string extract_magnitude(std::string v, unsigned width);
+  std::string extract_fraction(std::string v, unsigned width);
+  void debug_label_formula(std::string name, const z3::expr &formula);
+  void bump_addrspace_array(unsigned int idx, const z3::expr &val);
+  std::string get_cur_addrspace_ident(void);
+  void finalize_pointer_chain(unsigned int objnum);
+  void init_addr_space_array(void);
+
+  virtual literalt land(literalt a, literalt b);
+  virtual literalt lor(literalt a, literalt b);
+  virtual literalt land(const bvt &bv);
+  virtual literalt lor(const bvt &bv);
+  virtual literalt lnot(literalt a);
+  virtual literalt limplies(literalt a, literalt b);
+  virtual literalt new_variable();
+  virtual uint64_t get_no_variables() const { return no_variables; }
+  virtual void set_no_variables(uint64_t no) { no_variables = no; }
+  virtual void lcnf(const bvt &bv);
+
+  virtual const std::string solver_text()
+  { return "Z3"; }
+
+  virtual tvt l_get(literalt a);
+
+  z3::expr z3_literal(literalt l);
+
+  bool process_clause(const bvt &bv, bvt &dest);
+
   std::list<pointer_logict> pointer_logic;
 
   // Types for bv_cache.
@@ -242,36 +272,6 @@ private:
   union_varst union_vars;
   typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
-
-  std::string itos(int i);
-  std::string fixed_point(std::string v, unsigned width);
-  std::string extract_magnitude(std::string v, unsigned width);
-  std::string extract_fraction(std::string v, unsigned width);
-  void debug_label_formula(std::string name, const z3::expr &formula);
-  void bump_addrspace_array(unsigned int idx, const z3::expr &val);
-  std::string get_cur_addrspace_ident(void);
-  void finalize_pointer_chain(unsigned int objnum);
-  void init_addr_space_array(void);
-
-  virtual literalt land(literalt a, literalt b);
-  virtual literalt lor(literalt a, literalt b);
-  virtual literalt land(const bvt &bv);
-  virtual literalt lor(const bvt &bv);
-  virtual literalt lnot(literalt a);
-  virtual literalt limplies(literalt a, literalt b);
-  virtual literalt new_variable();
-  virtual uint64_t get_no_variables() const { return no_variables; }
-  virtual void set_no_variables(uint64_t no) { no_variables = no; }
-  virtual void lcnf(const bvt &bv);
-
-  virtual const std::string solver_text()
-  { return "Z3"; }
-
-  virtual tvt l_get(literalt a);
-
-  z3::expr z3_literal(literalt l);
-
-  bool process_clause(const bvt &bv, bvt &dest);
 
   u_int number_variables_z3, set_to_counter, number_vcs_z3,
 	    max_core_size;
