@@ -2261,7 +2261,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
   // Specifically, when irep2 conversion reaches code creation, we should
   // encode the resulting type in the overflow operands type. Right now it's
   // inferred.
-  bool is_signed = false;
+  Z3_bool is_signed = Z3_L_FALSE;
 
   typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
   typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
@@ -2279,7 +2279,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
     call2 = workaround_Z3_mk_bvadd_no_underflow;
     if (is_signedbv_type(to_add2t(overflow.operand).side_1->type) ||
         is_signedbv_type(to_add2t(overflow.operand).side_2->type))
-    is_signed = true;
+      is_signed = Z3_L_TRUE;
   } else if (is_sub2t(overflow.operand)) {
     convert_bv(to_sub2t(overflow.operand).side_1, operand[0]);
     convert_bv(to_sub2t(overflow.operand).side_2, operand[1]);
@@ -2289,7 +2289,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
     call2 = workaround_Z3_mk_bvsub_no_overflow;
     if (is_signedbv_type(to_sub2t(overflow.operand).side_1->type) ||
         is_signedbv_type(to_sub2t(overflow.operand).side_2->type))
-    is_signed = true;
+      is_signed = Z3_L_TRUE;
   } else if (is_mul2t(overflow.operand)) {
     convert_bv(to_mul2t(overflow.operand).side_1, operand[0]);
     convert_bv(to_mul2t(overflow.operand).side_2, operand[1]);
@@ -2302,7 +2302,7 @@ z3_convt::convert_smt_expr(const overflow2t &overflow, void *_bv)
     call2 = Z3_mk_bvmul_no_underflow;
     if (is_signedbv_type(to_mul2t(overflow.operand).side_1->type) ||
         is_signedbv_type(to_mul2t(overflow.operand).side_2->type))
-    is_signed = true;
+      is_signed = Z3_L_TRUE;
   } else {
     std::cerr << "Overflow operation with invalid operand";
     abort();
@@ -3071,7 +3071,7 @@ workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                    Z3_bool is_signed)
 {
 
-  if (is_signed) {
+  if (is_signed == Z3_L_TRUE) {
     Z3_sort s = Z3_get_sort(ctx, a1);
     Z3_inc_ref(ctx, (Z3_ast)s);
     Z3_ast zero = Z3_mk_int(ctx, 0, s);
@@ -3158,7 +3158,7 @@ workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                     Z3_bool is_signed)
 {
 
-  if (is_signed) {
+  if (is_signed == Z3_L_TRUE) {
     Z3_sort s = Z3_get_sort(ctx, a1);
     Z3_inc_ref(ctx, (Z3_ast)s);
     Z3_ast zero = Z3_mk_int(ctx, 0, s);
