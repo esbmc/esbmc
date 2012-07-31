@@ -2303,8 +2303,8 @@ void goto_convertt::convert_while(
 
   if(inductive_step)
   {
-    //replace_cond(tmp, dest);
-	replace_ifthenelse(tmp);
+    replace_cond(tmp, dest);
+	//replace_ifthenelse(tmp);
   }
 
   array_typet state_vector;
@@ -2342,7 +2342,7 @@ void goto_convertt::convert_while(
   z->make_skip();
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(tmp), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v=tmp_branch.instructions.begin();
