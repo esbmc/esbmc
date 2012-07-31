@@ -63,7 +63,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   s_is_uw = uw;
   this->uw = uw;
   model = NULL;
-  array_of_count = 0;
   no_variables = 1;
 
   Z3_push(z3_ctx);

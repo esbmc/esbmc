@@ -282,7 +282,6 @@ private:
   bool int_encoding, smtlib, store_assumptions, uw;
   std::string filename;
 
-  unsigned int array_of_count;
   std::string dyn_info_arr_name;
 
   uint64_t no_variables;
