@@ -391,12 +391,6 @@ z3_convt::set_z3_core_size(uint val)
     max_core_size = val;
 }
 
-bool
-z3_convt::get_z3_encoding(void) const
-{
-  return int_encoding;
-}
-
 void
 z3_convt::set_filename(std::string file)
 {

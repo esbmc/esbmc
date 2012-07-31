@@ -48,7 +48,6 @@ public:
   virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   Z3_lbool check2_z3_properties(void);
-  bool get_z3_encoding(void) const;
   void set_filename(std::string file);
   uint get_z3_core_size(void);
   uint get_z3_number_of_assumptions(void);
