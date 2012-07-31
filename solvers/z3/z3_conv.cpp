@@ -129,13 +129,6 @@ z3_convt::~z3_convt()
 
     temp_out << smt_lib_str << std::endl;
   }
-
-
-  // Don't destruct with Z3 items still in existance.
-  bv_cache.clear();
-  assumpt_ctx_stack.clear();
-  assumpt.clear();
-  sort_cache.clear();
 }
 
 void

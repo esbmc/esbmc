@@ -37,7 +37,6 @@ class z3_convt: public prop_convt
 public:
   z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp);
   virtual ~z3_convt();
-  z3::context ctx;
 private:
   void intr_push_ctx(void);
   void intr_pop_ctx(void);
@@ -285,6 +284,9 @@ public:
       >
     >
   > union_varst;
+
+  //  Must be first member; that way it's the last to be destroyed.
+  z3::context ctx;
 
   bv_cachet bv_cache;
   union_varst union_vars;
