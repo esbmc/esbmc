@@ -1079,13 +1079,16 @@ namespace z3 {
             Z3_model_inc_ref(ctx(), m);
         }
     public:
+        model(void) : object(), m_model(NULL) { } // jmorse - uninitialized cons
         model(context & c, Z3_model m):object(c) { init(m); }
         model(model const & s):object(s) { init(s.m_model); }
         ~model() { Z3_model_dec_ref(ctx(), m_model); }
         operator Z3_model() const { return m_model; }
         model & operator=(model const & s) {
-            Z3_model_inc_ref(s.ctx(), s.m_model);
-            Z3_model_dec_ref(ctx(), m_model);
+            if (s.m_model)
+              Z3_model_inc_ref(s.ctx(), s.m_model);
+            if (m_model)
+              Z3_model_dec_ref(ctx(), m_model);
             m_ctx = s.m_ctx;
             m_model = s.m_model;
             return *this;
