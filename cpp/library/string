@@ -2530,5 +2530,9 @@ namespace std
 	{
 		return string(lhc) + string(rhc);
 	}
+
+	istream& getline ( istream& is, string& str, char delim );
+	istream& getline ( istream& is, string& str );
+
 }
 #endif

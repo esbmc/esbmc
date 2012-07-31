@@ -94,6 +94,9 @@ ostream& operator<< (ostream& out, float val) {
 ostream& operator<< (ostream& out, double val) {
 	return out;
 }
+ostream& operator<< (ostream& out, long long val) {
+	return out;
+}
 
 
 ostream& operator<< (ostream& out, streambuf* sb);

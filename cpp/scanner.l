@@ -70,7 +70,7 @@ hex_escape "x"[0-9a-fA-F]+
 
 escape_sequence [\\]({simple_escape}|{octal_escape}|{hex_escape})
 c_char [^'\\\n]|{escape_sequence}
-s_char [^"\\\n]|{escape_sequence}
+s_char [^"]|{escape_sequence}
 
 h_tab [\011]
 form_feed [\014]
