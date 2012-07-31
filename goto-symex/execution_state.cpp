@@ -265,12 +265,19 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
+  expr2tc pre_goto_state_guard = threads_state[active_thread].guard.as_expr();
 
   goto_symext::symex_goto(old_guard);
 
   if (!is_nil_expr(old_guard)) {
-    if (threads_state.size() > 1)
-      owning_rt->analyse_for_cswitch_after_read(old_guard);
+    if (threads_state.size() > 1) {
+      if (owning_rt->analyse_for_cswitch_after_read(old_guard)) {
+        // We're taking a context switch, store the state guard of this GOTO
+        // instruction. i.e., a state guard that doesn't depend on the _result_
+        // of the GOTO.
+        pre_goto_guard = pre_goto_state_guard;
+      }
+    }
   }
 
   return;

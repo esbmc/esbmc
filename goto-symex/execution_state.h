@@ -491,6 +491,10 @@ class execution_statet : public goto_symext
    *  Means that there is no path from here on where any assertion may
    *  become satisfiable. */
   bool interleaving_unviable;
+  /** State guard prior to a GOTO instruction causing a cswitch. Any thread
+   *  interleaved after a GOTO will be composed with this guard, rather than
+   *  the guard from any of the branches of the GOTO itself. */
+  expr2tc pre_goto_guard;
 
   protected:
   /** Number of context switches performed by this ex_state */
