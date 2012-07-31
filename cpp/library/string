@@ -2533,6 +2533,6 @@ namespace std
 
 	istream& getline ( istream& is, string& str, char delim );
 	istream& getline ( istream& is, string& str );
-	ostream& operator<< (ostream& os, const string& str);
+
 }
 #endif
