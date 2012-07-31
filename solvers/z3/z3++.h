@@ -1176,7 +1176,7 @@ namespace z3 {
             Z3_solver_inc_ref(ctx(), s);
         }
     public:
-        solver(void) : object() { } // jmorse - uninitialized cons
+        solver(void) : object(), m_solver(NULL) { } // jmorse - uninitialized cons
         solver(context & c):object(c) { init(Z3_mk_solver(c)); }
         solver(context & c, Z3_solver s):object(c) { init(s); }
         solver(context & c, char const * logic):object(c) { init(Z3_mk_solver_for_logic(c, c.str_symbol(logic))); }
@@ -1185,7 +1185,8 @@ namespace z3 {
         operator Z3_solver() const { return m_solver; }
         solver & operator=(solver const & s) {
             Z3_solver_inc_ref(s.ctx(), s.m_solver);
-            Z3_solver_dec_ref(ctx(), m_solver);
+            if (m_solver)
+              Z3_solver_dec_ref(ctx(), m_solver);
             m_ctx = s.m_ctx;
             m_solver = s.m_solver;
             return *this;
