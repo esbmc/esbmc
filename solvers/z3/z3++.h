@@ -1082,7 +1082,7 @@ namespace z3 {
         model(void) : object(), m_model(NULL) { } // jmorse - uninitialized cons
         model(context & c, Z3_model m):object(c) { init(m); }
         model(model const & s):object(s) { init(s.m_model); }
-        ~model() { Z3_model_dec_ref(ctx(), m_model); }
+        ~model() { if (m_model) Z3_model_dec_ref(ctx(), m_model); }
         operator Z3_model() const { return m_model; }
         model & operator=(model const & s) {
             if (s.m_model)
