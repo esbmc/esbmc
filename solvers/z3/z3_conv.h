@@ -288,6 +288,7 @@ public:
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
   z3::solver solver;
+  z3::model model;
 
   bv_cachet bv_cache;
   union_varst union_vars;
@@ -295,8 +296,6 @@ public:
   sort_cachet sort_cache;
 
   u_int max_core_size;
-
-  Z3_model model; // Model of satisfying program.
 
   unsigned int level_ctx;
   bool int_encoding, smtlib, store_assumptions, uw;

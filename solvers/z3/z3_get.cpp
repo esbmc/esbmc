@@ -67,7 +67,7 @@ z3_convt::get(const expr2tc &expr)
   if (is_symbol2t(expr)) {
     std::string identifier, tmp;
     z3::sort sort;
-    Z3_ast bv;
+    z3::expr bv;
 
     const symbol2t sym = to_symbol2t(expr);
     identifier = sym.get_symbol_name();
@@ -88,20 +88,17 @@ z3_convt::get(const expr2tc &expr)
     }
 
     bv = ctx.constant(identifier.c_str(), sort);
-    Z3_inc_ref(ctx, bv);
 
-    Z3_ast got_bv;
-    Z3_bool res = Z3_model_eval(z3_ctx, model, bv, false, &got_bv);
-    if (!res) {
-      // This symbol doesn't have an assignment in this model
-      return expr2tc();
+    try {
+      z3::expr res = model.eval(bv, false);
+      expr2tc ret = bv_get_rec(res, expr->type);
+      return ret;
     }
 
-    Z3_inc_ref(ctx, got_bv);
-    expr2tc ret = bv_get_rec(got_bv, expr->type);
-    Z3_dec_ref(ctx, got_bv);
-    Z3_dec_ref(ctx, bv);
-    return ret;
+    catch (z3::exception &e) {
+    }
+    // This symbol doesn't have an assignment in this model
+    return expr2tc();
   } else if (is_constant_expr(expr)) {
     return expr;
   } else {

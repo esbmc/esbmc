@@ -52,7 +52,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   store_assumptions = (smt || uw);
   s_is_uw = uw;
   this->uw = uw;
-  model = NULL;
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
@@ -99,9 +98,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
 
 z3_convt::~z3_convt()
 {
-
-  if (model != NULL)
-    Z3_del_model(z3_ctx, model);
 
   if (smtlib) {
     std::ofstream temp_out;
@@ -548,7 +544,7 @@ z3_convt::check2_z3_properties(void)
   if (result == z3::sat)
     model = solver.get_model();
 
-  if (config.options.get_bool_option("dump-z3-assigns") && model != NULL)
+  if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
     std::cout << Z3_model_to_string(z3_ctx, model);
 
   if (result == z3::sat)
