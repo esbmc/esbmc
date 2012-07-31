@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <simplify_expr.h>
+
 #include "goto_symex.h"
 
 /*******************************************************************\
@@ -106,7 +108,12 @@ void goto_symext::symex_throw()
       }
       else
       {
-
+        cur_state->guard.add(false_exprt());
+        exprt tmp=cur_state->guard.as_expr();
+        simplify(tmp);
+        target->assertion(cur_state->guard, tmp, "Trying to rethrow an exception but there isn't a last exception", cur_state->gen_stack_trace(),
+                          cur_state->source);
+        return;
       }
     }
 
