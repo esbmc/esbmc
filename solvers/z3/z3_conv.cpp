@@ -480,7 +480,7 @@ prop_convt::resultt
 z3_convt::dec_solve(void)
 {
   unsigned major, minor, build, revision;
-  Z3_lbool result;
+  z3::check_result result;
   Z3_get_version(&major, &minor, &build, &revision);
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
@@ -490,15 +490,15 @@ z3_convt::dec_solve(void)
 
   result = check2_z3_properties();
 
-  if (result == Z3_L_FALSE)
+  if (result == z3::unsat)
     return prop_convt::P_UNSATISFIABLE;
-  else if (result == Z3_L_UNDEF)
+  else if (result == z3::unknown)
     return prop_convt::P_ERROR;
   else
     return prop_convt::P_SATISFIABLE;
 }
 
-Z3_lbool
+z3::check_result
 z3_convt::check2_z3_properties(void)
 {
   z3::check_result result;
@@ -527,12 +527,7 @@ z3_convt::check2_z3_properties(void)
   if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
     std::cout << Z3_model_to_string(z3_ctx, model);
 
-  if (result == z3::sat)
-    return Z3_L_TRUE;
-  else if (result == z3::unsat)
-    return Z3_L_FALSE;
-  else
-    return Z3_L_UNDEF;
+  return result;
 }
 
 void
