@@ -2198,7 +2198,7 @@ void goto_convertt::replace_cond(
         init_nondet_expr(tmp.op1(), dest);
     }
   }
-  else if ( exprid == "and")
+  else if ( exprid == "and" || exprid == "or")
   {
     assert(tmp.operands().size()==2);
     assert(tmp.op0().operands().size()==2);
