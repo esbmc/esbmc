@@ -3202,7 +3202,11 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
 
   if (expr.is_symbol())
   {
-    get_cs_member(expr, new_expr, expr.type(), found);
+    if (expr.type().is_pointer() &&
+    		expr.type().subtype().is_symbol())
+      found = true;
+    else
+      get_cs_member(expr, new_expr, expr.type(), found);
   }
   else if (expr.is_constant())
   {
