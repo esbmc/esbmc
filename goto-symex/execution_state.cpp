@@ -523,9 +523,12 @@ execution_statet::execute_guard(void)
     threads_state.at(i).global_guard.add(get_guard_identifier());
   }
 
-  // Finally, if we've determined execution from here on is unviable, then
-  // mark this path as unviable.
-  if (is_cur_state_guard_false())
+  // Check to see whether or not the state guard is false, indicating we've
+  // found an unviable interleaving. However don't do this if we didn't
+  // /actually/ switch between threads, because it's acceptable to have a
+  // context switch point in a branch where the guard is false (it just isn't
+  // acceptable to permit switching).
+  if (last_active_thread != active_thread && is_cur_state_guard_false())
     interleaving_unviable = true;
 }
 
