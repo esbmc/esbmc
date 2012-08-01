@@ -64,6 +64,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 
   threads_state.push_back(state);
   cur_state = &threads_state.front();
+  cur_state->global_guard.make_true();
+  cur_state->global_guard.add(get_guard_identifier());
 
   atomic_numbers.push_back(0);
 
@@ -515,12 +517,10 @@ execution_statet::execute_guard(void)
   if (is_false(parent_guard))
     guard_expr = parent_guard;
 
-  // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
-    // remove the old guard first
-    threads_state.at(i).guard.back_sub(old_guard);
-    threads_state.at(i).guard.add(guard_expr);
+    threads_state.at(i).global_guard.make_true();
+    threads_state.at(i).global_guard.add(get_guard_identifier());
   }
 
   // Finally, if we've determined execution from here on is unviable, then
@@ -538,6 +538,8 @@ execution_statet::add_thread(const goto_programt *prog)
                       prog, threads_state.size());
 
   new_state.source.thread_nr = threads_state.size();
+  new_state.global_guard.make_true();
+  new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
   atomic_numbers.push_back(0);
 
