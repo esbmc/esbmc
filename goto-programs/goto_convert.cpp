@@ -3307,11 +3307,15 @@ DEBUGLOC;
       assert(new_expr1.type().id() == expr.op0().op0().type().id());
     else if (expr.op1().is_index())
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
-    else if (new_expr1.type().id() != new_expr2.type().id())
+    else if (new_expr1.type().id() != new_expr2.type().id() ||
+    		new_expr1.type().width()!=new_expr2.type().width())
       new_expr2.make_typecast(new_expr1.type());
 
-    //std::cout << "replace_ifthenelse new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
-    //std::cout << "replace_ifthenelse new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse expr.id().as_string(): " << expr.id().as_string() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr1.type().width(): " << new_expr1.type().width() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr2.type().width(): " << new_expr2.type().width() << std::endl;
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
     //std::cout << "replace_ifthenelse expr2: " << expr.pretty() << std::endl;
