@@ -125,6 +125,7 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
+  pre_goto_guard = ex.pre_goto_guard;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
