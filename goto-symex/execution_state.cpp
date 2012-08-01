@@ -518,7 +518,7 @@ execution_statet::execute_guard(void)
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
     // remove the old guard first
-    threads_state.at(i).guard -= old_guard;
+    threads_state.at(i).guard.back_sub(old_guard);
     threads_state.at(i).guard.add(guard_expr);
   }
 
