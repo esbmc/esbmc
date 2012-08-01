@@ -1731,7 +1731,10 @@ void goto_convertt::convert_for(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
+  {
+	remove_sideeffects(cond, dest);
     assert_cond(cond, true, dest); //assert(!c)
+  }
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2149,6 +2152,7 @@ void goto_convertt::replace_cond(
   goto_programt &dest)
 {
   //std::cout << tmp.pretty() << std::endl;
+
   irep_idt exprid = tmp.id();
   
   if (tmp.is_true())
@@ -2297,6 +2301,7 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
+
   is_infinite_loop = tmp.is_true();
 
   set_while_block(true);
@@ -2308,7 +2313,7 @@ void goto_convertt::convert_while(
   }
 
   array_typet state_vector;
-  const exprt &cond=code.op0();
+  const exprt &cond=tmp;//code.op0();
   const locationt &location=code.location();
 
 
@@ -2397,7 +2402,10 @@ void goto_convertt::convert_while(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-    assert_cond(cond, true, dest); //assert(!c)
+  {
+	remove_sideeffects(tmp, dest);
+    assert_cond(tmp, true, dest); //assert(!c)
+  }
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2537,7 +2545,10 @@ void goto_convertt::convert_dowhile(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-    assert_cond(cond, true, dest); //assert(!c)
+  {
+	remove_sideeffects(tmp, dest);
+    assert_cond(tmp, true, dest); //assert(!c)
+  }
 
   // restore break/continue targets
   targets.restore(old_targets);
