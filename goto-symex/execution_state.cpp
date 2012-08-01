@@ -471,9 +471,16 @@ execution_statet::is_cur_state_guard_false(void)
 
     expr2tc the_question(new equality2t(true_expr, parent_guard));
 
-    tvt res = rte->ask_solver_question(the_question);
-    if (res.is_false())
+    try {
+      tvt res = rte->ask_solver_question(the_question);
+      if (res.is_false())
+        return true;
+    } catch (runtime_encoded_equationt::dual_unsat_exception &e) {
+      // Basically, this means our _assumptions_ here are false as well, so
+      // neither true or false guards are possible. Consider this as meaning
+      // that the guard is false.
       return true;
+    }
   }
 
   return false;
