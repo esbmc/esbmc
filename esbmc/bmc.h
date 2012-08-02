@@ -148,7 +148,7 @@ protected:
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    const prop_convt &prop_conv, symex_target_equationt &equation);
+    prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
 };
 

@@ -64,6 +64,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 
   threads_state.push_back(state);
   cur_state = &threads_state.front();
+  cur_state->global_guard.make_true();
+  cur_state->global_guard.add(get_guard_identifier());
 
   atomic_numbers.push_back(0);
 
@@ -125,6 +127,7 @@ execution_statet::operator=(const execution_statet &ex)
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
   interleaving_unviable = ex.interleaving_unviable;
+  pre_goto_guard = ex.pre_goto_guard;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -241,6 +244,7 @@ execution_statet::symex_step(reachability_treet &art)
 void
 execution_statet::symex_assign(const expr2tc &code)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::symex_assign(code);
 
@@ -253,6 +257,7 @@ execution_statet::symex_assign(const expr2tc &code)
 void
 execution_statet::claim(const expr2tc &expr, const std::string &msg)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::claim(expr, msg);
 
@@ -265,12 +270,20 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
+  pre_goto_guard = expr2tc();
+  expr2tc pre_goto_state_guard = threads_state[active_thread].guard.as_expr();
 
   goto_symext::symex_goto(old_guard);
 
   if (!is_nil_expr(old_guard)) {
-    if (threads_state.size() > 1)
-      owning_rt->analyse_for_cswitch_after_read(old_guard);
+    if (threads_state.size() > 1) {
+      if (owning_rt->analyse_for_cswitch_after_read(old_guard)) {
+        // We're taking a context switch, store the state guard of this GOTO
+        // instruction. i.e., a state guard that doesn't depend on the _result_
+        // of the GOTO.
+        pre_goto_guard = pre_goto_state_guard;
+      }
+    }
   }
 
   return;
@@ -279,6 +292,7 @@ execution_statet::symex_goto(const expr2tc &old_guard)
 void
 execution_statet::assume(const expr2tc &assumption)
 {
+  pre_goto_guard = expr2tc();
 
   goto_symext::assume(assumption);
 
@@ -346,8 +360,6 @@ execution_statet::get_guard_identifier()
 void
 execution_statet::switch_to_thread(unsigned int i)
 {
-
-  assert(i != active_thread);
 
   last_active_thread = active_thread;
   active_thread = i;
@@ -459,9 +471,16 @@ execution_statet::is_cur_state_guard_false(void)
 
     expr2tc the_question(new equality2t(true_expr, parent_guard));
 
-    tvt res = rte->ask_solver_question(the_question);
-    if (res.is_false())
+    try {
+      tvt res = rte->ask_solver_question(the_question);
+      if (res.is_false())
+        return true;
+    } catch (runtime_encoded_equationt::dual_unsat_exception &e) {
+      // Basically, this means our _assumptions_ here are false as well, so
+      // neither true or false guards are possible. Consider this as meaning
+      // that the guard is false.
       return true;
+    }
   }
 
   return false;
@@ -476,7 +495,15 @@ execution_statet::execute_guard(void)
   exprt new_rhs, const_prop_val;
   expr2tc parent_guard;
 
-  parent_guard = threads_state[last_active_thread].guard.as_expr();
+  // Parent guard of this context switch - if a assign/claim/assume, just use
+  // the current thread guard. However if we just executed a goto, use the
+  // pre-goto thread guard that we stored at that time. This is so that the
+  // thread we context switch to gets the guard of that context switch happening
+  // rather than the guard of either branch of the GOTO.
+  if (!is_nil_expr(pre_goto_guard))
+    parent_guard = pre_goto_guard;
+  else
+    parent_guard = threads_state[last_active_thread].guard.as_expr();
 
   // Rename value, allows its use in other renamed exprs
   state_level2->make_assignment(guard_expr, expr2tc(), expr2tc());
@@ -497,17 +524,18 @@ execution_statet::execute_guard(void)
   if (is_false(parent_guard))
     guard_expr = parent_guard;
 
-  // copy the new guard exprt to every threads
   for (unsigned int i = 0; i < threads_state.size(); i++)
   {
-    // remove the old guard first
-    threads_state.at(i).guard -= old_guard;
-    threads_state.at(i).guard.add(guard_expr);
+    threads_state.at(i).global_guard.make_true();
+    threads_state.at(i).global_guard.add(get_guard_identifier());
   }
 
-  // Finally, if we've determined execution from here on is unviable, then
-  // mark this path as unviable.
-  if (is_cur_state_guard_false())
+  // Check to see whether or not the state guard is false, indicating we've
+  // found an unviable interleaving. However don't do this if we didn't
+  // /actually/ switch between threads, because it's acceptable to have a
+  // context switch point in a branch where the guard is false (it just isn't
+  // acceptable to permit switching).
+  if (last_active_thread != active_thread && is_cur_state_guard_false())
     interleaving_unviable = true;
 }
 
@@ -520,6 +548,8 @@ execution_statet::add_thread(const goto_programt *prog)
                       prog, threads_state.size());
 
   new_state.source.thread_nr = threads_state.size();
+  new_state.global_guard.make_true();
+  new_state.global_guard.add(get_guard_identifier());
   threads_state.push_back(new_state);
   atomic_numbers.push_back(0);
 

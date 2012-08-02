@@ -382,6 +382,8 @@ public:
 
   /** Current state guard of this thread. */
   guardt guard;
+  /** Guard of global context. */
+  guardt global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
   /** Invocation count for each function name. Tracks how many times a function
