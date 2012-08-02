@@ -403,6 +403,7 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
   } else {
+    pop_ctx();
     throw dual_unsat_exception();
   }
 
