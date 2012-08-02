@@ -35,12 +35,19 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target);
     expr2tc question(new equality2t(true_expr, new_guard));
-    tvt res = rte->ask_solver_question(question);
+    try {
+      tvt res = rte->ask_solver_question(question);
 
-    if (res.is_false())
+      if (res.is_false())
+        new_guard_false = true;
+      else if (res.is_true())
+        new_guard_true = true;
+    } catch (runtime_encoded_equationt::dual_unsat_exception &e) {
+      // Assumptions mean that the guard is never satisfiable as true or false,
+      // basically means we've assume'd away the possibility of hitting this
+      // point.
       new_guard_false = true;
-    else if (res.is_true())
-      new_guard_true = true;
+    }
   }
 
   if (new_guard_false) {
