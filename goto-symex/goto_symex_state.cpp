@@ -49,6 +49,7 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   depth = state.depth;
   thread_ended = state.thread_ended;
   guard = state.guard;
+  global_guard = state.global_guard;
   source = state.source;
   function_frame = state.function_frame;
   unwind_map = state.unwind_map;

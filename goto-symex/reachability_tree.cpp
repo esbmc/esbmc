@@ -166,11 +166,10 @@ reachability_treet::create_next_state(void)
     //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != next_thread_id) {
+    if (new_state->get_active_state_number() != next_thread_id)
       new_state->increment_context_switch();
-      new_state->switch_to_thread(next_thread_id);
-    }
 
+    new_state->switch_to_thread(next_thread_id);
     new_state->update_after_switch_point();
   }
 

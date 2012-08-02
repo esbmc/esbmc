@@ -403,9 +403,8 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
   } else {
-    // Both are unsat
-    std::cerr << "Dual-unsat outcome when asking solver question" << std::endl;
-    abort();
+    pop_ctx();
+    throw dual_unsat_exception();
   }
 
   // We have our result; pop off the questions / formula we've asked.
