@@ -2,10 +2,9 @@
 // compile with: /EHsc
 #include <vector>
 #include <iostream>
-
+using namespace std;
 int main( )
 {
-   using namespace std;
    vector<int> v1, v2, v3;
    vector<int>::iterator iter;
 
