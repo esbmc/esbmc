@@ -222,7 +222,15 @@ namespace std{
     //void assign ( T first, T last );
     //void assign(size_type n, const T& u);
     void assign(int t1, int t2);
-    void assign(iterator t1, iterator t2);
+    void assign(iterator t1, iterator t2){
+    	iterator p;
+    	int n;
+    	for(p = t1, n = 0 ; p != t2 ; p++, n++){
+    		buf[n] = *p;
+    	}
+    	_size = n;
+    	return;
+    }
     void assign(int t1[], int *t2);
 
     // iterators:
