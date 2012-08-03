@@ -230,9 +230,15 @@ namespace std{
     	iterator buffer;
     	buffer.pointer = buf;
     	buffer.pos = 0;
+    	return buffer;
     }
     const_iterator begin() const;
-    iterator end();
+    iterator end(){
+    	iterator buffer;
+    	buffer.pointer = (buf + _size - 1);
+    	buffer.pos = _size - 1;
+    	return buffer;
+    }
     const_iterator end() const;
     reverse_iterator rbegin();
     const_reverse_iterator rbegin() const;
@@ -328,7 +334,6 @@ namespace std{
     	}
     	_size--;
     	return position;
-
     }
     iterator erase(iterator first, iterator last);
 
