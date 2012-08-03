@@ -3,10 +3,10 @@
 #include <vector>
 #include <iostream>
 #include <cassert>
-
+using namespace std;
 int main( )
 {
-   using namespace std;
+   
    vector<int> v1, v2, v3;
    vector<int>::iterator iter;
 
