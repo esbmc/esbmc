@@ -340,7 +340,10 @@ void goto_convertt::do_malloc(
 
   //the k-induction does not support dynamic memory allocation yet
   if (inductive_step)
+  {
     print_msg_mem_alloc(lhs);
+    assert(0);
+  }
 }
 
 /*******************************************************************\

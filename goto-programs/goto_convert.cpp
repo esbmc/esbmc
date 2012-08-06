@@ -1731,10 +1731,7 @@ void goto_convertt::convert_for(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-  {
-	remove_sideeffects(cond, dest);
     assert_cond(cond, true, dest); //assert(!c)
-  }
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2009,6 +2006,7 @@ void goto_convertt::print_msg_mem_alloc(
   std::cerr << "warning: this program contains dynamic memory allocation,"
             << " so we are not applying the inductive step to this program!" 
             << std::endl;
+  std::cout << "failed" << std::endl;
   disable_k_induction();
 }
 
@@ -2402,10 +2400,7 @@ void goto_convertt::convert_while(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-  {
-	remove_sideeffects(tmp, dest);
     assert_cond(tmp, true, dest); //assert(!c)
-  }
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2545,10 +2540,7 @@ void goto_convertt::convert_dowhile(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-  {
-	remove_sideeffects(tmp, dest);
     assert_cond(tmp, true, dest); //assert(!c)
-  }
 
   // restore break/continue targets
   targets.restore(old_targets);
@@ -3301,7 +3293,10 @@ DEBUGLOC;
       get_new_expr(expr.op0(), new_expr, found);
     else
       get_new_expr(expr, new_expr, found);
+
+    if (!found) std::cout << "failed" << std::endl;
     assert(found);
+
     if (!new_expr.type().is_bool())
       new_expr.make_typecast(bool_typet());
     expr = new_expr;
