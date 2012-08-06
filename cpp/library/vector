@@ -81,7 +81,12 @@ namespace std{
 	      bool operator <= ( const iterator&)const;
 	      bool operator >= ( const iterator&)const;
 
-	      iterator operator + (int) const;
+	      iterator operator + (int n) const{
+	    	  iterator buffer;
+	    	  buffer.pointer = pointer + sizeof(T) * n;
+	    	  buffer.pos = pos + n;
+	    	  return buffer;
+	      }
 	      iterator operator - (int) const;
 	      iterator operator - (const iterator&) const;
 
