@@ -13,7 +13,7 @@ Date: Feb 2012
 
 #include "iterator"
 
-#define VECTOR_CAPACITY 30
+#define VECTOR_CAPACITY 500
 
 namespace std{
 
@@ -25,10 +25,12 @@ namespace std{
 	      public:
 	    	T* pointer;
 	    	int pos;
+	    	T* vec_pos;
 
 	    	iterator(const iterator& i)
 	    	{
 	    		pointer = i.pointer;
+	    		pos = i.pos;
 	    	}
 	    	iterator(){
 
@@ -38,6 +40,8 @@ namespace std{
 	    	}
 	    	iterator& operator=(const iterator& i){
 	    		pointer = i.pointer;
+	    		pos = i.pos;
+	    		return *this;
 	    	}
 
 	      T* operator -> ();
@@ -46,8 +50,22 @@ namespace std{
 	    	  return *pointer;
 	      }
 
-	      iterator& operator ++ ();
-	      iterator& operator ++ (int);
+	      iterator& operator ++ (){
+	    	  iterator buffer;
+	    	  buffer.pointer = pointer;
+	    	  buffer.pos = pos;
+	    	  pointer += sizeof(T);
+	    	  pos++;
+	    	  return buffer;
+	      }
+	      iterator& operator ++ (int b){
+	    	  iterator buffer;
+	    	  pointer += sizeof(T);
+	    	  pos++;
+  	    	  buffer.pointer = pointer;
+ 	  	      buffer.pos = pos;
+	    	  return buffer;
+	      }
 
 	      iterator& operator -- ();
 	      iterator& operator -- (int);
@@ -55,7 +73,9 @@ namespace std{
 	      bool operator == ( const iterator&)const;
 	      bool operator != ( const iterator&)const;
 
-	      bool operator < ( const iterator&)const;
+	      bool operator < ( const iterator& i)const{
+	    	  return (pointer < i.pointer);
+	      }
 	      bool operator > ( const iterator&)const;
 
 	      bool operator <= ( const iterator&)const;
@@ -72,35 +92,66 @@ namespace std{
 	    class const_iterator
 	    {
 	      public:
-	      const_iterator(const const_iterator&);
-	      const_iterator();
-	      const_iterator& operator=(const const_iterator&);
+	    	T* pointer;
+	    		    	int pos;
 
-	      const T* operator -> ();
+	    		    	const_iterator(const const_iterator& i)
+	    		    	{
+	    		    		pointer = i.pointer;
+	    		    	}
+	    		    	const_iterator(){
 
-	      const T& operator * ();
+	    		    	}
+	    		    	const_iterator(T* p){
+	    		    		pointer = p;
+	    		    	}
+	    		    	const_iterator& operator=(const const_iterator& i){
+	    		    		pointer = i.pointer;
+	    		    	}
 
-	      const_iterator& operator ++ ();
-	      const_iterator& operator ++ (int);
+	    		      T* operator -> ();
 
-	      const_iterator& operator -- ();
-	      const_iterator& operator -- (int);
+	    		      T& operator * (){
+	    		    	  return *pointer;
+	    		      }
 
-	      bool operator == ( const const_iterator&)const;
-	      bool operator != ( const const_iterator&)const;
+	    		      const_iterator& operator ++ (){
+	    		    	  const_iterator buffer;
+	    		    	  buffer.pointer = pointer;
+	    		    	  buffer.pos = pos;
+	    		    	  pointer += sizeof(T);
+	    		    	  pos++;
+	    		    	  return buffer;
+	    		      }
+	    		      const_iterator& operator ++ (int b){
+	    		    	  const_iterator buffer;
+	    		    	  pointer += sizeof(T);
+	    		    	  pos++;
+	    	  	    	  buffer.pointer = pointer;
+	    	 	  	      buffer.pos = pos;
+	    		    	  return buffer;
+	    		      }
 
-	      bool operator < ( const const_iterator&)const;
-	      bool operator > ( const const_iterator&)const;
+	    		      const_iterator& operator -- ();
+	    		      const_iterator& operator -- (int);
 
-	      bool operator <= ( const const_iterator&)const;
-	      bool operator >= ( const const_iterator&)const;
+	    		      bool operator == ( const const_iterator&)const;
+	    		      bool operator != ( const const_iterator&)const;
 
-	      const_iterator operator + (int) const;
-	      const_iterator operator - (int) const;
+	    		      bool operator < ( const const_iterator& i)const{
+	    		    	  return (pointer < i.pointer);
+	    		      }
+	    		      bool operator > ( const const_iterator&)const;
 
-	      const_iterator& operator += (int);
-	      const_iterator& operator -= (int);
-	    };
+	    		      bool operator <= ( const const_iterator&)const;
+	    		      bool operator >= ( const const_iterator&)const;
+
+	    		      const_iterator operator + (int) const;
+	    		      const_iterator operator - (int) const;
+	    		      const_iterator operator - (const const_iterator&) const;
+
+	    		      const_iterator& operator += (int);
+	    		      const_iterator& operator -= (int);	    };
 
 	    class reverse_iterator{
 	      public:
@@ -178,7 +229,6 @@ namespace std{
     // construct:
     explicit vector(): _size(0), _capacity(0)
     {
-
     }
 
 //    explicit vector(T t1, T t2): _size(0)
@@ -242,14 +292,27 @@ namespace std{
     	buffer.pos = 0;
     	return buffer;
     }
-    const_iterator begin() const;
-    iterator end(){
-    	iterator buffer;
-    	buffer.pointer = (buf + _size - 1);
-    	buffer.pos = _size - 1;
+    const_iterator begin() const{
+    	const_iterator buffer;
+    	buffer.pointer = buf;
+    	buffer.pos = 0;
     	return buffer;
     }
-    const_iterator end() const;
+    iterator end(){
+    	iterator buffer;
+    	if(_size > 0){
+    		buffer.pointer = (buf + _size - 1);
+    		buffer.pos = _size - 1;
+    	}
+    	else {
+    		buffer.pointer = buf;
+    		buffer.pos = 0;
+    	}
+    	return buffer;
+    }
+    const_iterator end() const{
+
+    }
     reverse_iterator rbegin();
     const_reverse_iterator rbegin() const;
     reverse_iterator rend();
@@ -339,7 +402,15 @@ namespace std{
       _size--;
     }
 
-    iterator insert(iterator position, const T& x);
+    iterator insert(iterator position, const T& x){
+    	T& aux = *position;
+    	for(int i = position.pos; i == _size ; i++){
+
+    	}
+    	buf[position.pos] = x;
+    	_size++;
+    	return position;
+    }
     void insert(iterator position, size_type n, const T& x);
     void insert(iterator position, iterator n, iterator x){
    	    	// model
