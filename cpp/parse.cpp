@@ -1816,12 +1816,9 @@ bool Parser::optThrowDecl(irept &throw_decl)
   if(lex->LookAhead(0)==TOK_THROW)
   {
     lex->GetToken(tk);
-    //p=irept::Snoc(p, new LeafReserved(tk));
 
     if(lex->GetToken(tk)!='(')
       return false;
-
-    //p=irept::Snoc(p, new Leaf(tk));
 
     for(;;)
     {
@@ -1837,7 +1834,6 @@ bool Parser::optThrowDecl(irept &throw_decl)
       }
       else if(rName(q))
       {
-        //  p=irept::Snoc(p, q);
       }
       else
         return false;
@@ -1845,16 +1841,11 @@ bool Parser::optThrowDecl(irept &throw_decl)
       if(lex->LookAhead(0)==',')
       {
         lex->GetToken(tk);
-        //p=irept::Snoc(p, new Leaf(tk));
       }
-      else
-        break;
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
-
-    //p=irept::Snoc(p, new Leaf(tk));
   }
 
   throw_decl=p;
