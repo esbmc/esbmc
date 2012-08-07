@@ -89,7 +89,7 @@ protected:
   bool rAttribute();
   bool optIntegralTypeOrClassSpec(typet &);
   bool rConstructorDecl(cpp_declaratort &, typet &);
-  bool optThrowDecl(irept &);
+  bool optThrowDecl(exprt &);
 
   bool rDeclarators(cpp_declarationt::declaratorst &, bool, bool=false);
   bool rDeclaratorWithInit(cpp_declaratort &, bool, bool);
@@ -1807,11 +1807,11 @@ bool Parser::rConstructorDecl(
   throw.decl : THROW '(' (name {','})* {name} ')'
              : THROW '(' '...' ')'
 */
-bool Parser::optThrowDecl(irept &throw_decl)
+bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  irept p=get_nil_irep();
+  exprt p=exprt("throw_list");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
@@ -1823,7 +1823,6 @@ bool Parser::optThrowDecl(irept &throw_decl)
     for(;;)
     {
       irept q;
-
       cpp_declarationt declaration;
 
       t=lex->LookAhead(0);
@@ -1852,6 +1851,8 @@ bool Parser::optThrowDecl(irept &throw_decl)
       {
         lex->GetToken(tk);
       }
+
+      p.get_sub().push_back(declaration);
     }
 
     if(lex->GetToken(tk)!=')')
@@ -2129,7 +2130,7 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      irept throw_decl;
+      exprt throw_decl;
       optThrowDecl(throw_decl); // ignore in this version
 
       if(lex->LookAhead(0)==':')
