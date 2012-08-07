@@ -7,7 +7,7 @@ void myunexpected () {
   throw;
 }
 
-void myfunction () throw (int e,bad_exception) {
+void myfunction () throw () {
   throw 'x';
 }
 
