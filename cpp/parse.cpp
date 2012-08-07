@@ -1859,7 +1859,9 @@ bool Parser::optThrowDecl(exprt &throw_decl)
       return false;
   }
 
-  throw_decl=p;
+  if(p.get_sub().size())
+    throw_decl=p;
+
   return true;
 }
 
@@ -2091,6 +2093,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
+  exprt throw_decl(static_cast<const exprt &>(get_nil_irep()));
 
   for(;;)
   {
@@ -2130,7 +2133,6 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      exprt throw_decl;
       optThrowDecl(throw_decl); // ignore in this version
 
       if(lex->LookAhead(0)==':')
@@ -2192,6 +2194,9 @@ bool Parser::rDeclarator(
 
   if(method_qualifier.is_not_nil())
     declarator.method_qualifier().swap(method_qualifier);
+
+  if(throw_decl.is_not_nil())
+    declarator.throw_decl().swap(throw_decl);
 
   declarator.type().swap(d_outer);
 
