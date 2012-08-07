@@ -1823,7 +1823,11 @@ bool Parser::optThrowDecl(irept &throw_decl)
     for(;;)
     {
       irept q;
+
+      cpp_declarationt declaration;
+
       t=lex->LookAhead(0);
+
       if(t=='\0')
         return false;
       else if(t==')')
@@ -1832,8 +1836,10 @@ bool Parser::optThrowDecl(irept &throw_decl)
       {
         lex->GetToken(tk);
       }
-      else if(rName(q))
+      else if(rArgDeclaration(declaration))
       {
+        // We need the type declaration but we can't have any initializer
+        assert(declaration.declarators().size()==1);
       }
       else
         return false;
