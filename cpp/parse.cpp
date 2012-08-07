@@ -1840,6 +1840,10 @@ bool Parser::optThrowDecl(irept &throw_decl)
       {
         // We need the type declaration but we can't have any initializer
         assert(declaration.declarators().size()==1);
+
+        if(declaration.declarators().at(0).name().is_not_nil())
+          if(!SyntaxError())
+            return false;        // too many errors
       }
       else
         return false;
