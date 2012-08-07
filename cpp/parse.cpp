@@ -1843,6 +1843,9 @@ bool Parser::optThrowDecl(exprt &throw_decl)
         if(declaration.declarators().at(0).name().is_not_nil())
           if(!SyntaxError())
             return false;        // too many errors
+
+        // We don't them anymore
+        declaration.declarators().clear();
       }
       else
         return false;
