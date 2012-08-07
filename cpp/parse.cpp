@@ -1815,6 +1815,8 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
+    throw_decl=p;
+
     lex->GetToken(tk);
 
     if(lex->GetToken(tk)!='(')
