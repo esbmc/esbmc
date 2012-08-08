@@ -12,8 +12,8 @@ if test $? != 0; then
   exit 1
 fi
 
-if test $# != 2; then
-  echo "Usage: fetchlibc.sh output_file path_to_keyring." >&2
+if test $# != 3; then
+  echo "Usage: fetchlibc.sh infilename output_file path_to_keyring." >&2
   exit 1
 fi
 
@@ -27,21 +27,21 @@ tmplibc=`mktemp`
 tmpsig=`mktemp`
 
 echo "Fetching libc.a for linux 2.6.18"
-curl -s --insecure https://jmorse.net/~jmorse/libc.a -o $tmplibc
+curl -s --insecure https://jmorse.net/~jmorse/$1 -o $tmplibc
 if test $? != 0; then
   echo "Failed to download libc.a." >&2
   exit 1
 fi
 
 echo "Fetching libc.a signature"
-curl -s --insecure https://jmorse.net/~jmorse/libc.a.asc -o $tmpsig
+curl -s --insecure https://jmorse.net/~jmorse/$1.asc -o $tmpsig
 if test $? != 0; then
   echo "Failed to download libc.a.asc." >&2
   exit 1
 fi
 
 echo "Verifying libc signature"
-gpg --no-default-keyring --keyring $2 --verify $tmpsig $tmplibc >/dev/null 2>&1
+gpg --no-default-keyring --keyring $3 --verify $tmpsig $tmplibc >/dev/null 2>&1
 if test $? != 0; then
   echo "Verification of libc file failed; bad signature." >&2
   exit 1
@@ -49,4 +49,4 @@ fi
 
 echo "Success"
 rm $tmpsig
-mv $tmplibc $1
+mv $tmplibc $2

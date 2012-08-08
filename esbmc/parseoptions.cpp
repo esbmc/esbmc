@@ -1374,6 +1374,7 @@ void cbmc_parseoptionst::help()
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
     " --version                    show current ESBMC version and exit\n\n"
+    " --show-goto-functions        show goto program\n"
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
@@ -1424,7 +1425,6 @@ void cbmc_parseoptionst::help()
 #if 0
     " --unsigned-char              make \"char\" unsigned by default\n"
     " --show-symbol-table          show symbol table\n"
-    " --show-goto-functions        show goto program\n"
     " --ppc-macos                  set MACOS/PPC architecture\n"
 #endif
     #ifdef _WIN32

@@ -296,10 +296,13 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (step_next_state())
+    if (step_next_state()) {
       cur_state_it++;
-    else
+    } else {
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       has_complete_formula = true;
+    }
   }
 
   at_end_of_run = false;
@@ -530,7 +533,7 @@ reachability_treet::print_ileave_trace(void) const
   std::cout << "Context switch trace for interleaving:" << std::endl;
   for (it = execution_states.begin(); it != execution_states.end(); it++, i++) {
     std::cout << "Context switch point " << i << std::endl;
-    (*it)->print_stack_traces(ns, 4);
+    (*it)->print_stack_traces(4);
   }
 }
 
@@ -555,7 +558,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
-  execution_states.back()->print_stack_traces(ns, 4);
+  execution_states.back()->print_stack_traces(4);
 
   while (std::cout << "Input: ", std::getline(std::cin, input)) {
     if (input == "b") {
