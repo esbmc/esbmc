@@ -1149,6 +1149,10 @@ void value_sett::assign_rec(
     // someone writes into a string-constant
     // evil guy
   }
+  else if(lhs.id()=="constant")
+  {
+    // evil as well
+  }
   else if(lhs.id()=="NULL-object")
   {
     // evil as well

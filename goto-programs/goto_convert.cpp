@@ -2016,6 +2016,7 @@ void goto_convertt::print_msg_mem_alloc(
   std::cerr << "warning: this program contains dynamic memory allocation,"
             << " so we are not applying the inductive step to this program!"
             << std::endl;
+  std::cout << "failed" << std::endl;
   disable_k_induction();
 }
 
@@ -2159,6 +2160,7 @@ void goto_convertt::replace_cond(
   goto_programt &dest)
 {
   //std::cout << tmp.pretty() << std::endl;
+
   irep_idt exprid = tmp.id();
 
   if (tmp.is_true())
@@ -2208,7 +2210,7 @@ void goto_convertt::replace_cond(
         init_nondet_expr(tmp.op1(), dest);
     }
   }
-  else if ( exprid == "and")
+  else if ( exprid == "and" || exprid == "or")
   {
     assert(tmp.operands().size()==2);
     assert(tmp.op0().operands().size()==2);
@@ -2307,18 +2309,19 @@ void goto_convertt::convert_while(
 
   exprt tmp=code.op0();
 
+
   is_infinite_loop = tmp.is_true();
 
   set_while_block(true);
 
   if(inductive_step)
   {
-    //replace_cond(tmp, dest);
-	replace_ifthenelse(tmp);
+    replace_cond(tmp, dest);
+	//replace_ifthenelse(tmp);
   }
 
   array_typet state_vector;
-  const exprt &cond=code.op0();
+  const exprt &cond=tmp;//code.op0();
   const locationt &location=code.location();
 
 
@@ -2352,7 +2355,7 @@ void goto_convertt::convert_while(
   z->make_skip();
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(tmp), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v=tmp_branch.instructions.begin();
@@ -2407,7 +2410,7 @@ void goto_convertt::convert_while(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-    assert_cond(cond, true, dest); //assert(!c)
+    assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue
   targets.restore(old_targets);
@@ -2547,7 +2550,7 @@ void goto_convertt::convert_dowhile(
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
-    assert_cond(cond, true, dest); //assert(!c)
+    assert_cond(tmp, true, dest); //assert(!c)
 
   // restore break/continue targets
   targets.restore(old_targets);
@@ -3212,7 +3215,11 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
 
   if (expr.is_symbol())
   {
-    get_cs_member(expr, new_expr, expr.type(), found);
+    if (expr.type().is_pointer() &&
+    		expr.type().subtype().is_symbol())
+      found = true;
+    else
+      get_cs_member(expr, new_expr, expr.type(), found);
   }
   else if (expr.is_constant())
   {
@@ -3296,7 +3303,10 @@ DEBUGLOC;
       get_new_expr(expr.op0(), new_expr, found);
     else
       get_new_expr(expr, new_expr, found);
+
+    if (!found) std::cout << "failed" << std::endl;
     assert(found);
+
     if (!new_expr.type().is_bool())
       new_expr.make_typecast(bool_typet());
     expr = new_expr;
@@ -3317,11 +3327,15 @@ DEBUGLOC;
       assert(new_expr1.type().id() == expr.op0().op0().type().id());
     else if (expr.op1().is_index())
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
-    else if (new_expr1.type().id() != new_expr2.type().id())
+    else if (new_expr1.type().id() != new_expr2.type().id() ||
+    		new_expr1.type().width()!=new_expr2.type().width())
       new_expr2.make_typecast(new_expr1.type());
 
-    //std::cout << "replace_ifthenelse new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
-    //std::cout << "replace_ifthenelse new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse expr.id().as_string(): " << expr.id().as_string() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr1.type().width(): " << new_expr1.type().width() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr2.pretty(): " << new_expr2.pretty() << std::endl;
+//    std::cout << "replace_ifthenelse new_expr2.type().width(): " << new_expr2.type().width() << std::endl;
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
     //std::cout << "replace_ifthenelse expr2: " << expr.pretty() << std::endl;

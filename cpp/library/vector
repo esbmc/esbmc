@@ -14,7 +14,7 @@ Date: Feb 2012
 #include "iterator"
 #include "stdexcept"
 
-#define VECTOR_CAPACITY 20
+#define VECTOR_CAPACITY 500
 
 namespace std{
 
@@ -24,16 +24,49 @@ namespace std{
 
 	    class iterator{
 	      public:
-	      iterator(const iterator&);
-	      iterator();
-	      iterator& operator=(const iterator&);
+	    	T* pointer;
+	    	int pos;
+	    	T* vec_pos;
+
+	    	iterator(const iterator& i)
+	    	{
+	    		pointer = i.pointer;
+	    		pos = i.pos;
+	    	}
+	    	iterator(){
+
+	    	}
+	    	iterator(T* p){
+	    		pointer = p;
+	    	}
+	    	iterator& operator=(const iterator& i){
+	    		pointer = i.pointer;
+	    		pos = i.pos;
+	    		return *this;
+	    	}
 
 	      T* operator -> ();
 
-	      T& operator * ();
+	      T& operator * (){
+	    	  return *pointer;
+	      }
 
-	      iterator& operator ++ ();
-	      iterator& operator ++ (int);
+	      iterator& operator ++ (){
+	    	  iterator buffer;
+	    	  buffer.pointer = pointer;
+	    	  buffer.pos = pos;
+	    	  pointer += sizeof(T);
+	    	  pos++;
+	    	  return buffer;
+	      }
+	      iterator& operator ++ (int b){
+	    	  iterator buffer;
+	    	  pointer += sizeof(T);
+	    	  pos++;
+  	    	  buffer.pointer = pointer;
+ 	  	      buffer.pos = pos;
+	    	  return buffer;
+	      }
 
 	      iterator& operator -- ();
 	      iterator& operator -- (int);
@@ -41,13 +74,20 @@ namespace std{
 	      bool operator == ( const iterator&)const;
 	      bool operator != ( const iterator&)const;
 
-	      bool operator < ( const iterator&)const;
+	      bool operator < ( const iterator& i)const{
+	    	  return (pointer < i.pointer);
+	      }
 	      bool operator > ( const iterator&)const;
 
 	      bool operator <= ( const iterator&)const;
 	      bool operator >= ( const iterator&)const;
 
-	      iterator operator + (int) const;
+	      iterator operator + (int n) const{
+	    	  iterator buffer;
+	    	  buffer.pointer = pointer + sizeof(T) * n;
+	    	  buffer.pos = pos + n;
+	    	  return buffer;
+	      }
 	      iterator operator - (int) const;
 	      iterator operator - (const iterator&) const;
 
@@ -57,49 +97,105 @@ namespace std{
 
 	    class const_iterator
 	    {
-	      public:
-	      const_iterator(const const_iterator&);
-	      const_iterator();
-	      const_iterator& operator=(const const_iterator&);
+	    public:
+	    	T* pointer;
+	    	int pos;
 
-	      const T* operator -> ();
+	    	const_iterator(const const_iterator& i)
+	    	{
+	    		pointer = i.pointer;
+	    	}
+	    	const_iterator(){
 
-	      const T& operator * ();
+	    	}
+	    	const_iterator(T* p){
+	    		pointer = p;
+	    	}
+	    	const_iterator& operator=(const const_iterator& i){
+	    		pointer = i.pointer;
+	    	}
 
-	      const_iterator& operator ++ ();
-	      const_iterator& operator ++ (int);
+	    	T* operator -> ();
 
-	      const_iterator& operator -- ();
-	      const_iterator& operator -- (int);
+	    	T& operator * (){
+	    		return *pointer;
+	    	}
 
-	      bool operator == ( const const_iterator&)const;
-	      bool operator != ( const const_iterator&)const;
+	    	const_iterator& operator ++ (){
+	    		const_iterator buffer;
+	    		buffer.pointer = pointer;
+	    		buffer.pos = pos;
+	    		pointer += sizeof(T);
+	    		pos++;
+	    		return buffer;
+	    	}
+	    	const_iterator& operator ++ (int b){
+	    		const_iterator buffer;
+	    		pointer += sizeof(T);
+	    		pos++;
+	    		buffer.pointer = pointer;
+	    		buffer.pos = pos;
+	    		return buffer;
+	    	}
 
-	      bool operator < ( const const_iterator&)const;
-	      bool operator > ( const const_iterator&)const;
+	    	const_iterator& operator -- ();
+	    	const_iterator& operator -- (int);
 
-	      bool operator <= ( const const_iterator&)const;
-	      bool operator >= ( const const_iterator&)const;
+	    	bool operator == ( const const_iterator&)const;
+	    	bool operator != ( const const_iterator&)const;
 
-	      const_iterator operator + (int) const;
-	      const_iterator operator - (int) const;
+	    	bool operator < ( const const_iterator& i)const{
+	    		return (pointer < i.pointer);
+	    	}
+	    	bool operator > ( const const_iterator&)const;
 
-	      const_iterator& operator += (int);
-	      const_iterator& operator -= (int);
+	    	bool operator <= ( const const_iterator&)const;
+	    	bool operator >= ( const const_iterator&)const;
+
+	    	const_iterator operator + (int) const;
+	    	const_iterator operator - (int) const;
+	    	const_iterator operator - (const const_iterator&) const;
+
+	    	const_iterator& operator += (int);
+	    	const_iterator& operator -= (int);
 	    };
 
 	    class reverse_iterator{
 	      public:
-	      reverse_iterator(const reverse_iterator&);
-	      reverse_iterator();
-	      reverse_iterator& operator=(const reverse_iterator&);
+	    	T* pointer;
+	    	int pos;
+	    	T* vec_pos;
+	      reverse_iterator(const reverse_iterator& i){
+	    	  pointer = i.pointer;
+	    	  pos = i.pos;
+	    	  vec_pos = i.vec_pos;
+	      }
+	      reverse_iterator(){
+
+	      }
+	      reverse_iterator& operator=(const reverse_iterator& i){
+	    	  pointer = i.pointer;
+	    	  pos = i.pos;
+	    	  vec_pos = i.vec_pos;
+	    	  return *this;
+	      }
 
 	      T* operator -> ();
 
-	      T& operator * ();
+	      T& operator * (){
+	    	  return *pointer;
+	      }
 
 	      reverse_iterator& operator ++ ();
-	      reverse_iterator& operator ++ (int);
+	      reverse_iterator& operator ++ (int n){
+	    	  reverse_iterator buffer;
+	    	  buffer.pointer = pointer;
+	    	  buffer.pos = pos;
+	    	  buffer.vec_pos = vec_pos;
+	    	  pointer -= sizeof(T);
+	    	  pos--;
+	    	  return buffer;
+	      }
 
 	      reverse_iterator& operator -- ();
 	      reverse_iterator& operator -- (int);
@@ -164,7 +260,6 @@ namespace std{
     // construct:
     explicit vector(): _size(0), _capacity(0)
     {
-
     }
 
 //    explicit vector(T t1, T t2): _size(0)
@@ -201,21 +296,71 @@ namespace std{
         //model
     }
 
-    vector<T>& operator=(const vector<T>& x);
+    vector<T>& operator=(const vector<T>& x){
+    	_size = 0;
+    	for(int i = 0 ; i < x.size() ; i++){
+    		push_back(x[i]);
+    	}
+    }
     //void assign ( T first, T last );
     //void assign(size_type n, const T& u);
     void assign(int t1, int t2);
-    void assign(iterator t1, iterator t2);
+    void assign(iterator t1, iterator t2){
+    	iterator p;
+    	int n;
+    	for(p = t1, n = 0 ; p != t2 ; p++, n++){
+    		buf[n] = *p;
+    	}
+    	_size = n;
+    	return;
+    }
     void assign(int t1[], int *t2);
 
     // iterators:
-    iterator begin();
-    const_iterator begin() const;
-    iterator end();
-    const_iterator end() const;
-    reverse_iterator rbegin();
+    iterator begin(){
+    	iterator buffer;
+    	buffer.pointer = buf;
+    	buffer.pos = 0;
+    	return buffer;
+    }
+    const_iterator begin() const{
+    	const_iterator buffer;
+    	buffer.pointer = buf;
+    	buffer.pos = 0;
+    	return buffer;
+    }
+    iterator end(){
+    	iterator buffer;
+    	buf[_size] = 0;
+    	if(_size > 0){
+    		buffer.pointer = buf + _size;
+    		buffer.pos = _size;
+    	}
+    	else {
+    		buffer.pointer = buf;
+    		buffer.pos = 0;
+    	}
+    	return buffer;
+    }
+    const_iterator end() const{
+
+    }
+    reverse_iterator rbegin(){
+    	reverse_iterator buffer;
+    	buffer.pointer = buf + _size -1;
+    	buffer.pos = _size -1;
+    	buffer.vec_pos = buf;
+    	return buffer;
+    }
     const_reverse_iterator rbegin() const;
-    reverse_iterator rend();
+    reverse_iterator rend(){
+    	reverse_iterator buffer;
+    	*(buf-1) = 0;
+    	buffer.pointer = buf -1;
+    	buffer.pos = -1;
+    	buffer.vec_pos = buf;
+    	return buffer;
+    }
     const_reverse_iterator rend() const;
 
     // capacity:
@@ -260,22 +405,33 @@ namespace std{
 			return buf[i];
     }
 
-    const_reference at(size_type n) const;
-    reference at(size_type n)
-    {
-      __ESBMC_assert(n >= 0, "the index must be a positive number");
-      if (n >= _size)
-        out_of_range();
+    const_reference at(size_type n) const{
+    	assert(0 <= n);
+    	assert(n < _size);
+    	assert(_size <= VECTOR_CAPACITY);
+    	return buf[n];
     }
-    reference front();
-    const_reference front() const;
+    reference at(size_type n){
+    	assert(0 <= n);
+    	assert(n < _size);
+    	assert(_size <= VECTOR_CAPACITY);
+    	return buf[n];
+    }
+    reference front(){
+    	return buf[0];
+    }
+    const_reference front() const{
+    	return buf[0];
+    }
 
     value_type back()
     {      
       return buf[_size-1];
     }
 
-    const_reference back() const;
+    const_reference back() const{
+    	return buf[_size-1];
+    }
 
     // modifiers:
     void push_back(const T& x)
@@ -288,10 +444,18 @@ namespace std{
     void pop_back()
     {
       __ESBMC_assert(_size!=0, "pop_back() on empty vector");
-      resize(_size-1);
+      _size--;
     }
 
-    iterator insert(iterator position, const T& x);
+    iterator insert(iterator position, const T& x){
+    	T& aux = *position;
+    	for(int i = position.pos; i == _size ; i++){
+
+    	}
+    	buf[position.pos] = x;
+    	_size++;
+    	return position;
+    }
     void insert(iterator position, size_type n, const T& x);
     void insert(iterator position, iterator n, iterator x){
    	    	// model
@@ -300,11 +464,20 @@ namespace std{
   	    	// model
   	}
 
-    iterator erase(iterator position);
+    iterator erase(iterator position){
+    	for(int i = position.pos + 1; i < _size ; i++){
+    		buf[i - 1] = buf[i];
+    	}
+    	_size--;
+    	return position;
+    }
     iterator erase(iterator first, iterator last);
 
     void swap(vector<T>&);
-    void clear();
+    void clear(){
+    	_size = 0;
+    	return;
+    }
 
     // comparators:
 
@@ -332,8 +505,23 @@ namespace std{
 };
 
   // specialized algorithms:
+
   template <class T>
-  void swap(vector<T>&, vector<T>&);
+  void swap(vector<T>& v1, vector<T>& v2){
+	  T aux[VECTOR_CAPACITY];
+	  for(int i = 0 ; i < v1.size() ; i++){
+		  aux[i] = v1[i];
+	  }
+	  v1.clear();
+	  for(int i = 0 ; i < v2.size() ; i++){
+		  v1.push_back(v2[i]);
+	  }
+	  v2.clear();
+	  for(int i = 0 ; i < v1.size() ; i++){
+		  v2.push_back(aux[i]);
+	  }
+	  return;
+  }
 
 }
 
