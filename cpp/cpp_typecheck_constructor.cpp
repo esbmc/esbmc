@@ -767,7 +767,7 @@ Function: full_member_initialization
           First, all the direct-parent constructors are called.
           Second, all the non-pod data members are initialized.
 
- Note: The initialization order follows the decalration order.
+ Note: The initialization order follows the declaration order.
 
 \*******************************************************************/
 
@@ -896,6 +896,27 @@ void cpp_typecheckt::full_member_initialization(
         found = true;
         break;
       }
+      // initialize the indirect parent
+      //Begin: L.Cordeiro
+      else {
+		  irep_idt identifier=parent_it->type().identifier();
+		  const symbolt &isymb=lookup(identifier);
+		  const typet &type = isymb.type;
+		  assert(type.id()=="struct");
+		  const irept &ibase = type.find("bases");
+		  forall_irep(iparent_it, ibase.get_sub())
+		  {
+			  assert(iparent_it->get("type") == "symbol" );
+			  if(member_type.identifier()
+				 == iparent_it->type().identifier())
+			  {
+				  final_initializers.move_to_sub(initializer);
+				  found = true;
+				  break;
+			  }
+		  }
+      }
+      //End: L.Cordeiro
     }
 
     // Call the parent default constructor
