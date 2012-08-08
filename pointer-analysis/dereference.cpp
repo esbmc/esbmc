@@ -324,28 +324,31 @@ void dereferencet::build_reference_to(
   exprt &pointer_guard,
   const guardt &guard)
 {
+  const typet &dereference_type=
+    ns.follow(deref_expr.type()).subtype();
+
   value.make_nil();
   pointer_guard.make_false();
 
   if(what.id()=="unknown" ||
      what.id()=="invalid")
   {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      // constraint that it actually is an invalid pointer
-
-      exprt invalid_pointer_expr("invalid-pointer", typet("bool"));
-      invalid_pointer_expr.copy_to_operands(deref_expr);
-
-      // produce new guard
-
-      guardt tmp_guard(guard);
-      tmp_guard.move(invalid_pointer_expr);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalid pointer",
-        tmp_guard);
-    }
+//    if(!options.get_bool_option("no-pointer-check"))
+//    {
+//      // constraint that it actually is an invalid pointer
+//
+//      exprt invalid_pointer_expr("invalid-pointer", typet("bool"));
+//      invalid_pointer_expr.copy_to_operands(deref_expr);
+//
+//      // produce new guard
+//
+//      guardt tmp_guard(guard);
+//      tmp_guard.move(invalid_pointer_expr);
+//      dereference_callback.dereference_failure(
+//        "pointer dereference",
+//        "invalid pointer",
+//        tmp_guard);
+//    }
 
     return;
   }
@@ -391,7 +394,14 @@ void dereferencet::build_reference_to(
 
       exprt sym("symbol", array_typet());
       sym.type().subtype() = bool_typet();
-      sym.set("identifier", "c::__ESBMC_is_dynamic");
+
+      const symbolt *sp;
+      if(!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
+        sym.set("identifier", "c::__ESBMC_is_dynamic");
+      } else {
+        sym.set("identifier", "cpp::__ESBMC_is_dynamic");
+      }
+
       exprt pointerobj("pointer_object", signedbv_typet());
       pointerobj.copy_to_operands(deref_expr);
       exprt is_dynamic_object_expr("index", bool_typet());
@@ -465,6 +475,133 @@ void dereferencet::build_reference_to(
   }
   else
   {
+#if 0
+    // something generic -- really has to be a symbol
+    address_of_exprt object_pointer(object);
+
+    if(o.offset().is_zero())
+    {
+      equality_exprt equality(deref_expr, object_pointer);
+
+      if(ns.follow(equality.lhs().type())!=ns.follow(equality.rhs().type()))
+        equality.lhs().make_typecast(equality.rhs().type());
+
+      pointer_guard=equality;
+    }
+    else
+    {
+      pointer_guard=exprt("same-object", bool_typet());
+      pointer_guard.copy_to_operands(deref_expr, object_pointer);
+    }
+
+    value=object;
+
+    guardt tmp_guard(guard);
+    tmp_guard.add(pointer_guard);
+
+    valid_check(object, tmp_guard, mode);
+
+    exprt offset;
+
+
+    const typet &object_type=ns.follow(object.type());
+    exprt root_object=o.root_object();
+    const typet &root_object_type=ns.follow(root_object.type());
+
+    if(dereference_type_compare(value, dereference_type) &&
+       o.offset().is_zero())
+    {
+      // The simplest case: types match, and offset is zero!
+      // This is great, we are almost done.
+      value=object;
+
+      if(object_type!=ns.follow(dereference_type))
+        value.make_typecast(dereference_type);
+      return ;
+    }
+    else if(root_object_type.id()=="array" &&
+            dereference_type_compare(root_object, dereference_type))
+    {
+      // We have an array with a subtype that matches
+      // the dereferencing type.
+      // We will require well-alignedness!
+
+      exprt offset;
+
+      // this should work as the object is essentially the root object
+      if(o.offset().is_constant())
+        offset=o.offset();
+      else
+        offset=unary_exprt("pointer_offset", deref_expr, index_type());
+
+      exprt adjusted_offset;
+
+      // are we doing a byte?
+      mp_integer element_size=
+        pointer_offset_size(dereference_type);
+
+      if(element_size==1)
+      {
+        // no need to adjust offset
+        adjusted_offset=offset;
+      }
+      else
+      {
+        exprt element_size_expr=
+          from_integer(element_size, offset.type());
+
+        adjusted_offset=binary_exprt(
+          offset, exprt::div, element_size_expr, offset.type());
+
+        // TODO: need to assert well-alignedness
+      }
+
+      index_exprt index_expr=
+        index_exprt(root_object, adjusted_offset, root_object_type.subtype());
+
+      bounds_check(index_expr, guard);
+
+      value=index_expr;
+
+      if(ns.follow(value.type())!=ns.follow(dereference_type))
+        value.make_typecast(dereference_type);
+
+      return ;
+    }
+    else
+    {
+      // we extract something from the root object
+      value=o.root_object();
+
+      // this is relative to the root object
+      exprt offset=
+        unary_exprt("pointer_offset", deref_expr, index_type());
+
+      if(memory_model(value, dereference_type, tmp_guard, offset))
+      {
+        // ok, done
+      }
+      else
+      {
+        if(!options.get_bool_option("no-pointer-check"))
+        {
+          std::string msg="memory model not applicable (got `";
+          msg+=from_type(ns, "", value.type());
+          msg+="', expected `";
+          msg+=from_type(ns, "", dereference_type);
+          msg+="')";
+
+          dereference_callback.dereference_failure(
+            "pointer dereference",
+            msg, tmp_guard);
+        }
+
+        return ; // give up, no way that this is ok
+      }
+    }
+#endif
+
+#if 1
     value=object;
 
     exprt object_pointer("address_of", pointer_typet());
@@ -549,6 +686,7 @@ void dereferencet::build_reference_to(
         }
       }
     }
+#endif
   }
 }
 
@@ -825,7 +963,13 @@ bool dereferencet::memory_model_bytes(
   const guardt &guard,
   exprt &new_offset)
 {
+#if 1
+  //std::cout << "value.pretty(): " << value.pretty() << std::endl;
+  //std::cout << "new_offset.pretty(): " << new_offset.pretty() << std::endl;
+  //std::cout << "to_type.id(): " << to_type.id() << std::endl;
+
   const typet from_type=value.type();
+  exprt result;
 
   // we won't try to convert to/from code
   if(from_type.is_code() || to_type.is_code())
@@ -895,7 +1039,95 @@ bool dereferencet::memory_model_bytes(
 
     return true;
   }
+  else if (to_type.id()=="struct" && value.type().id()=="struct")
+  {
+    if (ns.follow(from_type).id()=="array" &&
+       pointer_offset_size(ns.follow(from_type).subtype())==1 &&
+       pointer_offset_size(to_type)==1 &&
+       is_a_bv_type(ns.follow(from_type).subtype()) &&
+       is_a_bv_type(to_type))
+    {
+      // yes, can use 'index'
+      result=index_exprt(value, new_offset, ns.follow(from_type).subtype());
+
+      // possibly need to convert
+      if(!base_type_eq(result.type(), to_type, ns))
+        result.make_typecast(to_type);
+      }
+      else
+      {
+        // no, use 'byte_extract'
+        result=exprt(byte_extract_id(), to_type);
+        result.copy_to_operands(value, new_offset);
+      }
+
+    value=result;
+
+    // are we within the bounds?
+    if(!options.get_bool_option("no-pointer-check"))
+    {
+      // upper bound
+      {
+        mp_integer from_width=pointer_offset_size(from_type);
+        mp_integer to_width=pointer_offset_size(to_type);
+
+        exprt bound=from_integer(from_width-to_width, new_offset.type());
+
+        binary_relation_exprt
+          offset_upper_bound(new_offset, exprt::i_gt, bound);
+
+        guardt tmp_guard(guard);
+        tmp_guard.add(offset_upper_bound);
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "object upper bound", tmp_guard);
+      }
+
+      // lower bound is easy
+      if(!new_offset.is_zero())
+      {
+        binary_relation_exprt
+          offset_lower_bound(new_offset, exprt::i_lt,
+                           gen_zero(new_offset.type()));
+
+        guardt tmp_guard(guard);
+        tmp_guard.add(offset_lower_bound);
+        dereference_callback.dereference_failure(
+        "pointer dereference",
+        "object lower bound", tmp_guard);
+      }
+    }
+    return true;
+  }
 
   return false;
+#endif
 }
 
+
+/*******************************************************************\
+
+Function: dereferencet::byte_extract_id
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+irep_idt dereferencet::byte_extract_id()
+{
+  switch(config.ansi_c.endianess)
+  {
+  case configt::ansi_ct::IS_LITTLE_ENDIAN:
+    return "byte_extract_little_endian";
+
+  case configt::ansi_ct::IS_BIG_ENDIAN:
+    return "byte_extract_big_endian";
+
+  default:
+    assert(false);
+  }
+}

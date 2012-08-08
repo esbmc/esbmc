@@ -26,7 +26,7 @@ void goto_symext::symex_malloc(
 {
   if(code.operands().size()!=1)
     throw "malloc expected to have one operand";
-    
+
   if(lhs.is_nil())
     return; // ignore
 
@@ -43,7 +43,7 @@ void goto_symext::symex_malloc(
     mp_integer i;
     size_is_one=(!to_integer(size, i) && i==1);
   }
-  
+
   if(type.is_nil())
     type=char_type();
 
@@ -59,7 +59,7 @@ void goto_symext::symex_malloc(
 
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
-  
+
   typet renamedtype = ns.follow(type);
   if(size_is_one)
     symbol.type=renamedtype;
@@ -75,9 +75,9 @@ void goto_symext::symex_malloc(
   symbol.mode="C";
 
   new_context.add(symbol);
-  
+
   exprt rhs(exprt::addrof, typet(typet::t_pointer));
-  
+
   if(size_is_one)
   {
     rhs.type().subtype()=symbol.type;
@@ -90,12 +90,12 @@ void goto_symext::symex_malloc(
     rhs.type().subtype()=symbol.type.subtype();
     rhs.move_to_operands(index_expr);
   }
-  
+
   if(rhs.type()!=lhs.type())
     rhs.make_typecast(lhs.type());
 
   cur_state->rename(rhs);
-  
+
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
@@ -130,7 +130,7 @@ void goto_symext::symex_printf(
     args.push_back(operands[i]);
 
   const exprt &format=operands[0];
-  
+
   if(format.id()==exprt::addrof &&
      format.operands().size()==1 &&
      format.op0().id()==exprt::index &&
@@ -155,7 +155,7 @@ void goto_symext::symex_cpp_new(
     throw "new expected to return pointer";
 
   do_array=(code.statement()=="cpp_new[]");
-      
+
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
 
@@ -169,7 +169,7 @@ void goto_symext::symex_cpp_new(
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
   symbol.mode="C++";
-  
+
   typet newtype;
   typet renamedtype = ns.follow(code.type().subtype());
   if(do_array)
@@ -185,14 +185,14 @@ void goto_symext::symex_cpp_new(
 
   //symbol.type.active(symbol_expr(active_symbol));
   symbol.type.dynamic(true);
-  
+
   new_context.add(symbol);
 
   // make symbol expression
 
   exprt rhs(exprt::addrof, typet(typet::t_pointer));
   rhs.type().subtype()=renamedtype;
-  
+
   if(do_array)
   {
     exprt index_expr(exprt::index, renamedtype);
@@ -201,11 +201,24 @@ void goto_symext::symex_cpp_new(
   }
   else
     rhs.copy_to_operands(symbol_expr(symbol));
-  
+
   cur_state->rename(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
+
+  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
+  exprt sym("symbol", array_typet());
+  sym.type().subtype() = bool_typet();
+  sym.set("identifier", "cpp::__ESBMC_is_dynamic");
+  exprt pointerobj("pointer_object", signedbv_typet());
+  exprt ptrsrc = lhs;
+  pointerobj.move_to_operands(ptrsrc);
+  exprt index("index", bool_typet());
+  index.move_to_operands(sym, pointerobj);
+  exprt truth("constant", bool_typet());
+  truth.set("value", "true");
+  symex_assign_rec(index, truth, guard);
 }
 
 // XXX - implement as a call to free?

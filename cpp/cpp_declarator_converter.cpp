@@ -515,7 +515,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       {
         if(storage_spec.is_static())
         {
-          symbol.static_lifetime=true;
+          //symbol.static_lifetime=true;
           symbol.file_local=true;
         }
         else if(storage_spec.is_extern())

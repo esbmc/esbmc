@@ -301,8 +301,7 @@ void string_instrumentationt::do_function_call(
     else if(identifier=="c::fscanf")
       do_fscanf(dest, target, call);
 
-    dest.compute_targets();
-    dest.number_targets();
+    dest.update();
   }
 }
 
@@ -393,7 +392,6 @@ void string_instrumentationt::do_snprintf(
   assertion->location.property("string");
   assertion->location.comment("snprintf buffer overflow");
   assertion->local_variables=target->local_variables;
-
 
   exprt bufsize = buffer_size(arguments[0]);
   assertion->make_assertion(binary_relation_exprt(bufsize, ">=", arguments[1]));

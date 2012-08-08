@@ -127,6 +127,8 @@ private:
     const typet &type,
     const guardt &guard,
     exprt &new_offset);
+
+  static irep_idt byte_extract_id();
 };
 
 #endif

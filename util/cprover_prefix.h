@@ -1,1 +1,2 @@
 #define CPROVER_PREFIX "c::__ESBMC_"
+#define VERIFIER_PREFIX "c::__VERIFIER_"

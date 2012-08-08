@@ -23,7 +23,7 @@
 #ifdef _WIN64
     typedef __int64 streamsize;
 #else
-    typedef int streamsize;
+    typedef unsigned int streamsize;
 #endif
 
 unsigned int nondet_uint();
@@ -31,8 +31,11 @@ float nondet_float();
 bool nondet_bool();
 char* nondet_charPointer();
 char nondet_char();
+class smanip {};
 
 typedef unsigned int size_t;
+typedef int ptrdiff_t;
+
 #define _SIZE_T_DEFINED
 
 #endif

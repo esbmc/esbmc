@@ -103,6 +103,15 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
+	//std::cout << "has_throw_target: " << has_throw_target << std::endl;
+	//std::cout << "has_catch: " << has_catch << std::endl;
+    if (has_throw_target && has_catch) {
+      instruction.targets.pop_back();
+      instruction.targets.push_back(throw_target);
+      has_throw_target = false;
+      has_catch = false;
+    }
+
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
@@ -124,13 +133,13 @@ goto_symext::symex_step(reachability_treet & art)
 
       do_simplify(tmp);
       if (!tmp.is_true()) {
-	exprt tmp2 = tmp;
-	cur_state->guard.guard_expr(tmp2);
+        exprt tmp2 = tmp;
+        cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp2);
+        assume(tmp2);
 
-	// we also add it to the state guard
-	cur_state->guard.add(tmp);
+        // we also add it to the state guard
+        cur_state->guard.add(tmp);
       }
     }
     cur_state->source.pc++;
@@ -142,15 +151,15 @@ goto_symext::symex_step(reachability_treet & art)
           !cur_state->source.pc->location.user_provided()
           || options.get_bool_option("deadlock-check")) {
 
-	std::string msg = cur_state->source.pc->location.comment().as_string();
-	if (msg == "") msg = "assertion";
-	exprt tmp(instruction.guard);
+        std::string msg = cur_state->source.pc->location.comment().as_string();
+        if (msg == "") msg = "assertion";
+        exprt tmp(instruction.guard);
 
-	replace_dynamic_allocation(tmp);
-	replace_nondet(tmp);
-	dereference(tmp, false);
+        replace_dynamic_allocation(tmp);
+        replace_nondet(tmp);
+        dereference(tmp, false);
 
-	claim(tmp, msg);
+        claim(tmp, msg);
       }
     }
     cur_state->source.pc++;
@@ -159,10 +168,10 @@ goto_symext::symex_step(reachability_treet & art)
   case RETURN:
     if (!cur_state->guard.is_false()) {
       const code_returnt &code =
-        to_code_return(instruction.code);
+          to_code_return(instruction.code);
       code_assignt assign;
       if (make_return_assignment(assign, code))
-	goto_symext::symex_assign(assign);
+        goto_symext::symex_assign(assign);
       symex_return();
     }
 
@@ -187,25 +196,25 @@ goto_symext::symex_step(reachability_treet & art)
   case FUNCTION_CALL:
     if (!cur_state->guard.is_false()) {
       code_function_callt deref_code =
-        to_code_function_call(instruction.code);
+          to_code_function_call(instruction.code);
 
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       if (deref_code.lhs().is_not_nil()) {
-	dereference(deref_code.lhs(), true);
+        dereference(deref_code.lhs(), true);
       }
 
       Forall_expr(it, deref_code.arguments()) {
-	dereference(*it, false);
+        dereference(*it, false);
       }
 
       if (has_prefix(deref_code.function().identifier().as_string(),
-                     "c::__ESBMC")) {
-	cur_state->source.pc++;
-	run_intrinsic(deref_code, art,
-	              deref_code.function().identifier().as_string());
-	return;
+          "c::__ESBMC")) {
+        cur_state->source.pc++;
+        run_intrinsic(deref_code, art,
+            deref_code.function().identifier().as_string());
+        return;
       }
 
       symex_function_call(deref_code);
@@ -222,12 +231,12 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case CATCH:
-    symex_catch(*cur_state);
+    symex_catch();
     cur_state->source.pc++;
     break;
 
   case THROW:
-    symex_throw(*cur_state);
+    symex_throw();
     cur_state->source.pc++;
     break;
 

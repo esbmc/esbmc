@@ -89,7 +89,7 @@ protected:
   bool rAttribute();
   bool optIntegralTypeOrClassSpec(typet &);
   bool rConstructorDecl(cpp_declaratort &, typet &);
-  bool optThrowDecl(irept &);
+  bool optThrowDecl(exprt &);
 
   bool rDeclarators(cpp_declarationt::declaratorst &, bool, bool=false);
   bool rDeclaratorWithInit(cpp_declaratort &, bool, bool);
@@ -1807,26 +1807,28 @@ bool Parser::rConstructorDecl(
   throw.decl : THROW '(' (name {','})* {name} ')'
              : THROW '(' '...' ')'
 */
-bool Parser::optThrowDecl(irept &throw_decl)
+bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  irept p=get_nil_irep();
+  exprt p=exprt("throw_list");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
+    throw_decl=p;
+
     lex->GetToken(tk);
-    //p=irept::Snoc(p, new LeafReserved(tk));
 
     if(lex->GetToken(tk)!='(')
       return false;
 
-    //p=irept::Snoc(p, new Leaf(tk));
-
     for(;;)
     {
       irept q;
+      cpp_declarationt declaration;
+
       t=lex->LookAhead(0);
+
       if(t=='\0')
         return false;
       else if(t==')')
@@ -1835,9 +1837,17 @@ bool Parser::optThrowDecl(irept &throw_decl)
       {
         lex->GetToken(tk);
       }
-      else if(rName(q))
+      else if(rArgDeclaration(declaration))
       {
-        //  p=irept::Snoc(p, q);
+        // We need the type declaration but we can't have any initializer
+        assert(declaration.declarators().size()==1);
+
+        if(declaration.declarators().at(0).name().is_not_nil())
+          if(!SyntaxError())
+            return false;        // too many errors
+
+        // We don't them anymore
+        declaration.declarators().clear();
       }
       else
         return false;
@@ -1845,19 +1855,18 @@ bool Parser::optThrowDecl(irept &throw_decl)
       if(lex->LookAhead(0)==',')
       {
         lex->GetToken(tk);
-        //p=irept::Snoc(p, new Leaf(tk));
       }
-      else
-        break;
+
+      p.get_sub().push_back(declaration);
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
-
-    //p=irept::Snoc(p, new Leaf(tk));
   }
 
-  throw_decl=p;
+  if(p.get_sub().size())
+    throw_decl=p;
+
   return true;
 }
 
@@ -2089,6 +2098,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
+  exprt throw_decl(static_cast<const exprt &>(get_nil_irep()));
 
   for(;;)
   {
@@ -2128,7 +2138,6 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      irept throw_decl;
       optThrowDecl(throw_decl); // ignore in this version
 
       if(lex->LookAhead(0)==':')
@@ -2190,6 +2199,9 @@ bool Parser::rDeclarator(
 
   if(method_qualifier.is_not_nil())
     declarator.method_qualifier().swap(method_qualifier);
+
+  if(throw_decl.is_not_nil())
+    declarator.throw_decl().swap(throw_decl);
 
   declarator.type().swap(d_outer);
 
@@ -4266,7 +4278,8 @@ bool Parser::rThrowExpr(exprt &exp)
 
   int t=lex->LookAhead(0);
 
-  exp=exprt("cpp-throw");
+  exp=exprt("sideeffect");
+  exp.statement("cpp-throw");
   set_location(exp, tk);
 
   if(t==':' || t==';')
@@ -5395,6 +5408,7 @@ bool Parser::rCompoundStatement(codet &statement)
   #endif
 
   statement=code_blockt();
+  set_location(statement, ob);
 
   while(lex->LookAhead(0)!='}')
   {
@@ -5883,12 +5897,14 @@ bool Parser::rTryStatement(codet &statement)
   statement=codet("cpp-catch");
   set_location(statement, tk);
 
-  codet body;
+  {
+    codet body;
 
-  if(!rCompoundStatement(body))
-    return false;
+    if(!rCompoundStatement(body))
+      return false;
 
-  statement.move_to_operands(body);
+    statement.move_to_operands(body);
+  }
 
   // iterate while there are catch clauses
   do
@@ -5906,7 +5922,18 @@ bool Parser::rTryStatement(codet &statement)
     if(lex->LookAhead(0)==TOK_ELLIPSIS)
     {
       lex->GetToken(cp);
-      // TODO
+
+      declaration = cpp_declarationt();
+
+      typet kw=typet("ellipsis");
+      set_location(kw, cp);
+      declaration.type().swap(kw);
+
+      cpp_declaratort arg_declarator;
+      if(!rDeclarator(arg_declarator, kArgDeclarator, false, true))
+      	return false;
+
+      declaration.declarators().push_back(arg_declarator);
     }
     else
     {
@@ -5914,11 +5941,37 @@ bool Parser::rTryStatement(codet &statement)
         return false;
     }
 
+    // No name in the declarator? Make one.
+    assert(declaration.declarators().size()==1);
+
+    if(declaration.declarators().front().name().is_nil())
+    {
+      irept name("name");
+      name.identifier("#anon");
+      name.set("#location", declaration.type().location());
+      declaration.declarators().front().name()=cpp_namet();
+      declaration.declarators().front().name().get_sub().push_back(name);
+    }
+
     if(lex->GetToken(cp)!=')')
       return false;
 
+    codet body;
+
     if(!rCompoundStatement(body))
       return false;
+
+    // We prepend the declaration to the body
+    // as a declaration statement
+    assert(body.get_statement()=="block");
+
+    code_declt code_decl;
+    code_decl.move_to_operands(declaration);
+
+    codet::operandst &ops=body.operands();
+    ops.insert(ops.begin(), code_decl);
+
+    statement.move_to_operands(body);
   }
   while(lex->LookAhead(0)==TOK_CATCH);
 

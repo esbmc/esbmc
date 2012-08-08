@@ -437,6 +437,7 @@ protected:
   void typecheck_expr_main(exprt &expr);
   void typecheck_expr_member(exprt &expr);
   void typecheck_expr_ptrmember(exprt &expr);
+  void typecheck_expr_throw(exprt &expr);
   void typecheck_function_expr(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
   void typecheck_expr_cpp_name(exprt &expr,
