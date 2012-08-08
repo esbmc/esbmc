@@ -1,98 +1,45 @@
-// Fig. 13.1: fig13_01.cpp
-// A simple exception-handling example that checks for
-// divide-by-zero exceptions.
-//#include <iostream>
-
-//using std::cout;
-//using std::cin;
-//using std::endl;
-
 #include <exception>
-
 using std::exception;
 
 // DivideByZeroException objects should be thrown by functions
 // upon detecting division-by-zero exceptions
 class DivideByZeroException : public exception {
-
 public:
+  DivideByZeroException() :
+    message("attempted to divide by zero"){}
 
-   // constructor specifies default error message
-
-#if 0 
-
-*Erro no código antigo*
-
-   DivideByZeroException::DivideByZeroException()
-      : exception( "attempted to divide by zero" ) {}
-#endif
-#if 1
-   DivideByZeroException()
-		:message("attempted to divide by zero"){}
-
-	const char *whato() const
-		{return message;}
+  const char *whato() const {return message;}
 
 private:
-	const char *message;
-
-#endif
+  const char *message;
 };  // end class DivideByZeroException
 
-
-
-
-// perform division and throw DivideByZeroException object if 
+// perform division and throw DivideByZeroException object if
 // divide-by-zero exception occurs
-#if 1
 double quotient( int numerator, int denominator )
 {
-   // throw DivideByZeroException if trying to divide by zero
-   if ( denominator == 0 )
-      throw DivideByZeroException(); // terminate function
+  // throw DivideByZeroException if trying to divide by zero
+  if ( denominator == 0 )
+    throw DivideByZeroException(); // terminate function
 
-   // return division result
-   return static_cast< double >( numerator ) / denominator;
+  // return division result
+  return static_cast< double >( numerator ) / denominator;
 
 }  // end function quotient
-#endif
 
 int main()
 {
-   int number1;    // user-specified numerator
-   int number2;    // user-specified denominator
-   int result;  // result of division
+  int number1;    // user-specified numerator
+  int number2;    // user-specified denominator
+  int result;  // result of division
 
-//   cout << "Enter two integers (end-of-file to end): ";
+  try {
+    result = quotient( number1, number2 );
+  } // end try
+  // exception handler handles a divide-by-zero exception
+  catch ( DivideByZeroException &divideByZeroException ) { } // end catch
 
-   // enable user to enter two integers to divide
-//   while ( cin >> number1 >> number2 ) {
-    
-      // try block contains code that might throw exception
-      // and code that should not execute if an exception occurs
-
-      try {
-//  result = number1/0;       
-         result = quotient( number1, number2 );
-         //cout << "The quotient is: " << result << endl;
-
-      } // end try
-
-      // exception handler handles a divide-by-zero exception
-      catch ( DivideByZeroException &divideByZeroException ) {
-   //      cout << "Exception occurred: " << 
-//            divideByZeroException.whato() << endl;
-
-      } // end catch
-
-//      cout << "\nEnter two integers (end-of-file to end): ";
-
-//   }  // end while
-
-//   cout << endl;
-
-   return 0;  // terminate normally
-
+  return 0;  // terminate normally
 }  // end main
 
 

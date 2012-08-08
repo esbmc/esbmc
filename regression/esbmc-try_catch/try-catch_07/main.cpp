@@ -1,30 +1,30 @@
 #include <iostream>
 using namespace std;
-#include <exception>
 
+#include <exception>
 using std::exception;
 
 #include <cassert>
 
-void throwException() 
+void throwException()
 {
-	int numerador =2;
-	int denominador = 0;
-   
-	try {
-		if (denominador == 0)
-      	throw 1; 
-   }
-   catch ( int ) {
-		denominador = 1;	
-   }
+  int numerador = 2;
+  int denominador = 0;
 
-	int result = numerador/denominador;
-	cout << result << endl;
+  try {
+    if (denominador == 0)
+      throw 1;
+  }
+  catch ( int ) {
+    denominador = 1;
+  }
+
+  int result = numerador/denominador;
+  cout << result << endl;
 }
 
 int main()
 {
-      throwException();
-   return 0;
+  throwException();
+  return 0;
 }

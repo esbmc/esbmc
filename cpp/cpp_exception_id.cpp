@@ -43,6 +43,16 @@ void cpp_exception_list_rec(
       return;
     }
   }
+  else if(src.id()=="symbol")
+  {
+    irep_idt identifier = src.identifier();
+    dest.push_back(id2string(identifier)+suffix);
+  }
+  else if(src.id()=="ellipsis")
+  {
+    irep_idt identifier = "ellipsis";
+    dest.push_back(id2string(identifier)+suffix);
+  }
 
   // grab C++ type
   irep_idt cpp_type=src.get("#cpp_type");
@@ -52,8 +62,6 @@ void cpp_exception_list_rec(
     dest.push_back(id2string(cpp_type)+suffix);
     return;
   }
-
-  std::cout << "XX: " << src.pretty() << std::endl;
 
   return;
 }

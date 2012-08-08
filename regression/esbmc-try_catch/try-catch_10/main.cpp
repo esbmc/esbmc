@@ -32,6 +32,7 @@ int main()
 {
   pfv old_term = set_terminate(my_terminate);
   pfv old_unex = set_unexpected(my_unexpected);
+
   try {
     cout << "In first try block" << endl;
     f();

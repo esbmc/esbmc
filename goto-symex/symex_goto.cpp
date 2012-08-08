@@ -92,10 +92,12 @@ goto_symext::symex_goto(const exprt &old_guard)
   goto_state_list.push_back(statet::goto_statet(*cur_state));
   statet::goto_statet &new_state = goto_state_list.back();
 
+//  std::cout << "########### new_guard.pretty(): " << new_guard.pretty() << std::endl;
   // adjust guards
   if (new_guard.is_true()) {
-    cur_state->guard.make_false();
-  } else   {
+      cur_state->guard.make_false();
+
+  } else {
     // produce new guard symbol
     exprt guard_expr;
 

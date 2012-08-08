@@ -12,6 +12,7 @@ Date: Feb 2012
 #define __STL_VECTOR
 
 #include "iterator"
+#include "stdexcept"
 
 #define VECTOR_CAPACITY 500
 

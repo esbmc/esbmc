@@ -32,7 +32,7 @@ void convert_integer_literal(
 {
   bool is_unsigned=false;
   unsigned long_cnt=0;
-  
+
   for(unsigned i=src.size(); i!=0; i--)
   {
     register char ch=src[i-1];
@@ -45,7 +45,7 @@ void convert_integer_literal(
   }
 
   mp_integer value;
-  
+
   if(base==10)
   {
     dest.value(src);
@@ -62,23 +62,44 @@ void convert_integer_literal(
     std::string without_prefix(src, 2, std::string::npos);
     value=string2integer(without_prefix, 16);
   }
-  
+
   typet type;
-  
+  irep_idt cpp_type;
+
   if(is_unsigned)
     type=typet("unsignedbv");
   else
     type=typet("signedbv");
 
-  if(long_cnt==0)
+  if(long_cnt==0) {
     type.width(config.ansi_c.int_width);
-  else if(long_cnt==1)
+
+    if(!is_unsigned)
+      cpp_type="signed_int";
+    else
+      cpp_type="unsigned_int";
+
+  } else if(long_cnt==1) {
     type.width(config.ansi_c.long_int_width);
-  else
+
+    if(!is_unsigned)
+      cpp_type="signed_long_int";
+    else
+      cpp_type="unsigned_long_int";
+
+  } else {
     type.width(config.ansi_c.long_long_int_width);
-    
+
+    if(!is_unsigned)
+      cpp_type="signed_long_long_int";
+    else
+      cpp_type="unsigned_long_long_int";
+  }
+
+  type.set("#cpp_type", cpp_type);
+
   dest=from_integer(value, type);
 
   dest.cformat(src);
-  
+
 }

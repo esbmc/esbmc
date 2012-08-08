@@ -15,4 +15,3 @@ int main (void) {
   catch (...) { cerr << "caught other exception (non-compliant compiler?)\n"; }
   return 0;
 }
-

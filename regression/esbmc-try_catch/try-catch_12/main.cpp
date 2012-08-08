@@ -11,7 +11,7 @@ int main (void) {
     myvector.resize(myvector.max_size()+1);
   }
   catch (length_error& le) {
-	  cerr << "Length error: " << le.what() << endl;
+    cerr << "Length error: " << le.what() << endl;
   }
   return 0;
 }

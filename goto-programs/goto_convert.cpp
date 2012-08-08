@@ -162,9 +162,6 @@ void goto_convertt::goto_convert_rec(
   convert(code, dest);
 
   finish_gotos();
-  remove_skip(dest);
-
-  dest.update();
 }
 
 /*******************************************************************\
@@ -375,7 +372,7 @@ void goto_convertt::convert_catch(
   const codet &code,
   goto_programt &dest)
 {
-//  assert(code.operands().size()>=2);
+  assert(code.operands().size()>=2);
 
   // add the CATCH-push instruction to 'dest'
   goto_programt::targett catch_push_instruction=dest.add_instruction();
@@ -394,7 +391,9 @@ void goto_convertt::convert_catch(
   end_target->make_skip();
 
   // the first operand is the 'try' block
-  convert(to_code(code.op0()), dest);
+  goto_programt tmp;
+  convert(to_code(code.op0()), tmp);
+  dest.destructive_append(tmp);
 
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
@@ -411,7 +410,6 @@ void goto_convertt::convert_catch(
     // grab the ID and add to CATCH instruction
     exception_list.push_back(irept(block.get("exception_id")));
 
-    goto_programt tmp;
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
     dest.destructive_append(tmp);
@@ -741,6 +739,18 @@ void goto_convertt::convert_sideeffect(
   else if(statement=="temporary_object")
   {
     remove_sideeffects(expr, dest, false);
+  }
+  else if(statement=="cpp-throw")
+  {
+    goto_programt::targett t=dest.add_instruction(THROW);
+    t->code=codet("cpp-throw");
+    t->code.operands().swap(expr.operands());
+    t->code.location()=expr.location();
+    t->location=expr.location();
+    t->code.set("exception_list", expr.find("exception_list"));
+
+    // the result can't be used, these are void
+    expr.make_nil();
   }
   else
   {
@@ -1727,7 +1737,7 @@ void goto_convertt::convert_for(
   //std::cout << "k_induction" << k_induction << std::endl;
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -1760,7 +1770,7 @@ void goto_convertt::make_nondet_assign(
     exprt rhs_expr=side_effect_expr_nondett(state.components()[j].type());
     exprt new_expr(exprt::with, state);
     exprt lhs_expr("symbol", state);
-   
+
     if (state.components()[j].type().is_array())
     {
       rhs_expr=exprt("array_of", state.components()[j].type());
@@ -1883,7 +1893,7 @@ Function: goto_convertt::assign_state_vector
 \*******************************************************************/
 
 void goto_convertt::assign_state_vector(
-  const array_typet &state_vector, 
+  const array_typet &state_vector,
   goto_programt &dest)
 {
     //set the type of the state vector
@@ -1928,7 +1938,7 @@ Function: goto_convertt::assume_cond
 \*******************************************************************/
 
 void goto_convertt::assume_cond(
-  const exprt &cond, 
+  const exprt &cond,
   const bool &neg,
   goto_programt &dest)
 {
@@ -1955,7 +1965,7 @@ Function: goto_convertt::assert_cond
 \*******************************************************************/
 
 void goto_convertt::assert_cond(
-  const exprt &cond, 
+  const exprt &cond,
   const bool &neg,
   goto_programt &dest)
 {
@@ -2004,7 +2014,7 @@ void goto_convertt::print_msg_mem_alloc(
   const exprt &tmp)
 {
   std::cerr << "warning: this program contains dynamic memory allocation,"
-            << " so we are not applying the inductive step to this program!" 
+            << " so we are not applying the inductive step to this program!"
             << std::endl;
   std::cout << "failed" << std::endl;
   disable_k_induction();
@@ -2025,10 +2035,10 @@ Function: goto_convertt::print_msg
 void goto_convertt::print_msg(
   const exprt &tmp)
 {
-  std::cerr << "warning: this program " << tmp.location().get_file() 
-            << " contains a '" << tmp.id() << "' operator at line " 
+  std::cerr << "warning: this program " << tmp.location().get_file()
+            << " contains a '" << tmp.id() << "' operator at line "
             << tmp.location().get_line()
-            << ", so we are not applying the k-induction method to this program!" 
+            << ", so we are not applying the k-induction method to this program!"
             << std::endl;
   disable_k_induction();
 }
@@ -2051,9 +2061,9 @@ bool goto_convertt::check_op_const(
 {
   if (tmp.is_constant() || tmp.type().id() == "pointer")
   {
-    std::cerr << "warning: this program " << loc.get_file() 
+    std::cerr << "warning: this program " << loc.get_file()
               << " contains a bounded loop at line " << loc.get_line()
-   	      << ", so we are not applying the k-induction method to this program!" 
+	      << ", so we are not applying the k-induction method to this program!"
               << std::endl;
     disable_k_induction();
     return true;
@@ -2152,7 +2162,7 @@ void goto_convertt::replace_cond(
   //std::cout << tmp.pretty() << std::endl;
 
   irep_idt exprid = tmp.id();
-  
+
   if (tmp.is_true())
   {
     //replace_infinite_loop(tmp, dest);
@@ -2161,7 +2171,7 @@ void goto_convertt::replace_cond(
   {
     assert(tmp.operands().size()==2);
     if (is_for_block())
-      if (check_op_const(tmp.op0(), tmp.location())) 
+      if (check_op_const(tmp.op0(), tmp.location()))
         return ;
     else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
 
@@ -2178,14 +2188,14 @@ void goto_convertt::replace_cond(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(tmp.op0(), dest);
     }
-  } 
+  }
   else if ( exprid == "<" ||  exprid == "<=")
   {
     //std::cout << tmp.pretty() << std::endl;
     if (is_for_block())
-      if (check_op_const(tmp.op1(), tmp.location())) 
+      if (check_op_const(tmp.op1(), tmp.location()))
         return ;
-    
+
     nondet_varst::const_iterator cache_result;
     if (tmp.op1().is_constant())
     {
@@ -2208,16 +2218,16 @@ void goto_convertt::replace_cond(
 
     //check whether we have the same variable
     if (!tmp.op0().op0().is_constant())
-    {    
-      if ((tmp.op0().op0() == tmp.op1().op0()) || 
+    {
+      if ((tmp.op0().op0() == tmp.op1().op0()) ||
           (tmp.op0().op0() == tmp.op1().op1()))
       {
         print_msg(tmp);
       }
     }
     else if (!tmp.op0().op1().is_constant())
-    {    
-      if ((tmp.op0().op1() == tmp.op1().op0()) || 
+    {
+      if ((tmp.op0().op1() == tmp.op1().op0()) ||
           (tmp.op0().op1() == tmp.op1().op1()))
       {
         print_msg(tmp);
@@ -2229,7 +2239,7 @@ void goto_convertt::replace_cond(
     //std::cout << tmp.pretty() << std::endl;
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
-	  
+
   }
   else
   {
@@ -2396,7 +2406,7 @@ void goto_convertt::convert_while(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -2536,7 +2546,7 @@ void goto_convertt::convert_dowhile(
   dest.destructive_append(tmp_z);
 
   //do the g label
-  if (!is_break() && !is_goto() 
+  if (!is_break() && !is_goto()
 			&& (base_case || (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
@@ -2716,9 +2726,9 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 
-  if ((base_case || inductive_step) && 
+  if ((base_case || inductive_step) &&
 	(is_while_block()))
-    set_break(true);  
+    set_break(true);
 }
 
 /*******************************************************************\
@@ -2758,12 +2768,12 @@ void goto_convertt::convert_return(
     remove_sideeffects(new_code.return_value(), sideeffects);
     dest.destructive_append(sideeffects);
 
-	if(options.get_bool_option("atomicity-check"))
-	{
+    if(options.get_bool_option("atomicity-check"))
+    {
       unsigned int globals = get_expr_number_globals(new_code.return_value());
       if(globals > 0)
-    	break_globals2assignments(new_code.return_value(), dest,code.location());
-	}
+        break_globals2assignments(new_code.return_value(), dest,code.location());
+    }
   }
 
   if(targets.return_value)
@@ -2841,9 +2851,9 @@ void goto_convertt::convert_goto(
   // remember it to do target later
   targets.gotos.insert(t);
 
-  if ((base_case || inductive_step) && 
+  if ((base_case || inductive_step) &&
 	(is_while_block()))
-    set_goto(true);  
+    set_goto(true);
 }
 
 /*******************************************************************\
@@ -3131,7 +3141,7 @@ Function: goto_convertt::get_cs_member
 
 void goto_convertt::get_cs_member(
   exprt &expr,
-  exprt &result, 
+  exprt &result,
   const typet &type,
   bool &found)
 {
@@ -3153,7 +3163,7 @@ void goto_convertt::get_cs_member(
   new_expr.component_name(expr.get_string("identifier"));
   //std::cout << "expr.get_string(identifier): " << expr.get_string("identifier") << std::endl;
 
-  //std::cout << "new_expr: " << new_expr.pretty() << std::endl;  
+  //std::cout << "new_expr: " << new_expr.pretty() << std::endl;
   assert(!new_expr.get_string("component_name").empty());
 
   const struct_typet &struct_type = to_struct_type(lhs_struct.type());
@@ -3167,7 +3177,7 @@ void goto_convertt::get_cs_member(
   {
     //std::cout << "name: " << it->get("name") << std::endl;
     //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
-    //std::cout << "it->pretty(): " << it->pretty() << std::endl; 
+    //std::cout << "it->pretty(): " << it->pretty() << std::endl;
     if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       found=true;
   }
@@ -3222,7 +3232,7 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
     assert(expr.operands().size()==2);
 
     //do we have an index of index?
-    if (expr.op0().operands().size() == 2) 
+    if (expr.op0().operands().size() == 2)
       get_new_expr(expr.op0(), array, found); // this should return another index
     else
       get_cs_member(expr.op0(), array, expr.op0().type(), found); //we have one index only
@@ -3306,7 +3316,7 @@ DEBUGLOC;
   {
     assert(expr.operands().size()==2);
     assert(expr.op0().type() == expr.op1().type());
-    
+
     exprt new_expr1, new_expr2;
 
     get_new_expr(expr.op0(), new_expr1, found);
