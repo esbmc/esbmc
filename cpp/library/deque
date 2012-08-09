@@ -205,20 +205,32 @@ namespace std {
     // element access:
     reference operator[](size_type i)
     {
+    	int n = vecOne.size();
+    	int tmp;
+    	        if (i < n){
+    	            tmp = (n-1) - i;
+    	        	return vecOne[tmp];
+    	        }
+    	        else{
+    	            tmp = i - n ;
+    	            return vecTwo[tmp];
+    	        }
+#if 0
         int n = vecOne.size();
         if (i < n)
             return vecOne [ (n-1) - i ];
         else
             return vecTwo [ i - n ];
+#endif
     }
     const_reference operator[](size_type i) const
-    {
+    {/*
         int n = vecOne.size();
         if (i < n)
             return vecOne [ (n-1) - i ];
         else
             return vecTwo [ i - n ];
-    }
+    */}
     void push_front(const T& x) { vecOne.push_back(x); }
     void push_back(const T& x)  { vecTwo.push_back(x); }
     reference back()
