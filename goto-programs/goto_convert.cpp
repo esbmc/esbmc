@@ -358,7 +358,24 @@ void goto_convertt::convert(
 
 /*******************************************************************\
 
-Function: goto_convertt::convert_block
+Function: goto_convertt::convert_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void convert_throw_decl(const exprt &expr, goto_programt &dest)
+{
+
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_catch
 
   Inputs:
 
