@@ -122,6 +122,21 @@ void goto_symext::symex_throw()
 
       if(c_it!=frame.catch_map.end())
       {
+        if(frame.throw_list_set.empty())
+        {
+//          std::cout << "### tentando lançar: " << e_it->id() << std::endl;
+
+          goto_symex_statet::framet::throw_list_sett::const_iterator
+            s_it=frame.throw_list_set.find(e_it->id());
+
+          if(s_it==frame.throw_list_set.end())
+          {
+            const std::string &msg="Trying to throw an exception not allowed by declaration";
+            claim(false_exprt(), msg);
+            return;
+          }
+        }
+
         throw_target = (*c_it).second;
         has_throw_target=true;
         last_throw = &instruction; // save last throw
