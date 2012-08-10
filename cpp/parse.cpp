@@ -1811,7 +1811,7 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  exprt p=exprt("throw_list");
+  exprt p=exprt("throw_decl");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
