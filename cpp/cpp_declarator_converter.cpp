@@ -485,9 +485,8 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.pretty_name=pretty_name;
   symbol.mode=cpp_typecheck.current_mode;
 
-  exprt throw_decl = declarator.throw_decl();
-  if(throw_decl.is_not_nil())
-    symbol.throw_decl=throw_decl;
+  if(declarator.throw_decl().statement() == "throw_decl")
+    symbol.value.operands().push_back(declarator.throw_decl());
 
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
