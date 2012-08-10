@@ -228,6 +228,9 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
     throw "got invalid code for function `"+id2string(identifier)+"'";
   }
 
+  if(symbol.throw_decl.is_not_nil())
+    convert_throw_decl(symbol.throw_decl, f.body);
+
   codet tmp(to_code(symbol.value));
 
   locationt end_location;

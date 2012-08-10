@@ -284,8 +284,6 @@ void goto_convertt::convert(
 {
   const irep_idt &statement=code.get_statement();
 
-  dest.instructions.clear();
-
   link_up_type_names((codet&)code, ns);
 
   //std::cout << "### code.pretty(): " << code.pretty() << std::endl;
@@ -368,9 +366,30 @@ Function: goto_convertt::convert_throw_decl
 
 \*******************************************************************/
 
-void convert_throw_decl(const exprt &expr, goto_programt &dest)
+void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 {
+  // add the THROW_DECL instruction to 'dest'
+  goto_programt::targett throw_decl_instruction=dest.add_instruction();
+  throw_decl_instruction->make_throw_decl();
+  throw_decl_instruction->code.set_statement("throw-decl");
+  throw_decl_instruction->location=expr.location();
 
+  // the THROW_DECL instruction is annotated with a list of IDs,
+  // one per target
+  irept::subt &throw_list=
+    throw_decl_instruction->code.add("throw_list").get_sub();
+
+  for(unsigned i=0; i<expr.operands().size(); i++)
+  {
+    const exprt &block=expr.operands()[i];
+
+    irept type = irept(block.get("type"));
+    if(type.id() == "cpp-name")
+      type = irept(block.type().get_sub()[0].identifier());
+
+    // grab the ID and add to THROW_DECL instruction
+    throw_list.push_back(irept(type));
+  }
 }
 
 /*******************************************************************\
