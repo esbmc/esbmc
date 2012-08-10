@@ -1811,7 +1811,7 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  exprt p=exprt("throw_decl");
+  codet p=codet("throw_decl");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
@@ -2096,7 +2096,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
-  exprt throw_decl(static_cast<const exprt &>(get_nil_irep()));
+  codet throw_decl;
 
   for(;;)
   {
