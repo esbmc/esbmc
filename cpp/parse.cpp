@@ -1857,14 +1857,14 @@ bool Parser::optThrowDecl(exprt &throw_decl)
         lex->GetToken(tk);
       }
 
-      p.get_sub().push_back(declaration);
+      p.operands().push_back(declaration);
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
   }
 
-  if(p.get_sub().size())
+  if(p.has_operands())
     throw_decl=p;
 
   return true;
