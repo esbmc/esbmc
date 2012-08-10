@@ -35,6 +35,7 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   cur_state(NULL),
   has_throw_target(false),
   has_catch(false),
+  has_throw_decl(false),
   last_throw(NULL)
 {
   const std::string &set = options.get_option("unwindset");

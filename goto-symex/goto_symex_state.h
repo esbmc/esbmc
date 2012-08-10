@@ -202,6 +202,9 @@ public:
     // exceptions
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
     catch_mapt catch_map;
+
+    typedef std::set<irep_idt> throw_list_sett;
+    throw_list_sett throw_list_set;
   };
 
   // Macros
