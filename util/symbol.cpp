@@ -20,7 +20,7 @@ Function: symbolt::show
  Purpose:
 
 \*******************************************************************/
-   
+
 void symbolt::show(std::ostream &out) const
 {
   out << "  " << name << std::endl;
@@ -56,8 +56,11 @@ void symbolt::show(std::ostream &out) const
       it++)
     out << " " << *it;
 
-  out << std::endl;  
-  out << std::endl;  
+  if(throw_decl.has_operands())
+    out << " throw_decl:  " << throw_decl.pretty(4) << std::endl;
+
+  out << std::endl;
+  out << std::endl;
 }
 
 /*******************************************************************\
@@ -77,7 +80,7 @@ std::ostream &operator<<(std::ostream &out,
 {
   symbol.show(out);
   return out;
-}                        
+}
 
 /*******************************************************************\
 
@@ -119,7 +122,7 @@ void symbolt::to_irep(irept &dest) const
   if (static_lifetime) dest.static_lifetime(true);
   if (file_local) dest.file_local(true);
   if (is_extern) dest.is_extern(true);
-  if (is_volatile) dest.is_volatile(true);       
+  if (is_volatile) dest.is_volatile(true);
 }
 
 /*******************************************************************\

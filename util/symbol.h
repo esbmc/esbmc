@@ -20,41 +20,43 @@ class symbolt
 public:
   typet type;
   exprt value;
+  exprt throw_decl;
   locationt location;
   irep_idt name;
   irep_idt module;
   irep_idt base_name;
   irep_idt mode;
   irep_idt pretty_name;
-  
+
   const irep_idt &display_name() const
   {
     return pretty_name==""?name:pretty_name;
   }
-  
+
   typedef std::list<irep_idt> hierarchyt;
   hierarchyt hierarchy;
-  
+
   unsigned ordering;
-  
+
   // global use
   bool theorem, axiom, is_type, is_macro, is_exported,
        is_input, is_output, is_statevar;
-       
+
   // PVS
   bool is_actual, free_var, binding;
-  
+
   // ANSI-C
   bool lvalue, static_lifetime, file_local, is_extern, is_volatile;
-       
+
   symbolt()
   {
     clear();
   }
-  
+
   void clear()
   {
     value.make_nil();
+    throw_decl.make_nil();
     location.make_nil();
     theorem=lvalue=static_lifetime=file_local=is_extern=
     axiom=free_var=
@@ -63,13 +65,14 @@ public:
     ordering=0;
     name=module=base_name=mode=pretty_name="";
   }
-     
+
   void swap(symbolt &b)
   {
     #define SYM_SWAP1(x) x.swap(b.x)
-    
+
     SYM_SWAP1(type);
     SYM_SWAP1(value);
+    SYM_SWAP1(throw_decl);
     SYM_SWAP1(name);
     SYM_SWAP1(pretty_name);
     SYM_SWAP1(module);
@@ -78,7 +81,7 @@ public:
     SYM_SWAP1(location);
 
     #define SYM_SWAP2(x) std::swap(x, b.x)
-    
+
     SYM_SWAP2(ordering);
     SYM_SWAP2(theorem);
     SYM_SWAP2(axiom);
@@ -96,7 +99,7 @@ public:
     SYM_SWAP2(is_extern);
     SYM_SWAP2(is_volatile);
   }
-  
+
   void show(std::ostream &out) const;
 
   void to_irep(irept &dest) const;
@@ -107,7 +110,7 @@ std::ostream &operator<<(std::ostream &out,
                          const symbolt &symbol);
 
 #include <list>
- 
+
 typedef std::list<symbolt> symbol_listt;
 
 #define forall_symbol_list(it, expr) \
