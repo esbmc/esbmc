@@ -205,6 +205,8 @@ goto_symext::symex_step(reachability_treet & art)
         dereference(deref_code.lhs(), true);
       }
 
+      dereference(deref_code.function(), false);
+
       Forall_expr(it, deref_code.arguments()) {
         dereference(*it, false);
       }
