@@ -1772,7 +1772,7 @@ bool Parser::rConstructorDecl(
   cv.make_nil();
   optCvQualify(cv);
 
-  optThrowDecl(constructor.throw_decl());
+  optThrowDecl(constructor.throw_decl()); // ignore in this version
 
   if(lex->LookAhead(0)==':')
   {
@@ -1815,9 +1815,8 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
-    throw_decl=p;
-
     lex->GetToken(tk);
+    set_location(p, tk);
 
     if(lex->GetToken(tk)!='(')
       return false;
@@ -1862,10 +1861,9 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 
     if(lex->GetToken(tk)!=')')
       return false;
-  }
 
-  if(p.has_operands())
     throw_decl=p;
+  }
 
   return true;
 }
@@ -2138,7 +2136,7 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      optThrowDecl(throw_decl); // ignore in this version
+      optThrowDecl(throw_decl);
 
       if(lex->LookAhead(0)==':')
       {
