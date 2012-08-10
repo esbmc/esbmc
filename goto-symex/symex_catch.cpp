@@ -58,8 +58,6 @@ void goto_symext::symex_catch()
         it++, i++)
     {
       frame.catch_map[exception_list[i].id()]=*it;
-      //std::cout << "exception_list[i].id(): " << exception_list[i].id() << std::endl;
-      //std::cout << "(*it)->code: " << (*it)->code << std::endl;
     }
   }
 }
@@ -80,7 +78,6 @@ void goto_symext::symex_throw()
 {
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
-  //std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
   // get the list of exceptions thrown
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
@@ -174,4 +171,34 @@ void goto_symext::symex_throw()
     }
     last_throw = &instruction; // save last throw
   }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::symex_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::symex_throw_decl()
+{
+  has_throw_decl = true;
+
+  // there are two variants: 'push' and 'pop'
+  const goto_programt::instructiont &instruction= *cur_state->source.pc;
+
+  cur_state->call_stack.push_back(goto_symex_statet::framet(cur_state->source.thread_nr));
+  goto_symex_statet::framet &frame=cur_state->call_stack.back();
+
+  // copy throw_list
+  const irept::subt &throw_decl_list=
+    instruction.code.find("throw_list").get_sub();
+
+  for(unsigned i=0; i<throw_decl_list.size(); ++i)
+    frame.throw_list_set.insert(throw_decl_list[i].id());
 }
