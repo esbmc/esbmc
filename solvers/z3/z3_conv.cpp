@@ -518,6 +518,21 @@ z3_convt::check2_z3_properties(void)
     }
   }
 
+  // XXX XXX XXX jmorse: as of 5dd8a432 running with --smt-during-symex on tests
+  // like 03_exor_01 caused a significant performance hit for no known reason.
+  // Solving got progressively slower as more interleavings were checked.
+  // Profiling said a lot of time was spent in Z3's
+  // bv_simplifier_plugin::bit2bool_simplify method. This doesn't happen if you
+  // run with no additional options. No idea why, but the belief is that the
+  // solver is caching something, bloats, and leads to a performance hit.
+  //
+  // So during debugging I added the following line to see whether some asserts
+  // were being left in the solver accidentally leading to the bloat and... it
+  // just stopped. Presumably this accidentally flushes some kind of internal
+  // cache and kills bloatage; I've no idea why; but if you remove it there's
+  // a significant performance hit.
+  z3::expr_vector vec = solver.assertions();
+
   if (uw) {
     result = solver.check(assumptions);
   } else {
