@@ -1463,7 +1463,7 @@ void cpp_typecheckt::convert_compound_ano_union(
   }
 
   // produce an anonymous member
-  irep_idt base_name="#anon_member"+i2string(components.size());
+  irep_idt base_name="#anon_member"+i2string((unsigned long)components.size());
 
   irep_idt identifier=
     cpp_identifier_prefix(current_mode)+"::"+

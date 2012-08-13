@@ -146,7 +146,7 @@ while getopts ":3:6:2:5:r:t:T:onONaicj" opt; do
       target_32bit=0
       ;;
     N)
-      target_64bit=1
+      target_64bit=0
       ;;
     i)
       incrementalbuild=1

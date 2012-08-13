@@ -93,6 +93,9 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
+    if(has_throw_decl)
+      cur_state->call_stack.pop_back();
+
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
@@ -103,8 +106,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-	//std::cout << "has_throw_target: " << has_throw_target << std::endl;
-	//std::cout << "has_catch: " << has_catch << std::endl;
     if (has_throw_target && has_catch) {
       instruction.targets.pop_back();
       instruction.targets.push_back(throw_target);
@@ -205,6 +206,8 @@ goto_symext::symex_step(reachability_treet & art)
         dereference(deref_code.lhs(), true);
       }
 
+      dereference(deref_code.function(), false);
+
       Forall_expr(it, deref_code.arguments()) {
         dereference(*it, false);
       }
@@ -237,6 +240,11 @@ goto_symext::symex_step(reachability_treet & art)
 
   case THROW:
     symex_throw();
+    cur_state->source.pc++;
+    break;
+
+  case THROW_DECL:
+    symex_throw_decl();
     cur_state->source.pc++;
     break;
 

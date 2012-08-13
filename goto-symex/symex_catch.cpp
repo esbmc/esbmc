@@ -57,9 +57,8 @@ void goto_symext::symex_catch()
         it!=instruction.targets.end();
         it++, i++)
     {
+//      std::cout << "### exception_list[i].id(): " << exception_list[i].id() << std::endl;
       frame.catch_map[exception_list[i].id()]=*it;
-      //std::cout << "exception_list[i].id(): " << exception_list[i].id() << std::endl;
-      //std::cout << "(*it)->code: " << (*it)->code << std::endl;
     }
   }
 }
@@ -80,7 +79,6 @@ void goto_symext::symex_throw()
 {
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
-  //std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
   // get the list of exceptions thrown
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
@@ -120,36 +118,27 @@ void goto_symext::symex_throw()
         e_it++)
     {
       goto_symex_statet::framet::catch_mapt::const_iterator
-      c_it=frame.catch_map.find(e_it->id());
+        c_it=frame.catch_map.find(e_it->id());
 
       if(c_it!=frame.catch_map.end())
       {
-    	  throw_target = (*c_it).second;
-    	  has_throw_target=true;
-#if 0
-        goto_programt::const_targett goto_target =
-        		(*c_it).second;
+        if(frame.throw_list_set.empty())
+        {
+//          std::cout << "### tentando lançar: " << e_it->id() << std::endl;
 
-        goto_programt::const_targett new_state_pc, state_pc;
+          goto_symex_statet::framet::throw_list_sett::const_iterator
+            s_it=frame.throw_list_set.find(e_it->id());
 
-        new_state_pc = goto_target; // goto target instruction
-        state_pc = cur_state->source.pc;
-        state_pc++; // next instruction
+          if(s_it==frame.throw_list_set.end())
+          {
+            const std::string &msg="Trying to throw an exception not allowed by declaration";
+            claim(false_exprt(), msg);
+            return;
+          }
+        }
 
-        cur_state->source.pc = state_pc;
-
-        new_state_pc->guard.make_false();
-
-        // put into state-queue
-        statet::goto_state_listt &goto_state_list =
-          cur_state->top().goto_state_map[new_state_pc];
-
-        goto_state_list.push_back(statet::goto_statet(*cur_state));
-        statet::goto_statet &new_state = goto_state_list.back();
-
-        cur_state->guard.make_true();
-        has_throw_target = true;
-#endif
+        throw_target = (*c_it).second;
+        has_throw_target=true;
         last_throw = &instruction; // save last throw
         return;
       }
@@ -173,5 +162,38 @@ void goto_symext::symex_throw()
       }
     }
     last_throw = &instruction; // save last throw
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::symex_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::symex_throw_decl()
+{
+  has_throw_decl = true;
+
+  // there are two variants: 'push' and 'pop'
+  const goto_programt::instructiont &instruction= *cur_state->source.pc;
+
+  cur_state->call_stack.push_back(goto_symex_statet::framet(cur_state->source.thread_nr));
+  goto_symex_statet::framet &frame=cur_state->call_stack.back();
+
+  // copy throw_list
+  const irept::subt &throw_decl_list=
+    instruction.code.find("throw_list").get_sub();
+
+  for(unsigned i=0; i<throw_decl_list.size(); ++i)
+  {
+//    std::cout << "### throw: " << throw_decl_list[i].id() << std::endl;
+    frame.throw_list_set.insert(throw_decl_list[i].id());
   }
 }

@@ -611,6 +611,39 @@ void value_sett::get_value_set_rec(
       return;
     }
   }
+#if 1
+  else if(expr.id()=="byte_extract_little_endian" ||
+          expr.id()=="byte_extract_big_endian")
+  {
+    if(expr.operands().size()!=2)
+      throw "byte_extract takes two operands";
+
+    // we just pass through
+    get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
+
+    return;
+  }
+  else if(expr.id()=="byte_update_little_endian" ||
+          expr.id()=="byte_update_big_endian")
+  {
+    if(expr.operands().size()!=3)
+      throw "byte_update takes three operands";
+
+    // we just pass through
+    get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
+    get_value_set_rec(expr.op2(), dest, suffix, original_type, ns);
+
+    return;
+    // we could have checked object size to be more precise
+  }
+#endif
+  else
+  {
+	#if 0
+	  std::cout << "WARNING: not doing " << expr.id() << std::endl;
+	#endif
+  }
+
 
   insert(dest, exprt("unknown", original_type));
 }
@@ -1148,6 +1181,10 @@ void value_sett::assign_rec(
   {
     // someone writes into a string-constant
     // evil guy
+  }
+  else if(lhs.id()=="constant")
+  {
+    // evil as well
   }
   else if(lhs.id()=="NULL-object")
   {

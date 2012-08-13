@@ -1772,7 +1772,7 @@ bool Parser::rConstructorDecl(
   cv.make_nil();
   optCvQualify(cv);
 
-  optThrowDecl(constructor.throw_decl());
+  optThrowDecl(constructor.throw_decl()); // ignore in this version
 
   if(lex->LookAhead(0)==':')
   {
@@ -1811,13 +1811,12 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  exprt p=exprt("throw_list");
+  codet p=codet("throw_decl");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
-    throw_decl=p;
-
     lex->GetToken(tk);
+    set_location(p, tk);
 
     if(lex->GetToken(tk)!='(')
       return false;
@@ -1857,15 +1856,14 @@ bool Parser::optThrowDecl(exprt &throw_decl)
         lex->GetToken(tk);
       }
 
-      p.get_sub().push_back(declaration);
+      p.operands().push_back(declaration);
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
-  }
 
-  if(p.get_sub().size())
     throw_decl=p;
+  }
 
   return true;
 }
@@ -2098,7 +2096,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
-  exprt throw_decl(static_cast<const exprt &>(get_nil_irep()));
+  codet throw_decl;
 
   for(;;)
   {
@@ -2138,7 +2136,7 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      optThrowDecl(throw_decl); // ignore in this version
+      optThrowDecl(throw_decl);
 
       if(lex->LookAhead(0)==':')
       {

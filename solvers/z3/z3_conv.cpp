@@ -683,7 +683,6 @@ z3_convt::create_type(const typet &type, Z3_type_ast &bv) const
   } else {
     std::cout << "type.pretty(): " << type.pretty() << std::endl;
     std::cout << "return_type: " << type.get("return_type") << std::endl;
-    assert(0);
     throw new conv_error("unexpected type in create_type", type);
   }
   DEBUGLOC;
@@ -2812,9 +2811,9 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
 
   u_int j = 0;
   Z3_ast struct_var;
-
+  DEBUGLOC;
   convert_bv(expr.op0(), struct_var);
-
+  DEBUGLOC;
   j = convert_member_name(expr.op0(), expr);
 
   if (expr.op0().type().id() == "union") {
@@ -2828,6 +2827,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       if (source_type.compare(expr.type()) == 0) {
         // Type we're fetching from union matches expected type; just return it.
         bv = z3_api.mk_tuple_select(struct_var, cache_result->second);
+        DEBUGLOC;
         return;
       }
 
@@ -2838,6 +2838,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
       expr2.type() = source_type;
       cast.op0() = expr2;
       convert_z3_expr(cast, bv);
+      DEBUGLOC;
       return;
     }
   }
@@ -3017,7 +3018,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   Z3_ast op0;
   DEBUGLOC;
   convert_bv(expr.op0(), op0);
-
+  DEBUGLOC;
   if (int_encoding) {
 	DEBUGLOC;
 
@@ -3053,9 +3054,33 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       else
 	    bv = Z3_mk_bv2int(z3_ctx, bv, 0);
 
+    } else if (expr.op0().type().id() == "struct") {
+
+        const struct_typet &struct_type = to_struct_type(expr.op0().type());
+        const struct_typet::componentst &components = struct_type.components();
+        unsigned i = 0;
+        Z3_ast struct_elem[components.size() + 1],
+               struct_elem_inv[components.size() + 1];
+
+        for (struct_typet::componentst::const_iterator
+             it = components.begin();
+             it != components.end();
+             it++, i++)
+        {
+        	if (expr.op0().operands().size()==0) {
+        	  //the expression does not contain any element,
+        	  //so return only an empty struct
+        	  convert_bv(expr.op0(), bv);
+        	  return ;
+        	} else {
+      	      throw new conv_error("the size of the expression operands is unknown", expr.op0());
+      	    }
+        }
+        throw new conv_error("unsupported type for byte_extract", expr);
     } else {
       throw new conv_error("unsupported type for byte_extract", expr);
     }
+	DEBUGLOC;
   } else   {
 	DEBUGLOC;
     if (expr.op0().type().id() == "struct") {
@@ -3100,6 +3125,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       }
       op0 = struct_elem_inv[components.size()];
     } else if (expr.op0().type().id()=="array") {
+      DEBUGLOC;
       Z3_ast op1;
       convert_bv(expr.op1(), op1);
       bv = Z3_mk_select(z3_ctx, op0, op1);
@@ -3113,6 +3139,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 
     DEBUGLOC;
     if (expr.op0().id() == "index") {
+      DEBUGLOC;
       Z3_ast args[2];
 
       const exprt &symbol = expr.op0().operands()[0];
