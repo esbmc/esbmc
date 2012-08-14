@@ -486,8 +486,8 @@ template<class FwdIt, class Pr>
 template<class InIt, class OutIt>
     OutIt unique_copy(InIt first, InIt last, OutIt dest)
 {
-  InIt value = *first;
-  *dest=*first;
+  InIt value = first;
+  dest=first;
   while (++first != last)
   {
     if (!(value == *first))  // or: if (!pred(value,*first)) for the pred version
