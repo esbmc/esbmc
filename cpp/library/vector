@@ -142,10 +142,10 @@ namespace std{
 	    	const_iterator& operator -- ();
 	    	const_iterator& operator -- (int);
 
-	    	bool operator == ( const const_iterator&)const{
+	    	bool operator == ( const const_iterator& i)const{
 	    		return (pointer == i.pointer);
 	    	}
-	    	bool operator != ( const const_iterator&)const{
+	    	bool operator != ( const const_iterator& i)const{
 	    		return (pointer != i.pointer);
 	    	}
 
