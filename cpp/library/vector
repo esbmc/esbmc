@@ -71,13 +71,20 @@ namespace std{
 	      iterator& operator -- ();
 	      iterator& operator -- (int);
 
-	      bool operator == ( const iterator&)const;
-	      bool operator != ( const iterator&)const;
+	      bool operator == ( const iterator& i)const{
+	    		return (pointer == i.pointer);
+	      }
+	      bool operator != ( const iterator& i)const{
+	    	  return (pointer != i.pointer);
+	      }
 
 	      bool operator < ( const iterator& i)const{
-	    	  return (pos < i.pos);
+	    	  return (pointer < i.pointer);
 	      }
-	      bool operator > ( const iterator&)const;
+	      bool operator > ( const iterator& i)const{
+	    	  return (pointer > i.pointer);
+	      }
+
 
 	      bool operator <= ( const iterator&)const;
 	      bool operator >= ( const iterator&)const;
@@ -126,13 +133,13 @@ namespace std{
 	    		const_iterator buffer;
 	    		buffer.pointer = pointer;
 	    		buffer.pos = pos;
-	    		pointer += sizeof(T);
+	    		pointer ++;
 	    		pos++;
 	    		return buffer;
 	    	}
 	    	const_iterator& operator ++ (int b){
 	    		const_iterator buffer;
-	    		pointer += sizeof(T);
+	    		pointer ++;
 	    		pos++;
 	    		buffer.pointer = pointer;
 	    		buffer.pos = pos;
@@ -146,13 +153,15 @@ namespace std{
 	    		return (pointer == i.pointer);
 	    	}
 	    	bool operator != ( const const_iterator& i)const{
-	    		return (pointer != i.pointer);
+	    		return ((pointer < i.pointer)||(pointer > i.pointer));
 	    	}
 
 	    	bool operator < ( const const_iterator& i)const{
 	    		return (pointer < i.pointer);
 	    	}
-	    	bool operator > ( const const_iterator&)const;
+	    	bool operator > ( const const_iterator& i)const{
+	    		return (pointer > i.pointer);
+	    	}
 
 	    	bool operator <= ( const const_iterator&)const;
 	    	bool operator >= ( const const_iterator&)const;
@@ -389,7 +398,9 @@ namespace std{
 
     size_type max_size() const;
 
-    void resize(size_type sz);
+    void resize(size_type sz){
+    	_size = sz;
+    }
     void resize(size_type sz, T t);
     size_type capacity() const
     {
