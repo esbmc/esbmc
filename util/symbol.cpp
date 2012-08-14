@@ -24,12 +24,8 @@ Function: symbolt::show
 void symbolt::show(std::ostream &out) const
 {
   out << "  " << name << std::endl;
-  out << "    type:  " << type.pretty(4) << std::endl;
-
-  if(throw_decl.has_operands())
-    out << "    throw_decl:  " << throw_decl.pretty(4) << std::endl;
-
-  out << "    value: " << value.pretty(4) << std::endl;
+  out << "    type:  " << type.pretty(4) << std::endl
+      << "    value: " << value.pretty(4) << std::endl;
 
   out << "  flags:";
   if(lvalue)          out << " lvalue";

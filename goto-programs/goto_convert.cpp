@@ -341,6 +341,8 @@ void goto_convertt::convert(
     convert_cpp_delete(code, dest);
   else if(statement=="cpp-catch")
     convert_catch(code, dest);
+  else if(statement=="throw_decl")
+    convert_throw_decl(code, dest);
   else
   {
     copy(code, OTHER, dest);

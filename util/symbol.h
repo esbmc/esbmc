@@ -20,7 +20,6 @@ class symbolt
 public:
   typet type;
   exprt value;
-  exprt throw_decl;
   locationt location;
   irep_idt name;
   irep_idt module;
@@ -56,7 +55,6 @@ public:
   void clear()
   {
     value.make_nil();
-    throw_decl.make_nil();
     location.make_nil();
     theorem=lvalue=static_lifetime=file_local=is_extern=
     axiom=free_var=
@@ -72,7 +70,6 @@ public:
 
     SYM_SWAP1(type);
     SYM_SWAP1(value);
-    SYM_SWAP1(throw_decl);
     SYM_SWAP1(name);
     SYM_SWAP1(pretty_name);
     SYM_SWAP1(module);
