@@ -56,10 +56,7 @@ void goto_symext::symex_catch()
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
-    {
-//      std::cout << "### exception_list[i].id(): " << exception_list[i].id() << std::endl;
       frame.catch_map[exception_list[i].id()]=*it;
-    }
   }
 }
 
@@ -84,7 +81,6 @@ void goto_symext::symex_throw()
     instruction.code.find("exception_list").get_sub();
 
   // go through the call stack, beginning with the top
-
   for(goto_symex_statet::call_stackt::const_reverse_iterator
       s_it=cur_state->call_stack.rbegin();
       s_it!=cur_state->call_stack.rend();
@@ -94,7 +90,8 @@ void goto_symext::symex_throw()
 
     if(frame.catch_map.empty()) continue;
 
-    if(!exceptions_thrown.size()) // throw without argument, we must rethrow last exception
+    // throw without argument, we must rethrow last exception
+    if(!exceptions_thrown.size())
     {
       if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
       {
@@ -117,32 +114,32 @@ void goto_symext::symex_throw()
         e_it!=exceptions_thrown.end();
         e_it++)
     {
+      // Check if we can throw the exception
+      if(has_throw_decl)
+      {
+        goto_symex_statet::framet::throw_list_sett::const_iterator
+          s_it=frame.throw_list_set.find(e_it->id());
+
+        if(s_it==frame.throw_list_set.end())
+        {
+          const std::string &msg="Trying to throw an exception not allowed by declaration";
+          claim(false_exprt(), msg);
+          return;
+        }
+      }
+
+      // We can throw it, look on the map if we have a catch for it
       goto_symex_statet::framet::catch_mapt::const_iterator
         c_it=frame.catch_map.find(e_it->id());
 
       if(c_it!=frame.catch_map.end())
       {
-        if(frame.throw_list_set.empty())
-        {
-//          std::cout << "### tentando lançar: " << e_it->id() << std::endl;
-
-          goto_symex_statet::framet::throw_list_sett::const_iterator
-            s_it=frame.throw_list_set.find(e_it->id());
-
-          if(s_it==frame.throw_list_set.end())
-          {
-            const std::string &msg="Trying to throw an exception not allowed by declaration";
-            claim(false_exprt(), msg);
-            return;
-          }
-        }
-
         throw_target = (*c_it).second;
         has_throw_target=true;
         last_throw = &instruction; // save last throw
         return;
       }
-      else
+      else // We don't have a catch for it
       {
         // Do we have an ellipsis?
         c_it=frame.catch_map.find("ellipsis");
@@ -155,10 +152,11 @@ void goto_symext::symex_throw()
           return;
         }
 
-        // An un-caught exception. Behaves like assume(0);
-        cur_state->guard.add(false_exprt());
-        exprt tmp=cur_state->guard.as_expr();
-        target->assumption(cur_state->guard, tmp, cur_state->source);
+        // An un-caught exception. Error
+        const std::string &msg="Throwing an exception of type " +
+          e_it->id().as_string() + " but there is not catch for it.";
+        claim(false_exprt(), msg);
+        return;
       }
     }
     last_throw = &instruction; // save last throw
@@ -181,19 +179,14 @@ void goto_symext::symex_throw_decl()
 {
   has_throw_decl = true;
 
-  // there are two variants: 'push' and 'pop'
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
-
-  cur_state->call_stack.push_back(goto_symex_statet::framet(cur_state->source.thread_nr));
-  goto_symex_statet::framet &frame=cur_state->call_stack.back();
 
   // copy throw_list
   const irept::subt &throw_decl_list=
     instruction.code.find("throw_list").get_sub();
 
+  goto_symex_statet::framet &frame=cur_state->call_stack.back();
+
   for(unsigned i=0; i<throw_decl_list.size(); ++i)
-  {
-//    std::cout << "### throw: " << throw_decl_list[i].id() << std::endl;
     frame.throw_list_set.insert(throw_decl_list[i].id());
-  }
 }

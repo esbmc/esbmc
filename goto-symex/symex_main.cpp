@@ -93,9 +93,6 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
-    if(has_throw_decl)
-      cur_state->call_stack.pop_back();
-
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
