@@ -384,10 +384,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   for(unsigned i=0; i<expr.operands().size(); i++)
   {
     const exprt &block=expr.operands()[i];
-
-    irept type = irept(block.get("type"));
-    if(type.id() == "cpp-name")
-      type = irept(block.type().get_sub()[0].identifier());
+    irept type = irept(block.get("throw_decl_id"));
 
     // grab the ID and add to THROW_DECL instruction
     throw_list.push_back(irept(type));
