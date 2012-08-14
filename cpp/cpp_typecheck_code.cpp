@@ -38,6 +38,11 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_catch(code);
   }
+  else if(statement=="throw_decl")
+  {
+    code.type()=typet("code");
+    typecheck_throw_decl(code);
+  }
   else if(statement=="member_initializer")
   {
     code.type()=typet("code");
@@ -49,6 +54,23 @@ void cpp_typecheckt::typecheck_code(codet &code)
   }
   else
     c_typecheck_baset::typecheck_code(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_throw_decl(codet &code)
+{
+
 }
 
 /*******************************************************************\
