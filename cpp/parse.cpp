@@ -1856,7 +1856,10 @@ bool Parser::optThrowDecl(exprt &throw_decl)
         lex->GetToken(tk);
       }
 
-      p.operands().push_back(declaration);
+      codet statement=codet("decl");
+      statement.operands().push_back(declaration);
+
+      p.operands().push_back(statement);
     }
 
     if(lex->GetToken(tk)!=')')
@@ -2096,7 +2099,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
-  codet throw_decl;
+  codet throw_decl("nil");
 
   for(;;)
   {
@@ -2198,7 +2201,7 @@ bool Parser::rDeclarator(
   if(method_qualifier.is_not_nil())
     declarator.method_qualifier().swap(method_qualifier);
 
-  if(throw_decl.is_not_nil())
+  if(throw_decl.statement()!="nil")
     declarator.throw_decl().swap(throw_decl);
 
   declarator.type().swap(d_outer);
