@@ -60,6 +60,10 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
   conf.set("MODEL", true);
   conf.set("RELEVANCY", 0);
   conf.set("SOLVER", true);
+  // Disabling this option results in the enablement of --symex-thread-guard on
+  // 03_exor_01 to not explode solving time. No idea why this is the case,
+  // doesn't affect any other solving time.
+  conf.set("ARRAY_ALWAYS_PROP_UPWARD", false);
 
   ctx.init(conf, int_encoding);
 
