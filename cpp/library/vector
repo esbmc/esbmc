@@ -142,8 +142,12 @@ namespace std{
 	    	const_iterator& operator -- ();
 	    	const_iterator& operator -- (int);
 
-	    	bool operator == ( const const_iterator&)const;
-	    	bool operator != ( const const_iterator&)const;
+	    	bool operator == ( const const_iterator&)const{
+	    		return (pointer == i.pointer);
+	    	}
+	    	bool operator != ( const const_iterator&)const{
+	    		return (pointer != i.pointer);
+	    	}
 
 	    	bool operator < ( const const_iterator& i)const{
 	    		return (pointer < i.pointer);
@@ -549,20 +553,22 @@ namespace std{
   // specialized algorithms:
 
   template <class T>
-  void swap(vector<T>& v1, vector<T>& v2){
-	  T aux[VECTOR_CAPACITY];
-	  for(int i = 0 ; i < v1.size() ; i++){
-		  aux[i] = v1[i];
-	  }
-	  v1.clear();
-	  for(int i = 0 ; i < v2.size() ; i++){
-		  v1.push_back(v2[i]);
-	  }
-	  v2.clear();
-	  for(int i = 0 ; i < v1.size() ; i++){
-		  v2.push_back(aux[i]);
-	  }
-	  return;
+  void swap(vector<T>& v1){
+//	  T aux[VECTOR_CAPACITY];
+//
+//	  for(int i = 0 ; i < v1.size() ; i++){
+//		  aux[i] = v1[i];
+//	  }
+//	  v1.clear();
+//	  for(int i = 0 ; i < v2.size() ; i++){
+//		  v1.push_back(v2[i]);
+//	  }
+//	  v2.clear();
+//	  for(int i = 0 ; i < v1.size() ; i++){
+//		  v2.push_back(aux[i]);
+//	  }
+//	  return;
+	  assert(0);
   }
 
 }
