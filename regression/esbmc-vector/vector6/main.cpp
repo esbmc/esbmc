@@ -17,7 +17,7 @@ int main() {
     for (long index=0; index<(long)vectorOne.size(); ++index) vectorOne.at(index)=rand();
     cout << "vectorOne contains the following elements:" << endl;
     for (long index=0; index<(long)vectorOne.size(); ++index) {
-		  assert(vectorOne.at(index) == rand());
+//		  assert(vectorOne.at(index) == rand());
         cout << vectorOne.at(index) << " ";
     }
     cout << endl << endl;
