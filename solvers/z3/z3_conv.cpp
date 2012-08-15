@@ -1575,21 +1575,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
-  unsigned width;
-  width = data.source_value->type->get_width();
-  // XXXjmorse - looks like this only ever reads a single byte, not the desired
-  // number of bytes to fill the type.
-
-  uint64_t upper, lower;
-  if (!data.big_endian) {
-    upper = ((intref.constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = intref.constant_value.to_long() * 8; //i*w;
-  } else {
-    uint64_t max = width - 1;
-    upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
-    lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
-  }
-
   z3::expr source;
 
   convert_bv(data.source_value, source);
@@ -1645,7 +1630,22 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                                         the_elem, remainder));
     convert_bv(subfetch, output);
   } else if (is_number_type(data.source_value->type)) {
-    // First, is the size within the size of this type?
+    unsigned width;
+    width = data.source_value->type->get_width();
+    // XXXjmorse - looks like this only ever reads a single byte, not the
+    // desired number of bytes to fill the type.
+
+    uint64_t upper, lower;
+    if (!data.big_endian) {
+      upper = ((intref.constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+      lower = intref.constant_value.to_long() * 8; //i*w;
+    } else {
+      uint64_t max = width - 1;
+      upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
+      lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+    }
+
+    // is the size within the size of this type?
     uint64_t typesize = data.source_value->type->get_width();
     uint64_t offset = intref.constant_value.to_ulong();
     if (offset * 8 >= typesize) {
