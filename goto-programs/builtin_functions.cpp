@@ -828,6 +828,7 @@ void goto_convertt::do_function_call_symbol(
     do_atomic_end(lhs, function, arguments, dest);
   }
   else if(has_prefix(id2string(identifier), "c::nondet_") ||
+          has_prefix(id2string(identifier), "c::__VERIFIER_nondet_") ||
           has_prefix(id2string(identifier), "cpp::nondet_"))
   {
     // make it a side effect if there is an LHS
