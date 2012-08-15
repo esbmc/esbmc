@@ -3135,8 +3135,6 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
     bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
     DEBUGLOC;
 
-    std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
-
     DEBUGLOC;
     if (expr.op0().id() == "index") {
       DEBUGLOC;
