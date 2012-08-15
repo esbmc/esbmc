@@ -305,22 +305,21 @@ public:
 		//model
 	}
 
-	explicit vector(T t): _size(0)
+//	explicit vector(T t): _size(0)
+//	{
+//		buf[0] = 0;
+//		_size = 0;
+//		_capacity = 1;
+//		push_back(t);
+//		verify_capacity();
+//	}
+
+	explicit vector(size_type n): _size(0),  _capacity(1)
 	{
-		buf[0] = 0;
-		_size = 0;
-		_capacity = 1;
-		push_back(t);
-		verify_capacity();
+		_size = n;
+		_capacity = n;
 	}
 
-	//    explicit vector(T t[], T* addr): _size(0),  _capacity(1)
-	//    {
-		//        int i=0;
-		//				while((t+i)<addr)
-			//          push_back(t[i++]);
-		//		verify_capacity();
-		//    }
 	explicit vector(void t[], void* addr): _size(0),  _capacity(1)
 	{
 		int i=0;
@@ -466,7 +465,9 @@ public:
 		return (_size == 0) ? true : false;
 	}
 
-	void reserve(size_type n);
+	void reserve(size_type n){
+		_capacity = n;
+	}
 
 	// element access:
 	reference operator[](size_type i)
