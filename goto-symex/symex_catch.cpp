@@ -186,7 +186,11 @@ void goto_symext::symex_throw_decl()
   const irept::subt &throw_decl_list=
     instruction.code.find("throw_list").get_sub();
 
-  goto_symex_statet::framet &frame=cur_state->call_stack.back();
+  goto_symex_statet::call_stackt::const_reverse_iterator
+    s_it=cur_state->call_stack.rbegin();
+  ++s_it;
+
+  const goto_symex_statet::framet &frame=*s_it;
 
   for(unsigned i=0; i<throw_decl_list.size(); ++i)
     frame.throw_list_set.insert(throw_decl_list[i].id());
