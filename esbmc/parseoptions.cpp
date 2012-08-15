@@ -220,6 +220,21 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
 
+  if (cmdline.isset("smt-during-symex")) {
+    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
+    std::cout << std::endl;
+    options.set_option("no-slice", true);
+  }
+
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard")) {
+    if (!cmdline.isset("smt-during-symex")) {
+      std::cerr << "Please explicitly specify --smt-during-symex if you want "
+                   "to use features that involve encoding SMT during symex"
+                   << std::endl;
+      abort();
+    }
+  }
+
   if(cmdline.isset("base-case") ||
      options.get_bool_option("base-case"))
   {
@@ -1370,6 +1385,7 @@ void cbmc_parseoptionst::help()
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
     " --version                    show current ESBMC version and exit\n\n"
+    " --show-goto-functions        show goto program\n"
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
@@ -1418,7 +1434,6 @@ void cbmc_parseoptionst::help()
 #if 0
     " --unsigned-char              make \"char\" unsigned by default\n"
     " --show-symbol-table          show symbol table\n"
-    " --show-goto-functions        show goto program\n"
     " --ppc-macos                  set MACOS/PPC architecture\n"
 #endif
     #ifdef _WIN32

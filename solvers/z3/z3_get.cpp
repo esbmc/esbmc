@@ -59,16 +59,15 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
 }
 
 expr2tc
-z3_convt::get(const expr2tc &expr) const
+z3_convt::get(const expr2tc &expr)
 {
 
   try {
 
   if (is_symbol2t(expr)) {
     std::string identifier, tmp;
-    Z3_sort sort;
-    Z3_ast bv;
-    Z3_func_decl func;
+    z3::sort sort;
+    z3::expr bv;
 
     const symbol2t sym = to_symbol2t(expr);
     identifier = sym.get_symbol_name();
@@ -79,24 +78,26 @@ z3_convt::get(const expr2tc &expr) const
     } else if (int_encoding && is_bv_type(expr->type)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
-      sort = Z3_mk_int_sort(z3_ctx);
+      sort = ctx.int_sort();
     } else {
       // This doesn't work; can't be bothered to debug it either.
       //assert(cache_res != sort_cache.end() && "No cached copy of type when "
       //       "fetching cex data");
-      z3_convt *ourselves = const_cast<z3_convt *>(this);
-      ourselves->convert_type(expr->type, sort);
+      convert_type(expr->type, sort);
     }
 
-    bv = z3_api.mk_var(identifier.c_str(), sort);
-    func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
+    bv = ctx.constant(identifier.c_str(), sort);
 
-    if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
-      // This symbol doesn't have an assignment in this model
-      return expr2tc();
+    try {
+      z3::expr res = model.eval(bv, false);
+      expr2tc ret = bv_get_rec(res, expr->type);
+      return ret;
     }
 
-    return bv_get_rec(bv, expr->type);
+    catch (z3::exception &e) {
+    }
+    // This symbol doesn't have an assignment in this model
+    return expr2tc();
   } else if (is_constant_expr(expr)) {
     return expr;
   } else {
@@ -113,7 +114,7 @@ z3_convt::get(const expr2tc &expr) const
 }
 
 expr2tc
-z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
+z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
 {
   Z3_app app;
   unsigned width;
@@ -270,7 +271,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type) const
       return expr2tc(new symbol2t(type, "NULL"));
     }
 
-    return pointer_logic.pointer_expr(pointer, type);
+    return pointer_logic.back().pointer_expr(pointer, type);
   } else if (is_bv_type(type)) {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return expr2tc();

@@ -25,16 +25,23 @@ STRICTCOMPILE=1
 include $(ESBMCDIR)/common
 
 export LD LDFLAGS
+
+ifndef STATICLINK
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
+else
+
 # This build rule fetches a libc.a from my website that I've compiled to work on
 # iridis, aka linux 2.6.18. The library is checked for my pgp signature; then
 # linked up into esbmc to produce a library that /should/ work everywhere.
-iridis-esbmc: $(OBJS)
+esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
-	$(ESBMCDIR)/scripts/fetchlibc.sh .libc.a $(ESBMCDIR)/scripts/gpg-keyring
-	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) -print-file-name=libgcc.a` `$(CXX) -print-file-name=libgcc_eh.a` ./.libc.a
+	$(ESBMCDIR)/scripts/fetchlibc.sh libc${BITWIDTH_STR}.a .libc${BITWIDTH_STR}.a $(ESBMCDIR)/scripts/gpg-keyring
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) $(CXXFLAGS) -print-file-name=libgcc.a` `$(CXX) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
+
+endif
+
 clean:
 	-rm -f $(OBJDIR)/* esbmc $(OBJDIR)/.deps

@@ -941,6 +941,7 @@ aggregate_name:
 	}
 	| aggregate_key identifier_or_typedef_name
 		{
+		  init(&$<expr>$);
 		  PARSER.new_declaration(*$1, *$2, *$<expr>$, true);
 
 		  exprt tmp(*$<expr>$);

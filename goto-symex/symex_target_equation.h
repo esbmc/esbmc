@@ -36,6 +36,8 @@ extern "C" {
 class symex_target_equationt:public symex_targett
 {
 public:
+  class SSA_stept;
+
   symex_target_equationt(const namespacet &_ns):ns(_ns)
   {
     debug_print = config.options.get_bool_option("symex-ssa-trace");
@@ -75,12 +77,9 @@ public:
     std::vector<dstring> stack_trace,
     const sourcet &source);
 
-  void convert(prop_convt &prop_conv);
-  void convert_assignments(prop_convt &prop_conv) const;
-  void convert_assumptions(prop_convt &prop_conv);
-  void convert_assertions(prop_convt &prop_conv);
-  void convert_guards(prop_convt &prop_conv);
-  void convert_output(prop_convt &prop_conv);
+  virtual void convert(prop_convt &prop_conv);
+  void convert_internal_step(prop_convt &prop_conv, literalt &assumpt_lit,
+                             bvt &assertions, SSA_stept &s);
 
   class SSA_stept
   {
@@ -166,10 +165,35 @@ public:
     return new symex_target_equationt(*this);
   }
 
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
 
 protected:
   const namespacet &ns;
   bool debug_print;
+};
+
+class runtime_encoded_equationt : public symex_target_equationt
+{
+public:
+  class dual_unsat_exception { };
+
+  runtime_encoded_equationt(const namespacet &_ns, prop_convt &conv);
+
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
+
+  virtual symex_targett *clone(void) const;
+
+  virtual void convert(prop_convt &prop_conv);
+  void flush_latest_instructions(void);
+
+  tvt ask_solver_question(const expr2tc &question);
+
+  prop_convt &conv;
+  std::list<bvt> assert_vec_list;
+  std::list<literalt> assumpt_chain;
+  std::list<SSA_stepst::iterator> scoped_end_points;
 };
 
 extern inline bool operator<(

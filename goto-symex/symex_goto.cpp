@@ -15,6 +15,7 @@
 #include <std_expr.h>
 
 #include "goto_symex.h"
+#include "symex_target_equation.h"
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)
@@ -25,7 +26,31 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   cur_state->rename(new_guard);
   do_simplify(new_guard);
 
-  if ((is_false(new_guard)) || cur_state->guard.is_false()) {
+  bool new_guard_false = false, new_guard_true = false;
+
+  new_guard_false = ((is_false(new_guard)) || cur_state->guard.is_false());
+  new_guard_true = is_true(new_guard);
+
+  if (!new_guard_false && options.get_bool_option("smt-symex-guard")) {
+    runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
+                                                 (target);
+    expr2tc question(new equality2t(true_expr, new_guard));
+    try {
+      tvt res = rte->ask_solver_question(question);
+
+      if (res.is_false())
+        new_guard_false = true;
+      else if (res.is_true())
+        new_guard_true = true;
+    } catch (runtime_encoded_equationt::dual_unsat_exception &e) {
+      // Assumptions mean that the guard is never satisfiable as true or false,
+      // basically means we've assume'd away the possibility of hitting this
+      // point.
+      new_guard_false = true;
+    }
+  }
+
+  if (new_guard_false) {
 
     // reset unwinding counter
     cur_state->unwind_map[cur_state->source] = 0;
@@ -67,7 +92,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       return;
     }
 
-    if (is_true(new_guard)) {
+    if (new_guard_true) {
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -95,7 +120,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
-  if (is_true(new_guard)) {
+  if (new_guard_true) {
     cur_state->guard.make_false();
   } else   {
     // produce new guard symbol

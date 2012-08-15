@@ -52,6 +52,7 @@ reachability_treet::reachability_treet(
 void
 reachability_treet::setup_for_new_explore(void)
 {
+  symex_targett *targ;
 
   execution_states.clear();
 
@@ -61,6 +62,7 @@ reachability_treet::setup_for_new_explore(void)
   execution_statet *s;
   if (options.get_bool_option("schedule")) {
     schedule_target = target_template->clone();
+    targ = schedule_target;
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
                                                this, schedule_target,
@@ -68,15 +70,17 @@ reachability_treet::setup_for_new_explore(void)
                                                options, &schedule_total_claims,
                                                &schedule_remaining_claims));
   } else {
+    targ = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target_template->clone(),
+                                               targ,
                                                permanent_context, options));
     schedule_target = NULL;
   }
 
   execution_states.push_back(s);
   cur_state_it = execution_states.begin();
+  targ->push_ctx(); // Start with a depth of 1.
 }
 
 execution_statet & reachability_treet::get_cur_state()
@@ -190,11 +194,10 @@ reachability_treet::create_next_state(void)
     //end - H.Savino
 
     /* Make it active, make it follow on from previous state... */
-    if (new_state->get_active_state_number() != next_thread_id) {
+    if (new_state->get_active_state_number() != next_thread_id)
       new_state->increment_context_switch();
-      new_state->switch_to_thread(next_thread_id);
-    }
 
+    new_state->switch_to_thread(next_thread_id);
     new_state->execute_guard();
 
     /* Reset interleavings (?) investigated in this new state */
@@ -290,10 +293,13 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (step_next_state())
+    if (step_next_state()) {
       cur_state_it++;
-    else
+    } else {
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       has_complete_formula = true;
+    }
   }
 
   at_end_of_run = false;
@@ -341,6 +347,7 @@ void reachability_treet::go_next_state()
     {
       it = cur_state_it;
       cur_state_it--;
+      delete *it;
       execution_states.erase(it);
     }
 
@@ -669,6 +676,9 @@ reachability_treet::get_next_formula()
     create_next_state();
 
     switch_to_next_execution_state();
+
+    if (get_cur_state().interleaving_unviable)
+      break;
   }
 
   has_complete_formula = false;
