@@ -19,8 +19,6 @@ typedef bool (funcao)(int arg1, int arg2);
 
 namespace std
 {
-//template<class InIt, class Fn1>
-//    Fn1 for_each(InIt first, InIt last, Fn1 func);
 template<class InputIterator, class Function>
   Function for_each(InputIterator first, InputIterator last, Function f)
   {
@@ -50,15 +48,7 @@ template<class InIt, class Ty>
   }
   return first;
 }
-//template<class InputIterator, class T>
-//  InputIterator find ( InputIterator *first, InputIterator *last, T& value )
-//  {
-//    for ( ;first!=last; first++) if ( *first==value ) break;
-//    return value;
-//  }
 
-//template<class InIt, class Pr>
-//    InIt find_if(InIt first, InIt last, Pr pred);
 template<class InputIterator, class Predicate>
   InputIterator find_if ( InputIterator first, InputIterator last, Predicate pred )
   {
@@ -66,9 +56,6 @@ template<class InputIterator, class Predicate>
     return first;
   }
 
-//template<class FwdIt1, class FwdIt2>
-//    FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
-//        FwdIt2 first2, FwdIt2 last2);
 template<class ForwardIterator1, class ForwardIterator2>
   ForwardIterator1 find_end ( ForwardIterator1 first1, ForwardIterator1 last1,
                               ForwardIterator2 first2, ForwardIterator2 last2)
@@ -81,7 +68,7 @@ template<class ForwardIterator1, class ForwardIterator2>
   {
     ForwardIterator1 it1 = first1;
     ForwardIterator2 it2 = first2;
-    while (*it1==*it2) {    // or: while (pred(*it1,*it2)) for the pred version
+    while (*it1==*it2) {
         ++it1; ++it2;
         if (it2==last2) { ret=first1; break; }
         if (it1==last1) return ret;
@@ -93,7 +80,25 @@ template<class ForwardIterator1, class ForwardIterator2>
 
 template<class FwdIt1, class FwdIt2, class Pr>
     FwdIt1 find_end(FwdIt1 first1, FwdIt1 last1,
-        FwdIt2 first2, FwdIt2 last2, Pr pred);
+        FwdIt2 first2, FwdIt2 last2, Pr pred)
+{
+  if (first2==last2) return last1;  // specified in C++11
+
+  FwdIt1 ret = last1;
+
+  while (first1!=last1)
+  {
+	FwdIt1 it1 = first1;
+    FwdIt2 it2 = first2;
+    while (pred(*it1,*it2)){
+        ++it1; ++it2;
+        if (it2==last2) { ret=first1; break; }
+        if (it1==last1) return ret;
+    }
+    ++first1;
+  }
+  return ret;
+}
 
 template<class FwdIt1, class FwdIt2>
     FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
@@ -101,23 +106,31 @@ template<class FwdIt1, class FwdIt2>
 {
   for ( ; first1 != last1; ++first1 )
     for (FwdIt2 it=first2; it!=last2; ++it)
-      if (*it==*first1)          // or: if (comp(*it,*first)) for the pred version
+      if (*it==*first1)
         return first1;
   return last1;
 }
 
 template<class FwdIt1, class FwdIt2, class Pr>
     FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
-        FwdIt2 first2, FwdIt2 last2, Pr pred);
+        FwdIt2 first2, FwdIt2 last2, Pr pred)
+{
+  for ( ; first1 != last1; ++first1 )
+    for (FwdIt2 it=first2; it!=last2; ++it)
+    	if (pred(*it,*first))
+        return first1;
+  return last1;
+}
 
 template<class FwdIt>
     FwdIt adjacent_find(FwdIt first, FwdIt last)
 {
+	assert(0);
   if (first != last)
   {
 	FwdIt next=first; ++next;
     while (next != last) {
-      if (*first == *next)  // or: if (pred(*first,*next)), for the pred version
+      if (*first == *next)
         return first;
       else { ++first; ++next; }
     }
@@ -126,16 +139,24 @@ template<class FwdIt>
 }
 
 template<class FwdIt, class Pr>
-    FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred);
+    FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred)
+{
+  if (first != last)
+  {
+	FwdIt next=first; ++next;
+    while (next != last) {
+      if (pred(*first,*next))
+        return first;
+      else { ++first; ++next; }
+    }
+  }
+  return last;
+}
 
 template<class InIt, class Ty, class Dist>
     typename iterator_traits<InIt>::difference_type
         count(InIt first, InIt last,
             const Ty& val);
-
-//template <class InputIterator, class T>
-//  typename iterator_traits<InputIterator>::difference_type
-//    count ( ForwardIterator first, ForwardIterator last, const T& value );
 
 template <class InputIterator, class T>
 	ptrdiff_t count ( InputIterator first, InputIterator last, const T& value )
@@ -153,10 +174,6 @@ template <class InputIterator, class T>
   return ret;
 }
 
-//template<class InIt, class Pr, class Dist>
-//    typename iterator_traits<InIt>::difference_type
-//        count_if(InIt first, InIt last, Pr pred);
-
 template <class InputIterator, class T>
 	ptrdiff_t count_if ( InputIterator first, InputIterator last, const T& pred )
 {
@@ -173,14 +190,19 @@ template<class InIt1, class InIt2>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
         InIt2 *first2)
 {
-	while ( (first1!=last1) && (*first1==*first2) )  // or: pred(*first1,*first2), for the pred version
+	while ( (first1!=last1) && (*first1==*first2) )
     { ++first1; ++first2; }
     return make_pair(first1,first2);
 }
 
 template<class InIt1, class InIt2, class Pr>
     pair<InIt1, InIt2> mismatch(InIt1 first1, InIt1 last1,
-        InIt2 first2, Pr pred);
+        InIt2 first2, Pr pred)
+        {
+        	while ( pred(*first1,*first2) )
+            { ++first1; ++first2; }
+            return make_pair(first1,first2);
+        }
 
 template<class InIt1, class InIt2>
     bool equal(InIt1 first1, InIt1 last1, InIt2 first2);
@@ -190,7 +212,7 @@ template<class InIt1, class InIt2>
 {
   while ( first1!=last1 )
   {
-    if (!(*first1 == *first2))   // or: if (!pred(*first1,*first2)), for pred version
+    if (!(*first1 == *first2))
       return false;
     ++first1; ++first2;
   }
@@ -198,7 +220,16 @@ template<class InIt1, class InIt2>
 }
 
 template<class InIt1, class InIt2, class Pr>
-    bool equal(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred);
+    bool equal(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred)
+{
+  while ( first1!=last1 )
+  {
+	  if (!pred(*first1,*first2))
+      return false;
+    ++first1; ++first2;
+  }
+  return true;
+}
 
 template<class FwdIt1, class FwdIt2>
     FwdIt1 search(FwdIt1 first1, FwdIt1 last1,
@@ -210,7 +241,7 @@ template<class FwdIt1, class FwdIt2>
   {
 	FwdIt1 it1 = first1;
 	FwdIt2 it2 = first2;
-    while (*it1==*it2) {    // or: while (pred(*it1,*it2)) for the pred version
+    while (*it1==*it2) {
         ++it1; ++it2;
         if (it2==last2) return first1;
         if (it1==last1) return last1;
@@ -230,7 +261,7 @@ template<class FwdIt1, class FwdIt2>
   {
 	FwdIt1 it1 = first1;
 	FwdIt2 *it2 = first2;
-    while (*it1==*it2) {    // or: while (pred(*it1,*it2)) for the pred version
+    while (*it1==*it2) {
         ++it1; ++it2;
         if (it2==last2) return first1;
         if (it1==last1) return last1;
@@ -242,11 +273,23 @@ template<class FwdIt1, class FwdIt2>
 
 template<class FwdIt1, class FwdIt2, class Pr>
     FwdIt1 search(FwdIt1 first1, FwdIt1 last1,
-        FwdIt2 first2, FwdIt2 last2, Pr pred);
+        FwdIt2 first2, FwdIt2 last2, Pr pred)
+{
+  if (first2==last2) return first1;  // specified in C++11
 
-template<class FwdIt1, class FwdIt2, class Pr>
-    FwdIt1 search(FwdIt1 first1, FwdIt1 last1,
-        FwdIt2 first2, FwdIt2 last2, Pr pred);
+  while (first1!=last1)
+  {
+	FwdIt1 it1 = first1;
+	FwdIt2 it2 = first2;
+	while (pred(*it1,*it2)) {
+        ++it1; ++it2;
+        if (it2==last2) return first1;
+        if (it1==last1) return last1;
+    }
+    ++first1;
+  }
+  return last1;
+}
 
 template<class FwdIt, class Diff, class Ty>
     FwdIt search_n(FwdIt first, FwdIt last,
@@ -282,7 +325,7 @@ template<class InputIterator, class OutputIterator>
 
 template<class InIt, class OutIt>
     OutIt copy(InIt *first, InIt *last, OutIt dest){
-	  //while (first!=last) *dest++ = *first++;
+	  while (first!=last) *dest++ = *first++;
 	  return dest;
 }
 
@@ -290,14 +333,17 @@ template<class BidIt1, class BidIt2>
     BidIt2 copy_backward(BidIt1 first, BidIt1 last,
         BidIt2 dest)
 {
-  while (last!=first) *(--dest) = *(--last);
+  while (last!=first)
+	  *(--dest) = *(--last);
   return dest;
 }
 
 template<class Ty>
 void swap ( Ty& a, Ty& b )
 {
-  Ty c(a); a=b; b=c;
+  Ty c(a);
+  a=b;
+  b=c;
 }
 
 template<class FwdIt1, class FwdIt2>
@@ -333,13 +379,18 @@ template<class InIt, class OutIt, class Fn1>
         Fn1 func)
 {
   while (first != last)
-    *dest++ = func(*first++);  // or: *result++=binary_op(*first1++,*first2++);
+    *dest++ = func(*first++);
   return dest;
 }
 
 template<class InIt1, class InIt2, class OutIt, class Fn2>
     OutIt transform(InIt1 first1, InIt1 last1,
-        InIt2 first2, OutIt dest, Fn2 func);
+        InIt2 first2, OutIt dest, Fn2 func)
+{
+  while (first != last1)
+	  *dest++=func(*first1++,*first2++);
+  return dest;
+}
 
 template<class FwdIt, class Ty>
     void replace(FwdIt first, FwdIt last,
@@ -474,14 +525,23 @@ template<class FwdIt>
   FwdIt result=first;
   while (++first != last)
   {
-    if (!(*result == *first))  // or: if (!pred(*result,*first)) for the pred version
+    if (!(*result == *first))
       *(++result)=*first;
   }
   return ++result;
 }
 
 template<class FwdIt, class Pr>
-    FwdIt unique(FwdIt first, FwdIt last, Pr pred);
+    FwdIt unique(FwdIt first, FwdIt last, Pr pred)
+{
+  FwdIt result=first;
+  while (++first != last)
+  {
+	  if (!pred(*result,*first))
+      *(++result)=*first;
+  }
+  return ++result;
+}
 
 template<class InIt, class OutIt>
     OutIt unique_copy(InIt first, InIt last, OutIt dest)
@@ -490,7 +550,7 @@ template<class InIt, class OutIt>
   dest=first;
   while (++first != last)
   {
-    if (!(value == *first))  // or: if (!pred(value,*first)) for the pred version
+    if (!(value == *first))
       *(++dest) = value = *first;
   }
   return ++dest;
@@ -503,14 +563,24 @@ template<class InIt, class OutIt>
   *dest=*first;
   while (++first != last)
   {
-    if (!(value == *first))  // or: if (!pred(value,*first)) for the pred version
+    if (!(value == *first))
       *(++dest) = value = *first;
   }
   return ++dest;
 }
 
 template<class InIt, class OutIt, class Pr>
-    OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred);
+    OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred)
+{
+  InIt value = first;
+  dest=first;
+  while (++first != last)
+  {
+	  if (!pred(value,*first))
+      *(++dest) = value = *first;
+  }
+  return ++dest;
+}
 
 template<class BidIt>
     void reverse(BidIt first, BidIt last)
@@ -1026,12 +1096,6 @@ const char max(const char left, const char right)
     else return right;
 }
 
-//template<class Ty, class Pr>
-//    const Ty& max(const Ty& left, const Ty& right, Pr pred);
-
-//template<class Ty>
-//    const Ty& min(const Ty& left, const Ty& right);
-
 template<class Ty, class Pr>
     const Ty& min(const Ty& left, const Ty& right, Pr pred);
 
@@ -1066,23 +1130,39 @@ template<class FwdIt>
   FwdIt largest = first;
   if (first==last) return last;
   while (++first!=last)
-    if (*largest<*first)    // or: if (comp(*largest,*first)) for the comp version
+    if (*largest<*first)
       largest=first;
   return largest;
 }
 
 template<class FwdIt, class Pr>
-    FwdIt max_element(FwdIt first, FwdIt last, Pr pred);
+    FwdIt max_element(FwdIt first, FwdIt last, Pr pred)
+{
+  FwdIt largest = first;
+  if (first==last) return last;
+  while (++first!=last)
+	  if (pred(*largest,*first))
+      largest=first;
+  return largest;
+}
 
 template<class FwdIt, class Pr>
-    FwdIt* max_element(FwdIt *first, FwdIt *last, Pr pred);
+    FwdIt* max_element(FwdIt *first, FwdIt *last, Pr pred)
+{
+  FwdIt largest = first;
+  if (first==last) return last;
+  while (++first!=last)
+	  if (pred(*largest,*first))
+      largest=first;
+  return largest;
+}
 
 int* max_element(int *first, int *last)
 {
   int *largest = first;
   if (first==last) return last;
   while (++first!=last)
-    if (*largest<*first)    // or: if (comp(*largest,*first)) for the comp version
+    if (*largest<*first)
       largest=first;
   return largest;
 }
@@ -1093,7 +1173,7 @@ template<class FwdIt>
   FwdIt lowest = first;
   if (first==last) return last;
   while (++first!=last)
-    if (*first<*lowest)    // or: if (comp(*first,*lowest)) for the comp version
+    if (*first<*lowest)
       lowest=first;
   return lowest;
 }
@@ -1103,16 +1183,32 @@ int* min_element(int *first, int *last)
   int *lowest = first;
   if (first==last) return last;
   while (++first!=last)
-    if (*first<*lowest)    // or: if (comp(*first,*lowest)) for the comp version
+    if (*first<*lowest)
       lowest=first;
   return lowest;
 }
 
 template<class FwdIt, class Pr>
-    FwdIt min_element(FwdIt first, FwdIt last, Pr pred);
+    FwdIt min_element(FwdIt first, FwdIt last, Pr pred)
+{
+  FwdIt lowest = first;
+  if (first==last) return last;
+  while (++first!=last)
+	  if (pred(*first,*lowest))
+      lowest=first;
+  return lowest;
+}
 
 template<class FwdIt, class Pr>
-    FwdIt* min_element(FwdIt *first, FwdIt *last, Pr pred);
+    FwdIt* min_element(FwdIt *first, FwdIt *last, Pr pred)
+{
+  FwdIt lowest = first;
+  if (first==last) return last;
+  while (++first!=last)
+	  if (pred(*first,*lowest))
+      lowest=first;
+  return lowest;
+}
 
 template<class InIt1, class InIt2>
     bool lexicographical_compare(InIt1 *first1,
