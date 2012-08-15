@@ -103,7 +103,7 @@ void goto_symext::symex_throw()
       }
       else
       {
-        const std::string &msg="Trying to re-throw without last exception";
+        const std::string &msg="Trying to re-throw without last exception.";
         claim(false_exprt(), msg);
         return;
       }
@@ -122,7 +122,8 @@ void goto_symext::symex_throw()
 
         if(s_it==frame.throw_list_set.end())
         {
-          const std::string &msg="Trying to throw an exception not allowed by declaration";
+          const std::string &msg="Trying to throw an exception of type " +
+            e_it->id().as_string() + " but it's not allowed by declaration.";
           claim(false_exprt(), msg);
           return;
         }
