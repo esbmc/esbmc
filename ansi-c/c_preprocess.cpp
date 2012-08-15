@@ -141,6 +141,7 @@ static const char *cpp_normal_defs[] = {
 "__GNUC__",
 "__restrict__=/**/",
 "__restrict=/**/",
+"__VERIFIER_ASSUME=__ESBMC_assume",
 NULL
 };
 
