@@ -1606,7 +1606,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     uint64_t total_sz = 0, cur_item_sz = 0;
     unsigned int idx = 0;
     // The following can't throw as extracting variable size data would be wrong
-    unsigned int sel_sz = data.type->get_width();
+    unsigned int sel_sz = data.type->get_width() / 8;
 
     std::vector<type2tc>::const_iterator it;
     for (it = struct_type.members.begin(); it != struct_type.members.end();
