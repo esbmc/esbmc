@@ -180,6 +180,11 @@ private:
                            const z3::expr &new_val);
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
+  z3::expr extract_from_struct_field(const type2tc &t, bool be,
+                                     unsigned int field_idx,
+                                     const expr2tc &field_offset,
+                                     const expr2tc &expr);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate

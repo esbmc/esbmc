@@ -1565,6 +1565,27 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
   }
 }
 
+z3::expr
+z3_convt::extract_from_struct_field(const type2tc &type, bool be,
+                                    unsigned int field_idx,
+                                    const expr2tc &field_offset,
+                                    const expr2tc &expr)
+{
+  z3::expr output;
+  const struct_type2t &struct_type = to_struct_type(expr->type);
+  assert(field_idx < struct_type.members.size());
+
+  // Select field from source
+  expr2tc item(new member2t(struct_type.members[field_idx], expr,
+                            struct_type.member_names[field_idx]));
+
+  // And select an appropriately sized chunk from that.
+  expr2tc new_extract(new byte_extract2t(type, be, item, field_offset));
+
+  convert_bv(new_extract, output);
+  return output;
+}
+
 void
 z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
