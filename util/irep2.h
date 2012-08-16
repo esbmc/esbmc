@@ -1990,6 +1990,10 @@ public:
     : expr2t(ref) { }
 };
 
+/** Extract byte-orientated data from an expression.
+ *  Takes a source expression, and extracts a value from it at the given offset.
+ *  In the past this has only extracted a single byte; from now the type of
+ *  the expression should indicate the desired result type of the extraction.*/
 class byte_extract_data : public byte_ops
 {
 public:
@@ -2003,8 +2007,15 @@ public:
   bool big_endian;
   expr2tc source_value;
   expr2tc source_offset;
+  type2tc extract_type;
 };
 
+/** Update field in expr in byte representation.
+ *  Updates a particular location in the byte model of an expression. The value
+ *  of update_value will be written into source_value at the location indicated
+ *  by source_offset. In the past only a byte has been written; now the entirety
+ *  of update_value should be written.
+ */
 class byte_update_data : public byte_ops
 {
 public:
