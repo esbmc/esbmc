@@ -1605,6 +1605,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     uint64_t offs = intref.constant_value.to_ulong();
     uint64_t total_sz = 0, cur_item_sz = 0;
     unsigned int idx = 0;
+    // The following can't throw as extracting variable size data would be wrong
+    unsigned int sel_sz = data.type->get_width();
 
     std::vector<type2tc>::const_iterator it;
     for (it = struct_type.members.begin(); it != struct_type.members.end();
@@ -1621,11 +1623,19 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       return;
     }
 
-    // Make offs the offset into this item.
-    offs -= total_sz;
-    expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(offs)));
-    output = extract_from_struct_field(data.type, data.big_endian, idx,
-                                       new_offs, data.source_value);
+    // Is the selection entirely in the bounds of one field of this struct?
+    if (total_sz + cur_item_sz >= offs + sel_sz) {
+      // Yes, so just select from one of them.
+      // Make offs the offset into this item.
+      offs -= total_sz;
+      expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(offs)));
+      output = extract_from_struct_field(data.type, data.big_endian, idx,
+                                         new_offs, data.source_value);
+    } else {
+      // No; potentially many fields if there're a series of bytes. So iterate
+      // over fields from here, selecting out the necessary number of bytes.
+      assert(0);
+    }
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
     const array_type2t &array = to_array_type(data.source_value->type);
