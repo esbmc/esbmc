@@ -1634,7 +1634,48 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     } else {
       // No; potentially many fields if there're a series of bytes. So iterate
       // over fields from here, selecting out the necessary number of bytes.
-      assert(0);
+      bool first = true;
+      unsigned int orig_offs = offs;
+      for (; it != struct_type.members.end(); it++, idx++) {
+        if (total_sz >= orig_offs + sel_sz)
+          break;
+
+        unsigned int cur_offs = offs - total_sz;
+        unsigned int immediate_sz = cur_item_sz - cur_offs;
+
+        if (first) {
+          // Make offs the offset into this item.
+          type2tc getsz = type_pool.get_uint(immediate_sz * 8);
+          expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
+          output = extract_from_struct_field(getsz, data.big_endian, idx,
+                                             new_offs, data.source_value);
+
+          // No need to clip preceeding bits if there are any; they're already
+          // removed by the extraction we just performed.
+
+          first = false;
+          offs += immediate_sz;
+        } else {
+          cur_item_sz = (*it)->get_width() / 8;
+
+          // Potentially clip unneeded data off the end,
+          if (total_sz + cur_item_sz > orig_offs + sel_sz) {
+            unsigned int diff = total_sz + cur_item_sz - orig_offs - sel_sz;
+            immediate_sz -= diff;
+          }
+
+          type2tc getsz = type_pool.get_uint(immediate_sz * 8);
+          expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
+          z3::expr tmp = extract_from_struct_field(getsz, data.big_endian, idx,
+                                                   new_offs, data.source_value);
+
+          // And combine.
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
+          offs += immediate_sz;
+        }
+
+        total_sz += cur_item_sz;
+      }
     }
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
