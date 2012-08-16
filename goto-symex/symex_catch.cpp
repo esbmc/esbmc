@@ -122,8 +122,17 @@ void goto_symext::symex_throw()
 
         if(s_it==frame.throw_list_set.end())
         {
-          const std::string &msg="Trying to throw an exception of type " +
-            e_it->id().as_string() + " but it's not allowed by declaration.";
+          std::string msg=std::string("Trying to throw an exception ") +
+            std::string("but it's not allowed by declaration.\n\n");
+          msg += "Exception type: " + e_it->id().as_string();
+          msg += "\nAllowed exceptions: ";
+
+          for(goto_symex_statet::framet::throw_list_sett::iterator
+              s_it1=frame.throw_list_set.begin();
+              s_it1!=frame.throw_list_set.end();
+              ++s_it1)
+            msg+= std::string((*s_it1).c_str()) + "\n";
+
           claim(false_exprt(), msg);
           return;
         }
