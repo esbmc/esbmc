@@ -111,13 +111,35 @@ template<class FwdIt1, class FwdIt2>
   return last1;
 }
 
+template<class FwdIt1, class FwdIt2>
+    FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 *first2, FwdIt2 *last2)
+{
+  for ( ; first1 != last1; ++first1 )
+    for (FwdIt2 *it=first2; it!=last2; ++it)
+      if (*it==*first1)
+        return first1;
+  return last1;
+}
+
 template<class FwdIt1, class FwdIt2, class Pr>
     FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
         FwdIt2 first2, FwdIt2 last2, Pr pred)
 {
   for ( ; first1 != last1; ++first1 )
     for (FwdIt2 it=first2; it!=last2; ++it)
-    	if (pred(*it,*first))
+    	if (pred(*it,*first1))
+        return first1;
+  return last1;
+}
+
+template<class FwdIt1, class FwdIt2, class Pr>
+    FwdIt1 find_first_of(FwdIt1 first1, FwdIt1 last1,
+        FwdIt2 *first2, FwdIt2 *last2, Pr pred)
+{
+  for ( ; first1 != last1; ++first1 )
+    for (FwdIt2 *it=first2; it!=last2; ++it)
+    	if (pred(*it,*first1))
         return first1;
   return last1;
 }
