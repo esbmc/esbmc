@@ -618,8 +618,12 @@ void value_sett::get_value_set_rec(
     if(expr.operands().size()!=2)
       throw "byte_extract takes two operands";
 
+    const struct_typet &struct_type = to_struct_type(expr.type());
+    const struct_typet::componentst &components = struct_type.components();
+
     // we just pass through
-    get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
+    if (components.size() < expr.operands().size())
+      get_value_set_rec(expr.op0(), dest, suffix, original_type, ns);
 
     return;
   }
