@@ -1,11 +1,11 @@
-//     #include <iostream>
-//	  using namespace std;
+     #include <iostream>
+	  using namespace std;
      class Horse
      {
      public:
-        Horse() { /*cout << "Horse constructor... ";*/ }
-       virtual ~Horse() { /*cout << "Horse destructor... ";*/ }
-       virtual void Whinny() const { /*cout << "Whinny!... ";*/ }
+        Horse() { cout << "Horse constructor... "; }
+       virtual ~Horse() { cout << "Horse destructor... "; }
+       virtual void Whinny() const { cout << "Whinny!... "; }
     private:
        int itsAge;
     };
@@ -13,12 +13,12 @@
     class Bird
     {
     public:
-       Bird() { /*cout << "Bird constructor... ";*/ }
-       virtual ~Bird() { /*cout << "Bird destructor... ";*/ }
-       virtual void Chirp() const { /*cout << "Chirp... ";*/  }
+       Bird() { cout << "Bird constructor... "; }
+       virtual ~Bird() { cout << "Bird destructor... "; }
+       virtual void Chirp() const { cout << "Chirp... ";  }
        virtual void Fly() const 
        { 
-          /*cout << "I can fly! I can fly! I can fly! "; */
+          cout << "I can fly! I can fly! I can fly! "; 
        }
     private:
        int itsWeight;
@@ -28,11 +28,11 @@
     {
     public:
        void Chirp() const { Whinny(); }
-       Pegasus() { /*cout << "Pegasus constructor... ";*/ }
-       ~Pegasus() { /*cout << "Pegasus destructor...  ";*/ }
+       Pegasus() { cout << "Pegasus constructor... "; }
+       ~Pegasus() { cout << "Pegasus destructor...  "; }
     };
 
-    const int MagicNumber = 1;
+    const int MagicNumber = 2;
     int main()
     {
        Horse* Ranch[MagicNumber];
@@ -42,8 +42,8 @@
        int choice,i;
        for (i=0; i<MagicNumber; i++)
        {
-          //cout << "\n(1)Horse (2)Pegasus: ";
-          //cin >> choice;
+          cout << "\n(1)Horse (2)Pegasus: ";
+          cin >> choice;
           if (choice == 2)
              pHorse = new Pegasus;
           else
@@ -52,8 +52,8 @@
        }
        for (i=0; i<MagicNumber; i++)
        {
-          //cout << "\n(1)Bird (2)Pegasus: ";
-          //cin >> choice;
+          cout << "\n(1)Bird (2)Pegasus: ";
+          cin >> choice;
           if (choice == 2)
              pBird = new Pegasus; 
           else
@@ -61,17 +61,17 @@
           Aviary[i] = pBird;
        }
 
-       //cout << "\n";
+       cout << "\n";
        for (i=0; i<MagicNumber; i++)
        {
-          //cout << "\nRanch[" << i << "]: " ;
+          cout << "\nRanch[" << i << "]: " ;
           Ranch[i]->Whinny();
           delete Ranch[i];
        }
 
        for (i=0; i<MagicNumber; i++)
        {
-          //cout << "\nAviary[" << i << "]: " ;
+          cout << "\nAviary[" << i << "]: " ;
           Aviary[i]->Chirp();
           Aviary[i]->Fly();
           delete Aviary[i];
