@@ -1624,16 +1624,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     // Make offs the offset into this item.
     offs -= total_sz;
     expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(offs)));
-
-    // Select it out of the source
-    expr2tc item(new member2t(*it, data.source_value,
-                              struct_type.member_names[idx]));
-
-    // And select a byte out of that.
-    expr2tc new_extract(new byte_extract2t(char_type2(), data.big_endian,
-                                           item, new_offs));
-
-    convert_bv(new_extract, output);
+    output = extract_from_struct_field(data.type, data.big_endian, idx,
+                                       new_offs, data.source_value);
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
     const array_type2t &array = to_array_type(data.source_value->type);
