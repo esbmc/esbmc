@@ -679,7 +679,7 @@ bool dereferencet::memory_model_bytes(
           expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
         expr2tc upper_bound(new add2t(uint_type2(), new_offset, const_val));
         expr2tc upper_bound_eq =
-          expr2tc(new greaterthanequal2t(upper_bound, total_size));
+          expr2tc(new greaterthan2t(upper_bound, total_size));
 
         guardt tmp_guard(guard);
         tmp_guard.move(upper_bound_eq);
