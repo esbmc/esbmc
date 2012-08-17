@@ -602,52 +602,18 @@ bool dereferencet::memory_model(
 
   // first, check if it's really just a conversion
 
-  if (is_number_type(from_type) && is_number_type(to_type) &&
-      from_type->get_width() == to_type->get_width())
-    return memory_model_conversion(value, to_type, guard, new_offset);
+  if (is_bv_type(from_type) && is_bv_type(to_type) &&
+      from_type->get_width() == to_type->get_width() &&
+      is_constant_int2t(new_offset) &&
+      to_constant_int2t(new_offset).constant_value.is_zero()) {
+    value = expr2tc(new typecast2t(to_type, value));
+    return true;
+  }
 
   // otherwise, we will stich it together from bytes
 
   bool ret = memory_model_bytes(value, to_type, guard, new_offset);
   return ret;
-}
-
-bool dereferencet::memory_model_conversion(
-  expr2tc &value,
-  const type2tc &to_type,
-  const guardt &guard,
-  expr2tc &new_offset)
-{
-  const type2tc from_type = value->type;
-
-  // avoid semantic conversion in case of
-  // cast to float
-  if (is_fixedbv_type(to_type))
-  {
-    value = expr2tc(new to_bv_typecast2t(to_type, value));
-  }
-  else
-  {
-    // only doing type conversion
-    // just do the typecast
-    value = expr2tc(new typecast2t(to_type, value));
-  }
-
-  // also assert that offset is zero
-
-  if(!options.get_bool_option("no-pointer-check"))
-  {
-    expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
-    expr2tc offs_not_zero = expr2tc(new notequal2t(new_offset, zero));
-
-    guardt tmp_guard(guard);
-    tmp_guard.move(offs_not_zero);
-    dereference_callback.dereference_failure(
-      "word bounds",
-      "offset not zero", tmp_guard);
-  }
-
-  return true;
 }
 
 bool dereferencet::memory_model_bytes(
