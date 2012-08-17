@@ -353,17 +353,21 @@ void value_sett::get_value_set_rec(
       // pointer arithmetic. We also use the _perceived_ type of what we're
       // adding or subtracting from/to, it might be being typecasted.
       const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
-      mp_integer elem_size = pointer_offset_size(*subtype);
       mp_integer total_offs(0);
-      bool is_const;
-      if (is_constant_int2t(non_ptr_op)) {
-        const mp_integer &val = to_constant_int2t(non_ptr_op).constant_value;
-        total_offs = val * elem_size;
-        if (is_sub2t(expr))
-          total_offs.negate();
-        is_const = true;
-      } else {
-        is_const = false;
+      bool is_const = false;
+      try {
+        mp_integer elem_size = pointer_offset_size(*subtype);
+        if (is_constant_int2t(non_ptr_op)) {
+          const mp_integer &val = to_constant_int2t(non_ptr_op).constant_value;
+          total_offs = val * elem_size;
+          if (is_sub2t(expr))
+            total_offs.negate();
+          is_const = true;
+        } else {
+          is_const = false;
+        }
+      } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+      } catch (array_type2t::inf_sized_array_excp *e) {
       }
 
       for(object_map_dt::const_iterator
