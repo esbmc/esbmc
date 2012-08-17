@@ -194,7 +194,8 @@ public:
     declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep()))
+      return_value(static_cast<const exprt &>(get_nil_irep())),
+      has_throw_decl(false)
     {
       level1._thread_id = thread_id;
     }
@@ -205,6 +206,7 @@ public:
 
     typedef std::set<irep_idt> throw_list_sett;
     throw_list_sett throw_list_set;
+    bool has_throw_decl;
   };
 
   // Macros

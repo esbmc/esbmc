@@ -115,7 +115,7 @@ void goto_symext::symex_throw()
         e_it++)
     {
       // Check if we can throw the exception
-      if(has_throw_decl)
+      if(frame.has_throw_decl)
       {
         goto_symex_statet::framet::throw_list_sett::const_iterator
           s_it=frame.throw_list_set.find(e_it->id());
@@ -187,20 +187,22 @@ Function: goto_symext::symex_throw_decl
 
 void goto_symext::symex_throw_decl()
 {
-  has_throw_decl = true;
-
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
-  // copy throw_list
+  // Get throw list
   const irept::subt &throw_decl_list=
     instruction.code.find("throw_list").get_sub();
 
-  goto_symex_statet::call_stackt::const_reverse_iterator
+  // Get to the correct try (always the most external)
+  goto_symex_statet::call_stackt::reverse_iterator
     s_it=cur_state->call_stack.rbegin();
   ++s_it;
 
-  const goto_symex_statet::framet &frame=*s_it;
+  // Set the flag that this frame has throw list
+  // This is important because we can have empty throw lists
+  (*s_it).has_throw_decl = true;
 
+  // Copy throw list to the set
   for(unsigned i=0; i<throw_decl_list.size(); ++i)
-    frame.throw_list_set.insert(throw_decl_list[i].id());
+    (*s_it).throw_list_set.insert(throw_decl_list[i].id());
 }
