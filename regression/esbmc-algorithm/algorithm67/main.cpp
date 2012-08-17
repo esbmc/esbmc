@@ -18,19 +18,12 @@ int main () {
 
   // using default comparison:
   it = find_end (myvector.begin(), myvector.end(), match1, match1+3);
-
-  if (it!=myvector.end())
-    cout << "match1 last found at position " << int(it-myvector.begin()) << endl;
+  assert(*it == 1);
 
   int match2[] = {4,5,1};
 
   // using predicate comparison:
   it = find_end (myvector.begin(), myvector.end(), match2, match2+3, myfunction);
-
   assert(*it != 4);
-
-  if (it!=myvector.end())
-    cout << "match2 last found at position " << int(it-myvector.begin()) << endl;
-  
   return 0;
 }
