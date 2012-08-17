@@ -1680,19 +1680,58 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
     const array_type2t &array = to_array_type(data.source_value->type);
-    uint64_t elem_size = array.subtype->get_width();
+    uint64_t sel_sz = data.type->get_width() / 8;
+    uint64_t elem_size = array.subtype->get_width() / 8;
     uint64_t offset = intref.constant_value.to_ulong();
     uint64_t elem = offset / elem_size;
     uint64_t sub_offs = offset % elem_size;
 
-    // We know where to pick from; fetch it.
-    expr2tc the_elem(new index2t(array.subtype, data.source_value,
-                     expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
-    // And the remaining offset...
-    expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
-    expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
-                                        the_elem, remainder));
-    convert_bv(subfetch, output);
+    // Is the selection entirely in the bounds of one element?
+    if (elem_size - sub_offs >= sel_sz) {
+      // Yes, so just select from one of them.
+      expr2tc the_elem(new index2t(array.subtype, data.source_value,
+                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+      // And the remaining offset...
+      expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
+      expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
+                                          the_elem, remainder));
+      convert_bv(subfetch, output);
+    } else {
+      // No; repeat algorithm for structs, iterating over the next element each
+      // time and moving more data into the thing we're fetching. No check for
+      // end-of-array problems, that'll lead to free elements being used. And
+      // that bounds problem should be caught by an assertion somewhere else.
+      // (TM).
+      bool first = true;
+      unsigned int szleft = sel_sz;
+      for (; ; elem++) {
+        if (first) {
+          expr2tc the_elem(new index2t(array.subtype, data.source_value,
+                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+          // And the remaining offset...
+          expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
+          unsigned int getszi = elem_size - sub_offs;
+          type2tc getsz = type_pool.get_uint(getszi);
+          expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
+                                              the_elem, remainder));
+          convert_bv(subfetch, output);
+
+          szleft -= getszi;
+          first = false;
+        } else {
+          expr2tc the_elem(new index2t(array.subtype, data.source_value,
+                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+          expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
+          unsigned int getszi = std::min<unsigned int>(szleft, elem_size);
+          type2tc getsz = type_pool.get_uint(getszi);
+          expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
+                                              the_elem, zero));
+          z3::expr tmp;
+          convert_bv(subfetch, tmp);
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
+        }
+      }
+    }
   } else if (is_number_type(data.source_value->type)) {
     unsigned width = data.source_value->type->get_width();
     unsigned sel_width = data.type->get_width() / 8;
