@@ -177,10 +177,16 @@ bool dereferencet::dereference_type_compare(
     // There's scope in the future for supporting nondeterministic indexes of
     // arrays, if we're confident that the index is a multiple of the array
     // element size.
-    mp_integer i = to_constant_int2t(offset).constant_value;
-    i %= pointer_offset_size(*object_type);
-    if (!i.is_zero())
+    try {
+      mp_integer i = to_constant_int2t(offset).constant_value;
+      i %= pointer_offset_size(*object_type);
+      if (!i.is_zero())
+        return false;
+    } catch (array_type2t::dyn_sized_array_excp *e) { // Nondetly sized.
       return false;
+    } catch (array_type2t::inf_sized_array_excp *e) {
+      return false;
+    }
   }
 
   if (base_type_eq(object_type, dereference_type, ns)) {
