@@ -1,4 +1,5 @@
 #include <exception>
+#include <cassert>
 using namespace std;
 
 void myfunction () throw (int,bad_exception) {
@@ -15,9 +16,8 @@ int main (void) {
 
     try {
       myfunction1();
-    } 
-    catch (char) { return 1; }
-
+    }
+    catch (char) { throw 'x'; }
   }
   catch (int) { return 1; }
   catch (bad_exception be) { return 2; }

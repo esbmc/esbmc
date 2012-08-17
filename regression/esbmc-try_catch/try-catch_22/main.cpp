@@ -11,7 +11,7 @@ int main (void) {
     myfunction();
   }
   catch (int) { return 3; }
-  catch (...) { return 1; }
   catch (char) { return 2; }
+  catch (...) { return 1; }
   return 0;
 }

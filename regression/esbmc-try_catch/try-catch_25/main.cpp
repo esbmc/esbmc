@@ -6,11 +6,11 @@ class X {
 int main()
 {
   try {
-    X x();
+    X x;
   }
   catch(int e) {
     switch(e) {
-      case 5: 
+      case 5:
         assert(0);
         break;
 
