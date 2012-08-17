@@ -657,28 +657,35 @@ bool dereferencet::memory_model_bytes(
     {
       if(!options.get_bool_option("no-pointer-check"))
       {
+        // Get total size of the data object we're working on.
+        expr2tc total_size;
+        try {
+          total_size = expr2tc(new constant_int2t(uint_type2(),
+                                          base_object->type->get_width() / 8));
+        } catch (array_type2t::dyn_sized_array_excp *e) {
+          total_size = e->size;
+        }
+
         unsigned long width = orig_value->type->get_width();
         expr2tc const_val =
           expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
-        expr2tc offs_upper_bound =
-          expr2tc(new greaterthanequal2t(new_offset, const_val));
+        expr2tc upper_bound(new add2t(uint_type2(), new_offset, const_val));
+        expr2tc upper_bound_eq =
+          expr2tc(new greaterthanequal2t(upper_bound, total_size));
 
         guardt tmp_guard(guard);
-        tmp_guard.move(offs_upper_bound);
+        tmp_guard.move(upper_bound_eq);
         dereference_callback.dereference_failure(
-          "word bounds",
-          "word offset upper bound", tmp_guard);
-      }
+          "byte model object boundries",
+          "byte access upper bound", tmp_guard);
 
-      if(!options.get_bool_option("no-pointer-check"))
-      {
         expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
         expr2tc offs_lower_bound = expr2tc(new lessthan2t(new_offset, zero));
 
-        guardt tmp_guard(guard);
-        tmp_guard.move(offs_lower_bound);
+        guardt tmp_guard2(guard);
+        tmp_guard2.move(offs_lower_bound);
         dereference_callback.dereference_failure(
-          "word bounds",
+          "byte model object boundries",
           "word offset lower bound", tmp_guard);
       }
     }
