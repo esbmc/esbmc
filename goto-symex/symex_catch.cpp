@@ -124,14 +124,14 @@ void goto_symext::symex_throw()
         {
           std::string msg=std::string("Trying to throw an exception ") +
             std::string("but it's not allowed by declaration.\n\n");
-          msg += "Exception type: " + e_it->id().as_string();
-          msg += "\nAllowed exceptions: ";
+          msg += "  Exception type: " + e_it->id().as_string();
+          msg += "\n  Allowed exceptions:";
 
           for(goto_symex_statet::framet::throw_list_sett::iterator
               s_it1=frame.throw_list_set.begin();
               s_it1!=frame.throw_list_set.end();
               ++s_it1)
-            msg+= std::string((*s_it1).c_str()) + "\n";
+            msg+= "\n   - " + std::string((*s_it1).c_str());
 
           claim(false_exprt(), msg);
           return;
