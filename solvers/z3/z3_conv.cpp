@@ -1627,8 +1627,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (total_sz + cur_item_sz >= offs + sel_sz) {
       // Yes, so just select from one of them.
       // Make offs the offset into this item.
-      offs -= total_sz;
-      expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(offs)));
+      unsigned long item_offs = offs -= total_sz;
+      expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(item_offs)));
       output = extract_from_struct_field(data.type, data.big_endian, idx,
                                          new_offs, data.source_value);
     } else {
@@ -1636,15 +1636,15 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // over fields from here, selecting out the necessary number of bytes.
       bool first = true;
       unsigned int orig_offs = offs;
+      unsigned int accuml_offs = offs;
       for (; it != struct_type.members.end(); it++, idx++) {
         if (total_sz >= orig_offs + sel_sz)
           break;
 
-        unsigned int cur_offs = offs - total_sz;
+        unsigned int cur_offs = accuml_offs - total_sz;
         unsigned int immediate_sz = cur_item_sz - cur_offs;
 
         if (first) {
-          // Make offs the offset into this item.
           type2tc getsz = type_pool.get_uint(immediate_sz * 8);
           expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
           output = extract_from_struct_field(getsz, data.big_endian, idx,
@@ -1654,7 +1654,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           // removed by the extraction we just performed.
 
           first = false;
-          offs += immediate_sz;
         } else {
           cur_item_sz = (*it)->get_width() / 8;
 
@@ -1671,10 +1670,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
           // And combine.
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
-          offs += immediate_sz;
         }
 
         total_sz += cur_item_sz;
+        accuml_offs += immediate_sz;
       }
     }
   } else if (is_array_type(data.source_value->type)) {
