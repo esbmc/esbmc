@@ -93,6 +93,22 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
+
+    // We must check if we can access right frame
+    if(cur_state->call_stack.size()>2)
+    {
+      // Get the correct frame
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
+      ++s_it;
+
+      // Clear the allowed exceptions, we're not on the function anymore
+      (*s_it).throw_list_set.clear();
+
+      // We don't have throw_decl anymore too
+      (*s_it).has_throw_decl = false;
+    }
+
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
