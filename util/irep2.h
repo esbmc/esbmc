@@ -526,8 +526,6 @@ public:
     invalid_pointer_id,
     buffer_size_id,
     code_asm_id,
-    to_bv_typecast_id,
-    from_bv_typecast_id,
     code_cpp_del_array_id,
     code_cpp_delete_id,
     code_cpp_catch_id,
@@ -1630,8 +1628,6 @@ class constant_array2t;
 class constant_array_of2t;
 class symbol2t;
 class typecast2t;
-class to_bv_typecast2t;
-class from_bv_typecast2t;
 class if2t;
 class equality2t;
 class notequal2t;
@@ -2392,12 +2388,6 @@ typedef esbmct::expr_methods<symbol2t, symbol_data,
 typedef esbmct::expr_methods<typecast2t, typecast_data,
         expr2tc, typecast_data, &typecast_data::from>
         typecast_expr_methods;
-typedef esbmct::expr_methods<to_bv_typecast2t, typecast_data,
-        expr2tc, typecast_data, &typecast_data::from>
-        to_bv_typecast_expr_methods;
-typedef esbmct::expr_methods<from_bv_typecast2t, typecast_data,
-        expr2tc, typecast_data, &typecast_data::from>
-        from_bv_typecast_expr_methods;
 typedef esbmct::expr_methods<if2t, if_data,
         expr2tc, if_data, &if_data::cond,
         expr2tc, if_data, &if_data::true_value,
@@ -2879,48 +2869,6 @@ public:
   typecast2t(const typecast2t &ref)
     : typecast_expr_methods(ref){}
   virtual expr2tc do_simplify(bool second) const;
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Typecast to a bit vector.
- *  In contrast to typecast2t, this expr forces a bit representation cast of
- *  whatever its operand is, rather than a semantic cast. This is the only way
- *  to express the bit-value of floats, as a normal typecast will attemp to
- *  cast their value.
- *  @extends typecast_data
- */
-class to_bv_typecast2t : public to_bv_typecast_expr_methods
-{
-public:
-  /** Primary constructor
-   *  @param type Type to convert value to.
-   *  @param from Value to convert from.
-   */
-  to_bv_typecast2t(const type2tc &type, const expr2tc &from)
-    : to_bv_typecast_expr_methods(type, to_bv_typecast_id, from) { }
-  to_bv_typecast2t(const to_bv_typecast2t &ref)
-    : to_bv_typecast_expr_methods(ref){}
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-/** Typecast from a bitvector.
- *  Like to_bv_typecast2t, but in the other direction.
- *  @see to_bv_typecast2t
- *  @extends typecast_data
- */
-class from_bv_typecast2t : public from_bv_typecast_expr_methods
-{
-public:
-  /** Primary constructor
-   *  @param type Type to convert value to.
-   *  @param from Value to convert from.
-   */
-  from_bv_typecast2t(const type2tc &type, const expr2tc &from)
-    : from_bv_typecast_expr_methods(type, from_bv_typecast_id, from) { }
-  from_bv_typecast2t(const from_bv_typecast2t &ref)
-    : from_bv_typecast_expr_methods(ref){}
 
   static std::string field_names[esbmct::num_type_fields];
 };
