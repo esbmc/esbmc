@@ -178,19 +178,29 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
 
-  // stop the time
-  fine_timet sat_start=current_time();
-
   do_unwind_module(prop_conv);
-  do_cbmc(prop_conv, equation);
 
-  decision_proceduret::resultt dec_result=prop_conv.dec_solve();
+  fine_timet encode_start = current_time();
+  do_cbmc(prop_conv, equation);
+  fine_timet encode_stop = current_time();
+
+  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
+  {
+    std::ostringstream str;
+    str << "Encoding to solver time: ";
+    output_time(encode_stop - encode_stop, str);
+    str << "s";
+    status(str.str());
+  }
+
+  fine_timet sat_start=current_time();
+  prop_convt::resultt dec_result=prop_conv.dec_solve();
+  fine_timet sat_stop=current_time();
 
   // output runtime
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
   {
     std::ostringstream str;
-    fine_timet sat_stop=current_time();
     str << "Runtime decision procedure: ";
     output_time(sat_stop-sat_start, str);
     str << "s";
