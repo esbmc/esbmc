@@ -38,6 +38,11 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_catch(code);
   }
+  else if(statement=="throw_decl")
+  {
+    code.type()=typet("code");
+    typecheck_throw_decl(code);
+  }
   else if(statement=="member_initializer")
   {
     code.type()=typet("code");
@@ -49,6 +54,48 @@ void cpp_typecheckt::typecheck_code(codet &code)
   }
   else
     c_typecheck_baset::typecheck_code(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_throw_decl(codet &code)
+{
+  codet::operandst &operands=code.operands();
+
+  for(codet::operandst::iterator
+      it=operands.begin();
+      it!=operands.end();
+      it++)
+  {
+    codet &op=to_code(*it);
+
+    if(op.operands().size()!=1)
+    {
+      err_location(code);
+      throw "declaration expected to have one operand";
+    }
+
+    assert(op.op0().id()=="cpp-declaration");
+    cpp_declarationt &declaration=to_cpp_declaration(op.op0());
+
+    // Get the cpp_type
+    typet &type=declaration.type();
+    typecheck_type(type);
+    assert(type.is_not_nil());
+
+    // annotate exception ID
+    it->set("throw_decl_id", cpp_exception_id(op.op0().type(), *this));
+  }
 }
 
 /*******************************************************************\
@@ -74,7 +121,8 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   {
     code_blockt &block=to_code_block(to_code(*it));
 
-    // Hack to fix dereference bug. This is probably not the right thing to do
+    // Hack to fix dereference bug. This is probably not the right
+    // thing to do but works
     if(block.op0().has_operands()){
       if(block.op0().op0().has_operands()) {
         typet &catch_type = block.op0().op0().op0().type();

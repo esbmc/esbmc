@@ -373,6 +373,9 @@ protected:
   /** Register exception handler on stack. */
   void symex_catch();
 
+  /** Register throw handler on stack. */
+  void symex_throw_decl();
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with

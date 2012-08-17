@@ -103,8 +103,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-	//std::cout << "has_throw_target: " << has_throw_target << std::endl;
-	//std::cout << "has_catch: " << has_catch << std::endl;
     if (has_throw_target && has_catch) {
       instruction.targets.pop_back();
       instruction.targets.push_back(throw_target);
@@ -239,6 +237,11 @@ goto_symext::symex_step(reachability_treet & art)
 
   case THROW:
     symex_throw();
+    cur_state->source.pc++;
+    break;
+
+  case THROW_DECL:
+    symex_throw_decl();
     cur_state->source.pc++;
     break;
 

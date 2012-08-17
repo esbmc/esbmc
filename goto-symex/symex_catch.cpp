@@ -56,11 +56,7 @@ void goto_symext::symex_catch()
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
-    {
       frame.catch_map[exception_list[i].id()]=*it;
-      //std::cout << "exception_list[i].id(): " << exception_list[i].id() << std::endl;
-      //std::cout << "(*it)->code: " << (*it)->code << std::endl;
-    }
   }
 }
 
@@ -80,13 +76,11 @@ void goto_symext::symex_throw()
 {
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
-  //std::cout << "instruction.code.pretty(): " << instruction.code.pretty() << std::endl;
   // get the list of exceptions thrown
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
 
   // go through the call stack, beginning with the top
-
   for(goto_symex_statet::call_stackt::const_reverse_iterator
       s_it=cur_state->call_stack.rbegin();
       s_it!=cur_state->call_stack.rend();
@@ -96,7 +90,8 @@ void goto_symext::symex_throw()
 
     if(frame.catch_map.empty()) continue;
 
-    if(!exceptions_thrown.size()) // throw without argument, we must rethrow last exception
+    // throw without argument, we must rethrow last exception
+    if(!exceptions_thrown.size())
     {
       if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
       {
@@ -108,7 +103,7 @@ void goto_symext::symex_throw()
       }
       else
       {
-        const std::string &msg="Trying to re-throw without last exception";
+        const std::string &msg="Trying to re-throw without last exception.";
         claim(false_exprt(), msg);
         return;
       }
@@ -119,41 +114,42 @@ void goto_symext::symex_throw()
         e_it!=exceptions_thrown.end();
         e_it++)
     {
+      // Check if we can throw the exception
+      if(frame.has_throw_decl)
+      {
+        goto_symex_statet::framet::throw_list_sett::const_iterator
+          s_it=frame.throw_list_set.find(e_it->id());
+
+        if(s_it==frame.throw_list_set.end())
+        {
+          std::string msg=std::string("Trying to throw an exception ") +
+            std::string("but it's not allowed by declaration.\n\n");
+          msg += "  Exception type: " + e_it->id().as_string();
+          msg += "\n  Allowed exceptions:";
+
+          for(goto_symex_statet::framet::throw_list_sett::iterator
+              s_it1=frame.throw_list_set.begin();
+              s_it1!=frame.throw_list_set.end();
+              ++s_it1)
+            msg+= "\n   - " + std::string((*s_it1).c_str());
+
+          claim(false_exprt(), msg);
+          return;
+        }
+      }
+
+      // We can throw it, look on the map if we have a catch for it
       goto_symex_statet::framet::catch_mapt::const_iterator
-      c_it=frame.catch_map.find(e_it->id());
+        c_it=frame.catch_map.find(e_it->id());
 
       if(c_it!=frame.catch_map.end())
       {
-    	  throw_target = (*c_it).second;
-    	  has_throw_target=true;
-#if 0
-        goto_programt::const_targett goto_target =
-        		(*c_it).second;
-
-        goto_programt::const_targett new_state_pc, state_pc;
-
-        new_state_pc = goto_target; // goto target instruction
-        state_pc = cur_state->source.pc;
-        state_pc++; // next instruction
-
-        cur_state->source.pc = state_pc;
-
-        new_state_pc->guard.make_false();
-
-        // put into state-queue
-        statet::goto_state_listt &goto_state_list =
-          cur_state->top().goto_state_map[new_state_pc];
-
-        goto_state_list.push_back(statet::goto_statet(*cur_state));
-        statet::goto_statet &new_state = goto_state_list.back();
-
-        cur_state->guard.make_true();
-        has_throw_target = true;
-#endif
+        throw_target = (*c_it).second;
+        has_throw_target=true;
         last_throw = &instruction; // save last throw
         return;
       }
-      else
+      else // We don't have a catch for it
       {
         // Do we have an ellipsis?
         c_it=frame.catch_map.find("ellipsis");
@@ -166,12 +162,47 @@ void goto_symext::symex_throw()
           return;
         }
 
-        // An un-caught exception. Behaves like assume(0);
-        cur_state->guard.add(false_exprt());
-        exprt tmp=cur_state->guard.as_expr();
-        target->assumption(cur_state->guard, tmp, cur_state->source);
+        // An un-caught exception. Error
+        const std::string &msg="Throwing an exception of type " +
+          e_it->id().as_string() + " but there is not catch for it.";
+        claim(false_exprt(), msg);
+        return;
       }
     }
     last_throw = &instruction; // save last throw
   }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::symex_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::symex_throw_decl()
+{
+  const goto_programt::instructiont &instruction= *cur_state->source.pc;
+
+  // Get throw list
+  const irept::subt &throw_decl_list=
+    instruction.code.find("throw_list").get_sub();
+
+  // Get to the correct try (always the most external)
+  goto_symex_statet::call_stackt::reverse_iterator
+    s_it=cur_state->call_stack.rbegin();
+  ++s_it;
+
+  // Set the flag that this frame has throw list
+  // This is important because we can have empty throw lists
+  (*s_it).has_throw_decl = true;
+
+  // Copy throw list to the set
+  for(unsigned i=0; i<throw_decl_list.size(); ++i)
+    (*s_it).throw_list_set.insert(throw_decl_list[i].id());
 }

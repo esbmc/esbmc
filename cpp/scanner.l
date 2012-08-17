@@ -190,7 +190,7 @@ __interface         { loc(); return MSC_Keyword(TOK_INTERFACE); }
 __forceinline       { loc(); return MSC_Keyword(TOK_INLINE); }
 __noreturn__        { /* ignore */ }
 restrict            { /* ignore */ }
-__restrict__        { /* ignroe */ }
+__restrict__        { /* ignore */ }
 __restrict          { /* ignore */ }
 __stdcall           { loc(); return MSC_Keyword(TOK_STDCALL); }
 __fastcall          { loc(); return MSC_Keyword(TOK_FASTCALL); }
@@ -218,7 +218,7 @@ __try               { loc(); return MSC_Keyword(TOK_MSC_TRY); }
 __except            { loc(); return MSC_Keyword(TOK_MSC_EXCEPT); }
 __leave             { loc(); return MSC_Keyword(TOK_MSC_LEAVE); }
 __finally           { loc(); return MSC_Keyword(TOK_MSC_FINALLY); }
-__uuidof 	    { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
+__uuidof 	        { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
 and                 { loc(); return TOK_ANDAND; }
 auto                { loc(); return TOK_AUTO; }
 bool                { loc(); return TOK_BOOL; }
