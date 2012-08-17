@@ -427,6 +427,7 @@ bool bmct::run(const goto_functionst &goto_functions)
     	           " ***");
         }
 
+      fine_timet bmc_start = current_time();
       if(run_thread())
       {
         ++interleaving_failed;
@@ -440,6 +441,13 @@ bool bmct::run(const goto_functionst &goto_functions)
           return true;
         }
       }
+      fine_timet bmc_stop = current_time();
+
+      std::ostringstream str;
+      str << "BMC program time: ";
+      output_time(bmc_stop-bmc_start, str);
+      str << "s";
+      status(str.str());
 
       if (checkpoint_sig) {
         write_checkpoint();
