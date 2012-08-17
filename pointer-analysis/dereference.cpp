@@ -635,11 +635,7 @@ bool dereferencet::memory_model_bytes(
     return true;
   }
 
-  // won't do this without a committment to an endianess
-  if(config.ansi_c.endianess==configt::ansi_ct::NO_ENDIANESS)
-    return false;
-
-  // But anything else we will try!
+  assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
 
   // We allow reading more or less anything as bit-vector.
   if (is_bv_type(to_type))
