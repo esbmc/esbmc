@@ -1176,7 +1176,8 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
     expr2tc new_idx = expr2tc(new index2t(idx.type, idx.source_value, zero));
-    expr2tc sub_addr_of = expr2tc(new address_of2t(type, new_idx));
+    const type2tc &subtype = to_pointer_type(type).subtype;
+    expr2tc sub_addr_of = expr2tc(new address_of2t(subtype, new_idx));
 
     return expr2tc(new add2t(type, sub_addr_of, new_index));
   } else {
