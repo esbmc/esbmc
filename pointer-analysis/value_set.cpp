@@ -352,7 +352,8 @@ void value_sett::get_value_set_rec(
       // Calculate the offset caused by this addition, in _bytes_. Involves
       // pointer arithmetic. We also use the _perceived_ type of what we're
       // adding or subtracting from/to, it might be being typecasted.
-      mp_integer elem_size = pointer_offset_size(*ptr_op->type);
+      const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
+      mp_integer elem_size = pointer_offset_size(*subtype);
       mp_integer total_offs(0);
       bool is_const;
       if (is_constant_int2t(non_ptr_op)) {
