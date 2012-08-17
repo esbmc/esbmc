@@ -428,15 +428,23 @@ void dereferencet::build_reference_to(
       if (is_index2t(orig_value))
       {
         // So; we're working on an index, which might be wrapped in a typecast.
-        // Update the offset; then encode a bounds check.
+        // Update the offset; then encode a bounds check. Also divide the index,
+        // as it's now a byte offset into the array. dereference_type_compare
+        // guarentees us that it's an offset corresponding to the start of
+        // an element.
+        mp_integer elem_size =
+          pointer_offset_size(*to_index2t(orig_value).source_value->type);
+        expr2tc factor(new constant_int2t(uint_type2(), elem_size));
+        expr2tc new_offset(new div2t(uint_type2(), offset, factor));
+
         if (is_typecast2t(value)) {
           typecast2t &cast = to_typecast2t(value);
           index2t &idx = to_index2t(cast.from);
-          idx.index = offset;
+          idx.index = new_offset;
           bounds_check(idx, tmp_guard);
         } else {
           index2t &idx = to_index2t(value);
-          idx.index = offset;
+          idx.index = new_offset;
           bounds_check(idx, tmp_guard);
         }
       }
