@@ -5907,6 +5907,8 @@ bool Parser::rTryStatement(codet &statement)
     statement.move_to_operands(body);
   }
 
+  bool has_catch_ellipsis = false;
+
   // iterate while there are catch clauses
   do
   {
@@ -5922,6 +5924,8 @@ bool Parser::rTryStatement(codet &statement)
 
     if(lex->LookAhead(0)==TOK_ELLIPSIS)
     {
+      has_catch_ellipsis = true;
+
       lex->GetToken(cp);
 
       declaration = cpp_declarationt();
@@ -5938,6 +5942,20 @@ bool Parser::rTryStatement(codet &statement)
     }
     else
     {
+      // catch(...) must always be the last catch
+      if(has_catch_ellipsis)
+      {
+        std::string message=
+          "‘...’ handler must be the last handler for its try block";
+
+        locationt location;
+        location.set_file(op.filename);
+        location.set_line(i2string(op.line_no));
+
+        parser->print(1, message, -1, location);
+        return false;
+      }
+
       if(!rArgDeclaration(declaration))
         return false;
     }
