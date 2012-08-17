@@ -159,12 +159,29 @@ void dereferencet::dereference(
 }
 
 bool dereferencet::dereference_type_compare(
-  expr2tc &object, const type2tc &dereference_type) const
+  expr2tc &object, const type2tc &dereference_type, const expr2tc &offset) const
 {
   const type2tc object_type = object->type;
 
   if (is_empty_type(dereference_type))
     return true; // always ok
+
+  if (!is_constant_int2t(offset))
+    return false;
+  if (!to_constant_int2t(offset).constant_value.is_zero()) {
+    // We have a non-zero offset into this... thing. Now, if it's an array and
+    // has a constant offset that's a multiple of the element size, that's just
+    // fine. In any other case, we now can't know whether or not the offset
+    // can be represented as member/indexing something else. So, fall back to
+    // memory modelling it.
+    // There's scope in the future for supporting nondeterministic indexes of
+    // arrays, if we're confident that the index is a multiple of the array
+    // element size.
+    mp_integer i = to_constant_int2t(offset).constant_value;
+    i %= pointer_offset_size(*object_type);
+    if (!i.is_zero())
+      return false;
+  }
 
   if (base_type_eq(object_type, dereference_type, ns)) {
     // Ok, they just match. However, the SMT solver that receives this formula
@@ -371,7 +388,7 @@ void dereferencet::build_reference_to(
     // way, true if they're either the same type or extremely similar. value
     // may be replaced with a typecast.
     expr2tc orig_value = value;
-    if (!dereference_type_compare(value, type))
+    if (!dereference_type_compare(value, type, offset))
     {
       if (memory_model(value, type, tmp_guard, offset))
       {

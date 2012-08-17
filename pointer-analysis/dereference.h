@@ -80,7 +80,8 @@ private:
 
   bool dereference_type_compare(
     expr2tc &object,
-    const type2tc &dereference_type) const;
+    const type2tc &dereference_type,
+    const expr2tc &offset) const;
 
   void offset_sum(
     exprt &dest,
