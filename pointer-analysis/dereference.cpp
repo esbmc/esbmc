@@ -656,7 +656,7 @@ bool dereferencet::memory_model_bytes(
     new_offset = expr2tc(new add2t(new_offset->type, new_offset,
                                    compute_pointer_offset(value)));
 
-    const expr2tc &base_object = get_base_object(value);
+    expr2tc base_object = get_base_object(value);
     value = expr2tc(new byte_extract2t(to_type, is_big_endian,
                                        base_object, new_offset));
 
