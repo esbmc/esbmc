@@ -439,7 +439,9 @@ void dereferencet::build_reference_to(
         // guarentees us that it's an offset corresponding to the start of
         // an element.
         mp_integer elem_size =
-          pointer_offset_size(*to_index2t(orig_value).source_value->type);
+          pointer_offset_size(*to_array_type(
+                                  to_index2t(orig_value).source_value->type)
+                              .subtype);
         expr2tc factor(new constant_int2t(uint_type2(), elem_size));
         expr2tc new_offset(new div2t(uint_type2(), offset, factor));
 
