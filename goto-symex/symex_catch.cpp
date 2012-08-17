@@ -202,6 +202,9 @@ void goto_symext::symex_throw_decl()
   // This is important because we can have empty throw lists
   (*s_it).has_throw_decl = true;
 
+  // Clear before insert new types
+  (*s_it).throw_list_set.clear();
+
   // Copy throw list to the set
   for(unsigned i=0; i<throw_decl_list.size(); ++i)
     (*s_it).throw_list_set.insert(throw_decl_list[i].id());
