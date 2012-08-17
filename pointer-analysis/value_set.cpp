@@ -25,6 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
+#include <pointer_offset_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
@@ -348,6 +349,22 @@ void value_sett::get_value_set_rec(
       object_mapt pointer_expr_set;
       get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type, ns);
 
+      // Calculate the offset caused by this addition, in _bytes_. Involves
+      // pointer arithmetic. We also use the _perceived_ type of what we're
+      // adding or subtracting from/to, it might be being typecasted.
+      mp_integer elem_size = pointer_offset_size(*ptr_op->type);
+      mp_integer total_offs(0);
+      bool is_const;
+      if (is_constant_int2t(non_ptr_op)) {
+        const mp_integer &val = to_constant_int2t(non_ptr_op).constant_value;
+        total_offs = val * elem_size;
+        if (is_sub2t(expr))
+          total_offs.negate();
+        is_const = true;
+      } else {
+        is_const = false;
+      }
+
       for(object_map_dt::const_iterator
           it=pointer_expr_set.read().begin();
           it!=pointer_expr_set.read().end();
@@ -355,16 +372,13 @@ void value_sett::get_value_set_rec(
       {
         objectt object=it->second;
 
-        if (object.offset_is_zero()) {
-          if (is_constant_int2t(non_ptr_op)) {
-            object.offset = to_constant_int2t(non_ptr_op).constant_value;
-          } else {
-            object.offset_is_set = false;
-          }
+        if (is_const && object.offset_is_set) {
+          // Both are const; we can accumulate offsets;
+          object.offset += total_offs;
         } else {
           object.offset_is_set=false;
         }
-          
+
         insert(dest, it->first, object);
       }
 
