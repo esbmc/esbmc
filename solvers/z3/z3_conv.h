@@ -187,6 +187,8 @@ private:
                                      const expr2tc &field_offset,
                                      const expr2tc &expr);
 
+  void dynamic_offs_byte_extract(const byte_extract2t &data, z3::expr &output);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate

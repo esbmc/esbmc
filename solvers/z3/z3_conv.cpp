@@ -1588,12 +1588,42 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
 }
 
 void
+z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
+{
+
+  // So; this routine is called when we're extracting data out of some object,
+  // but don't have a fixed offset to extract from. In this case, potentially
+  // any byte of data could be extracted. So, we have to potentially extract
+  // from any position in our source value.
+  //
+  // In the past I implemented this to just pump all data in an object into a
+  // bit-vector, then shift the desired offset to the right position, and
+  // extract the desired amount of data. However, some tests have structs with
+  // thousands of bytes of data, and it turns out Z3 doesn't react well to
+  // having such huge bitvectors, running out of memory extremely switftly.
+  //
+  // So instead, extract a series of bytes from the object, into an array. Then
+  // select out and reconstruct into whatever sort we want. This has the benefit
+  // that we can just use the existing byte_extract routine to get each byte.
+  //
+  // That leaves leaves one final problematic situation: extracting from
+  // dynamically sized arrays. Here we don't know what element to extract from.
+  // Or whether we cross an element bound. So the only option is to
+  // nondeterministically select the first element it can /possibly/ be, then
+  // extract all data up to the last element it can /possibly/ be. Then
+  // reconstruct from that selected data.
+  abort();
+}
+
+void
 z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    dynamic_offs_byte_extract(data, output);
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
