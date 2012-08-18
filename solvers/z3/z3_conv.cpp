@@ -1737,6 +1737,13 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     unsigned sel_width = data.type->get_width() / 8;
     uint64_t upper, lower;
     uint64_t offset = intref.constant_value.to_ulong();
+
+    if (offset * 8 >= width) {
+      // Entirely out of bounds. Return free variable.
+      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_width * 8));
+      return;
+    }
+
     if (!data.big_endian) {
       upper = ((offset + sel_width) * 8) - 1; //((i+1)*w)-1;
       lower = offset * 8; //i*w;
