@@ -1765,6 +1765,30 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     expr2tc extract(new byte_extract2t(type_pool.get_uint8(), data.big_endian,
                                        cast_to_intrep, data.source_offset));
     convert_bv(extract, output);
+  } else if (is_bool_type(data.source_value->type)) {
+    // If offset isn't zero, completely free value, and something elsewhere
+    // should catch this as a bounds violation.
+    if (!intref.constant_value.is_zero()) {
+      z3::sort s;
+      convert_type(data.type, s);
+      output = ctx.fresh_const(NULL, s);
+    }
+
+    // Treat a boolean as a zero or one byte. This is potentially an incomplete
+    // model.
+    z3::expr t_val = ctx.bv_val(1, 8);
+    z3::expr f_val = ctx.bv_val(0, 8);
+    z3::expr res = ite(source, t_val, f_val);
+
+    // If a size greater than 1 byte has been requested, tack some more free
+    // bits on the end.
+    unsigned long desired_size = data.type->get_width();
+    if (desired_size > 8) {
+      z3::expr free_bits = ctx.fresh_const(NULL, ctx.bv_sort(desired_size));
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, res, free_bits));
+    } else {
+      output = res;
+    }
   } else {
     // Missing: bools, unions.
     throw new conv_error("Unexpected irep type in byte_extract");
