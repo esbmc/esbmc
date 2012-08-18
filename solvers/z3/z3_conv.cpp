@@ -1751,7 +1751,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (offset * 8 >= typesize) {
       // Error at dereference; should (TM) be caught by an assertion failure
       // elsewhere.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_width));
+      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_width * 8));
       return;
     }
 
