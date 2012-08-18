@@ -1825,7 +1825,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
     convert_bv(new_extract, output);
   } else {
-    // Missing: bools, unions.
+    // Everything /should/ be covered, but...
     throw new conv_error("Unexpected irep type in byte_extract");
   }
 }
