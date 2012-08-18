@@ -207,7 +207,12 @@ type2t::do_crc(hacky_hash &hash) const
 unsigned int
 bool_type2t::get_width(void) const
 {
-  return 1;
+  // A bool is modelled in the solver as an actual boolean... but whenever
+  // we're dealing with bitwidths, what we care about is the byte representation
+  // model we're dealing with, which a bool has to be addressable in. Right now
+  // what that looks like is bools being single bytes with zero or one as a
+  // value. We can revisit this in the future if necessary.
+  return 8;
 }
 
 unsigned int
