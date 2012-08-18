@@ -1790,6 +1790,33 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     } else {
       output = res;
     }
+  } else if (is_union_type(data.source_value->type)) {
+    // Work out what union field we should be working on, and extract again
+    // on the extraction of that from the union.
+    union_varst::const_iterator cache_result;
+
+    if (is_symbol2t(data.source_value)) {
+      const symbol2t &sym = to_symbol2t(data.source_value);
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
+    } else {
+      cache_result = union_vars.end();
+    }
+
+    if (cache_result == union_vars.end())
+      throw new
+        conv_error("byte_extract from union can't determine correct field");
+
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*data.source_value->type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const type2tc source_type = members[cache_result->idx];
+    const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
+
+    expr2tc member(new member2t(source_type, data.source_value, fieldname));
+    expr2tc new_extract(new byte_extract2t(data.type, data.big_endian,
+                                           member, data.source_offset));
+
+    convert_bv(new_extract, output);
   } else {
     // Missing: bools, unions.
     throw new conv_error("Unexpected irep type in byte_extract");
