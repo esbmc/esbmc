@@ -674,7 +674,7 @@ bool dereferencet::memory_model_bytes(
           total_size = e->size;
         }
 
-        unsigned long width = orig_value->type->get_width() / 8;
+        unsigned long width = to_type->get_width() / 8;
         expr2tc const_val =
           expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
         expr2tc upper_bound(new add2t(uint_type2(), new_offset, const_val));
