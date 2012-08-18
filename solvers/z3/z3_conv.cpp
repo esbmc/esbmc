@@ -1641,12 +1641,13 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.
     unsigned long output_width = data.type->get_width() / 8;
-    z3::expr idx, byte;
+    z3::expr idx, byte, offs;
+    convert_bv(data.source_offset, offs);
     for (i = 0; i < output_width; i++) {
       if (i == 0) {
-        output = select(part_array, i);
+        output = select(part_array, offs);
       } else {
-        byte = select(part_array, i);
+        byte = select(part_array, offs);
 
         // How we stitch bytes together also depends on endianness.
         if (data.big_endian)
@@ -1654,8 +1655,9 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
         else
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
       }
-    }
 
+      offs = offs + ctx.esbmc_int_val(1);
+    }
   } catch (array_type2t::dyn_sized_array_excp *e) {
     std::cerr << "EUNIMPLEMENTED: dynamic sized array extracts" << std::endl;
     abort();
