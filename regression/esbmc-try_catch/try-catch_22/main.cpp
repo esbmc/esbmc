@@ -1,6 +1,6 @@
 void myfunction () throw (char) {
   try {
-    throw 5.0;
+    throw 5.0f;
   } catch (float) {
     throw 'x';
   }

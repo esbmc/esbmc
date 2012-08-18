@@ -1,7 +1,7 @@
 void myfunction () throw (char) {
   try {
     throw 5.0;
-  } catch (float) {
+  } catch (double) {
     throw 'x';
   }
 }
