@@ -1612,7 +1612,54 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
   // nondeterministically select the first element it can /possibly/ be, then
   // extract all data up to the last element it can /possibly/ be. Then
   // reconstruct from that selected data.
-  abort();
+
+  try {
+    unsigned long width, i;
+    width = data.source_value->type->get_width() / 8;
+
+    // We're a fixed sized piece of data. Fetch bytes from it and store them
+    // into a fresh array.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+
+    for (i = 0; i < width; i++) {
+      expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
+      expr2tc extract_byte(new byte_extract2t(
+            type_pool.get_uint8(), data.big_endian, data.source_value, offs));
+      z3::expr byte;
+
+      // Call directly to avoid caching. Could put the byte_extract on the
+      // stack, but it's extremely iffy.
+      convert_smt_expr(static_cast<const byte_extract2t &>(*extract_byte.get()),
+                  reinterpret_cast<void*>(&byte));
+
+      // And put that byte into the array.
+      z3::expr idx = ctx.esbmc_int_val(i);
+      part_array = store(part_array, idx, byte);
+    }
+
+    // Extracted; now rebuild from that array. If we go out of bounds, we'll
+    // just get a free value, and some assertion elsewhere should pick this up.
+    unsigned long output_width = data.type->get_width() / 8;
+    z3::expr idx, byte;
+    for (i = 0; i < output_width; i++) {
+      if (i == 0) {
+        output = select(part_array, i);
+      } else {
+        byte = select(part_array, i);
+
+        // How we stitch bytes together also depends on endianness.
+        if (data.big_endian)
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
+        else
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+      }
+    }
+
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    std::cerr << "EUNIMPLEMENTED: dynamic sized array extracts" << std::endl;
+    abort();
+  }
 }
 
 void
