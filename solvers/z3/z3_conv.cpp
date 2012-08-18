@@ -50,8 +50,9 @@ Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
 Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
-z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp)
-: prop_convt()
+z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
+                   const namespacet &_ns)
+: prop_convt(), ns(_ns)
 {
   this->int_encoding = int_encoding;
 
@@ -2533,7 +2534,10 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
 
       // Actually perform some pointer arith
       const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-      mp_integer type_size = pointer_offset_size(*ptr_type.subtype.get());
+      typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
+      type2tc followed_type;
+      migrate_type(followed_type_old, followed_type);
+      mp_integer type_size = pointer_offset_size(*followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));

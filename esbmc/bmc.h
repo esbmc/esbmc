@@ -49,7 +49,7 @@ public:
 #ifdef Z3
     runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
                                    opts.get_bool_option("int-encoding"),
-                                   opts.get_bool_option("smt"), is_cpp);
+                                   opts.get_bool_option("smt"), is_cpp, ns);
 
     runtime_z3_conv->set_filename(opts.get_option("outfile"));
     runtime_z3_conv->set_z3_core_size(
@@ -110,7 +110,7 @@ protected:
 #ifdef Z3
   class z3_solver : public solver_base {
   public:
-    z3_solver(bmct &bmc, bool is_cpp);
+    z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
     virtual bool run_solver(symex_target_equationt &equation);
   protected:
     z3_convt z3_conv;
