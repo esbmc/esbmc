@@ -2023,11 +2023,13 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
   z3::expr tuple, value;
   uint width_op0, width_op2;
+  unsigned int insert_width;
 
   convert_bv(data.source_value, tuple);
   convert_bv(data.update_value, value);
 
   width_op2 = data.update_value->type->get_width();
+  insert_width = width_op2;
 
   if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = to_struct_type(data.source_value->type);
@@ -2047,16 +2049,11 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
     else
       output = z3::to_expr(ctx, tuple);
-  } else if (is_signedbv_type(data.source_value->type)) {
+  } else if (is_bv_type(data.source_value->type)) {
+    unsigned int source_width = data.source_value->type->get_width();
 
-    width_op0 = data.source_value->type->get_width();
-
-    if (width_op0 == 0)
-      // XXXjmorse - can this ever happen now?
-      throw new conv_error("failed to get width of byte_update operand");
-
-    if (width_op0 > width_op2)
-      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
+    if (source_width > insert_width)
+      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (source_width - width_op2), value));
     else
       throw new conv_error("unsupported irep for convert_byte_update");
   } else {
