@@ -2048,10 +2048,6 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     else
       output = z3::to_expr(ctx, tuple);
   } else if (is_signedbv_type(data.source_value->type)) {
-    if (int_encoding) {
-      output = z3::to_expr(ctx, value);
-      return;
-    }
 
     width_op0 = data.source_value->type->get_width();
 
