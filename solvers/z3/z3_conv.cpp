@@ -2020,6 +2020,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     throw new conv_error("byte_update expects constant 2nd arg");
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
+  unsigned long offset = intref.constant_value.to_ulong() * 8;
 
   z3::expr tuple, value;
   uint width_op0, width_op2;
@@ -2050,12 +2051,54 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     else
       output = z3::to_expr(ctx, tuple);
   } else if (is_bv_type(data.source_value->type)) {
+    z3::expr top, bottom;
+    bool top_b = false, bottom_b = false;
     unsigned int source_width = data.source_value->type->get_width();
 
-    if (source_width > insert_width)
-      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (source_width - width_op2), value));
-    else
-      throw new conv_error("unsupported irep for convert_byte_update");
+    if (offset > source_width) {
+      // Offset is greater than our number of bits; this is more or less an
+      // error, but never mind.
+      convert_bv(data.source_value, output);
+      return;
+    }
+
+    // Work out where we're going to be inserting.
+    unsigned int upper, lower;
+    if (!data.big_endian) {
+      upper = (offset + insert_width) - 1; //((i+1)*w)-1;
+      lower = offset; //i*w;
+    } else {
+      uint64_t max = source_width - 1;
+      upper = max - offset; //max-(i*w);
+      lower = max - ((offset + insert_width) - 1); //max-((i+1)*w-1);
+    }
+
+    // If there's a chunk to keep at the top of the current data, extract
+    if (upper < source_width -1) {
+      // there's a top segment to extract.
+      top = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, source_width-1, upper+1,
+                                           tuple));
+      top_b = true;
+    }
+
+    // If there's a chunk at the bottom of current data, extract
+    if (lower > 0) {
+      bottom = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, lower - 1, 0, tuple));
+      bottom_b = true;
+    }
+
+    // Then join all these together, with the update value in the middle.
+    if (top_b) {
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, top, value));
+    } else {
+      output = value;
+    }
+
+    if (bottom_b) {
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, bottom));
+    }
+
+    // Done
   } else {
     throw new conv_error("unsupported irep for convert_byte_update");
   }
