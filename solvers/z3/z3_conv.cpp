@@ -2070,11 +2070,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
-    if (offset > data.source_value->type->get_width()) {
-      // Out of bounds.
-      convert_bv(data.source_value, output);
-      return;
-    }
+    if (offset > data.source_value->type->get_width())
+      goto outofbounds;
 
     if (offset == 0 && insert_width == data.source_value->type->get_width()) {
       // We can just replace this.
@@ -2094,12 +2091,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     bool top_b = false, bottom_b = false;
     unsigned int source_width = data.source_value->type->get_width();
 
-    if (offset > source_width) {
-      // Offset is greater than our number of bits; this is more or less an
-      // error, but never mind.
-      convert_bv(data.source_value, output);
-      return;
-    }
+    if (offset > source_width)
+      goto outofbounds;
 
     // Work out where we're going to be inserting.
     unsigned int upper, lower;
@@ -2143,10 +2136,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     // Done
   } else if (is_bool_type(data.source_value->type)) {
     // Out of bounds?
-    if (offset != 0) {
-      convert_bv(data.source_value, output);
-      return;
-    }
+    if (offset != 0)
+      goto outofbounds;
 
     // Is update value zero or not, -> the bool value.
     z3::sort update_sort;
@@ -2158,6 +2149,16 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   } else {
     throw new conv_error("unsupported irep for convert_byte_update");
   }
+
+outofbounds:
+  if (data.type == data.source_value->type) {
+    convert_bv(data.source_value, output);
+  } else {
+    expr2tc cast(new typecast2t(data.type, data.source_value));
+    convert_bv(cast, output);
+  }
+
+  return;
 
 }
 
