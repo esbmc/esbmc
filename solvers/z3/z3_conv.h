@@ -211,7 +211,8 @@ private:
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
-  void debug_label_formula(std::string name, const z3::expr &formula);
+  const expr2tc label_formula(std::string name, const type2tc &t,
+                              const z3::expr &formula);
   void bump_addrspace_array(unsigned int idx, const z3::expr &val);
   std::string get_cur_addrspace_ident(void);
   void finalize_pointer_chain(unsigned int objnum);
@@ -327,8 +328,11 @@ public:
   z3::func_decl addr_space_tuple_decl;
   std::list<std::map<unsigned, z3::expr> > addr_space_data; // Obj id, size
 
-  // Debug map, for naming pieces of AST and auto-numbering them
-  std::map<std::string, unsigned> debug_label_map;
+  // Label map, for naming pieces of AST and auto-numbering them. Originally
+  // for debugging, now I figure it's a useful tool for connecting pieces of
+  // code where we've generated a Z3 representation of something, but then
+  // want to deal with it in terms of expr2tc's.
+  std::list<std::map<std::string, unsigned> > label_map;
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
