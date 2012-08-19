@@ -667,7 +667,8 @@ bool dereferencet::memory_model_bytes(
           total_size = expr2tc(new constant_int2t(uint_type2(),
                                           base_object->type->get_width() / 8));
         } catch (array_type2t::dyn_sized_array_excp *e) {
-          total_size = e->size;
+          expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
+          total_size = expr2tc(new div2t(uint_type2(), e->size, eight));
         }
 
         unsigned long width = to_type->get_width() / 8;
