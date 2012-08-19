@@ -1878,23 +1878,22 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     }
   } else if (is_number_type(data.source_value->type)) {
     unsigned width = data.source_value->type->get_width();
-    unsigned sel_width = data.type->get_width() / 8;
     uint64_t upper, lower;
     uint64_t offset = intref.constant_value.to_ulong();
 
     if (offset * 8 >= width) {
       // Entirely out of bounds. Return free variable.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_width * 8));
+      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_sz * 8));
       return;
     }
 
     if (!data.big_endian) {
-      upper = ((offset + sel_width) * 8) - 1; //((i+1)*w)-1;
+      upper = ((offset + sel_sz) * 8) - 1; //((i+1)*w)-1;
       lower = offset * 8; //i*w;
     } else {
       uint64_t max = width - 1;
       upper = max - (offset * 8); //max-(i*w);
-      lower = max - ((offset + sel_width) * 8 - 1); //max-((i+1)*w-1);
+      lower = max - ((offset + sel_sz) * 8 - 1); //max-((i+1)*w-1);
     }
 
     // is the size within the size of this type?
@@ -1902,7 +1901,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (offset * 8 >= typesize) {
       // Error at dereference; should (TM) be caught by an assertion failure
       // elsewhere.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_width * 8));
+      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_sz * 8));
       return;
     }
 
