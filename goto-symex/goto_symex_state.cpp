@@ -193,6 +193,12 @@ void goto_symex_statet::assignment(
   else
     const_value = expr2tc();
 
+  // Don't allow constant propagation between pointers, if they have different
+  // subtypes. Prevents type of lhs being renamed out in a future rename.
+  if (is_pointer_type(rhs->type) && is_pointer_type(lhs->type) &&
+      rhs->type != lhs->type)
+    const_value = expr2tc();
+
   level2.make_assignment(lhs, const_value, rhs);
 
   if(use_value_set)
