@@ -1729,6 +1729,15 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
       offs = offs + ctx.esbmc_int_val(1);
     }
   }
+
+  // Just like byte extract, optionally cast up to being a pointer.
+  if (is_pointer_type(data.type)) {
+    type2tc sz = type_pool.get_uint(data.type->get_width());
+    expr2tc sym = label_formula("byte_extract", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
+  }
 }
 
 void
@@ -1737,17 +1746,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   // This function contains gotos. You have been warned.
-
-  // First, only allow extracting integer values. If a pointer is desired,
-  // produce it via the medium of a typecast.
-  if (is_pointer_type(data.type)) {
-    type2tc bitvector_type = type_pool.get_uint(data.type->get_width());
-    expr2tc new_extract(data.clone());
-    new_extract.get()->type = bitvector_type;
-    expr2tc cast(new typecast2t(data.type, new_extract));
-    convert_bv(cast, output);
-    return;
-  }
 
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);
@@ -1984,6 +1982,15 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   } else {
     // Everything /should/ be covered, but...
     throw new conv_error("Unexpected irep type in byte_extract");
+  }
+
+  // If a pointer is desired, // produce it via the medium of a typecast.
+  if (is_pointer_type(data.type)) {
+    type2tc sz = type_pool.get_uint(sel_sz * 8);
+    expr2tc sym = label_formula("byte_extract", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
   }
 
   return;
