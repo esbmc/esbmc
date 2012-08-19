@@ -3006,7 +3006,10 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     } catch (array_type2t::dyn_sized_array_excp *e) {
       // Dynamically (nondet) sized array; take that size and use it for the
       // offset-to-end expression.
-      const expr2tc size_expr = e->size;
+      // First divide it by eight, because it's in bits.
+      expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
+      const expr2tc size_expr = expr2tc(new div2t(uint_type2(), e->size,eight));
+
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     } catch (type2t::symbolic_type_excp *e) {
@@ -3043,6 +3046,9 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       const expr2tc size_expr = e->size;
       z3::expr sz;
       convert_bv(size_expr, sz);
+
+      // Divide it by eight, as it's in bits.
+      sz = mk_div(sz, ctx.esbmc_int_val(8), true);
       addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
     } catch (type2t::symbolic_type_excp *e) {
       // It's valid to take the address of code,
