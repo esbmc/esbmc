@@ -229,8 +229,15 @@ array_type2t::get_width(void) const
   if (size_is_infinite)
     throw new inf_sized_array_excp();
 
-  if (array_size->expr_id != expr2t::constant_int_id)
-    throw new dyn_sized_array_excp(array_size);
+  if (array_size->expr_id != expr2t::constant_int_id) {
+    // The following can't throw, subtype can't be dynamically sized, because
+    // we are.
+    expr2tc subtype_sz(new constant_int2t(array_size->type,
+                        BigInt(subtype->get_width())));
+
+    expr2tc sz(new mul2t(array_size->type, array_size, subtype_sz));
+    throw new dyn_sized_array_excp(sz);
+  }
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
