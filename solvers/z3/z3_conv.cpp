@@ -2991,6 +2991,19 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       z3::expr sz;
       convert_bv(size_expr, sz);
       addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
+    } catch (type2t::symbolic_type_excp *e) {
+      // It's valid to take the address of code,
+      if (is_code_type(expr->type)) {
+        // In which case the size can be one byte; we don't model code, and
+        // it's an error to access it as data anyway.
+        z3::expr sz = ctx.esbmc_int_val(1);
+        addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num,sz));
+      } else {
+        std::cerr << "Z3 conversion can't calculate the size of type:";
+        std::cerr << std::endl;
+        std::cerr << expr->type->pretty(0) << std::endl;
+        abort();
+      }
     }
 
     z3::expr start_ast, end_ast;
