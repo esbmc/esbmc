@@ -2119,6 +2119,20 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     }
 
     // Done
+  } else if (is_bool_type(data.source_value->type)) {
+    // Out of bounds?
+    if (offset != 0) {
+      convert_bv(data.source_value, output);
+      return;
+    }
+
+    // Is update value zero or not, -> the bool value.
+    z3::sort update_sort;
+    convert_type(data.source_value->type, update_sort);
+    z3::expr zero = ctx.num_val(0, update_sort);
+
+    z3::expr cond = zero == value;
+    output = ite(cond, ctx.bool_val(false), ctx.bool_val(true));
   } else {
     throw new conv_error("unsupported irep for convert_byte_update");
   }
