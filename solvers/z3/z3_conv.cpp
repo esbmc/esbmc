@@ -2800,7 +2800,14 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // Actually perform some pointer arith
       const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
       type2tc followed_type = ns.follow(ptr_type.subtype);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+      mp_integer type_size;
+      if (!is_empty_type(followed_type)) {
+        type_size = pointer_offset_size(*followed_type);
+      } else {
+        // Empty type -> multiply by one. Unfortunate, but code out there
+        // does use it.
+        type_size = 1;
+      }
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
