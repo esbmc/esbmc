@@ -2799,9 +2799,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
 
       // Actually perform some pointer arith
       const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-      typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-      type2tc followed_type;
-      migrate_type(followed_type_old, followed_type);
+      type2tc followed_type = ns.follow(ptr_type.subtype);
       mp_integer type_size = pointer_offset_size(*followed_type);
 
       // Generate nonptr * constant.
