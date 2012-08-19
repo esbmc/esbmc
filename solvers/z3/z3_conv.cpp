@@ -1738,6 +1738,17 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   // This function contains gotos. You have been warned.
 
+  // First, only allow extracting integer values. If a pointer is desired,
+  // produce it via the medium of a typecast.
+  if (is_pointer_type(data.type)) {
+    type2tc bitvector_type = type_pool.get_uint(data.type->get_width());
+    expr2tc new_extract(data.clone());
+    new_extract.get()->type = bitvector_type;
+    expr2tc cast(new typecast2t(data.type, new_extract));
+    convert_bv(cast, output);
+    return;
+  }
+
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);
     return;
