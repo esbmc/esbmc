@@ -1847,7 +1847,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // (TM).
       bool first = true;
       unsigned int szleft = sel_sz;
-      for (; ; elem++) {
+      for (; szleft != 0; elem++) {
         if (first) {
           expr2tc the_elem(new index2t(array.subtype, data.source_value,
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
@@ -1872,6 +1872,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           z3::expr tmp;
           convert_bv(subfetch, tmp);
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
+
+          szleft -= getszi;
         }
       }
     }
