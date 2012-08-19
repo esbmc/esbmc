@@ -1690,10 +1690,10 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
     // Right; iterate through some arrays.
-    z3::expr the_array, source_val;
+    z3::expr the_array, source_offset;
     convert_bv(data.source_value, the_array);
-    convert_bv(data.source_value, source_val);
-    z3::expr idx = mk_div(source_val, ctx.esbmc_int_val(elem_size), true);
+    convert_bv(data.source_offset, source_offset);
+    z3::expr idx = mk_div(source_offset, ctx.esbmc_int_val(elem_size), true);
     unsigned long i, j;
     for (i = 0; i < max_num_elems; i++) {
       expr2tc iter(new constant_int2t(uint_type2(), BigInt(i)));
