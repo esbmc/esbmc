@@ -380,14 +380,7 @@ void dereferencet::build_reference_to(
     if (is_constant_expr(o.offset))
       offset = o.offset;
     else
-    {
-      expr2tc ptr_offs = expr2tc(new pointer_offset2t(index_type2(),
-                                                      deref_expr));
-      expr2tc base = expr2tc(new pointer_offset2t(index_type2(), obj_ptr));
-
-      // need to subtract base address
-      offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
-    }
+      offset = expr2tc(new pointer_offset2t(index_type2(), deref_expr));
 
     // See whether or not we need to munge the object into the desired type;
     // this will return false if we need to juggle the type in a significant
