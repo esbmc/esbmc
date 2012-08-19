@@ -76,7 +76,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   setup_pointer_sort();
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
-  addr_space_data.push_back(std::map<unsigned, unsigned>());
+  addr_space_data.push_back(std::map<unsigned, z3::expr>());
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -331,8 +331,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data.back()[0] = 0;
-  addr_space_data.back()[1] = 0;
+  addr_space_data.back()[0] = ctx.esbmc_int_val(0);
+  addr_space_data.back()[1] = ctx.esbmc_int_val(0);
 
   return;
 }
@@ -2390,7 +2390,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   z3::expr obj_ids[addr_space_data.back().size()];
   z3::expr obj_starts[addr_space_data.back().size()];
 
-  std::map<unsigned,unsigned>::const_iterator it;
+  std::map<unsigned,z3::expr>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end(); it++, i++)
@@ -2980,8 +2980,13 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] =
-          pointer_offset_size(*expr->type.get()).to_long() + 1;
+    try {
+      unsigned long len = pointer_offset_size(*expr->type.get()).to_long();
+      addr_space_data.back()[obj_num] = ctx.esbmc_int_val(len);
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      const expr2tc size_expr = e->size;
+      convert_bv(size_expr, addr_space_data.back()[obj_num]);
+    }
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
