@@ -1854,7 +1854,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           // And the remaining offset...
           expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
           unsigned int getszi = elem_size - sub_offs;
-          type2tc getsz = type_pool.get_uint(getszi);
+          type2tc getsz = type_pool.get_uint(getszi * 8);
           expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
                                               the_elem, remainder));
           convert_bv(subfetch, output);
@@ -1866,7 +1866,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
           expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
           unsigned int getszi = std::min<unsigned int>(szleft, elem_size);
-          type2tc getsz = type_pool.get_uint(getszi);
+          type2tc getsz = type_pool.get_uint(getszi * 8);
           expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
                                               the_elem, zero));
           z3::expr tmp;
