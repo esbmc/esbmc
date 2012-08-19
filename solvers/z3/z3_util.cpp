@@ -22,9 +22,10 @@ const expr2tc
 z3_convt::label_formula(std::string name, const type2tc &t,
                         const z3::expr &formula)
 {
-  unsigned &num = label_map.back()[name];
+  unsigned &num = label_map.back()[name], level;
   std::string basename = "__ESBMC_z3_label_map_" + name;
   std::string the_name = basename + "&0#" + itos(num);
+  level = num;
   num++;
 
   z3::expr sym = ctx.constant(the_name.c_str(), formula.get_sort());
@@ -32,5 +33,5 @@ z3_convt::label_formula(std::string name, const type2tc &t,
   assert_formula(eq);
 
   return expr2tc(new symbol2t(t, basename, symbol2t::level2_global,
-                              0, num, 0, 0));
+                              0, level, 0, 0));
 }
