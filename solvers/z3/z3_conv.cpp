@@ -1707,7 +1707,27 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     }
 
     // We now have a part array containing our desired lumps of data.
-    abort();
+    z3::expr byte, offs;
+    // Number of bytes up to the first element in the part array,
+    offs = mk_div(source_offset, ctx.esbmc_int_val(elem_size), true);
+    // Turn source offset into an offset into the part array.
+    offs = source_offset - offs;
+
+    for (i = 0; i < output_width; i++) {
+      if (i == 0) {
+        output = select(part_array, offs);
+      } else {
+        byte = select(part_array, offs);
+
+        // How we stitch bytes together also depends on endianness.
+        if (data.big_endian)
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
+        else
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+      }
+
+      offs = offs + ctx.esbmc_int_val(1);
+    }
   }
 }
 
