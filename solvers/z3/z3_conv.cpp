@@ -331,8 +331,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data.back()[0] = ctx.esbmc_int_val(0);
-  addr_space_data.back()[1] = ctx.esbmc_int_val(0);
+  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(0, ctx.esbmc_int_val(0)));
+  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(1, ctx.esbmc_int_val(0)));
 
   return;
 }
@@ -2982,10 +2982,13 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     try {
       unsigned long len = pointer_offset_size(*expr->type.get()).to_long();
-      addr_space_data.back()[obj_num] = ctx.esbmc_int_val(len);
+      z3::expr sz = ctx.esbmc_int_val(len);
+      addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
     } catch (array_type2t::dyn_sized_array_excp *e) {
       const expr2tc size_expr = e->size;
-      convert_bv(size_expr, addr_space_data.back()[obj_num]);
+      z3::expr sz;
+      convert_bv(size_expr, sz);
+      addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
     }
 
     z3::expr start_ast, end_ast;
