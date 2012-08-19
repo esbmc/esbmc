@@ -2008,6 +2008,23 @@ freeret:
 }
 
 void
+z3_convt::byte_swap_expr(const expr2tc &data, z3::expr &output)
+{
+  unsigned int w = data->type->get_width() / 8, i;
+  assert(w <= 8 && "Non-native sized integer in byte_swap_expr");
+  z3::expr byte, tmp;
+  convert_bv(data, tmp);
+
+  for (i = 0; i < w; i++) {
+    byte = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (i*8)+7, i*8, tmp));
+    if (i == 0)
+      output = byte;
+    else
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+  }
+}
+
+void
 z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
