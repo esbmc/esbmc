@@ -356,12 +356,16 @@ void value_sett::get_value_set_rec(
       mp_integer total_offs(0);
       bool is_const = false;
       try {
-        mp_integer elem_size = pointer_offset_size(*subtype);
         if (is_constant_int2t(non_ptr_op)) {
-          const mp_integer &val = to_constant_int2t(non_ptr_op).constant_value;
-          total_offs = val * elem_size;
-          if (is_sub2t(expr))
-            total_offs.negate();
+          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+            total_offs = 0;
+          } else {
+            mp_integer elem_size = pointer_offset_size(*subtype);
+            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            total_offs = val * elem_size;
+            if (is_sub2t(expr))
+              total_offs.negate();
+          }
           is_const = true;
         } else {
           is_const = false;
