@@ -1588,6 +1588,32 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
 }
 
 void
+z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
+                                     unsigned int width,
+                                     z3::expr &array)
+{
+  unsigned int i;
+
+  for (i = 0; i < width; i++) {
+    expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
+    expr2tc extract_byte(new byte_extract2t(
+          type_pool.get_uint8(), be, data, offs));
+    z3::expr byte;
+
+    // Call directly to avoid caching. Could put the byte_extract on the
+    // stack, but it's extremely iffy.
+    convert_smt_expr(static_cast<const byte_extract2t &>(*extract_byte.get()),
+                reinterpret_cast<void*>(&byte));
+
+    // And put that byte into the array.
+    z3::expr idx = ctx.esbmc_int_val(i);
+    array = store(array, idx, byte);
+  }
+
+  return;
+}
+
+void
 z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
 {
 
@@ -1622,21 +1648,8 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
-    for (i = 0; i < width; i++) {
-      expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
-      expr2tc extract_byte(new byte_extract2t(
-            type_pool.get_uint8(), data.big_endian, data.source_value, offs));
-      z3::expr byte;
-
-      // Call directly to avoid caching. Could put the byte_extract on the
-      // stack, but it's extremely iffy.
-      convert_smt_expr(static_cast<const byte_extract2t &>(*extract_byte.get()),
-                  reinterpret_cast<void*>(&byte));
-
-      // And put that byte into the array.
-      z3::expr idx = ctx.esbmc_int_val(i);
-      part_array = store(part_array, idx, byte);
-    }
+    build_part_array_from_elem(data.source_value, data.big_endian, width,
+                               part_array);
 
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.
