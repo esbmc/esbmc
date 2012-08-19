@@ -77,7 +77,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
   addr_space_data.push_back(std::map<unsigned, unsigned>());
-  total_mem_space.push_back(0);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -185,7 +184,6 @@ z3_convt::intr_push_ctx(void)
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   addr_space_data.push_back(addr_space_data.back());
-  total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
   std::list<z3::expr>::iterator it = assumpt.end();
@@ -212,7 +210,6 @@ z3_convt::intr_pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
-  total_mem_space.pop_back();
 
   level_ctx--;
 }
@@ -2966,10 +2963,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     }
-
-    // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() +=
-      pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
     z3::expr offs_eq;

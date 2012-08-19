@@ -325,7 +325,6 @@ public:
   z3::sort addr_space_arr_sort;
   z3::func_decl addr_space_tuple_decl;
   std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
-  std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;
