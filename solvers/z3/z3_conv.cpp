@@ -2088,6 +2088,9 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       uint64_t max = source_width - 1;
       upper = max - offset; //max-(i*w);
       lower = max - ((offset + insert_width) - 1); //max-((i+1)*w-1);
+
+      // Also, swap all the incoming byte around.
+      byte_swap_expr(data.update_value, value);
     }
 
     // If there's a chunk to keep at the top of the current data, extract
