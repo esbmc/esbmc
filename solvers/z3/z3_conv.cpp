@@ -1731,7 +1731,7 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
   }
 
   // Just like byte extract, optionally cast up to being a pointer.
-  if (is_pointer_type(data.type)) {
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
     type2tc sz = type_pool.get_uint(data.type->get_width());
     expr2tc sym = label_formula("byte_extract", sz, output);
 
@@ -1919,15 +1919,20 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     // We can just extract out of the converted source.
     output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
   } else if (is_pointer_type(data.source_value->type)) {
-    // We want an integer representation of this pointer; that code lives
-    // elsewhere, so perform a cast.
-    expr2tc cast_to_intrep(new
+    // If this extract perfectly extracts a pointer from a pointer, just return
+    // this field. Otherwise, cast to bits.
+    unsigned long offset = intref.constant_value.to_ulong();
+    if (is_pointer_type(data.type) && offset == 0) {
+      convert_bv(data.source_value, output);
+    } else {
+      expr2tc cast_to_intrep(new
                      typecast2t(type_pool.get_uint(config.ansi_c.pointer_width),
-                                data.source_value));
-    type2tc extract_size = type_pool.get_uint(sel_sz * 8);
-    expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
-                                       cast_to_intrep, data.source_offset));
-    convert_bv(extract, output);
+                                  data.source_value));
+      type2tc extract_size = type_pool.get_uint(sel_sz * 8);
+      expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
+                                         cast_to_intrep, data.source_offset));
+      convert_bv(extract, output);
+    }
   } else if (is_bool_type(data.source_value->type)) {
     // If offset isn't zero, completely free value, and something elsewhere
     // should catch this as a bounds violation.
@@ -1985,7 +1990,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   }
 
   // If a pointer is desired, // produce it via the medium of a typecast.
-  if (is_pointer_type(data.type)) {
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
     type2tc sz = type_pool.get_uint(sel_sz * 8);
     expr2tc sym = label_formula("byte_extract", sz, output);
 
