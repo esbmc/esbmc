@@ -2067,6 +2067,28 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
     else
       output = z3::to_expr(ctx, tuple);
+  } else if (is_pointer_type(data.source_value->type)) {
+    // Make this a byte update with some casts; unless it's a pointer updating
+    // a pointer, in which case just return the new one.
+    if (offset > data.source_value->type->get_width()) {
+      // Out of bounds.
+      convert_bv(data.source_value, output);
+      return;
+    }
+
+    if (offset == 0 && insert_width == data.source_value->type->get_width()) {
+      // We can just replace this.
+      convert_bv(data.update_value, output);
+      return;
+    }
+
+    // Nope; typecasts and writes.
+    type2tc pointer_size =
+      type_pool.get_uint(data.source_value->type->get_width());
+    expr2tc cast(new typecast2t(pointer_size, data.source_value));
+    expr2tc new_update(data.clone());
+    to_byte_update2t(new_update).source_value = cast;
+    convert_bv(new_update, output);
   } else if (is_bv_type(data.source_value->type)) {
     z3::expr top, bottom;
     bool top_b = false, bottom_b = false;
