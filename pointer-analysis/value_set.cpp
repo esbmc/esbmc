@@ -361,7 +361,7 @@ void value_sett::get_value_set_rec(
             total_offs = 0;
           } else {
             // Potentially rename,
-            type2tc renamed = ns.follow(subtype);
+            const type2tc renamed = ns.follow(subtype);
             mp_integer elem_size = pointer_offset_size(*renamed);
             const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
             total_offs = val * elem_size;
