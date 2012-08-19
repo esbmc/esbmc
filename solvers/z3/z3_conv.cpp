@@ -1739,6 +1739,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
+  unsigned long sel_sz = data.type->get_width() / 8;
 
   z3::expr source;
 
@@ -1750,7 +1751,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     uint64_t total_sz = 0, cur_item_sz = 0;
     unsigned int idx = 0;
     // The following can't throw as extracting variable size data would be wrong
-    unsigned int sel_sz = data.type->get_width() / 8;
 
     std::vector<type2tc>::const_iterator it;
     for (it = struct_type.members.begin(); it != struct_type.members.end();
@@ -1823,7 +1823,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   } else if (is_array_type(data.source_value->type)) {
     // We have an array; pick an element.
     const array_type2t &array = to_array_type(data.source_value->type);
-    uint64_t sel_sz = data.type->get_width() / 8;
     uint64_t elem_size = array.subtype->get_width() / 8;
     uint64_t offset = intref.constant_value.to_ulong();
     uint64_t elem = offset / elem_size;
