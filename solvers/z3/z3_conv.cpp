@@ -1664,9 +1664,9 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
 
         // How we stitch bytes together also depends on endianness.
         if (data.big_endian)
-          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
-        else
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+        else
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
       }
 
       offs = offs + ctx.esbmc_int_val(1);
