@@ -2017,7 +2017,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   // op2 is the value to update with
 
   if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+    throw new conv_error("byte_update expects constant 2nd arg");
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
