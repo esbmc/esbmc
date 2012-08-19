@@ -1590,7 +1590,7 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
 void
 z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
                                      unsigned int width,
-                                     z3::expr &array)
+                                     z3::expr &array, unsigned int array_offs)
 {
   unsigned int i;
 
@@ -1606,7 +1606,7 @@ z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
                 reinterpret_cast<void*>(&byte));
 
     // And put that byte into the array.
-    z3::expr idx = ctx.esbmc_int_val(i);
+    z3::expr idx = ctx.esbmc_int_val(array_offs + i);
     array = store(array, idx, byte);
   }
 
@@ -1649,7 +1649,7 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
     build_part_array_from_elem(data.source_value, data.big_endian, width,
-                               part_array);
+                               part_array, 0);
 
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.

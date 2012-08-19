@@ -188,7 +188,8 @@ private:
                                      const expr2tc &expr);
 
   void build_part_array_from_elem(const expr2tc &data, bool be,
-                                  unsigned int width, z3::expr &array);
+                                  unsigned int width, z3::expr &array,
+                                  unsigned int array_offs);
   void dynamic_offs_byte_extract(const byte_extract2t &data, z3::expr &output);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
