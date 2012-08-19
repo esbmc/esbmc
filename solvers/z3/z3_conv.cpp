@@ -1733,6 +1733,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
+  // This function contains gotos. You have been warned.
+
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);
     return;
@@ -1763,8 +1765,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
     if (it == struct_type.members.end()) {
       // Offset does in fact pass the end of this struct.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(8));
-      return;
+      goto freeret;
     }
 
     // Is the selection entirely in the bounds of one field of this struct?
@@ -1883,8 +1884,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
     if (offset * 8 >= width) {
       // Entirely out of bounds. Return free variable.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_sz * 8));
-      return;
+      goto freeret;
     }
 
     if (!data.big_endian) {
@@ -1901,8 +1901,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (offset * 8 >= typesize) {
       // Error at dereference; should (TM) be caught by an assertion failure
       // elsewhere.
-      output = ctx.fresh_const(NULL, ctx.bv_sort(sel_sz * 8));
-      return;
+      goto freeret;
     }
 
     // We can just extract out of the converted source.
@@ -1971,6 +1970,14 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     // Everything /should/ be covered, but...
     throw new conv_error("Unexpected irep type in byte_extract");
   }
+
+  return;
+
+freeret:
+  z3::sort s;
+  convert_type(data.type, s);
+  output = ctx.fresh_const(NULL, s);
+  return;
 }
 
 void
