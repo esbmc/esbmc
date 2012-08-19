@@ -374,6 +374,19 @@ void value_sett::get_value_set_rec(
         }
       } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
       } catch (array_type2t::inf_sized_array_excp *e) {
+      } catch (type2t::symbolic_type_excp *e) {
+        // This vastly annoying piece of code is making operations on void
+        // pointers, or worse. If a void pointer, treat the multiplier of the
+        // addition as being one. If not void pointer, throw cookies.
+        if (is_empty_type(subtype)) {
+          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          is_const = true;
+        } else {
+          std::cerr << "Pointer arithmetic on type where we can't determine ";
+          std::cerr << "size:" << std::endl;
+          std::cerr << subtype->pretty(0) << std::endl;
+          abort();
+        }
       }
 
       for(object_map_dt::const_iterator
