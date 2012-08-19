@@ -2062,9 +2062,9 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     if (width_op0 > width_op2)
       output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
     else
-      throw new conv_error("unsupported irep for conver_byte_update");
+      throw new conv_error("unsupported irep for convert_byte_update");
   } else {
-    throw new conv_error("unsupported irep for conver_byte_update");
+    throw new conv_error("unsupported irep for convert_byte_update");
   }
 
 }
