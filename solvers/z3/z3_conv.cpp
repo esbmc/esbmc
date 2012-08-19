@@ -1926,7 +1926,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     expr2tc cast_to_intrep(new
                      typecast2t(type_pool.get_uint(config.ansi_c.pointer_width),
                                 data.source_value));
-    expr2tc extract(new byte_extract2t(type_pool.get_uint8(), data.big_endian,
+    type2tc extract_size = type_pool.get_uint(sel_sz * 8);
+    expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
                                        cast_to_intrep, data.source_offset));
     convert_bv(extract, output);
   } else if (is_bool_type(data.source_value->type)) {
