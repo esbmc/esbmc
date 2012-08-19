@@ -1659,8 +1659,39 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
       offs = offs + ctx.esbmc_int_val(1);
     }
   } catch (array_type2t::dyn_sized_array_excp *e) {
-    std::cerr << "EUNIMPLEMENTED: dynamic sized array extracts" << std::endl;
-    abort();
+    // K, a dynamic array. We need to select enough elements and then munge it.
+    const array_type2t &arr = static_cast<const array_type2t&>
+                                         (*data.source_value->type.get());
+    unsigned long elem_size = arr.subtype->get_width() / 8;
+    unsigned long output_width = data.type->get_width() / 8;
+
+    // And the number of elements is...
+    unsigned long max_num_elems = output_width / elem_size;
+    // If extract size is more than one, and elements are larger than one, we
+    // might go over an element boundry at the start/end too.
+    if (elem_size != 1 && output_width != 1)
+      max_num_elems++;
+
+    // Generate an array to store goo in,
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+
+    // Right; iterate through some arrays.
+    z3::expr the_array, source_val;
+    convert_bv(data.source_value, the_array);
+    convert_bv(data.source_value, source_val);
+    z3::expr idx = mk_div(source_val, ctx.esbmc_int_val(elem_size), true);
+    unsigned long i, j;
+    for (i = 0; i < max_num_elems; i++) {
+      z3::expr elem = select(the_array, idx);
+      for (j = 0; j < elem_size; j++) {
+        // Fetch contents of element into part array.
+        // Unimplemented
+        abort();
+      }
+
+      idx = idx + ctx.esbmc_int_val(1);
+    }
   }
 }
 
