@@ -1696,15 +1696,18 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::expr idx = mk_div(source_val, ctx.esbmc_int_val(elem_size), true);
     unsigned long i, j;
     for (i = 0; i < max_num_elems; i++) {
-      z3::expr elem = select(the_array, idx);
-      for (j = 0; j < elem_size; j++) {
-        // Fetch contents of element into part array.
-        // Unimplemented
-        abort();
-      }
+      expr2tc iter(new constant_int2t(uint_type2(), BigInt(i)));
+      expr2tc idx(new add2t(uint_type2(), data.source_offset, iter));
+      expr2tc selection(new index2t(arr.subtype, data.source_value, idx));
 
-      idx = idx + ctx.esbmc_int_val(1);
+      for (j = 0; j < elem_size; j++) {
+        build_part_array_from_elem(selection, data.big_endian, elem_size,
+                                   part_array, i * elem_size);
+      }
     }
+
+    // We now have a part array containing our desired lumps of data.
+    abort();
   }
 }
 
