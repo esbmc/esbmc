@@ -2740,6 +2740,22 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
 }
 
 void
+z3_convt::convert_smt_expr(const null_object2t &null, void *_bv)
+{
+  z3::expr &output = cast_to_z3(_bv);
+
+  // XXX XXX XXX jmorse - this shouldn't be turning up here, but it is... one
+  // imagines that all dereferences that result in a null object being accessed
+  // are also guarded by assertions that the dereferences doesn't deref null.
+  // In that case, we should be able to return a free value here, and let the
+  // null-deref-assertion elsewhere fire.
+  // However, I'm not confidend that this is why null is turning up.
+  z3::sort s;
+  convert_type(null.type, s);
+  output = ctx.fresh_const(NULL, s);
+}
+
+void
 z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
                                 const expr2tc &side2,
                                 const type2tc &type, z3::expr &output)
