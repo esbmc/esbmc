@@ -1836,7 +1836,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
       // And the remaining offset...
       expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
-      expr2tc subfetch(new byte_extract2t(char_type2(), data.big_endian,
+      expr2tc subfetch(new byte_extract2t(data.type, data.big_endian,
                                           the_elem, remainder));
       convert_bv(subfetch, output);
     } else {
