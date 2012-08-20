@@ -3332,6 +3332,23 @@ z3_convt::set_to(const expr2tc &expr, bool value)
 
       union_var_mapt mapentry = { ref, idx, 0 };
       union_vars.insert(mapentry);
+    } else if (is_union_type(eq.side_1->type) && is_symbol2t(eq.side_1)) {
+      // Assignment to a union in some way that /isn't/ a member - in this case,
+      // keep the field number that the previous value had.
+      expr2tc sym_copy = eq.side_1; // Reallocates
+      symbol2t &sym = to_symbol2t(sym_copy);
+      sym.level2_num--;
+      const std::string &ref = sym.get_symbol_name();
+
+      union_varst::const_iterator cache_result = union_vars.find(ref.c_str());
+      if (cache_result == union_vars.end())
+        // There isn't a previous assigned field. Freak out.
+        return;
+
+      sym.level2_num++;
+      const std::string &ref2 = sym.get_symbol_name();
+      union_var_mapt mapentry = { ref2, cache_result->idx, 0 };
+      union_vars.insert(mapentry);
     }
   }
 }
