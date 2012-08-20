@@ -373,12 +373,8 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // add the THROW_DECL instruction to 'dest'
   goto_programt::targett throw_decl_instruction=dest.add_instruction();
   throw_decl_instruction->make_throw_decl();
+  throw_decl_instruction->code.set_statement("throw-decl");
   throw_decl_instruction->location=expr.location();
-
-  if(!expr.get_bool("throw-decl-constructor"))
-    throw_decl_instruction->code.set_statement("throw-decl");
-  else
-    throw_decl_instruction->code.set_statement("throw-decl-constructor");
 
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target

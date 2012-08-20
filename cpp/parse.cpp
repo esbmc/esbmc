@@ -1772,10 +1772,7 @@ bool Parser::rConstructorDecl(
   cv.make_nil();
   optCvQualify(cv);
 
-  optThrowDecl(constructor.throw_decl());
-
-  if(constructor.throw_decl().statement()!="nil")
-    constructor.throw_decl().set("throw-decl-constructor", true);
+  optThrowDecl(constructor.throw_decl()); // ignore in this version
 
   if(lex->LookAhead(0)==':')
   {
