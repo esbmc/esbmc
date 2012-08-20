@@ -2097,6 +2097,49 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     // because this struct is a z3 "datatype" too.
     output = source_value;
     return;
+  } else if (is_array_type(data.source_value->type)) {
+    // Pick an index to start at; progress through select and updating.
+    const array_type2t &arr = to_array_type(data.source_value->type);
+    unsigned int elem_size = arr.subtype->get_width();
+    unsigned int elem_idx = offset / elem_size;
+    unsigned int offs_into_elem = 0;
+    unsigned int offs_into_update = 0;
+
+    offs_into_elem = offset - (elem_idx * elem_size);
+    for (; ; elem_idx++) {
+      expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem_idx)));
+      expr2tc elem(new index2t(arr.subtype, data.source_value, idx));
+
+      // How many bits are we going to be writing today.
+      unsigned int write_bits = std::min<unsigned int>(insert_width,
+                                         elem_size - offs_into_elem);
+      type2tc sel_sz = type_pool.get_uint(write_bits);
+
+      // Fetch that many bits out of the update value.
+      expr2tc update_offs(new constant_int2t(uint_type2(),
+                                             BigInt(offs_into_update / 8)));
+      expr2tc ext(new byte_extract2t(sel_sz, data.big_endian,
+                                     data.update_value, update_offs));
+
+      // And update it into the array element.
+      expr2tc into_elem(new constant_int2t(uint_type2(), offs_into_elem / 8));
+      expr2tc update(new byte_update2t(arr.subtype, data.big_endian,
+                                       elem, into_elem, ext));
+
+      z3::expr new_elem;
+      convert_bv(update, new_elem);
+      source_value = store(source_value, elem_idx, new_elem);
+
+      offs_into_update += write_bits;
+      insert_width -= write_bits;
+      offs_into_elem = 0;
+
+      if (insert_width == 0)
+        break;
+    }
+
+    output = source_value;
+    return;
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
