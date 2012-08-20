@@ -2034,9 +2034,33 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
   //
   // For dynamically sized arrays, the usual rotating occurs.
 
+  unsigned int update_width = data.update_value->type->get_width();
+
   try {
     unsigned long width, i;
-    width = data.source_value->type->get_width() / 8;
+    width = data.source_value->type->get_width();
+
+    // First, fetch an array of all the data we have.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+    build_part_array_from_elem(data.source_value, data.big_endian, width / 8,
+                               part_array, 0);
+
+    // Now, update the appropriate fields.
+    z3::expr offs_into_array;
+    convert_bv(data.source_offset, offs_into_array);
+    for (i = 0; i < update_width / 8; i++) {
+      expr2tc offs_into_update(new constant_int2t(uint_type2(), BigInt(i)));
+      expr2tc ext(new byte_extract2t(char_type2(), data.big_endian,
+                                     data.update_value, offs_into_update));
+      z3::expr byte;
+      convert_bv(ext, byte);
+      part_array = store(part_array, offs_into_array, byte);
+      offs_into_array = offs_into_array + ctx.esbmc_int_val(1);
+    }
+
+    // That's now the array updated; we now need to rebuild the data object into
+    // the shape that it should be.
     abort();
   } catch (array_type2t::dyn_sized_array_excp *e) {
     abort();
