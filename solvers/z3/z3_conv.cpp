@@ -2150,6 +2150,17 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     throw new conv_error("unsupported irep for convert_byte_update");
   }
 
+  // Optionally cast to a pointer if requested.
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
+    type2tc sz = type_pool.get_uint(output.get_sort().bv_size());
+    expr2tc sym = label_formula("byte_update", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
+  }
+
+  return;
+
 outofbounds:
   if (data.type == data.source_value->type) {
     convert_bv(data.source_value, output);
