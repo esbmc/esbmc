@@ -2049,23 +2049,54 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
   if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = to_struct_type(data.source_value->type);
-    bool has_field = false;
-    unsigned int source_width;
+    unsigned int offs_into_struct = 0;
+    unsigned int offs_into_update = 0;
+    unsigned int idx = 0;
 
-    // XXXjmorse, this isn't going to be the case if it's a with.
-
+    // First, iterate until we find the first element we want to deal with.
     forall_types(it, struct_type.members) {
-      source_width = (*it)->get_width();
+      unsigned int field_width = (*it)->get_width();
+      if (offs_into_struct + field_width > offset) {
+        // We have something to update.
+        unsigned int offs_into_field = offset - offs_into_struct;
+        unsigned int bits_to_update = std::min<unsigned int>(insert_width,
+                                      offs_into_struct + field_width - offset);
+        type2tc update_sz = type_pool.get_uint(bits_to_update);
 
-      if (((*it)->type_id == data.update_value->type->type_id) &&
-          (source_width == insert_width))
-	has_field = true;
+        // Extract an appropriate amount of data from source.
+        expr2tc ext_offs(new constant_int2t(uint_type2(),
+                                            BigInt(offs_into_update / 8)));
+        expr2tc ext(new byte_extract2t(update_sz, data.big_endian,
+                                       data.update_value, ext_offs));
+
+        // Now, insert into this field,
+        expr2tc memb(new member2t(*it, data.source_value,
+                                  struct_type.member_names[idx]));
+        expr2tc memb_offs(new constant_int2t(uint_type2(),
+                                             BigInt(offs_into_field / 8)));
+        expr2tc update(new byte_update2t(*it, data.big_endian,
+                                         data.source_value, memb_offs,
+                                         ext));
+
+        z3::expr new_field;
+        convert_bv(update, new_field);
+        source_value = mk_tuple_update(source_value, idx, new_field);
+
+        offs_into_update += bits_to_update;
+        insert_width -= bits_to_update;
+      }
+
+      offs_into_struct += field_width;
+      idx++;
+
+      if (insert_width == 0)
+        break;
     }
 
-    if (has_field)
-      output = mk_tuple_update(source_value, intref.constant_value.to_long(), update_value);
-    else
-      output = z3::to_expr(ctx, source_value);
+    // Don't allow lower check for conversion to pointers; it'll be confused
+    // because this struct is a z3 "datatype" too.
+    output = source_value;
+    return;
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
