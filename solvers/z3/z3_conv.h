@@ -164,7 +164,6 @@ private:
   virtual void convert_smt_expr(const overflow2t &overflow, void *bv);
   virtual void convert_smt_expr(const overflow_cast2t &ocast, void *arg);
   virtual void convert_smt_expr(const overflow_neg2t &neg, void *arg);
-  virtual void convert_smt_expr(const null_object2t &null, void *arg);
 
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
