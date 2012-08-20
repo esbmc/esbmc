@@ -1745,6 +1745,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
+  assert(!int_encoding && "Can't byte extract in integer mode");
+
   // This function contains gotos. You have been warned.
 
   if (!is_constant_int2t(data.source_offset)) {
@@ -2176,6 +2178,8 @@ void
 z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
+
+  assert(!int_encoding && "Can't byte update in integer mode");
 
   if (!is_constant_int2t(data.source_offset)) {
     byte_update_via_part_array(data, output);
