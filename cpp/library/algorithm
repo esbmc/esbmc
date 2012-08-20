@@ -491,7 +491,7 @@ OutIt transform(InIt first, InIt last, OutIt dest, Fn1 func) {
 
 template<class InIt1, class InIt2, class OutIt, class Fn2>
 OutIt transform(InIt1 first1, InIt1 last1, InIt2 first2, OutIt dest, Fn2 func) {
-	while (first != last1)
+	while (first1 != last1)
 		*dest++ = func(*first1++, *first2++);
 	return dest;
 }
@@ -658,6 +658,7 @@ OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
 
 template<class InIt, class OutIt, class Pr>
 OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
+#if 0
 	InIt value = first;
 	dest = first;
 	while (++first != last) {
@@ -665,6 +666,7 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
 			*(++dest) = value = *first;
 	}
 	return ++dest;
+#endif
 }
 
 template<class BidIt>
