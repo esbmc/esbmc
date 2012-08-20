@@ -2338,7 +2338,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     expr2tc new_update(data.clone());
     to_byte_update2t(new_update).source_value = cast;
     convert_bv(new_update, output);
-  } else if (is_bv_type(data.source_value->type)) {
+  } else if (is_number_type(data.source_value->type)) {
     z3::expr top, bottom;
     bool top_b = false, bottom_b = false;
     unsigned int source_width = data.source_value->type->get_width();
