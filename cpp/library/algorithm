@@ -385,12 +385,12 @@ FwdIt1 search(FwdIt1 first1, FwdIt1 last1, FwdIt2 first2, FwdIt2 last2,
 	return last1;
 }
 
-template <class InputIterator, class Distance>
-  void advance (InputIterator& i, Distance n);
+template<class InputIterator, class Distance>
+void advance(InputIterator& i, Distance n);
 
 template<class InputIterator>
-  typename iterator_traits<InputIterator>::difference_type
-    distance (InputIterator first, InputIterator last);
+typename iterator_traits<InputIterator>::difference_type
+distance(InputIterator first, InputIterator last);
 
 template<class FwdIt, class Diff, class Ty>
 FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& value) {
@@ -412,8 +412,7 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& value) {
 }
 
 template<class FwdIt, class Diff, class Ty, class Pr>
-FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& val, Pr pred)
-{
+FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& val, Pr pred) {
 #if 0
 	FwdIt it, limit;
 	size_t i;
@@ -663,7 +662,7 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
 	dest = first;
 	while (++first != last) {
 		if (!pred(value, *first))
-			*(++dest) = value = *first;
+		*(++dest) = value = *first;
 	}
 	return ++dest;
 #endif
@@ -1258,7 +1257,7 @@ FwdIt max_element(FwdIt first, FwdIt last, Pr pred) {
 
 template<class FwdIt, class Pr>
 FwdIt* max_element(FwdIt *first, FwdIt *last, Pr pred) {
-	FwdIt largest = first;
+	FwdIt *largest = first;
 	if (first == last)
 		return last;
 	while (++first != last)
@@ -1300,7 +1299,7 @@ int* min_element(int *first, int *last) {
 
 template<class FwdIt, class Pr>
 FwdIt min_element(FwdIt first, FwdIt last, Pr pred) {
-	FwdIt lowest = first;
+	FwdIt *lowest = first;
 	if (first == last)
 		return last;
 	while (++first != last)
@@ -1311,7 +1310,7 @@ FwdIt min_element(FwdIt first, FwdIt last, Pr pred) {
 
 template<class FwdIt, class Pr>
 FwdIt* min_element(FwdIt *first, FwdIt *last, Pr pred) {
-	FwdIt lowest = first;
+	FwdIt *lowest = first;
 	if (first == last)
 		return last;
 	while (++first != last)
