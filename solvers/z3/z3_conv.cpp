@@ -3174,9 +3174,10 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       expr2tc sub(new sub2t(uint_type2(), cast1, cast2));
 
       // And calculate what it is in pointer elements.
-      const pointer_type2t &ptr_type = to_pointer_type(side1->type);
+      const pointer_type2t &ptr_type = to_pointer_type(type1);
+      const type2tc &subtype = ns.follow(ptr_type.subtype);
       expr2tc elem_size(new constant_int2t(uint_type2(),
-                                           ptr_type.subtype->get_width() / 8));
+                                           subtype->get_width() / 8));
       expr2tc result(new div2t(uint_type2(), sub, elem_size));
       convert_bv(result, output);
       break;
