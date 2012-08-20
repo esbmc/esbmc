@@ -2039,12 +2039,12 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
   unsigned long offset = intref.constant_value.to_ulong() * 8;
 
-  z3::expr tuple, value;
+  z3::expr source_value, update_value;
   uint width_op0, width_op2;
   unsigned int insert_width;
 
-  convert_bv(data.source_value, tuple);
-  convert_bv(data.update_value, value);
+  convert_bv(data.source_value, source_value);
+  convert_bv(data.update_value, update_value);
 
   width_op2 = data.update_value->type->get_width();
   insert_width = width_op2;
@@ -2064,9 +2064,9 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     }
 
     if (has_field)
-      output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
+      output = mk_tuple_update(source_value, intref.constant_value.to_long(), update_value);
     else
-      output = z3::to_expr(ctx, tuple);
+      output = z3::to_expr(ctx, source_value);
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
@@ -2105,28 +2105,29 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       lower = max - ((offset + insert_width) - 1); //max-((i+1)*w-1);
 
       // Also, swap all the incoming byte around.
-      byte_swap_expr(data.update_value, value);
+      byte_swap_expr(data.update_value, update_value);
     }
 
     // If there's a chunk to keep at the top of the current data, extract
     if (upper < source_width -1) {
       // there's a top segment to extract.
       top = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, source_width-1, upper+1,
-                                           tuple));
+                                           source_value));
       top_b = true;
     }
 
     // If there's a chunk at the bottom of current data, extract
     if (lower > 0) {
-      bottom = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, lower - 1, 0, tuple));
+      bottom = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, lower - 1, 0,
+                           source_value));
       bottom_b = true;
     }
 
     // Then join all these together, with the update value in the middle.
     if (top_b) {
-      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, top, value));
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, top, update_value));
     } else {
-      output = value;
+      output = update_value;
     }
 
     if (bottom_b) {
@@ -2144,7 +2145,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     convert_type(data.source_value->type, update_sort);
     z3::expr zero = ctx.num_val(0, update_sort);
 
-    z3::expr cond = zero == value;
+    z3::expr cond = zero == update_value;
     output = ite(cond, ctx.bool_val(false), ctx.bool_val(true));
   } else {
     throw new conv_error("unsupported irep for convert_byte_update");
