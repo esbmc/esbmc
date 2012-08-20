@@ -2061,7 +2061,22 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
 
     // That's now the array updated; we now need to rebuild the data object into
     // the shape that it should be.
-    abort();
+    expr2tc accuml = data.source_value;
+    type2tc arr_type(new array_type2t(char_type2(), expr2tc(), i));
+    expr2tc sym = label_formula("byte_update_recombine", arr_type, part_array);
+
+    // Loop over part array, selecting bytes, and updating into our current
+    // value. This may, in the end, be vastly inefficient, but it'll work. A
+    // potential optimisation for the future is pre-combining bytes into the
+    // sizes that we're going to be inserting, rather than doing it byte by byte
+    for (i = 0; i < width / 8; i++) {
+      expr2tc offs(new constant_int2t(uint_type2(), i));
+      expr2tc sel(new index2t(char_type2(), sym, offs));
+      accuml = expr2tc(new byte_update2t(accuml->type, data.big_endian,
+                                         accuml, offs, sel));
+    }
+
+    convert_bv(accuml, out);
   } catch (array_type2t::dyn_sized_array_excp *e) {
     abort();
   }
