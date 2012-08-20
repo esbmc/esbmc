@@ -3156,11 +3156,11 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
   //      N        N          N         Will never be fed here
   //      N        P          N         Expected arith option, then cast to int
   //      N        N          P            "
-  //      N        P          P         Not permitted by C spec
+  //      N        P          P         Element difference
   //      P        N          N         Return arith action with cast to pointer
   //      P        P          N         Calculate expected ptr arith operation
   //      P        N          P            "
-  //      P        P          P         Not permitted by C spec
+  //      P        P          P         Element difference
   //      NPP is the most dangerous - there's the possibility that an integer
   //      arithmetic is going to lead to an invalid pointer, that falls out of
   //      all dereference switch cases. So, we need to verify that all derefs
@@ -3176,8 +3176,27 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmetic with two pointer operands");
+    {
+      // We're supposed to calculate the index difference between two pointers
+      // that have the same sub-object. First, check they're the same type.
+      const type2tc &type1 = ns.follow(side1->type);
+      const type2tc &type2 = ns.follow(side2->type);
+      assert(type1 == type2 &&
+             "Pointer subtraction must have same pointer type");
+
+      // Calculate the subtraction,
+      expr2tc cast1(new typecast2t(uint_type2(), side1));
+      expr2tc cast2(new typecast2t(uint_type2(), side2));
+      expr2tc sub(new sub2t(uint_type2(), cast1, cast2));
+
+      // And calculate what it is in pointer elements.
+      const pointer_type2t &ptr_type = to_pointer_type(side1->type);
+      expr2tc elem_size(new constant_int2t(uint_type2(),
+                                           ptr_type.subtype->get_width() / 8));
+      expr2tc result(new div2t(uint_type2(), sub, elem_size));
+      convert_bv(result, output);
       break;
+    }
     case 4:
       // Artithmatic operation that has the result type of ptr.
       // Should have been handled at a higher level
