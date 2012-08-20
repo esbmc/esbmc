@@ -2057,7 +2057,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     forall_types(it, struct_type.members) {
       unsigned int field_width = (*it)->get_width();
       if (offs_into_struct + field_width > offset) {
-        // We have something to update.
+        // We have something to update. A potential future optimisation is to
+        // not juggle all this if the entire field is going to be replaced.
         unsigned int offs_into_field = offset - offs_into_struct;
         unsigned int bits_to_update = std::min<unsigned int>(insert_width,
                                       offs_into_struct + field_width - offset);
