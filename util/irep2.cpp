@@ -755,6 +755,8 @@ object_descriptor2t::get_root_object(void) const
       tmp = &to_member2t(*tmp).source_value;
     else if (is_index2t(*tmp))
       tmp = &to_index2t(*tmp).source_value;
+    else if (is_typecast2t(*tmp))
+      tmp = &to_typecast2t(*tmp).from;
     else
       return *tmp;
   } while (1);
