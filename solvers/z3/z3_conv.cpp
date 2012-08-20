@@ -2172,7 +2172,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
     // Is update value zero or not, -> the bool value.
     z3::sort update_sort;
-    convert_type(data.source_value->type, update_sort);
+    convert_type(data.update_value->type, update_sort);
     z3::expr zero = ctx.num_val(0, update_sort);
 
     z3::expr cond = zero == update_value;
