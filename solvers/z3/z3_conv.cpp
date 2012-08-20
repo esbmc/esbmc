@@ -2133,7 +2133,6 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       part_array = store(part_array, update_offs, byte);
       update_offs = update_offs + ctx.esbmc_int_val(1);
     }
-    label_formula("lulzy_updated_array", type_pool.get_bool(), part_array);
 
     // And now, rebuild from that part array.
     cur_elem = expr2tc(new div2t(uint_type2(), data.source_offset,
@@ -2166,7 +2165,6 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
 
     // Good grief, that whole thing is massive.
     convert_bv(accuml, out);
-    label_formula("thewholebloodything", type_pool.get_bool(), out);
   }
 }
 
