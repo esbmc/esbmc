@@ -196,7 +196,8 @@ void goto_symext::symex_throw_decl()
   // Get to the correct try (always the most external)
   goto_symex_statet::call_stackt::reverse_iterator
     s_it=cur_state->call_stack.rbegin();
-  ++s_it;
+
+  while(!(*s_it).catch_map.size()) ++s_it;
 
   // Set the flag that this frame has throw list
   // This is important because we can have empty throw lists
