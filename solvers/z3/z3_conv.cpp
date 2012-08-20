@@ -2146,16 +2146,22 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
 
       unsigned int j;
+      expr2tc elem_offs(new constant_int2t(uint_type2(), BigInt(0)));
       for (j = 0; j < elem_width / 8; j++) {
         expr2tc offs(new constant_int2t(uint_type2(), (i * (elem_width/8)) +j));
         expr2tc sel(new index2t(char_type2(), sym, offs));
         select = expr2tc(new byte_update2t(select->type, data.big_endian,
-                                           select, offs, sel));
+                                           select, elem_offs, sel));
+        elem_offs = expr2tc(new add2t(uint_type2(), elem_offs, one));
       }
 
       accuml = expr2tc(new with2t(accuml->type, accuml, cur_elem, select));
+      z3::expr newelem, pos;
+      convert_bv(select, newelem);
+      convert_bv(cur_elem, pos);
 
       cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+      update_offs = ctx.esbmc_int_val(0);
     }
 
     // Good grief, that whole thing is massive.
