@@ -2076,8 +2076,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
         expr2tc memb_offs(new constant_int2t(uint_type2(),
                                              BigInt(offs_into_field / 8)));
         expr2tc update(new byte_update2t(*it, data.big_endian,
-                                         data.source_value, memb_offs,
-                                         ext));
+                                         memb, memb_offs, ext));
 
         z3::expr new_field;
         convert_bv(update, new_field);
