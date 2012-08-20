@@ -705,12 +705,24 @@ pointer_offset2t::do_simplify(bool second) const
 
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
-    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, non_ptr_op));
 
-    // XXX XXX XXX
-    // XXX XXX XXX  This may be the source of pointer arith fail. Or lack of
-    // XXX XXX XXX  consideration of pointer arithmetic.
-    // XXX XXX XXX
+    // The non pointer op has to take into account pointer arithmetic though,
+    // so multiply it by the pointer size of the operand. If we can't get that,
+    // abort.
+    unsigned int width;
+    try {
+      const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
+      width = ptr_type.subtype->get_width() / 8;
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type isn't renamed enough to let this happen; give up now.
+      return expr2tc();
+    }
+
+    expr2tc ptr_subtype_sz(new constant_int2t(uint_type2(), BigInt(width)));
+    expr2tc muled_non_ptr(new mul2t(uint_type2(), non_ptr_op, ptr_subtype_sz));
+
+    // And recombine.
+    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, muled_non_ptr));
 
     // So, this add is a valid simplification. We may be able to simplify
     // further though.
