@@ -2040,26 +2040,25 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   unsigned long offset = intref.constant_value.to_ulong() * 8;
 
   z3::expr source_value, update_value;
-  uint width_op0, width_op2;
   unsigned int insert_width;
 
   convert_bv(data.source_value, source_value);
   convert_bv(data.update_value, update_value);
 
-  width_op2 = data.update_value->type->get_width();
-  insert_width = width_op2;
+  insert_width = data.update_value->type->get_width();
 
   if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = to_struct_type(data.source_value->type);
     bool has_field = false;
+    unsigned int source_width;
 
     // XXXjmorse, this isn't going to be the case if it's a with.
 
     forall_types(it, struct_type.members) {
-      width_op0 = (*it)->get_width();
+      source_width = (*it)->get_width();
 
       if (((*it)->type_id == data.update_value->type->type_id) &&
-          (width_op0 == width_op2))
+          (source_width == insert_width))
 	has_field = true;
     }
 
