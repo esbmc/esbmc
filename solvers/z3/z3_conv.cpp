@@ -1833,10 +1833,14 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
         accuml_offs += immediate_sz;
       }
     }
-  } else if (is_array_type(data.source_value->type)) {
+  } else if (is_array_type(data.source_value->type) ||
+             is_string_type(data.source_value->type)) {
     // We have an array; pick an element.
-    const array_type2t &array = to_array_type(data.source_value->type);
-    uint64_t elem_size = array.subtype->get_width() / 8;
+    const type2tc &subtype = (is_string_type(data.source_value->type))
+                ? char_type2() : to_array_type(data.source_value->type).subtype;
+    uint64_t elem_size = subtype->get_width() / 8;
+
+    // We have an array; pick an element.
     uint64_t offset = intref.constant_value.to_ulong();
     uint64_t elem = offset / elem_size;
     uint64_t sub_offs = offset % elem_size;
@@ -1844,7 +1848,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     // Is the selection entirely in the bounds of one element?
     if (elem_size - sub_offs >= sel_sz) {
       // Yes, so just select from one of them.
-      expr2tc the_elem(new index2t(array.subtype, data.source_value,
+      expr2tc the_elem(new index2t(subtype, data.source_value,
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
       // And the remaining offset...
       expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
@@ -1861,7 +1865,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       unsigned int szleft = sel_sz;
       for (; szleft != 0; elem++) {
         if (first) {
-          expr2tc the_elem(new index2t(array.subtype, data.source_value,
+          expr2tc the_elem(new index2t(subtype, data.source_value,
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
           // And the remaining offset...
           expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
@@ -1874,7 +1878,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           szleft -= getszi;
           first = false;
         } else {
-          expr2tc the_elem(new index2t(array.subtype, data.source_value,
+          expr2tc the_elem(new index2t(subtype, data.source_value,
                       expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
           expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
           unsigned int getszi = std::min<unsigned int>(szleft, elem_size);
