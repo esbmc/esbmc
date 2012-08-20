@@ -2078,7 +2078,89 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
 
     convert_bv(accuml, out);
   } catch (array_type2t::dyn_sized_array_excp *e) {
-    abort();
+    const array_type2t &arr = to_array_type(data.source_value->type);
+    unsigned int elem_width = arr.subtype->get_width();
+
+
+    // Calcluate the number of elements we're going to be working on.
+    unsigned int num_elems;
+    if (update_width == 8) {
+      num_elems = 1;
+    } else {
+      // Starting point
+      num_elems = 1;
+      // Every additional element's size can overlap another element.
+      num_elems += update_width / elem_width;
+      // If there's a nonzero tail, that too can overlap another element.
+      if (update_width % elem_width != 0)
+        num_elems++;
+    }
+
+    // Offset into first element we'll be working on.
+    expr2tc one(new constant_int2t(uint_type2(), BigInt(1)));
+    expr2tc elem_sz_expr(new constant_int2t(uint_type2(),BigInt(elem_width/8)));
+    expr2tc cur_elem(new div2t(uint_type2(), data.source_offset, elem_sz_expr));
+
+    // And, start selecting elements then dumping data into them.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(),ctx.bv_sort(8));
+    unsigned int i, part_array_offs = 0;
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+    for (i = 0; i < num_elems; i++) {
+      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+
+      build_part_array_from_elem(select, data.big_endian, elem_width / 8,
+                                 part_array, 0);
+
+      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+
+      part_array_offs += elem_width / 8;
+    }
+
+    // Turn the udpate value into a byte array
+    z3::expr update_array = ctx.fresh_const(NULL, array_sort);
+    build_part_array_from_elem(data.update_value, data.big_endian,
+                               update_width / 8, update_array, 0);
+
+    expr2tc offs_into_first_elem(new modulus2t(uint_type2(), data.source_offset,
+                                               elem_sz_expr));
+    z3::expr update_offs;
+    convert_bv(offs_into_first_elem, update_offs);
+
+    // The part array now contains N elements worth of data. Update them.
+    z3::expr byte;
+    for (i = 0; i < update_width / 8; i++) {
+      byte = select(update_array, i);
+      part_array = store(part_array, update_offs, byte);
+      update_offs = update_offs + ctx.esbmc_int_val(1);
+    }
+    label_formula("lulzy_updated_array", type_pool.get_bool(), part_array);
+
+    // And now, rebuild from that part array.
+    cur_elem = expr2tc(new div2t(uint_type2(), data.source_offset,
+                                 elem_sz_expr));
+    type2tc arr_type(new array_type2t(char_type2(), expr2tc(), i));
+    expr2tc sym = label_formula("byte_update_dyn", arr_type, part_array);
+    expr2tc accuml = data.source_value;
+
+    for (i = 0; i < num_elems; i++) {
+      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+
+      unsigned int j;
+      for (j = 0; j < elem_width / 8; j++) {
+        expr2tc offs(new constant_int2t(uint_type2(), (i * (elem_width/8)) +j));
+        expr2tc sel(new index2t(char_type2(), sym, offs));
+        select = expr2tc(new byte_update2t(select->type, data.big_endian,
+                                           select, offs, sel));
+      }
+
+      accuml = expr2tc(new with2t(accuml->type, accuml, cur_elem, select));
+
+      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+    }
+
+    // Good grief, that whole thing is massive.
+    convert_bv(accuml, out);
+    label_formula("thewholebloodything", type_pool.get_bool(), out);
   }
 }
 
