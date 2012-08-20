@@ -2074,7 +2074,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
     if (offset == 0 && insert_width == data.source_value->type->get_width()) {
       // We can just replace this.
-      convert_bv(data.update_value, output);
+      output = update_value;
       return;
     }
 
