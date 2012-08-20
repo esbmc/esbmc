@@ -2025,12 +2025,33 @@ z3_convt::byte_swap_expr(const expr2tc &data, z3::expr &output)
 }
 
 void
+z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
+{
+  // Follow similar approach to extracting with a dynamic offset; convert
+  // everything into a part array, representing the object in a byte array.
+  // Then update some fields. Then reconstruct the original object from the
+  // part array, which will be expensive.
+  //
+  // For dynamically sized arrays, the usual rotating occurs.
+
+  try {
+    unsigned long width, i;
+    width = data.source_value->type->get_width() / 8;
+    abort();
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    abort();
+  }
+}
+
+void
 z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_update expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    byte_update_via_part_array(data, output);
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
   unsigned long offset = intref.constant_value.to_ulong() * 8;

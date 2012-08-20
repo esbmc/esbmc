@@ -195,6 +195,8 @@ private:
 
   void byte_swap_expr(const expr2tc &data, z3::expr &output);
 
+  void byte_update_via_part_array(const byte_update2t &update, z3::expr &out);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
