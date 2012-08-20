@@ -2310,7 +2310,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
-    if (offset > data.source_value->type->get_width())
+    if (offset >= data.source_value->type->get_width())
       goto outofbounds;
 
     if (offset == 0 && insert_width == data.source_value->type->get_width()) {
@@ -2331,7 +2331,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     bool top_b = false, bottom_b = false;
     unsigned int source_width = data.source_value->type->get_width();
 
-    if (offset > source_width)
+    if (offset >= source_width)
       goto outofbounds;
 
     // Work out where we're going to be inserting.
