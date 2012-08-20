@@ -2140,6 +2140,35 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
     output = source_value;
     return;
+  } else if (is_union_type(data.source_value->type)) {
+    // Work out the most recent field used; extract from there.
+    union_varst::const_iterator cache_result;
+
+    if (is_symbol2t(data.source_value)) {
+      const symbol2t &sym = to_symbol2t(data.source_value);
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
+    } else {
+      cache_result = union_vars.end();
+    }
+
+    if (cache_result == union_vars.end())
+      throw new
+        conv_error("byte_update from union can't determine correct field");
+
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*data.source_value->type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const type2tc source_type = members[cache_result->idx];
+    const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
+
+    expr2tc member(new member2t(source_type, data.source_value, fieldname));
+    expr2tc new_update(new byte_update2t(data.type, data.big_endian,
+                                           member, data.source_offset,
+                                           data.update_value));
+
+    z3::expr tmp;
+    convert_bv(new_update, tmp);
+    output = mk_tuple_update(source_value, cache_result->idx, tmp);
   } else if (is_pointer_type(data.source_value->type)) {
     // Make this a byte update with some casts; unless it's a pointer updating
     // a pointer, in which case just return the new one.
