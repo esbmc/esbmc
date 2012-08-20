@@ -1128,6 +1128,11 @@ typecast2t::do_simplify(bool second) const
     // behaviour.
     std::list<expr2tc> set2;
     forall_operands2(it, expr_operands, from) {
+      // Bail immediately if any of those are pointers; we can't push these
+      // casts down on top of pointer arithmetic.
+      if (is_pointer_type((***it).type))
+        return expr2tc();
+
       expr2tc cast = expr2tc(new typecast2t(type, **it));
       set2.push_back(cast);
     }
