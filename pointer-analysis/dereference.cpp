@@ -642,7 +642,8 @@ bool dereferencet::memory_model_bytes(
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
 
   // We allow reading more or less anything as bit-vector.
-  if (is_bv_type(to_type) || is_pointer_type(to_type))
+  if (is_bv_type(to_type) || is_pointer_type(to_type) ||
+      is_fixedbv_type(to_type))
   {
     bool is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
