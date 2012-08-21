@@ -266,13 +266,13 @@ empty_type2t::get_width(void) const
 unsigned int
 symbol_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 unsigned int
 cpp_name_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 unsigned int
