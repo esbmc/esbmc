@@ -25,7 +25,7 @@ Function: goto_symext::symex_catch
 void goto_symext::symex_catch()
 {
   // there are two variants: 'push' and 'pop'
-  const goto_programt::instructiont &instruction= *cur_state->source.pc;
+  const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
   if(instruction.targets.empty()) // pop
   {
@@ -35,10 +35,26 @@ void goto_symext::symex_catch()
     if(cur_state->top().catch_map.empty())
       throw "catch-pop on function frame";
 
-    has_catch=true;
+    // Copy the frame before pop
+    goto_symex_statet::framet frame=cur_state->call_stack.back();
 
     // pop the stack frame
     cur_state->call_stack.pop_back();
+
+    // Increase program counter
+    cur_state->source.pc++;
+
+    if(frame.has_throw_target)
+    {
+      // the next instruction is always a goto
+      const goto_programt::instructiont &goto_instruction=*cur_state->source.pc;
+
+      // Update target
+      goto_instruction.targets.pop_back();
+      goto_instruction.targets.push_back(frame.throw_target);
+
+      frame.has_throw_target = false;
+    }
   }
   else // push
   {
@@ -57,6 +73,9 @@ void goto_symext::symex_catch()
         it!=instruction.targets.end();
         it++, i++)
       frame.catch_map[exception_list[i].id()]=*it;
+
+    // Increase program counter
+    cur_state->source.pc++;
   }
 }
 
@@ -142,10 +161,10 @@ void goto_symext::symex_throw()
       goto_symex_statet::framet::catch_mapt::const_iterator
         c_it=frame->catch_map.find(e_it->id());
 
-      if(c_it!=frame->catch_map.end())
+      if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
       {
-        throw_target = (*c_it).second;
-        has_throw_target=true;
+        frame->throw_target = (*c_it).second;
+        frame->has_throw_target=true;
         last_throw = &instruction; // save last throw
         return;
       }
@@ -154,19 +173,22 @@ void goto_symext::symex_throw()
         // Do we have an ellipsis?
         c_it=frame->catch_map.find("ellipsis");
 
-        if(c_it!=frame->catch_map.end())
+        if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
         {
-          throw_target = (*c_it).second;
-          has_throw_target=true;
+          frame->throw_target = (*c_it).second;
+          frame->has_throw_target=true;
           last_throw = &instruction; // save last throw
           return;
         }
 
-        // An un-caught exception. Error
-        const std::string &msg="Throwing an exception of type " +
-          e_it->id().as_string() + " but there is not catch for it.";
-        claim(false_exprt(), msg);
-        return;
+        if(!frame->has_throw_target)
+        {
+          // An un-caught exception. Error
+          const std::string &msg="Throwing an exception of type " +
+              e_it->id().as_string() + " but there is not catch for it.";
+          claim(false_exprt(), msg);
+          return;
+        }
       }
     }
     last_throw = &instruction; // save last throw

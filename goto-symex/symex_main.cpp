@@ -119,13 +119,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    if (has_throw_target && has_catch) {
-      instruction.targets.pop_back();
-      instruction.targets.push_back(throw_target);
-      has_throw_target = false;
-      has_catch = false;
-    }
-
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
@@ -248,7 +241,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case CATCH:
     symex_catch();
-    cur_state->source.pc++;
     break;
 
   case THROW:
