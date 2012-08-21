@@ -4327,11 +4327,8 @@ bool Parser::rTypeidExpr(exprt &exp)
     if(rTypeName(tname))
       if(lex->GetToken(cp)==')')
       {
-        //exp=new ireptTypeidExpr(new Leaf(tk),
-        //                        irept::List(new Leaf(op), tname,
-        //                        new Leaf(cp)));
-
         exp=exprt("typeid");
+        exp.set("type", tname);
         set_location(exp, tk);
         return true;
       }
@@ -4342,12 +4339,8 @@ bool Parser::rTypeidExpr(exprt &exp)
     if(rExpression(subexp))
       if(lex->GetToken(cp)==')')
       {
-        // exp=new ireptTypeidExpr(new Leaf(tk),
-        //                              irept::List(
-        //                                  irept::List(new Leaf(op), subexp, new Leaf(cp))
-        //                              ));
-
         exp=exprt("typeid");
+        exp.move_to_operands(subexp);
         set_location(exp, tk);
         return true;
       }
