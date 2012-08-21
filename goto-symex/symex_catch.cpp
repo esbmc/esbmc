@@ -81,14 +81,14 @@ void goto_symext::symex_throw()
     instruction.code.find("exception_list").get_sub();
 
   // go through the call stack, beginning with the top
-  for(goto_symex_statet::call_stackt::const_reverse_iterator
+  for(goto_symex_statet::call_stackt::reverse_iterator
       s_it=cur_state->call_stack.rbegin();
       s_it!=cur_state->call_stack.rend();
       s_it++)
   {
-    const goto_symex_statet::framet &frame=*s_it;
+    goto_symex_statet::framet *frame=&(*s_it);
 
-    if(frame.catch_map.empty()) continue;
+    if(frame->catch_map.empty()) continue;
 
     // throw without argument, we must rethrow last exception
     if(!exceptions_thrown.size())
@@ -115,12 +115,12 @@ void goto_symext::symex_throw()
         e_it++)
     {
       // Check if we can throw the exception
-      if(frame.has_throw_decl)
+      if(frame->has_throw_decl)
       {
         goto_symex_statet::framet::throw_list_sett::const_iterator
-          s_it=frame.throw_list_set.find(e_it->id());
+          s_it=frame->throw_list_set.find(e_it->id());
 
-        if(s_it==frame.throw_list_set.end())
+        if(s_it==frame->throw_list_set.end())
         {
           std::string msg=std::string("Trying to throw an exception ") +
             std::string("but it's not allowed by declaration.\n\n");
@@ -128,8 +128,8 @@ void goto_symext::symex_throw()
           msg += "\n  Allowed exceptions:";
 
           for(goto_symex_statet::framet::throw_list_sett::iterator
-              s_it1=frame.throw_list_set.begin();
-              s_it1!=frame.throw_list_set.end();
+              s_it1=frame->throw_list_set.begin();
+              s_it1!=frame->throw_list_set.end();
               ++s_it1)
             msg+= "\n   - " + std::string((*s_it1).c_str());
 
@@ -140,9 +140,9 @@ void goto_symext::symex_throw()
 
       // We can throw it, look on the map if we have a catch for it
       goto_symex_statet::framet::catch_mapt::const_iterator
-        c_it=frame.catch_map.find(e_it->id());
+        c_it=frame->catch_map.find(e_it->id());
 
-      if(c_it!=frame.catch_map.end())
+      if(c_it!=frame->catch_map.end())
       {
         throw_target = (*c_it).second;
         has_throw_target=true;
@@ -152,9 +152,9 @@ void goto_symext::symex_throw()
       else // We don't have a catch for it
       {
         // Do we have an ellipsis?
-        c_it=frame.catch_map.find("ellipsis");
+        c_it=frame->catch_map.find("ellipsis");
 
-        if(c_it!=frame.catch_map.end())
+        if(c_it!=frame->catch_map.end())
         {
           throw_target = (*c_it).second;
           has_throw_target=true;
