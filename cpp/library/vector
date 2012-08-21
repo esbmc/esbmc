@@ -32,6 +32,7 @@ public:
 		{
 			pointer = i.pointer;
 			pos = i.pos;
+			vec_pos = i.vec_pos;
 		}
 		iterator(){
 
@@ -42,43 +43,44 @@ public:
 		iterator& operator=(const iterator& i){
 			pointer = i.pointer;
 			pos = i.pos;
+			vec_pos = i.vec_pos;
 			return *this;
 		}
 
 		T* operator -> ();
 
 		T& operator * (){
-			return *pointer;
+			return vec_pos[pos];
 		}
 
 		iterator& operator ++ (){
+			pointer+=sizeof(T);
+			pos++;
+			return *this;
+
+		}
+		iterator& operator ++ (int b){
 			iterator buffer;
 			buffer.pointer = pointer;
 			buffer.pos = pos;
+			buffer.vec_pos = vec_pos;
 			pointer++;
 			pos++;
 			return buffer;
 		}
-		iterator& operator ++ (int b){
-			pointer+=sizeof(T);
-			pos++;
-			return *this;
-		}
 
 		iterator& operator -- (){
-			iterator buffer;
-			buffer.pointer = pointer;
-			buffer.pos = pos;
 			pointer-=sizeof(T);
 			pos--;
-			return buffer;
+			return *this;
 		}
 		iterator& operator -- (int b){
 			iterator buffer;
-			pointer-=sizeof(T);
-			pos--;
 			buffer.pointer = pointer;
 			buffer.pos = pos;
+			buffer.vec_pos = vec_pos;
+			pointer--;
+			pos--;
 			return buffer;
 		}
 
@@ -106,11 +108,24 @@ public:
 			buffer.pos = pos + n;
 			return buffer;
 		}
-		iterator operator - (int) const;
+		iterator operator - (int n) const{
+			iterator buffer;
+			buffer.pointer = pointer - sizeof(T) * n;
+			buffer.pos = pos - n;
+			return buffer;
+		}
 		iterator operator - (const iterator&) const;
 
-		iterator& operator += (int);
-		iterator& operator -= (int);
+		iterator& operator += (int n){
+			pointer += sizeof(T) * n;
+			pos += n;
+			return *this;
+		}
+		iterator& operator -= (int n){
+			pointer -= sizeof(T) * n;
+			pos -= n;
+			return *this;
+		}
 	};
 
 	class const_iterator
@@ -132,6 +147,8 @@ public:
 		}
 		const_iterator& operator=(const const_iterator& i){
 			pointer = i.pointer;
+			pos = i.pos;
+			vec_pos = i.vec_pos;
 		}
 
 		T* operator -> ();
