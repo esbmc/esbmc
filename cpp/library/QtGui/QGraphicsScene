@@ -6,8 +6,6 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QGraphicsItem"
-
 class QObject
 {
 public:
@@ -18,5 +16,5 @@ public:
 class QGraphicsScene{
 public:
 	QGraphicsScene ( QObject * parent = 0 ){}
-	void	addItem ( QGraphicsItem * item ){}
+	void	addItem ( QGraphicsPixmapItem * item ){}
 };
