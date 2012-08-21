@@ -20,12 +20,12 @@ public:
 	string str ( ) const;
 //	Virtual protected members
 protected:
-	streambuf* setbuf ( char* s, streamsize n);
-	streampos seekoff ( streamoff off, ios_base::seekdir way, ios_base::openmode which = ios_base::in | ios_base::out );
-	streampos seekpos ( streampos sp, ios_base::openmode which = ios_base::in | ios_base::out );
-	int underflow ( );
-	int pbackfail ( int c = EOF );
-	int overflow ( int c = EOF );
+	streambuf* setbuf ( char* s, streamsize n) {}
+	streampos seekoff ( streamoff off, ios_base::seekdir way, ios_base::openmode which = ios_base::in | ios_base::out ) {}
+	streampos seekpos ( streampos sp, ios_base::openmode which = ios_base::in | ios_base::out ){}
+	int underflow ( ){}
+	int pbackfail ( int c = EOF ){}
+	int overflow ( int c = EOF ){}
 
 };
 

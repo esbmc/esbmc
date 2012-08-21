@@ -823,6 +823,10 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 
   // next, find out if we do an array
 
+//  const contextt &ctxt = namespacet::get_context();
+//  ctxt.show(std::cout);
+
+
   if(expr.type().id()=="array")
   {
     // first typecheck subtype
@@ -889,8 +893,32 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
       object_expr,
       expr.operands());
 
+  //Begin: B. Savino
+  if(expr.type().subtype().id()=="symbol") {
+	  const symbolt &base_symbol = lookup(expr.type().subtype().identifier());
+	  if(base_symbol.type.id()=="struct") {
+		  const struct_typet &struct_type=
+		     to_struct_type(base_symbol.type);
+		  const struct_typet::componentst &components=
+		     struct_type.components();
+          for(struct_typet::componentst::const_iterator c_it =
+          	components.begin(); c_it != components.end(); c_it++) {
+        	  if(c_it->get_bool("is_virtual") && !(c_it->get_bool("is_pure_virtual"))) {
+				  const symbolt &member_function = lookup(c_it->get_name());
+				  if(member_function.value.is_nil()) {
+					  err_location(member_function.location);
+					  str << "The virtual function isn't pure virtual and hasn't a function implementation";
+					  throw 0;
+        		  }
+       		  }
+          }
+	  }
+  }
+ //End: B. Savino
+
   expr.add("initializer").swap(code);
   expr.remove("operands");
+
 }
 
 /*******************************************************************\

@@ -188,6 +188,24 @@ std::ostream& goto_programt::output_instruction(
     out << "ATOMIC_END" << std::endl;
     break;
 
+  case THROW_DECL:
+    out << "THROW_DECL (";
+
+    {
+      const irept::subt &throw_list=
+        it->code.find("throw_list").get_sub();
+
+      for(unsigned int i=0; i<throw_list.size(); ++i)
+      {
+        if(i) out << ", ";
+        out << throw_list[i].id();
+      }
+      out << ")";
+    }
+
+    out << std::endl;
+    break;
+
   default:
     throw "unknown statement";
   }

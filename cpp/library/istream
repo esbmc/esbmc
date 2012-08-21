@@ -12,7 +12,7 @@ namespace std
 class istream: virtual public ios
 {
 public:
-  virtual ~istream ();
+  virtual ~istream (){}
   istream(int _id = 0): id(_id) {
 	  ios();
 	  _gcount = 0;

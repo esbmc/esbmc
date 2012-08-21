@@ -8,7 +8,7 @@ class Bird {
 
 class FlyingBird: public Bird {
   public:
-    virtual void fly();
+    virtual void fly(){}
     virtual int g(void) { return 42; }
 };
 

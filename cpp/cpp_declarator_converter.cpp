@@ -485,6 +485,12 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.pretty_name=pretty_name;
   symbol.mode=cpp_typecheck.current_mode;
 
+  // We always insert throw_decl to the begin of the function
+  if(declarator.throw_decl().statement() == "throw_decl")
+    symbol.value.operands().insert(
+        symbol.value.operands().begin(),
+        declarator.throw_decl());
+
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
      symbol.value.is_not_nil())

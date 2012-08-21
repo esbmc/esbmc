@@ -1772,7 +1772,7 @@ bool Parser::rConstructorDecl(
   cv.make_nil();
   optCvQualify(cv);
 
-  optThrowDecl(constructor.throw_decl());
+  optThrowDecl(constructor.throw_decl()); // ignore in this version
 
   if(lex->LookAhead(0)==':')
   {
@@ -1811,13 +1811,12 @@ bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  exprt p=exprt("throw_list");
+  codet p=codet("throw_decl");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
-    throw_decl=p;
-
     lex->GetToken(tk);
+    set_location(p, tk);
 
     if(lex->GetToken(tk)!='(')
       return false;
@@ -1857,15 +1856,17 @@ bool Parser::optThrowDecl(exprt &throw_decl)
         lex->GetToken(tk);
       }
 
-      p.get_sub().push_back(declaration);
+      codet statement=codet("decl");
+      statement.operands().push_back(declaration);
+
+      p.operands().push_back(statement);
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
-  }
 
-  if(p.get_sub().size())
     throw_decl=p;
+  }
 
   return true;
 }
@@ -2098,7 +2099,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
-  exprt throw_decl(static_cast<const exprt &>(get_nil_irep()));
+  codet throw_decl("nil");
 
   for(;;)
   {
@@ -2138,7 +2139,7 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      optThrowDecl(throw_decl); // ignore in this version
+      optThrowDecl(throw_decl);
 
       if(lex->LookAhead(0)==':')
       {
@@ -2200,7 +2201,7 @@ bool Parser::rDeclarator(
   if(method_qualifier.is_not_nil())
     declarator.method_qualifier().swap(method_qualifier);
 
-  if(throw_decl.is_not_nil())
+  if(throw_decl.statement()!="nil")
     declarator.throw_decl().swap(throw_decl);
 
   declarator.type().swap(d_outer);
@@ -5906,6 +5907,8 @@ bool Parser::rTryStatement(codet &statement)
     statement.move_to_operands(body);
   }
 
+  bool has_catch_ellipsis = false;
+
   // iterate while there are catch clauses
   do
   {
@@ -5921,6 +5924,8 @@ bool Parser::rTryStatement(codet &statement)
 
     if(lex->LookAhead(0)==TOK_ELLIPSIS)
     {
+      has_catch_ellipsis = true;
+
       lex->GetToken(cp);
 
       declaration = cpp_declarationt();
@@ -5937,6 +5942,20 @@ bool Parser::rTryStatement(codet &statement)
     }
     else
     {
+      // catch(...) must always be the last catch
+      if(has_catch_ellipsis)
+      {
+        std::string message=
+          "‘...’ handler must be the last handler for its try block";
+
+        locationt location;
+        location.set_file(op.filename);
+        location.set_line(i2string(op.line_no));
+
+        parser->print(1, message, -1, location);
+        return false;
+      }
+
       if(!rArgDeclaration(declaration))
         return false;
     }
