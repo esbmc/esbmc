@@ -5,6 +5,10 @@
 
 #include "cstring"
 
+void free(void *p);
+//void *malloc(unsigned);
+//void *malloc(int);
+
 unsigned int nondet_uint();
 
 double atof ( const char * str );
