@@ -3369,6 +3369,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     expr2tc endisequal;
     try {
       uint64_t type_size = expr->type->get_width() / 8;
+
       expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
@@ -3377,7 +3378,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       // offset-to-end expression.
       // First divide it by eight, because it's in bits.
       expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
-      const expr2tc size_expr = expr2tc(new div2t(uint_type2(), e->size,eight));
+      expr2tc size_expr = expr2tc(new div2t(uint_type2(), e->size,eight));
 
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
@@ -3398,11 +3399,15 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
-    // of the address space (ie, wrap around). So, also assert that end > start
+    // of the address space (ie, wrap around). So, also assert that end > start.
+    // However, don't do that if the alloc size is 0, as that would be unsat.
+    expr2tc zero_size_alloc(new equality2t(end_sym, start_sym));
     expr2tc wraparound(new greaterthan2t(end_sym, start_sym));
-    z3::expr wraparound_eq;
+    z3::expr zero_alloc, wraparound_eq, bounds_eq;
+    convert_bv(zero_size_alloc, zero_alloc);
     convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    bounds_eq = zero_alloc || wraparound_eq;
+    assert_formula(bounds_eq);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
