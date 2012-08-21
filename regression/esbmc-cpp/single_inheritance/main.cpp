@@ -4,6 +4,7 @@ class Bird {
   public:
   virtual int f(void) { return 21; }
   virtual int g(void) { return 21; }
+  virtual ~Bird(){}
 };
 
 class FlyingBird: public Bird {
@@ -16,6 +17,8 @@ class Penguin: public Bird {
   public:
     virtual int f(void) { return 42; }
 };
+
+void FlyingBird::fly() { }
 
 int main(){
   Bird *b = new Bird();
