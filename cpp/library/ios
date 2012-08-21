@@ -132,7 +132,7 @@ public:
   class failure {};
 
   ios_base();
-  virtual ~ios_base();
+  virtual ~ios_base(){}
   ios_base (const ios_base&);
   ios_base& operator= (const ios_base&);
 };
@@ -145,7 +145,7 @@ public:
   typedef int streamoff;
 
   ios() {ios_base(); }
-  virtual ~ios();
+  virtual ~ios(){}
   mutable char  __fill;
   streambuf*    __streambuf;
   bool operator ! ( ) const;

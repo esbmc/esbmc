@@ -16,7 +16,7 @@ namespace std
 		iostream(int id = 0) { ostream(id); istream(id);}
 //		explicit iostream (streambuf * sb);
 //		iostream(const iostream&){ ostream(0); istream(0);} // disabled
-		virtual ~iostream ();
+		virtual ~iostream (){}
 		iostream& operator=(const iostream&); // disabled
 	};
 

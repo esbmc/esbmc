@@ -14,7 +14,7 @@ namespace std
 class filebuf: public streambuf{
 public:
 	  filebuf () {_fileopen = false; _filesize = nondet_uint();}
-	  virtual ~filebuf ();
+	  virtual ~filebuf (){}
 
 	  bool is_open ( ) { return _fileopen; }
 	  filebuf * open ( const char * s, ios_base::openmode mode ) {

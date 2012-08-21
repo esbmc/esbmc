@@ -21,7 +21,7 @@ public:
 	}
 	ostream(const ostream&); // disabled
 
-	virtual ~ostream();
+	virtual ~ostream(){}
 
 	int id;
 	streamsize width ( ) const;
