@@ -433,7 +433,7 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& val, Pr pred) {
 template<class InputIterator, class OutputIterator>
 OutputIterator copy(InputIterator first, InputIterator last,
 		OutputIterator result) {
-	//while (first!=last) *result++ = *first++;
+	while (first!=last) *result++ = *first++;
 	return result;
 }
 
@@ -832,7 +832,21 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val) {
 }
 
 template<class FwdIt, class Ty, class Pr>
-FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred);
+FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred) {
+#if 0
+	FwdIt it;
+	FwdIt count, step;
+	count = distance(first,last);
+	while (count>0)
+	{
+		it = first; step=count/2; advance (it,step);
+		if (!comp(value,*it))
+		{	first=++it; count-=step+1;}
+		else count=step;
+	}
+	return first;
+#endif
+}
 
 template<class FwdIt, class Ty>
 pair<FwdIt, FwdIt> equal_range(FwdIt first, FwdIt last, const Ty& val) {
