@@ -17,46 +17,8 @@
 #ifndef BOOST_CONFIG_HPP
 #define BOOST_CONFIG_HPP
 
-// if we don't have a user config, then use the default location:
-#if !defined(BOOST_USER_CONFIG) && !defined(BOOST_NO_USER_CONFIG)
-#  define BOOST_USER_CONFIG <boost/config/user.hpp>
-#endif
-// include it first:
-#ifdef BOOST_USER_CONFIG
-#  include BOOST_USER_CONFIG
-#endif
-
-// if we don't have a compiler config set, try and find one:
-#if !defined(BOOST_COMPILER_CONFIG) && !defined(BOOST_NO_COMPILER_CONFIG) && !defined(BOOST_NO_CONFIG)
-#  include <boost/config/select_compiler_config.hpp>
-#endif
-// if we have a compiler config, include it now:
-#ifdef BOOST_COMPILER_CONFIG
-#  include BOOST_COMPILER_CONFIG
-#endif
-
-// if we don't have a std library config set, try and find one:
-#if !defined(BOOST_STDLIB_CONFIG) && !defined(BOOST_NO_STDLIB_CONFIG) && !defined(BOOST_NO_CONFIG) && defined(__cplusplus)
-#  include <boost/config/select_stdlib_config.hpp>
-#endif
-// if we have a std library config, include it now:
-#ifdef BOOST_STDLIB_CONFIG
-#  include BOOST_STDLIB_CONFIG
-#endif
-
-// if we don't have a platform config set, try and find one:
-#if !defined(BOOST_PLATFORM_CONFIG) && !defined(BOOST_NO_PLATFORM_CONFIG) && !defined(BOOST_NO_CONFIG)
-#  include <boost/config/select_platform_config.hpp>
-#endif
-// if we have a platform config, include it now:
-#ifdef BOOST_PLATFORM_CONFIG
-#  include BOOST_PLATFORM_CONFIG
-#endif
-
-// get config suffix code:
-#include <boost/config/suffix.hpp>
-
 #endif  // BOOST_CONFIG_HPP
+
 
 
 
