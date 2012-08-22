@@ -454,6 +454,7 @@ protected:
   void typecheck_expr_explicit_constructor_call(exprt &expr);
   void typecheck_expr_address_of(exprt &expr);
   void typecheck_expr_dereference(exprt &expr);
+  void typecheck_expr_typeid(exprt &expr);
   void typecheck_expr_function_identifier(exprt &expr);
   void typecheck_expr_reference_to(exprt &expr);
   void typecheck_expr_this(exprt &expr);

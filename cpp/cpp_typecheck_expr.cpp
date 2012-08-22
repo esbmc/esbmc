@@ -1618,6 +1618,23 @@ void cpp_typecheckt::add_implicit_dereference(exprt &expr)
 
 /*******************************************************************\
 
+Function: cpp_typecheckt::typecheck_expr_typeid
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
+{
+
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheckt::typecheck_side_effect_function_call
 
 Inputs:
@@ -1655,10 +1672,15 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   // Backup of the original operand
   exprt op0=expr.function();
 
-  // We'll ignore typeid for now and handle it on goto-programs
+  // Check typeid and return, we'll only check its parameters
   if(op0.has_operands())
+  {
     if(op0.op0().statement()=="typeid")
+    {
+      typecheck_expr_typeid(op0);
       return;
+    }
+  }
 
   // now do the function -- this has been postponed
   typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));
