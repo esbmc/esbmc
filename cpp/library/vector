@@ -340,15 +340,20 @@ public:
 
 	vector(const vector<T>& x): _size(0),  _capacity(1)
 	{
-		//model
+		_size = 0;
+		buf[0] = 0;
+		for(int i = 0 ; i < x.size() ; i++)
+			push_back(x[i]);
+		verify_capacity();
 	}
 
 	vector<T>& operator=(const vector<T>& x){
 		_size = 0;
-		//*buf = 0;
+		buf[0] = 0;
 		for(int i = 0 ; i < x.size() ; i++)
 			push_back(x[i]);
 		verify_capacity();
+		return *this;
 	}
 	//void assign ( T first, T last );
 	void assign(size_type n, const T& u){
