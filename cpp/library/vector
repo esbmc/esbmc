@@ -105,6 +105,94 @@ public:
 			return iterator(pointer-=n,pos-=n,vec_pos);
 		}
 	};
+/*
+	class ostream_iterator{
+		public:
+			T* pointer;
+			int pos;
+			T* vec_pos;
+
+			ostream_iterator(const ostream_iterator& i)
+			{
+				pointer = i.pointer;
+				pos = i.pos;
+				vec_pos = i.vec_pos;
+			}
+			ostream_iterator(){
+
+			}
+			ostream_iterator(ostream& o,char a){
+
+			}
+			ostream_iterator(T* p){
+				pointer = p;
+			}
+			ostream_iterator(T* ppointer,int ppos,T* pvec_pos){
+				pointer = ppointer;
+				pos = ppos;
+				vec_pos = pvec_pos;
+			}
+			ostream_iterator& operator=(const ostream_iterator& i){
+				pointer = i.pointer;
+				pos = i.pos;
+				vec_pos = i.vec_pos;
+				return *this;
+			}
+
+			T* operator -> ();
+
+			T& operator * (){
+				return vec_pos[pos];
+			}
+
+			ostream_iterator& operator ++ (){
+				return ostream_iterator(++pointer,++pos,vec_pos);
+			}
+			ostream_iterator& operator ++ (int b){
+				return ostream_iterator(pointer++,pos++,vec_pos);
+			}
+
+			ostream_iterator& operator -- (){
+				return ostream_iterator(--pointer,--pos,vec_pos);
+			}
+			ostream_iterator& operator -- (int b){
+				return ostream_iterator(pointer--,pos--,vec_pos);
+			}
+
+			bool operator == ( const ostream_iterator& i)const{
+				return (pointer == i.pointer);
+			}
+			bool operator != ( const ostream_iterator& i)const{
+				return (pointer != i.pointer);
+			}
+
+			bool operator < ( const ostream_iterator& i)const{
+				return (pointer < i.pointer);
+			}
+			bool operator > ( const ostream_iterator& i)const{
+				return (pointer > i.pointer);
+			}
+
+
+			bool operator <= ( const ostream_iterator&)const;
+			bool operator >= ( const ostream_iterator&)const;
+
+			ostream_iterator operator + (int n) const{
+				return ostream_iterator(pointer + n,pos + n,vec_pos);
+			}
+			ostream_iterator operator - (int n) const{
+				return ostream_iterator(pointer - n,pos - n,vec_pos);
+			}
+			ostream_iterator operator - (const ostream_iterator&) const;
+
+			ostream_iterator& operator += (int n){
+				return ostream_iterator(pointer+=n,pos+=n,vec_pos);
+			}
+			ostream_iterator& operator -= (int n){
+				return ostream_iterator(pointer-=n,pos-=n,vec_pos);
+			}
+		};
+*/
 
 	class const_iterator
 	{
