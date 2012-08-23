@@ -78,6 +78,8 @@ protected:
   bool typecheck_module(
     contextt &context,
     const std::string &module);
+
+  void typecheck_virtual_methods(contextt &context);
 };
  
 #endif
