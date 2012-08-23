@@ -71,6 +71,7 @@ template <class T, class charT=char, class traits=char_traits<charT>,
         ostream_iterator(ostream&);
         ostream_iterator(ostream& s, const char* delimiter);
         T& operator*() { return value; }
+        ostream_iterator& operator++(int n);
     private:
         T value;
 };
