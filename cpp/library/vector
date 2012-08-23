@@ -40,6 +40,11 @@ public:
 		iterator(T* p){
 			pointer = p;
 		}
+		iterator(T* ppointer,int ppos,T* pvec_pos){
+			pointer = ppointer;
+			pos = ppos;
+			vec_pos = pvec_pos;
+		}
 		iterator& operator=(const iterator& i){
 			pointer = i.pointer;
 			pos = i.pos;
@@ -54,34 +59,17 @@ public:
 		}
 
 		iterator& operator ++ (){
-			pointer+=sizeof(T);
-			pos++;
-			return *this;
-
+			return iterator(++pointer,++pos,vec_pos);
 		}
 		iterator& operator ++ (int b){
-			iterator buffer;
-			buffer.pointer = pointer;
-			buffer.pos = pos;
-			buffer.vec_pos = vec_pos;
-			pointer++;
-			pos++;
-			return buffer;
+			return iterator(pointer++,pos++,vec_pos);
 		}
 
 		iterator& operator -- (){
-			pointer-=sizeof(T);
-			pos--;
-			return *this;
+			return iterator(--pointer,--pos,vec_pos);
 		}
 		iterator& operator -- (int b){
-			iterator buffer;
-			buffer.pointer = pointer;
-			buffer.pos = pos;
-			buffer.vec_pos = vec_pos;
-			pointer--;
-			pos--;
-			return buffer;
+			return iterator(pointer--,pos--,vec_pos);
 		}
 
 		bool operator == ( const iterator& i)const{
@@ -103,28 +91,18 @@ public:
 		bool operator >= ( const iterator&)const;
 
 		iterator operator + (int n) const{
-			iterator buffer;
-			buffer.pointer = pointer + sizeof(T) * n;
-			buffer.pos = pos + n;
-			return buffer;
+			return iterator(pointer + n,pos + n,vec_pos);
 		}
 		iterator operator - (int n) const{
-			iterator buffer;
-			buffer.pointer = pointer - sizeof(T) * n;
-			buffer.pos = pos - n;
-			return buffer;
+			return iterator(pointer - n,pos - n,vec_pos);
 		}
 		iterator operator - (const iterator&) const;
 
 		iterator& operator += (int n){
-			pointer += sizeof(T) * n;
-			pos += n;
-			return *this;
+			return iterator(pointer+=n,pos+=n,vec_pos);
 		}
 		iterator& operator -= (int n){
-			pointer -= sizeof(T) * n;
-			pos -= n;
-			return *this;
+			return iterator(pointer-=n,pos-=n,vec_pos);
 		}
 	};
 
@@ -315,8 +293,9 @@ public:
 
 	explicit vector(size_type n): _size(0),  _capacity(1)
 	{
-		_size = n;
 		_capacity = n;
+		for(int i = 0;i < n;i++)
+			push_back(T());
 	}
 
 	explicit vector(void t[], void* addr): _size(0),  _capacity(1)
