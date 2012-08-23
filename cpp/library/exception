@@ -50,10 +50,10 @@ namespace std {
 
     // This declaration is not useless:
     // http://gcc.gnu.org/onlinedocs/gcc-3.0.2/gcc_6.html#SEC118
-    virtual ~bad_exception();
+    virtual ~bad_exception(){}
 
     // See comment in eh_exception.cc.
-    virtual const char* what() const;
+    virtual const char* what() const{}
   };
 }
 
