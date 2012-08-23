@@ -142,10 +142,17 @@ public:
 		return m;
 	}
 
-	ostream& operator<< (char*& val) {
-
-		int tam = strlen(val);
-		_string.append(val, tam);
+//	ostream& operator<< (char* &val) {
+//
+//		int tam = strlen(val);
+//		_string.append(val, tam);
+//		ostream m;
+//		return m;
+//	}
+	ostream& operator<< (char* val) {
+		const char* str = val;
+		int tam = strlen(str);
+		_string.append(str, tam);
 		ostream m;
 		return m;
 	}
