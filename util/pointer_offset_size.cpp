@@ -39,6 +39,7 @@ mp_integer member_offset(
       return -1; // give up
 
     result += sub_size;
+    idx++;
   }
 
   return result;
