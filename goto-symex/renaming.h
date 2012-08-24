@@ -100,7 +100,7 @@ namespace renaming {
       current_names.erase(name_record(to_symbol2t(symbol)));
     }
 
-    void rename(const expr2tc &symbol, unsigned frame)
+    void rename_to(const expr2tc &symbol, unsigned frame)
     {
       // Given that this is level1, use base symbol.
       current_names[name_record(to_symbol2t(symbol))]=frame;
@@ -212,7 +212,7 @@ namespace renaming {
                                  const expr2tc &assigned_value);
 
     virtual void rename(expr2tc &expr) const;
-    virtual void rename(expr2tc &expr, unsigned count)=0;
+    virtual void rename_to(expr2tc &expr, unsigned count)=0;
 
     virtual void get_ident_name(expr2tc &symbol) const;
 

@@ -282,7 +282,7 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
   valuet &entry = current_names[name_record(to_symbol2t(lhs_symbol))];
 
   // This'll update entry beneath our feet; could reengineer it in the future.
-  rename(lhs_symbol, entry.count + 1);
+  rename_to(lhs_symbol, entry.count + 1);
 
   symbol2t &symbol = to_symbol2t(lhs_symbol);
   symbol2t::renaming_level lev = (symbol.rlevel == symbol2t::level0 ||
