@@ -948,9 +948,9 @@ execution_statet::ex_state_level2t::rename_to(expr2tc &lhs_sym, unsigned count)
 }
 
 void
-execution_statet::ex_state_level2t::rename(expr2tc &identifier)
+execution_statet::ex_state_level2t::rename(expr2tc &identifier, bool no_const_p)
 {
-  renaming::level2t::rename(identifier);
+  renaming::level2t::rename(identifier, no_const_p);
 }
 
 dfs_execution_statet::~dfs_execution_statet(void)

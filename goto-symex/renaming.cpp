@@ -72,7 +72,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-void renaming::level1t::rename(expr2tc &expr) const
+void renaming::level1t::rename(expr2tc &expr, bool no_const_prop) const
 {
   // rename all the symbols with their last known value
 
@@ -101,17 +101,17 @@ void renaming::level1t::rename(expr2tc &expr) const
   }
   else if (is_address_of2t(expr))
   {
-    rename(to_address_of2t(expr).ptr_obj);
+    rename(to_address_of2t(expr).ptr_obj, no_const_prop);
   }
   else
   {
     // do this recursively
     Forall_operands2(it, oper_list, expr)
-      rename(**it);
+      rename(**it, no_const_prop);
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr) const
+void renaming::level2t::rename(expr2tc &expr, bool no_const_prop) const
 {
   // rename all the symbols with their last known value
 
@@ -144,7 +144,7 @@ void renaming::level2t::rename(expr2tc &expr) const
       else
         lev = symbol2t::level2;
 
-      if (!is_nil_expr(it->second.constant))
+      if (!is_nil_expr(it->second.constant) && !no_const_prop)
         expr = it->second.constant; // sym is now invalid reference
       else
         expr = expr2tc(new symbol2t(sym.type, sym.thename, lev,
@@ -172,7 +172,7 @@ void renaming::level2t::rename(expr2tc &expr) const
   {
     // do this recursively
     Forall_operands2(it, oper_list, expr)
-      rename(**it);
+      rename(**it, no_const_prop);
   }
 }
 
