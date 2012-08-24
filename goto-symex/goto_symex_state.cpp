@@ -226,7 +226,16 @@ void goto_symex_statet::rename(expr2tc &expr)
   else if (is_address_of2t(expr))
   {
     address_of2t &addrof = to_address_of2t(expr);
-    rename_address(addrof.ptr_obj);
+
+    // Don't rename symbols to level2, we want pointer values of data objects.
+    // However, there's one exception: addresses of multidimensional arrays are
+    // actually just pointer arith, and thus can (and must) be renamed fully.
+    if (is_byte_extract2t(addrof.ptr_obj)) {
+      top().level1.rename(addrof.ptr_obj);
+      level2.rename(addrof.ptr_obj);
+    } else {
+      rename_address(addrof.ptr_obj);
+    }
   }
   else
   {
