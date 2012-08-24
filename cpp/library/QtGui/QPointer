@@ -6,10 +6,7 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QObject"
-
-class QGraphicsScene{
-public:
-	QGraphicsScene ( QObject * parent = 0 ){}
-	void	addItem ( QGraphicsPixmapItem * item ){}
-};
+class QPointer{
+	QPointer(){}
+	~QPointer(){}
+}

@@ -6,10 +6,11 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QObject"
+#include "QAbstractAnimation"
 
-class QGraphicsScene{
+class QPropertyAnimation{
 public:
-	QGraphicsScene ( QObject * parent = 0 ){}
-	void	addItem ( QGraphicsPixmapItem * item ){}
+	QPropertyAnimation(){}
+	~QPropertyAnimation(){}
 };
+
