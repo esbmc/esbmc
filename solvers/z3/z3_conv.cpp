@@ -1544,6 +1544,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
     convert_identifier_pointer(obj.ptr_obj, identifier, output);
+  } else if (is_constant_array2t(obj.ptr_obj)) {
+    // XXXjmorse - this whole thing should be avoided anyway.
+    const constant_array2t &arr = to_constant_array2t(obj.ptr_obj);
+    std::string identifier =
+      "address_of_array_const(" + arr.pretty(0) + ")";
+    convert_identifier_pointer(obj.ptr_obj, identifier, output);
+
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.

@@ -95,6 +95,12 @@ compute_pointer_offset(const expr2tc &expr)
 
     return expr2tc(new constant_int2t(uint_type2(), result));
   }
+  else if (is_constant_array2t(expr))
+  {
+    // Some code, somewhere, is renaming a constant array into a dereference
+    // target. The offset into the base object is nothing.
+    return expr2tc(new constant_int2t(uint_type2(), BigInt(0)));
+  }
   else
   {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
