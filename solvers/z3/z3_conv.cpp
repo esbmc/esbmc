@@ -3198,8 +3198,14 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // And calculate what it is in pointer elements.
       const pointer_type2t &ptr_type = to_pointer_type(type1);
       const type2tc &subtype = ns.follow(ptr_type.subtype);
-      expr2tc elem_size(new constant_int2t(uint_type2(),
-                                           subtype->get_width() / 8));
+      expr2tc elem_size;
+      if (is_empty_type(subtype)) {
+        // GCC extension, arith on void pointers has a multiplier of one.
+        elem_size = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
+      } else {
+        elem_size = expr2tc(new constant_int2t(uint_type2(),
+                                               subtype->get_width() / 8));
+      }
       expr2tc result(new div2t(uint_type2(), sub, elem_size));
       convert_bv(result, output);
       break;
