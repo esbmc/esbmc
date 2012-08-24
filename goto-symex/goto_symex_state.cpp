@@ -232,7 +232,7 @@ void goto_symex_statet::rename(expr2tc &expr)
     // actually just pointer arith, and thus can (and must) be renamed fully.
     if (is_byte_extract2t(addrof.ptr_obj)) {
       top().level1.rename(addrof.ptr_obj);
-      level2.rename(addrof.ptr_obj);
+      level2.rename(addrof.ptr_obj, true);
     } else {
       rename_address(addrof.ptr_obj);
     }
