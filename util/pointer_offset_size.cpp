@@ -35,8 +35,10 @@ mp_integer member_offset(
 #endif
 
     mp_integer sub_size=pointer_offset_size(**it);
-    if(sub_size==-1) return -1; // give up
-    result+=sub_size;
+    if (sub_size==-1)
+      return -1; // give up
+
+    result += sub_size;
   }
 
   return result;
