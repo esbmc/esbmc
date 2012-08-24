@@ -1561,6 +1561,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
                                        to_typecast2t(obj.ptr_obj).from));
     tmp.get()->type = obj.type;
     convert_bv(tmp, output);
+  } else if (is_byte_extract2t(obj.ptr_obj)) {
+    // Address of an extract is the address of whatever we're extracting from,
+    // plus the offset of the extract.
+    const byte_extract2t &extract = to_byte_extract2t(obj.ptr_obj);
+    expr2tc new_addrof(new address_of2t(char_type2(), extract.source_value));
+    expr2tc add(new add2t(new_addrof->type, new_addrof, extract.source_offset));
+    convert_bv(add, output);
   } else {
     throw new conv_error("Unrecognized address_of operand");
   }

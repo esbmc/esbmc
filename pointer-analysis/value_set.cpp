@@ -644,6 +644,24 @@ void value_sett::get_reference_set_rec(
     get_reference_set_rec(cast.from, dest, ns);
     return;
   }
+  else if (is_byte_extract2t(expr))
+  {
+    // Address of byte extracts can refer to the object that is being extracted
+    // from.
+    const byte_extract2t &extract = to_byte_extract2t(expr);
+
+    // This may or may not have a constant offset
+    objectt o;
+    if (is_constant_int2t(extract.source_offset)) {
+      o.offset = to_constant_int2t(extract.source_offset).constant_value;
+      o.offset_is_set = true;
+    } else {
+      o.offset_is_set = false;
+    }
+
+    insert(dest, extract.source_value, o);
+    return;
+  }
 
   expr2tc unknown = expr2tc(new unknown2t(expr->type));
   insert(dest, unknown);
