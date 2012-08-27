@@ -421,4 +421,16 @@ src[i] = c;
 
 return src;
 }
+
+void *memset(void *s, int c, int n) {
+size_t i;
+int *src = (int*) s;
+
+for (i = 0; i < n; i++) {
+src[i] = c;
+}
+
+return src;
+}
+
 #endif
