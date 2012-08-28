@@ -35,6 +35,8 @@ char* nondet_charPointer();
 char nondet_char();
 class smanip {};
 
+int sprintf ( char * str, const char * format, ... );
+
 //#ifndef _size_t
 //typedef unsigned int size_t;
 //#endif
