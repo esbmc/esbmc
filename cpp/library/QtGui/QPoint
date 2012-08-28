@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QPoint {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QPoint();
+	~QPoint();
 };

@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QDesktopWidget {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QDesktopWidget();
+	~QDesktopWidget();
 };

@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QtGlobal {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QtGlobal();
+	~QtGlobal();
 };

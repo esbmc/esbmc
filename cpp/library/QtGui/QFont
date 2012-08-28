@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QFont {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QFont();
+	~QFont();
 };

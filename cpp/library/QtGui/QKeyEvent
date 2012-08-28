@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QKeyEvent {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QKeyEvent();
+	~QKeyEvent();
 };

@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QSequentialAnimationGroup {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QSequentialAnimationGroup();
+	~QSequentialAnimationGroup();
 };

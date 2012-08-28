@@ -6,8 +6,7 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QAbstractAnimation{
-public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
-};
+class QDebug{
+	QDebug(){}
+	~QDebug(){}
+}

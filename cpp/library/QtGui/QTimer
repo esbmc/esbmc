@@ -1,13 +1,15 @@
 /*******************************************************************\
 
+Module: 
 
 Author: Felipe Rodrigues
 
+Date: 
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+class QTimer {
 public:
-	QAbstractAnimation(){}
-	~QAbstractAnimation(){}
+	QTimer();
+	~QTimer();
 };
