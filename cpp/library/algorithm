@@ -12,6 +12,7 @@
 
 #include "iterator"
 #include "definitions.h"
+#include <utility>
 #include <vector>
 
 typedef bool (funcao)(int arg1, int arg2);
