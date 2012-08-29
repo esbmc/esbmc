@@ -60,7 +60,7 @@ void goto_symext::symex_catch()
         it!=instruction.targets.end();
         it++, i++)
     {
-      const expr2tc &entry = catch_ref.exception_list[i];
+      const irep_idt &entry = catch_ref.exception_list[i];
       frame.catch_map[entry]=*it;
       //std::cout << "exception_list[i].id(): " << exception_list[i].id() << std::endl;
       //std::cout << "(*it)->code: " << (*it)->code << std::endl;
@@ -122,7 +122,7 @@ void goto_symext::symex_throw()
       }
     }
 
-    forall_exprs(e_it, throw_ref.exception_list)
+    forall_names(e_it, throw_ref.exception_list)
     {
       goto_symex_statet::framet::catch_mapt::const_iterator
       c_it=frame.catch_map.find(*e_it);
@@ -162,8 +162,7 @@ void goto_symext::symex_throw()
       else
       {
         // Do we have an ellipsis?
-        expr2tc ellipsis(new code_cpp_ellipsis2t());
-        c_it=frame.catch_map.find(ellipsis);
+        c_it=frame.catch_map.find("ellipsis");
 
         if(c_it!=frame.catch_map.end())
         {

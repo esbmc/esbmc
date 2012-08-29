@@ -532,7 +532,6 @@ public:
     code_cpp_delete_id,
     code_cpp_catch_id,
     code_cpp_throw_id,
-    code_cpp_ellipsis_id,
     end_expr_id
   };
 
@@ -1706,7 +1705,6 @@ class code_cpp_del_array2t;
 class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
-class code_cpp_ellipsis2t;
 
 // Data definitions.
 
@@ -2323,24 +2321,26 @@ class code_cpp_catch_data : public code_base
 {
 public:
   code_cpp_catch_data(const type2tc &t, expr2t::expr_ids id,
-                      const std::vector<expr2tc> &el)
+                      const std::vector<irep_idt> &el)
     : code_base(t, id), exception_list(el) { }
   code_cpp_catch_data(const code_cpp_catch_data &ref)
     : code_base(ref), exception_list(ref.exception_list) { }
 
-  std::vector<expr2tc> exception_list;
+  std::vector<irep_idt> exception_list;
 };
 
 class code_cpp_throw_data : public code_base
 {
 public:
-  code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id,
-                      const std::vector<expr2tc> &l)
-    : code_base(t, id), exception_list(l) { }
+  code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
+                      const std::vector<irep_idt> &l)
+    : code_base(t, id), operand(o), exception_list(l) { }
   code_cpp_throw_data(const code_cpp_throw_data &ref)
-    : code_base(ref), exception_list(ref.exception_list) { }
+    : code_base(ref), operand(ref.operand), exception_list(ref.exception_list)
+      { }
 
-  std::vector<expr2tc> exception_list;
+  expr2tc operand;
+  std::vector<irep_idt> exception_list;
 };
 
 // Give everything a typedef name
@@ -2648,15 +2648,14 @@ typedef esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
         expr2tc, code_expression_data, &code_expression_data::operand>
         code_cpp_delete_expr_methods;
 typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
-        std::vector<expr2tc>, code_cpp_catch_data,
+        std::vector<irep_idt>, code_cpp_catch_data,
         &code_cpp_catch_data::exception_list>
         code_cpp_catch_expr_methods;
 typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
-        std::vector<expr2tc>, code_cpp_throw_data,
+        expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
+        std::vector<irep_idt>, code_cpp_throw_data,
         &code_cpp_throw_data::exception_list>
         code_cpp_throw_expr_methods;
-typedef esbmct::expr_methods<code_cpp_ellipsis2t, expr2t>
-        code_cpp_ellipsis_expr_methods;
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4104,7 +4103,7 @@ public:
 class code_cpp_catch2t : public code_cpp_catch_expr_methods
 {
 public:
-  code_cpp_catch2t(const std::vector<expr2tc> &el)
+  code_cpp_catch2t(const std::vector<irep_idt> &el)
     : code_cpp_catch_expr_methods(type_pool.get_empty(),
                                    code_cpp_catch_id, el) { }
   code_cpp_catch2t(const code_cpp_catch2t &ref)
@@ -4116,22 +4115,11 @@ public:
 class code_cpp_throw2t : public code_cpp_throw_expr_methods
 {
 public:
-  code_cpp_throw2t(const std::vector<expr2tc> &l)
-    : code_cpp_throw_expr_methods(type_pool.get_empty(), code_cpp_throw_id, l){}
+  code_cpp_throw2t(const expr2tc &o, const std::vector<irep_idt> &l)
+    : code_cpp_throw_expr_methods(type_pool.get_empty(), code_cpp_throw_id,
+                                  o, l){}
   code_cpp_throw2t(const code_cpp_throw2t &ref)
     : code_cpp_throw_expr_methods(ref) { }
-
-  static std::string field_names[esbmct::num_type_fields];
-};
-
-class code_cpp_ellipsis2t : public code_cpp_ellipsis_expr_methods
-{
-public:
-  code_cpp_ellipsis2t(void)
-    : code_cpp_ellipsis_expr_methods(type_pool.get_empty(),
-                                     code_cpp_ellipsis_id) { }
-  code_cpp_ellipsis2t(const code_cpp_ellipsis2t &ref)
-      : code_cpp_ellipsis_expr_methods(ref) { }
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4289,7 +4277,6 @@ expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
-expr_macros(code_cpp_ellipsis);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -4431,8 +4418,6 @@ typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
                        code_cpp_catch2tc;
 typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
                        code_cpp_throw2tc;
-typedef irep_container<code_cpp_ellipsis2t, expr2t::code_cpp_ellipsis_id>
-                       code_cpp_ellipsis2tc;
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,

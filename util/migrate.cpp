@@ -1161,20 +1161,19 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     // No type,
     const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
 
-    std::vector<expr2tc> expr_list;
+    std::vector<irep_idt> expr_list;
     for(irept::subt::const_iterator
         e_it=exceptions_thrown.begin();
         e_it!=exceptions_thrown.end();
         e_it++)
     {
-      expr2tc tmp;
-      migrate_expr((exprt&)*e_it, tmp);
-      expr_list.push_back(tmp);
+      expr_list.push_back(e_it->id());
     }
 
-    new_expr_ref = expr2tc(new code_cpp_throw2t(expr_list));
-  } else if (expr.id() == "ellipsis") {
-    return expr2tc(new code_cpp_ellipsis2t());
+    expr2tc operand;
+    migrate_expr(expr.op0(), operand);
+
+    new_expr_ref = expr2tc(new code_cpp_throw2t(operand, expr_list));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2143,14 +2142,13 @@ migrate_expr_back(const expr2tc &ref)
     exprt codeexpr("cpp-throw");
     irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
 
-    forall_exprs(it, ref2.exception_list) {
-      exceptions_thrown.push_back(migrate_expr_back(*it));
+    forall_names(it, ref2.exception_list) {
+      exceptions_thrown.push_back(irept(*it));
     }
 
+    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }
-  case expr2t::code_cpp_ellipsis_id:
-    return exprt("ellipsis");
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
   }
