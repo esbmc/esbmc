@@ -164,7 +164,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   {
     std::ostringstream str;
     str << "Encoding to solver time: ";
-    output_time(encode_stop - encode_stop, str);
+    output_time(encode_stop - encode_start, str);
     str << "s";
     status(str.str());
   }
