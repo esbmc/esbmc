@@ -434,7 +434,7 @@ void goto_convertt::do_cpp_new(
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
   t_a->location=rhs.find_location();
-  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
+  migrate_expr(neg_valid_expr, t_a->guard);
 
   migrate_expr(valid_expr, t_a->guard);
   t_a->guard = expr2tc(new not2t(t_a->guard));
@@ -459,7 +459,8 @@ void goto_convertt::do_cpp_new(
 #if TSE_PAPER
   //now set deallocated bit
   goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
-  t_d_i->code=code_assignt(deallocated_expr, false_exprt());
+  codet tmp = code_assignt(deallocated_expr, false_exprt());
+  migrate_expr(tmp, t_d_i->code);
   t_d_i->location=rhs.find_location();
 #endif
 
@@ -789,7 +790,7 @@ void goto_convertt::do_function_call_symbol(
       exprt cond = arguments.front();
       replace_ifthenelse(cond);
       goto_programt::targett t=dest.add_instruction(ASSUME);
-      t->guard=cond;
+      migrate_expr(cond, t->guard);
       t->location=function.location();
       t->location.user_provided(true);
     }

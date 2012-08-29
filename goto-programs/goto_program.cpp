@@ -141,18 +141,13 @@ std::ostream& goto_programt::output_instruction(
     out << "THROW";
 
     {
-      const irept::subt &exception_list=
-        it->code.find("exception_list").get_sub();
+      const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(it->code);
+      forall_names(it, throw_ref.exception_list) {
+        out << " " << *it;
+      }
 
-      for(irept::subt::const_iterator
-          it=exception_list.begin();
-          it!=exception_list.end();
-          it++)
-        out << " " << it->id();
+      out << ": " << from_expr(ns, identifier, throw_ref.operand);
     }
-
-    if(it->code.operands().size()==1)
-      out << ": " << from_expr(ns, identifier, it->code.op0());
 
     out << std::endl;
     break;
@@ -162,9 +157,8 @@ std::ostream& goto_programt::output_instruction(
 
     {
       unsigned i=0;
-      const irept::subt &exception_list=
-        it->code.find("exception_list").get_sub();
-      assert(it->targets.size()==exception_list.size());
+      const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(it->code);
+      assert(it->targets.size() == catch_ref.exception_list.size());
 
       for(instructiont::targetst::const_iterator
           gt_it=it->targets.begin();
@@ -173,7 +167,7 @@ std::ostream& goto_programt::output_instruction(
           i++)
       {
         if(gt_it!=it->targets.begin()) out << ", ";
-        out << exception_list[i].id() << "->"
+        out << catch_ref.exception_list[i] << "->"
             << (*gt_it)->target_number;
       }
     }

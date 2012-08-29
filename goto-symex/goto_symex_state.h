@@ -205,7 +205,7 @@ public:
     }
 
     // exceptions
-    typedef std::map<expr2tc, goto_programt::targett> catch_mapt;
+    typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
     catch_mapt catch_map;
   };
 

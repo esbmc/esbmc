@@ -472,7 +472,7 @@ void goto_program_templatet<codeT, guardT>::get_successors(
         t_it++)
       successors.push_back(*t_it);
 
-    if(!i.guard.is_true())
+    if(!is_true(i.guard))
       successors.push_back(next);
   }
   else if(i.is_throw())
@@ -486,7 +486,7 @@ void goto_program_templatet<codeT, guardT>::get_successors(
   }
   else if(i.is_assume())
   {
-    if(!i.guard.is_false())
+    if(!is_false(i.guard))
       successors.push_back(next);
   }
   else
@@ -514,7 +514,7 @@ void goto_program_templatet<codeT, guardT>::get_successors(
         t_it++)
       successors.push_back(*t_it);
 
-    if(!i.guard.is_true())
+    if(!is_true(i.guard))
       successors.push_back(next);
   }
   else if(i.is_return())
@@ -524,7 +524,7 @@ void goto_program_templatet<codeT, guardT>::get_successors(
   }
   else if(i.is_assume())
   {
-    if(!i.guard.is_false())
+    if(!is_false(i.guard))
       successors.push_back(next);
   }
   else
