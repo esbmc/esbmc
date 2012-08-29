@@ -325,7 +325,7 @@ void goto_convertt::convert_catch(
 
   // the CATCH-push instruction is annotated with a list of IDs,
   // one per target.
-  std::vector<unsigned int> exception_list;
+  std::vector<irep_idt> exception_list;
 
   // add a SKIP target for the end of everything
   goto_programt end;
@@ -340,9 +340,9 @@ void goto_convertt::convert_catch(
   // add the CATCH-pop to the end of the 'try' block
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
   catch_pop_instruction->make_catch();
-  std::vector<unsigned int> empty_excp_list;
+  std::vector<irep_idt> empty_excp_list;
   catch_pop_instruction->code =
-    expr2tc(new code_cpp_catch2t(expr2tc(), empty_excp_list));
+    expr2tc(new code_cpp_catch2t(empty_excp_list));
 
   // add a goto to the end of the 'try' block
   dest.add_instruction()->make_goto(end_target);
@@ -352,7 +352,7 @@ void goto_convertt::convert_catch(
     const codet &block=to_code(code.operands()[i]);
 
     // grab the ID and add to CATCH instruction
-    exception_list.push_back(atoi(block.get("exception_id").as_string().c_str()));
+    exception_list.push_back(block.get("exception_id"));
 
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
@@ -365,7 +365,7 @@ void goto_convertt::convert_catch(
   // add end-target
   dest.destructive_append(end);
 
-  catch_push_instruction->code = expr2tc(new code_cpp_catch2t(expr2tc(), exception_list));
+  catch_push_instruction->code = expr2tc(new code_cpp_catch2t(exception_list));
 }
 
 /*******************************************************************\
@@ -691,11 +691,12 @@ void goto_convertt::convert_sideeffect(
   else if(statement=="cpp-throw")
   {
     goto_programt::targett t=dest.add_instruction(THROW);
-    t->code=codet("cpp-throw");
-    t->code.operands().swap(expr.operands());
-    t->code.location()=expr.location();
+    codet tmp("cpp-throw");
+    tmp.operands().swap(expr.operands());
+    tmp.location()=expr.location();
+    tmp.set("exception_list", expr.find("exception_list"));
+    migrate_expr(tmp, t->code);
     t->location=expr.location();
-    t->code.set("exception_list", expr.find("exception_list"));
 
     // the result can't be used, these are void
     expr.make_nil();
