@@ -105,6 +105,14 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
+
+    if (has_throw_target && has_catch) {
+      instruction.targets.pop_back();
+      instruction.targets.push_back(throw_target);
+      has_throw_target = false;
+      has_catch = false;
+    }
+
     expr2tc tmp = instruction.guard;
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
@@ -131,7 +139,7 @@ goto_symext::symex_step(reachability_treet & art)
         expr2tc tmp3 = tmp2;
 	cur_state->guard.guard_expr(tmp2);
 
-	assume(tmp2);
+        assume(tmp2);
 
 	// we also add it to the state guard
 	cur_state->guard.add(tmp3);
@@ -155,7 +163,7 @@ goto_symext::symex_step(reachability_treet & art)
 
 	dereference(tmp, false);
 
-	claim(tmp, msg);
+        claim(tmp, msg);
       }
     }
     cur_state->source.pc++;
@@ -208,9 +216,11 @@ goto_symext::symex_step(reachability_treet & art)
           dereference(*it, false);
 
       if (is_symbol2t(call.function) &&
-        has_prefix(to_symbol2t(call.function).thename.as_string(), "c::__ESBMC")){
+        has_prefix(to_symbol2t(call.function).thename.as_string(),
+          "c::__ESBMC")){
 	cur_state->source.pc++;
-	run_intrinsic(call, art, to_symbol2t(call.function).thename.as_string());
+	run_intrinsic(call, art,
+                      to_symbol2t(call.function).thename.as_string());
 	return;
       }
 
@@ -228,12 +238,12 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case CATCH:
-    symex_catch(*cur_state);
+    symex_catch();
     cur_state->source.pc++;
     break;
 
   case THROW:
-    symex_throw(*cur_state);
+    symex_throw();
     cur_state->source.pc++;
     break;
 

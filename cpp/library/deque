@@ -14,7 +14,7 @@ Date: Feb 2012
 
 #include <vector>
 
-#include "iterator"
+//#include "iterator"
 
 namespace std {
   template <class T>
@@ -219,30 +219,34 @@ namespace std {
         else
             return vecTwo [ i - n ];
     }
-
-    reference at(size_type n);
-    const_reference at(size_type n) const;
+    void push_front(const T& x) { vecOne.push_back(x); }
+    void push_back(const T& x)  { vecTwo.push_back(x); }
+    reference back()
+    {
+        //if (vecOne.empty())
+            //return vecTwo.back();
+        //else
+            return vecOne.front();
+    }
+    void pop_front();
+    void pop_back();
     reference front()
     {
         if (vecOne.empty())
             return vecTwo.front();
-        else
-            return vecOne.back();
+        //else
+            //return vecOne.back();
     }
+    /*
+    reference at(size_type n);
+    const_reference at(size_type n) const;
+
     const_reference front() const
     {
         if (vecOne.empty())
             return vecTwo.front();
         else
             return vecOne.back();
-    }
-
-    reference back()
-    {
-        if (vecOne.empty())
-            return vecTwo.back();
-        else
-            return vecOne.front();
     }
 
     const_reference back() const
@@ -254,13 +258,9 @@ namespace std {
     }
 
     // modifiers:
-    void push_front(const T& x) { vecOne.push_back(x); }
-    void push_back(const T& x)  { vecTwo.push_back(x); }
     iterator insert(iterator position, const T& x);
     void insert(iterator position, size_type n, const T& x);
 
-    void pop_front();
-    void pop_back();
     iterator erase(iterator position); 
     iterator erase(iterator first, iterator last);
 
@@ -272,11 +272,10 @@ namespace std {
     bool operator != (const deque<T>&) const;
     bool operator >= (const deque<T>&) const;
     bool operator <= (const deque<T>&) const;
-
+*/
     protected:
     	vector<T> vecOne;
     	vector<T> vecTwo;
-
   };
 }
 #endif

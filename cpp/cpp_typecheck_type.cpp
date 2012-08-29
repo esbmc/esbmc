@@ -249,6 +249,9 @@ void cpp_typecheckt::typecheck_type(typet &type)
   {
     // ignore, for template argument guessing
   }
+  else if(type.id()=="ellipsis")
+  {
+  }
   else
   {
     err_location(type);

@@ -5,36 +5,166 @@
 #include "definitions.h"
 #include "ostream"
 #include "ios"
+#include "string"
+#include "cstdio"
+#include "cstdlib"
+
 
 namespace std
 {
-struct istringstream{
-	explicit istringstream ( const string & str );
-	istream& operator>> (string& val );
-	istream& operator>> (int& val );
-	bool good ( ) const;
+class stringbuf: public streambuf{
+public:
+	explicit stringbuf ( ios_base::openmode which = ios_base::in | ios_base::out );
+	explicit stringbuf ( const string& str, ios_base::openmode which = ios_base::in | ios_base::out );
+	void str ( const string & s );
+	string str ( ) const;
+//	Virtual protected members
+protected:
+	streambuf* setbuf ( char* s, streamsize n);
+	streampos seekoff ( streamoff off, ios_base::seekdir way, ios_base::openmode which = ios_base::in | ios_base::out );
+	streampos seekpos ( streampos sp, ios_base::openmode which = ios_base::in | ios_base::out );
+	int underflow ( );
+	int pbackfail ( int c = EOF );
+	int overflow ( int c = EOF );
+
 };
 
-struct stringstream:ios,ostream{
-	explicit stringstream ( openmode which = ios_base::out|ios_base::in );
-	explicit stringstream ( const string & str, openmode which = ios_base::out|ios_base::in );
+class istringstream:public istream{
+public:
+	explicit istringstream ( openmode which = ios_base::in ){istream();}
+	explicit istringstream ( const string & str, openmode which = ios_base::in ){istream();}
+	stringbuf* rdbuf ( ) const;
 	string str ( ) const;
 	void str ( const string & s );
+//	explicit istringstream ( const string & str );
+//	istream& operator>> (string& val );
+//	istream& operator>> (int& val );
+//	bool good ( ) const;
 };
 
-struct ostringstream: ios{
-	explicit ostringstream ( openmode which = out );
-	explicit ostringstream ( const string & str, openmode which = out );
+class stringstream:public istream, public ostream{
+public:
+	string _string;
+	explicit stringstream ( openmode which = ios_base::out|ios_base::in ) {istream();ostream();}
+	explicit stringstream ( const string & str, openmode which = ios_base::out|ios_base::in ) {istream();ostream();}
+	stringbuf* rdbuf ( ) const;
+	string str ( ) const{
+		return _string;
+	}
+	ostream& operator<< (string& val) {
+		ostream m;
+		_string.append(val);
+		return m;
+	}
+
+	ostream& operator<< (bool& val) {
+		char temp;
+		if(val)
+			_string.append("1");
+		else
+			_string.append("0");
+
+		ostream m;
+		return m;
+
+	}
+	ostream& operator<< (short& val) {
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
+	}
+
+	ostream& operator<< (unsigned short& val) {
+			char* temp = new char[33];
+			itoa(val, temp, 10);
+			_string.append(temp);
+			ostream m;
+			return m;
+		}
+
+	ostream& operator<< (long& val) {
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
+	}
+
+	ostream& operator<< (unsigned long& val) {
+		char* temp = new char[33];
+		itoa(val, temp, 10);
+		_string.append(temp);
+		ostream m;
+		return m;
+	}
+
+
+	ostream& operator<< (float& val) {
+		char* temp = new char[33];
+		char* temp2 = new char[2];
+		int n = (int) val;
+		itoa(n, temp, 10);
+		strcat(temp, ".");
+		val = val - (float) n;
+		for(int i = 0;i < 33, val != 0;i++){
+			val = val * 10;
+			n = (int) val;
+			itoa(n, temp2, 10);
+			strcat(temp, temp2);
+		}
+		_string.append(temp);
+		ostream m;
+		return m;
+	}
+
+	ostream& operator<< (double& val) {
+		char* temp = new char[33];
+		char* temp2 = new char[2];
+		int n = (int) val;
+		itoa(n, temp, 10);
+		strcat(temp, ".");
+		val = val - (double) n;
+		for(int i = 0;i < 33, val != 0;i++){
+			val = val * 10;
+			n = (int) val;
+			itoa(n, temp2, 10);
+			strcat(temp, temp2);
+		}
+		_string.append(temp);
+		ostream m;
+		return m;
+	}
+	ostream& operator<< (char& val) {
+		_string.append(val, 1);
+		ostream m;
+		return m;
+	}
+
+	ostream& operator<< (char*& val) {
+
+		int tam = strlen(val);
+		_string.append(val, tam);
+		ostream m;
+		return m;
+	}
+};
+
+class ostringstream:public ostream{
+public:
+	explicit ostringstream ( openmode which = out ){ostream();}
+	explicit ostringstream ( const string & str, openmode which = out ){ostream();}
+	stringbuf* rdbuf ( ) const;
 	string str ( ) const;
 	void str ( const string & s );
-	ostream& operator<< (string& val );
-	ostream& operator<< (int &val);
-	ostream& operator<< (int val);
-	ostream& operator<< (double val);
-	ostream& operator<< (const char* s );
+//	ostream& operator<< (string& val );
+//	ostream& operator<< (int &val);
+//	ostream& operator<< (int val);
+//	ostream& operator<< (double val);
+//	ostream& operator<< (const char* s );
 };
 
-struct stringbuf{};
 }
 
 #endif

@@ -86,6 +86,40 @@ extern inline symbol_exprt &to_symbol_expr(exprt &expr)
   return static_cast<symbol_exprt &>(expr);
 }
 
+
+/*! \brief Generic base class for unary expressions
+*/
+class unary_exprt:public exprt
+{
+public:
+  inline unary_exprt()
+  {
+    operands().resize(1);
+  }
+
+  inline explicit unary_exprt(const irep_idt &id):exprt(id)
+  {
+    operands().resize(1);
+  }
+
+  inline unary_exprt(
+    const irep_idt &_id,
+    const exprt &_op):
+    exprt(_id, _op.type())
+  {
+    copy_to_operands(_op);
+  }
+
+  inline unary_exprt(
+    const irep_idt &_id,
+    const exprt &_op,
+    const typet &_type):
+    exprt(_id, _type)
+  {
+    copy_to_operands(_op);
+  }
+};
+
 class predicate_exprt:public exprt
 {
 public:
@@ -174,6 +208,17 @@ public:
     const irep_idt &_id,
     const exprt &_rhs):
     exprt(_id)
+  {
+    copy_to_operands(_lhs, _rhs);
+  }
+
+
+  inline binary_exprt(
+    const exprt &_lhs,
+    const irep_idt &_id,
+    const exprt &_rhs,
+    const typet &_type):
+    exprt(_id, _type)
   {
     copy_to_operands(_lhs, _rhs);
   }
@@ -294,6 +339,15 @@ public:
 
   inline index_exprt(const exprt &_array, const exprt &_index):
     exprt(exprt::index, _array.type().subtype())
+  {
+    copy_to_operands(_array, _index);
+  }
+
+  inline index_exprt(
+    const exprt &_array,
+    const exprt &_index,
+    const typet &_type):
+    exprt("index", _type)
   {
     copy_to_operands(_array, _index);
   }

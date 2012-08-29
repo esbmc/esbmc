@@ -31,6 +31,13 @@
 #define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *&>((arg))))
 #define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
 
+#ifdef DEBUG
+#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
+                          "[" << __LINE__ << "]" << std::endl;
+#else
+#define DEBUGLOC
+#endif
+
 static u_int unsat_core_size = 0;
 static u_int assumptions_status = 0;
 
@@ -1823,6 +1830,39 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
   }
 
   output = mk_tuple_select(struct_var, j);
+
+#if 0
+  // XXX jmorse - this turned up during merging some latest kinduction goo into
+  // irep2, pre master merge. Not certain why it exists, appears to insert an
+  // inverted cast from int to bool into certain members, when k-induction is
+  // enabled.
+  // Left here in case it turns out some tests are failing in the future.
+  if (config.options.get_bool_option("k-induction"))
+  {
+    if (expr.type().is_bool() &&
+        expr.op0().type().is_struct())
+    {
+      Z3_ast cond;
+      unsigned width;
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+
+      get_type_width(struct_type.components()[j].type(), width);
+
+      if (struct_type.components()[j].type().id() == "signedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, true));
+      else if (struct_type.components()[j].type().id() == "unsignedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, false));
+      else if (struct_type.components()[j].type().id() == "bool")
+        cond = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
+      else
+      {
+        std::cout << "we do not support `" << struct_type.components()[j].type().id() 
+                  << "' in the state vector" << std::endl;
+        assert(0);
+      }
+
+      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_false(z3_ctx), Z3_mk_true(z3_ctx));
+#endif
 }
 
 void
@@ -2705,6 +2745,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr isfalse = ctx.bool_val(false) == select;
     assert_formula(isfalse);
   }
+
+  DEBUGLOC;
 }
 
 void
@@ -2805,7 +2847,6 @@ z3_convt::land(literalt a, literalt b)
   assert_formula(formula);
 
   return l;
-
 }
 
 literalt
@@ -2828,7 +2869,6 @@ z3_convt::lor(literalt a, literalt b)
   assert_formula(formula);
 
   return l;
-
 }
 
 literalt

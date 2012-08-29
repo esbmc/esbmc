@@ -74,6 +74,18 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   {
     code_blockt &block=to_code_block(to_code(*it));
 
+    // Hack to fix dereference bug. This is probably not the right thing to do
+    if(block.op0().has_operands()){
+      if(block.op0().op0().has_operands()) {
+        typet &catch_type = block.op0().op0().op0().type();
+
+        if(catch_type.get_bool("#reference")) {
+          typet catch_type_nil("nil");
+          block.op0().op0().op0().type().swap(catch_type_nil);
+        }
+      }
+    }
+
     typecheck_code(block);
 
     // is it a catch block?

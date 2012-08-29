@@ -17,7 +17,7 @@ char *strcpy(char *dest, const char* src)
 char *strcpy(char *d, const char *s) {
 int i;
 
-for (i = 0; s[i] != '\0'; i++) {
+for (i = 0; s[i] != 0; i++) {
 d[i] = s[i];
 }
 
@@ -213,24 +213,24 @@ int strlen(const char *s)
 	return s - p;
 }
 #endif
+#if 1
+size_t strlen(const char *s)
+{
+  __ESBMC_assert(s!=NULL, "string must contain any character");
+  size_t len=0;
+  while(*s!=NULL) {s++; len++;}
+  return len;
+}
 
+#endif
+#if 0
 size_t strlen(const char *s) {
 size_t i;
 
-for (i = 0; s[i]; i++);
+for (i = 0; s[i] != 0; i++);
 
 return i;
 }
-
-size_t strspn_reverse(const char *s1, const char *s2)
-{
-    size_t ret=strlen(s1);
-    while(*s1 && strchr(s2,*s1--))
-        ret--;
-    return ret;
-}
-
-#if 0
 char* strtok(char* str, const char* delim)
 {
 	static char* p=0;

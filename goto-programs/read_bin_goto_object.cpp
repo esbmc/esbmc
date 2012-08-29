@@ -1,11 +1,11 @@
 /*******************************************************************\
- 
+
 Module: Read goto object files.
- 
+
 Author: CM Wintersteiger
- 
+
 Date: June 2006
- 
+
 \*******************************************************************/
 
 #include <namespace.h>
@@ -23,16 +23,16 @@ Date: June 2006
 #define BINARY_VERSION 1
 
 /*******************************************************************\
- 
+
 Function: read_goto_object
- 
+
   Inputs: input stream, context, functions
- 
+
  Outputs: true on error, false otherwise
- 
- Purpose: reads a goto object xml file back into a symbol and a 
+
+ Purpose: reads a goto object xml file back into a symbol and a
           function table
- 
+
 \*******************************************************************/
 
 bool read_bin_goto_object(
@@ -41,14 +41,14 @@ bool read_bin_goto_object(
   contextt &context,
   goto_functionst &functions,
   message_handlert &message_handler)
-{ 
+{
   message_streamt message_stream(message_handler);
 
   {
     char hdr[4];
     hdr[0]=in.get();
     hdr[1]=in.get();
-    hdr[2]=in.get();    
+    hdr[2]=in.get();
 
     if (hdr[0]!='G' || hdr[1]!='B' || hdr[2]!='F')
     {
@@ -57,7 +57,7 @@ bool read_bin_goto_object(
       if (hdr[0]==0x7f && hdr[1]=='E' && hdr[2]=='L' && hdr[3]=='F')
       {
         if (filename!="")
-          message_stream.str << 
+          message_stream.str <<
             "Sorry, but I can't read ELF binary `" << filename << "'";
         else
           message_stream.str << "Sorry, but I can't read ELF binaries";
@@ -68,18 +68,18 @@ bool read_bin_goto_object(
       message_stream.error();
 
       return false;
-    } 
+    }
   }
-  
+
   irep_serializationt::ireps_containert ic;
   irep_serializationt irepconverter(ic);
   symbol_serializationt symbolconverter(ic);
   goto_function_serializationt gfconverter(ic);
-  
+
   {
     unsigned version=irepconverter.read_long(in);
-        
-    if (version!=BINARY_VERSION) 
+
+    if (version!=BINARY_VERSION)
     {
       message_stream.str <<
         "The input was compiled with a different version of " <<
@@ -87,8 +87,8 @@ bool read_bin_goto_object(
       message_stream.warning();
       return false;
     }
-  } 
-  
+  }
+
   unsigned count = irepconverter.read_long(in);
 
   for (unsigned i=0; i<count; i++)
@@ -97,31 +97,31 @@ bool read_bin_goto_object(
     symbolconverter.convert(in, t);
     symbolt symbol;
     symbol.from_irep(t);
-    
+
     if(!symbol.is_type &&
        symbol.type.is_code())
     {
       // makes sure there is an empty function
       // for every function symbol and fixes
-      // the function types. 
-      functions.function_map[symbol.name].type=
-        to_code_type(symbol.type);      
+      // the function types.
+      code_typet type = functions.function_map[symbol.name].type=
+        to_code_type(symbol.type);
     }
     // std::cout << "Adding Symbol: " << symbol.name << std::endl;
     context.add(symbol);
   }
-  
-  count = irepconverter.read_long(in); 
+
+  count = irepconverter.read_long(in);
   for (unsigned i=0; i<count; i++)
   {
     irept t;
-    dstring fname=irepconverter.read_string(in);    
+    dstring fname=irepconverter.read_string(in);
     gfconverter.convert(in, t);
-    // std::cout << "Adding function body: " << fname << std::endl;        
+    // std::cout << "Adding function body: " << fname << std::endl;
     goto_functionst::goto_functiont &f = functions.function_map[fname];
     convert(t, f.body);
-    f.body_available = f.body.instructions.size()>0;    
+    f.body_available = f.body.instructions.size()>0;
   }
-   
+
   return false;
 }

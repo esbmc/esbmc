@@ -27,6 +27,7 @@ extern "C" {
 #include <irep.h>
 #include <config.h>
 #include <expr_util.h>
+#include <time_stopping.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
@@ -725,6 +726,7 @@ bool cbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  fine_timet parse_start = current_time();
   try
   {
     if(cmdline.isset("binary"))
@@ -771,6 +773,13 @@ bool cbmc_parseoptionst::get_goto_program(
 
     if(process_goto_program(options, goto_functions))
       return true;
+
+    fine_timet parse_stop = current_time();
+    std::ostringstream str;
+    str << "GOTO program creation time: ";
+    output_time(parse_stop - parse_start, str);
+    str << "s";
+    status(str.str());
   }
 
   catch(const char *e)

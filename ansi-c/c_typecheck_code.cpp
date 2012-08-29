@@ -45,7 +45,7 @@ void c_typecheck_baset::typecheck_code(codet &code)
   if(!code.is_code())
     throw "expected code, got "+code.pretty();
 
-  code.type()=typet("code");
+  code.type()=code_typet();
 
   const irep_idt &statement=code.statement();
 

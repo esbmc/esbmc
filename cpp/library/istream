@@ -3,24 +3,47 @@
 
 #include "ios"
 #include "definitions.h"
+#include "cstring"
+//#include "iomanip"
+
 
 namespace std
 {
-struct istream: ios
+class istream: virtual public ios
 {
-//  streamsize width ( ) const;
-//  streamsize width ( streamsize wide );
-  istream(int id = 0): id(id), ios() {}
+public:
+  virtual ~istream ();
+  istream(int _id = 0): id(_id) {
+	  ios();
+	  _gcount = 0;
+	  _filesize = nondet_uint();
+	  _filepos = 0;
+  }
+  istream (streambuf * sb) {
+	  ios();
+	  _gcount = 0;
+	  _filesize = nondet_uint();
+	  _filepos = 0;
+}
   int id;
   istream& ignore(int i = 1, int delim = EOF);
+
   int get();
-  istream& get(char str[], int n);
-  istream& getline(char str[], int size, char delim = '\n');
-  void read(char str[], int size);
-  int gcount();
+  istream& get ( char& c );
+  istream& get ( char* s, streamsize n );
+  istream& get ( char* s, streamsize n, char delim );
+  istream& get ( streambuf& sb);
+  istream& get ( streambuf& sb, char delim );
+
+//  static istream& getline(char str[], int size, char delim = '\n');
+  istream& getline (char* s, streamsize n );
+  istream& getline (char* s, streamsize n, char delim );
+
+  streamsize  gcount ( ) const;
 //  int rdstate();
-  istream& seekg ( streampos pos ); // model
-  istream& seekg ( streamoff off, ios_base::seekdir dir ); // model
+  istream& read ( char* s, streamsize n );
+  istream& seekg ( streampos pos );
+  istream& seekg ( streamoff off, ios_base::seekdir dir );
   streampos tellg ( ); //model
 
   int peek ( );
@@ -30,11 +53,24 @@ struct istream: ios
 
   int sync ( );
 
+  class sentry {
+	  public:
+		explicit sentry ( istream& is, bool noskipws = false );
+		~sentry();
+		operator bool() const;
+	  private:
+		sentry (const sentry&);             // not defined
+		sentry& operator= (const sentry& ); // not defined
+  };
 
-private:
+  static streamsize _gcount;
+
   istream(const istream&); // disabled
   istream& operator=(const istream&); // disabled
+  streamsize _filesize;
+  static streampos _filepos;
 };
+
 }
 
 namespace esbmc
@@ -47,95 +83,182 @@ namespace esbmc
 
 namespace std {
 
-inline istream& operator >> (istream& is, char& c)
-{
-  esbmc::esbmc_read_char(is.id,c);
-  return is;
+istream& operator>> (istream& is, bool& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, short& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, unsigned short& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, int& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, unsigned int& val ) {
+	is._gcount=0;
+	return is;
 }
 
-template <class T>
-T operator >> (istream& is, char c[]) {
-  return is;
+istream& operator>> (istream& is, float& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, double& val ) {
+	is._gcount=0;
+	return is;
+}
+istream& operator>> (istream& is, void*& val ) {
+	is._gcount=0;
+	return is;
 }
 
-inline bool operator >> (istream& is, char c[])
-{
-  //	return is;
-  return nondet_bool();
+istream& operator>> (istream& is, streambuf* sb ) {
+	return is;
 }
 
-inline istream& operator >> (istream& is, int& i)
-{
-  esbmc::esbmc_read_int(is.id,i);
-  return is;
+istream& operator>> (istream& is, istream& ( *pf )(istream&)) {
+	return pf(is);
+}
+istream& operator>> (istream& is, ios& ( *pf )(ios&)) {
+	pf(is);
+	return is;
+}
+istream& operator>> (istream& is, ios_base& ( *pf )(ios_base&)) {
+	pf(is);
+	return is;
 }
 
-inline istream& operator >> (istream& is, setw)
-{
-  return is;
+
+istream& operator>> (istream& is, char& ch ) {
+	is._gcount=0;
+	return is;
 }
 
-inline istream& operator >> (istream& is, unsigned long& l)
-{
-  esbmc::esbmc_read_unsigned_long(is.id,l);
-  return is;
+inline istream& operator>> (istream& is, unsigned char& ch ) {
+	return (is >> reinterpret_cast <char&> (ch));
 }
 
-inline istream& operator >> (istream& is, double& d)
-{
-  esbmc::esbmc_read_double(is.id,d);
-  return is;
+istream& operator>> (istream& is, char* str ) {
+  is._gcount = 0;
+	return is;
 }
+istream& operator>> (istream& is, unsigned char* str ) {
+	return (is >> reinterpret_cast <char*> (str));
+}
+istream& operator>> (istream& is, smanip sm );
 
 int istream::get()
 {
-  if (nondet_bool())
-    return (int) nondet_char();
+  _gcount = 1;
+  if (nondet_bool()) {
+	  return (int) nondet_char();
+  }
   else
     return EOF;
 }
 
-istream& get(char str[], int n)
+//istream& get(char str[], int n)
+istream& istream::get ( char* s, streamsize n )
 {
 #if 0
   char *out[nondet_uint() % n];
   str = out;
 #endif
-  return istream();
+  _gcount = n;
+  return *this;
 }
 
-istream& getline(char str[], int size, char delim = '\n')
-{
-#if 0
-  char *out[nondet_uint() % n];
-  str = out;
-#endif
-  return istream();
+//static istream& istream::getline(char str[], int size, char delim = '\n')
+//{
+//#if 0
+//  char *out[nondet_uint() % n];
+//  str = out;
+//#endif
+//
+//  return istream();
+//}
+istream& istream::getline (char* s, streamsize n ) {
+	_gcount = n;
+	return *this;
 }
+istream& istream::getline (char* s, streamsize n, char delim ) {
+	_gcount = n;
+	return *this;
+ }
 
-istream& read(char str[], int size)
+istream& istream::read(char* s, streamsize n)
 {
 #if 0
   char *out[nondet_uint() % size];
   str = out;
 #endif
-  return istream();
+//    	size_t slen = strlen(s);
+    _gcount = n;
+//	if(slen<=n) _gcount = slen;
+//	else _gcount = n;
+    return *this;
 }
 
-istream& ignore(int i = 1, int delim = EOF)
+istream& istream::ignore(int i, int delim)
 {
-  return istream();
+  return *this;
 }
 
-int istream::gcount()
+streamsize istream::gcount() const
 {
-  return nondet_uint();
+  return _gcount;
 }
 
-//int istream::rdstate()
-//{
-//  return nondet_uint();
-//}
+int istream::peek ( ) {
+	_gcount = 1;
+	return nondet_uint();
 }
+streamsize istream::readsome ( char* s, streamsize n ) {
+#if 0
+	size_t len = strlen(s);
+	if(n<=len) _gcount = n;
+	else _gcount = len;
+#else
+	_gcount = n;
+#endif
+	return _gcount;
+}
+istream& istream::putback ( char c ) {
+	_gcount = 0;
+	return *this;
+}
+istream& istream::unget ( ) {
+	_gcount = 0;
+	return *this;
+}
+
+istream& istream::seekg ( ios::streampos pos ) {
+	//__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+	_filepos = pos;
+	return *this;
+}
+istream& istream::seekg ( ios::streamoff off, ios_base::seekdir dir ) {
+	if (dir==ios::beg) {_filepos=off;}
+	if (dir==ios::cur) {_filepos+=off;}
+	if (dir==ios::end) {_filepos=_filesize-off;}
+	return *this;
+}
+ios::streampos istream::tellg ( ) {
+	return _filepos;
+}
+}
+
+namespace std
+{//==========Manipulators========
+
+istream& ws ( istream& is );
+
+}//==============================
+
 
 #endif

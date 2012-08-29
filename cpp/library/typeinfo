@@ -1,23 +1,55 @@
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
 #ifndef STL_TYPEINFO
 #define STL_TYPEINFO
 
 #include "definitions.h"
+#include "exception"
 
-
-struct typeinfo {
-  virtual ~typeinfo();
-  bool operator== (const typeinfo& rhs) const;
-  bool operator!= (const typeinfo& rhs) const;
-  bool before (const typeinfo& rhs) const;
-  const char* name() const;
-private:
-  typeinfo (const typeinfo& rhs);
-  typeinfo& operator= (const typeinfo& rhs);
-  const typeinfo& type_id;
+namespace std {
+  struct typeinfo {
+    virtual ~typeinfo();
+    bool operator== (const typeinfo& rhs) const;
+    bool operator!= (const typeinfo& rhs) const;
+    bool before (const typeinfo& rhs) const;
+    const char* name() const;
+  private:
+    typeinfo (const typeinfo& rhs);
+    typeinfo& operator= (const typeinfo& rhs);
+    const typeinfo& type_id;
   //typeinfo (const typeinfo& rhs){
 	//type_id = rhs;
   //}
   //typeinfo& operator= (const typeinfo& rhs);
-};
+  };
 
+  /**
+   *  @brief  Thrown during incorrect typecasting.
+   *  @ingroup exceptions
+   *
+   *  If you attempt an invalid @c dynamic_cast expression, an instance of
+   *  this class (or something derived from this class) is thrown.  */
+  class bad_cast : public exception
+  {
+  public:
+    bad_cast() { }
+
+    // This declaration is not useless:
+    // http://gcc.gnu.org/onlinedocs/gcc-3.0.2/gcc_6.html#SEC118
+    virtual ~bad_cast();
+
+    // See comment in eh_exception.cc.
+    virtual const char* what() const;
+  };
+
+
+}
 #endif

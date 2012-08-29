@@ -256,12 +256,22 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   }
   else
   {
+
     exprt e1 = expr.op1();
     exprt e2 = expr.op2();
 
     if(implicit_conversion_sequence(expr.op1(), expr.op2().type(), e1))
     {
-      if(implicit_conversion_sequence(expr.op2(),expr.op1().type(),e2))
+      if (expr.id()=="if")
+      {
+        if (e2.type().id()!=e1.type().id())
+        {
+          e2.make_typecast(e1.type());
+          expr.op2().swap(e2);
+        }
+        assert(e1.type().id() == e2.type().id());
+      }
+      else if(implicit_conversion_sequence(expr.op2(),expr.op1().type(),e2))
       {
         err_location(expr);
         str << "error: type is ambigious";
@@ -760,6 +770,43 @@ void cpp_typecheckt::typecheck_expr_address_of(exprt &expr)
 
 /*******************************************************************\
 
+Function: cpp_typecheckt::typecheck_expr_throw
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
+{
+  // these are of type void
+  expr.type()=empty_typet();
+
+  assert(expr.operands().size()==1 ||
+         expr.operands().size()==0);
+
+  if(expr.operands().size()==1)
+  {
+    // nothing really to do; one can throw _almost_ anything
+    const typet &exception_type=expr.op0().type();
+
+    if(follow(exception_type).id()=="empty")
+    {
+      err_location(expr.op0());
+      throw "cannot throw void";
+    }
+
+    // annotate the relevant exception IDs
+    expr.set("exception_list",
+             cpp_exception_list(exception_type, *this));
+  }
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheckt::typecheck_expr_new
 
 Inputs:
@@ -885,7 +932,7 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
     // There is an expr-vs-type ambiguity, as it is possible to write
     // (f)(1), where 'f' is a function symbol and not a type.
 
-    if(expr.type().id()=="cpp_name")
+    if(expr.type().id()=="cpp-name")
     {
       // try to resolve as type
       cpp_typecheck_fargst fargs;
@@ -2001,6 +2048,10 @@ void cpp_typecheckt::typecheck_expr_side_effect(
           statement=="postdecrement")
   {
     typecheck_side_effect_increment(expr);
+  }
+  else if(statement=="cpp-throw")
+  {
+    typecheck_expr_throw(expr);
   }
   else
     c_typecheck_baset::typecheck_expr_side_effect(expr);
