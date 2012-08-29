@@ -1065,6 +1065,12 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
+    if (rhs.type().is_code())
+    {
+      convert(to_code(rhs), dest);
+      return ;
+    }
+
     if(lhs.id()=="typecast")
     {
       assert(lhs.operands().size()==1);
@@ -1078,6 +1084,7 @@ void goto_convertt::convert_assign(
       exprt tmp(lhs.op0());
       lhs.swap(tmp);
     }
+
 
     int atomic = 0;
 

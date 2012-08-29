@@ -173,6 +173,7 @@ void goto_convertt::remove_sideeffects(
   goto_programt &dest,
   bool result_is_used)
 {
+
   if(!has_sideeffect(expr))
     return;
 
