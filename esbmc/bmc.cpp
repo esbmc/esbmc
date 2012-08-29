@@ -154,8 +154,6 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
 
-  do_unwind_module(prop_conv);
-
   fine_timet encode_start = current_time();
   do_cbmc(prop_conv, equation);
   fine_timet encode_stop = current_time();
