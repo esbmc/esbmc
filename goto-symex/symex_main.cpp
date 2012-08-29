@@ -107,8 +107,11 @@ goto_symext::symex_step(reachability_treet & art)
   {
 
     if (has_throw_target && has_catch) {
-      instruction.targets.pop_back();
-      instruction.targets.push_back(throw_target);
+      goto_programt::instructiont &insn =
+        const_cast<goto_programt::instructiont &>(instruction);
+
+      insn.targets.pop_back();
+      insn.targets.push_back(throw_target);
       has_throw_target = false;
       has_catch = false;
     }

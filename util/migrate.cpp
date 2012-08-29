@@ -1173,6 +1173,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw2t(expr_list));
+  } else if (expr.id() == "ellipsis") {
+    return expr2tc(new code_cpp_ellipsis2t());
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2147,6 +2149,8 @@ migrate_expr_back(const expr2tc &ref)
 
     return codeexpr;
   }
+  case expr2t::code_cpp_ellipsis_id:
+    return exprt("ellipsis");
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
   }
