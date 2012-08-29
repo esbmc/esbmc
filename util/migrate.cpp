@@ -1159,9 +1159,20 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = expr2tc(new code_asm2t(type, str));
   } else if (expr.id() == "cpp-throw") {
     // No type,
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = expr2tc(new code_cpp_throw2t(op));
+    const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
+
+    std::vector<expr2tc> expr_list;
+    for(irept::subt::const_iterator
+        e_it=exceptions_thrown.begin();
+        e_it!=exceptions_thrown.end();
+        e_it++)
+    {
+      expr2tc tmp;
+      migrate_expr((exprt&)*e_it, tmp);
+      expr_list.push_back(tmp);
+    }
+
+    new_expr_ref = expr2tc(new code_cpp_throw2t(expr_list));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2128,7 +2139,12 @@ migrate_expr_back(const expr2tc &ref)
   {
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
     exprt codeexpr("cpp-throw");
-    codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
+    irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
+
+    forall_exprs(it, ref2.exception_list) {
+      exceptions_thrown.push_back(migrate_expr_back(*it));
+    }
+
     return codeexpr;
   }
   default:

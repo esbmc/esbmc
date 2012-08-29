@@ -2333,12 +2333,13 @@ public:
 class code_cpp_throw_data : public code_base
 {
 public:
-  code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o)
-    : code_base(t, id), operand(o) { }
+  code_cpp_throw_data(const type2tc &t, expr2t::expr_ids id,
+                      const std::vector<expr2tc> &l)
+    : code_base(t, id), exception_list(l) { }
   code_cpp_throw_data(const code_cpp_throw_data &ref)
-    : code_base(ref), operand(ref.operand) { }
+    : code_base(ref), exception_list(ref.exception_list) { }
 
-  expr2tc operand;
+  std::vector<expr2tc> exception_list;
 };
 
 // Give everything a typedef name
@@ -2651,7 +2652,8 @@ typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
         &code_cpp_catch_data::excp_list>
         code_cpp_catch_expr_methods;
 typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
-        expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>
+        std::vector<expr2tc>, code_cpp_throw_data,
+        &code_cpp_throw_data::exception_list>
         code_cpp_throw_expr_methods;
 
 /** Constant integer class.
@@ -4112,8 +4114,8 @@ public:
 class code_cpp_throw2t : public code_cpp_throw_expr_methods
 {
 public:
-  code_cpp_throw2t(const expr2tc &o)
-    : code_cpp_throw_expr_methods(type_pool.get_empty(), code_cpp_throw_id, o){}
+  code_cpp_throw2t(const std::vector<expr2tc> &l)
+    : code_cpp_throw_expr_methods(type_pool.get_empty(), code_cpp_throw_id, l){}
   code_cpp_throw2t(const code_cpp_throw2t &ref)
     : code_cpp_throw_expr_methods(ref) { }
 
