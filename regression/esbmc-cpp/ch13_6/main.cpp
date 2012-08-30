@@ -20,7 +20,7 @@ void customNewHandler()
 // using set_new_handler to handle failed memory allocation
 int main()
 {
-   double *ptr[ 50 ];
+   double *ptr[ 5 ];
 
    // specify that customNewHandler should be called on failed 
    // memory allocation
@@ -28,7 +28,7 @@ int main()
 
    // allocate memory for ptr[ i ]; customNewHandler will be
    // called on failed memory allocation
-   for ( int i = 0; i < 50; i++ ) {
+   for ( int i = 0; i < 5; i++ ) {
       ptr[ i ] = new double[ 5000000000000 ];
 
       cout << "Allocated 5000000 doubles in ptr[ " 
