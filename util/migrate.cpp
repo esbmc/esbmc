@@ -1157,7 +1157,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), type);
     const irep_idt &str = expr.op0().value();
     new_expr_ref = expr2tc(new code_asm2t(type, str));
-  } else if (expr.id() == "cpp-throw") {
+  } else if (expr.id() == "code" && expr.statement() == "cpp-throw") {
     // No type,
     const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
 
