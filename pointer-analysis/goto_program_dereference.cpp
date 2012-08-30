@@ -263,6 +263,7 @@ void goto_program_dereferencet::dereference_instruction(
   current_target=target;
   valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
+  dereference_location = i.location;
 
   dereference_expr(i.guard, checks_only, dereferencet::READ);
 
