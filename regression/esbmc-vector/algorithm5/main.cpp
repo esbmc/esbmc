@@ -49,22 +49,22 @@ bool comp_case_insensitive (char c1, char c2) {
 }
 
 int main () {
-  int mychars[] = {'a','b','c','A','B','C'};
-  vector<char> myvector (mychars,mychars+6);
-  vector<char>::iterator it;
+  int mychars[] = {97, 98, 99, 65, 66, 67};
+  vector<int> myvector (mychars,mychars+6);
+  vector<int>::iterator it;
 
-  int match[] = {'A','B','C'};
+  int match[] = {65, 66, 67};
 
   // using default comparison:
   it = find_first_of (myvector.begin(), myvector.end(), match, match+3);
-  assert(*it == 'A');
+  assert(*it == 65);
   if (it!=myvector.end())
     cout << "first match is: " << *it << endl;
 
   // using predicate comparison:
   it = find_first_of (myvector.begin(), myvector.end(),
                       match, match+3, comp_case_insensitive);
-  assert(*it == 'a');
+  assert(*it == 97);
   if (it!=myvector.end())
     cout << "first match is: " << *it << endl;
   
