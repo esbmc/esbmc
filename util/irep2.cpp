@@ -72,9 +72,9 @@ template <class T>
 std::string
 pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
-  list_of_memberst memb = obj.tostring(indent);
+  list_of_memberst memb = obj.tostring(indent + 2);
 
-  std::string indentstr = indent_str(indent + 2);
+  std::string indentstr = indent_str(indent);
   std::string exprstr = ident;
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
