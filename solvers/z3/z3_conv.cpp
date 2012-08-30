@@ -1035,12 +1035,18 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
   convert_bv(side1, args[0]);
   convert_bv(side2, args[1]);
 
-  // XXXjmorse -- pointer comparisons are still broken.
-  if (is_pointer_type(side1->type))
-    args[0] = mk_tuple_select(args[0], 1);
+  // 6.3.8 defines relation operators on pointers to be comparisons on their
+  // bit representation, with pointers to array/struct/union fields comparing
+  // as you might expect.
+  if (is_pointer_type(side1->type)) {
+    expr2tc cast(new typecast2t(uint_type2(), side1));
+    convert_bv(cast, args[0]);
+  }
 
-  if (is_pointer_type(side2->type))
-    args[1] = mk_tuple_select(args[1], 1);
+  if (is_pointer_type(side2->type)) {
+    expr2tc cast(new typecast2t(uint_type2(), side2));
+    convert_bv(cast, args[1]);
+  }
 
   output = convert(args[0], args[1], !is_signedbv_type(side1->type));
 }
