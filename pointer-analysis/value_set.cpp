@@ -880,11 +880,19 @@ void value_sett::assign_rec(
   }
   else if (is_member2t(lhs))
   {
+    type2tc tmp;
     const member2t &member = to_member2t(lhs);
     const std::string &component_name = member.member.as_string();
 
-    assert(is_struct_type(member.source_value->type) ||
-           is_union_type(member.source_value->type) ||
+    // Might travel through a dereference, in which case type resolving is
+    // required
+    const type2tc *ourtype = &member.source_value->type;
+    if (is_symbol_type(*ourtype)) {
+      tmp = ns.follow(*ourtype);
+      ourtype = &tmp;
+    }
+
+    assert(is_struct_type(*ourtype) || is_union_type(*ourtype) ||
            is_dynamic_object2t(member.source_value));
            
     assign_rec(to_member2t(lhs).source_value, values_rhs,
