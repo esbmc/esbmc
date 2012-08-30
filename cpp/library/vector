@@ -57,7 +57,10 @@ public:
 		}
 
 		T& operator * (){
-			return vec_pos[pos];
+			if(vec_pos != 0)
+				return vec_pos[pos];
+			else
+				return *pointer;
 		}
 
 		iterator& operator ++ (){
