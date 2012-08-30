@@ -2055,41 +2055,21 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   new_members.reserve(struct_type_to.members.size());
   new_names.reserve(struct_type_to.members.size());
 
-  forall_types(it2, struct_type_to.members) {
-    i = 0;
-    forall_types(it, struct_type_from.members) {
-      if (struct_type_from.member_names[i] == struct_type_to.member_names[i2]) {
-	unsigned width = (*it)->get_width();
+  i = 0;
+  forall_types(it, struct_type_to.members) {
+    if (!base_type_eq(struct_type_from.members[i], *it, ns))
+      throw new conv_error("Incompatible struct in cast-to-struct");
 
-	if (is_signedbv_type(*it)) {
-          new_members.push_back(type2tc(new signedbv_type2t(width)));
-	} else if (is_unsignedbv_type(*it)) {
-          new_members.push_back(type2tc(new unsignedbv_type2t(width)));
-	} else if (is_bool_type(*it))     {
-          new_members.push_back(type2tc(new bool_type2t()));
-        } else if (is_pointer_type(*it)) {
-          new_members.push_back(*it);
-	} else {
-          throw new conv_error("Unexpected type when casting struct");
-	}
-        new_names.push_back(struct_type_from.member_names[i]);
-      }
-
-      i++;
-    }
-
-    i2++;
+    i++;
   }
 
-  struct_type2t newstruct(new_members, new_names, struct_type_to.name);
   z3::sort sort;
-  // Can't cache this type as it's constructed on the fly.
-  newstruct.convert_smt_type(*this, reinterpret_cast<void*>(&sort));
+  convert_type(cast.type, sort);
 
   freshval = ctx.fresh_const(NULL, sort);
 
   i2 = 0;
-  forall_types(it, newstruct.members) {
+  forall_types(it, struct_type_to.members) {
     z3::expr formula;
     formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i2);
     assert_formula(formula);
