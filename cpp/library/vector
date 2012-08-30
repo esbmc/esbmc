@@ -317,8 +317,12 @@ public:
 	explicit vector(size_type n): _size(0),  _capacity(1)
 	{
 		_capacity = n;
-		for(int i = 0;i < n;i++)
-			push_back(T());
+		for(int i = 0;i < n;i++){
+			if(sizeof(T)==sizeof(int))
+				push_back(0);
+			else
+				push_back(T());
+		}
 	}
 
 	explicit vector(void t[], void* addr): _size(0),  _capacity(1)
@@ -650,7 +654,7 @@ public:
 		return it;
 	}
 
-//	void swap(vector<T>&);
+	void swap(vector<T>&);
 	void clear(){
 		_size = 0;
 		buf[0] = T();
@@ -684,7 +688,7 @@ private:
 };
 
 // specialized algorithms:
-/*
+
 template <class T>
 void vector<T>::swap(vector<T>& v1){
 		  vector<T> aux;
@@ -693,7 +697,7 @@ void vector<T>::swap(vector<T>& v1){
 		*this = aux;
 
 }
-*/
+
 }
 
 #endif
