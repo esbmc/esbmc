@@ -174,6 +174,33 @@ bool dereferencet::dereference_type_compare(
     return true;
   }
 
+  // Check for C++ subclasses.
+  if (is_struct_type(object->type) && is_struct_type(dereference_type)) {
+    const symbolt *symbol = NULL;
+    const struct_type2t &from_type = to_struct_type(object->type);
+    const struct_type2t &to_type = to_struct_type(dereference_type);
+    std::string classname = "cpp::struct." + from_type.name.as_string();
+    if (!ns.lookup(classname, symbol)) {
+      // look at the list of bases; see if the struct we're dereferencing to
+      // is a base of this object. Is currently old-irep.
+      forall_irep(it, symbol->type.find("bases").get_sub()) {
+        const typet &base_type = (const typet&)*it;
+        assert(base_type.id() == "base");
+        assert(base_type.type().id() == "struct");
+        const std::string &basename = base_type.type().name().as_string();
+
+        // Is this a C++ class?
+        if (basename.compare(0, 12, "cpp::struct.", 0, 12))
+          continue;
+
+        std::string name = basename.substr(12);
+        if (name == to_type.name.as_string())
+          // Success
+          return true;
+      }
+    }
+  }
+
   // check for struct prefixes
 
   type2tc ot_base(object_type), dt_base(dereference_type);
