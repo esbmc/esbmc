@@ -544,12 +544,36 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   if(cpp_typecheck.context.move(symbol, new_symbol))
     throw "cpp_typecheckt::convert_declarator: context.move() failed";
 
-  if(!is_code && cpp_typecheck.cpp_scopes.current_scope().contains(base_name))
+  if(!is_code)
   {
-    std::string error(base_name.c_str());
-    error = "`" + error + "' already in scope";
-    throw error.c_str();
+    cpp_scopest::id_sett id_set;
+
+    cpp_typecheck.cpp_scopes.current_scope().lookup(
+      base_name, cpp_scopet::SYMBOL, id_set);
+
+    for(cpp_scopest::id_sett::const_iterator
+        id_it=id_set.begin();
+        id_it!=id_set.end();
+        id_it++)
+    {
+      const cpp_idt &id=**id_it;
+      // the name is already in the scope
+      // this is ok if they belong to different categories
+
+      if(!id.is_class() && !id.is_enum())
+      {
+        cpp_typecheck.err_location(new_symbol->location);
+        cpp_typecheck.str << "`" << base_name << "' already in scope";
+        throw 0;
+      }
+    }
   }
+//  if(!is_code && cpp_typecheck.cpp_scopes.current_scope().contains(base_name))
+//  {
+//    std::string error(base_name.c_str());
+//    error = "`" + error + "' already in scope";
+//    throw error.c_str();
+//  }
 
   // put into scope
   cpp_idt &identifier=

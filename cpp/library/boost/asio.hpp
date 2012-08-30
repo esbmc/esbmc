@@ -13,5 +13,6 @@
 #ifndef BOOST_ASIO_HPP
 #define BOOST_ASIO_HPP
 
+#include <boost/asio/ip/tcp.hpp>
 
 #endif // BOOST_ASIO_HPP
