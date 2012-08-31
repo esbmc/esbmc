@@ -17,3 +17,15 @@ let g:clang_hl_errors=1 " Highlight errors
 
 " Don't show scratch/preview window
 set completeopt=menu,menuone,longest
+
+function! LoadCscope()
+  let db = findfile(".cscope", ".;")
+  if (!empty(db))
+    let path = strpart(db, 0, match(db, "/.cscope$"))
+    set nocscopeverbose " suppress 'duplicate connection' error
+    exe "cs add " . db . " " . path
+    set cscopeverbose
+  endif
+endfunction
+au VimEnter /* call LoadCscope()
+au BufEnter /* call LoadCscope()
