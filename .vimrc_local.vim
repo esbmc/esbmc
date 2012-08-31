@@ -8,3 +8,12 @@ set expandtab     " Use softtabstop
 set shiftwidth=2
 set softtabstop=2 " Two spaces created by pressing tab
 
+" Load symbol index
+set tags=./.ctags;
+
+" Enable clang complete, for completion unsuprisingly
+let g:clang_auto_select=1 " Auto-select first popup item, without inserting
+let g:clang_hl_errors=1 " Highlight errors
+
+" Don't show scratch/preview window
+set completeopt=menu,menuone,longest
