@@ -375,7 +375,7 @@ void show_goto_trace(
       break;
 
     case goto_trace_stept::ASSIGNMENT:
-      if(it->pc->is_assign() ||
+      if(it->pc->is_assign() || it->pc->is_return() ||
          (it->pc->is_other() && it->lhs.is_not_nil()))
       {
         if(prev_step_nr!=it->step_nr || first_step)

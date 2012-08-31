@@ -236,7 +236,6 @@ execution_statet::symex_step(reachability_treet &art)
       art.force_cswitch_point();
       break;
     case RETURN:
-      state.source.pc++;
       if(!state.guard.is_false()) {
         const code_returnt &code = to_code_return(instruction.code);
         code_assignt assign;
@@ -247,6 +246,7 @@ execution_statet::symex_step(reachability_treet &art)
 
         owning_rt->analyse_for_cswitch_after_assign(assign);
       }
+      state.source.pc++;
       break;
     default:
       goto_symext::symex_step(art);
