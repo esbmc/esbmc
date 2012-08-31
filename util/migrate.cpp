@@ -171,6 +171,9 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type2tc(new cpp_name_type2t(name, template_args));
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
+  } else if (type.id() == "ellipsis") {
+    // Eh? Ellipsis isn't a type. It's a special case.
+    new_type_ref = type_pool.get_empty();
   } else {
     type.dump();
     assert(0);
@@ -219,6 +222,8 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == "cpp-name") {
     real_migrate_type(type, new_type_ref);
     // No caching; no reason, just not doing it right now.
+  } else if (type.id() == "ellipsis") {
+    real_migrate_type(type, new_type_ref);
   } else {
     type.dump();
     assert(0);
