@@ -898,7 +898,7 @@ type_poolt::get_int(unsigned int size)
   }
 }
 
-type_poolt type_pool __attribute__((init_priority(101)));
+type_poolt type_pool __attribute__((init_priority(102)));
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
@@ -2000,9 +2000,9 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   return;
 }
 
-const expr2tc true_expr __attribute__((init_priority(102)))
+const expr2tc true_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(true));
-const expr2tc false_expr __attribute__((init_priority(102)))
+const expr2tc false_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(false));
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
