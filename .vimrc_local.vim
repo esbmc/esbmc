@@ -8,3 +8,5 @@ set expandtab     " Use softtabstop
 set shiftwidth=2
 set softtabstop=2 " Two spaces created by pressing tab
 
+" Load symbol index
+set tags=./.ctags;
