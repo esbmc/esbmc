@@ -1171,7 +1171,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     expr2tc operand;
-    migrate_expr(expr.op0(), operand);
+    if (expr.op0().operands().size() == 1) {
+      migrate_expr(expr.op0(), operand);
+    } else {
+      operand = expr2tc();
+    }
 
     new_expr_ref = expr2tc(new code_cpp_throw2t(operand, expr_list));
   } else {
