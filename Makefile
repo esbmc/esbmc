@@ -39,6 +39,9 @@ esbmc: $(OBJDIR)/.depends infrastructure languages
 doxygen:
 	doxygen .doxygen
 
+ctags:
+	ctags -o .ctags -R --exclude=regression --extra=fq --fields=afikKlmnsSzt
+
 ###############################################################################
 
 include $(ESBMCDIR)/common
