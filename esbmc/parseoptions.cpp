@@ -764,15 +764,22 @@ bool cbmc_parseoptionst::get_goto_program(
         ui_message_handler);
     }
 
-    if(process_goto_program(options, goto_functions))
-      return true;
-
     fine_timet parse_stop = current_time();
     std::ostringstream str;
     str << "GOTO program creation time: ";
     output_time(parse_stop - parse_start, str);
     str << "s";
     status(str.str());
+
+    fine_timet process_start = current_time();
+    if(process_goto_program(options, goto_functions))
+      return true;
+    fine_timet process_stop = current_time();
+    std::ostringstream str2;
+    str2 << "GOTO program processing time: ";
+    output_time(process_stop - process_start, str2);
+    str2 << "s";
+    status(str2.str());
   }
 
   catch(const char *e)
