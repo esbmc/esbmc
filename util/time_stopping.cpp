@@ -73,7 +73,7 @@ Function: outout_time
 
 void output_time(const fine_timet &fine_time, std::ostream &out)
 {
-  out << (double)(fine_time)/1000;
+  out << setiosflags(ios::fixed) << setprecision(3) << (double)(fine_time)/1000;
 }
 
 /*******************************************************************\
