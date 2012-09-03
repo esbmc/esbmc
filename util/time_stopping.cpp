@@ -9,6 +9,7 @@ Date: February 2004
 \*******************************************************************/
 
 #include <sstream>
+#include <iomanip>
 
 #if defined(_WIN32) && !defined(__MINGW32__)
 #include <windows.h>
@@ -73,7 +74,7 @@ Function: outout_time
 
 void output_time(const fine_timet &fine_time, std::ostream &out)
 {
-  out << (double)(fine_time)/1000;
+  out << std::setiosflags(std::ios::fixed) << std::setprecision(3) << (double)(fine_time)/1000;
 }
 
 /*******************************************************************\
