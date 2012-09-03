@@ -3,7 +3,9 @@
 
 #include "definitions.h"
 
-typedef unsigned int time_t;
+#ifndef _TIME_T_DEFINED
+typedef long int time_t;
+#endif
 
 time_t time (time_t *timer);
 
