@@ -819,13 +819,11 @@ void goto_convertt::do_function_call_symbol(
   {
     do_printf(lhs, function, arguments, dest);
   }
-  else if(identifier==CPROVER_PREFIX "atomic_begin" ||
-		  identifier=="cpp::__ESBMC_atomic_begin()")
+  else if(identifier==CPROVER_PREFIX "atomic_begin")
   {
     do_atomic_begin(lhs, function, arguments, dest);
   }
-  else if(identifier==CPROVER_PREFIX "atomic_end" ||
-		  identifier=="cpp::__ESBMC_atomic_end()")
+  else if(identifier==CPROVER_PREFIX "atomic_end")
   {
     do_atomic_end(lhs, function, arguments, dest);
   }
