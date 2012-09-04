@@ -3,6 +3,7 @@
 
 #include "definitions.h"
 //#include "ios"
+#include "cstdio"
 
 namespace std
 {
