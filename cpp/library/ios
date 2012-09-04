@@ -3,6 +3,7 @@
 
 #include "streambuf"
 #include "definitions.h"
+#include "cstdio"
 
 namespace std
 {
