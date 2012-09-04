@@ -2,9 +2,6 @@
 #include <cassert>
 #include <pthread.h>
 
-void __ESBMC_atomic_begin();
-void __ESBMC_atomic_end();
-
 int x;
 
 void *t1(void* arg)
