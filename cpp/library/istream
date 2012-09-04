@@ -4,6 +4,7 @@
 #include "ios"
 #include "definitions.h"
 #include "cstring"
+#include "cstdio"
 //#include "iomanip"
 
 
