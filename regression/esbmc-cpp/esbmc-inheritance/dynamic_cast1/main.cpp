@@ -36,7 +36,7 @@ class CTriangle: public CPolygon {
     int area (void)
       { return ((width * height) / 2); }
   };
-
+#if 0
 class CCircle: public CPolygon {
   public:
   CCircle(int w, int h)
@@ -61,16 +61,17 @@ class CSquare: public CPolygon {
       { return (width * width); }
   };
 
+#endif
 
 int main () {
 	CPolygon* polygons[4];
 	
-	polygons[0] = new CRectangle(20,30);
-	polygons[1] = new CTriangle(20,25);
+	polygons[0] = new CTriangle(20,25); //CRectangle(20,30);
+	polygons[1] = new CRectangle(20,30); //new CTriangle(20,25);
 //	polygons[2] = new CCircle(25,25);
 //	polygons[3] = new CSquare(18,18);
 	
-	for(int i = 0; i < 4; i++)
+	for(int i = 0; i < 2; i++)
 	{
 		CTriangle* trin = dynamic_cast <CTriangle *> (polygons[i]);
 		if (trin != 0)
@@ -78,6 +79,7 @@ int main () {
 			trin->set_values(10, 10);
 			assert(trin->area() == 50);
 		}
+
 #if 0		
 		CCircle* circ = dynamic_cast <CCircle *> (polygons[i]);
 		if (circ != 0)
