@@ -1,7 +1,7 @@
 //dynamic cast test
-#include <iostream>
-#include <cassert>
-using namespace std;
+//#include <iostream>
+//#include <cassert>
+//using namespace std;
 
 class CPolygon {
   protected:
@@ -67,8 +67,8 @@ int main () {
 	
 	polygons[0] = new CRectangle(20,30);
 	polygons[1] = new CTriangle(20,25);
-	polygons[2] = new CCircle(25,25);
-	polygons[3] = new CSquare(18,18);
+//	polygons[2] = new CCircle(25,25);
+//	polygons[3] = new CSquare(18,18);
 	
 	for(int i = 0; i < 4; i++)
 	{
@@ -78,7 +78,7 @@ int main () {
 			trin->set_values(10, 10);
 			assert(trin->area() == 50);
 		}
-		
+#if 0		
 		CCircle* circ = dynamic_cast <CCircle *> (polygons[i]);
 		if (circ != 0)
 		{
@@ -99,7 +99,7 @@ int main () {
 			rect->set_values(10, 20);
 			assert(rect->area() == 200);
 		}
-		
+#endif		
 	}
 /*
 */
