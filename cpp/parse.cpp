@@ -357,6 +357,10 @@ bool Parser::rTypedef(cpp_declarationt &declaration)
   if(lex->GetToken(tk)!=TOK_TYPEDEF)
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 1\n";
+  #endif
+
   declaration=cpp_declarationt();
   set_location(declaration, tk);
 
@@ -367,11 +371,19 @@ bool Parser::rTypedef(cpp_declarationt &declaration)
 
   merge_types(type_name, declaration.type());
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 2\n";
+  #endif
+
   if(!rDeclarators(declaration.declarators(), true))
     return false;
 
   if(lex->GetToken(tk)!=';')
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 3\n";
+  #endif
 
   return true;
 }
@@ -974,6 +986,10 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
   if(!optCvQualify(cv_q))
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rDeclaration 4\n";
+  #endif
+
   if(!optIntegralTypeOrClassSpec(integral))
     return false;
 
@@ -981,10 +997,6 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
   if(member_spec.is_empty())
     if(!optMemberSpec(member_spec))
       return false;
-
-  #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 4\n";
-  #endif
 
   if(integral.is_not_nil())
   {
@@ -1235,11 +1247,19 @@ bool Parser::rOtherDeclaration(
     if(!optStorageSpec(storage_spec))
       return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rOtherDeclaration 2\n";
+  #endif
+
   bool is_constructor = isConstructorDecl();
   bool is_operator = false;
 
   if(is_constructor)
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 3\n";
+    #endif
+
     assert(!type_name.get_sub().empty());
 
     for(unsigned i=0; i < type_name.get_sub().size(); i++)
@@ -1254,6 +1274,10 @@ bool Parser::rOtherDeclaration(
 
   if(is_operator && is_constructor)
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 4\n";
+    #endif
+
     // it's a conversion operator
     typet type = type_name;
     type.get_sub().erase(type.get_sub().begin());
@@ -1269,7 +1293,7 @@ bool Parser::rOtherDeclaration(
   else if(cv_q.is_nil() && is_constructor)
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 2\n";
+    std::cout << "Parser::rOtherDeclaration 5\n";
     #endif
 
     assert(!type_name.get_sub().empty());
@@ -1282,6 +1306,10 @@ bool Parser::rOtherDeclaration(
     if(!rConstructorDecl(constructor_declarator, type_name))
       return false;
 
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 6\n";
+    #endif
+
     // it's the name (declarator), not the return type
 
     type_name=typet(is_destructor?"destructor":"constructor");
@@ -1290,7 +1318,7 @@ bool Parser::rOtherDeclaration(
   else if(!member_spec.is_empty() && lex->LookAhead(0)==';')
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 3\n";
+    std::cout << "Parser::rOtherDeclaration 7\n";
     #endif
 
     // FRIEND name ';'
@@ -1308,7 +1336,7 @@ bool Parser::rOtherDeclaration(
   else
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 4\n";
+    std::cout << "Parser::rOtherDeclaration 8\n";
     #endif
 
     if(!optCvQualify(cv_q))
@@ -1325,13 +1353,13 @@ bool Parser::rOtherDeclaration(
   declaration.member_spec().swap(member_spec);
 
   #ifdef DEBUG
-  std::cout << "Parser::rOtherDeclaration 5\n";
+  std::cout << "Parser::rOtherDeclaration 9\n";
   #endif
 
   if(lex->LookAhead(0)==';')
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 6\n";
+    std::cout << "Parser::rOtherDeclaration 10\n";
     #endif
 
     Token tk;
@@ -1340,7 +1368,7 @@ bool Parser::rOtherDeclaration(
   else
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 7\n";
+    std::cout << "Parser::rOtherDeclaration 11\n";
     #endif
 
     if(declaration.declarators().size()!=1)
@@ -1772,7 +1800,7 @@ bool Parser::rConstructorDecl(
   cv.make_nil();
   optCvQualify(cv);
 
-  optThrowDecl(constructor.throw_decl()); // ignore in this version
+  optThrowDecl(constructor.throw_decl());
 
   if(lex->LookAhead(0)==':')
   {
@@ -6287,6 +6315,8 @@ bool Parser::rExprStatement(codet &statement)
 bool Parser::rCondition(exprt &statement)
 {
   cpp_token_buffert::post pos=lex->Save();
+
+  // C++ conditions can be a declaration!
 
   cpp_declarationt declaration;
 
