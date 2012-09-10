@@ -405,14 +405,30 @@ bool Parser::rTypeSpecifier(typet &tspec, bool check)
 
   cv_q.make_nil();
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 0\n";
+  #endif
+
   if(!optCvQualify(cv_q))
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 1\n";
+  #endif
 
   if(!optIntegralTypeOrClassSpec(tspec))
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 2\n";
+  #endif
+
   if(tspec.is_nil())
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rTypeSpecifier 3\n";
+    #endif
+
     Token tk;
     lex->LookAhead(0, tk);
 
@@ -420,9 +436,17 @@ bool Parser::rTypeSpecifier(typet &tspec, bool check)
       if(!MaybeTypeNameOrClassTemplate(tk))
         return false;
 
+    #ifdef DEBUG
+    std::cout << "Parser::rTypeSpecifier 4\n";
+    #endif
+
     if(!rName(tspec))
       return false;
   }
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 5\n";
+  #endif
 
   if(!optCvQualify(cv_q))
     return false;
@@ -4170,8 +4194,16 @@ bool Parser::rTypeName(typet &tname)
 {
   typet type_name;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 0\n";
+  #endif
+
   if(!rTypeSpecifier(type_name, true))
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 1\n";
+  #endif
 
   cpp_declaratort declarator;
 
@@ -4179,6 +4211,10 @@ bool Parser::rTypeName(typet &tname)
     return false;
 
   tname.swap(declarator.type());
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 2\n";
+  #endif
 
   // make type_name subtype of arg
   make_subtype(type_name, tname);
