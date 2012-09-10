@@ -4380,6 +4380,22 @@ bool Parser::rTypeidExpr(exprt &exp)
   if(lex->GetToken(tk)!=TOK_TYPEID)
     return false;
 
+  exp=exprt("sideeffect");
+  exp.statement("function_call");
+
+  // Op0 must be the function typeid(*)
+  exprt typeid_exp("cpp-name");
+  set_location(typeid_exp, tk);
+
+  irept typeid_name("name");
+  typeid_name.identifier(tk.text);
+  set_location(typeid_name, tk);
+
+  typeid_exp.get_sub().push_back(typeid_name);
+
+  // Set Op0
+  exp.move_to_operands(typeid_exp);
+
   if(lex->LookAhead(0)=='(')
   {
     typet tname;
@@ -4388,11 +4404,19 @@ bool Parser::rTypeidExpr(exprt &exp)
 
     cpp_token_buffert::post pos=lex->Save();
     lex->GetToken(op);
+
+    // typeid for variables
     if(rTypeName(tname))
       if(lex->GetToken(cp)==')')
       {
-        exp=exprt("typeid");
-        exp.set("type", tname);
+        // The second argument is the function parameter
+        irept tmp_irept = static_cast<irept>(tname);
+        exprt &tmp_exprt = static_cast<exprt&>(tmp_irept);
+
+        exprt arguments_exprt("arguments");
+        arguments_exprt.operands().push_back(tmp_exprt);
+
+        exp.move_to_operands(arguments_exprt);
         set_location(exp, tk);
         return true;
       }
@@ -4403,7 +4427,6 @@ bool Parser::rTypeidExpr(exprt &exp)
     if(rExpression(subexp))
       if(lex->GetToken(cp)==')')
       {
-        exp=exprt("typeid");
         exp.move_to_operands(subexp);
         set_location(exp, tk);
         return true;
