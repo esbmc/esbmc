@@ -13,8 +13,12 @@ OutIt transform(InIt first, InIt last, OutIt dest, Fn1 func) {
 
 template<class InIt1, class InIt2, class OutIt, class Fn2>
 OutIt transform(InIt1 first1, InIt1 last1, InIt2 first2, OutIt dest, Fn2 func) {
-	while (first1 != last1)
-		*dest++ = func(*first1++, *first2++);
+	while (first1 != last1){
+		*dest = func(*first1, *first2);
+		dest++;
+		fisrt1++;
+		first2++;
+		}
 	return dest;
 }
 
