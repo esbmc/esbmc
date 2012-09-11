@@ -19,16 +19,17 @@ const char* message;
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
+bool uncaught_exception() throw ();
+terminate_handler set_terminate(terminate_handler f) throw ();
+unexpected_handler set_unexpected(unexpected_handler f) throw ();
+
 class exception {
 public:
 	exception() throw ();
 	exception(const exception&) throw ();
 	exception& operator=(const exception&) throw ();
-	terminate_handler set_terminate(terminate_handler f) throw ();
-	unexpected_handler set_unexpected(unexpected_handler f) throw ();
 	void unexpected();
 	void terminate();
-	bool uncaught_exception() throw ();
 	virtual ~exception() throw () {
 	}
 	virtual const char* what() const throw () {
