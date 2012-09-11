@@ -80,6 +80,9 @@ public:
 		bool operator == ( const iterator& i)const{
 			return (pointer == i.pointer);
 		}
+		bool operator == ( int i)const{
+			return (pointer == i);
+		}
 		bool operator != ( const iterator& i)const{
 			return (pointer != i.pointer);
 		}
@@ -115,6 +118,7 @@ public:
 		iterator& operator -= (int n){
 			return iterator(pointer-=n,pos-=n,vec_pos);
 		}
+		iterator operator[]( iterator n );
 	};
 
 	class const_iterator
