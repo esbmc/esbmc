@@ -174,4 +174,3 @@ if($failures == 0) {
 
 close LOG;
 
-exit $failures;
