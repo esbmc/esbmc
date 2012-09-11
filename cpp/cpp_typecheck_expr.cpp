@@ -1655,6 +1655,11 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   // Backup of the original operand
   exprt op0=expr.function();
 
+  // We'll ignore typeid for now and handle it on goto-programs
+  if(op0.has_operands())
+    if(op0.op0().statement()=="typeid")
+      return;
+
   // now do the function -- this has been postponed
   typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));
 
