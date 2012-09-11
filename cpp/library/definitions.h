@@ -36,6 +36,7 @@ long double nondet_ldouble();
 bool nondet_bool();
 char* nondet_charPointer();
 char nondet_char();
+unsigned nondet_unsigned();
 class smanip {};
 
 //int sprintf ( char * str, const char * format, ... );
