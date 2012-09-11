@@ -1656,14 +1656,22 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   {
     typecheck_expr_cpp_name(arguments, cpp_typecheck_fargst());
   }
-  else // It's a type
+  else // Type or index
   {
-    // Typecheck if it's a type
-    typet type(arguments.id());
-    typecheck_type(type);
+    if(arguments.id()=="index")
+    {
+      Forall_operands(it, arguments)
+        typecheck_expr_cpp_name(*it, cpp_typecheck_fargst());
+    }
+    else
+    {
+      // Typecheck the type
+      typet type(arguments.id());
+      typecheck_type(type);
 
-    // Swap to the arguments
-    arguments.swap(type);
+      // Swap to the arguments
+      arguments.swap(type);
+    }
   }
 
   // Finally, replace the expr with the correct values
