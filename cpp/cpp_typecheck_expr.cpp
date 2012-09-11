@@ -1718,7 +1718,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   {
     if(op0.op0().statement()=="typeid")
     {
-      typecheck_expr_typeid(op0);
+      typecheck_expr_typeid(expr.function());
       return;
     }
   }
