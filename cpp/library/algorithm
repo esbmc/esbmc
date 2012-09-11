@@ -720,7 +720,7 @@ OutIt rotate_copy(FwdIt *first, FwdIt *mid, FwdIt *last, OutIt dest) {
 
 template<class T>
 T rand(T rand) {
-	return (rand % 32767 + 1);
+	return ((rand % 32767) + 1);
 }
 
 template<class RanIt>
