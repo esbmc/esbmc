@@ -1652,8 +1652,26 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   exprt function = expr.op0();
   exprt arguments = function.op1().op0();
 
-  if(arguments.id()=="type")
-    typecheck_type(arguments.type());
+  if(arguments.get_sub().size()) // It's an object
+  {
+    typecheck_expr_cpp_name(arguments, cpp_typecheck_fargst());
+  }
+  else // It's a type
+  {
+    // Typecheck if it's a type
+    typet type(arguments.id());
+    typecheck_type(type);
+
+    // Swap to the arguments
+    arguments.swap(type);
+  }
+
+  // Finally, replace the expr with the correct values
+  // Swap back to function
+  function.op1().op0().swap(arguments);
+
+  // Swap back to expr
+  expr.op0().swap(function);
 }
 
 /*******************************************************************\
