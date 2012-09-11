@@ -23,6 +23,7 @@ namespace std
   class priority_queue
 	{
 	public:
+	  priority_queue ( );
 	  explicit priority_queue ( const Compare& x, const Container& y );
 	  template <class InputIterator>
 	           priority_queue ( InputIterator first, InputIterator last,
