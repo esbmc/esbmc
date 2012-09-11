@@ -4381,7 +4381,7 @@ bool Parser::rTypeidExpr(exprt &exp)
     return false;
 
   exp=exprt("sideeffect");
-  exp.statement("function_call");
+  exp.statement("typeid");
 
   // Op0 must be the function typeid(*)
   exprt typeid_exp("cpp-name");
