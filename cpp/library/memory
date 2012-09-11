@@ -13,8 +13,7 @@
 #include "cstddef"
 #include "iterator"
 
-namespace std {
-
+#if 0
 template<class T> class allocator {
 	T value_type;
 	T* pointer;
@@ -40,62 +39,45 @@ template<class T> class allocator {
 		((T*) p)->~T();
 	}
 };
+#endif
 
-template<class X> class auto_ptr {
-	X* ptr;
-public:
-	explicit auto_ptr(X* p = 0) throw () {
-		ptr = p;
+namespace std
+{
+template <class X> class auto_ptr{
+  X* ptr;
+	public:
+	explicit auto_ptr (X* p=0) throw()
+	{
+   ptr=p;
+		//model
 	}
-	auto_ptr(auto_ptr& a) throw () {
-		ptr = a;
+	auto_ptr (auto_ptr& a) throw()
+	{
+		//model
 	}
-	template<class Y>
-	auto_ptr(auto_ptr<Y>& a) throw () {
-		ptr = a;
+ 	template<class Y>
+		auto_ptr (auto_ptr<Y>& a) throw()
+		{
+		//model
+		}
+	X* operator->() const throw()
+	{
+		//model
+    return ptr;
 	}
-	X* operator->() const throw () {
-		return ptr;
-	}
-	X& operator*() const throw () {
-		X& ptr2 = *ptr;
-		return ptr2;
-	}
-	X* get() const throw () {
-		return ptr;
+	X& operator*() const throw()
+	{
+		//model
+    X& ptr2 = *ptr;
+    return ptr2;
 	}
 	auto_ptr& operator=(auto_ptr& a) throw ();
 	template<class Y>
 	auto_ptr& operator=(auto_ptr<Y>& a) throw ();
-	auto_ptr& operator=(auto_ptr_ref<X> r) throw ();
 	X* release() throw ();
 	void reset(X* p = 0) throw ();
-	template<class Y> operator auto_ptr_ref<Y>() throw ();
 	template<class Y> operator auto_ptr<Y>() throw ();
 };
-
-template<class Y> struct auto_ptr_ref;
-
-#if 0
-template <class OutputIterator, class T>
-class raw_storage_iterator :
-public iterator<output_iterator_tag,void,void,void,void>
-{
-protected:
-	OutputIterator iter;
-
-public:
-	explicit raw_storage_iterator (OutputIterator x) : iter(x) {}
-	raw_storage_iterator<OutputIterator,T>& operator* ()
-	{	return *this;}
-	raw_storage_iterator<OutputIterator,T>& operator= (const T& element)
-	{	new (static_cast<void*>(&*iter)) T (element); return *this;}
-	raw_storage_iterator<OutputIterator,T>& operator++ ()
-	{	++iter; return *this;}
-	raw_storage_iterator<OutputIterator,T> operator++ (int)
-	{	raw_storage_iterator<OutputIterator,T> tmp = *this; ++iter; return tmp;}
-};
-#endif
 
 template<class T> pair<T*, ptrdiff_t> get_temporary_buffer(ptrdiff_t n);
 
@@ -123,6 +105,27 @@ void fill(ForwardIterator first, Size n, const T& x) {
 		new (static_cast<void*>(&*first)) typename iterator_traits<
 				ForwardIterator>::value_type(x);
 }
+
+#if 0
+template <class OutputIterator, class T>
+class raw_storage_iterator :
+public iterator<output_iterator_tag,void,void,void,void>
+{
+protected:
+	OutputIterator iter;
+
+public:
+	explicit raw_storage_iterator (OutputIterator x) : iter(x) {}
+	raw_storage_iterator<OutputIterator,T>& operator* ()
+	{	return *this;}
+	raw_storage_iterator<OutputIterator,T>& operator= (const T& element)
+	{	new (static_cast<void*>(&*iter)) T (element); return *this;}
+	raw_storage_iterator<OutputIterator,T>& operator++ ()
+	{	++iter; return *this;}
+	raw_storage_iterator<OutputIterator,T> operator++ (int)
+	{	raw_storage_iterator<OutputIterator,T> tmp = *this; ++iter; return tmp;}
+};
+#endif
 
 }
 
