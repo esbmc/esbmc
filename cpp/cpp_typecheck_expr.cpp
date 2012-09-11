@@ -1647,6 +1647,13 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
     str << "only typeid(*).name() is supported\n";
     throw 0;
   }
+
+  // Second, let's check the typeid parameter
+  exprt function = expr.op0();
+  exprt arguments = function.op1().op0();
+
+  if(arguments.id()=="type")
+    typecheck_type(arguments.type());
 }
 
 /*******************************************************************\
