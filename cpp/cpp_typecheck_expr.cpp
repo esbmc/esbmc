@@ -1630,7 +1630,23 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
 {
+  // First, let's check if we're getting the function name
+  irept component_cpp_name = expr.find("component_cpp_name");
 
+  if(component_cpp_name.get_sub().size()!=1)
+  {
+    err_location(expr.location());
+    str << "only typeid(*).name() is supported\n";
+    throw 0;
+  }
+
+  irep_idt identifier = component_cpp_name.get_sub()[0].identifier();
+  if(identifier!="name")
+  {
+    err_location(expr.location());
+    str << "only typeid(*).name() is supported\n";
+    throw 0;
+  }
 }
 
 /*******************************************************************\
