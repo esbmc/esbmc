@@ -20,7 +20,7 @@ using namespace std;
 
 namespace std {
 
-class bitset::reference {
+class reference {
 	friend class bitset;
 	reference(); // no public constructor
 public:
@@ -48,7 +48,6 @@ public:
 		return _size;
 	}
 	unsigned long to_ulong() const;
-	size_t count();
 	bool any() const;
 	bool none() const;
 	bool test(size_t pos) const;
