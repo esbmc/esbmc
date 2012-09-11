@@ -99,6 +99,11 @@ void goto_convertt::do_function_call(
   else if(new_function.id()=="NULL-object")
   {
   }
+  else if(new_function.id()=="member"
+          && new_function.has_operands()
+          && new_function.op0().statement()=="typeid")
+  {
+  }
   else
   {
     err_location(function);

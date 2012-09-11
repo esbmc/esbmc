@@ -346,6 +346,10 @@ void goto_convertt::remove_sideeffects(
     {
       // these are fine
     }
+    else if(statement=="typeid")
+    {
+      // Let's handle typeid later (goto_function.cpp, do_function_call)
+    }
     else
     {
       str << "cannot remove side effect (" << statement << ")";
