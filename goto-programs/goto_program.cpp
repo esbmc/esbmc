@@ -111,17 +111,10 @@ std::ostream& goto_programt::output_instruction(
     }
     else
     {
-      // Get the type
-      exprt typeid_exp;
-
-      if(it->code.op0().type().id()=="array")
-        typeid_exp.id(it->code.op0().type().subtype().get("#cpp_type"));
-      else if(it->code.op0().type().get_bool("#class"))
-        typeid_exp.id(it->code.op0().type().get("name"));
-      else
-        typeid_exp.id(it->code.op0().type().get("#cpp_type"));
-
-      out << typeid_exp << std::endl << std::endl;
+      // Get the identifier
+      out << "  return_value = ";
+      out << "typeid(" << it->code.op0().identifier() << ").name() ";
+      out << std::endl << std::endl;
     }
     break;
 
