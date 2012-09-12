@@ -1658,6 +1658,13 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   if(arguments.get_sub().size()) // It's an object
   {
     typecheck_expr_cpp_name(arguments, cpp_typecheck_fargst());
+
+    if(arguments.type().id()=="incomplete_array")
+    {
+      err_location(arguments.location());
+      str << "storage size of ‘y’ isn’t known\n";
+      throw 0;
+    }
   }
   else // Type or index
   {
