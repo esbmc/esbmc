@@ -118,7 +118,6 @@ public:
 		iterator& operator -= (int n){
 			return iterator(pointer-=n,pos-=n,vec_pos);
 		}
-		iterator operator[]( iterator n );
 	};
 
 	class const_iterator
