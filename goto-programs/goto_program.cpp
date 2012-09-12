@@ -104,7 +104,25 @@ std::ostream& goto_programt::output_instruction(
   case OTHER:
   case FUNCTION_CALL:
   case ASSIGN:
-    out << from_expr(ns, identifier, it->code) << std::endl;
+
+    if(it->code.statement()!="typeid")
+    {
+      out << from_expr(ns, identifier, it->code) << std::endl;
+    }
+    else
+    {
+      // Get the type
+      exprt typeid_exp;
+
+      if(it->code.op0().type().id()=="array")
+        typeid_exp.id(it->code.op0().type().subtype().get("#cpp_type"));
+      else if(it->code.op0().type().get_bool("#class"))
+        typeid_exp.id(it->code.op0().type().get("name"));
+      else
+        typeid_exp.id(it->code.op0().type().get("#cpp_type"));
+
+      out << typeid_exp << std::endl << std::endl;
+    }
     break;
 
   case ASSUME:
