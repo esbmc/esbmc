@@ -1394,6 +1394,10 @@ void value_sett::apply_code(
   {
     // doesn't do anything
   }
+  else if(statement=="typeid")
+  {
+    // doesn't do anything
+  }
   else
   {
     std::cerr << code.pretty() << std::endl;
