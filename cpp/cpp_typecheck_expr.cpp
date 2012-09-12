@@ -1630,12 +1630,14 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
 {
+  exprt typeid_function = expr.op0();
+
   // First, let's check if we're getting the function name
-  irept component_cpp_name = expr.find("component_cpp_name");
+  irept component_cpp_name = typeid_function.find("component_cpp_name");
 
   if(component_cpp_name.get_sub().size()!=1)
   {
-    err_location(expr.location());
+    err_location(typeid_function.location());
     str << "only typeid(*).name() is supported\n";
     throw 0;
   }
@@ -1643,13 +1645,13 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   irep_idt identifier = component_cpp_name.get_sub()[0].identifier();
   if(identifier!="name")
   {
-    err_location(expr.location());
+    err_location(typeid_function.location());
     str << "only typeid(*).name() is supported\n";
     throw 0;
   }
 
   // Second, let's check the typeid parameter
-  exprt function = expr.op0();
+  exprt function = typeid_function.op0();
   exprt arguments = function.op1().op0();
 
   if(arguments.get_sub().size()) // It's an object
@@ -1685,7 +1687,8 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   function.op1().op0().swap(arguments);
 
   // Swap back to expr
-  expr.op0().swap(function);
+  typeid_function.swap(function);
+
 }
 
 /*******************************************************************\
@@ -1732,7 +1735,7 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   {
     if(op0.op0().statement()=="typeid")
     {
-      typecheck_expr_typeid(expr.function());
+      typecheck_expr_typeid(expr);
       return;
     }
   }
