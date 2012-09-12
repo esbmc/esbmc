@@ -1669,8 +1669,14 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       typet type(arguments.id());
       typecheck_type(type);
 
+      // Create exprt like the ones for not types
+      exprt type_symbol("symbol");
+      type_symbol.identifier(arguments.id());
+      type_symbol.type() = type;
+      type_symbol.location() = arguments.location();
+
       // Swap to the arguments
-      arguments.swap(type);
+      arguments.swap(type_symbol);
     }
   }
 
