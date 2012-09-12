@@ -521,6 +521,14 @@ exprt c_typecheck_baset::do_initializer_union(
   const union_typet &type,
   bool force_constant)
 {
+
+  if(state->id() == "designated_list")
+  {
+    exprt e=do_designated_union_initializer(*state, type, force_constant);
+    state++;
+    return e;
+  }
+
   if(!state.has_next())
   {
     exprt zero;
@@ -676,6 +684,47 @@ exprt c_typecheck_baset::do_designated_initializer(
     if(initializer.is_nil())
       zero_initializer(initializer, components[i].type());
   }
+
+  return result;
+}
+
+exprt c_typecheck_baset::do_designated_union_initializer(
+  const exprt &value,
+  const union_typet &union_type,
+  bool force_constant)
+{
+  assert(value.id()=="designated_list");
+  assert(value.operands().size() == 1);
+
+  exprt result("union", union_type);
+  
+  // We don't in fact have to lay out a series of fields. Because this is a
+  // union, all we do to represent a constant set operand 0 to something of the
+  // type of one of the union fields.
+
+  // start with NIL
+  result.operands().resize(1);
+  const exprt &initializer=value.op0();
+  assert(initializer.operands().size()==1);
+  const irep_idt &component_name = initializer.component_name();
+
+  // Work out what field we're initializing to. This is required, because we
+  // can't work out just from the initialization expression what type the
+  // operand is.
+
+  if (!union_type.has_component(component_name))
+  {
+    err_location(initializer);
+    str << "failed to find component `" << component_name << "'";
+    throw 0;
+  }
+
+  unsigned number = union_type.component_number(component_name);
+  assert(number < union_type.components().size());
+  const typet &operand_type = union_type.components()[number].type();
+
+  result.op0() = do_initializer_rec(initializer.op0(), operand_type,
+                                    force_constant);
 
   return result;
 }
