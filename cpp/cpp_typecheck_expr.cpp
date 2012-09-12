@@ -1630,6 +1630,7 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
 {
+  // expr.op0() contains the typeid function
   exprt typeid_function = expr.op0();
 
   // First, let's check if we're getting the function name
@@ -1689,7 +1690,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   function.op1().op0().swap(arguments);
 
   // Swap back to expr
-  typeid_function.swap(function);
+  expr.op0().op0().swap(function);
 
   // Set type
   typet char_type(irep_idt("char"));
