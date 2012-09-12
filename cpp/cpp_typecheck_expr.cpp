@@ -1683,12 +1683,20 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   }
 
   // Finally, replace the expr with the correct values
+  // and set its type to const char*
+
   // Swap back to function
   function.op1().op0().swap(arguments);
 
   // Swap back to expr
   typeid_function.swap(function);
 
+  // Set type
+  typet char_type(irep_idt("char"));
+  typecheck_type(char_type);
+
+  pointer_typet char_pointer_type(char_type);
+  expr.type() = char_pointer_type;
 }
 
 /*******************************************************************\
