@@ -11,11 +11,12 @@ int main ()
 
   it = myvector.begin();
   it = myvector.insert ( it , 200 );
-
+  assert(myvector[0]==200);
   myvector.insert (it,2,300);
+  assert(myvector[1]!=300);
 
   // "it" no longer valid, get a new one:
-  it = myvector.begin();
+/*  it = myvector.begin();
 
   vector<int> anothervector (2,400);
   myvector.insert (it+2,anothervector.begin(),anothervector.end());
@@ -27,6 +28,6 @@ int main ()
   for (it=myvector.begin(); it<myvector.end(); it++);
 //    cout << " " << *it;
 //  cout << endl;
-
+*/
   return 0;
 }
