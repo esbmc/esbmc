@@ -81,7 +81,7 @@ public:
 			return (pointer == i.pointer);
 		}
 		bool operator == ( int i)const{
-			return (pointer == i);
+			return (pos == i);
 		}
 		bool operator != ( const iterator& i)const{
 			return (pointer != i.pointer);
