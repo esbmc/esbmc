@@ -29,7 +29,7 @@ int main () {
   for (int i=0; i<9; ++i)
     cout << " " << myarray[i];
 
-  for (i=0;i<8;i++) assert(myarray[i] == ++i);
+  for (i=0;i<8;i++) assert(myarray[i] == i+1);
 
   cout << endl;
   return 0;
