@@ -135,18 +135,6 @@ public:
 	}
 };
 
-template<class S, class T, class A>
-class mem_fun1_t: public binary_function<T*, A, S> {
-	S (T::*pmem)(A) const;
-public:
-	explicit mem_fun1_t(S (T::*p)(A) const) :
-			pmem(p) {
-	}
-	S operator()(T* p, A x) const {
-		return (p->*pmem)(x);
-	}
-};
-
 template<class S, class T>
 class mem_fun_ref_t: public unary_function<T, S> {
 	S (T::*pmem)();
@@ -180,18 +168,6 @@ public:
 	}
 	S operator()(T& p) const {
 		return (p.*pmem)();
-	}
-};
-
-template<class S, class T, class A>
-class mem_fun1_ref_t: public binary_function<T, A, S> {
-	S (T::*pmem)(A) const;
-public:
-	explicit mem_fun1_ref_t(S (T::*p)(A) const) :
-			pmem(p) {
-	}
-	S operator()(T& p, A x) const {
-		return (p.*pmem)(x);
 	}
 };
 
