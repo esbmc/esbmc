@@ -548,14 +548,13 @@ public:
 	}
 
 	// modifiers:
+
 	void push_back(const T& x)
 	{
 		assert(0 <= _size);
 		assert(_size < VECTOR_CAPACITY);
 		_size++;
 		buf[_size] = x;
-//		int n = _size + 1;
-//		buf[n] = T();
 		verify_capacity();
 	}
 
@@ -581,8 +580,6 @@ public:
 		}
 		buf[position.pos] = x;
 		verify_capacity();
-//		int n = _size + 1;
-//		buf[n] = T();
 		return position;
 	}
 
@@ -599,24 +596,15 @@ public:
 			buf[position.pos] = x;
 		}
 		verify_capacity();
-//		int n = _size + 1;
-//		buf[n] = T();
 	}
 
 	void insert(iterator position, iterator first, iterator last){
 		int i = _size;
 		int aux;
-		for(iterator j = last - 1 ; j == first ; j--){
-			_size++;
-			while( i > position.pos - 1){
-				aux = i +1;
-				buf[aux] = buf[i];
-				i--;
-			}
-			buf[position.pos] = *j;
+		while(first!=last){
+			insert(position, *first);
+			first++;
 		}
-//		int n = _size + 1;
-//		buf[n] = T();
 		verify_capacity();
 	}
 
@@ -624,19 +612,9 @@ public:
 		int j = 0;
 		int i = _size;
 		int aux;
-
 		while((n+j)<x){
-			_size++;
-			i = _size - 1;
-			while( i > position.pos - 1){
-				aux = i +1;
-				buf[aux] = buf[i];
-				i--;
-			}
-			buf[position.pos] = n[j++];
+			insert(position++,n[j++]);
 		}
-//		j = _size + 1;
-//		buf[j] = T();
 		verify_capacity();
 	}
 
@@ -670,21 +648,10 @@ public:
 
 	// comparators:
 
-	bool operator == (const vector<T>&) const: _size(0)
-	{/*
-		__ESBMC_HIDE:
-	    if(vtr._size != v2._size)return false;
-   	      for(unsigned i = 0; i < vtr._size; i++)
-   	        if (vtr.buf[i] != v2.buf[i]) return false;
-		return true;
-	 */}
-	bool operator != (const vector<T>&) const: _size(0)
-			{/*
-		__ESBMC_HIDE:
-	    return !(vtr==v2);
-			 */}
-	bool operator >= (const vector<T>&) const;
-	bool operator <= (const vector<T>&) const;
+	bool operator==(const vector<T>&);
+	bool operator!=(const vector<T>&);
+	bool operator>=(const vector<T>&);
+	bool operator<=(const vector<T>&);
 
 private:
 	T buf[VECTOR_CAPACITY];
@@ -692,6 +659,32 @@ private:
 	int _capacity;
 
 };
+
+template <class T>
+bool vector<T>::operator== (const vector<T>& rhv){
+	if(this->size() != rhv.size()) return false;
+	int i = 0;
+	while(i != this->size()){
+		if(this->at(i) != rhv[i]) return false;
+		i++;
+	}
+	return true;
+}
+
+template <class T>
+bool vector<T>::operator!= (const vector<T>& rhv){
+	return (!(*this == rhv));
+}
+
+template <class T>
+bool vector<T>::operator>= (const vector<T>& rhv){
+	return ((*this == rhv)||(this->size() > rhv.size()));
+}
+
+template <class T>
+bool vector<T>::operator<= (const vector<T>& rhv){
+	return ((*this == rhv)||(this->size() < rhv.size()));
+}
 
 // specialized algorithms:
 
