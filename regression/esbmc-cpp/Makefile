@@ -7,6 +7,7 @@ string := esbmc-string
 trycatch := esbmc-try_catch
 vector := esbmc-vector
 deque := esbmc-deque
+list := esbmc-list
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -15,9 +16,9 @@ endif
 clean: all
 
 # Make them all
-all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque)
+all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list)
 
-$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque):
+$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list):
 	$(MAKE) --directory=$@ $(TARGET)
 
 # Make each directory
@@ -29,6 +30,7 @@ string: $(string)
 trycatch: $(trycatch)
 vector: $(vector)
 deque: $(deque)
+list: $(list)
 
 # Allow parallel make
-.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque)
+.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list)
