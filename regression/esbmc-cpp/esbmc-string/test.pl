@@ -35,10 +35,10 @@ sub run($$$) {
 	
 	# for XML file
 	#------------------------------
-	$tags{"item_04_esbmc-option"} = "esbmc ".$options." ".$input;
+	$tags{"item_04_esbmc-option"} = "esbmc"." ".$input." ".$options;
 	#------------------------------
 	
-	my $cmd = "esbmc $options $input >$output 2>&1";  
+	my $cmd = "esbmc $input $options >$output 2>&1";  
 	
 	print LOG "Running $cmd\n";
 
