@@ -123,13 +123,19 @@ void cpp_typecheckt::typecheck_catch(codet &code)
 
     // Hack to fix dereference bug. This is probably not the right
     // thing to do but works
-    if(block.op0().has_operands()){
-      if(block.op0().op0().has_operands()) {
-        typet &catch_type = block.op0().op0().op0().type();
+    if(block.has_operands())
+    {
+      if(block.op0().has_operands())
+      {
+        if(block.op0().op0().has_operands())
+        {
+          typet &catch_type = block.op0().op0().op0().type();
 
-        if(catch_type.get_bool("#reference")) {
-          typet catch_type_nil("nil");
-          block.op0().op0().op0().type().swap(catch_type_nil);
+          if(catch_type.get_bool("#reference"))
+          {
+            typet catch_type_nil("nil");
+            block.op0().op0().op0().type().swap(catch_type_nil);
+          }
         }
       }
     }
