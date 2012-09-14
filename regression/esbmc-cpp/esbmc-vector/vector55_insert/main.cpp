@@ -18,8 +18,11 @@ int main ()
 
   it = myvector.begin();
 
-  vector<int> anothervector (2,400);
+  vector<int> anothervector;
+  anothervector.push_back(1);
+  anothervector.push_back(2);
   myvector.insert (it+2,anothervector.begin(),anothervector.end());
+  assert(myvector[3]!=2);
 
   int myarray [] = { 501,502,503 };
   myvector.insert (myvector.begin(), myarray, myarray+3);
