@@ -602,7 +602,7 @@ public:
 		int i = _size;
 		int aux;
 		while(first!=last){
-			insert(position, *first);
+			insert(position++, *first);
 			first++;
 		}
 		verify_capacity();
