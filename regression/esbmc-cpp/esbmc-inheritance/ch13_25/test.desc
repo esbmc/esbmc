@@ -1,3 +1,3 @@
 main.cpp 
---unwind 10 --no-unwinding-assertions -I ~/libraries/ --no-pointer-check
+BasePlusCommissionEmployee.cpp CommissionEmployee.cpp Employee.cpp HourlyEmployee.cpp SalariedEmployee.cpp --unwind 10 --no-unwinding-assertions -I ~/libraries/
 ^VERIFICATION SUCCESSFUL$
