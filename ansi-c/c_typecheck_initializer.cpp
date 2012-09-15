@@ -81,7 +81,9 @@ bool c_typecheck_baset::zero_initializer(
       if(to_integer(size_expr, size))
         return true;
 
-      if(size<=0) return true;
+      // Permit GCC zero sized arrays; disallow negative sized arrays.
+      // Cringe slightly when doing it though.
+      if (size < 0) return true;
     }
 
     value=exprt("array_of", type);
