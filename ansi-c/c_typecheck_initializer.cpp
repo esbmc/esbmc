@@ -583,7 +583,8 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
       const typet &final_type=follow(symbol.type);
       
       if(final_type.id()!="incomplete_struct" &&
-         final_type.id()!="incomplete_array")
+         final_type.id()!="incomplete_array" &&
+         !symbol.is_extern) // Don't zero-init externs
       {
         // zero initializer
         if(zero_initializer(symbol.value, symbol.type))
