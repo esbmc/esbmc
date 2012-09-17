@@ -81,7 +81,9 @@ bool c_typecheck_baset::zero_initializer(
       if(to_integer(size_expr, size))
         return true;
 
-      if(size<=0) return true;
+      // Permit GCC zero sized arrays; disallow negative sized arrays.
+      // Cringe slightly when doing it though.
+      if (size < 0) return true;
     }
 
     value=exprt("array_of", type);
@@ -581,7 +583,8 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
       const typet &final_type=follow(symbol.type);
       
       if(final_type.id()!="incomplete_struct" &&
-         final_type.id()!="incomplete_array")
+         final_type.id()!="incomplete_array" &&
+         !symbol.is_extern) // Don't zero-init externs
       {
         // zero initializer
         if(zero_initializer(symbol.value, symbol.type))
