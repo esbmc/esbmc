@@ -7,6 +7,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include "cpp_exception_id.h"
+#include <std_types.h>
 
 /*******************************************************************\
 
@@ -46,7 +47,28 @@ void cpp_exception_list_rec(
   else if(src.id()=="symbol")
   {
     irep_idt identifier = src.identifier();
-    dest.push_back(id2string(identifier)+suffix);
+
+    // We must check if is a derived class
+    typet type = ns.lookup(identifier).type;
+
+    if(type.id()=="struct")
+    {
+      struct_typet struct_type=to_struct_type(type);
+      const exprt &bases = static_cast<const exprt&>(struct_type.find("bases"));
+
+      if(bases.is_not_nil())
+      {
+        // Save all the base classes
+        for(unsigned int i=0; i<bases.get_sub().size(); ++i)
+        {
+          typet base_type = bases.get_sub()[i].type();
+          identifier = base_type.identifier();
+          dest.push_back(id2string(identifier)+suffix);
+        }
+      }
+      else // It's a base class
+        dest.push_back(id2string(identifier)+suffix);
+    }
   }
   else if(src.id()=="ellipsis")
   {
