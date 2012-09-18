@@ -117,29 +117,8 @@ void goto_symext::symex_throw()
         e_it!=exceptions_thrown.end();
         e_it++)
     {
-      // Check if we can throw the exception
-      if(frame->has_throw_decl)
-      {
-        goto_symex_statet::framet::throw_list_sett::const_iterator
-          s_it=frame->throw_list_set.find(e_it->id());
-
-        if(s_it==frame->throw_list_set.end())
-        {
-          std::string msg=std::string("Trying to throw an exception ") +
-            std::string("but it's not allowed by declaration.\n\n");
-          msg += "  Exception type: " + e_it->id().as_string();
-          msg += "\n  Allowed exceptions:";
-
-          for(goto_symex_statet::framet::throw_list_sett::iterator
-              s_it1=frame->throw_list_set.begin();
-              s_it1!=frame->throw_list_set.end();
-              ++s_it1)
-            msg+= "\n   - " + std::string((*s_it1).c_str());
-
-          claim(false_exprt(), msg);
-          return;
-        }
-      }
+      // Handle throw declarations
+      handle_throw_decl(frame, e_it->id());
 
       // We can throw! look on the map if we have a catch for the type thrown
       goto_symex_statet::framet::catch_mapt::const_iterator
@@ -181,7 +160,47 @@ void goto_symext::symex_throw()
 
 /*******************************************************************\
 
-Function: goto_symext::check_rethrow
+Function: goto_symext::handle_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::handle_throw_decl(goto_symex_statet::framet* frame,
+  const irep_idt &id)
+{
+  // Check if we can throw the exception
+  if(frame->has_throw_decl)
+  {
+    goto_symex_statet::framet::throw_list_sett::const_iterator
+    s_it=frame->throw_list_set.find(id);
+
+    if(s_it==frame->throw_list_set.end())
+    {
+      std::string msg=std::string("Trying to throw an exception ") +
+          std::string("but it's not allowed by declaration.\n\n");
+      msg += "  Exception type: " + id.as_string();
+      msg += "\n  Allowed exceptions:";
+
+      for(goto_symex_statet::framet::throw_list_sett::iterator
+          s_it1=frame->throw_list_set.begin();
+          s_it1!=frame->throw_list_set.end();
+          ++s_it1)
+        msg+= "\n   - " + std::string((*s_it1).c_str());
+
+      claim(false_exprt(), msg);
+      return;
+    }
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::handle_rethrow
 
   Inputs:
 

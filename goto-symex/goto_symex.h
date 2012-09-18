@@ -383,6 +383,12 @@ protected:
   void handle_rethrow(irept::subt exceptions_thrown,
     const goto_programt::instructiont instruction);
 
+  /** Check if we can throw an exception:
+   *  if we can't then gives a error.
+   */
+  void handle_throw_decl(goto_symex_statet::framet* frame,
+    const irep_idt &id);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with
