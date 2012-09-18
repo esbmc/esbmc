@@ -119,6 +119,18 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
+    if(cur_state->call_stack.size())
+    {
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
+
+      if((*s_it).has_throw_target)
+      {
+        cur_state->source.pc++;
+        break;
+      }
+    }
+
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
