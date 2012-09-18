@@ -376,6 +376,13 @@ protected:
   /** Register throw handler on stack. */
   void symex_throw_decl();
 
+  /** Check if we can rethrow an exception:
+   *  if we can then update the target.
+   *  if we can't then gives a error.
+   */
+  void handle_rethrow(irept::subt exceptions_thrown,
+    const goto_programt::instructiont instruction);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with

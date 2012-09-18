@@ -109,24 +109,8 @@ void goto_symext::symex_throw()
 
     if(frame->catch_map.empty()) continue;
 
-    // throw without argument, we must rethrow last exception
-    if(!exceptions_thrown.size())
-    {
-      if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
-      {
-        // get exception from last throw
-        irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
-
-        // update current state exception list
-        instruction.code.find("exception_list").get_sub().push_back((*e_it));
-      }
-      else
-      {
-        const std::string &msg="Trying to re-throw without last exception.";
-        claim(false_exprt(), msg);
-        return;
-      }
-    }
+    // Handle rethrows
+    handle_rethrow(exceptions_thrown, instruction);
 
     for(irept::subt::const_iterator
         e_it=exceptions_thrown.begin();
@@ -157,7 +141,7 @@ void goto_symext::symex_throw()
         }
       }
 
-      // We can throw it, look on the map if we have a catch for it
+      // We can throw! look on the map if we have a catch for the type thrown
       goto_symex_statet::framet::catch_mapt::const_iterator
         c_it=frame->catch_map.find(e_it->id());
 
@@ -192,6 +176,41 @@ void goto_symext::symex_throw()
       }
     }
     last_throw = &instruction; // save last throw
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::check_rethrow
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::handle_rethrow(irept::subt exceptions_thrown,
+  const goto_programt::instructiont instruction)
+{
+  // throw without argument, we must rethrow last exception
+  if(!exceptions_thrown.size())
+  {
+    if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
+    {
+      // get exception from last throw
+      irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
+
+      // update current state exception list
+      instruction.code.find("exception_list").get_sub().push_back((*e_it));
+    }
+    else
+    {
+      const std::string &msg="Trying to re-throw without last exception.";
+      claim(false_exprt(), msg);
+      return;
+    }
   }
 }
 
