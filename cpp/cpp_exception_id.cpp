@@ -56,7 +56,8 @@ void cpp_exception_list_rec(
       struct_typet struct_type=to_struct_type(type);
       const exprt &bases = static_cast<const exprt&>(struct_type.find("bases"));
 
-      if(bases.is_not_nil())
+      if(bases.is_not_nil()
+         && bases.get_sub().size())
       {
         // Save all the base classes
         for(unsigned int i=0; i<bases.get_sub().size(); ++i)
