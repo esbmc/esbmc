@@ -130,8 +130,7 @@ void goto_symext::symex_throw()
       if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
       {
         // We do!
-        frame->throw_target = (*c_it).second;
-        frame->has_throw_target=true;
+        update_throw_target(frame, c_it);
         last_throw = &instruction; // save last throw
 
         // Now let's check if we're going to the right throw
@@ -157,14 +156,11 @@ void goto_symext::symex_throw()
               // We must check the id order
               if(new_id_number < old_id_number)
               {
-                frame->throw_target = (*c_it).second;
-                frame->has_throw_target=true;
-                last_throw = &instruction; // save last throw
+                update_throw_target(frame, c_it);
               }
             }
           }
         }
-
         return;
       }
       else // We don't have a catch for it
@@ -174,8 +170,7 @@ void goto_symext::symex_throw()
 
         if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
         {
-          frame->throw_target = (*c_it).second;
-          frame->has_throw_target=true;
+          update_throw_target(frame, c_it);
           last_throw = &instruction; // save last throw
           return;
         }
@@ -191,6 +186,25 @@ void goto_symext::symex_throw()
       }
     }
   }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::update_throw_target
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::update_throw_target(goto_symex_statet::framet* frame,
+  goto_symex_statet::framet::catch_mapt::const_iterator c_it)
+{
+  frame->throw_target = (*c_it).second;
+  frame->has_throw_target=true;
 }
 
 /*******************************************************************\
