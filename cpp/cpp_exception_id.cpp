@@ -27,20 +27,21 @@ void cpp_exception_list_rec(
   const typet &src,
   const namespacet &ns,
   const std::string &suffix,
-  std::vector<irep_idt> &dest)
+  std::vector<irep_idt> &dest,
+  bool is_catch)
 {
   if(src.id()=="pointer")
   {
     if(src.reference())
     {
       // do not change
-      cpp_exception_list_rec(src.subtype(), ns, suffix, dest);
+      cpp_exception_list_rec(src.subtype(), ns, suffix, dest, is_catch);
       return;
     }
     else
     {
       // append suffix _ptr
-      cpp_exception_list_rec(src.subtype(), ns, "_ptr"+suffix, dest);
+      cpp_exception_list_rec(src.subtype(), ns, "_ptr"+suffix, dest, is_catch);
       return;
     }
   }
@@ -51,11 +52,13 @@ void cpp_exception_list_rec(
     // We must check if is a derived class
     typet type = ns.lookup(identifier).type;
 
-    if(type.id()=="struct")
+    if(type.id()=="struct"
+       && !is_catch) // We only get the base class when throwing
     {
       struct_typet struct_type=to_struct_type(type);
       const exprt &bases = static_cast<const exprt&>(struct_type.find("bases"));
 
+      // Throwing a derived class
       if(bases.is_not_nil()
          && bases.get_sub().size())
       {
@@ -67,9 +70,11 @@ void cpp_exception_list_rec(
           dest.push_back(id2string(identifier)+suffix);
         }
       }
-      else // It's a base class
+      else // Throwing a base class
         dest.push_back(id2string(identifier)+suffix);
     }
+    else
+      dest.push_back(id2string(identifier)+suffix);
   }
   else if(src.id()=="ellipsis")
   {
@@ -106,7 +111,7 @@ irept cpp_exception_list(const typet &src, const namespacet &ns)
   std::vector<irep_idt> ids;
   irept result("exception_list");
 
-  cpp_exception_list_rec(src, ns, "", ids);
+  cpp_exception_list_rec(src, ns, "", ids, false);
   result.get_sub().resize(ids.size());
 
   for(unsigned i=0; i<ids.size(); i++)
@@ -130,7 +135,7 @@ Function: cpp_exception_id
 irep_idt cpp_exception_id(const typet &src, const namespacet &ns)
 {
   std::vector<irep_idt> ids;
-  cpp_exception_list_rec(src, ns, "", ids);
+  cpp_exception_list_rec(src, ns, "", ids, true);
   assert(!ids.empty());
   return ids.front();
 }
