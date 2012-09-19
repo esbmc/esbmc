@@ -126,11 +126,45 @@ void goto_symext::symex_throw()
       goto_symex_statet::framet::catch_mapt::const_iterator
         c_it=frame->catch_map.find(e_it->id());
 
+      // Do we have a catch for it?
       if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
       {
+        // We do!
         frame->throw_target = (*c_it).second;
         frame->has_throw_target=true;
         last_throw = &instruction; // save last throw
+
+        // Now let's check if we're going to the right throw
+        // when throwing derived object with multiple inheritance
+        if(exceptions_thrown.size()>1)
+        {
+          // Save number id
+          unsigned old_id_number = (*frame->catch_order.find(e_it->id())).second;
+
+          // Let's update for the next throw
+          e_it++;
+
+          for( ;
+              e_it!=exceptions_thrown.end();
+              ++e_it)
+          {
+            c_it=frame->catch_map.find(e_it->id());
+
+            if(c_it!=frame->catch_map.end())
+            {
+              unsigned new_id_number = (*frame->catch_order.find(e_it->id())).second;
+
+              // We must check the id order
+              if(new_id_number < old_id_number)
+              {
+                frame->throw_target = (*c_it).second;
+                frame->has_throw_target=true;
+                last_throw = &instruction; // save last throw
+              }
+            }
+          }
+        }
+
         return;
       }
       else // We don't have a catch for it
