@@ -115,10 +115,15 @@ void goto_symext::symex_throw()
     // Handle rethrows
     handle_rethrow(exceptions_thrown, instruction);
 
-    if(exceptions_thrown.size())
-    {
-      irept::subt::const_iterator e_it=exceptions_thrown.begin();
+    // It'll be used for catch ordering when throwing
+    // a derived object with multiple inheritance
+    unsigned old_id_number=-1, new_id_number=0;
 
+    for(irept::subt::const_iterator
+        e_it=exceptions_thrown.begin();
+        e_it!=exceptions_thrown.end();
+        e_it++)
+    {
       // Handle throw declarations
       handle_throw_decl(frame, e_it->id());
 
@@ -130,38 +135,15 @@ void goto_symext::symex_throw()
       if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
       {
         // We do!
-        update_throw_target(frame, c_it);
-        last_throw = &instruction; // save last throw
 
-        // Now let's check if we're going to the right throw
-        // when throwing derived object with multiple inheritance
-        if(exceptions_thrown.size()>1)
-        {
-          // Save number id
-          unsigned old_id_number = (*frame->catch_order.find(e_it->id())).second;
+        // Get current catch number and update if needed
+        new_id_number = (*frame->catch_order.find(e_it->id())).second;
 
-          // Let's update for the next throw
-          e_it++;
+        if(new_id_number < old_id_number)
+          update_throw_target(frame, c_it);
 
-          for( ;
-              e_it!=exceptions_thrown.end();
-              ++e_it)
-          {
-            c_it=frame->catch_map.find(e_it->id());
-
-            if(c_it!=frame->catch_map.end())
-            {
-              unsigned new_id_number = (*frame->catch_order.find(e_it->id())).second;
-
-              // We must check the id order
-              if(new_id_number < old_id_number)
-              {
-                update_throw_target(frame, c_it);
-              }
-            }
-          }
-        }
-        return;
+        // Save old number id
+        old_id_number = new_id_number;
       }
       else // We don't have a catch for it
       {
@@ -169,11 +151,7 @@ void goto_symext::symex_throw()
         c_it=frame->catch_map.find("ellipsis");
 
         if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
-        {
           update_throw_target(frame, c_it);
-          last_throw = &instruction; // save last throw
-          return;
-        }
 
         if(!frame->has_throw_target)
         {
@@ -181,10 +159,11 @@ void goto_symext::symex_throw()
           const std::string &msg="Throwing an exception of type " +
               e_it->id().as_string() + " but there is not catch for it.";
           claim(false_exprt(), msg);
-          return;
         }
       }
     }
+    last_throw = &instruction; // save last throw
+    return;
   }
 }
 
