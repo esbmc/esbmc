@@ -72,7 +72,10 @@ void goto_symext::symex_catch()
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
+    {
       frame.catch_map[exception_list[i].id()]=*it;
+      frame.catch_order[exception_list[i].id()]=i;
+    }
 
     // Increase program counter
     cur_state->source.pc++;
