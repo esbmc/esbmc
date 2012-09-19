@@ -112,11 +112,10 @@ void goto_symext::symex_throw()
     // Handle rethrows
     handle_rethrow(exceptions_thrown, instruction);
 
-    for(irept::subt::const_iterator
-        e_it=exceptions_thrown.begin();
-        e_it!=exceptions_thrown.end();
-        e_it++)
+    if(exceptions_thrown.size())
     {
+      irept::subt::const_iterator e_it=exceptions_thrown.begin();
+
       // Handle throw declarations
       handle_throw_decl(frame, e_it->id());
 
@@ -154,7 +153,6 @@ void goto_symext::symex_throw()
         }
       }
     }
-    last_throw = &instruction; // save last throw
   }
 }
 
