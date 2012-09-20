@@ -67,6 +67,9 @@ void cpp_exception_list_rec(
       if(bases.is_not_nil()
          && bases.get_sub().size())
       {
+        // Save the derived class
+        dest.push_back(id2string(identifier)+suffix);
+
         // Save all the base classes
         for(unsigned int i=0; i<bases.get_sub().size(); ++i)
         {
