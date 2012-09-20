@@ -147,22 +147,38 @@ void goto_symext::symex_throw()
       }
       else // We don't have a catch for it
       {
-        // Do we have an ellipsis?
-        c_it=frame->catch_map.find("ellipsis");
-
-        if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
-          update_throw_target(frame, c_it);
-
-        if(!frame->has_throw_target)
+        // If it's a pointer, we must look for a catch(void*)
+        if(e_it->id().as_string().find("_ptr") != std::string::npos)
         {
-          // An un-caught exception. Error
-          const std::string &msg="Throwing an exception of type " +
-              e_it->id().as_string() + " but there is not catch for it.";
-          claim(false_exprt(), msg);
+          // It's a pointer!
+
+          // Do we have an void*?
+          c_it=frame->catch_map.find("void_ptr");
+
+          if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
+            update_throw_target(frame, c_it); // Make the jump to void*
+        }
+        else
+        {
+          // Do we have an ellipsis?
+          c_it=frame->catch_map.find("ellipsis");
+
+          if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
+            update_throw_target(frame, c_it);
+
+          if(!frame->has_throw_target)
+          {
+            // An un-caught exception. Error
+            const std::string &msg="Throwing an exception of type " +
+                e_it->id().as_string() + " but there is not catch for it.";
+            claim(false_exprt(), msg);
+          }
         }
       }
     }
-    last_throw = &instruction; // save last throw
+
+    // save last throw for rethrow handling
+    last_throw = &instruction;
     return;
   }
 }
