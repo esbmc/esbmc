@@ -1659,6 +1659,38 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   {
     typecheck_expr_cpp_name(arguments, cpp_typecheck_fargst());
 
+    // If the object on typeid is a null pointer we must
+    // throw a bad_typeid exception
+    symbolt pointer_symbol = lookup(arguments.identifier());
+
+    if(pointer_symbol.value.value()=="NULL")
+    {
+      // It's NULL :( Let's add a throw bad_typeid
+
+      // Let's create the bad_typeid exception
+      // We must check if the user included typeinfo
+      std::cout << "**** WARNING: throwing a null pointer: ";
+      std::cout << "Don't forget to include typeinfo" << std::endl;
+
+      irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
+
+      // If the user haven't included typeinfo, this will fail
+      symbolt bad_typeid_symbol=lookup(bad_typeid_identifier);
+
+      // Ok! Let's create the temp object bad_typeid
+      exprt bad_typeid;
+      bad_typeid.identifier(bad_typeid_identifier);
+      bad_typeid.operands().push_back(exprt("sideeffect"));
+      bad_typeid.op0().type()=typet("symbol");
+      bad_typeid.op0().type().identifier(bad_typeid_identifier);
+
+      // Check throw
+      typecheck_expr_throw(bad_typeid);
+
+      // Save on the expression for handling on goto-program
+      function.set("exception_list", bad_typeid.find("exception_list"));
+    }
+
     if(arguments.type().id()=="incomplete_array")
     {
       err_location(arguments.location());
@@ -1691,7 +1723,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   }
 
   // Finally, replace the expr with the correct values
-  // and set its type to const char*
+  // and set its return type to const char*
 
   // Swap back to function
   function.op1().op0().swap(arguments);
@@ -1699,7 +1731,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
   // Swap back to expr
   expr.op0().op0().swap(function);
 
-  // Set type
+  // Set return type
   typet char_type(irep_idt("char"));
   typecheck_type(char_type);
 
