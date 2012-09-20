@@ -9,6 +9,7 @@ int main () {
   try
   {
     Polymorphic * pb = 0;
+    const char* name = typeid(*pb).name();
   }
   catch (bad_typeid& bt)
   {
