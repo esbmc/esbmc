@@ -9,6 +9,12 @@
 #include "cstdio"
 #include "cstdlib"
 
+#ifdef _WIN64
+	#define NUM_SIZE 20
+#else
+	#define NUM_SIZE 20
+#endif
+#define DEC 10
 
 namespace std
 {
@@ -52,9 +58,8 @@ public:
 		return _string;
 	}
 	ostream& operator<< (string& val) {
-		ostream m;
 		_string.append(val);
-		return m;
+		return ostream();
 	}
 
 	ostream& operator<< (bool& val) {
@@ -64,97 +69,86 @@ public:
 		else
 			_string.append("0");
 
-		ostream m;
-		return m;
+		return ostream();
 
 	}
 	ostream& operator<< (short& val) {
-		char* temp = new char[33];
-		itoa(val, temp, 10);
+		char* temp = new char[NUM_SIZE];
+		itoa(val, temp, DEC);
 		_string.append(temp);
-		ostream m;
-		return m;
+		return ostream();
 	}
 
 	ostream& operator<< (unsigned short& val) {
-			char* temp = new char[33];
-			itoa(val, temp, 10);
+			char* temp = new char[NUM_SIZE];
+			itoa(val, temp, DEC);
 			_string.append(temp);
-			ostream m;
-			return m;
+			return ostream();
 		}
 
 	ostream& operator<< (long& val) {
-		char* temp = new char[33];
-		itoa(val, temp, 10);
+		char* temp = new char[NUM_SIZE];
+		itoa(val, temp, DEC);
 		_string.append(temp);
-		ostream m;
-		return m;
+		return ostream();
 	}
 
 	ostream& operator<< (unsigned long& val) {
-		char* temp = new char[33];
-		itoa(val, temp, 10);
+		char* temp = new char[NUM_SIZE];
+		itoa(val, temp, DEC);
 		_string.append(temp);
-		ostream m;
-		return m;
+		return ostream();
 	}
 
 
-	ostream& operator<< (float& val) {
-		char* temp = new char[33];
+	ostream& operator<< (float val) {
+		char* temp = new char[NUM_SIZE];
 		char* temp2 = new char[2];
 		int n = (int) val;
-		itoa(n, temp, 10);
+		itoa(n, temp, DEC);
 		strcat(temp, ".");
 		val = val - (float) n;
-		for(int i = 0;i < 33, val != 0;i++){
-			val = val * 10;
+		for(int i = 0;i < NUM_SIZE, val != 0;i++){
+			val = val * DEC;
 			n = (int) val;
-			itoa(n, temp2, 10);
+			itoa(n, temp2, DEC);
 			strcat(temp, temp2);
 		}
 		_string.append(temp);
-		ostream m;
-		return m;
+		return ostream();
 	}
 
-	ostream& operator<< (double& val) {
-		char* temp = new char[33];
+	ostream& operator<< (double val) {
+		char* temp = new char[NUM_SIZE];
 		char* temp2 = new char[2];
 		int n = (int) val;
-		itoa(n, temp, 10);
+		itoa(n, temp, DEC);
 		strcat(temp, ".");
 		val = val - (double) n;
-		for(int i = 0;i < 33, val != 0;i++){
-			val = val * 10;
+		for(int i = 0;i < NUM_SIZE, val != 0;i++){
+			val = val * DEC;
 			n = (int) val;
-			itoa(n, temp2, 10);
+			itoa(n, temp2, DEC);
 			strcat(temp, temp2);
 		}
 		_string.append(temp);
-		ostream m;
-		return m;
+		return ostream();
 	}
 	ostream& operator<< (char& val) {
 		_string.append(val, 1);
-		ostream m;
-		return m;
+		return ostream();
 	}
 
-//	ostream& operator<< (char* &val) {
-//
-//		int tam = strlen(val);
-//		_string.append(val, tam);
-//		ostream m;
-//		return m;
-//	}
-	ostream& operator<< (char* val) {
-		const char* str = val;
-		int tam = strlen(str);
-		_string.append(str, tam);
-		ostream m;
-		return m;
+	ostream& operator<< (unsigned char& val) {
+		    char val1 = (char) val;
+			_string.append(val1, 1);
+			return ostream();
+		}
+
+	ostream& operator<< (const char* val) {
+		int tam = strlen(val);
+		_string.append(val, tam);
+		return ostream();
 	}
 };
 
