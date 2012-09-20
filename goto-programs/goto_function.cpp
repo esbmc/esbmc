@@ -118,6 +118,20 @@ void goto_convertt::do_function_call(
 
     // Second, copy to the goto-program
     copy(to_code(typeid_code), OTHER, dest);
+
+    // We must check if the is a exception list
+    // If there is, we must throw the exception
+    const exprt& exception_list=
+      static_cast<const exprt&>(function.op0().find("exception_list"));
+
+    if(exception_list.is_not_nil())
+    {
+      // Add new instruction throw
+      goto_programt::targett t=dest.add_instruction(THROW);
+      t->code=codet("cpp-throw");
+      t->location=function.location();
+      t->code.set("exception_list", exception_list);
+    }
   }
   else
   {
