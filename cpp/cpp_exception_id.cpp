@@ -38,6 +38,11 @@ void cpp_exception_list_rec(
       cpp_exception_list_rec(src.subtype(), ns, suffix, dest, is_catch);
       return;
     }
+    else if(src.subtype().id()=="empty") // throwing void*
+    {
+      irep_idt identifier = "void_ptr";
+      dest.push_back(id2string(identifier)+suffix);
+    }
     else
     {
       // append suffix _ptr
