@@ -113,7 +113,8 @@ void goto_symext::symex_throw()
     if(frame->catch_map.empty()) continue;
 
     // Handle rethrows
-    handle_rethrow(exceptions_thrown, instruction);
+    if(!handle_rethrow(exceptions_thrown, instruction))
+      return;
 
     // It'll be used for catch ordering when throwing
     // a derived object with multiple inheritance
@@ -165,16 +166,16 @@ void goto_symext::symex_throw()
 
           if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
             update_throw_target(frame, c_it);
-
-          if(!frame->has_throw_target)
-          {
-            // An un-caught exception. Error
-            const std::string &msg="Throwing an exception of type " +
-                e_it->id().as_string() + " but there is not catch for it.";
-            claim(false_exprt(), msg);
-          }
         }
       }
+    }
+
+    if(!frame->has_throw_target)
+    {
+      // An un-caught exception. Error
+      const std::string &msg="Throwing an exception of type " +
+          e_it->id().as_string() + " but there is not catch for it.";
+      claim(false_exprt(), msg);
     }
 
     // save last throw for rethrow handling
@@ -254,7 +255,7 @@ Function: goto_symext::handle_rethrow
 
 \*******************************************************************/
 
-void goto_symext::handle_rethrow(irept::subt exceptions_thrown,
+bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
   const goto_programt::instructiont instruction)
 {
   // throw without argument, we must rethrow last exception
@@ -267,14 +268,17 @@ void goto_symext::handle_rethrow(irept::subt exceptions_thrown,
 
       // update current state exception list
       instruction.code.find("exception_list").get_sub().push_back((*e_it));
+
+      return true;
     }
     else
     {
       const std::string &msg="Trying to re-throw without last exception.";
       claim(false_exprt(), msg);
-      return;
+      return false;
     }
   }
+  return true;
 }
 
 /*******************************************************************\
