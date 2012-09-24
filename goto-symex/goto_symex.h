@@ -206,7 +206,7 @@ protected:
    *  Join together a previous jump state into thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
-   *  states being joined. 
+   *  states being joined.
    *  @param goto_state The previous jumps state to be merged into the current
    */
   void phi_function(const statet::goto_statet &goto_state);
@@ -251,7 +251,7 @@ protected:
    */
   bool make_return_assignment(code_assignt &assign, const code_returnt &code);
 
-  /** 
+  /**
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
@@ -379,7 +379,12 @@ protected:
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
 
-  // dynamic stuff
+  /** Walk back up stack frame looking for exception handler. */
+  void symex_throw();
+
+  /** Register exception handler on stack. */
+  void symex_catch();
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with
@@ -390,6 +395,7 @@ protected:
    *  @param expr Expression we're replacing the contents of.
    */
   void replace_dynamic_allocation(exprt &expr);
+  void default_replace_dynamic_allocation(exprt &expr);
 
   /**
    *  Decide if symbol is valid or not.
@@ -539,6 +545,16 @@ protected:
   symex_targett *target;
   /** Target thread we're currently operating upon */
   goto_symex_statet *cur_state;
+  /** Symbol names for modelling arrays.
+   *  These irep_idts contain the names of the arrays being used to store data
+   *  modelling what pointers are active, which are freed, and so forth. As for
+   *  why, well, that's a trainwreck. */
+  irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
+
+  // exception
+  bool has_throw_target, has_catch;
+  goto_programt::targett throw_target;
+  goto_programt::instructiont *last_throw;
 };
 
 #endif

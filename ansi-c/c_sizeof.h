@@ -26,6 +26,7 @@ public:
     return c_sizeof(type);
   }
 
+
 protected:
   const namespacet &ns;
 
@@ -41,3 +42,7 @@ protected:
     return result;
   }
 };
+
+exprt c_sizeof(
+  const typet &src,
+  const namespacet &ns);

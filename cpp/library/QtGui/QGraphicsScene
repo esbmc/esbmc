@@ -1,0 +1,22 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "QGraphicsItem"
+
+class QObject
+{
+public:
+	QObject ( QObject * parent = 0 ){}
+	~QObject (){}
+};
+
+class QGraphicsScene{
+public:
+	QGraphicsScene ( QObject * parent = 0 ){}
+	void	addItem ( QGraphicsItem * item ){}
+};

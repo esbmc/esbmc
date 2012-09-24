@@ -86,6 +86,40 @@ extern inline symbol_exprt &to_symbol_expr(exprt &expr)
   return static_cast<symbol_exprt &>(expr);
 }
 
+
+/*! \brief Generic base class for unary expressions
+*/
+class unary_exprt:public exprt
+{
+public:
+  inline unary_exprt()
+  {
+    operands().resize(1);
+  }
+
+  inline explicit unary_exprt(const irep_idt &id):exprt(id)
+  {
+    operands().resize(1);
+  }
+
+  inline unary_exprt(
+    const irep_idt &_id,
+    const exprt &_op):
+    exprt(_id, _op.type())
+  {
+    copy_to_operands(_op);
+  }
+
+  inline unary_exprt(
+    const irep_idt &_id,
+    const exprt &_op,
+    const typet &_type):
+    exprt(_id, _type)
+  {
+    copy_to_operands(_op);
+  }
+};
+
 class predicate_exprt:public exprt
 {
 public:
@@ -174,6 +208,17 @@ public:
     const irep_idt &_id,
     const exprt &_rhs):
     exprt(_id)
+  {
+    copy_to_operands(_lhs, _rhs);
+  }
+
+
+  inline binary_exprt(
+    const exprt &_lhs,
+    const irep_idt &_id,
+    const exprt &_rhs,
+    const typet &_type):
+    exprt(_id, _type)
   {
     copy_to_operands(_lhs, _rhs);
   }
@@ -291,7 +336,22 @@ public:
   {
     operands().resize(2);
   }
- 
+
+  inline index_exprt(const exprt &_array, const exprt &_index):
+    exprt(exprt::index, _array.type().subtype())
+  {
+    copy_to_operands(_array, _index);
+  }
+
+  inline index_exprt(
+    const exprt &_array,
+    const exprt &_index,
+    const typet &_type):
+    exprt("index", _type)
+  {
+    copy_to_operands(_array, _index);
+  }
+
   inline exprt &array()
   {
     return op0();
@@ -477,9 +537,14 @@ dynamic_object_exprt &to_dynamic_object_expr(exprt &expr);
 class typecast_exprt:public exprt
 {
 public:
-  explicit typecast_exprt(const typet &_type):exprt(exprt::typecast, _type)
+  inline explicit typecast_exprt(const typet &_type):exprt(exprt::typecast, _type)
   {
     operands().resize(1);
+  }
+
+  inline typecast_exprt(const exprt &op, const typet &_type):exprt(exprt::typecast, _type)
+  {
+    copy_to_operands(op);
   }
 
   inline exprt &op()
@@ -768,6 +833,16 @@ public:
   void set_component_name(const irep_idt &component_name)
   {
     this->component_name(component_name);
+  }
+
+  inline const exprt &struct_op() const
+  {
+    return op0();
+  }
+
+  inline exprt &struct_op()
+  {
+    return op0();
   }
 };
 

@@ -1,0 +1,3 @@
+main.c 
+--unwind 2 --no-pointer-check --no-unwinding-assertions --no-pointer-check -I ~/libraries/
+^VERIFICATION SUCCESSFUL$

@@ -6,14 +6,17 @@
 #include "ios"
 #include "istream"
 #include "ostream"
+#include "string"
 
 namespace std
 {
-	struct iostream: ostream, istream
+	class iostream: public ostream, public istream
 	{
-		iostream(int id = 0): ostream(id), istream(id){}
-	private:
-		iostream(const iostream&); // disabled
+	public:
+		iostream(int id = 0) { ostream(id); istream(id);}
+//		explicit iostream (streambuf * sb);
+//		iostream(const iostream&){ ostream(0); istream(0);} // disabled
+		virtual ~iostream ();
 		iostream& operator=(const iostream&); // disabled
 	};
 
@@ -22,7 +25,7 @@ namespace std
 	extern ostream cerr;
 //	extern ios_base ios;
 
-	char endl = '\n';
+//	char endl = '\n';
 }
 
 #endif

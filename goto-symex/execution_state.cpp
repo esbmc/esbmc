@@ -93,7 +93,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   check_ltl = false;
   mon_thread_warning = false;
 
-  str_state = string_container.take_state_snapshot();
+//  str_state = string_container.take_state_snapshot();
 }
 
 execution_statet::execution_statet(const execution_statet &ex) :
@@ -119,7 +119,7 @@ execution_statet::execution_statet(const execution_statet &ex) :
   // Take another snapshot to represent what string state was
   // like when we began the exploration this execution_statet will
   // perform.
-  str_state = string_container.take_state_snapshot();
+//  str_state = string_container.take_state_snapshot();
 
 }
 
@@ -233,7 +233,14 @@ execution_statet::symex_step(reachability_treet &art)
     case ATOMIC_END:
       decrement_active_atomic_number();
       state.source.pc++;
-      art.force_cswitch_point();
+
+      // Don't context switch if the guard is false. This instruction hasn't
+      // actually been executed, so context switching achieves nothing. (We
+      // don't do this for the active_atomic_number though, because it's cheap,
+      // and should be balanced under all circumstances anyway).
+      if (!state.guard.is_false())
+        art.force_cswitch_point();
+
       break;
     case RETURN:
       if(!state.guard.is_false()) {
@@ -368,7 +375,6 @@ execution_statet::switch_to_thread(unsigned int i)
   last_active_thread = active_thread;
   active_thread = i;
   cur_state = &threads_state[active_thread];
-  execute_guard();
 }
 
 bool
@@ -768,12 +774,26 @@ execution_statet::serialise_expr(const exprt &rhs)
     string2array(rhs, tmp);
     return serialise_expr(tmp);
   } else if (rhs.id() == "same-object") {
+    str = "same-obj((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_update_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "))";
   } else if (rhs.id() == "byte_extract_little_endian") {
+    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "byte_extract_big_endian") {
+    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
+    str += serialise_expr(rhs.op1()) + "),";
+    str += serialise_expr(rhs.op2()) + "))";
   } else if (rhs.id() == "infinity") {
     return "inf";
+  } else if (rhs.id() == "nil") {
+    return "nil";
   } else {
     execution_statet::expr_id_map_t::const_iterator it;
     it = expr_id_map.find(rhs.id());
@@ -856,8 +876,7 @@ execution_statet::init_expr_id_map()
 }
 
 void
-execution_statet::print_stack_traces(const namespacet &ns,
-  unsigned int indent) const
+execution_statet::print_stack_traces(unsigned int indent) const
 {
   std::vector<goto_symex_statet>::const_iterator it;
   std::string spaces = std::string("");
@@ -1042,7 +1061,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
 
   // Free all name strings and suchlike we generated on this run
   // and no longer require
-  string_container.restore_state_snapshot(str_state);
+//  string_container.restore_state_snapshot(str_state);
 }
 
 dfs_execution_statet* dfs_execution_statet::clone(void) const

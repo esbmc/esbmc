@@ -34,6 +34,7 @@ reachability_treet::reachability_treet(
     contextt &context,
     message_handlert &_message_handler) :
     goto_functions(goto_functions),
+    permanent_context(context),
     ns(ns),
     options(opts),
     message_handler(_message_handler)
@@ -48,22 +49,33 @@ reachability_treet::reachability_treet(
   else
     por = true;
 
+  target_template = target;
+}
+
+void
+reachability_treet::setup_for_new_explore(void)
+{
+
+  execution_states.clear();
+
   at_end_of_run = false;
   has_complete_formula = false;
 
   execution_statet *s;
   if (options.get_bool_option("schedule")) {
+    schedule_target = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new schedule_execution_statet(goto_functions, ns,
-                                               this, target, context, opts,
-                                               &schedule_total_claims,
+                                               this, schedule_target,
+                                               permanent_context,
+                                               options, &schedule_total_claims,
                                                &schedule_remaining_claims,
                                                message_handler));
-    schedule_target = target;
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               target, context, opts,
+                                               target_template->clone(),
+                                               permanent_context, options,
                                                message_handler));
     schedule_target = NULL;
   }
@@ -194,6 +206,8 @@ reachability_treet::create_next_state(void)
       new_state->switch_to_thread(next_thread_id);
     }
 
+    new_state->execute_guard();
+
     /* Reset interleavings (?) investigated in this new state */
     new_state->resetDFS_traversed();
   }
@@ -269,7 +283,6 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
 
 bool reachability_treet::is_at_end_of_run()
 {
-
   return at_end_of_run ||
          get_cur_state().get_active_state().thread_ended ||
          get_cur_state().get_active_state().call_stack.empty();
@@ -290,10 +303,13 @@ void reachability_treet::switch_to_next_execution_state()
   if(it != execution_states.end()) {
     cur_state_it++;
   } else {
-    if (step_next_state())
+    if (step_next_state()) {
       cur_state_it++;
-    else
+    } else {
+      if (config.options.get_bool_option("print-stack-traces"))
+        print_ileave_trace();
       has_complete_formula = true;
+    }
   }
 
   at_end_of_run = false;
@@ -419,7 +435,7 @@ bool reachability_treet::dfs_position::write_to_file(
     entry.location_number = htonl(it->location_number);
     entry.num_threads = htons(it->num_threads);
     entry.cur_thread = htons(it->cur_thread);
-    
+
     if (fwrite(&entry, sizeof(entry), 1, f) != 1)
       goto fail;
 
@@ -524,7 +540,7 @@ reachability_treet::print_ileave_trace(void) const
   std::cout << "Context switch trace for interleaving:" << std::endl;
   for (it = execution_states.begin(); it != execution_states.end(); it++, i++) {
     std::cout << "Context switch point " << i << std::endl;
-    (*it)->print_stack_traces(ns, 4);
+    (*it)->print_stack_traces(4);
   }
 }
 
@@ -549,7 +565,7 @@ reachability_treet::get_ileave_direction_from_user(const exprt &expr) const
 
   std::cout << "Context switch point encountered; please select a thread to run" << std::endl;
   std::cout << "Current thread states:" << std::endl;
-  execution_states.back()->print_stack_traces(ns, 4);
+  execution_states.back()->print_stack_traces(4);
 
   while (std::cout << "Input: ", std::getline(std::cin, input)) {
     if (input == "b") {
@@ -664,6 +680,8 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
 goto_symext::symex_resultt *
 reachability_treet::get_next_formula()
 {
+
+  assert(execution_states.size() > 0 && "Must setup RT before exploring");
 
   while(!is_has_complete_formula())
   {

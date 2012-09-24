@@ -141,6 +141,8 @@ static const char *cpp_normal_defs[] = {
 "__GNUC__",
 "__restrict__=/**/",
 "__restrict=/**/",
+"__VERIFIER_ASSUME=__ESBMC_assume",
+"__VERIFIER_assume=__ESBMC_assume",
 NULL
 };
 
@@ -267,6 +269,7 @@ bool c_preprocess(
   std::istream &instream,
   const std::string &path,
   std::ostream &outstream,
+  bool is_cpp,
   message_handlert &message_handler)
 {
   int err, ret;

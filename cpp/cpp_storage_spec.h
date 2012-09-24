@@ -17,15 +17,15 @@ public:
   cpp_storage_spect():irept("cpp-storage-spec")
   {
   }
-  
+
   locationt &location()
   {
-    return (locationt &)add("#location");
+    return static_cast<locationt &>(add("#location"));
   }
 
   const locationt &location() const
   {
-    return (const locationt &)find("#location");
+    return static_cast<const locationt &>(find("#location"));
   }
 
   bool is_static()   const { return get("storage")=="static"; }

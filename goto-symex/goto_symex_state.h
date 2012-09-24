@@ -198,6 +198,10 @@ public:
     {
       level1._thread_id = thread_id;
     }
+
+    // exceptions
+    typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
+    catch_mapt catch_map;
   };
 
   // Macros
@@ -362,7 +366,7 @@ public:
    *  original c-level identifier for a symbol. This method applies this to
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.
-   */  
+   */
   void get_original_name(exprt &expr) const;
 
   /**

@@ -3,3 +3,7 @@
 *.swp
 .deps
 .depends
+.project
+.cproject
+.ctags
+.cscope

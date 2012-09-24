@@ -120,6 +120,8 @@ void bmct::error_trace(const prop_convt &prop_conv,
   goto_tracet goto_trace;
   build_goto_trace(equation, prop_conv, goto_trace);
 
+  goto_trace.metadata_filename = options.get_option("llvm-metadata");
+
   switch(ui)
   {
   case ui_message_handlert::PLAIN:
@@ -176,19 +178,29 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
 
-  // stop the time
-  fine_timet sat_start=current_time();
-
   do_unwind_module(prop_conv);
-  do_cbmc(prop_conv, equation);
 
-  decision_proceduret::resultt dec_result=prop_conv.dec_solve();
+  fine_timet encode_start = current_time();
+  do_cbmc(prop_conv, equation);
+  fine_timet encode_stop = current_time();
+
+  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
+  {
+    std::ostringstream str;
+    str << "Encoding to solver time: ";
+    output_time(encode_stop - encode_start, str);
+    str << "s";
+    status(str.str());
+  }
+
+  fine_timet sat_start=current_time();
+  prop_convt::resultt dec_result=prop_conv.dec_solve();
+  fine_timet sat_stop=current_time();
 
   // output runtime
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
   {
     std::ostringstream str;
-    fine_timet sat_stop=current_time();
     str << "Runtime decision procedure: ";
     output_time(sat_stop-sat_start, str);
     str << "s";
@@ -220,6 +232,13 @@ Function: bmct::report_success
 
 void bmct::report_success()
 {
+
+  if(options.get_bool_option("base-case"))
+  {
+    status("No bug has been found in the base case");
+    return ;
+  }
+
   status("VERIFICATION SUCCESSFUL");
 
   switch(ui)
@@ -367,6 +386,8 @@ bool bmct::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
+  symex.setup_for_new_explore();
+
   if(options.get_bool_option("schedule"))
   {
     if(options.get_bool_option("uw-model"))
@@ -399,12 +420,14 @@ bool bmct::run(const goto_functionst &goto_functions)
 
     do
     {
-      if (++interleaving_number>1) {
+      if(!options.get_bool_option("k-induction"))
+        if (++interleaving_number>1) {
     	  print(8, "*** Thread interleavings "+
     	           i2string((unsigned long)interleaving_number)+
     	           " ***");
-      }
+        }
 
+      fine_timet bmc_start = current_time();
       if(run_thread())
       {
         ++interleaving_failed;
@@ -418,6 +441,13 @@ bool bmct::run(const goto_functionst &goto_functions)
           return true;
         }
       }
+      fine_timet bmc_stop = current_time();
+
+      std::ostringstream str;
+      str << "BMC program time: ";
+      output_time(bmc_stop-bmc_start, str);
+      str << "s";
+      status(str.str());
 
       if (checkpoint_sig) {
         write_checkpoint();
@@ -630,17 +660,28 @@ bool bmct::run_thread()
 
 bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 {
-
   switch(bmc.run_decision_procedure(*conv, equation))
   {
-  case decision_proceduret::D_UNSATISFIABLE:
-    bmc.report_success();
-    return false;
+    case decision_proceduret::D_UNSATISFIABLE:
+      if(!bmc.options.get_bool_option("base-case"))
+        bmc.report_success();
+      else
+        bmc.status("No bug has been found in the base case");
+      return false;
 
-  case decision_proceduret::D_SATISFIABLE:
-    bmc.error_trace(*conv, equation);
-    bmc.report_failure();
-    return true;
+    case decision_proceduret::D_SATISFIABLE:
+      if(!bmc.options.get_bool_option("inductive-step")
+    		  && !bmc.options.get_bool_option("forward-condition"))
+      {
+        bmc.error_trace(*conv, equation);
+   	    bmc.report_failure();
+      }
+      else if (bmc.options.get_bool_option("forward-condition"))
+        bmc.status("The forward condition is unable to prove the property");
+      else
+        bmc.status("The inductive step is unable to prove the property");
+
+      return true;
 
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit

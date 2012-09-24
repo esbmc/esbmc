@@ -15,10 +15,15 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_declaration.h"
 #include "cpp_scope.h"
 
+// converts a cpp_declator plus some
+// additional information stored in the class
+// into a symbol
+
 class cpp_declarator_convertert
 {
 public:
-  cpp_declarator_convertert(class cpp_typecheckt &_cpp_typecheck);
+  cpp_declarator_convertert(
+    class cpp_typecheckt &_cpp_typecheck);
 
   bool is_typedef;
   bool is_template;
@@ -27,7 +32,7 @@ public:
   irep_idt mode;
 
   symbolt &convert(
-    const typet &type,
+    const typet &type, // already typechecked
     const cpp_storage_spect &storage_spec,
     const cpp_member_spect &member_spec,
     cpp_declaratort &declarator);
@@ -37,8 +42,10 @@ public:
     cpp_declaratort &declarator)
   {
     return convert(
-      declaration.type(),  declaration.storage_spec(),
-      declaration.member_spec(), declarator);
+      declaration.type(),
+      declaration.storage_spec(),
+      declaration.member_spec(),
+      declarator);
   }
 
   class cpp_typecheckt &cpp_typecheck;
@@ -47,11 +54,11 @@ protected:
   std::string base_name;
   typet final_type;
   cpp_scopet *scope;
-  std::string final_identifier;
+  irep_idt final_identifier;
   bool is_code;
 
   void get_final_identifier();
-  std::string get_pretty_name();
+  irep_idt get_pretty_name();
 
   symbolt &convert_new_symbol(
     const cpp_storage_spect &storage_spec,

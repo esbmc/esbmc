@@ -1,29 +1,60 @@
-#ifndef STL_CSIGNAL
-#define STL_CSIGNAL
+/*******************************************************************\
+
+Module: 
+
+Author: 
+
+Date: Feb 2012
+
+\*******************************************************************/
+
+#ifndef STL_EXCEPTION
+#define STL_EXCEPTION
 
 #include "definitions.h"
 
 namespace std {
 
-const char* message;
+  const char* message;
 
-struct exception {
-
-public:
-  exception( ) throw( );
-  exception(const exception& right) throw( );
   bool uncaught_exception ( ) throw ( );
-  exception& operator=(const exception& right) throw( );
-  ~exception( ) throw( );
-  const char* what() const throw() {
+
+  typedef void (*terminate_handler)();
+  terminate_handler set_terminate (terminate_handler f) throw();
+
+  typedef void (*unexpected_handler)();
+  unexpected_handler set_unexpected (unexpected_handler f) throw();
+
+  struct exception {
+
+  public:
+    exception( ) throw( );
+    exception(const exception& right) throw( );
+//  bool uncaught_exception ( ) throw ( );
+    exception& operator=(const exception& right) throw( );
+    ~exception( ) throw( );
+    const char* what() const throw() {
 	  return (const char*)message;
 	  //Returns a null terminated character sequence containing a generic description of the exception.
 	  //Both the wording of such description and the character width are implementation-defined.
 	  //source: http://www.cplusplus.com/reference/std/exception/exception/
-  }
+    }
+  };
 
-};
+  /** If an %exception is thrown which is not listed in a function's
+   *  %exception specification, one of these may be thrown.  */
+  class bad_exception : public exception
+  {
+  public:
+    bad_exception() { }
 
+    // This declaration is not useless:
+    // http://gcc.gnu.org/onlinedocs/gcc-3.0.2/gcc_6.html#SEC118
+    virtual ~bad_exception();
+
+    // See comment in eh_exception.cc.
+    virtual const char* what() const;
+  };
 }
 
 #endif

@@ -21,7 +21,6 @@ int main()
         << "\nstring3: " << string3 << "\nstring4: " << string4
         << "\n\n";
 
-   assert(string1 == string2);
 
    // comparing string1 and string4
    if ( string1 == string4 )

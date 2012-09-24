@@ -1,7 +1,7 @@
 // Fig. 5.29: fig05_29.cpp
 // Using strcat and strncat.
 #include <iostream>
-//#include <assert.h>
+#include <cassert>
 using std::cout;
 using std::endl;
 

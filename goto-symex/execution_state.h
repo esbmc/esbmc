@@ -436,7 +436,7 @@ class execution_statet : public goto_symext
    *  @param ns Namespace to work in.
    *  @param indent Indentation to print each stack trace with
    */
-  void print_stack_traces(const namespacet &ns, unsigned int indent = 0) const;
+  void print_stack_traces(unsigned int indent = 0) const;
 
   /** Switch to registered monitor thread.
    *  Switches the currently executing thread to the monitor thread that's been

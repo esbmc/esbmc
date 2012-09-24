@@ -55,12 +55,42 @@ public:
   }  
 };
 
+
+/*! \brief Cast a generic typet to a \ref symbol_typet
+ *
+ * This is an unchecked conversion. \a type must be known to be \ref
+ * symbol_typet.
+ *
+ * \param type Source type
+ * \return Object of type \ref symbol_typet
+ *
+ * \ingroup gr_std_types
+*/
+extern inline const symbol_typet &to_symbol_type(const typet &type)
+{
+  assert(type.id()=="symbol");
+  return static_cast<const symbol_typet &>(type);
+}
+
+/*! \copydoc to_symbol_type(const typet &)
+ * \ingroup gr_std_types
+*/
+extern inline symbol_typet &to_symbol_type(typet &type)
+{
+  assert(type.id()=="symbol");
+  return static_cast<symbol_typet &>(type);
+}
+
 // structs
 
 class struct_union_typet:public typet
 {
 public:
   struct_union_typet()
+  {
+  }
+
+  inline explicit struct_union_typet(const irep_idt &_id):typet(_id)
   {
   }
 
@@ -75,6 +105,46 @@ public:
     void set_name(const irep_idt &name)
     {
       return set(a_name, name);
+    }
+
+    inline const irep_idt &get_base_name() const
+    {
+      return get("base_name");
+    }
+
+    inline void set_base_name(const irep_idt &base_name)
+    {
+      return set("base_name", base_name);
+    }
+
+    inline const irep_idt &get_access() const
+    {
+      return get("access");
+    }
+
+    inline void set_access(const irep_idt &access)
+    {
+      return set("access", access);
+    }
+
+    inline const irep_idt &get_pretty_name() const
+    {
+      return get("pretty_name");
+    }
+
+    inline void set_pretty_name(const irep_idt &name)
+    {
+      return set("pretty_name", name);
+    }
+
+    inline const bool get_anonymous() const
+    {
+      return get_bool("anonymous");
+    }
+
+    inline void set_anonymous(bool anonymous)
+    {
+      return set("anonymous", anonymous);
     }
   };
 
@@ -264,6 +334,16 @@ public:
   {
     return (argumentst &)add(a_arguments).get_sub();
   }
+
+  inline bool get_inlined() const
+  {
+    return get_bool("#inlined");
+  }
+
+  inline void set_inlined(bool value)
+  {
+    set("#inlined", value);
+  }
 };
 
 extern inline const code_typet &to_code_type(const typet &type)
@@ -335,6 +415,7 @@ public:
 };
 
 bool is_reference(const typet &type);
+bool is_rvalue_reference(const typet &type);
 
 class bv_typet:public typet
 {
@@ -373,6 +454,31 @@ public:
   }
 };
 
+/*! \brief Cast a generic typet to an \ref unsignedbv_typet
+ *
+ * This is an unchecked conversion. \a type must be known to be \ref
+ * unsignedbv_typet.
+ *
+ * \param type Source type
+ * \return Object of type \ref unsignedbv_typet
+ *
+ * \ingroup gr_std_types
+*/
+inline const unsignedbv_typet &to_unsignedbv_type(const typet &type)
+{
+  assert(type.id()=="unsignedbv");
+  return static_cast<const unsignedbv_typet &>(type);
+}
+
+/*! \copydoc to_unsignedbv_type(const typet &)
+ * \ingroup gr_std_types
+*/
+inline unsignedbv_typet &to_unsignedbv_type(typet &type)
+{
+  assert(type.id()=="unsignedbv");
+  return static_cast<unsignedbv_typet &>(type);
+}
+
 class signedbv_typet:public bv_typet
 {
 public:
@@ -388,6 +494,31 @@ public:
   }
 };
 
+
+/*! \brief Cast a generic typet to a \ref signedbv_typet
+ *
+ * This is an unchecked conversion. \a type must be known to be \ref
+ * signedbv_typet.
+ *
+ * \param type Source type
+ * \return Object of type \ref signedbv_typet
+ *
+ * \ingroup gr_std_types
+*/
+inline const signedbv_typet &to_signedbv_type(const typet &type)
+{
+  assert(type.id()=="signedbv");
+  return static_cast<const signedbv_typet &>(type);
+}
+
+/*! \copydoc to_signedbv_type(const typet &)
+ * \ingroup gr_std_types
+*/
+inline signedbv_typet &to_signedbv_type(typet &type)
+{
+  assert(type.id()=="signedbv");
+  return static_cast<signedbv_typet &>(type);
+}
 class fixedbv_typet:public bv_typet
 {
 public:

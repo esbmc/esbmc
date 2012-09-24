@@ -9,13 +9,16 @@ Author: Daniel Kroening
 \*******************************************************************/
 
 #include <assert.h>
+#include <string.h>
 
 #include <ansi-c/printf_formatter.h>
 #include <langapi/language_util.h>
 #include <arith_tools.h>
 
-#include "goto_trace.h"
 
+#include "goto_trace.h"
+#include "VarMap.h"
+#include <std_types.h>
 /*******************************************************************\
 
 Function: goto_tracet::output
@@ -141,12 +144,12 @@ void counterexample_value(
 {
   const irep_idt &identifier=lhs.identifier();
   std::string value_string;
-
   if(value.is_nil())
     value_string="(assignment removed)";
   else
   {
     value_string=from_expr(ns, identifier, value);
+
     if(value.is_constant())
     {
       if(value.type().id()==typet::t_signedbv ||
@@ -329,6 +332,136 @@ void show_goto_trace(
 
 /*******************************************************************\
 
+Function: get_varname_from_guard
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+std::string get_varname_from_guard (
+	goto_tracet::stepst::const_iterator &it,
+	const goto_tracet &goto_trace) {
+
+    std::string varname;
+    if (!it->pc->guard.op0().operands().empty()) {
+		if(!it->pc->guard.op0().op0().identifier().as_string().empty()) {
+		  char identstr[it->pc->guard.op0().op0().identifier().as_string().length()];
+		  strcpy(identstr,it->pc->guard.op0().op0().identifier().c_str());
+		  //std::cout<<"Guard "<<it->pc->guard<<std::endl;
+		  int j=0;
+		  char * tok;
+			tok = strtok (identstr,"::");
+			while (tok != NULL) {
+			  if (j==4) varname = tok;
+			   tok = strtok (NULL, "::");
+			   j++;
+			}
+		}
+    }
+	return varname;
+
+}
+/*******************************************************************\
+
+Function: get_metada_from_llvm
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void get_metada_from_llvm(
+  goto_tracet::stepst::const_iterator &it,
+  const goto_tracet &goto_trace)
+{
+  char line[it->pc->location.get_line().as_string().length()];
+  strcpy(line,it->pc->location.get_line().c_str());
+  if (it->rhs.type().is_struct()) {
+	  const struct_typet struct_type = to_struct_type(it->original_lhs.type());
+	  struct_typet::componentst components = struct_type.components();
+
+	  std::string ident = it->original_lhs.identifier().as_string();
+	  std::string struct_name = ident.substr(ident.find_last_of(":")+1);
+
+	  u_int i = 0, j = 0;
+	  for (struct_typet::componentst::const_iterator
+	       itt = components.begin();
+	       itt != components.end();
+	       itt++, i++)
+	  {
+		  std::string comp_name =struct_type.components()[j].name().as_string();
+		  std::string key_map = struct_name + "." + struct_type.components()[j].name().c_str();
+		  if (goto_trace.llvm_varmap.find(key_map) != goto_trace.llvm_varmap.end() ){
+//			  std::cout<<"map->first<"<<goto_trace.llvm_varmap.find(key_map)->first<<">\n";
+//			  std::cout<<"map->second<"<<goto_trace.llvm_varmap.find(key_map)->second<<">\n";
+			  std::string newname = goto_trace.llvm_varmap.find(key_map)->second;
+			  struct_type.components()[j].set_name(newname);
+			  struct_type.components()[j].set_pretty_name(newname);
+		  }
+	      j++;
+	  }
+  }
+  if (!goto_trace.llvm_linemap.find(line)->second.empty()){
+	  char VarInfo[goto_trace.llvm_linemap.find(line)->second.length()];
+      if(!goto_trace.llvm_linemap.find(line)->second.empty()) {
+     	  strcpy(VarInfo,goto_trace.llvm_linemap.find(line)->second.c_str());
+      }
+      char * pch;
+      pch = strtok (VarInfo,"@#");
+      int k=0;
+      while (pch != NULL) {
+        if (k==0) const_cast<goto_tracet*>(&goto_trace)->FileName = pch;
+        if (k==1) const_cast<goto_tracet*>(&goto_trace)->LineNumber = pch;
+        if (k==2) const_cast<goto_tracet*>(&goto_trace)->FuncName = pch;
+        if (k==3) const_cast<goto_tracet*>(&goto_trace)->VarName = pch;
+        //std::cout<<"varname - "<<goto_trace.VarName<<std::endl;
+        if (k==4) const_cast<goto_tracet*>(&goto_trace)->OrigVarName = pch;
+        pch = strtok (NULL, "@#");
+        k++;
+      }
+      //********************change indentifier************************************/
+		exprt* lhs = const_cast<exprt*>(&it->original_lhs);
+		char identstr[it->original_lhs.identifier().as_string().length()];
+		strcpy(identstr,it->original_lhs.identifier().c_str());
+		//std::cout<<"Guard "<<it->pc->guard<<std::endl;
+		int j=0;
+		char * tok;
+		tok = strtok (identstr,"::");
+		std::string newidentifier;
+		while (tok != NULL) {
+		 // std::cout<<"("<<j<<")"<<tok<<std::endl;
+		  if (j<=1) newidentifier = newidentifier + tok + "::";
+		  if (j==2) newidentifier = newidentifier + goto_trace.FuncName + "::";
+		  if (j==3) newidentifier = newidentifier + tok + "::";
+		  if (j==4) {
+			  if (!goto_trace.OrigVarName.empty()) newidentifier = newidentifier + goto_trace.OrigVarName;
+			  else newidentifier = newidentifier + tok;
+		  }
+		  tok = strtok (NULL, "::");
+		  j++;
+		}
+		lhs->identifier(newidentifier);
+		//**********************************************************************/
+
+      //std::cout<<"VarName "<<goto_trace.VarName<<std::endl;
+ //     if(!goto_trace.llvm_linemap.find(line)->second.empty()) {
+        const_cast<locationt*>(&it->pc->location)->set_file(goto_trace.FileName);
+        const_cast<locationt*>(&it->pc->location)->set_line(goto_trace.LineNumber);
+        const_cast<locationt*>(&it->pc->location)->set_function(goto_trace.FuncName);
+ //      }
+  }
+ // std::cout << "__LINE__ = " << __LINE__ << std::endl; //<=================================
+}
+
+/*******************************************************************\
+
 Function: show_goto_trace
 
   Inputs:
@@ -348,6 +481,9 @@ void show_goto_trace(
   unsigned prev_step_nr=0;
   bool first_step=true;
 
+  if (!goto_trace.metadata_filename.empty())
+    const_cast<goto_tracet*>(&goto_trace)->open_llvm_varmap();
+
   for(goto_tracet::stepst::const_iterator
       it=goto_trace.steps.begin();
       it!=goto_trace.steps.end();
@@ -360,13 +496,28 @@ void show_goto_trace(
       {
         out << std::endl;
         out << "Violated property:" << std::endl;
-        if(!it->pc->location.is_nil())
-          out << "  " << it->pc->location << std::endl;
+        if(!it->pc->location.is_nil()) {
+            if (!goto_trace.metadata_filename.empty()) {
+              get_metada_from_llvm(it, goto_trace);
+             }
+            out << "  " << it->pc->location << std::endl;
+        }
+        //std::cout<<"comment "<<it->comment<<std::endl;
         out << "  " << it->comment << std::endl;
 
         if(it->pc->is_assert())
-          out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
-
+        	if (!goto_trace.metadata_filename.empty() && !it->pc->guard.operands().empty()) {
+				std::string assertsrt, varname;
+				assertsrt = from_expr(ns, "", it->pc->guard);
+				varname=get_varname_from_guard(it,goto_trace);
+				if(!goto_trace.llvm_varmap.find(varname)->second.empty()) {
+					assertsrt.replace(assertsrt.find(varname),varname.length(),goto_trace.llvm_varmap.find(varname)->second);
+					out << "  " << assertsrt<< std::endl;
+				}
+        	}
+        	else
+        		out << "  " << from_expr(ns, "", it->pc->guard)<< std::endl;
+        //std::cout<<"VarName "<<goto_trace.VarName<<" OrigVarName "<<goto_trace.OrigVarName<<std::endl;
         out << std::endl;
       }
       break;
@@ -382,9 +533,12 @@ void show_goto_trace(
         {
           first_step=false;
           prev_step_nr=it->step_nr;
+          if (!goto_trace.metadata_filename.empty()) {
+            get_metada_from_llvm(it, goto_trace);
+          }
           show_state_header(out, *it, it->pc->location, it->step_nr);
         }
-        counterexample_value(out, ns, it->original_lhs,
+         counterexample_value(out, ns, it->original_lhs,
                              it->value, pretty_names);
       }
       break;
@@ -407,3 +561,4 @@ void show_goto_trace(
     }
   }
 }
+

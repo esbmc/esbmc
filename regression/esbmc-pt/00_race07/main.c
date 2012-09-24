@@ -74,7 +74,6 @@ void *setThread(void *param) {
 
 void *checkThread(void *param) {
     if (! ((a == 0 && b == 0) || (a == 1 && b == -1))) {
-		assert(0);
         fprintf(stderr, "Bug found!\n");
         exit(-1);
     }

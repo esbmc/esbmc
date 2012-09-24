@@ -423,8 +423,16 @@ void goto_program_dereferencet::dereference_instruction(
       invalid_ptr.copy_to_operands(function_call.function().op0());
       guardt guard;
       guard.move(invalid_ptr);
+#if 1
+      if(!options.get_bool_option("no-pointer-check"))
+      {
+        dereference_failure("function pointer dereference",
+                            "invalid pointer", guard);
+      }
+#else
       dereference_failure("function pointer dereference",
                           "invalid pointer", guard);
+#endif
     }
   }
   else if (i.is_return())

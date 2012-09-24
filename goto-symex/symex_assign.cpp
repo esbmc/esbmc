@@ -32,7 +32,10 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   new_context(_new_context),
   goto_functions(_goto_functions),
   target(_target),
-  cur_state(NULL)
+  cur_state(NULL),
+  has_throw_target(false),
+  has_catch(false),
+  last_throw(NULL)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -51,13 +54,30 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   max_unwind=atol(options.get_option("unwind").c_str());
 
   art1 = NULL;
+
+  // Work out whether or not we'll be modelling with cpp:: or c:: arrays.
+  const symbolt *sp;
+  if (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp)) {
+    valid_ptr_arr_name = "c::__ESBMC_alloc";
+    alloc_size_arr_name = "c::__ESBMC_alloc_size";
+    deallocd_arr_name = "c::__ESBMC_deallocated";
+    dyn_info_arr_name = "c::__ESBMC_is_dynamic";
+  } else {
+    valid_ptr_arr_name = "cpp::__ESBMC_alloc";
+    alloc_size_arr_name = "cpp::__ESBMC_alloc_size";
+    deallocd_arr_name = "cpp::__ESBMC_deallocated";
+    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
+  }
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
   ns(sym.ns),
   options(sym.options),
   new_context(sym.new_context),
-  goto_functions(sym.goto_functions)
+  goto_functions(sym.goto_functions),
+  has_throw_target(false),
+  has_catch(false),
+  last_throw(NULL)
 {
   *this = sym;
 }
@@ -71,6 +91,11 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   guard_identifier_s = sym.guard_identifier_s;
+
+  valid_ptr_arr_name = sym.valid_ptr_arr_name;
+  alloc_size_arr_name = sym.alloc_size_arr_name;
+  deallocd_arr_name = sym.deallocd_arr_name;
+  dyn_info_arr_name = sym.dyn_info_arr_name;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -369,7 +394,8 @@ void goto_symext::symex_assign_byte_extract(
 
 void goto_symext::replace_nondet(exprt &expr)
 {
-  if(expr.id()=="sideeffect" && expr.statement()=="nondet")
+  if ((expr.id()=="sideeffect" && expr.statement()=="nondet")
+	|| expr.id()=="nondet_symbol")
   {
     unsigned int &nondet_count = get_dynamic_counter();
     exprt new_expr("nondet_symbol", expr.type());

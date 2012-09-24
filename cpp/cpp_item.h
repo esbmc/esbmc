@@ -20,30 +20,30 @@ class cpp_itemt:public irept
 {
 public:
   // declaration
-  
+
   cpp_declarationt &make_declaration()
   {
     id("cpp-declaration");
     return (cpp_declarationt &)*this;
   }
-  
+
   cpp_declarationt &get_declaration()
   {
     assert(is_declaration());
     return (cpp_declarationt &)*this;
   }
-  
+
   const cpp_declarationt &get_declaration() const
   {
     assert(is_declaration());
     return (const cpp_declarationt &)*this;
   }
-  
+
   bool is_declaration() const
   {
     return id()=="cpp-declaration";
   }
-  
+
   // linkage spec
 
   cpp_linkage_spect &make_linkage_spec()
@@ -68,9 +68,9 @@ public:
   {
     return id()=="cpp-linkage-spec";
   }
-  
+
   // namespace
-  
+
   cpp_namespace_spect &make_namespace_spec()
   {
     id("cpp-namespace-spec");
@@ -95,7 +95,7 @@ public:
   }
 
   // using
-  
+
   cpp_usingt &make_using()
   {
     id("cpp-using");

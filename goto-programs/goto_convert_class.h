@@ -18,6 +18,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <options.h>
 #include <message_stream.h>
 
+#include <expr_util.h>
+
 #include "goto_program.h"
 
 class goto_convertt:public message_streamt
@@ -36,8 +38,17 @@ public:
     temporary_counter(0),
     tmp_symbol_prefix("goto_convertt::")
   {
+    goto_stmt=false;
+    break_stmt=false;
     is_thread=false;
-    loop_for_block=false;
+    for_block=false;
+    while_block=false;
+    state_counter=1;
+    k_induction=false;
+    inductive_step=
+    options.get_bool_option("inductive-step");
+    base_case=
+    options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -154,7 +165,7 @@ protected:
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
-  void convert_cpp_try(const codet &code,goto_programt &dest);
+  void convert_catch(const codet &code,goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);
   void convert_dowhile(const codet &code, goto_programt &dest);
@@ -177,6 +188,40 @@ protected:
   void convert_bp_abortif(const codet &code, goto_programt &dest);
   void convert(const codet &code, goto_programt &dest);
   void copy(const codet &code, goto_program_instruction_typet type, goto_programt &dest);
+
+  //
+  // k-induction conversion
+  //
+  void make_nondet_assign(goto_programt &dest);
+  void init_k_indice(goto_programt &dest);
+  void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
+  void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
+  void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
+  void replace_ifthenelse(exprt &expr);
+  void get_cs_member(exprt &expr, exprt &result, const typet &type, bool &found);
+  void get_new_expr(exprt &expr, exprt &new_expr, bool &found);
+  void set_goto(bool opt) {goto_stmt=opt;}
+  bool is_goto() const {return goto_stmt;}
+  void set_break(bool opt) {break_stmt=opt;}
+  bool is_break() const {return break_stmt;}
+  void set_for_block(bool opt) {for_block=opt;}
+  bool is_for_block() const {return for_block;}
+  void set_while_block(bool opt) {while_block=opt;}
+  bool is_while_block() const {return while_block;}
+  bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
+  bool is_expr_in_state(const exprt &expr, const struct_typet &str);
+  void get_struct_components(const exprt &exp, struct_typet &str);
+  void replace_cond(exprt &tmp, goto_programt &dest);
+  void increment_var(const exprt &var, goto_programt &dest);
+  void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
+  bool check_op_const(const exprt &tmp, const locationt &loc);
+  void assume_state_vector(array_typet state_vector, goto_programt &dest);
+  void update_state_vector(array_typet state_vector, goto_programt &dest);
+  void init_nondet_expr(exprt &tmp, goto_programt &dest);
+  void print_msg(const exprt &tmp);
+  void replace_infinite_loop(exprt &tmp, goto_programt &dest);
+  void disable_k_induction(void);
+  void print_msg_mem_alloc(const exprt &tmp);
 
   //
   // gotos
@@ -330,8 +375,13 @@ protected:
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   private:
-    bool is_thread;
-    bool loop_for_block;
+    bool is_thread, for_block, break_stmt, 
+	 goto_stmt, while_block;
+    unsigned int state_counter;
+    struct_typet state;
+    bool k_induction, inductive_step, base_case;
+    typedef std::map<exprt, exprt> nondet_varst;
+    nondet_varst nondet_vars;
 };
 
 #endif

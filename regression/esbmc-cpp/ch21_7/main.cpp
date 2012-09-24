@@ -20,11 +20,13 @@ typedef std::set< double, std::less< double > > double_set;
 
 int main()
 {
+
    const int SIZE = 5;
    double a[ SIZE ] = { 2.1, 4.2, 9.5, 2.1, 3.7 };   
 
-   double_set doubleSet( a, a + SIZE );;
-  std::ostreambuf_iterator< double > output( cout );
+   double_set doubleSet( a, a + SIZE );
+
+  std::ostream_iterator< double > output( cout, " " );
 
    cout << "doubleSet contains: ";
    std::copy( doubleSet.begin(), doubleSet.end(), output );

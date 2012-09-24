@@ -1,0 +1,18 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "vector"
+
+template<class T> class QVector
+{
+public:
+	QVector (){}
+	~QVector (){}
+	int size() const{}
+	void push_back( const T& value ){}
+};

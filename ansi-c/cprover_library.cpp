@@ -10,6 +10,8 @@ extern "C" {
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdint.h>
+#include <unistd.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -68,6 +70,12 @@ void
 generate_symbol_deps(irep_idt name, irept irep, std::multimap<irep_idt, irep_idt> &deps)
 {
   std::pair<irep_idt, irep_idt> type;
+
+  if (irep.id() == "symbol") {
+    type = std::pair<irep_idt, irep_idt>(name, irep.identifier());
+    deps.insert(type);
+    return;
+  }
 
   forall_irep(irep_it, irep.get_sub()) {
     if (irep_it->id() == "symbol") {

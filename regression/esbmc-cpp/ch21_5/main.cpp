@@ -1,7 +1,7 @@
 // Fig. 21.18: fig21_18.cpp
 // Standard library class deque test program.
 #include <iostream>
-
+#include <iterator>
 using std::cout;
 using std::endl;
 
@@ -11,7 +11,7 @@ using std::endl;
 int main()
 { 
    std::deque< double > values;
-   std::ostreambuf_iterator < double > output( cout, " " );
+   std::ostream_iterator < double > output( cout, " " );
 
    // insert elements in values
    values.push_front( 2.2 );

@@ -92,10 +92,12 @@ goto_symext::symex_goto(const exprt &old_guard)
   goto_state_list.push_back(statet::goto_statet(*cur_state));
   statet::goto_statet &new_state = goto_state_list.back();
 
+//  std::cout << "########### new_guard.pretty(): " << new_guard.pretty() << std::endl;
   // adjust guards
   if (new_guard.is_true()) {
-    cur_state->guard.make_false();
-  } else   {
+      cur_state->guard.make_false();
+
+  } else {
     // produce new guard symbol
     exprt guard_expr;
 
@@ -279,8 +281,44 @@ goto_symext::loop_bound_exceeded(const exprt &guard)
   bool partial_loops =
     options.get_bool_option("partial-loops");
 
-  if (!partial_loops) {
-    if (unwinding_assertions) {
+  bool base_case=
+    options.get_bool_option("base-case");
+
+  bool forward_condition=
+    options.get_bool_option("forward-condition");
+
+  bool inductive_step=
+    options.get_bool_option("inductive-step");
+
+  //std::cout << "base_case: " << base_case << std::endl;
+  //std::cout << "forward_condition: " << forward_condition << std::endl;
+  //std::cout << "inductive_step: " << inductive_step << std::endl;
+  //std::cout << "partial_loops: " << partial_loops << std::endl;
+  //std::cout << "unwinding_assertions: " << unwinding_assertions << std::endl;
+
+  if (base_case)
+  {
+    // generate unwinding assumption
+    exprt guarded_expr=negated_cond;
+    cur_state->guard.guard_expr(guarded_expr);
+    target->assumption(cur_state->guard, guarded_expr, cur_state->source);
+
+    // add to state guard to prevent further assignments
+    cur_state->guard.add(negated_cond);
+  }
+  else if (forward_condition)
+  {
+    // generate unwinding assertion
+    claim(negated_cond,
+          "unwinding assertion loop "+id2string(loop_id));
+
+    // add to state guard to prevent further assignments
+    cur_state->guard.add(negated_cond);
+  }
+  else if(!partial_loops)
+  {
+    if(unwinding_assertions)
+    {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
     } else   {

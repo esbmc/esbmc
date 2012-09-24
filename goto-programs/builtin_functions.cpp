@@ -258,6 +258,9 @@ void goto_convertt::do_malloc(
   if(alloc_type.is_nil())
     alloc_type=char_type();
 
+  if (alloc_type.id() == "symbol")
+    alloc_type = ns.follow(alloc_type);
+
   if(alloc_size.type()!=uint_type())
   {
     alloc_size.make_typecast(uint_type());
@@ -334,6 +337,13 @@ void goto_convertt::do_malloc(
   if (options.get_bool_option("memory-leak-check")
 	  && allocated_object.type().id()=="pointer")
     allocated_objects.push(allocated_object);
+
+  //the k-induction does not support dynamic memory allocation yet
+  if (inductive_step)
+  {
+    print_msg_mem_alloc(lhs);
+    assert(0);
+  }
 }
 
 /*******************************************************************\
@@ -363,6 +373,29 @@ void goto_convertt::do_cpp_new(
   goto_programt tmp_initializer;
   cpp_new_initializer(lhs, rhs, tmp_initializer);
 
+  exprt alloc_size;
+
+  if(rhs.statement()=="cpp_new[]")
+  {
+    alloc_size=static_cast<const exprt &>(rhs.size_irep());
+    if(alloc_size.type()!=uint_type())
+      alloc_size.make_typecast(uint_type());
+
+    remove_sideeffects(alloc_size, dest);
+    rhs.size_irep() = alloc_size;
+  }
+  else
+    alloc_size=from_integer(1, uint_type());
+
+  if(alloc_size.is_nil())
+    alloc_size=from_integer(1, uint_type());
+
+  if(alloc_size.type()!=uint_type())
+  {
+    alloc_size.make_typecast(uint_type());
+    simplify(alloc_size);
+  }
+
   // produce new object
   goto_programt::targett t_n=dest.add_instruction(ASSIGN);
   t_n->code=code_assignt(lhs, rhs);
@@ -371,23 +404,28 @@ void goto_convertt::do_cpp_new(
   // set up some expressions
   exprt valid_expr("valid_object", typet("bool"));
   valid_expr.copy_to_operands(lhs);
+  exprt neg_valid_expr=gen_not(valid_expr);
 
-  // first assume that it's available
+  //tse paper
+#if TSE_PAPER
+  exprt deallocated_expr("deallocated_object", typet("bool"));
+  deallocated_expr.copy_to_operands(lhs);
+  exprt neg_deallocated_expr=gen_not(deallocated_expr);
+#endif
+
+  exprt pointer_offset_expr("pointer_offset", int_type());
+  pointer_offset_expr.copy_to_operands(lhs);
+
+  equality_exprt offset_is_zero_expr(
+    pointer_offset_expr, gen_zero(int_type()));
+
+  // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
+  t_a->location=rhs.find_location();
+  t_a->guard=(neg_valid_expr, offset_is_zero_expr);
 
   t_a->guard=valid_expr;
   t_a->guard.make_not();
-
-  exprt alloc_size;
-
-  if(rhs.statement()=="cpp_new[]")
-  {
-    alloc_size=static_cast<const exprt &>(rhs.size_irep());
-    if(alloc_size.type()!=uint_type())
-      alloc_size.make_typecast(uint_type());
-  }
-  else
-    alloc_size=from_integer(1, uint_type());
 
   // set size
   //nec: ex37.c
@@ -402,6 +440,14 @@ void goto_convertt::do_cpp_new(
   goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
   t_s_a->code=code_assignt(valid_expr, true_exprt());
   t_s_a->location=rhs.find_location();
+
+  //tse paper
+#if TSE_PAPER
+  //now set deallocated bit
+  goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
+  t_d_i->code=code_assignt(deallocated_expr, false_exprt());
+  t_d_i->location=rhs.find_location();
+#endif
 
   // run initializer
   dest.destructive_append(tmp_initializer);
@@ -722,6 +768,16 @@ void goto_convertt::do_function_call_symbol(
     t->location=function.location();
     t->location.user_provided(true);
 
+    if (is_assume && inductive_step)
+    {
+      exprt cond = arguments.front();
+      replace_ifthenelse(cond);
+      goto_programt::targett t=dest.add_instruction(ASSUME);
+      t->guard=cond;
+      t->location=function.location();
+      t->location.user_provided(true);
+    }
+
     if(is_assert)
       t->location.property("assertion");
 
@@ -772,6 +828,7 @@ void goto_convertt::do_function_call_symbol(
     do_atomic_end(lhs, function, arguments, dest);
   }
   else if(has_prefix(id2string(identifier), "c::nondet_") ||
+          has_prefix(id2string(identifier), "c::__VERIFIER_nondet_") ||
           has_prefix(id2string(identifier), "cpp::nondet_"))
   {
     // make it a side effect if there is an LHS

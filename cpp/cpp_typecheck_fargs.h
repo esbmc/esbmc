@@ -18,22 +18,26 @@ public:
   bool in_use, has_object;
   exprt::operandst operands;
 
+  // has_object indicates that the first element of
+  // 'operands' is the 'this' pointer (with the object type,
+  // not pointer to object type)
+
   cpp_typecheck_fargst():in_use(false), has_object(false) { }
 
   bool has_class_type() const;
 
   void build(
-        const side_effect_expr_function_callt &function_call);
+    const side_effect_expr_function_callt &function_call);
 
   explicit cpp_typecheck_fargst(
-         const side_effect_expr_function_callt &function_call):
+    const side_effect_expr_function_callt &function_call):
     in_use(false), has_object(false)
   {
     build(function_call);
   }
 
   bool match(
-             const code_typet::argumentst &arguments,
+    const code_typet &code_type,
     unsigned &distance,
     cpp_typecheckt &cpp_typecheck) const;
 
@@ -46,9 +50,9 @@ public:
 
   void remove_object()
   {
-      assert(has_object);
-      operands.erase(operands.begin());
-      has_object = false;
+    assert(has_object);
+    operands.erase(operands.begin());
+    has_object = false;
   }
 };
 

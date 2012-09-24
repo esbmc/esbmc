@@ -19,7 +19,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
 {
 
   // builds virtual-table value maps: (class x virtual_name x value)
-  std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps; 
+  std::map<irep_idt, std::map<irep_idt,exprt> > vt_value_maps;
 
   const struct_typet& struct_type = to_struct_type(symbol.type);
   for(unsigned i = 0; i < struct_type.components().size(); i++)
@@ -34,7 +34,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
     const pointer_typet& pointer_type =
       static_cast<const pointer_typet&>(code_type.arguments()[0].type());
 
-    irep_idt class_id = pointer_type.subtype().get("identifier");
+    irep_idt class_id = pointer_type.subtype().identifier();
 
     std::map<irep_idt,exprt>& value_map =
       vt_value_maps[class_id];
@@ -62,7 +62,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
   {
     const std::map<irep_idt,exprt>& value_map = cit->second;
 
-    const symbolt& late_cast_symb = namespacet(context).lookup(cit->first); 
+    const symbolt& late_cast_symb = namespacet(context).lookup(cit->first);
     const symbolt& vt_symb_type = namespacet(context).lookup("virtual_table::"+late_cast_symb.name.as_string());
 
     symbolt vt_symb_var;
@@ -82,7 +82,7 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
     {
       const struct_typet::componentt& compo = vt_type.components()[i];
       std::map<irep_idt,exprt>::const_iterator cit2 =
-        value_map.find( compo.get("base_name"));
+        value_map.find( compo.base_name());
       assert(cit2 != value_map.end());
       const exprt& value = cit2->second;
       assert(value.type() == compo.type());
@@ -92,6 +92,5 @@ void cpp_typecheckt::do_virtual_table(const symbolt& symbol)
 
     bool failed = context.move(vt_symb_var);
     assert(!failed);
-
   }
 }

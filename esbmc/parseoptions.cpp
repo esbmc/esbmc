@@ -27,6 +27,7 @@ extern "C" {
 #include <irep.h>
 #include <config.h>
 #include <expr_util.h>
+#include <time_stopping.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
@@ -215,13 +216,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    {
      options.set_option("deadlock-check", true);
      options.set_option("atomicity-check", false);
-     //disable all other checks
-     //options.set_option("no-bounds-check", true);
-     //options.set_option("no-div-by-zero-check", true);
-     //options.set_option("overflow-check", false);
-     //options.set_option("no-pointer-check", true);
      options.set_option("no-assertions", true);
-     //options.set_option("no-lock-check", true);
    }
    else
      options.set_option("deadlock-check", false);
@@ -233,6 +228,49 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 
   if(cmdline.isset("inlining"))
     options.set_option("inlining", true);
+
+  if(cmdline.isset("base-case") ||
+     options.get_bool_option("base-case"))
+  {
+    options.set_option("base-case", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
+  }
+
+  if(cmdline.isset("forward-condition") ||
+     options.get_bool_option("forward-condition"))
+  {
+    options.set_option("forward-condition", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", false);
+    options.set_option("partial-loops", false);
+  }
+
+  if(cmdline.isset("inductive-step")  ||
+     options.get_bool_option("inductive-step"))
+  {
+    options.set_option("inductive-step", true);
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
+  }
+
+  if(cmdline.isset("k-induction"))
+  {
+    options.set_option("no-bounds-check", true);
+    options.set_option("no-div-by-zero-check", true);
+    options.set_option("no-pointer-check", true);
+    options.set_option("no-unwinding-assertions", true);
+    options.set_option("partial-loops", true);
+    options.set_option("unwind", i2string(k_step));
+  }
 
   // jmorse
   if(cmdline.isset("timeout")) {
@@ -317,6 +355,25 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
 #endif
   }
 
+#ifndef _WIN32
+  struct rlimit lim;
+  if (cmdline.isset("enable-core-dump")) {
+    lim.rlim_cur = RLIM_INFINITY;
+    lim.rlim_max = RLIM_INFINITY;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't unlimit core dump size");
+      abort();
+    }
+  } else {
+    lim.rlim_cur = 0;
+    lim.rlim_max = 0;
+    if (setrlimit(RLIMIT_CORE, &lim) != 0) {
+      perror("Couldn't disable core dump size");
+      abort();
+    }
+  }
+#endif
+
   config.options = options;
 }
 
@@ -334,8 +391,6 @@ Function: cbmc_parseoptionst::doit
 
 int cbmc_parseoptionst::doit()
 {
-  goto_functionst goto_functions;
-
   if(cmdline.isset("version"))
   {
     std::cout << ESBMC_VERSION << std::endl;
@@ -359,8 +414,12 @@ int cbmc_parseoptionst::doit()
   // command line options
   //
 
-  get_command_line_options(options);
   set_verbosity(*this);
+
+  goto_functionst goto_functions;
+
+  optionst opts;
+  get_command_line_options(opts);
 
   if(cmdline.isset("preprocess"))
   {
@@ -368,7 +427,7 @@ int cbmc_parseoptionst::doit()
     return 0;
   }
 
-  if(get_goto_program(goto_functions))
+  if(get_goto_program(opts, goto_functions))
     return 6;
 
   if(cmdline.isset("show-claims"))
@@ -384,10 +443,224 @@ int cbmc_parseoptionst::doit()
   // slice according to property
 
   // do actual BMC
-  bmct bmc(goto_functions, options, context, ui_message_handler);
-  get_command_line_options(bmc.options);
+  bmct bmc(goto_functions, opts, context, ui_message_handler);
   set_verbosity(bmc);
   return do_bmc(bmc, goto_functions);
+}
+
+/*******************************************************************\
+
+Function: cbmc_parseoptionst::doit_k_induction
+
+  Inputs:
+
+ Outputs:
+
+ Purpose: invoke main modules
+
+\*******************************************************************/
+
+int cbmc_parseoptionst::doit_k_induction()
+{
+  if(cmdline.isset("version"))
+  {
+    std::cout << ESBMC_VERSION << std::endl;
+    return 0;
+  }
+
+  //
+  // unwinding of transition systems
+  //
+
+  if(cmdline.isset("module") ||
+    cmdline.isset("gen-interface"))
+
+  {
+    error("This version has no support for "
+          " hardware modules.");
+    return 1;
+  }
+
+  //
+  // command line options
+  //
+
+  set_verbosity(*this);
+
+  if(cmdline.isset("preprocess"))
+  {
+    preprocessing();
+    return 0;
+  }
+
+  //
+  // do the base case
+  //
+
+  status("\n*** Generating Base Case ***");
+  goto_functionst goto_functions_base_case;
+
+  optionst opts1;
+  opts1.set_option("base-case", true);
+  opts1.set_option("forward-condition", false);
+  opts1.set_option("inductive-step", false);
+  get_command_line_options(opts1);
+
+  if(get_goto_program(opts1, goto_functions_base_case))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions_base_case);
+    return 0;
+  }
+
+  if(set_claims(goto_functions_base_case))
+    return 7;
+
+  context_base_case = context;
+
+  bmct bmc_base_case(goto_functions_base_case, opts1,
+      context_base_case, ui_message_handler);
+  set_verbosity(bmc_base_case);
+
+  context.clear(); // We need to clear the previous context
+
+  //
+  // do the forward condition
+  //
+
+  status("\n*** Generating Forward Condition ***");
+  goto_functionst goto_functions_forward_condition;
+
+  optionst opts2;
+  opts2.set_option("base-case", false);
+  opts2.set_option("forward-condition", true);
+  opts2.set_option("inductive-step", false);
+  get_command_line_options(opts2);
+
+  if(get_goto_program(opts2, goto_functions_forward_condition))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions_forward_condition);
+    return 0;
+  }
+
+  if(set_claims(goto_functions_forward_condition))
+    return 7;
+
+  context_forward_condition = context;
+
+  bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
+      context_forward_condition, ui_message_handler);
+  set_verbosity(bmc_forward_condition);
+
+  context.clear(); // We need to clear the previous context
+
+  //
+  // do the inductive step
+  //
+
+  status("\n*** Generating Inductive Step ***");
+  goto_functionst goto_functions_inductive_step;
+
+  optionst opts3;
+  opts3.set_option("base-case", false);
+  opts3.set_option("forward-condition", false);
+  opts3.set_option("inductive-step", true);
+  get_command_line_options(opts3);
+
+  if(get_goto_program(opts3, goto_functions_inductive_step))
+    return 6;
+
+  if(cmdline.isset("show-claims"))
+  {
+    const namespacet ns(context);
+    show_claims(ns, get_ui(), goto_functions_inductive_step);
+    return 0;
+  }
+
+  if(set_claims(goto_functions_inductive_step))
+    return 7;
+
+  context_inductive_step = context;
+
+  bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
+      context_inductive_step, ui_message_handler);
+  set_verbosity(bmc_inductive_step);
+
+  // do actual BMC
+  bool res;
+
+  do {
+    std::cout << std::endl << "*** K-Induction Loop Iteration ";
+    std::cout << i2string((unsigned long) k_step);
+    std::cout << " ***" << std::endl;
+    std::cout << "*** Checking ";
+
+    if(base_case)
+    {
+      std::cout << "base case " << std::endl;
+
+      // We need to set the right context
+      context.clear();
+      context = context_base_case;
+
+      res = do_bmc(bmc_base_case, goto_functions_base_case);
+
+      if(k_step >= 1 && res)
+        return 0;
+
+      ++k_step;
+
+      base_case = false; //disable base case
+      forward_condition = true; //enable forward condition
+    }
+    else if (forward_condition)
+    {
+      std::cout << "forward condition " << std::endl;
+
+      // We need to set the right context
+      context.clear();
+      context = context_forward_condition;
+
+      res = do_bmc(bmc_forward_condition, goto_functions_forward_condition);
+
+      if (!res)
+        return 0;
+
+      forward_condition = false; //disable forward condition
+    }
+    else
+    {
+      std::cout << "inductive step " << std::endl;
+
+      // We need to set the right context
+      context.clear();
+      context = context_inductive_step;
+
+      res = do_bmc(bmc_inductive_step, goto_functions_inductive_step);
+
+      if (!res)
+        return 0;
+
+      base_case = true; //enable base case
+    }
+
+    bmc_base_case.options.set_option("unwind", i2string(k_step));
+    bmc_forward_condition.options.set_option("unwind", i2string(k_step));
+    bmc_inductive_step.options.set_option("unwind", i2string(k_step));
+
+  } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
+
+  status("Unable to prove or falsify the property, giving up.");
+  status("VERIFICATION UNKNOWN");
+
+  return 0;
 }
 
 /*******************************************************************\
@@ -442,8 +715,11 @@ Function: cbmc_parseoptionst::get_goto_program
 
 \*******************************************************************/
 
-bool cbmc_parseoptionst::get_goto_program(goto_functionst &goto_functions)
+bool cbmc_parseoptionst::get_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
+  fine_timet parse_start = current_time();
   try
   {
     if(cmdline.isset("binary"))
@@ -488,8 +764,22 @@ bool cbmc_parseoptionst::get_goto_program(goto_functionst &goto_functions)
         ui_message_handler);
     }
 
-    if(process_goto_program(goto_functions))
+    fine_timet parse_stop = current_time();
+    std::ostringstream str;
+    str << "GOTO program creation time: ";
+    output_time(parse_stop - parse_start, str);
+    str << "s";
+    status(str.str());
+
+    fine_timet process_start = current_time();
+    if(process_goto_program(options, goto_functions))
       return true;
+    fine_timet process_stop = current_time();
+    std::ostringstream str2;
+    str2 << "GOTO program processing time: ";
+    output_time(process_stop - process_start, str2);
+    str2 << "s";
+    status(str2.str());
   }
 
   catch(const char *e)
@@ -889,7 +1179,9 @@ relink_calls_from_to(irept &irep, irep_idt from_name, irep_idt to_name)
   return;
 }
 
-bool cbmc_parseoptionst::process_goto_program(goto_functionst &goto_functions)
+bool cbmc_parseoptionst::process_goto_program(
+  optionst &options,
+  goto_functionst &goto_functions)
 {
   try
   {
@@ -1050,7 +1342,8 @@ Function: cbmc_parseoptionst::do_bmc
 
 \*******************************************************************/
 
-int cbmc_parseoptionst::do_bmc(
+
+bool cbmc_parseoptionst::do_bmc(
   bmct &bmc1,
   const goto_functionst &goto_functions)
 {
@@ -1060,7 +1353,7 @@ int cbmc_parseoptionst::do_bmc(
 
   status("Starting Bounded Model Checking");
 
-  bmc1.run(goto_functions);
+  bool res = bmc1.run(goto_functions);
 
 #ifndef _WIN32
   if (bmc1.options.get_bool_option("memstats")) {
@@ -1070,7 +1363,7 @@ int cbmc_parseoptionst::do_bmc(
   }
 #endif
 
-  return 0;
+  return res;
 }
 
 
@@ -1098,7 +1391,7 @@ void cbmc_parseoptionst::help()
     " esbmc file.c ...              source file names\n"
     "\n"
     "Additonal options:\n\n"
-    " --- front-end options ------------------------------------------------------------------\n\n"
+    " --- front-end options ---------------------------------------------------------\n\n"
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
@@ -1112,11 +1405,13 @@ void cbmc_parseoptionst::help()
     " --document-subgoals          generate subgoals documentation\n"
     " --no-library                 disable built-in abstract C library\n"
     " --binary                     read goto program instead of source code\n"
+    " --llvm-metadata Filename     read the metadata file generated by LLVM\n"
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
     " --version                    show current ESBMC version and exit\n\n"
-    " --- BMC options ------------------------------------------------------------------------\n\n"
+    " --show-goto-functions        show goto program\n"
+    " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"
     " --depth nr                   limit search depth\n"
@@ -1124,18 +1419,18 @@ void cbmc_parseoptionst::help()
     " --unwindset nr               unwind given loop nr times\n"
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
-    " --- solver configuration ---------------------------------------------------------------\n\n"
+    " --- solver configuration ------------------------------------------------------\n\n"
     //" --minisat                    use the SAT solver MiniSat\n"
-    " --boolector-bv               use BOOLECTOR with bit-vector arithmetic (experimental)\n"
+    " --boolector-bv               use BOOLECTOR with bit-vector arith (experimental)\n"
     " --z3-bv                      use Z3 with bit-vector arithmetic\n"
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
-    " --btor                       output verification conditions in BTOR format (experimental)\n"
-    " --qf_aufbv                   output verification conditions in QF_AUFBV format (experimental)\n"
-    " --qf_auflira                 output verification conditions in QF_AUFLIRA format (experimental)\n"
-    " --outfile Filename           output verification conditions in SMT lib format to given file\n\n"
-    " --- property checking ------------------------------------------------------------------\n\n"
+    " --btor                       output VCCs in BTOR format (experimental)\n"
+    " --qf_aufbv                   output VCCs in QF_AUFBV format (experimental)\n"
+    " --qf_auflira                 output VCCs in QF_AUFLIRA format (experimental)\n"
+    " --outfile Filename           output VCCs in SMT lib format to given file\n\n"
+    " --- property checking ---------------------------------------------------------\n\n"
     " --no-assertions              ignore assertions\n"
     " --no-bounds-check            do not do array bounds check\n"
     " --no-div-by-zero-check       do not do division by zero check\n"
@@ -1144,23 +1439,28 @@ void cbmc_parseoptionst::help()
     " --overflow-check             enable arithmetic over- and underflow check\n"
     " --deadlock-check             enable global and local deadlock check with mutex\n"
     " --data-races-check           enable data races check\n"
-    " --atomicity-check            enable atomicity violation check at visible assignments\n\n"
-    " --- scheduling approaches ---------------------------------------------------------------\n\n"
+    " --atomicity-check            enable atomicity check at visible assignments\n\n"
+    " --- k-induction----------------------------------------------------------------\n\n"
+    " --base-case                  check the base case\n"
+    " --forward-condition          check the forward condition\n"
+    " --inductive-step             check the inductive step\n"
+    " --k-induction                prove by k-induction \n"
+    " --k-step nr                  set the k time step (default is 50) \n\n"
+    " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
     " --uw-model                   use under-approximation and widening approach\n"
-    " --core-size nr               limit the number of assumptions in the UW approach (experimental)\n"
+    " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
-    " --time-slice                 set the time slice of the round robin algorithm \n\n"
-    " --- concurrency checking ---------------------------------------------------------------\n\n"
-    " --context-switch nr          limit the number of context switches for each thread \n"
-    " --state-hashing              enable state-hashing to prune the state space exploration\n"
+    " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
+    " --- concurrency checking -----------------------------------------------------\n\n"
+    " --context-switch nr          limit number of context switches for each thread \n"
+    " --state-hashing              enable state-hashing, prunes duplicate states\n"
     " --control-flow-test          enable context switch before control flow tests\n"
     " --no-lock-check              do not do lock acquisition ordering check\n"
     " --no-por                     do not do partial order reduction\n"
 #if 0
     " --unsigned-char              make \"char\" unsigned by default\n"
     " --show-symbol-table          show symbol table\n"
-    " --show-goto-functions        show goto program\n"
     " --ppc-macos                  set MACOS/PPC architecture\n"
 #endif
     #ifdef _WIN32
@@ -1195,16 +1495,9 @@ void cbmc_parseoptionst::help()
 
     " --ecp                        perform equivalence checking of programs\n"
 #endif
-#if 0
-    " ---------------  concurrency checking  -------------------------\n"
-    " --data-races-check           enable data race check\n"
-    " --no-deadlock-check          do not do deadlock check\n"
-    " --no-vi-por                     no partial-order-reduction\n"
-    " --no-rw-por                  no read write analysis partial-order-reduction\n"
-    " --context-siwtch nr          set the number of context switches allowed for each thread\n"
-    " --DFS                        Depth first exploration\n"
-    " --schedule             schedule mode (experimental)\n"
-    " --all-runs                   Run all executions (do not stop at error)\n"
-#endif
+    "\n --- Miscellaneous options -----------------------------------------------------\n\n"
+    " --memlimit                   configure memory limit, of form \"100m\" or \"2g\"\n"
+    " --timeout                    configure time limit, integer followed by {s,m,h}\n"
+    " --enable-core-dump           don't disable core dump output\n"
     "\n";
 }
