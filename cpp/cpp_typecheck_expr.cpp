@@ -1670,7 +1670,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // Let's create the bad_typeid exception
       // We must check if the user included typeinfo
       std::cout << "**** WARNING: throwing a null pointer: ";
-      std::cout << "Don't forget to include typeinfo" << std::endl;
+      std::cout << "ensure that the typeinfo lib is included" << std::endl;
 
       irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
 
