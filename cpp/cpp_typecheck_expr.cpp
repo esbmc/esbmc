@@ -1694,7 +1694,8 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
     if(arguments.type().id()=="incomplete_array")
     {
       err_location(arguments.location());
-      str << "storage size of ‘y’ isn’t known\n";
+      str << "storage size of ‘" << lookup(arguments.identifier()).base_name;
+      str << "’ isn’t known\n";
       throw 0;
     }
   }
