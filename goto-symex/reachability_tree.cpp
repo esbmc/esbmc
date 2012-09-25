@@ -141,6 +141,8 @@ bool reachability_treet::force_cswitch_point()
 
 bool reachability_treet::analyse_for_cswitch_base(const exprt &expr)
 {
+  if (options.get_bool_option("ltl"))
+    return false;
 
   execution_statet &ex_state = get_cur_state();
 
