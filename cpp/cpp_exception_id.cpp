@@ -30,7 +30,9 @@ void cpp_exception_list_rec(
   std::vector<irep_idt> &dest,
   bool is_catch)
 {
-  if(src.id()=="pointer")
+  if(src.id()=="pointer"
+    || src.id()=="array"
+    || src.id()=="incomplete_array")
   {
     if(src.reference())
     {
