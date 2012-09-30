@@ -400,7 +400,7 @@ public:
   }
 
   //! Compute loop numbers
-  void compute_loop_numbers();
+  void compute_loop_numbers(unsigned int &num);
 
   //! Update all indices
   void update();
@@ -440,15 +440,15 @@ public:
 };
 
 template <class codeT, class guardT>
-void goto_program_templatet<codeT, guardT>::compute_loop_numbers()
+void goto_program_templatet<codeT, guardT>::compute_loop_numbers
+                                            (unsigned int &num)
 {
-  unsigned nr=0;
   for(typename instructionst::iterator
       it=instructions.begin();
       it!=instructions.end();
       it++)
     if(it->is_backwards_goto())
-      it->loop_number=nr++;
+      it->loop_number=num++;
 }
 
 template <class codeT, class guardT>
