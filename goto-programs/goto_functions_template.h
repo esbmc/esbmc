@@ -205,11 +205,12 @@ Function: goto_functions_templatet::compute_loop_numbers
 template <class bodyT>
 void goto_functions_templatet<bodyT>::compute_loop_numbers()
 {
+  unsigned int num = 0;
   for(typename function_mapt::iterator
       it=function_map.begin();
       it!=function_map.end();
       it++)
-    it->second.body.compute_loop_numbers();
+    it->second.body.compute_loop_numbers(num);
 }
 
 #endif
