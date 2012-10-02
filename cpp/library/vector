@@ -690,10 +690,10 @@ bool vector<T>::operator<= (const vector<T>& rhv){
 
 template <class T>
 void vector<T>::swap(vector<T>& v1){
-		  vector<T> aux;
-		aux = v1;
-		v1 = *this;
-		*this = aux;
+	vector<T> aux;
+	aux = v1;
+	v1 = *this;
+	*this = aux;
 
 }
 
