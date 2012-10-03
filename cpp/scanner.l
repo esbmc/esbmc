@@ -286,6 +286,7 @@ __CPROVER_thread_local { loc(); return TOK_THREAD_LOCAL; }
 bitand              { loc(); return '&'; }
 bitor               { loc(); return '|'; }
 compl               { loc(); return '~'; }
+xor	                { loc(); return '^'; }
 
 %{
 /* a huge batch of MS extensions
