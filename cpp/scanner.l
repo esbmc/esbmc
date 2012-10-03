@@ -289,6 +289,7 @@ bitand              { loc(); return '&'; }
 bitor               { loc(); return '|'; }
 compl               { loc(); return '~'; }
 xor	                { loc(); return '^'; }
+xor_eq              { loc(); return TOK_XORASSIGN; }
 
 %{
 /* a huge batch of MS extensions
