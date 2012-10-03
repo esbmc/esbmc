@@ -249,6 +249,7 @@ long                { loc(); return TOK_LONG; }
 mutable             { loc(); return TOK_MUTABLE; }
 namespace           { loc(); return TOK_NAMESPACE; }
 new                 { loc(); return TOK_NEW; }
+not_eq              { loc(); return TOK_NE; }
 noreturn            { /* ignore */ }
 nullptr             { loc(); return TOK_NULLPTR; } // C++11
 operator            { loc(); return TOK_OPERATOR; }
