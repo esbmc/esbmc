@@ -255,6 +255,7 @@ noreturn            { /* ignore */ }
 nullptr             { loc(); return TOK_NULLPTR; } // C++11
 operator            { loc(); return TOK_OPERATOR; }
 or                  { loc(); return TOK_OROR; }
+or_eq               { loc(); return TOK_ORASSIGN; }
 private             { loc(); return TOK_PRIVATE; }
 protected           { loc(); return TOK_PROTECTED; }
 public              { loc(); return TOK_PUBLIC; }
