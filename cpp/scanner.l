@@ -220,6 +220,7 @@ __leave             { loc(); return MSC_Keyword(TOK_MSC_LEAVE); }
 __finally           { loc(); return MSC_Keyword(TOK_MSC_FINALLY); }
 __uuidof 	        { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
 and                 { loc(); return TOK_ANDAND; }
+and_eq              { loc(); return TOK_ANDASSIGN; }
 auto                { loc(); return TOK_AUTO; }
 bool                { loc(); return TOK_BOOL; }
 break               { loc(); return TOK_BREAK; }
