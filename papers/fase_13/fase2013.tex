@@ -56,13 +56,141 @@ Background here (Lucas)...
 
 \section{SMT-Based BMC for C++ Software}
 %
-Description of the solution here (Mikhail, Bruno/Mauro, Felipe, and Hendrio)...
+
+\section{Standard Template Libraries}
+\subsection{Introduction}
+\\ \\
+	Several applications have C++ as its basic programming language, including verification tools, information retrieval machines, databases, simulators, embedded systems and telecommunication systems. Compared to C, this programming language provides a wider set of features, libraries and functionalities that would require a way larger codification in the basic version of this language. This features include OOP (Object-oriented programming), specialized input-output libraries (stream libraries, in general), the template concept ,including STL containers, which have some of the popular data structures in Computing Science, plus making possible the use of any data type, thanks to template usage. 
+\\ \\
+	Systems that make use of this language (and its functionalities) require strong and steady software verification, for its errors become harder to find, as its own structure grows. 
+\\ \\
+	For this kind of operation, verification software is becoming more important and critical, especially its crucial characteristics (speed, accuracy, efficiency, friendliness). Many verifying systems are available, especially in high-level test. In a particular approach, STL verification become very useful as the system needs grows, for its practicality and encapsulated features accelerates the programming process, shortening the auxiliary implementation (like data structures creation, sort algorithms, search functions), helping the programmer focus on what matters.
+\\ \\
+	Of course, if C++ seems to be a more complex version of C, its verification will be more complex as well. Our solution involves the usual C code verification, using SMT-based bounded model-checking (ESBMC), and an operational model of the C++ libraries. In this session, we will focus on the STL sequential containers operational model, its preconditions and simulation features (like how we store the elements values of the containers and intern class methods), and how this is used to verify a C++ program code.
+\\ \\
+\subsection{Structure}
+\\
+	The structure of STL containers is based on the C++ structure itself, including its classes, operators, methods, functions and intern variables. It is divided in: iterations, capacity, element access, modifiers and unique members. The similarities and differences between sequential containers are described at Table 1.
+	
+\begin{table}
+	\centering
+		\begin{tabular}
+			
+		\end{tabular}
+	\caption{STL sequential containers}
+	\label{tab:STLSequentialContainers}
+\end{table}
+	
+	\subsection{Model Semantics}
+	
+	Let us consider that a container model is composed by five types of variables, \emph{I}, \emph{C}, \emph{N}, \emph{P} and \emph{T}. \emph{I} represents a iterator that points to a position in the container, \emph{C} represents the container itself, N represents natural integer numbers used in the container, like size, capacity and elements index, \emph{P} represents the memory address where \emph{T} is located, and \emph{T} represents de values stored in the container. For convention, we assume that \emph{\{c, v, d, l\}} \subset C$,$ \{i, j, n\} \subset N $and$ \{it1, it2\} \subset I. 
+	
+	
+	The containers contain an array of elements \emph{T}, and their positions in the memory are represented by pointers \emph{P}.
+Assuming this, the syntax for integer expression is:\\ \\
+
+%	\emph{
+%	\textit{Int} = N \left| Z\\
+%		\left| \textit{C}.size \left| \textit{C}.capacity\\
+%		\left| \textit{Int} ( + \left| ? \left| * \left| ...) \textit{Int} $\\$ 
+%   	\left|\textit{It} ( + \left| - ) \textit{It}\\
+%	}
+%	
+% \\ \\ 
+
+%	Similarly, the syntax for iterator expressions is:
+%	\\ \\
+%	\emph{
+%		\textit{It} = I \left| \textit{It} ( + \left| - ) \textit{It} \\
+%		\left| \textit{C}.begin \left| \textit{C}.end \\
+%		}
+%
+%	For \emph{P} (memory address values), the syntax is as follows:
+%	\\ \\
+%	\emph{
+%		\textit{P} = p \left| \textit{It}.pointer \left| \textit{C}.array
+%		\left| \textit{It}.source
+%		\left| \textit{P} ( + \left| - ) \textit{P}
+%	}
+%\\ \\
+%	The syntax for \emph{T} values is the following: 
+%\\ \\
+%\emph{	
+%	\textit{T} = t \left| *\textit{It} \left| *\textit{P} \left| \textit{C}_int
+%	}
+%	\\ \\
+%	To test the assertions, we use Booleans expressions, with the following syntax: 
+%	\\ \\
+%		Bool = Int ( < | > | = | … ) Int 
+%| It ( < | > | = | … ) It
+%| T  =  T
+% | Assert | Assert (_| ^| ...) Assert
+%|    var . Assert | E var . Assert
+
+\subsection{Model}
+	To simulate appropriately the containers, our model makes use of three variables: a variable P called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements contained in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value. \\ \\
+	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element T in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element T stored in the container.\\ \\
+	The vector container model has a structure as it follows: \\ \\
+	
+\emph{	C1 = \{P1, C1.size, C1.capacity\}}
+\\ \\
+	Where P1 is a memory address where it is stored the elements of the container, C1.size is the total number of elements in the container, and C1.capacity is the total capacity of the vector, simulated internally in the model. \\ \\
+	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like push-back(), pop-back(), front(), back(), push-front() and pop-front() are only a simplified variation of those main methods, optimized for some containers (like pop-back in a stack).
+\\ \\
+	An insert method is represented by the following structure:
+\\ \\
+	C{cont}\\
+	It{cont.insert}|cont.insert\\
+	It{position} & It{first} & It{last}\\
+	P{point1} & P{point2}\\
+	T{value}\\
+	N{quantity}\\
+	cont.insert (position, value)\\
+		cont'.size = cont.size + 1\\
+		*position = value\\
+	|cont.insert(position, value, quantity)\\
+		cont'.size = cont.size + quantity\\
+		*(position + N(0 -> quantity)) = value\\
+	|insert(position, first, last)\\
+		cont'.size = cont.size +( last - first)\\
+		*position = *first\\
+	|insert(position, point1, point2)\\
+		cont'size = cont.size + (point2 - point1)\\
+		*position = *point1\\
+		\\ \\
+	Similarly, an erase method is structured like the following:
+	\\ \\
+	C{cont}\\
+	It{cont.erase}|cont. erase\\
+	It{position} & It{first} & It{last}\\
+	P{point1} & P{point2}\\
+	cont. erase (position)\\
+		cont'.size = cont.size - 1\\
+		position' = position + 1\\
+	|cont. erase (position, first, last)\\
+		cont'.size = cont.size -(last - first)\\
+		position' = last\\
+		\\ \\
+	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself).
+	\\ \\
+	C{cont}\\
+	It{i}\\
+	N{n}\\
+	T{C[n]}\\
+	T{*i}\\
+	\\ \\
+	The structure of iterators is treated differently from the other types. The model is the following:\\ \\
+	
+	It : P{pointer}; N{pos}; P{cont_pos}\\ \\
+
+	Where pointer is a memory address that points to the real position of the required element in the container (pointed by the iterator), pos is the iterator index internally in the container, and cont_pos is a memory address equivalent to cont.buf, being cont the container pointed by the iterator.
+\\ \\
 
 \section{Experimental Results}
 %
 Experimental Results here (Mauro)...
 
-\sourcecode {}
+
 
 \section{Related Work}
 %
