@@ -1,0 +1,145 @@
+%\documentclass[oribibl,runningheads,a4paper]{llncs}
+\documentclass[a4paper]{llncs}
+\usepackage{url}
+\usepackage{times}
+
+\newcommand{\comment}[1]{}
+\newcommand{\citenot}[1]{}
+\newcommand{\blurb}[1]{{\texttt{[.. #1..]}}}
+
+
+\begin{document}
+
+%\mainmatter  % start of an individual contribution
+
+%\title{Context-Bounded Symbolic Model Checking with ESBMC 1.17}
+\title{SMT-Based Bounded Model Checking of C++ Programs}
+%\subtitle{(Competition Contribution)}
+%\title{TACAS'12 Competition Entry: ESBMC v1.17}
+%\title{Software Verification Competition: ESBMC v1.17}
+%\title{TACAS'12 Software Verification Competition: ESBMC v1.17}
+%\title{System Description: ESBMC v1.17}
+%\title{System Description: ESBMC v1.17 (TACAS'12 Competition version)}
+%\titlerunning{}
+\comment{
+\author{Lucas Cordeiro$^1$ \and
+	Jeremy Morse$^2$   \and
+	Denis Nicole$^2$   \and
+	Bernd Fischer$^2$}
+\authorrunning{Lucas Cordeiro, Jeremy Morse, Denis Nicole, Bernd Fischer}
+\institute{
+  $^1$ Electronic and Information Research Center, %\\
+  Federal University of Amazonas, Brazil\\
+  %\url{lucascordeiro@ufam.edu.br}
+  %\\\smallskip
+  $^2$ Electronics and Computer Science, %\\
+  University of Southampton, UK\\
+  %\url{{jcmm106,dan,bf}@ecs.soton.ac.uk}
+  %\url{http://www.ecs.soton.ac.uk}
+  \url{esbmc@ecs.soton.ac.uk}
+}
+}
+
+\maketitle
+
+\begin{abstract}
+Bounded model Checking (BMC) of C++ programs presents greater complexity than C programs due to features that the languages offers, such as templates, containers and exception handling. We present ESBMC, a bounded model checker for C and C++ programs, which encodes the verification conditions using different background theories and passes them directly to an SMT Solver. Our experimental results show that our approach can handle more constructs of the C++ programs and substantially reduce the verification time. 
+\end{abstract}
+
+\section{Introduction}
+%
+Introduction here (Lucas)...
+
+\section{Background}
+%
+Background here (Lucas)...
+
+\section{SMT-Based BMC for C++ Software}
+%
+Description of the solution here (Mikhail, Bruno/Mauro, Felipe, and Hendrio)...
+
+\section{Experimental Results}
+%
+Experimental Results here (Mauro)...
+
+\sourcecode {}
+
+\section{Related Work}
+%
+Related Work here (Mauro and Mikhail)
+
+\section{Conclusions}
+%
+Conclusions here (Lucas)...
+
+
+\smallskip{\small\noindent{\bf Acknowledgments.} 
+%
+Acknowledgments here (Lucas)...
+}
+
+\vspace{-2.5ex}
+\renewcommand\refname{{\normalsize References}}
+{\begin{thebibliography}{10}
+\vspace{-0.5ex}
+
+%\bibitem{Boolector09}
+%R.~Brummayer and A.~Biere
+%\newblock Boolector: An efficient {SMT} solver for bit-vectors and arrays
+%\newblock {\em TACAS}, {\em LNCS} 5505, pp. 174--177, 2009.
+
+\bibitem{Cimatti10}
+A.~Cimatti, A.~Micheli, I.~Narasamdya, and M.~Roveri.
+\newblock Verifying {SystemC}: a software model checking approach.
+\newblock {\em FMCAD}, 2010, pp.\ 121--128.
+
+\bibitem{Clarke04}
+%E.~Clarke et~al.
+E.~Clarke, D.~Kroening, and F.~Lerda.
+\newblock A tool for checking {ANSI-C} programs.
+\newblock {\em TACAS}, {\em LNCS} 2988, pp.\ 168--176, 2004.
+
+\bibitem{CordeiroPhD}
+L.~Cordeiro.
+\newblock {SMT}-Based Bounded Model Checking of Multi-Threaded Software in 
+Embedded Systems.
+\newblock PhD Thesis, U Southampton, 2011.
+
+\bibitem{Cordeiro09}
+L.~Cordeiro, B.~Fischer, and J.~Marques-Silva.
+\newblock {SMT}-based bounded model checking for embedded {ANSI-C} software.
+\newblock {\em ASE}, pp.\ 137--148, 2009. 
+%\newblock Extended version to appear in \emph{IEEE Trans.~Software Engineering}.
+
+\bibitem{icse11}
+L.~Cordeiro and B.~Fischer.
+\newblock Verifying Multi-Threaded Software using {SMT}-based Context-Bounded 
+Model Checking.
+\newblock {\em ICSE}, pp.\ 331--340, 2011. 
+
+%\bibitem{Z08}
+%L.~M. de~Moura and N.~Bj{\o}rner.
+%\newblock Z3: An efficient {SMT} solver.
+%\newblock {\em TACAS}, {\em LNCS} 4963, pp. 337--340, 2008.
+
+\bibitem{sefm11}
+J.~Morse, L.~Cordeiro, D.~Nicole, and B.~Fischer.
+\newblock Context-Bounded Model Checking of LTL Properties for ANSI-C Software.
+\newblock {\em SEFM}, {\em LNCS} 7041, pp.\ 302--317, 2011.
+
+%\bibitem{wtr}
+%R.~Barreto, L.~Cordeiro, and B.~Fischer.
+%\newblock Verifying Embedded C Software with Timing Constraints using an
+%Untimed Bounded Model Checker
+%\newblock {\em Proc.\ SBESC Workshop on Real-Time Systems}, to appear, 2011.
+
+%\bibitem{Godefroid95}
+%Patrice Godefroid.
+%\newblock {\em Partial-order Methods for the Verification of Concurrent
+%  Systems: An Approach to the State-explosion Problem}.
+%\newblock University of Liege, PhD thesis, 1995.
+
+\end{thebibliography}}
+
+\end{document}
+
