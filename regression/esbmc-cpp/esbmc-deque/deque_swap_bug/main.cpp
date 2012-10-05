@@ -4,7 +4,7 @@
 #include <cassert>
 using namespace std;
 
-main ()
+int main ()
 {
   unsigned int i;
   deque<int> first (3,100);   // three ints with a value of 100
