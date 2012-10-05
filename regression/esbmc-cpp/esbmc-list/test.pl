@@ -354,7 +354,3 @@ $doc->setDocumentElement($root);
 open(FILE_XML , ">test_log.xml") or die "Could not possible to write xml log file!";
 print FILE_XML $doc->toString(1);
 close FILE_XML;
-
-
-
-exit $failures;

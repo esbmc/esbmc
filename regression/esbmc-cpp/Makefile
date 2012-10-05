@@ -15,6 +15,12 @@ ifneq ($(filter clean,$(MAKECMDGOALS)),)
 endif
 clean: all
 
+# llbmc
+ifneq ($(filter llvm,$(MAKECMDGOALS)),)
+        TARGET := llvm
+endif
+llvm: all
+
 # Make them all
 all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list)
 
