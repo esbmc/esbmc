@@ -154,19 +154,11 @@ This set is subdivided in four categories: Containers, Algorithms, Iterators and
 
 \subsubsection{Structure.}
 
-The structure of STL containers is based on the C++ structure itself, including its classes, operators, methods, functions and intern variables. It is divided in: iterations, capacity, element access, modifiers and unique members. The similarities and differences between sequential containers are described at Table 1.
+In this session, we will focus on the STL sequential containers operational model, its preconditions and simulation features (like how we store the elements values of the containers and intern class methods), and how this is used to verify a C++ program code.
 
-%%Hendrio: you should summarize the table in the text and then cite it.
-\comment{	
-\begin{table}
-	\centering
-		\begin{tabular}
-			
-		\end{tabular}
-	\caption{STL sequential containers}
-	\label{tab:STLSequentialContainers}
-\end{table}
-}
+	The structure of STL containers is based on the C++ structure itself, including its classes, operators, methods, functions and intern variables. It is divided in: iterations, capacity, element access, modifiers and unique members. As the containers structure differs a little between each other, some of their methods will vary too, changing its intern model as well. For example, a list container does not have a reference operator (operator[]), and the elements are reached only by iterators (list has a dynamic structure, unlike deque or vector). Lists also have unique methods, optimized by its dynamic structure, like merging, elements sorting, reverse order, etc.
+	Vector also have unique methods, related to size and capacity manipulation, and it also does not have push\_front() and pop\_front() methods. Further information can be reached in C++ Reference website (www.cplusplus.com/reference/stl).
+
 	
 \subsubsection{Model Semantics.}
 	
@@ -187,92 +179,127 @@ Assuming this, the syntax for integer expression is:
 Similarly, the syntax for iterator expressions is:
 %
 %
-\[\begin{array}{r@{\:\:}c@{\:\:}l}
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 \\[-5ex]
-\mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \: | \\
+\mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
 \end{array}
 \]
 %
+%
+For \emph{P} (memory address values), the syntax is as follows:
+%	
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
+\\[-5ex]
+\mathit{P}  & ::= & \: \mathit{p} \: | \: \mathit{It.pointer} \: | \: \mathit{C.array} \: | \\
+            &     & \: \mathit{It.source} \: | \: \mathit{P}  ( \: + \: | \: - \: )  \textit{P} \: \\
+\end{array}
+\]
+%	
+The syntax for \emph{T} values is the following: 
+%
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
+\\[-5ex]
+\mathit{T}   & ::= & \: \mathit{t} \: | \: \mathit{*It} \: | \: \mathit{*P} \: | \: \mathit{C_n} \:  \\
+\end{array}
+\]
+%
+To test the assertions, we use Booleans expressions, with the following syntax: 
+%
 
-
-	For \emph{P} (memory address values), the syntax is as follows:
-%	\emph{
-%		\textit{P} = p \left| \textit{It}.pointer \left| \textit{C}.array
-%		\left| \textit{It}.source
-%		\left| \textit{P} ( + \left| - ) \textit{P}
-%	}
-%\\ \\
-%	The syntax for \emph{T} values is the following: 
-%\\ \\
-%\emph{	
-%	\textit{T} = t \left| *\textit{It} \left| *\textit{P} \left| \textit{C}_int
-%	}
-%	\\ \\
-%	To test the assertions, we use Booleans expressions, with the following syntax: 
-%	\\ \\
-%		Bool = Int ( < | > | = | … ) Int 
-%| It ( < | > | = | … ) It
-%| T  =  T
-% | Assert | Assert (_| ^| ...) Assert
-%|    var . Assert | E var . Assert
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{boolean-semantics}
+\\[-5ex]
+\mathit{Bool}  & ::= & \: \mathit{Int} ( < \: | \: > \: | = \: | \: ... ) \mathit{Int} \: | \\
+               &     & \: \mathit{It} ( < \: | \:> \: | \: = \: | \: ... ) \mathit{It}  \: | \\
+               &     & \: \mathit{T} \: = \: \mathit{T} \: | \: \neg\mathit{Bool} \: | \\
+               &     & \: \textit{Bool} ( \vee \: | \: \wedge | \: ... ) \textit{Bool} \: \\
+               
+\end{array}
+\]
 
 \subsubsection{Model.}
-	To simulate appropriately the containers, our model makes use of three variables: a variable \textit{P} called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements contained in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value.
+	To simulate appropriately the containers, our model makes use of three variables: a variable \textit{P} called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value.
 	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element \textit{T} in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element \textit{T} stored in the container.
 	The vector container model has a structure as it follows:
 	
-\emph{	C1 = \{P1, C1.size, C1.capacity\}}
-
-	Where P1 is a memory address where it is stored the elements of the container, C1.size is the total number of elements in the container, and C1.capacity is the total capacity of the vector, simulated internally in the model. \\ \\
-	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like push-back(), pop-back(), front(), back(), push-front() and pop-front() are only a simplified variation of those main methods, optimized for some containers (like pop-back in a stack).
-
-	An insert method is represented by the following structure:
-
-	C{cont}
-	It{cont.insert}|cont.insert
-	It{position} \& It{first} \& It{last}
-	P{point1} \& P{point2}
-	T{value}
-	N{quantity}
-	cont.insert (position, value)
-		cont'.size = cont.size + 1
-		*position = value
-	|cont.insert(position, value, quantity)
-		cont'.size = cont.size + quantity
-		*(position + N(0 -> quantity)) = value
-	|insert(position, first, last)
-		cont'.size = cont.size +( last - first)
-		*position = *first
-	|insert(position, point1, point2)
-		cont'size = cont.size + (point2 - point1)
-		*position = *point1
-
-	Similarly, an erase method is structured like the following:
-
-	C{cont}
-	It{cont.erase}|cont. erase
-	It{position} \& It{first} \& It{last}
-	P{point1} \& P{point2}
-	cont. erase (position)
-		cont'.size = cont.size - 1
-		position' = position + 1
-	|cont. erase (position, first, last)
-		cont'.size = cont.size -(last - first)
-		position' = last
-
-	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself).
-
-	C{cont}
-	It{i}
-	N{n}
-	T{C[n]}
-	T{*i}
-
-	The structure of iterators is treated differently from the other types. The model is the following:
+	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{container-model}
+\\[-5ex]
+\ &  &\: \mathit{C} = \{ \mathit{P}, \mathit{C.size}, \mathit{C.capacity}\} \:
+               
+\end{array}
+\]
 	
-	It : P{pointer}; N{pos}; P{cont\_pos}
+	Where \textit{P} is a memory address where it is stored the elements of the container, \textit{C.size} is the total number of elements in the container, and \textit{C.capacity} is the total capacity of the vector, simulated internally in the model.
+	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like \textit{push\_back()}, \textit{pop\_back()}, \textit{front()}, \textit{back()}, \textit{push\_front()} and \textit{pop\_front()} are only a simplified variation of those main methods, optimized for some containers (like popping back in a stack).
 
-	Where pointer is a memory address that points to the real position of the required element in the container (pointed by the iterator), pos is the iterator index internally in the container, and cont\_pos is a memory address equivalent to cont.buf, being cont the container pointed by the iterator.
+	An insert method is represented by the following structure:\\
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert-model}
+\\[-5ex]
+\  & & \: C\{cont\} \\
+	 & &	\: It\{cont.insert\} \: | \: cont.insert \\
+	 & &	\: It\{position\} \& It\{first\} \& It\{last\} \\
+	 & &	\: P\{point1\} \& P\{point2\} \\
+	 & &	\: T\{value\} \\
+	 & &	\: N\{quantity\} \\
+	 & &	\: \\
+	 & &	\: cont.insert (position, value) \\
+	 &  &	 \: cont'.size = cont.size + 1 \\
+	 &  &	 \: *position = value \\
+	 & &	\: \\
+	 & &	\: |cont.insert(position, value, quantity) \\
+	 &  &	 \: cont'.size = cont.size + quantity \\
+	 &  &	 \: *(position + N(0 -> quantity)) = value \\
+	 & &	\: \\
+	 & &	\: |insert(position, first, last) \\
+	 &  &	 \: cont'.size = cont.size +( last - first) \\
+	 &  &	 \: *position = *first \\
+	 & &	\: \\
+	 & &	\: |insert(position, point1, point2) \\
+	 &  &	 \: cont'size = cont.size + (point2 - point1) \\
+	 &  &	 \: *position = *point1 \\
+\end{array}
+\]
+%
+	Similarly, an erase method is structured like the following:\\
+%
+
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase-model}
+\\[-5ex]
+\ &  & \:	C\{\mathit{cont}\}\\
+	&  & \: It\{\mathit{cont.erase}\}|\mathit{cont.erase}\\
+	&  & \: It\{\mathit{position}\} \& It\{\mathit{first}\} \& It\{\mathit{last}\}\\
+	&  & \: P\{\mathit{point1}\} \& P\{\mathit{point2}\}\\
+	& &	\: \\
+	&  & \: \mathit{cont.erase} (\mathit{position})\\
+	&  & \:	\mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
+	&   & \:	\mathit{position'} = \mathit{position} + \mathit{1}\\
+	& &	\: \\
+	&  & \:| \mathit{cont.erase} (\mathit{position}, \mathit{first}, \mathit{last})\\
+	&   & \:	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
+	&   & \:	\mathit{position'} = \mathit{last}\\
+\end{array}
+\]
+
+	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself).\\
+
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{search-model}
+\\[-5ex]
+\ &  &\:	C\{\mathit{cont}\}\\
+	&  &\:  It\{\mathit{i}\}\\
+	&  &\:  N\{\mathit{n}\}\\
+	&  &\:  T\{\mathit{cont_n}\}\\
+	&  &\:  T\{\mathit{*i}\}\\
+\end{array}
+\]
+
+	The structure of iterators is treated differently from the other types. The model is the following:\\
+	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-model}
+\\[-5ex]
+ \ &  &\: \mathit{It} = \{ \mathit{pointer}, \mathit{pos}, \mathit{cont\_pos}\} \:\\
+               
+\end{array}
+\]
+	
+	Where \textit{pointer} is a memory address that points to the real position of the required element in the container (pointed by the iterator), \textit{pos} is the iterator index internally in the container, and \textit{cont\_pos} is a memory address equivalent to cont.buf, being cont the container pointed by the iterator.
 
 %
 \subsection{General Libraries}
