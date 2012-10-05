@@ -1,3 +1,5 @@
+#include <cassert>
+
 class X {
   public:
     X() { throw 5; }

@@ -1,3 +1,4 @@
+#include <cassert>
 
 int main (void) {
   try {
