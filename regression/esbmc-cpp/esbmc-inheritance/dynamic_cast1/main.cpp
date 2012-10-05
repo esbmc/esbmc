@@ -1,6 +1,6 @@
 //dynamic cast test
 //#include <iostream>
-//#include <cassert>
+#include <cassert>
 //using namespace std;
 
 class CPolygon {
