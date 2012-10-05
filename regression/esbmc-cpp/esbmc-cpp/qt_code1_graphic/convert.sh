@@ -7,8 +7,7 @@ if [ "$RESULT" = "^CONVERSION ERROR$" ]
 	 $(cd ..)
 	}
    else {
-   	$(clang++ -w -emit-llvm *.cpp -g -c -m64 -pipe -O2 -Wall -W -D_REENTRANT -DQT_WEBKIT -DQT_NO_DEBUG -DQT_GUI_LIB -DQT_CORE_LIB -DQT_SHARED -I/usr/share/qt4/mkspecs/linux-g++-64 -I. -I/usr/include/qt4/QtCore -I/usr/include/qt4/QtGui -I/usr/include/qt4 -I. -I.)
-	$(llvm-link *.o -o main.ll -S)
-	$(llc -march=c main.ll -o main.c)
+	$(clang++ -c -g -emit-llvm *.cpp -fno-exceptions)
+	$(llvm-link *.o -o main.bc)
    }
 fi

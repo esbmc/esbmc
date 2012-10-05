@@ -7,8 +7,7 @@ if [ "$RESULT" = "^CONVERSION ERROR$" ]
 	 $(cd ..)
 	}
    else {
-   	$(clang++ -w -emit-llvm *.cpp -c -g)
-	$(llvm-link *.o -o main.ll -S)
-	$(llc -march=c main.ll -o main.c)
+	$(clang++ -c -g -emit-llvm *.cpp -fno-exceptions)
+	$(llvm-link *.o -o main.bc)
    }
 fi
