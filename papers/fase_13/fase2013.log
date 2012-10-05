@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.1415926-2.3-1.40.12 (MiKTeX 2.9) (preloaded format=pdflatex 2012.10.4)  4 OCT 2012 19:03
+This is pdfTeX, Version 3.1415926-2.3-1.40.12 (MiKTeX 2.9) (preloaded format=pdflatex 2012.10.4)  5 OCT 2012 09:07
 entering extended mode
 **C:/Users/guy/Documents/PaperFASE13/fase2013.tex
 (C:/Users/guy/Documents/PaperFASE13/fase2013.tex
@@ -348,27 +348,182 @@ Underfull \hbox (badness 10000) in paragraph at lines 89--91
 
  []
 
+! Missing $ inserted.
+<inserted text> 
+                $
+l.97 	}
+       
+I've inserted a begin-math/end-math symbol since I think
+you left one out. Proceed, with fingers crossed.
 
-Underfull \hbox (badness 10000) in paragraph at lines 131--134
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.97 	}
+       
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Extra }, or forgotten \right.
+<recently read> \egroup 
+                        
+l.97 	}
+       
+I've deleted a group-closing symbol because it seems to be
+spurious, as in `$x}$'. But perhaps the } is legitimate and
+you forgot something else, as in `\hbox{$x}'. In such cases
+the way to recover is to insert both the forgotten and the
+deleted material, e.g., by typing `I$}'.
+
+! Missing $ inserted.
+<inserted text> 
+                $
+l.98 
+     
+I've inserted a begin-math/end-math symbol since I think
+you left one out. Proceed, with fingers crossed.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.98 
+     
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+! Missing \right. inserted.
+<inserted text> 
+                \right .
+l.98 
+     
+I've inserted something that you may have forgotten.
+(See the <inserted text> above.)
+With luck, this will get me unwedged. But if you
+really didn't forget anything, try typing `2' now; then
+my insertion and my current dilemma will both disappear.
+
+
+! LaTeX Error: There's no line here to end.
+
+See the LaTeX manual or LaTeX Companion for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.99  \\ \\
+           
+Your command was ignored.
+Type  I <command> <return>  to replace it with another command,
+or  <return>  to continue without it.
+
+
+! LaTeX Error: There's no line here to end.
+
+See the LaTeX manual or LaTeX Companion for explanation.
+Type  H <return>  for immediate help.
+ ...                                              
+                                                  
+l.100 
+      
+Your command was ignored.
+Type  I <command> <return>  to replace it with another command,
+or  <return>  to continue without it.
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 133--134
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 131--134
+Underfull \hbox (badness 10000) in paragraph at lines 133--134
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 131--134
+Underfull \hbox (badness 10000) in paragraph at lines 133--134
 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 131--134
+Underfull \hbox (badness 10000) in paragraph at lines 133--134
 
  []
 
 [2]
+LaTeX Font Info:    Font shape `OMS/ptm/m/n' in size <10> not available
+(Font)              Font shape `OMS/cmsy/m/n' tried instead on input line 135.
+
 ! Misplaced alignment tab character &.
 l.144 	It{position} &
                       It{first} & It{last}\\
@@ -499,10 +654,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 135--183
 
  []
 
-
-Underfull \vbox (badness 10000) has occurred while \output is active []
-
- [3]
+[3]
 ! Missing $ inserted.
 <inserted text> 
                 $
@@ -550,9 +702,9 @@ I've inserted a begin-math/end-math symbol since I think
 you left one out. Proceed, with fingers crossed.
 
 
-Overfull \hbox (116.29178pt too wide) in paragraph at lines 186--188
-\OT1/ptm/m/n/10 con-tainer, and cont$[]\OML/cmm/m/it/10 osisamemoryaddressequiv
-alenttocont:buf; beingcontthecontainerpointedbytheiterator:[] 
+Overfull \hbox (117.26175pt too wide) in paragraph at lines 186--188
+\OT1/ptm/m/it/10 con-tainer, and cont$[]\OML/cmm/m/it/10 osisamemoryaddressequi
+valenttocont:buf; beingcontthecontainerpointedbytheiterator:[] 
  []
 
 
@@ -560,23 +712,20 @@ Underfull \hbox (badness 10000) in paragraph at lines 186--188
 
  []
 
+[4] [5] (C:\Users\guy\Documents\PaperFASE13\fase2013.aux) )
+(\end occurred inside a group at level 2)
 
-Underfull \vbox (badness 3460) has occurred while \output is active []
-
- [4]
-[5] (C:\Users\guy\Documents\PaperFASE13\fase2013.aux) )
-(\end occurred inside a group at level 1)
-
-### simple group (level 1) entered at line 184 ({)
+### simple group (level 2) entered at line 184 ({)
+### simple group (level 1) entered at line 97 ({)
 ### bottom level 
 Here is how much of TeX's memory you used:
- 788 strings out of 494045
- 9674 string characters out of 3145975
- 65973 words of memory out of 3000000
- 4122 multiletter control sequences out of 15000+200000
+ 789 strings out of 494045
+ 9688 string characters out of 3145975
+ 66973 words of memory out of 3000000
+ 4123 multiletter control sequences out of 15000+200000
  19519 words of font info for 38 fonts, out of 3000000 for 9000
  715 hyphenation exceptions out of 8191
- 29i,4n,21p,753b,198s stack positions out of 5000i,500n,10000p,200000b,50000s
+ 29i,10n,21p,753b,204s stack positions out of 5000i,500n,10000p,200000b,50000s
 {C:/Program Files (x86)/MiKTeX 2.9/fonts/enc/dvips/fontname/8r.
 enc}<C:/Program Files (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmmi10.pf
 b><C:/Program Files (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmmi7.pfb><
@@ -585,7 +734,7 @@ Program Files (x86)/MiKTeX 2.9/fonts/type1/public/amsfonts/cm/cmsy10.pfb><C:/Pr
 ogram Files (x86)/MiKTeX 2.9/fonts/type1/urw/times/utmb8a.pfb><C:/Program Files
  (x86)/MiKTeX 2.9/fonts/type1/urw/times/utmr8a.pfb><C:/Program Files (x86)/MiKT
 eX 2.9/fonts/type1/urw/times/utmri8a.pfb>
-Output written on fase2013.pdf (5 pages, 90499 bytes).
+Output written on fase2013.pdf (5 pages, 99055 bytes).
 PDF statistics:
  47 PDF objects out of 1000 (max. 8388607)
  0 named destinations out of 1000 (max. 500000)

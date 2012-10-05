@@ -89,22 +89,22 @@ Background here (Lucas)...
 	The containers contain an array of elements \emph{T}, and their positions in the memory are represented by pointers \emph{P}.
 Assuming this, the syntax for integer expression is:\\ \\
 
-%	\emph{
-%	\textit{Int} = N \left| Z\\
-%		\left| \textit{C}.size \left| \textit{C}.capacity\\
-%		\left| \textit{Int} ( + \left| ? \left| * \left| ...) \textit{Int} $\\$ 
-%   	\left|\textit{It} ( + \left| - ) \textit{It}\\
-%	}
-%	
-% \\ \\ 
+	\emph{
+	\textit{Int} = N \left| Z\\
+		\left| C.size \left| C.capacity\\
+		\left| \textit{Int} ( + \left| ? \left| * \left| ...) \textit{Int} $\\$ 
+   	\left|\textit{It} ( + \left| - ) \textit{It}\\
+	}
+	
+ \\ \\ 
 
-%	Similarly, the syntax for iterator expressions is:
-%	\\ \\
-%	\emph{
-%		\textit{It} = I \left| \textit{It} ( + \left| - ) \textit{It} \\
-%		\left| \textit{C}.begin \left| \textit{C}.end \\
-%		}
-%
+	Similarly, the syntax for iterator expressions is:
+	\\ \\
+	\emph{
+		\textit{It} = I \left| \textit{It} ( + \left| - ) \textit{It} \\
+		\left| \textit{C}.begin \left| \textit{C}.end \\
+		}
+
 %	For \emph{P} (memory address values), the syntax is as follows:
 %	\\ \\
 %	\emph{
@@ -128,9 +128,9 @@ Assuming this, the syntax for integer expression is:\\ \\
 %|    var . Assert | E var . Assert
 
 \subsection{Model}
-	To simulate appropriately the containers, our model makes use of three variables: a variable P called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements contained in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value. \\ \\
-	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element T in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element T stored in the container.\\ \\
-	The vector container model has a structure as it follows: \\ \\
+	\emph{To simulate appropriately the containers, our model makes use of three variables: a variable \textit{P} called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements contained in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value. \\ \\
+	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element \textit{T} in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element \textit{T} stored in the container.\\ \\
+	The vector container model has a structure as it follows: \\ \\}
 	
 \emph{	C1 = \{P1, C1.size, C1.capacity\}}
 \\ \\
