@@ -147,18 +147,26 @@ sub test($$) {
 	print LOG "  Options: $options\n";
 	print LOG "  Results:\n";
 	
+	
 	my $result;
+	my $expected_from_test="";
+	
 	foreach my $result (@results) {
 		print LOG "    $result\n";
-		# for XML file	
-		#------------------------------
-		if($result =~ m/SUCCESSFUL/){			
-			$tags{"item_09_expected-result"} = "[SUCCESSFUL]";
-		}else{			
-			$tags{"item_09_expected-result"} = "[FAILED]";
-		}		
-		#------------------------------
 		
+		# for XML file			
+		#------------------------------
+		if($result =~ m/VERIFICATION.SUCCESSFUL/){			
+			$tags{"item_09_expected-result"} = "[SUCCESSFUL]";
+			$expected_from_test = "[SUCCESSFUL]";
+		}elsif($result =~ m/VERIFICATION.FAILED/){			
+			$tags{"item_09_expected-result"} = "[FAILED]";
+			$expected_from_test = "[FAILED]";
+		}else{ 
+			$tags{"item_09_expected-result"} = "[CONVERSION_ERROR]";
+			$expected_from_test = "[CONVERSION_ERROR]";
+		}		
+		#------------------------------		
 	}
 	
 
@@ -172,51 +180,170 @@ sub test($$) {
 		
 		print LOG "Execution [OK]\n";
 		my $included = 1;
-		foreach my $result (@results) {			
-			if($result eq "--") {
-				$included = !$included;
-			} else {
-				my $r;				
-				system "grep '$result' '$output' >/dev/null";
-				
-				# for XML file
-				#------------------------------
-				if($failed){
-					$tags{"item_10_actual-result"} = "[FAILED]";
-				}else{
-					$tags{"item_10_actual-result"} = "[SUCCESSFUL]";
-				}
-				#------------------------------					
-				
-				$r = ($included ? $? != 0 : $? == 0);				
-				if($r) {					
-					# expected result is NOT egual to actual result
-					print LOG "$result [FAILED]\n";					
-					$failed = 1;
-					
-					# for XML file	
-					#------------------------------
-					if(not($result =~ m/SUCCESSFUL/)){			
-						$tags{"item_10_actual-result"} = "[SUCCESSFUL]";
-					}else{			
-						$tags{"item_10_actual-result"} = "[FAILED]";
-					}		
-					#------------------------------					
+		
+		#check output for llbmc or esbmc
+		# For ESBMC
+		if( $llvm != 1 ){
+				foreach my $result (@results) {			
+				if($result eq "--") {
+					$included = !$included;
 				} else {
-					print LOG "$result [OK]\n";
+					my $r;				
+					system "grep '$result' '$output' >/dev/null";
 					
-					# expected result is egual to actual result
-					# for XML file	
-					#------------------------------
-					if($result =~ m/SUCCESSFUL/){			
-						$tags{"item_10_actual-result"} = "[SUCCESSFUL]";
-					}else{			
-						$tags{"item_10_actual-result"} = "[FAILED]";
-					}		
-					#------------------------------					
+					
+					#check the output to get the result from main.out
+					my $status_sucessful=0;
+					my $status_violated=0;
+					my $status_aborted=0;
+					
+					open(OUTPUT , "<$output") or die "Could not read the file: $!";
+					while (<OUTPUT>) { 
+						if($_ =~ m/^VERIFICATION\sSUCCESSFUL$/i){
+							$status_sucessful = 1;							
+						}elsif($_ =~ m/^VERIFICATION\sFAILED$/i){
+							$status_violated = 1;							
+						}elsif($_ =~ m/^Aborted$/i){
+							$status_aborted = 1;
+						}
+					}
+					
+					if($status_sucessful != 1 and $status_violated != 1 and $status_aborted != 1){
+						$status_sucessful=0;
+						$status_violated=0;
+						$status_aborted = 0;						
+					}
+									
+					
+					$r = ($included ? $? != 0 : $? == 0);				
+					if($r) {					
+						# expected result is NOT egual to actual result
+						print LOG "$result [FAILED]\n";					
+						$failed = 1;
+						
+						# for XML file							
+						#------------------------------
+						if($status_sucessful == 1){			
+							$tags{"item_10_actual-result"} = "[SUCCESSFUL]";													
+						}elsif($status_violated ==  1){			
+							$tags{"item_10_actual-result"} = "[FAILED]";							
+						}elsif($status_aborted ==  1){			
+							$tags{"item_10_actual-result"} = "[ABORTED]";							
+						}else{ #CONVERSION ERROR
+							$tags{"item_10_actual-result"} = "[CONVERSION_ERROR]";
+						}	
+						#------------------------------					
+					} else {
+						print LOG "$result [OK]\n";
+						
+						# expected result is egual to actual result
+						# for XML file							
+						#------------------------------
+						if($status_sucessful == 1){			
+							$tags{"item_10_actual-result"} = "[SUCCESSFUL]";													
+						}elsif($status_violated ==  1){			
+							$tags{"item_10_actual-result"} = "[FAILED]";							
+						}elsif($status_aborted ==  1){			
+							$tags{"item_10_actual-result"} = "[ABORTED]";							
+						}else{ #CONVERSION ERROR
+							$tags{"item_10_actual-result"} = "[CONVERSION_ERROR]";
+						}	
+						#------------------------------				
+					}
 				}
 			}
-		}
+		}else{ # For LLBMC
+		
+			my $actual_result_llbmc="";
+			
+			#check by "Error by llbmc Could not open file."
+			my $get_status_error_conversion=0;
+			$get_status_error_conversion=`cat $output | grep -c "Could not open file."`;
+			
+			if($get_status_error_conversion == 1){
+				$actual_result_llbmc="[CONVERSION_ERROR]";				
+				if( $actual_result_llbmc eq $expected_from_test ){
+					print LOG "$expected_from_test [CONVERSION_ERROR]\n";
+					# for XML file	
+					#------------------------------
+					$tags{"item_10_actual-result"} = "[CONVERSION_ERROR]";
+					#------------------------------														
+				}else{							
+					# for XML file	
+					#------------------------------
+					$tags{"item_10_actual-result"} = "[CONVERSION_ERROR]";
+					#------------------------------	
+					print LOG "$expected_from_test [CONVERSION_ERROR]\n";	
+					$failed = 1;
+				}
+			}else{
+				#read output file $output
+				my @output_test = ();
+				open(ENTRADA , "<$output") or die "Could not read the file: $!";
+				while (<ENTRADA>) { 
+					push(@output_test,$_);
+				}
+				
+				my $sizeLinhasFile = @output_test;
+				my $flag_run_result = 0;
+				my $count_result_line=0;			
+			
+				for ($count_result_line=0; $count_result_line <= $sizeLinhasFile; $count_result_line++) {				
+					if( $output_test[$count_result_line] =~ m/^Result:/ and $output_test[$count_result_line+1] =~ m/^=/){
+						#No error detected
+						if ( $output_test[$count_result_line+3] =~ m/(^No error detected.)/){						
+							
+							$actual_result_llbmc="[SUCCESSFUL]";
+							
+							if( $actual_result_llbmc eq $expected_from_test ){
+								print LOG "$expected_from_test [SUCCESSFUL] - output llbmc: [$1]\n";
+								# for XML file	
+								#------------------------------
+								$tags{"item_10_actual-result"} = "[SUCCESSFUL]";
+								#------------------------------																
+							}else{							
+								# for XML file	
+								#------------------------------
+								$tags{"item_10_actual-result"} = "[SUCCESSFUL]";
+								#------------------------------	
+								print LOG "$expected_from_test [SUCCESSFUL] - output llbmc: [$1]\n";	
+								$failed = 1;														
+							}							
+						#Error detected 																												
+						}elsif ( $output_test[$count_result_line+3] =~ m/(^Error detected.)/){
+							
+							$actual_result_llbmc="[FAILED]";
+							if($actual_result_llbmc eq $expected_from_test){
+								print LOG "$expected_from_test [FAILED] - output llbmc: [$1]\n";
+								# for XML file	
+								#------------------------------
+								$tags{"item_10_actual-result"} = "[FAILED]";
+								#------------------------------									
+							}else{
+								# for XML file	
+								#------------------------------
+								$tags{"item_10_actual-result"} = "[FAILED]";
+								#------------------------------	
+								print LOG "$expected_from_test [FAILED] - output llbmc: [$1]\n";	
+								$failed = 1;								
+							}							
+						}					
+						$flag_run_result = 1;												
+					}
+				}
+				#Running SMT solver (STP with MiniSat)...Unrecoverable error: No matching SMT expression for Op % (nondef) found!					
+				if($flag_run_result == 0){
+					# for XML file	
+					#------------------------------
+					$tags{"item_10_actual-result"} = "[UNRECOVERABLE_ERROR_Op_%]";
+					#------------------------------	
+					print LOG "$expected_from_test [UNRECOVERABLE_ERROR_Op_%]\n";	
+					$failed = 1;
+				}
+		 }	
+			
+	  }
+				
 	} else {
 		# for XML file
 		#------------------------------
@@ -224,7 +351,7 @@ sub test($$) {
 		#------------------------------
 		print LOG "Execution [FAILED]\n";
 	}
-
+	$expected_from_test="";
 	print LOG "\n";	
 	
 	# for XML -> generate all nodes on xml structure
