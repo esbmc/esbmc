@@ -38,7 +38,13 @@ sub run($$$) {
 	$tags{"item_04_esbmc-option"} = "esbmc"." ".$input." ".$options;
 	#------------------------------
 	
-	my $cmd = "esbmc $input $options >$output 2>&1";  
+	my $cmd;
+
+	if($llvm != 1) {
+		$cmd = "esbmc $input $options >$output 2>&1";
+	} else {
+		$cmd = "llbmc $input $options >$output 2>&1";
+	}
 	
 	print LOG "Running $cmd\n";
 
@@ -119,6 +125,7 @@ sub test($$) {
 	my ($input, $options, @results) = load($test);
 
 	my $output = $input;
+        $output =~ s/\.bc.*$/.out/;
 	$output =~ s/\.cpp.*$/.out/;
 	$output =~ s/\.c.*$/.out/;
 
