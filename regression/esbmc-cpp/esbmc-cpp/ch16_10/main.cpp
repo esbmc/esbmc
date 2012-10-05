@@ -37,13 +37,11 @@ int main()
 
    // data was posted
    if ( getenv( "CONTENT_LENGTH" ) ) {
-#if 1
       // retrieve query string
       contentLength = atoi( getenv( "CONTENT_LENGTH" ) );
       cin.read( query, contentLength );
       dataString = query;
 
-      __ESBMC_assume(dataString=="user:e&password:e");
       
       // find username location
       int userLocation = dataString.find( "user=" ) + 5;
@@ -65,9 +63,7 @@ int main()
 
       userName = dataString.substr( userLocation, endUser - 
          userLocation );
-#endif
    } // end if
-#if 1
    // no data was retrieved
    if ( dataString == "" ) {
       header();
@@ -215,9 +211,8 @@ int main()
 
    cout << "</body>\n</html>\n";
    return 0;
-#endif
 } // end main
-#if 1
+
 // function to output header
 void header()
 {
@@ -245,7 +240,7 @@ void writeCookie()
         << expires << "; path=\n";
 
 } // end writeCookie
-#endif
+
 /**************************************************************************
  * (C) Copyright 1992-2003 by Deitel & Associates, Inc. and Prentice      *
  * Hall. All Rights Reserved.                                             *

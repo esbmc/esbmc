@@ -1,6 +1,7 @@
 #include <iostream>
 #include <new>          // C++ standard new operator
 #include <cstring>      // strcpy and strlen prototypes
+#include <cassert>
 
 int main()
 {

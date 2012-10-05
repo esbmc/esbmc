@@ -1,5 +1,6 @@
 #include <vector>
 #include <iostream>
+#include <cassert>
 using namespace std;   
 
 int main( )
@@ -13,4 +14,6 @@ int main( )
 	assert(v1.capacity() == 1);
    cout << "Current capacity of v1 = " 
       << v1.capacity( ) << endl;
+
+   return 0;
 }

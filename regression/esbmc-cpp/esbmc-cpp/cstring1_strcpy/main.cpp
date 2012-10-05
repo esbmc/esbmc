@@ -1,6 +1,7 @@
 /* strcpy example */
 #include <cstring>
 #include <iostream>
+#include <cassert>
 
 int main ()
 {
