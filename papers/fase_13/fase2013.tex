@@ -25,7 +25,7 @@
 %\mainmatter  % start of an individual contribution
 
 %\title{Context-Bounded Symbolic Model Checking with ESBMC 1.17}
-\title{SMT-Based Bounded Model Checking of C++ Programs}
+\title{Bounded Model Checking of C++ Programs using SMT Solvers}
 %\subtitle{(Competition Contribution)}
 %\title{TACAS'12 Competition Entry: ESBMC v1.17}
 %\title{Software Verification Competition: ESBMC v1.17}
@@ -55,41 +55,51 @@
 \maketitle
 
 \begin{abstract}
-Bounded model Checking (BMC) of C++ programs presents greater complexity than C programs due to features that the languages offers, such as templates, containers and exception handling. We present ESBMC, a bounded model checker for C and C++ programs, which encodes the verification conditions using different background theories and passes them directly to an SMT Solver. Our experimental results show that our approach can handle more constructs of the C++ programs and substantially reduce the verification time. 
+Bounded model Checking (BMC) of C++ programs presents greater complexity than C programs 
+due to features that the languages offers, such as templates, containers, and exception handling. 
+We present ESBMC++, a bounded model checker for C++ programs, which encodes the verification 
+conditions via an operational model using different background theories and passes them directly 
+to an SMT Solver. This operational model is an abstract representation of the standard C++ library,
+which conservatively approximates its semantics. Our experimental results show that our approach can 
+handle a wider range of the C++ constructs and substantially reduce the verification time. 
 \end{abstract}
 
+%------------------------------
 \section{Introduction}
+%------------------------------
 %
-
 Bounded model checking (BMC) has already been successfully applied to
 verify software and to discover subtle errors in real
 systems~\cite{handbook09}.\ In an attempt to cope with growing 
 system complexity, Boolean Satisfiability (SAT) solvers are increasingly 
 replaced by Satisfiability Modulo Theories (SMT) solvers to prove the generated 
-verification conditions (VCs) ~\cite{Armando09,Ganai06,Cordeiro12}.\
-There have also been attempts to extend BMC to the verification of C++ programs.
-The main challenge here is to support the features that the languages offers, 
-such as templates, containers and exception handling.
+verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.\
+There have also been attempts to extend BMC to the verification of C++ 
+programs~\cite{Blanc07,Florian12}. The main challenge here is to handle large 
+programs and support the features that the languages offers, such as templates, 
+containers and exception handling.
 
-There are several real-world applications that use C++ as its mainstream programming 
+The verification of C++ programs is an important topic due to the fact that there are 
+several real-world applications that use C++ as its mainstream programming 
 language, which includes software/hardware verification tools, information retrieval 
 machines, databases, simulators, embedded systems, and telecommunication systems. 
 If we compared the C++ to the C programming language, C++ arises much more challenges 
 since it provides a wider set of features, libraries and functionalities that would require 
-too much effort to develop from scratch. These features include Object-Oriented Programming (OOP), 
-specialized input-output libraries (e.g., stream libraries), and the template usage 
+too much effort to develop from scratch. These features include object-oriented programming 
+(OOP), specialized input-output libraries (e.g., stream libraries), and the template usage 
 (including STL containers, which have the most popular data structures in Computing Science).
 
 Systems that make use of the C++ language (and its functionalities) tend to require a high 
 verification effort since the errors are hard to find as its own structure grows. 
-To hunt bugs in C++ applications, software verification tools are now becoming more and more important 
-and critical due to its crucial characteristics (e.g., speed, accuracy, efficiency, and friendliness). 
-Obviously, if the C++ programming language seems to be a more complex version than C, then its verification 
-will be more complex as well. To tackle this problem, our solution applies Bounded Model Checking (BMC) 
-to C++ programs using an operational model of the C++ libraries. In particular, we focus on the STL 
-sequential containers operational model, its preconditions and simulation features 
-(e.g., how we store the elements values of the containers and intern class methods), 
-and how this is used to verify the C++ program.
+To hunt bugs in C++ applications, a verification tool has deal with crucial characteristics 
+(e.g., speed, accuracy, efficiency, and friendliness) to make it attractive to be used in the 
+mainstream software development. Obviously, if the C++ programming language seems to be a more 
+complex version than C, then its verification will be more complex as well. To tackle this problem, 
+our proposed approach applies Bounded Model Checking (BMC) to C++ programs using an operational model 
+of the C++ libraries. This operational model is an abstract representation of the standard C++ library,
+which conservatively approximates its semantics. In particular, we focus on the STL sequential containers 
+operational model, its preconditions and simulation features (e.g., how we store the elements values 
+of the containers and intern class methods), and how these are used to verify the C++ programs.
 
 \section{Background}
 %
@@ -133,7 +143,7 @@ structure of each. The topics that follow describe the structure of subsets of l
 %
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.28]{figures/diagramascpp.eps}
+\includegraphics[scale=0.28]{figures/diagramascpp}
 \caption{Representation of the configuration and functional classification of the operational model.}
 \label{figure:cpp-diagram}
 \end{figure*}
@@ -165,7 +175,7 @@ Therefore, we define the syntax for these definitions set as:
 \begin{equation}
 \left( \alpha \in M \wedge \beta \in O \right) \rightarrow 		          \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
 \label{eq:csi646-definitions}
-\end{equation}}
+\end{equation}
 \\
 Within the ANSI-C libraries set, also we can represent the structure of others libraries with functions only. This is case of the 
 csignal library that dealing with signals emitted in a given code. Basing in this concept, we define that the operational model of 
@@ -175,12 +185,13 @@ $\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$. The functional signal records c
 that when the function raise is called with the respective signal the registered function is called, therefore, 
 assuming $f$ as a un-deterministic function and as null element, is obtained following the formalize modeling.
 \\
+
 \begin{equation}
 \label{c-csignal}
-C := \left [ \begin{array}{3} 
-                \left(\varphi \subset A\right)\\
-                \wedge \, \, \left(2 \leq \varphi \leq 15\right)\\
-                \wedge \, \, \left(f \neq \phi\right)\\
+C := \left [ \begin{array}{ll} 
+                \left(\varphi \subset A\right) \\
+                \wedge \, \, \left(2 \leq \varphi \leq 15\right) \\
+                \wedge \, \, \left(f \neq \phi\right) \\
               \end{array} \right ]  \\ 
 \end{equation}
 
@@ -188,7 +199,7 @@ $\newline$
 
 \begin{equation}
 \label{p-csignal}
-C := \left [ \begin{array}{2} 
+C := \left [ \begin{array}{ll} 
                 \left(i_{0} = \varphi\right) \, \, 
                 \wedge \, \, \left(v_{i} = f\right)\\
               \end{array} \right ]  \\ 
@@ -215,7 +226,7 @@ sighandler vetor[16];
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.22]{figures/inputoutputdiagram.eps}
+\includegraphics[scale=0.22]{figures/inputoutputdiagram}
 \caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.}
 \label{figure:cpp-inputoutputdiagram}
 \end{figure*}
@@ -426,21 +437,16 @@ represent it described by $str_{i}$, such that $i$ represent the position of som
 constructor method that creates a string containing $n$ times the character $c$ and, furthermore the find method that search a character within a 
 certain string from a given position described by $pos$. Such formalizations can be observed in the following.
 
-\\
-$\newline$
 \begin{equation}
 \label{cconstructor-string}
-C := \left [ \begin{array}{l} 
+C := \left [ \begin{array}{ll} 
                 \bigvee^{n}_{j=0} str_{j} = store\left(str_{j}, i_{j}, c_{0}\right) 
               \end{array} \right ]  \\ 
 \end{equation}
-\\
-
-$\newline$
-
+%
 \begin{equation}
 \label{pconstructor-string}
-P := \left [ \begin{array}{5} 
+P := \left [ \begin{array}{ll} 
                 \left(i_{0} \geq 0\right)  \, \, \wedge \, \, \left(i_{0} < \left(n_{0} + 1\right)\right)\\
                 \ldots \\
                 \wedge \, \, \left(i_{n} \geq 0\right)  \, \, \wedge \, \, \left(i_{n} < \left(n_{0} + 1\right)\right)\\
@@ -448,25 +454,23 @@ P := \left [ \begin{array}{5}
                 \wedge \, \, n_{0} > 0\\
               \end{array} \right ]  \\ 
 \end{equation}
-
-$\newline$
-
+%
 \begin{equation}
 \label{cfind-string}
-C := \left [ \begin{array}{4} 
+C := \left [ \begin{array}{ll} 
                 \left(c_{0} \neq \phi\right)\\
                 \wedge \, \, \left(0 \leq pos \leq length\right)\\
                 \wedge \, \, \left(0 \leq i_{n} \leq length\right)\\
               \end{array} \right ]  \\ 
 \end{equation}
-
-$\newline$
+%
 \begin{equation}
 \label{pfind-string}
-P := \left [ \begin{array}{l} 
+P := \left [ \begin{array}{ll} 
                 \bigvee^{length}_{j=0} str_{j+1} = ite\left(select\left(str_{j}, i_{j}\right) = c_{0}, i_{j}, -1\right)
               \end{array} \right ]  \\ 
 \end{equation}
+
 
 \subsection{Exception Handling}
 
@@ -485,15 +489,13 @@ one of than needs to handle the exceptions thrown.
 \centering
 \begin{minipage}{0.7\textwidth}
 \begin{lstlisting}
-int main() 
-{
+int main() {
   // try block
   try {
     throw 20;
   }
   // catch block
   catch (int) { /* error handling */ }
-
   return 0;
 }
 \end{lstlisting}
@@ -508,7 +510,7 @@ There are also other ways to an exception be thrown by an program, other than th
 bad\_alloc exception, dynamic\_cast can throw bad\_cast exception and typeid can throw bad\_typeid exception. Also those exception are 
 builtin on C++ and are supposed to be handled by the programmer during the development.
 
-When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with itÂ´s
+When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with it´s
 handler are defined on the C++ standard draft ***CITACAO*** as follow:
 
 \begin{itemize}
@@ -518,7 +520,7 @@ handler are defined on the C++ standard draft ***CITACAO*** as follow:
  \item Throwing "arrays of type T" and "functions returning type T" with be handled by handles with "pointer to type T" 
        and "pointer to function returning type T" types.
  \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T.
- \item The handler will catch an exception of type pointer T if TÂ´s type can be converted to the type of the handler, either by 
+ \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
        qualification conversion or standard pointer conversion.
  \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it.
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block.
@@ -527,31 +529,28 @@ handler are defined on the C++ standard draft ***CITACAO*** as follow:
 \subsubsection{Rethrows and Exception Specifications.}
 
 C++ also provides features as rethrows and exception specifications. The rethrows allows us to rethrow the last thrown exception, 
-as shown on FIGURA XXX. Rethrows are useful for propagating the exception up in stacks with lots of try-catch blocks.
+as shown on Figure~\ref{figure:try-catch-example-rethrowing-an-int-type}. Rethrows are useful for propagating the exception up in stacks with lots of try-catch blocks.
 
 \begin{figure}[ht]
 \centering
 \begin{minipage}{0.7\textwidth}
 \begin{lstlisting}
-int main() 
-{
+int main() {
   try {
     throw 20;
   }
-  catch(...)
-  { 
+  catch(...)  { 
     throw; // Rethrows type int
   }
-
   return 0;
 }
 \end{lstlisting}
 \end{minipage}
 \caption{Try-catch example: Rethrowing an int type.}
-\label{figure:try-catch-example}
+\label{figure:try-catch-example-rethrowing-an-int-type}
 \end{figure}
 
-Exception specifications define which exceptions a function or method can throw. The FIGURA XXX shows an example of exception specifications
+Exception specifications define which exceptions a function or method can throw. Figure~\ref{figure:try-catch-example-allowing-that-only-int-type-can-be-thrown} shows an example of exception specifications
 usage. They are useful when we want to forbid that certain types of exceptions can be thrown, for example, we can define that an function
 or method cannot throw any exception.
 
@@ -560,29 +559,23 @@ or method cannot throw any exception.
 \begin{minipage}{0.7\textwidth}
 \begin{lstlisting}
 // This function can only throw int types
-void x() throw (int) 
-{ 
+void x() throw (int) { 
   throw 20;
 }
-
-int main() 
-{
+int main() {
   try {
     x()
   }
-  catch(...)
-  { 
+  catch(...)  { 
     throw; // Rethrows type int
   }
-
   return 0;
 }
 \end{lstlisting}
 \end{minipage}
 \caption{Try-catch example: Allowing that only int type can be thrown.}
-\label{figure:try-catch-example}
+\label{figure:try-catch-example-allowing-that-only-int-type-can-be-thrown}
 \end{figure}
-
 
 \section{Experimental Results}
 %
@@ -609,10 +602,10 @@ Acknowledgments here (Lucas)...
 {\begin{thebibliography}{10}
 \vspace{-0.5ex}
 
-%\bibitem{Boolector09}
-%R.~Brummayer and A.~Biere
-%\newblock Boolector: An efficient {SMT} solver for bit-vectors and arrays
-%\newblock {\em TACAS}, {\em LNCS} 5505, pp. 174--177, 2009.
+\bibitem{Blanc07}
+N.~Blanc, A.~Groce, and D.~Kroening,
+\newblock Verifying C++ with STL containers via predicate abstraction.
+\newblock In {\em ASE}, pp. 521--524. 2007.
 
 \bibitem{handbook09}
 A.~Biere.
@@ -625,7 +618,6 @@ A.~Cimatti, A.~Micheli, I.~Narasamdya, and M.~Roveri.
 \newblock {\em FMCAD}, 2010, pp.\ 121--128.
 
 \bibitem{Clarke04}
-%E.~Clarke et~al.
 E.~Clarke, D.~Kroening, and F.~Lerda.
 \newblock A tool for checking {ANSI-C} programs.
 \newblock {\em TACAS}, {\em LNCS} 2988, pp.\ 168--176, 2004.
@@ -636,22 +628,11 @@ L.~Cordeiro.
 Embedded Systems.
 \newblock PhD Thesis, U Southampton, 2011.
 
-\bibitem{Cordeiro09}
-L.~Cordeiro, B.~Fischer, and J.~Marques-Silva.
-\newblock {SMT}-based bounded model checking for embedded {ANSI-C} software.
-\newblock {\em ASE}, pp.\ 137--148, 2009. 
-%\newblock Extended version to appear in \emph{IEEE Trans.~Software Engineering}.
-
 \bibitem{icse11}
 L.~Cordeiro and B.~Fischer.
 \newblock Verifying Multi-Threaded Software using {SMT}-based Context-Bounded 
 Model Checking.
 \newblock {\em ICSE}, pp.\ 331--340, 2011. 
-
-%\bibitem{Z08}
-%L.~M. de~Moura and N.~Bj{\o}rner.
-%\newblock Z3: An efficient {SMT} solver.
-%\newblock {\em TACAS}, {\em LNCS} 4963, pp. 337--340, 2008.
 
 \bibitem{sefm11}
 J.~Morse, L.~Cordeiro, D.~Nicole, and B.~Fischer.
@@ -673,7 +654,11 @@ M.~K. Ganai and A.~Gupta.
 L.~Cordeiro, B.~Fischer, and J.~Marques-Silva.
 \newblock {SMT}-based bounded model checking for embedded {ANSI-C} software.
 \newblock {\em IEEE Trans. Software Eng.}, v.\ 38, n.\ 4, pp.\ 957--974, 2012. 
-%\newblock Extended version to appear in \emph{IEEE Trans.~Software Engineering}.
+
+\bibitem{Florian12}
+F.~Merz, S.~Falke, and C.~Sinz.
+\newblock {LLBMC}: Bounded Model Checking of C and C++ Programs Using a Compiler IR.
+\newblock {\em VSTTE}, pp.\ 146--161, 2012. 
 
 %\bibitem{wtr}
 %R.~Barreto, L.~Cordeiro, and B.~Fischer.
