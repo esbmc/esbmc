@@ -176,6 +176,7 @@ Assuming this, the syntax for integer expression is:
 \end{array}
 \]
 %
+Where variables included in the containers like \emph{size} and \emph{capacity} return a integer value, as the arithmetics operations between integer values. 
 Similarly, the syntax for iterator expressions is:
 %
 %
@@ -185,7 +186,7 @@ Similarly, the syntax for iterator expressions is:
 \end{array}
 \]
 %
-%
+Where \emph{begin} and \emph{end} are methods that returns iterators pointing to the beginning or the end of a container. We also have iterator operations that returns iterators too. 
 For \emph{P} (memory address values), the syntax is as follows:
 %	
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
@@ -195,6 +196,7 @@ For \emph{P} (memory address values), the syntax is as follows:
 \end{array}
 \]
 %	
+Where \emph{pointer} is a memory address that stores the element in the container pointed by the iterator, \emph{array} is another memory address marks the beginning of the container, \emph{source} is the address that makes the link between the iterator and its pointed container (stores the container \emph{array} value). There is also the pointer return from pointer operations.
 The syntax for \emph{T} values is the following: 
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
@@ -203,6 +205,9 @@ The syntax for \emph{T} values is the following:
 \end{array}
 \]
 %
+Where \emph{*It} is the value stored in the position pointed by a iterator \emph{It}, similarly \emph{*P} is the value stores in the \emph{P} position of the memory, and $\mathit{C_n}$ is a element of a container \emph{C} in the position \emph{n}.
+%
+\comment{
 To test the assertions, we use Booleans expressions, with the following syntax: 
 %
 
@@ -215,7 +220,7 @@ To test the assertions, we use Booleans expressions, with the following syntax:
                
 \end{array}
 \]
-
+}
 \subsubsection{Model.}
 	To simulate appropriately the containers, our model makes use of three variables: a variable \textit{P} called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value.
 	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element \textit{T} in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element \textit{T} stored in the container.
@@ -229,77 +234,64 @@ To test the assertions, we use Booleans expressions, with the following syntax:
 \]
 	
 	Where \textit{P} is a memory address where it is stored the elements of the container, \textit{C.size} is the total number of elements in the container, and \textit{C.capacity} is the total capacity of the vector, simulated internally in the model.
-	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like \textit{push\_back()}, \textit{pop\_back()}, \textit{front()}, \textit{back()}, \textit{push\_front()} and \textit{pop\_front()} are only a simplified variation of those main methods, optimized for some containers (like popping back in a stack).
+	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like \textit{push\_back()}, \textit{pop\_back()}, \textit{front()}, \textit{back()}, \textit{push\_front()} and \textit{pop\_front()} are only a simplified variation of those main methods, optimized for some containers (like popping the last element of a stack).
 
-	An insert method is represented by the following structure:\\
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert-model}
+	%An insert method is represented by the following structure:
+	In order to represent the model, consider a container $C\{cont\}$, with a method $cont.insert \rightarrow It$ that returns a iterator result and makes use of a iterator $It\{position\}$, pointing to the desired insertion position, a template value $T\{value\}$ with the element to be inserted and a integer $N\{quantity\}$, that informs the amount of elements to be inserted in the desired position.\\
+	
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert1-model}
 \\[-5ex]
-\  & & \: C\{cont\} \\
-	 & &	\: It\{cont.insert\} \: | \: cont.insert \\
-	 & &	\: It\{position\} \& It\{first\} \& It\{last\} \\
-	 & &	\: P\{point1\} \& P\{point2\} \\
-	 & &	\: T\{value\} \\
-	 & &	\: N\{quantity\} \\
-	 & &	\: \\
-	 & &	\: cont.insert (position, value) \\
-	 &  &	 \: cont'.size = cont.size + 1 \\
-	 &  &	 \: *position = value \\
-	 & &	\: \\
-	 & &	\: |cont.insert(position, value, quantity) \\
-	 &  &	 \: cont'.size = cont.size + quantity \\
-	 &  &	 \: *(position + N(0 -> quantity)) = value \\
-	 & &	\: \\
-	 & &	\: |insert(position, first, last) \\
-	 &  &	 \: cont'.size = cont.size +( last - first) \\
-	 &  &	 \: *position = *first \\
-	 & &	\: \\
-	 & &	\: |insert(position, point1, point2) \\
-	 &  &	 \: cont'size = cont.size + (point2 - point1) \\
-	 &  &	 \: *position = *point1 \\
+	 & &	cont.insert(position, value, quantity) \Longrightarrow  \\
+	 &   &	\: \: \: cont'.size = cont.size + quantity \\
+	 &   &	\: \: \: *(position + N\{0, ... ,quantity\}) = value \\
 \end{array}
 \]
+	There is also another way to represent the insert method. It is possible to insert a sequence of elements in the desired insertion position, using both iterator or pointer bounds. For this, consider a iterator $It\{first\}$, marking the first element to be inserted, and another iterator $It\{end\}$, pointing to the first element after the end of the sequence to be inserted in the required position. Therefore, we have:\\
+
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert2-model}
+\\[-5ex]
+	 & &	 cont.insert(position, first, last) \Longrightarrow \\
+	 &   &\: \: \: cont'.size = cont.size +( last - first) \\
+	 &   &\: \: \: *position = *first \\
+\end{array}
+\]
+
+	The same model above is valid for pointers $P\{first\}$ and $P\{last\}$. This kind of insertion (with pointers) does not return a iterator.
+\\
 %
-	Similarly, an erase method is structured like the following:\\
+	%Similarly, an erase method is structured like the following:\\
+	The erase method works similarly to the insert method. It also uses iterator positions, integer values and pointers, but does note uses values, as the exclusion is made by a given position, regardless the value. It also returns a iterator position, pointing to the position next to the previously erased part of the container. The next model shows a erase method that excludes a single element:\\
 %
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase-model}
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase1-model}
 \\[-5ex]
-\ &  & \:	C\{\mathit{cont}\}\\
-	&  & \: It\{\mathit{cont.erase}\}|\mathit{cont.erase}\\
-	&  & \: It\{\mathit{position}\} \& It\{\mathit{first}\} \& It\{\mathit{last}\}\\
-	&  & \: P\{\mathit{point1}\} \& P\{\mathit{point2}\}\\
-	& &	\: \\
-	&  & \: \mathit{cont.erase} (\mathit{position})\\
-	&  & \:	\mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
-	&   & \:	\mathit{position'} = \mathit{position} + \mathit{1}\\
-	& &	\: \\
-	&  & \:| \mathit{cont.erase} (\mathit{position}, \mathit{first}, \mathit{last})\\
-	&   & \:	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
-	&   & \:	\mathit{position'} = \mathit{last}\\
+\
+	& & \mathit{cont.erase} (\mathit{position}) \Longrightarrow\\
+	&  & \: \: \:	\mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
+	&   & \: \: \:	\mathit{position'} = \mathit{position} + \mathit{1}\\
+\end{array}
+\]
+	It is also possible to exclude a number of elements from the container, marking the bounds with iterators. Works similarly to the equivalent insert method:\\
+
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase2-model}
+\\[-5ex]
+	& &  \mathit{cont.erase} (\mathit{position}, \mathit{first}, \mathit{last}) \Longrightarrow\\
+	&   & \: \: \:	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
+	&   & \: \: \:	\mathit{position'} = \mathit{last}\\
 \end{array}
 \]
 
-	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself).\\
-
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{search-model}
-\\[-5ex]
-\ &  &\:	C\{\mathit{cont}\}\\
-	&  &\:  It\{\mathit{i}\}\\
-	&  &\:  N\{\mathit{n}\}\\
-	&  &\:  T\{\mathit{cont_n}\}\\
-	&  &\:  T\{\mathit{*i}\}\\
-\end{array}
-\]
+	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself). It can be considered as values $N\{*It\}$, $N\{*P\}$ or $N\{\mathit{C_n}\}$ \\
 
 	The structure of iterators is treated differently from the other types. The model is the following:\\
-	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-model}
+	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator1-model}
 \\[-5ex]
  \ &  &\: \mathit{It} = \{ \mathit{pointer}, \mathit{pos}, \mathit{cont\_pos}\} \:\\
                
 \end{array}
 \]
 	
-	Where \textit{pointer} is a memory address that points to the real position of the required element in the container (pointed by the iterator), \textit{pos} is the iterator index internally in the container, and \textit{cont\_pos} is a memory address equivalent to cont.buf, being cont the container pointed by the iterator.
+	Where \textit{pointer} is a memory address that points to the real position of the required element in the container (pointed by the iterator), \textit{pos} is the iterator index internally in the container, and \textit{cont\_pos} is a memory address equivalent to \textit{cont.array}, being cont the container pointed by the iterator.
 
 %
 \subsection{General Libraries}
