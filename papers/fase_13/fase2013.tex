@@ -468,6 +468,121 @@ P := \left [ \begin{array}{l}
               \end{array} \right ]  \\ 
 \end{equation}
 
+\subsection{Exception Handling}
+
+One of the features that C++ provides over C is exception handling. The exceptions are unexpected situations on the program, situations 
+that the program was not designed to handle. On C++, the exception handling is divided in two blocks: a try block and a catch block. 
+
+The try block contains the code that is expected to run without errors and on the catch block, the code to handle errors from the try 
+block. The connection between the two blocks is made by a throw expression. The throw statement is an expression of type void that 
+invokes the handler from inside the try block and accepts one parameter, which is passed as parameter to the handler.
+
+The exception handling brings a lot of advantages to the C++ development, because it allows the separation between code and error 
+handling code. Futhermore, the exceptions propagates up in the stack, meaning that if a C++ program calls several functions, only 
+one of than needs to handle the exceptions thrown.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.7\textwidth}
+\begin{lstlisting}
+int main() 
+{
+  // try block
+  try {
+    throw 20;
+  }
+  // catch block
+  catch (int) { /* error handling */ }
+
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Try-catch example: Throwing an int type.}
+\label{figure:try-catch-example}
+\end{figure}
+
+\subsubsection{Throwing an Catching an Exception.}
+
+There are also other ways to an exception be thrown by an program, other than the throw statement, such as the new operator can throw 
+bad\_alloc exception, dynamic\_cast can throw bad\_cast exception and typeid can throw bad\_typeid exception. Also those exception are 
+builtin on C++ and are supposed to be handled by the programmer during the development.
+
+When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with it´s
+handler are defined on the C++ standard draft ***CITACAO*** as follow:
+
+\begin{itemize}
+ \item The handler that will catch the exception will be the first catch with a matching type.
+ \item A handler will catch a exception thrown if the type of the throw and the type of the handler are the same (ignoring const-volatile
+       qualifiers.
+ \item Throwing "arrays of type T" and "functions returning type T" with be handled by handles with "pointer to type T" 
+       and "pointer to function returning type T" types.
+ \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T.
+ \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
+       qualification conversion or standard pointer conversion.
+ \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it.
+ \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block.
+\end{itemize}
+
+\subsubsection{Rethrows and Exception Specifications.}
+
+C++ also provides features as rethrows and exception specifications. The rethrows allows us to rethrow the last thrown exception, 
+as shown on FIGURA XXX. Rethrows are useful for propagating the exception up in stacks with lots of try-catch blocks.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.7\textwidth}
+\begin{lstlisting}
+int main() 
+{
+  try {
+    throw 20;
+  }
+  catch(...)
+  { 
+    throw; // Rethrows type int
+  }
+
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Try-catch example: Rethrowing an int type.}
+\label{figure:try-catch-example}
+\end{figure}
+
+Exception specifications define which exceptions a function or method can throw. The FIGURA XXX shows an example of exception specifications
+usage. They are useful when we want to forbid that certain types of exceptions can be thrown, for example, we can define that an function
+or method cannot throw any exception.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.7\textwidth}
+\begin{lstlisting}
+// This function can only throw int types
+void x() throw (int) 
+{ 
+  throw 20;
+}
+
+int main() 
+{
+  try {
+    x()
+  }
+  catch(...)
+  { 
+    throw; // Rethrows type int
+  }
+
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Try-catch example: Allowing that only int type can be thrown.}
+\label{figure:try-catch-example}
+\end{figure}
+
 
 \section{Experimental Results}
 %
