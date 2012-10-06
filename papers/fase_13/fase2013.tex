@@ -91,40 +91,110 @@ sequential containers operational model, its preconditions and simulation featur
 (e.g., how we store the elements values of the containers and intern class methods), 
 and how this is used to verify the C++ program.
 
-\begin{figure*}[ht]
-\centering
-\includegraphics[scale=0.28]{figures/diagramas-cpp}
-%\includegraphics[scale=0.28]{figures/SystemArchitecture-eps-converted-to.pdf}
-\caption{Representation of the configuration and functional classification of the operational model.}
-\label{figure:cpp-diagram}
-\end{figure*}
-
 \section{Background}
 %
 Background here (Lucas)...
 
 \section{C++ Operational Model}
 %
-During the verification process, ESBMC needs to identify all the features and specifications of the code in order to generate the AST. In case of the C++ code, the basic representations (e.g., features related to object orientation, template and exception handling) are set internally to ESBMC in different levels (typecheck, goto-program, and goto-symex). However, ESBMC must have the specifications related to definitions of C++ libraries such as classes, methods, and types. Keeping this in mind, we developed a simplified representation of C++ libraries, with their respective classes, methods, and other features, called C++ Operational Model (COM).
+During the verification process, ESBMC needs to identify all the features and specifications of the code in order to generate the AST. 
+In case of the C++ code, the basic representations (e.g., features related to object orientation, template and exception handling) are 
+set internally to ESBMC in different levels (typecheck, goto-program, and goto-symex). However, ESBMC must have the specifications 
+related to definitions of C++ libraries such as classes, methods, and types. Keeping this in mind, we developed a simplified representation 
+of C++ libraries, with their respective classes, methods, and other features, called C++ Operational Model (COM).
 
-
-The development process of the COM can be divided into two phases: structural and modeling. In the structural phase, we built a set of classes with a specific hierarchical relationship and the signature of their methods and specific data, which consequently resulted in a simplified structure representing the set of C++ libraries. From this structure, we modeled the methods of each class and this modeling is focused for the validation and verification of all properties that include the specific method.
+The development process of the COM can be divided into two phases: structural and modeling. In the structural phase, we built a set 
+of classes with a specific hierarchical relationship and the signature of their methods and specific data, which consequently resulted 
+in a simplified structure representing the set of C++ libraries. From this structure, we modeled the methods of each class and this 
+modeling is focused for the validation and verification of all properties that include the specific method.
 %
+
 \subsection{Structure and Model}
 %
-In general, the verification process of a program ESBMC can be divided into two segments, respectively, identifying the expressions and verifying all properties related to those expressions, and in the identification step, the ESBMC must support all syntactic features of the language in which the program is implemented. Based on this, we have adopted two approaches to the development of the support of all syntactic characteristics of a C++ code. The first is to identify the basic structures of language, for example, polymorphism and template, modifying the kernel of the tool so that the AST can contain all the necessary information to verify these structures. The second approach is directly related to the definitions (classes, methods, functions, types) present in the C++ libraries, the goal is to build an operational model so that the ESBMC can rely on it to identify such definitions and also, verify all the properties related to these definitions based on the implementation of this model. It is important to say that this model is inserted into the verification process at the level of source code, ie, both model and source code are passed as parameters at the beginning of the verification process, so that the scan, parser and typecheck are done with the purpose of creating the AST joining the implementations.
+In general, the verification process of a program ESBMC can be divided into two segments, respectively, identifying the expressions and 
+verifying all properties related to those expressions, and in the identification step, the ESBMC must support all syntactic features 
+of the language in which the program is implemented. Based on this, we have adopted two approaches to the development of the support 
+of all syntactic characteristics of a C++ code. The first is to identify the basic structures of language, for example, polymorphism 
+and template, modifying the kernel of the tool so that the AST can contain all the necessary information to verify these structures. 
+The second approach is directly related to the definitions (classes, methods, functions, types) present in the C++ libraries, the goal 
+is to build an operational model so that the ESBMC can rely on it to identify such definitions and also, verify all the properties related 
+to these definitions based on the implementation of this model. It is important to say that this model is inserted into the verification 
+process at the level of source code, ie, both model and source code are passed as parameters at the beginning of the verification process, 
+so that the scan, parser and typecheck are done with the purpose of creating the AST joining the implementations.
 
-The first step of the construction process of this operating model is the formation of a simplified structure, which should get closer to actual structure as possible. This way, based on the documentation of the language C++ [1] the set of libraries was divided according to their functionalities, into four subsets called C Libraries, Input/Output Stream, Standard Template Libraries, and General Libraries, respectively. Each library present in a subset is particularly related to the other libraries, not only in its functionality but also in its structure due to the fact that many libraries depend on definitions of others. From this, we performed an analysis in the respective subsets, Figure 1, such a way that could be identified dependencies between each library and thus develop a simplified structure of each. The topics that follow describe the structure of subsets of libraries shown in Figure 1.
+The first step of the construction process of this operating model is the formation of a simplified structure,
+which should get closer to actual structure as possible. This way, based on the documentation of the language C++
+[1] the set of libraries was divided according to their functionalities, into four subsets called C Libraries,
+Input/Output Stream, Standard Template Libraries, and General Libraries, respectively. Each library present in a
+subset is particularly related to the other libraries, not only in its functionality but also in its structure due
+to the fact that many libraries depend on definitions of others. From this, we performed an analysis in the respective 
+subsets, Figure \ref{figure:cpp-diagram}, such a way that could be identified dependencies between each library and thus develop a simplified 
+structure of each. The topics that follow describe the structure of subsets of libraries shown in Figure \ref{figure:cpp-diagram}.
 %
+\begin{figure*}[ht]
+\centering
+\includegraphics[scale=0.28]{figures/diagramascpp.eps}
+\caption{Representation of the configuration and functional classification of the operational model.}
+\label{figure:cpp-diagram}
+\end{figure*}
+
 \subsection{C Libraries}
 %
-The C++ Standard Libraries also includes all the ANSI-C libraries, seeing that it's an extension of this language. The ESBMC supported language ANSI-C, however when occurred verification in C++ code; the same follow one different way for kernel's tool, passing for a specific typecheck directed to C++ software. For this reason, it's also necessary to build a representation of the ANSI-C libraries' set in the operational model. Meantime, we can define this libraries' set in simplified structure consisting of macro definitions and functions. Among the ANSI-C libraries' set exist libraries containing only macro definitions, for example, the ciso646 library that define a spelling set to the logic operators. To build the structure of this library, we distingue two kind of spelling: we define the macro set $M$ and operators set $O$. For convention, we assume $\left\{and, \: and\_eq, \: bitand, \: bitor, \: compl, \: not, \: not\_eq, \: or, \: or\_eq, \: xor, \: xor\_eq\right\} \subset M$, and $\left\{\&\&, \: \&=, \: \&, \: |, \: \widetilde{} \:, \: !, \: ||, \: |=, \: \widehat{} \:, \: \widehat{}= \: \right\} \subset O$. Therefore, we define the syntax for these definitions set as:
-\\\\
-Within the ANSI-C libraries set, also we can represent the structure of others libraries with functions only. This is case of the csignal library that dealing with signals emitted in a given code. Basing in this concept, we define that the operational model of this library has been represented to signal and raise functions, respectively, and furthermore, to vector $v_{i}$ assuming that $\left\{ i \in \aleph \:|\: 0 \leq i \leq 15 \right\}$ and to finite signals set $A$ assuming that $\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$. The functional signal records certain function in one specific signal such that when the function raise is called with the respective signal the registered function is called, therefore, assuming f as a un-deterministic function and as null element, is obtained following the formalize modeling.
+The C++ Standard Libraries also includes all the ANSI-C libraries, seeing that it's an extension of this language. The ESBMC 
+supported language ANSI-C, however when occurred verification in C++ code; the same follow one different way for kernel's tool, 
+passing for a specific typecheck directed to C++ software. For this reason, it's also necessary to build a representation of 
+the ANSI-C libraries' set in the operational model. Meantime, we can define this libraries' set in simplified structure 
+consisting of macro definitions and functions. Among the ANSI-C libraries' set exist libraries containing only macro definitions, 
+for example, the ciso646 library that define a spelling set to the logic operators. To build the structure of this library, we 
+distingue two kind of spelling: we define the macro set $M$ and operators set $O$. For convention, we assume 
+$\left\{and, \: and\_eq, \: bitand, \: bitor, \: compl, \: not, \: not\_eq, \: or, \: or\_eq, \: xor, \: xor\_eq\right\} \subset M$, and 
+$\left\{
+\: \&\&, 
+\: \&= \:, 
+\: \& \:, 
+\: | \:, 
+\: \widetilde{} \:, 
+\: ! \:, 
+\: || \:, 
+\: |= \:, 
+\:\: \widehat{} \:\:, 
+\: \widehat{}= \: 
+\right\} \subset O$. 
+Therefore, we define the syntax for these definitions set as:
 \\
+\begin{equation}
+\left( \alpha \in M \wedge \beta \in O \right) \rightarrow 		          \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
+\label{eq:csi646-definitions}
+\end{equation}}
+\\
+Within the ANSI-C libraries set, also we can represent the structure of others libraries with functions only. This is case of the 
+csignal library that dealing with signals emitted in a given code. Basing in this concept, we define that the operational model of 
+this library has been represented to signal and raise functions, respectively, and furthermore, to vector $v_{i}$ assuming that 
+$\left\{ i \in \aleph \:|\: 0 \leq i \leq 15 \right\}$ and to finite signals set $A$ assuming that 
+$\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$. The functional signal records certain function in one specific signal such 
+that when the function raise is called with the respective signal the registered function is called, therefore, 
+assuming $f$ as a un-deterministic function and as null element, is obtained following the formalize modeling.
+\\
+\begin{equation}
+\label{c-csignal}
+C := \left [ \begin{array}{3} 
+                \left(\varphi \subset A\right)\\
+                \wedge \, \, \left(2 \leq \varphi \leq 15\right)\\
+                \wedge \, \, \left(f \neq \phi\right)\\
+              \end{array} \right ]  \\ 
+\end{equation}
+
+$\newline$
+
+\begin{equation}
+\label{p-csignal}
+C := \left [ \begin{array}{2} 
+                \left(i_{0} = \varphi\right) \, \, 
+                \wedge \, \, \left(v_{i} = f\right)\\
+              \end{array} \right ]  \\ 
+\end{equation}
 \\
 The code section that represents this structure can be observed in the following.
-%
 
 \begin{figure}[ht]
 \centering
@@ -143,14 +213,39 @@ sighandler vetor[16];
 \label{figure:structure-of-the-CSIGNAL}
 \end{figure}
 
+\begin{figure*}[ht]
+\centering
+\includegraphics[scale=0.22]{figures/inputoutputdiagram.eps}
+\caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.}
+\label{figure:cpp-inputoutputdiagram}
+\end{figure*}
 
 \subsection{Input / Output Stream Libraries}
-The libraries group related to flow control of input and output data inside to certain program is represented for the libraries' set called Input / Output Stream. Aiming to build the operational model of this set, we elaborated a hierarchical structure really similar to real that can be observed in Figure 4.
+%
+
+The libraries group related to flow control of input and output data inside to certain program is represented for the libraries set 
+called Input / Output Stream. Aiming to build the operational model of this set, we elaborated a hierarchical structure really similar 
+to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}.
+\\
+%to do formalization
+\\
+
 \subsection{Standard Template Libraries}
 
-This set is subdivided in four categories: Containers, Algorithms, Iterators and Numeric. The algorithm library is the only one that composes the Algorithms categories and it has a model formed by 66 functions that present as main objective the manipulation of STL containers. Therefore, we define the variables set $It$ representing ranges and $Val$ representing any values, we assume $\left\{it_{1}, it_{2}\right\} \:\subset\:It$ and $\left\{n\right\} \:\subset\:Val$. From this, we can exemplified the functionalities of this library through the model's find function that search between the range compose to $it_{1}$, pointed to the first element of range, and $it_{2}$, pointed to the last element of range, the value represented to $n$. The modeling of this function has the following formal representation:
+This set is subdivided in four categories: Containers, Algorithms, Iterators and Numeric. The algorithm library is the only one that 
+composes the Algorithms categories and it has a model formed by 66 functions that present as main objective the manipulation of STL 
+containers. Therefore, we define the variables set $It$ representing ranges and $Val$ representing any values, we assume 
+$\left\{it_{1}, it_{2}\right\} \:\subset\:It$ and $\left\{n\right\} \:\subset\:Val$. From this, we can exemplified the functionalities 
+of this library through the model's find function that search between the range compose to $it_{1}$, pointed to the first element 
+of range, and $it_{2}$, pointed to the last element of range, the value represented to $n$. The modeling of this function has the 
+following formal representation:
 \\
-	The Numeric category present the numeric library formed by four functions that manipulated numeric sequences basically. To exemplified the functionalities of this library, we take as exempla the accumulate function; it covers a certain range adding the values inside the same in one variable (accumulator). Keep this in mind, we assume $\left\{it_{1}, it_{2}\right\} \:\subset\:It$ and $\left\{n\right\} \:\subset\:Val$, obtaining the modeling following:
+%to do formalization
+\\
+The Numeric category present the numeric library formed by four functions that manipulated numeric sequences basically. 
+To exemplified the functionalities of this library, we take as exempla the accumulate function; it covers a certain range adding 
+the values inside the same in one variable (accumulator). Keep this in mind, we assume $\left\{it_{1}, it_{2}\right\} \:\subset\:It$ 
+and $\left\{n\right\} \:\subset\:Val$, obtaining the modeling following:
 
 \subsubsection{Structure.}
 
@@ -295,6 +390,83 @@ To test the assertions, we use Booleans expressions, with the following syntax:
 
 %
 \subsection{General Libraries}
+%
+The libraries that performing more specific functions in the context of the C++ Standard
+Libraries have been defined as General Libraries and are subdivide in four particular categories:
+Language Support, Diagnostics, Strings and General Utilities.
+The Language Support category is compose by four libraries that work respectively with
+exception handling (exception), types information (typeinfo), dynamic allocation of memory (new) and 
+numeric limits (limits). Each library contains an structure formed by classes, specific types, methods
+and functions, however the limits library is one exception, seeing that it implements the definitions
+related to numeric elements, therefore, your structure is formed by one class with the numeric
+elements definitions and eight functions for manipulate this elements. A lot of functionalities related to
+exception handling, dynamic allocation of memory and types information have been implement in the
+ESBMC's kernel, however is important to have one representation about the libraries relationship to
+this functionalities so that tool is capable of identify all methods and definitions related to same.
+
+The stdexcept library is the only one the form the Diagnostic category, seeing that it
+implements kind of standard exceptions divide in two subcategories: logic errors and runtime errors. To build it model, we defined the exception set 
+$E$ assuming that $\left\{logic, domain, invalid\_argument, length, out\_of\_range, runtime, range, overflow, underflow\right\} \subset E$, 
+being that represent an element within to set $E$ such that for each $e_{i}$exist
+one class $\varphi(e_{i})$ that represent it, being that all $\varphi(e_{i})$ conatins one construtor that define a message contains a
+constructor that sets a message to be thrown if there is of these errors in the program. Whenever one
+of the constructors of these classes is called, one $assert(0)$ is throwing, forcing the ESBMC to identify this
+error and report it in the counterexample. A hierarchical representation of the model can be observed
+in Figure 5 and the formalization of the same in Figure 6.
+
+The General Libraries category also includes definitions about the manipulation of characters sequences, such definitions are implemented in 
+the library string. In the model constructed to represent this library, we implemented it structure through the class called string that contains 
+the main features of the library, and the iterator class containing the representation of the iterator for strings. In general, we define the 
+string object as an array of char, so that all heuristics that must be observed in handling vectors are therefore approached in this model. 
+From of the principle that main operations implemented by this library are restricted to creation, insertion, deletion and search of elements 
+inside to object string, we take as example the creation and search operations to exemplify and formalize the model created for this library. 
+Therefore, firstly we assume $S$ as the set of string variables, $c$ as character non-deterministic, the set $\left\{n, i, pos, length\right\} \subset N$, 
+and we define that s representing a string, the same has two attributes: the string size described by $length$, and a character sequence that 
+represent it described by $str_{i}$, such that $i$ represent the position of some character inside to string. Keep this in mind, can be defined a 
+constructor method that creates a string containing $n$ times the character $c$ and, furthermore the find method that search a character within a 
+certain string from a given position described by $pos$. Such formalizations can be observed in the following.
+
+\\
+$\newline$
+\begin{equation}
+\label{cconstructor-string}
+C := \left [ \begin{array}{l} 
+                \bigvee^{n}_{j=0} str_{j} = store\left(str_{j}, i_{j}, c_{0}\right) 
+              \end{array} \right ]  \\ 
+\end{equation}
+\\
+
+$\newline$
+
+\begin{equation}
+\label{pconstructor-string}
+P := \left [ \begin{array}{5} 
+                \left(i_{0} \geq 0\right)  \, \, \wedge \, \, \left(i_{0} < \left(n_{0} + 1\right)\right)\\
+                \ldots \\
+                \wedge \, \, \left(i_{n} \geq 0\right)  \, \, \wedge \, \, \left(i_{n} < \left(n_{0} + 1\right)\right)\\
+                \wedge \, \, c_{0} \neq 0\\
+                \wedge \, \, n_{0} > 0\\
+              \end{array} \right ]  \\ 
+\end{equation}
+
+$\newline$
+
+\begin{equation}
+\label{cfind-string}
+C := \left [ \begin{array}{4} 
+                \left(c_{0} \neq \phi\right)\\
+                \wedge \, \, \left(0 \leq pos \leq length\right)\\
+                \wedge \, \, \left(0 \leq i_{n} \leq length\right)\\
+              \end{array} \right ]  \\ 
+\end{equation}
+
+$\newline$
+\begin{equation}
+\label{pfind-string}
+P := \left [ \begin{array}{l} 
+                \bigvee^{length}_{j=0} str_{j+1} = ite\left(select\left(str_{j}, i_{j}\right) = c_{0}, i_{j}, -1\right)
+              \end{array} \right ]  \\ 
+\end{equation}
 
 
 \section{Experimental Results}
