@@ -24,14 +24,10 @@
 
 %\mainmatter  % start of an individual contribution
 
+\title{SMT-Based Bounded Model Checking of C++ Programs}
 %\title{Context-Bounded Symbolic Model Checking with ESBMC 1.17}
-\title{Bounded Model Checking of C++ Programs using SMT Solvers}
+%\title{SMT-Based Bounded Model Checking of C++ Programs}
 %\subtitle{(Competition Contribution)}
-%\title{TACAS'12 Competition Entry: ESBMC v1.17}
-%\title{Software Verification Competition: ESBMC v1.17}
-%\title{TACAS'12 Software Verification Competition: ESBMC v1.17}
-%\title{System Description: ESBMC v1.17}
-%\title{System Description: ESBMC v1.17 (TACAS'12 Competition version)}
 %\titlerunning{}
 \comment{
 \author{Lucas Cordeiro$^1$ \and
@@ -55,13 +51,15 @@
 \maketitle
 
 \begin{abstract}
-Bounded model Checking (BMC) of C++ programs presents greater complexity than C programs 
-due to features that the languages offers, such as templates, containers, and exception handling. 
-We present ESBMC++, a bounded model checker for C++ programs, which encodes the verification 
-conditions via an operational model using different background theories and passes them directly 
-to an SMT Solver. This operational model is an abstract representation of the standard C++ library,
-which conservatively approximates its semantics. Our experimental results show that our approach can 
-handle a wider range of the C++ constructs and substantially reduce the verification time. 
+Bounded Model Checking (BMC) of C++ programs presents greater
+complexity than that of C programs due to the features that the language offers, such as
+templates, containers, and exception handling. We present ESBMC++, a bounded
+model checker for C++ programs, which encodes the verification conditions via
+an operational model using different background theories supported 
+by an SMT Solver. This operational model is an abstract representation of
+the standard C++ library, which conservatively approximates its semantics. Our
+experimental results show that our approach can handle a wider range of the C++
+constructs than existing C++ model checkers and substantially reduce the verification time.
 \end{abstract}
 
 %------------------------------
@@ -101,63 +99,80 @@ which conservatively approximates its semantics. In particular, we focus on the 
 operational model, its preconditions and simulation features (e.g., how we store the elements values 
 of the containers and intern class methods), and how these are used to verify the C++ programs.
 
+%------------------------------
 \section{Background}
-%
+%------------------------------
+
 Background here (Lucas)...
 
+%------------------------------
 \section{C++ Operational Model}
-%
-During the verification process, ESBMC needs to identify all the features and specifications of the code in order to generate the AST. 
-In case of the C++ code, the basic representations (e.g., features related to object orientation, template and exception handling) are 
-set internally to ESBMC in different levels (typecheck, goto-program, and goto-symex). However, ESBMC must have the specifications 
-related to definitions of C++ libraries such as classes, methods, and types. Keeping this in mind, we developed a simplified representation 
-of C++ libraries, with their respective classes, methods, and other features, called C++ Operational Model (COM).
+%------------------------------
 
-The development process of the COM can be divided into two phases: structural and modeling. In the structural phase, we built a set 
-of classes with a specific hierarchical relationship and the signature of their methods and specific data, which consequently resulted 
-in a simplified structure representing the set of C++ libraries. From this structure, we modeled the methods of each class and this 
-modeling is focused for the validation and verification of all properties that include the specific method.
-%
+During the verification process, ESBMC++ has to identify all the features and specifications of the 
+C++ program in order to generate the abstract syntax tree (AST). In case of the C++ programs, 
+the basic representations (e.g., features related to OOP, template, and exception handling) are 
+set internally to ESBMC in different levels (i.e., scan, parser, and typecheck). However, ESBMC must 
+have the specifications related to the definitions of the C++ libraries such as classes, methods, and types. 
+Keeping this in mind, we developed a simplified representation of the C++ libraries, with their respective 
+classes, methods, and other features, called C++ Operational Model (COM).
 
+The development process of the COM can be divided into two phases: structural and modeling. 
+In the structural phase, we built a set of classes with a specific hierarchical relationship 
+and the signature of their methods and specific data, which consequently resulted 
+in a simplified structure, which represents the set of the standard C++ libraries. 
+From this structure, we modeled the methods of each class and this modeling is focused for the 
+validation and verification of all properties that include the specific method.
+
+%------------------------------
 \subsection{Structure and Model}
-%
-In general, the verification process of a program ESBMC can be divided into two segments, respectively, identifying the expressions and 
-verifying all properties related to those expressions, and in the identification step, the ESBMC must support all syntactic features 
-of the language in which the program is implemented. Based on this, we have adopted two approaches to the development of the support 
-of all syntactic characteristics of a C++ code. The first is to identify the basic structures of language, for example, polymorphism 
-and template, modifying the kernel of the tool so that the AST can contain all the necessary information to verify these structures. 
-The second approach is directly related to the definitions (classes, methods, functions, types) present in the C++ libraries, the goal 
-is to build an operational model so that the ESBMC can rely on it to identify such definitions and also, verify all the properties related 
-to these definitions based on the implementation of this model. It is important to say that this model is inserted into the verification 
-process at the level of source code, ie, both model and source code are passed as parameters at the beginning of the verification process, 
-so that the scan, parser and typecheck are done with the purpose of creating the AST joining the implementations.
+%------------------------------
 
-The first step of the construction process of this operating model is the formation of a simplified structure,
-which should get closer to actual structure as possible. This way, based on the documentation of the language C++
-[1] the set of libraries was divided according to their functionalities, into four subsets called C Libraries,
-Input/Output Stream, Standard Template Libraries, and General Libraries, respectively. Each library present in a
-subset is particularly related to the other libraries, not only in its functionality but also in its structure due
-to the fact that many libraries depend on definitions of others. From this, we performed an analysis in the respective 
-subsets, Figure \ref{figure:cpp-diagram}, such a way that could be identified dependencies between each library and thus develop a simplified 
-structure of each. The topics that follow describe the structure of subsets of libraries shown in Figure \ref{figure:cpp-diagram}.
+In general, for the verification process of a program, ESBMC++ splits it in two phases. In the first
+phase, ESBMC++ identifies the expressions and in the second phase it verifies all properties related 
+to those expressions. In the identification phase, ESBMC++ must support all syntactic features of the 
+language in which the program is implemented. Based on this, we have adopted two approaches to the 
+development of the support of all syntactic constructs of the C++ programs. The first is to identify 
+the basic structures of the language (e.g., inheritance, polymorphism, and template) so that the AST 
+can contain all the necessary information to verify these structures. 
+
+The second approach is directly related to the definitions (i.e., classes, methods, functions, types) 
+present in the C++ libraries. The goal here is to build an operational model of the standard C++ library 
+so that ESBMC++ can rely on it to identify such definitions and also to verify all the properties related 
+to these definitions based on the implementation of this operational model. It is important to say that 
+this model is inserted into the verification process at the level of source code (i.e., both model and 
+source code are passed as parameters at the beginning of the verification process).
+
+The first step of the construction process of this operational model is the creation of a simplified structure,
+which is similar to the actual structure. This way, based on the documentation of the language C++ [1] 
+\textbf{(the actual reference should be cited here)} the set of libraries was split according to their 
+functionalities, into four subsets called C Libraries, Input/Output Stream, Standard Template Libraries, 
+and General Libraries. Each library presents in a subset is particularly related to the other libraries, 
+not only in its functionality but also in its structure due to the fact that many libraries depend on 
+definitions of others. From this, we performed an analysis in the respective subsets as shown in 
+Figure~\ref{figure:cpp-diagram} in such a way that we could identify dependencies between each library 
+and thus develop a simplified structure of each one. The topics that follow describe the structure 
+of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
 %
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.28]{figures/diagramascpp.jpg}
+\includegraphics[scale=0.28]{figures/diagramascpp}
 \caption{Representation of the configuration and functional classification of the operational model.}
 \label{figure:cpp-diagram}
 \end{figure*}
 
+%------------------------------
 \subsection{C Libraries}
-%
-The C++ Standard Libraries also includes all the ANSI-C libraries, seeing that it's an extension of this language. The ESBMC 
-supported language ANSI-C, however when occurred verification in C++ code; the same follow one different way for kernel's tool, 
-passing for a specific typecheck directed to C++ software. For this reason, it's also necessary to build a representation of 
-the ANSI-C libraries' set in the operational model. Meantime, we can define this libraries' set in simplified structure 
-consisting of macro definitions and functions. Among the ANSI-C libraries' set exist libraries containing only macro definitions, 
-for example, the ciso646 library that define a spelling set to the logic operators. To build the structure of this library, we 
-distingue two kind of spelling: we define the macro set $M$ and operators set $O$. For convention, we assume 
-$\left\{and, \: and\_eq, \: bitand, \: bitor, \: compl, \: not, \: not\_eq, \: or, \: or\_eq, \: xor, \: xor\_eq\right\} \subset M$, and 
+%------------------------------
+
+The standard C++ libraries also include all the ANSI-C libraries given that it is an extension of this language. 
+ESBMC++ already supports the verification of ANSI-C programs. However, for the verification of C++ programs, ESBMC++ 
+follows a different approach to scan, parse, and typecheck the C++ programs. For this reason, it is also necessary 
+to build a representation of the ANSI-C libraries' set in the operational model. We can thus define this libraries' set 
+in simplified structure, which consists of macro definitions and functions. From the ANSI-C libraries' set, there are 
+libraries that contains only macro definitions (e.g., the ciso646 library that define a spelling set to the logic operators). 
+To build the structure of this library, we distingue two kind of spelling: we define the macro set $M$ and operators set $O$. 
+For convention, we assume $\left\{and, \: and\_eq, \: bitand, \: bitor, \: compl, \: not, \: not\_eq, \: or, \: or\_eq, \: xor, \: xor\_eq\right\} \subset M$, and 
 $\left\{
 \: \&\&, 
 \: \&= \:, 
@@ -171,21 +186,22 @@ $\left\{
 \: \widehat{}= \: 
 \right\} \subset O$. 
 Therefore, we define the syntax for these definitions set as:
-\\
+%
 \begin{equation}
 \left( \alpha \in M \wedge \beta \in O \right) \rightarrow 		          \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
 \label{eq:csi646-definitions}
 \end{equation}
-\\
-Within the ANSI-C libraries set, also we can represent the structure of others libraries with functions only. This is case of the 
-csignal library that dealing with signals emitted in a given code. Basing in this concept, we define that the operational model of 
-this library has been represented to signal and raise functions, respectively, and furthermore, to vector $v_{i}$ assuming that 
-$\left\{ i \in \aleph \:|\: 0 \leq i \leq 15 \right\}$ and to finite signals set $A$ assuming that 
-$\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$. The functional signal records certain function in one specific signal such 
-that when the function raise is called with the respective signal the registered function is called, therefore, 
-assuming $f$ as a un-deterministic function and as null element, is obtained following the formalize modeling.
-\\
 
+Within the ANSI-C libraries set, we can also represent the structure of others libraries with functions only. 
+This is case of the \textit{csignal} library, which deals with signals that are emitted to a given code. 
+Based on this concept, we define that the operational model of this library has been represented by signals that
+raise functions. For a vector $v_{i}$ assuming that $\left\{ i \in \aleph \:|\: 0 \leq i \leq 15 \right\}$ and 
+for a finite signals set $A$ assuming that $\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$, the functional 
+signal records a certain function in one specific signal such that when the function raise is called with 
+the respective signal, the registered function is called. Therefore, assuming $f$ as a non-deterministic function 
+and as NULL element, we obtain the following model for the \textit{csginal} library 
+\textbf{(this sentence and formula unclear. What are $\varphi$ and $\phi$?)}.
+%
 \begin{equation}
 \label{c-csignal}
 C := \left [ \begin{array}{ll} 
@@ -226,7 +242,7 @@ sighandler vetor[16];
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.22]{figures/inputoutputdiagram.jpg}
+\includegraphics[scale=0.22]{figures/inputoutputdiagram}
 \caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.}
 \label{figure:cpp-inputoutputdiagram}
 \end{figure*}
