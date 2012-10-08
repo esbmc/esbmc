@@ -489,9 +489,15 @@ P := \left [ \begin{array}{ll}
 
 \subsection{Inheritance and Polymorphism}
 
-Modeling C++ features like inheritance makes static analysis difficult to implement. We highlight the difficult in relation to other object-oriented languages, such as Java, the hierarchy of classes. C++ allows multiple inheritance, when a class may inherit from one or more classes, disallowing the direct use of tools already created for other languages like Java.
-When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base class virtual, has the name of shared inheritance .
-A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). This graph G is formed of a tuple < \textbf{C}, \prec s, \prec r >,\textbf{C} $ being the set of classes. $ \prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq \textbf{C} \times \textbf{C}$, are replicated inheritance edge. $ E \prec_{sr} = \prec_s \bigcup \prec_r.
+Modeling C++ features like inheritance makes static analysis difficult to implement. We highlight the difficult in relation to other 
+object-oriented languages, such as Java, the hierarchy of classes. C++ allows multiple inheritance, when a class may inherit from 
+one or more classes, disallowing the direct use of tools already created for other languages like Java.
+When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base 
+class virtual, has the name of shared inheritance.
+A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
+This graph G is formed of a tuple $<$ \textbf{C}, \prec $s$, \prec $r >$,\textbf{C} $ being the set of classes. $ 
+\prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
+\textbf{C} \times \textbf{C}$, are replicated inheritance edge. E$ \prec_{sr} = \prec_s \bigcup \prec_r.
 
 We made an intermediate representation, see Figure~\ref{figure:multiple-inheritance-IR}.
 
@@ -514,16 +520,16 @@ The indirect inheritance:
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/multiple-inheritance}
-\caption{Multiple inheritance: (a) C++ program, (b) class-inheritance graph.}
-\label{figure:multiple-inheritance}
+\includegraphics[scale=0.7]{figures/indirect-inheritance}
+\caption{Indirect inheritance: (a) C++ program, (b) class-inheritance graph.}
+\label{figure:indirect-inheritance}
 \end{figure*}
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
-\caption{Multiple inheritance intermediate representation.}
-\label{figure:multiple-inheritance-IR}
+\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
+\caption{Indirect inheritance intermediate representation.}
+\label{figure:indirect-inheritance-IR}
 \end{figure*}
 
 \subsection{Exception Handling}
