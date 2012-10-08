@@ -66,10 +66,10 @@ constructs than existing C++ model checkers and substantially reduce the verific
 \section{Introduction}
 %------------------------------
 %
-Bounded model checking (BMC) has already been successfully applied to
-verify software and to discover subtle errors in real
-systems~\cite{handbook09}.\ In an attempt to cope with growing 
-system complexity, Boolean Satisfiability (SAT) solvers are increasingly 
+Bounded Model Checking (BMC) based on Boolean Satisfiability (SAT) solvers
+has already been successfully applied to verify software and to discover 
+subtle errors in real systems~\cite{handbook09}.\ In an attempt to cope
+with growing system complexity, SAT solvers are increasingly
 replaced by Satisfiability Modulo Theories (SMT) solvers to prove the generated 
 verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.\
 There have also been attempts to extend BMC to the verification of C++ 
@@ -77,52 +77,80 @@ programs~\cite{Blanc07,Florian12}. The main challenge here is to handle large
 programs and support the features that the languages offers, such as templates, 
 containers and exception handling.
 
-The verification of C++ programs is an important topic due to the fact that there are 
-several real-world applications that use C++ as its mainstream programming 
-language, which includes software/hardware verification tools, information retrieval 
-machines, databases, simulators, embedded systems, and telecommunication systems. 
-If we compared the C++ to the C programming language, C++ arises much more challenges 
-since it provides a wider set of features, libraries and functionalities that would require 
-too much effort to develop from scratch. These features include object-oriented programming 
-(OOP), specialized input-output libraries (e.g., stream libraries), and the template usage 
-(including STL containers, which have the most popular data structures in Computing Science).
+Systems (e.g., model checkers, information retrieval 
+machines, databases, simulators, and embedded systems) that make use 
+of the C++ language (and its functionalities) tend to require a high 
+verification effort since the errors are hard to find as its own structure 
+grows. In this sense, C++ arises much more challenges (than the ANSI-C programming 
+laguage) since it provides a wider set of features (e.g., object-oriented programming), 
+libraries (e.g., specialized input-output), and functionalities (e.g., template usage) that 
+would require too much effort to develop from scratch. To hunt bugs in C++ applications, 
+model checkers have to deal with crucial characteristics (e.g., speed, accuracy, efficiency, 
+and friendliness) to make it attractive to be used in the mainstream software development. 
 
-Systems that make use of the C++ language (and its functionalities) tend to require a high 
-verification effort since the errors are hard to find as its own structure grows. 
-To hunt bugs in C++ applications, a verification tool has deal with crucial characteristics 
-(e.g., speed, accuracy, efficiency, and friendliness) to make it attractive to be used in the 
-mainstream software development. Obviously, if the C++ programming language seems to be a more 
-complex version than C, then its verification will be more complex as well. To tackle this problem, 
-our proposed approach applies Bounded Model Checking (BMC) to C++ programs using an operational model 
-of the C++ libraries. This operational model is an abstract representation of the standard C++ library,
-which conservatively approximates its semantics. In particular, we focus on the STL sequential containers 
-operational model, its preconditions and simulation features (e.g., how we store the elements values 
-of the containers and intern class methods), and how these are used to verify the C++ programs.
+To tackle this problem, our proposed approach aims to apply Bounded Model Checking (BMC) 
+to C++ programs using an operational model of the C++ libraries. This operational model 
+is an abstract representation of the standard C++ library, which conservatively approximates 
+its semantics. To support this operational mode, we extended our Efficient SMT-Based Bounded
+Model Checker (ESBMC) tool~\cite{Cordeiro12} that builds on the front-end of the C Bounded Model 
+Checker (CBMC) to support C++ features such as inheritance, polymorphism, templates, and 
+exception handling.
+
+In particular, we develop novel approaches to handle excpetions in C++ code that previous approaches
+are not able to deal with~\cite{Florian12,PrabhuMBIG11}. Additionally, we focus on the STL sequential 
+containers (which have the most popular data structures in Computing Science) operational model, 
+its preconditions and simulation features (e.g., how we store the elements values 
+of the containers and intern class methods), and how these are used to verify the real-world 
+C++ programs.
 
 %------------------------------
 \section{Background}
 %------------------------------
 
-Background here (Lucas)...
+ESBMC++ implements BMC for C++ programs using SMT solvers. 
+It can process C/C++ code into equivalent GOTO-programs 
+(i.e., control-flow graphs). The GOTO-programs can then be 
+processed by the symbolic execution engine. ESBMC++ uses CBMC's 
+internal parser, which is based on the OpenC++~\cite{OpenCpp12}, 
+to process the C/C++ files and to build an abstract syntax tree (AST). 
+The typechecker of ESBMC++’s front end annotates this AST with types and 
+generates a symbol table. ESBMC++’s IRep class then converts the annotated 
+AST into an internal, language-independent format used by the remaining phase 
+of the front-end.
+
+ESBMC++ uses two recursive functions that compute the
+constraints (i.e., assumptions and variable assignments) and
+properties (i.e., safety conditions and user-defined assertions).
+In addition, ESBMC++ automatically generates safety
+conditions that check for arithmetic overflow and underflow,
+array bounds violations, and NULL-pointer dereferences,
+in the spirit of Sites’ clean termination~\cite{Sites74}. Both
+functions accumulate the control flow predicates to each
+program point and use these predicates to guard both the
+constraints and the properties so that they properly reflect
+the program’s semantics. ESBMC++’s VC generator (VCG) then
+derives the VCs from these.
 
 %------------------------------
 \section{C++ Operational Model}
 %------------------------------
 
-During the verification process, ESBMC++ has to identify all the features and specifications of the 
-C++ program in order to generate the abstract syntax tree (AST). In case of the C++ programs, 
-the basic representations (e.g., features related to OOP, template, and exception handling) are 
-set internally to ESBMC in different levels (i.e., scan, parser, and typecheck). However, ESBMC must 
-have the specifications related to the definitions of the C++ libraries such as classes, methods, and types. 
-Keeping this in mind, we developed a simplified representation of the C++ libraries, with their respective 
-classes, methods, and other features, called C++ Operational Model (COM).
+During the verification process, ESBMC++ has to identify all the 
+specifications and features of the C++ program to generate the AST. 
+In case of the C++ programs, the basic representations (e.g., inheritance, 
+template, and exception handling) are treated internally in ESBMC in different 
+levels (i.e., scan, parser, and type-check). Apart from that, ESBMC++ still needs 
+the specifications related to the definitions of the standard C++ libraries 
+such as classes, methods, and types. We thus developed a simplified representation 
+of the C++ libraries called C++ Operational Model (COM) to represent the classes, 
+methods, and other features.
 
 The development process of the COM can be divided into two phases: structural and modeling. 
 In the structural phase, we built a set of classes with a specific hierarchical relationship 
 and the signature of their methods and specific data, which consequently resulted 
-in a simplified structure, which represents the set of the standard C++ libraries. 
-From this structure, we modeled the methods of each class and this modeling is focused for the 
-validation and verification of all properties that include the specific method.
+in a simplified structure to represent the set of the standard C++ libraries. 
+From this structure, we modeled the methods of each class and this modeling is thus focused 
+on the validation and verification of all properties that a specific method includes.
 
 %------------------------------
 \subsection{Structure and Model}
@@ -257,15 +285,20 @@ to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}.
 %to do formalization
 \\
 
+%-------------------------------------------
 \subsection{Standard Template Libraries}
+%-------------------------------------------
 
-This set is subdivided in four categories: Containers, Algorithms, Iterators and Numeric. The algorithm library is the only one that 
-composes the Algorithms categories and it has a model formed by 66 functions that present as main objective the manipulation of STL 
-containers. Therefore, we define the variables set $It$ representing ranges and $Val$ representing any values, we assume 
-$\left\{it_{1}, it_{2}\right\} \:\subset\:It$ and $\left\{n\right\} \:\subset\:Val$. From this, we can exemplified the functionalities 
-of this library through the model's find function that search between the range compose to $it_{1}$, pointed to the first element 
-of range, and $it_{2}$, pointed to the last element of range, the value represented to $n$. The modeling of this function has the 
-following formal representation:
+This set is subdivided in four categories: \textit{Containers}, \textit{Algorithms}, 
+\textit{Iterators}, and \textit{Numeric}. The algorithm library is the only one that 
+composes the \textit{Algorithms} categories. It has a model formed by 66 functions 
+that present as main objective the manipulation of STL containers. Therefore, we define 
+the variables set $It$ representing ranges and $Val$ representing any values, we assume 
+$\left\{it_{1}, it_{2}\right\} \:\subset\:It$ and $\left\{n\right\} \:\subset\:Val$. 
+From this, we can explain the functionalities of this library through the model's find function 
+that search between the range composed by $it_{1}$, pointed to the first element 
+of the range, and $it_{2}$, pointed to the last element of the range, the value represented to $n$. 
+The modeling of this function has the following formal representation:
 \\
 %to do formalization
 \\
@@ -495,9 +528,14 @@ one or more classes, disallowing the direct use of tools already created for oth
 When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base 
 class virtual, has the name of shared inheritance.
 A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
+<<<<<<< HEAD
 This graph G is formed of a tuple $<$ \textbf{C}, \prec $s$, \prec $r$ >,\textbf{C} $ being the set of classes. $ 
+=======
+This graph G is formed of a tuple $<$ \textbf{C},  $\prec s$, $\prec r >$,\textbf{C} being the set of classes. $ 
+>>>>>>> introduction modified
 \prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
-\textbf{C} \times \textbf{C}$, are replicated inheritance edge. E$ \prec_{sr} = \prec_s \bigcup \prec_r.
+\textbf{C} \times \textbf{C}$, are replicated inheritance edge. E $\prec_{sr} = \prec_s \bigcup \prec_r$.
+
 
 We made an intermediate representation, see Figure~\ref{figure:multiple-inheritance-IR}.
 
@@ -662,6 +700,15 @@ Acknowledgments here (Lucas)...
 {\begin{thebibliography}{10}
 \vspace{-0.5ex}
 
+\bibitem{Sites74}
+R.~L. Sites, ``Some thoughts on proving clean termination of programs.''
+  Stanford, CA, USA, Tech. Rep., 1974.
+  
+\bibitem{PrabhuMBIG11}
+P.~Prabhu, N.~Maeda, G.~Balakrishnan, F.~Ivancic, and A.~Gupta,
+\newblock Interprocedural Exception Analysis for C++.
+\newblock In {\em ECOOP}, pp. 583--608. 2011.
+
 \bibitem{Blanc07}
 N.~Blanc, A.~Groce, and D.~Kroening,
 \newblock Verifying C++ with STL containers via predicate abstraction.
@@ -719,6 +766,9 @@ L.~Cordeiro, B.~Fischer, and J.~Marques-Silva.
 F.~Merz, S.~Falke, and C.~Sinz.
 \newblock {LLBMC}: Bounded Model Checking of C and C++ Programs Using a Compiler IR.
 \newblock {\em VSTTE}, pp.\ 146--161, 2012. 
+
+\bibitem{OpenCpp12}
+OpenC++, http://opencxx.sourceforge.net/, 2012.
 
 %\bibitem{wtr}
 %R.~Barreto, L.~Cordeiro, and B.~Fischer.
