@@ -20,7 +20,7 @@ int main()
    srand( time( 0 ) );  // seed random-number generator
 
    // roll die 6000 times
-   for ( int roll = 1; roll <= 6000; roll++ )       
+   for ( int roll = 1; roll <= 60; roll++ )
       ++frequency[ 1 + rand() % 6 ]; // replaces 20-line switch
                                      // of Fig. 3.8
 

@@ -22,7 +22,7 @@ int main()
    int face;  // represents one roll of the die
 
    // loop 6000 times and summarize results
-   for ( int roll = 1; roll <= 6000; roll++ ) {
+   for ( int roll = 1; roll <= 60; roll++ ) {
       face = 1 + rand() % 6;  // random number from 1 to 6
 
       // determine face value and increment appropriate counter

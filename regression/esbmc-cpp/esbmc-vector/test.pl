@@ -27,7 +27,6 @@ $root->appendChild($second_root);
 my $llvm = 0;
 my $testdesc = "test.desc";
 
-
 # ---------------------------------------
 # run esbmc
 sub run($$$) {
@@ -37,7 +36,7 @@ sub run($$$) {
 	#------------------------------
 	$tags{"item_04_esbmc-option"} = "esbmc"." ".$input." ".$options;
 	#------------------------------
-	
+
 	my $cmd;
 
 	if($llvm != 1) {
@@ -335,9 +334,9 @@ sub test($$) {
 				if($flag_run_result == 0){
 					# for XML file	
 					#------------------------------
-					$tags{"item_10_actual-result"} = "[UNRECOVERABLE_ERROR_Op_%]";
+					$tags{"item_10_actual-result"} = "[UNRECOVERABLE_ERROR]";
 					#------------------------------	
-					print LOG "$expected_from_test [UNRECOVERABLE_ERROR_Op_%]\n";	
+					print LOG "$expected_from_test [UNRECOVERABLE_ERROR]\n";
 					$failed = 1;
 				}
 		 }	
