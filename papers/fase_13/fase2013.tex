@@ -715,8 +715,12 @@ Experimental Results here (Mauro)...
 
 
 \section{Related Work}
-%
-Related Work here (Mauro and Mikhail)
+
+Prabhu et al. presents an interprocedural exception analysis and transformation framework for C++ that records the control-flow created by the exceptions 
+and create a exception-free program. The exception-free program creation starts by generating a modular interprocedural exception control-flow graph (IECFG).
+The IECFG is refined using a algorithm based on a compact representation for a set of types called the Signed-TypeSet domain and the result is used 
+to generate the exception-free program. Finally, the exception-free program is verified using F-SOFT~\cite{Fsoft}. The verification focused on two properties:
+"no throw", the percentage of the code that does not raise an exception and "no leak", the number memory leaks on try-catch blocks.~\cite{PrabhuMBIG11}
 
 \section{Conclusions}
 %
@@ -809,6 +813,11 @@ C.standards commitee. Working draft, standard for programming language C++ (2012
 
 \bibitem{CppReference12}
 Reference of the C++ Language Library, http://www.cplusplus.com/reference/, 2012.
+
+\bibitem{Fsoft}
+F.~Ivancic, I.~Shlyakhter, A.~Gupta, M.~Ganai, V.~Kahlon, C.~Wang, Z.~Yang.
+\newblock {Model Checking C programs using F-Soft.}
+\newblock {\em IEEE International Conference on Computer Design.} pp.\ 297--308, October, 2005.
 
 \end{thebibliography}}
 
