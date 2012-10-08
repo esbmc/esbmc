@@ -100,7 +100,7 @@ In particular, we develop novel approaches to handle excpetions in C++ code that
 are not able to deal with~\cite{Florian12,PrabhuMBIG11}. Additionally, we focus on the STL sequential 
 containers (which have the most popular data structures in Computing Science) operational model, 
 its preconditions and simulation features (e.g., how we store the elements values 
-of the containers and intern class methods), and how these are used to verify the real-world 
+of the containers and intern class methods), and how these are used in order to verify real-world 
 C++ programs.
 
 %------------------------------
@@ -113,8 +113,8 @@ It can process C/C++ code into equivalent GOTO-programs
 processed by the symbolic execution engine. ESBMC++ uses CBMC's 
 internal parser, which is based on the OpenC++~\cite{OpenCpp12}, 
 to process the C/C++ files and to build an abstract syntax tree (AST). 
-The typechecker of ESBMC++Â’s front end annotates this AST with types and 
-generates a symbol table. ESBMC++Â’s IRep class then converts the annotated 
+The typechecker of ESBMC++’s front end annotates this AST with types and 
+generates a symbol table. ESBMC++’s IRep class then converts the annotated 
 AST into an internal, language-independent format used by the remaining phase 
 of the front-end.
 
@@ -124,11 +124,11 @@ properties (i.e., safety conditions and user-defined assertions).
 In addition, ESBMC++ automatically generates safety
 conditions that check for arithmetic overflow and underflow,
 array bounds violations, and NULL-pointer dereferences,
-in the spirit of SitesÂ’ clean termination~\cite{Sites74}. Both
+in the spirit of Sites’ clean termination~\cite{Sites74}. Both
 functions accumulate the control flow predicates to each
 program point and use these predicates to guard both the
 constraints and the properties so that they properly reflect
-the programÂ’s semantics. ESBMC++Â’s VC generator (VCG) then
+the program’s semantics. ESBMC++’s VC generator (VCG) then
 derives the VCs from these.
 
 %------------------------------
@@ -137,50 +137,41 @@ derives the VCs from these.
 
 During the verification process, ESBMC++ has to identify all the 
 specifications and features of the C++ program to generate the AST. 
-In case of the C++ programs, the basic representations (e.g., inheritance, 
-template, and exception handling) are treated internally in ESBMC in different 
-levels (i.e., scan, parser, and type-check). Apart from that, ESBMC++ still needs 
-the specifications related to the definitions of the standard C++ libraries 
-such as classes, methods, and types. We thus developed a simplified representation 
-of the C++ libraries called C++ Operational Model (COM) to represent the classes, 
-methods, and other features.
+The specifications are related to the definitions of the standard C++ 
+libraries such as classes, methods, and types while the features 
+(e.g., inheritance, template, and exception handling) are treated internally 
+in ESBMC++ in different levels (i.e., scan, parser, and type-check).
+In this sense, we developed a simplified representation of the C++ libraries 
+called C++ Operational Model (COM) to represent the classes, methods, 
+and other features.
 
-The development process of the COM can be divided into two phases: structural and modeling. 
-In the structural phase, we built a set of classes with a specific hierarchical relationship 
-and the signature of their methods and specific data, which consequently resulted 
-in a simplified structure to represent the set of the standard C++ libraries. 
-From this structure, we modeled the methods of each class and this modeling is thus focused 
-on the validation and verification of all properties that a specific method includes.
+The development process of the COM can be divided into two phases: \textit{structural} 
+and \textit{modeling}. In the structural phase, we built a set of classes with a specific 
+hierarchical relationship and the signature of their methods and specific data, 
+which resulted in a simplified structure to represent the set of the standard C++ libraries. 
+From this structure, we modeled the methods of each class and this modeling is focused 
+on the verification of all properties that a specific method includes.
 
 %------------------------------
 \subsection{Structure and Model}
 %------------------------------
 
-In general, for the verification process of a program, ESBMC++ splits it in two phases. In the first
-phase, ESBMC++ identifies the expressions and in the second phase it verifies all properties related 
-to those expressions. In the identification phase, ESBMC++ must support all syntactic features of the 
-language in which the program is implemented. Based on this, we have adopted two approaches to the 
-development of the support of all syntactic constructs of the C++ programs. The first is to identify 
-the basic structures of the language (e.g., inheritance, polymorphism, and template) so that the AST 
-can contain all the necessary information to verify these structures. 
-
-The second approach is directly related to the definitions (i.e., classes, methods, functions, types) 
-present in the C++ libraries. The goal here is to build an operational model of the standard C++ library 
-so that ESBMC++ can rely on it to identify such definitions and also to verify all the properties related 
-to these definitions based on the implementation of this operational model. It is important to say that 
-this model is inserted into the verification process at the level of source code (i.e., both model and 
-source code are passed as parameters at the beginning of the verification process).
-
-The first step of the construction process of this operational model is the creation of a simplified structure,
-which is similar to the actual structure. This way, based on the documentation of the language C++ [1] 
-\textbf{(the actual reference should be cited here)} the set of libraries was split according to their 
-functionalities, into four subsets called C Libraries, Input/Output Stream, Standard Template Libraries, 
-and General Libraries. Each library presents in a subset is particularly related to the other libraries, 
-not only in its functionality but also in its structure due to the fact that many libraries depend on 
-definitions of others. From this, we performed an analysis in the respective subsets as shown in 
-Figure~\ref{figure:cpp-diagram} in such a way that we could identify dependencies between each library 
-and thus develop a simplified structure of each one. The topics that follow describe the structure 
-of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
+The goal here is to build an operational model of the standard C++ library 
+so that ESBMC++ can rely on it to identify the definitions and to verify all 
+the properties related to these definitions. This operational model is inserted 
+into the verification process at the level of the source code (i.e., both model and 
+program are passed as parameters at the beginning of the verification process).
+The first step in the construction process of the operational model is the creation 
+of a simplified structure, which is similar to the actual structure. Based 
+on the documentation of the C++ language~\cite{CppReference12} the set of libraries 
+was split, according to their functionalities, into four subsets called C Libraries, 
+Input/Output Stream, Standard Template Libraries, and General Libraries. Each library 
+presents in a subset is particularly related to the other libraries, not only in its 
+functionality but also in its structure due to the fact that many libraries depend on 
+definitions of others. From this, we performed an analysis in the respective subsets 
+as shown in Figure~\ref{figure:cpp-diagram} in such a way that we could identify dependencies 
+between each library and thus develop a simplified structure of each one. In the next sections, 
+we describe the structure of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
 %
 \begin{figure*}[ht]
 \centering
@@ -193,15 +184,28 @@ of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
 \subsection{C Libraries}
 %------------------------------
 
-The standard C++ libraries also include all the ANSI-C libraries given that it is an extension of this language. 
-ESBMC++ already supports the verification of ANSI-C programs. However, for the verification of C++ programs, ESBMC++ 
-follows a different approach to scan, parse, and typecheck the C++ programs. For this reason, it is also necessary 
-to build a representation of the ANSI-C libraries' set in the operational model. We can thus define this libraries' set 
-in simplified structure, which consists of macro definitions and functions. From the ANSI-C libraries' set, there are 
-libraries that contains only macro definitions (e.g., the ciso646 library that define a spelling set to the logic operators). 
-To build the structure of this library, we distingue two kind of spelling: we define the macro set $M$ and operators set $O$. 
-For convention, we assume $\left\{and, \: and\_eq, \: bitand, \: bitor, \: compl, \: not, \: not\_eq, \: or, \: or\_eq, \: xor, \: xor\_eq\right\} \subset M$, and 
-$\left\{
+The standard C++ libraries also include all the ANSI-C libraries. 
+However, for the verification of C++ programs, ESBMC++ 
+follows a different path to parse the C++ programs. 
+For this reason, we also have to build a representation 
+of the ANSI-C libraries in the operational model. We can thus 
+define this libraries' set in a simplified structure, which consists 
+essentially of macro definitions and functions. From this ANSI-C libraries' set, 
+there are libraries that contains only macro definitions (e.g., the \textit{ciso646} library 
+defines a spelling set to the logic operators). To build the structure of this 
+library, we distingue two kinds of spelling: we define the macro set and operators set. 
+For convention, we assume the macro set $M$ as follows: 
+%
+\begin{eqnarray}
+\label{ciso646-macro-set}
+\left\{and, and\_eq, bitand, bitor, compl, not, not\_eq, or, or\_eq, xor, xor\_eq\right\} \subset M
+\end{eqnarray}
+
+The operator set $O$ is defined as follows:
+%
+\begin{eqnarray}
+\label{ciso646-operator-set}
+\left\{
 \: \&\&, 
 \: \&= \:, 
 \: \& \:, 
@@ -212,61 +216,40 @@ $\left\{
 \: |= \:, 
 \:\: \widehat{} \:\:, 
 \: \widehat{}= \: 
-\right\} \subset O$. 
-Therefore, we define the syntax for these definitions set as:
+\right\} \subset O
+\end{eqnarray}
+
+Therefore, we define the syntax for these definitions sets as:
 %
 \begin{equation}
-\left( \alpha \in M \wedge \beta \in O \right) \rightarrow 		          \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
+\left( \alpha \in M \wedge \beta \in O \right) \Rightarrow \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
 \label{eq:csi646-definitions}
 \end{equation}
 
-Within the ANSI-C libraries set, we can also represent the structure of others libraries with functions only. 
-This is case of the \textit{csignal} library, which deals with signals that are emitted to a given code. 
-Based on this concept, we define that the operational model of this library has been represented by signals that
-raise functions. For a vector $v_{i}$ assuming that $\left\{ i \in \aleph \:|\: 0 \leq i \leq 15 \right\}$ and 
-for a finite signals set $A$ assuming that $\left\{2, 4, 6, 8, 11, 15\right\}\:\subset\:A$, the functional 
-signal records a certain function in one specific signal such that when the function raise is called with 
-the respective signal, the registered function is called. Therefore, assuming $f$ as a non-deterministic function 
-and as NULL element, we obtain the following model for the \textit{csginal} library 
-\textbf{(this sentence and formula unclear. What are $\varphi$ and $\phi$?)}.
+Within the ANSI-C libraries set, we can also represent the structure 
+of others libraries with functions only. This is case of the \textit{csignal} 
+library, which deals with signals that are emitted to a given code. 
+We thus define that the operational model of this library can been represented 
+by signals that raise functions. For a vector $v$ of size $N$ and 
+for a finite signals set $S$ where $\left\{s_{1},\ldots, s_{n}\right\}\:\subset\:S$ 
+and $n < N$, the function signal records a certain function in one specific signal such that when 
+the raising function is called with the respective signal, the registered function 
+is called. Let $f$ be a function, $\varphi$ be a signal, and $\eta$ be a NULL element. 
+We can thus model the signal of the \textit{csginal} library as:
 %
-\begin{equation}
+%
+\begin{eqnarray}
 \label{c-csignal}
-C := \left [ \begin{array}{ll} 
-                \left(\varphi \subset A\right) \\
-                \wedge \, \, \left(2 \leq \varphi \leq 15\right) \\
-                \wedge \, \, \left(f \neq \phi\right) \\
-              \end{array} \right ]  \\ 
-\end{equation}
+\left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \Rightarrow store\left(v,\varphi,f\right)
+\end{eqnarray}
 
-$\newline$
-
-\begin{equation}
-\label{p-csignal}
-C := \left [ \begin{array}{ll} 
-                \left(i_{0} = \varphi\right) \, \, 
-                \wedge \, \, \left(v_{i} = f\right)\\
-              \end{array} \right ]  \\ 
-\end{equation}
+The raise function can be modeled as:  
+%
+\begin{eqnarray}
+\label{r-csignal}
+\left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(v,\varphi\right) \neq \eta\right) \Rightarrow select\left(v,\varphi\right)  
+\end{eqnarray}
 \\
-The code section that represents this structure can be observed in the following.
-
-\begin{figure}[ht]
-\centering
-\begin{minipage}{0.7\textwidth}
-\begin{lstlisting}
-#ifndef STL_CSIGNAL
-#define STL_CSIGNAL
-typedef void (*sighandler)(int);
-sighandler vetor[16];
-  void signal(int sig, sighandler func);
-  int raise(int sig);
-#endif
-\end{lstlisting}
-\end{minipage}
-\caption{Structure of the CSIGNAL.}
-\label{figure:structure-of-the-CSIGNAL}
-\end{figure}
 
 \begin{figure*}[ht]
 \centering
@@ -307,42 +290,76 @@ To exemplified the functionalities of this library, we take as exempla the accum
 the values inside the same in one variable (accumulator). Keep this in mind, we assume $\left\{it_{1}, it_{2}\right\} \:\subset\:It$ 
 and $\left\{n\right\} \:\subset\:Val$, obtaining the modeling following:
 
+%-------------------------------------------
 \subsubsection{Structure.}
+%-------------------------------------------
 
-In this session, we will focus on the STL sequential containers operational model, its preconditions and simulation features (like how we store the elements values of the containers and intern class methods), and how this is used to verify a C++ program code.
+In this section, we will focus on the STL sequential 
+containers operational model, its preconditions and 
+simulation features (e.g., how we store the elements 
+values of the containers and intern class methods), 
+and how these are used to verify real-world C++ programs.
+The structure of the STL containers is based on the 
+C++ structure itself, which includes its classes, operators, 
+methods, functions, and intern variables. It is split into: 
+iterations, capacity, element access, modifiers and unique 
+members. As the containers structure differs a little 
+between each other, some of their methods will vary too, 
+changing its intern model as well. For example, a list container 
+does not have a reference operator (i.e., $operator\left[\right]$), and the elements 
+are reached only by iterators (list has a dynamic structure, 
+unlike deque or vector). Lists also have unique methods, optimized by its 
+dynamic structure such as merging, elements sorting, and reverse order.
+Vector has also unique methods, related to size and capacity manipulation, 
+and it also does not have $push\_front\left(\right)$ 
+and $pop\_front\left(\right)$ methods~\cite{CppReference12}.
 
-	The structure of STL containers is based on the C++ structure itself, including its classes, operators, methods, functions and intern variables. It is divided in: iterations, capacity, element access, modifiers and unique members. As the containers structure differs a little between each other, some of their methods will vary too, changing its intern model as well. For example, a list container does not have a reference operator (operator[]), and the elements are reached only by iterators (list has a dynamic structure, unlike deque or vector). Lists also have unique methods, optimized by its dynamic structure, like merging, elements sorting, reverse order, etc.
-	Vector also have unique methods, related to size and capacity manipulation, and it also does not have push\_front() and pop\_front() methods. Further information can be reached in C++ Reference website (www.cplusplus.com/reference/stl).
-
-	
+%-------------------------------------------	
 \subsubsection{Model Semantics.}
+%-------------------------------------------
 	
-	Let us consider that a container model is composed by five types of variables, \emph{I}, \emph{C}, \emph{N}, \emph{P} and \emph{T}. \emph{I} represents a iterator that points to a position in the container, \emph{C} represents the container itself, N represents natural integer numbers used in the container, like size, capacity and elements index, \emph{P} represents the memory address where \emph{T} is located, and \emph{T} represents de values stored in the container. For convention, we assume that \emph{\{c, v, d, l\}} $\subset C, \{i, j, n\} \subset N$ and $\{it1, it2\} \subset I$. 
+Let us consider that a container model is composed 
+by five types of variables, which are: $I$, $C$, 
+$N$, $P$ and $T$. Let $I$ be an iterator that points 
+to a position in the container; $C$ be a container itself; 
+$N$ be a natural integer number used in the container
+such as size, capacity and elements index; $P$ be 
+the memory address where $T$ is located; and $T$ be the 
+values stored in the container. 
+For convention, we assume that 
+$\left(c, v, d, l\right) \subset C, \{i, j, n\} 
+\subset N$ and $\{it1, it2\} \subset I$. 
 	
-	
-	The containers contain an array of elements \emph{T}, and their positions in the memory are represented by pointers \emph{P}.
-Assuming this, the syntax for integer expression is:
+The containers contain an array of elements $T$ and their 
+positions in the memory are represented by pointers $P$.
+Therefore, the syntax for the integer expression is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}
 \\[-5ex]
 \mathit{Int}  & ::= & \: \mathit{N} \: | \: \mathit{Z} \: | \: \mathit{C.size} \: | \: \mathit{C.capacity} \: | \\
-              &     & \: \mathit{Int} ( + \: | \: ? \: | \: * \: | \: ...) \mathit{Int}  \: | \\
-              &     & \: \textit{It} ( + \: | \: - ) \textit{It} 
+              &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: | \\
+              &     & \: \textit{It} \: ( + \: | \: - ) \:  \textit{It} 
 \end{array}
 \]
-%
-Where variables included in the containers like \emph{size} and \emph{capacity} return a integer value, as the arithmetics operations between integer values. 
-Similarly, the syntax for iterator expressions is:
-%
+
+Where variables included in the containers 
+like \emph{size} and \emph{capacity} return 
+a integer value as well as the arithmetics 
+operations between integer values. 
+Similarly, the syntax for iterator 
+expressions is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 \\[-5ex]
 \mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
 \end{array}
 \]
-%
-Where \emph{begin} and \emph{end} are methods that returns iterators pointing to the beginning or the end of a container. We also have iterator operations that returns iterators too. 
-For \emph{P} (memory address values), the syntax is as follows:
+
+Where $begin$ and $end$ are methods 
+that return iterators, which point to the beginning 
+and the ending of a container, respectively. We also have 
+iterator operations that return iterators as well. 
+For $P$ (memory address values), the syntax is as follows:
 %	
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
 \\[-5ex]
@@ -350,8 +367,14 @@ For \emph{P} (memory address values), the syntax is as follows:
             &     & \: \mathit{It.source} \: | \: \mathit{P}  ( \: + \: | \: - \: )  \textit{P} \: \\
 \end{array}
 \]
-%	
-Where \emph{pointer} is a memory address that stores the element in the container pointed by the iterator, \emph{array} is another memory address marks the beginning of the container, \emph{source} is the address that makes the link between the iterator and its pointed container (stores the container \emph{array} value). There is also the pointer return from pointer operations.
+
+Where $pointer$ is a memory address that stores the element 
+in the container pointed by the iterator, $array$ is another 
+memory address that stores the beginning of the container, 
+$source$ is the address that makes the link between the iterator 
+and its pointed container (which stores the container $array$ value). 
+
+There is also the pointer return from pointer operations.
 The syntax for \emph{T} values is the following: 
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
@@ -360,97 +383,111 @@ The syntax for \emph{T} values is the following:
 \end{array}
 \]
 %
-Where \emph{*It} is the value stored in the position pointed by a iterator \emph{It}, similarly \emph{*P} is the value stores in the \emph{P} position of the memory, and $\mathit{C_n}$ is a element of a container \emph{C} in the position \emph{n}.
-%
-\comment{
-To test the assertions, we use Booleans expressions, with the following syntax: 
-%
+Where $*It$ is the value stored in the position pointed 
+by a iterator $It$. Similarly, $*P$ is the value stored 
+in the $P$ position of the memory, and $\mathit{C_n}$ is 
+an element of a container $C$ in the position $n$.
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{boolean-semantics}
-\\[-5ex]
-\mathit{Bool}  & ::= & \: \mathit{Int} ( < \: | \: > \: | = \: | \: ... ) \mathit{Int} \: | \\
-               &     & \: \mathit{It} ( < \: | \:> \: | \: = \: | \: ... ) \mathit{It}  \: | \\
-               &     & \: \mathit{T} \: = \: \mathit{T} \: | \: \neg\mathit{Bool} \: | \\
-               &     & \: \textit{Bool} ( \vee \: | \: \wedge | \: ... ) \textit{Bool} \: \\
-               
-\end{array}
-\]
-}
+%-------------------------------
 \subsubsection{Model.}
-	To simulate appropriately the containers, our model makes use of three variables: a variable \textit{P} called array, that points to the first element of the elements array, a natural value size, that stores the quantity of elements in the container, and a natural value capacity, that stores the total capacity of a container (valid onliy for vectors). Note that, as the elements are added in the container (specifically in vectors) and the size grows, the capacity also grows at a rate of 2*size, every time the size reaches the capacity value.
-	Similarly, iterators are modeled using three representing variables: a variable P called pointer, which contains the memory address to the correspondent element \textit{T} in the container, a variable N called position, which contains the index value pointed by the iterator, in the container, and a variable P called source, which contains the memory address correspondent to the first element \textit{T} stored in the container.
-	The vector container model has a structure as it follows:
-	
-	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{container-model}
-\\[-5ex]
-\ &  &\: \mathit{C} = \{ \mathit{P}, \mathit{C.size}, \mathit{C.capacity}\} \:
-               
-\end{array}
-\]
-	
-	Where \textit{P} is a memory address where it is stored the elements of the container, \textit{C.size} is the total number of elements in the container, and \textit{C.capacity} is the total capacity of the vector, simulated internally in the model.
-	The main methods of a vector (and sequential containers, in general) have only three types of operation: insertion, exclusion and search. Methods like \textit{push\_back()}, \textit{pop\_back()}, \textit{front()}, \textit{back()}, \textit{push\_front()} and \textit{pop\_front()} are only a simplified variation of those main methods, optimized for some containers (like popping the last element of a stack).
+%-------------------------------
 
-	%An insert method is represented by the following structure:
-	In order to represent the model, consider a container $C\{cont\}$, with a method $cont.insert \rightarrow It$ that returns a iterator result and makes use of a iterator $It\{position\}$, pointing to the desired insertion position, a template value $T\{value\}$ with the element to be inserted and a integer $N\{quantity\}$, that informs the amount of elements to be inserted in the desired position.\\
-	
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert1-model}
-\\[-5ex]
-	 & &	cont.insert(position, value, quantity) \Longrightarrow  \\
-	 &   &	\: \: \: cont'.size = cont.size + quantity \\
-	 &   &	\: \: \: *(position + N\{0, ... ,quantity\}) = value \\
-\end{array}
-\]
-	There is also another way to represent the insert method. It is possible to insert a sequence of elements in the desired insertion position, using both iterator or pointer bounds. For this, consider a iterator $It\{first\}$, marking the first element to be inserted, and another iterator $It\{end\}$, pointing to the first element after the end of the sequence to be inserted in the required position. Therefore, we have:\\
+To simulate appropriately the containers, our model makes 
+use of three variables: a variable $P$ called array that points 
+to the first element of the array, a natural value size that stores 
+the quantity of elements in the container, and a natural value capacity
+that stores the total capacity of a container (which is valid only for vectors). 
+Note that, as the elements are added in the container (specifically in vectors) 
+and the size grows, the capacity also grows at a rate of $2*size$, every time 
+the size reaches the capacity value. Similarly, iterators are modeled using 
+three variables: a variable $P$ called pointer, which contains the memory address 
+to the corresponding element $T$ in the container, a variable $N$ called position, 
+which contains the index value pointed by the iterator in the container, and a 
+variable $P$ called source, which contains the memory address to the first 
+element $T$ stored in the container. 
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{insert2-model}
-\\[-5ex]
-	 & &	 cont.insert(position, first, last) \Longrightarrow \\
-	 &   &\: \: \: cont'.size = cont.size +( last - first) \\
-	 &   &\: \: \: *position = *first \\
-\end{array}
-\]
-
-	The same model above is valid for pointers $P\{first\}$ and $P\{last\}$. This kind of insertion (with pointers) does not return a iterator.
-\\
+The vector container model has the following structure:
+$\mathit{C} = \{ \mathit{P}, \mathit{C.size}, \mathit{C.capacity}\}$,
+where $P$ is a memory address where the elements are stored in the container, 
+$C.size$ is the total number of elements in the container, and $C.capacity$ 
+is the total capacity of the vector, which is simulated internally in the model.
+The main methods of a vector (and sequential containers, in general) have only 
+three types of operation: \textit{insertion}, \textit{deletion}, and \textit{search}. 
+Methods such as $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$, 
+$back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ are only 
+a simplified variation of those main methods, which are optimized for some containers 
+(e.g., popping the last element of a stack).
 %
-	%Similarly, an erase method is structured like the following:\\
-	The erase method works similarly to the insert method. It also uses iterator positions, integer values and pointers, but does note uses values, as the exclusion is made by a given position, regardless the value. It also returns a iterator position, pointing to the position next to the previously erased part of the container. The next model shows a erase method that excludes a single element:\\
+To represent the model, consider a container $C$ (cont) with a method 
+$cont.insert \rightarrow It$ that returns an iterator result and 
+makes use of an iterator $It$ (position) that points to the desired 
+insertion position; a template value $T$ (value) with the element 
+to be inserted and an integer $N$ (quantity) that informs the amount 
+of elements to be inserted in the desired position.
+
+\[\begin{array}{ll}
+%\label{eqnarray:transformations}
+cont.insert(It, T, N) \Longrightarrow & cont'.size = cont.size \\
+  & \wedge \: *(position + 0) = value \\
+  & \ldots \\
+  & \wedge \: *(position + N) = value \\
+\end{array}\]
+
+There is also another way to represent the insert method. 
+It is possible to insert a sequence of elements in the desired 
+insertion position, using both iterator or pointer bounds. 
+Let $It\{first\}$ be an iterator that marks the first element 
+to be inserted, and let $It\{end\}$ be another iterator that 
+points to the first element after the end of the sequence to be inserted 
+in the required position. Therefore, we have:\\
+
+\[\begin{array}{ll}
+%\label{eqnarray:transformations}
+cont.insert(It, T, N) \Longrightarrow & cont'.size = cont.size + (last - first)\\
+  & \wedge \: *position = *first \\
+\end{array}\]
+
+The same model above is valid for pointers $P$ (first) and $P$ (last). 
+This kind of insertion (with pointers) does not return a iterator.
+The erase method works similarly to the insert method. It also uses iterator 
+positions, integer values and pointers, but it does not use values, as the exclusion 
+is made by a given position, regardless the value. It also returns a iterator position, 
+pointing to the position next to the previously erased part of the container. 
+The next model shows an erase method that deletes a single element:
 %
+\[\begin{array}{ll}
+\label{erase1-model}
+\mathit{cont.erase} (\mathit{It}) \Longrightarrow & \mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
+  & \wedge \: \mathit{position'} = \mathit{position} + \mathit{1} \\
+\end{array}\]
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase1-model}
-\\[-5ex]
-\
-	& & \mathit{cont.erase} (\mathit{position}) \Longrightarrow\\
-	&  & \: \: \:	\mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
-	&   & \: \: \:	\mathit{position'} = \mathit{position} + \mathit{1}\\
-\end{array}
-\]
-	It is also possible to exclude a number of elements from the container, marking the bounds with iterators. Works similarly to the equivalent insert method:\\
+It is also possible to delete a number of elements from the container, 
+marking the bounds with iterators. It works similarly to the equivalent 
+insert method:
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{erase2-model}
-\\[-5ex]
-	& &  \mathit{cont.erase} (\mathit{position}, \mathit{first}, \mathit{last}) \Longrightarrow\\
-	&   & \: \: \:	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
-	&   & \: \: \:	\mathit{position'} = \mathit{last}\\
-\end{array}
-\]
+\[\begin{array}{ll}
+\label{erase2-model}
+\mathit{cont.erase} (\mathit{It}, \mathit{first}, \mathit{last}) \Longrightarrow & 	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
+  & \wedge \:	\mathit{position'} = \mathit{last} \\
+\end{array}\]
 
-	Searches are made in a container by using reference operators and a pointing type (pointer or iterator), and return the reference value (the element stored itself). It can be considered as values $N\{*It\}$, $N\{*P\}$ or $N\{\mathit{C_n}\}$ \\
+Searches are made in a container by using reference operators 
+and a pointing type (pointer or iterator), and return the reference 
+value (the element stored itself). It can be considered as values 
+$N\{*It\}$, $N\{*P\}$ or $N\{\mathit{C_n}\}$.	The structure of iterators 
+is treated differently from other types. The model is the following:
+$\mathit{It} = \{ \mathit{pointer}, \mathit{pos}, \mathit{cont\_pos}\}$,
+where $pointer$ is a memory address that points to the 
+real position of the required element in the container 
+(pointed by the iterator), $pos$ is the iterator indexed 
+internally in the container, and $cont\_pos$ is a memory 
+address equivalent to $cont.array$, being $cont$ the container 
+pointed by the iterator.
 
-	The structure of iterators is treated differently from the other types. The model is the following:\\
-	\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator1-model}
-\\[-5ex]
- \ &  &\: \mathit{It} = \{ \mathit{pointer}, \mathit{pos}, \mathit{cont\_pos}\} \:\\
-               
-\end{array}
-\]
-	
-	Where \textit{pointer} is a memory address that points to the real position of the required element in the container (pointed by the iterator), \textit{pos} is the iterator index internally in the container, and \textit{cont\_pos} is a memory address equivalent to \textit{cont.array}, being cont the container pointed by the iterator.
-
-%
+%---------------------------------
 \subsection{General Libraries}
-%
+%---------------------------------
+
 The libraries that performing more specific functions in the context of the C++ Standard
 Libraries have been defined as General Libraries and are subdivide in four particular categories:
 Language Support, Diagnostics, Strings and General Utilities.
@@ -528,7 +565,7 @@ one or more classes, disallowing the direct use of tools already created for oth
 When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base 
 class virtual, has the name of shared inheritance.
 A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
-This graph G is formed of a tuple $<$\textbf{C},  $\prec s$, $\prec r>$,\textbf{C} being the set of classes. $ 
+This graph G is formed of a tuple $<$ \textbf{C},  $\prec s$, $\prec r >$,\textbf{C} being the set of classes. $ 
 \prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
 \textbf{C} \times \textbf{C}$, are replicated inheritance edge. E $\prec_{sr} = \prec_s \bigcup \prec_r$.
 
@@ -604,8 +641,8 @@ There are also other ways to an exception be thrown by an program, other than th
 bad\_alloc exception, dynamic\_cast can throw bad\_cast exception and typeid can throw bad\_typeid exception. Also those exception are 
 builtin on C++ and are supposed to be handled by the programmer during the development.
 
-When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with itÅ½s
-handler are defined on the C++ standard draft ~\cite{CppDraft} as follow:
+When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with it´s
+handler are defined on the C++ standard draft~\cite{CppDraft} as follow:
 
 \begin{itemize}
  \item The handler that will catch the exception will be the first catch with a matching type.
@@ -614,7 +651,7 @@ handler are defined on the C++ standard draft ~\cite{CppDraft} as follow:
  \item Throwing "arrays of type T" and "functions returning type T" with be handled by handles with "pointer to type T" 
        and "pointer to function returning type T" types.
  \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T.
- \item The handler will catch an exception of type pointer T if TÅ½s type can be converted to the type of the handler, either by 
+ \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
        qualification conversion or standard pointer conversion.
  \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it.
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block.
@@ -770,17 +807,8 @@ OpenC++, http://opencxx.sourceforge.net/, 2012.
 C.standards commitee. Working draft, standard for programming language C++ (2012),
 \newblock {http://www.open-std.org/JTC1/SC22/WG21/docs/papers/2012/n3376.pdf (acessed 8 october, 2012)}
 
-%\bibitem{wtr}
-%R.~Barreto, L.~Cordeiro, and B.~Fischer.
-%\newblock Verifying Embedded C Software with Timing Constraints using an
-%Untimed Bounded Model Checker
-%\newblock {\em Proc.\ SBESC Workshop on Real-Time Systems}, to appear, 2011.
-
-%\bibitem{Godefroid95}
-%Patrice Godefroid.
-%\newblock {\em Partial-order Methods for the Verification of Concurrent
-%  Systems: An Approach to the State-explosion Problem}.
-%\newblock University of Liege, PhD thesis, 1995.
+\bibitem{CppReference12}
+Reference of the C++ Language Library, http://www.cplusplus.com/reference/, 2012.
 
 \end{thebibliography}}
 
