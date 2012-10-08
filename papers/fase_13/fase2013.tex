@@ -113,8 +113,8 @@ It can process C/C++ code into equivalent GOTO-programs
 processed by the symbolic execution engine. ESBMC++ uses CBMC's 
 internal parser, which is based on the OpenC++~\cite{OpenCpp12}, 
 to process the C/C++ files and to build an abstract syntax tree (AST). 
-The typechecker of ESBMC++’s front end annotates this AST with types and 
-generates a symbol table. ESBMC++’s IRep class then converts the annotated 
+The typechecker of ESBMC++Â’s front end annotates this AST with types and 
+generates a symbol table. ESBMC++Â’s IRep class then converts the annotated 
 AST into an internal, language-independent format used by the remaining phase 
 of the front-end.
 
@@ -124,11 +124,11 @@ properties (i.e., safety conditions and user-defined assertions).
 In addition, ESBMC++ automatically generates safety
 conditions that check for arithmetic overflow and underflow,
 array bounds violations, and NULL-pointer dereferences,
-in the spirit of Sites’ clean termination~\cite{Sites74}. Both
+in the spirit of SitesÂ’ clean termination~\cite{Sites74}. Both
 functions accumulate the control flow predicates to each
 program point and use these predicates to guard both the
 constraints and the properties so that they properly reflect
-the program’s semantics. ESBMC++’s VC generator (VCG) then
+the programÂ’s semantics. ESBMC++Â’s VC generator (VCG) then
 derives the VCs from these.
 
 %------------------------------
@@ -528,11 +528,7 @@ one or more classes, disallowing the direct use of tools already created for oth
 When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base 
 class virtual, has the name of shared inheritance.
 A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
-<<<<<<< HEAD
-This graph G is formed of a tuple $<$ \textbf{C}, \prec $s$, \prec $r$ >,\textbf{C} $ being the set of classes. $ 
-=======
-This graph G is formed of a tuple $<$ \textbf{C},  $\prec s$, $\prec r >$,\textbf{C} being the set of classes. $ 
->>>>>>> introduction modified
+This graph G is formed of a tuple $<$\textbf{C},  $\prec s$, $\prec r>$,\textbf{C} being the set of classes. $ 
 \prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
 \textbf{C} \times \textbf{C}$, are replicated inheritance edge. E $\prec_{sr} = \prec_s \bigcup \prec_r$.
 
@@ -608,8 +604,8 @@ There are also other ways to an exception be thrown by an program, other than th
 bad\_alloc exception, dynamic\_cast can throw bad\_cast exception and typeid can throw bad\_typeid exception. Also those exception are 
 builtin on C++ and are supposed to be handled by the programmer during the development.
 
-When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with it´s
-handler are defined on the C++ standard draft ***CITACAO*** as follow:
+When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with itÅ½s
+handler are defined on the C++ standard draft ~\cite{CppDraft} as follow:
 
 \begin{itemize}
  \item The handler that will catch the exception will be the first catch with a matching type.
@@ -618,7 +614,7 @@ handler are defined on the C++ standard draft ***CITACAO*** as follow:
  \item Throwing "arrays of type T" and "functions returning type T" with be handled by handles with "pointer to type T" 
        and "pointer to function returning type T" types.
  \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T.
- \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
+ \item The handler will catch an exception of type pointer T if TÅ½s type can be converted to the type of the handler, either by 
        qualification conversion or standard pointer conversion.
  \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it.
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block.
@@ -769,6 +765,10 @@ F.~Merz, S.~Falke, and C.~Sinz.
 
 \bibitem{OpenCpp12}
 OpenC++, http://opencxx.sourceforge.net/, 2012.
+
+\bibitem{CppDraft}
+C.standards commitee. Working draft, standard for programming language C++ (2012),
+\newblock {http://www.open-std.org/JTC1/SC22/WG21/docs/papers/2012/n3376.pdf (acessed 8 october, 2012)}
 
 %\bibitem{wtr}
 %R.~Barreto, L.~Cordeiro, and B.~Fischer.
