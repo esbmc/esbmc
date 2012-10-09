@@ -1,9 +1,6 @@
 #include <cassert>
 #include <cstring>
 
-typedef unsigned int size_t;
-#define NULL 0
-
 namespace std
 {
 
