@@ -417,37 +417,42 @@ $back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ a
 a simplified variation of those main methods, which are optimized for some containers 
 (e.g., popping the last element of a stack).
 %
-To represent the model, consider a container $C$ (cont) with a method 
+To represent the model, consider a container $C\{cont\}$ with a method 
 $cont.insert \rightarrow It$ that returns an iterator result and 
-makes use of an iterator $It$ (position) that points to the desired 
-insertion position; a template value $T$ (value) with the element 
-to be inserted and an integer $N$ (quantity) that informs the amount 
+makes use of an iterator $It\{\iota\}$ that points to the desired 
+insertion position; a template value $T\{\tau\}$ with the element 
+to be inserted and an integer $N\{\theta\}$ that informs the amount 
 of elements to be inserted in the desired position.
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
-cont.insert(It, T, N) \Longrightarrow & cont'.size = cont.size \\
-  & \wedge \: *(position + 0) = value \\
+cont.insert(\iota, \tau, \theta) \Longrightarrow & cont'.size = cont.size \\
+  & \wedge \: *\iota = \tau \\
   & \ldots \\
-  & \wedge \: *(position + N) = value \\
+  & \wedge \: *(\iota + \theta - 1) = \tau \\
 \end{array}\]
 
 There is also another way to represent the insert method. 
 It is possible to insert a sequence of elements in the desired 
 insertion position, using both iterator or pointer bounds. 
-Let $It\{first\}$ be an iterator that marks the first element 
-to be inserted, and let $It\{end\}$ be another iterator that 
+Let $It\{\alpha_0\}$ be an iterator that marks the first element 
+to be inserted, $It\{\alpha_k\}$ be another iterator that 
 points to the first element after the end of the sequence to be inserted 
-in the required position. Therefore, we have:\\
+in the required position and let $N\{k\}$ be the length of the array $[\alpha_0\, \alpha_k)$. 
+
+Therefore, we have:\\
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
-cont.insert(It, T, N) \Longrightarrow & cont'.size = cont.size + (last - first)\\
-  & \wedge \: *position = *first \\
+cont.insert(\iota, \alpha_0, \alpha_k) \Longrightarrow & cont'.size = cont.size + k\\
+  & \wedge \: *\iota = *\alpha_0 \\
+  & \ldots \\
+  & \wedge \: *(\iota + k - 1) = *(\alpha_k - 1)
 \end{array}\]
 
-The same model above is valid for pointers $P$ (first) and $P$ (last). 
+The same model above is valid for pointers $P\{\alpha_0\}$ and $P\{\alpha_k\}$. 
 This kind of insertion (with pointers) does not return a iterator.
+
 The erase method works similarly to the insert method. It also uses iterator 
 positions, integer values and pointers, but it does not use values, as the exclusion 
 is made by a given position, regardless the value. It also returns a iterator position, 
@@ -456,8 +461,8 @@ The next model shows an erase method that deletes a single element:
 %
 \[\begin{array}{ll}
 \label{erase1-model}
-\mathit{cont.erase} (\mathit{It}) \Longrightarrow & \mathit{cont'.size} = \mathit{cont.size} - \mathit{1}\\
-  & \wedge \: \mathit{position'} = \mathit{position} + \mathit{1} \\
+cont.erase (\iota) \Longrightarrow & cont'.size = cont.size - 1\\
+  & \wedge \: \iota' = \iota + 1 \\
 \end{array}\]
 
 It is also possible to delete a number of elements from the container, 
@@ -466,20 +471,20 @@ insert method:
 
 \[\begin{array}{ll}
 \label{erase2-model}
-\mathit{cont.erase} (\mathit{It}, \mathit{first}, \mathit{last}) \Longrightarrow & 	\mathit{cont'.size} = \mathit{cont.size} -(\mathit{last} - \mathit{first})\\
-  & \wedge \:	\mathit{position'} = \mathit{last} \\
+cont.erase (\iota, \alpha_0, \alpha_k) \Longrightarrow & 	cont'.size = cont.size - k\\
+  & \wedge \:	\iota' = \alpha_k \\
 \end{array}\]
 
 Searches are made in a container by using reference operators 
 and a pointing type (pointer or iterator), and return the reference 
 value (the element stored itself). It can be considered as values 
-$N\{*It\}$, $N\{*P\}$ or $N\{\mathit{C_n}\}$.	The structure of iterators 
+$N\{*It\}$, $N\{*P\}$ or $N\{C_n\}$.	The structure of iterators 
 is treated differently from other types. The model is the following:
-$\mathit{It} = \{ \mathit{pointer}, \mathit{pos}, \mathit{cont\_pos}\}$,
-where $pointer$ is a memory address that points to the 
+$It = \{ ptr, n, cont\_n\}$,
+where $\ptr$ is a memory address that points to the 
 real position of the required element in the container 
-(pointed by the iterator), $pos$ is the iterator indexed 
-internally in the container, and $cont\_pos$ is a memory 
+(pointed by the iterator), $n$ is the iterator indexed 
+internally in the container, and $cont\_n$ is a memory 
 address equivalent to $cont.array$, being $cont$ the container 
 pointed by the iterator.
 
