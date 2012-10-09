@@ -15,4 +15,3 @@ int main()
   Test test(tmp);
   addr = (unsigned int) test.ptr;
 }
-

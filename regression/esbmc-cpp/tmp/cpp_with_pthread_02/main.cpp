@@ -27,4 +27,3 @@ int main ()
   pthread_create(&id2, NULL, t2, NULL);
   return 0;
 }
-
