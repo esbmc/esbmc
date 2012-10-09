@@ -10,7 +10,7 @@ int main () {
   stringstream oss;
   void* val;
   oss << val;
-  
-  
+
+
   return 0;
 }

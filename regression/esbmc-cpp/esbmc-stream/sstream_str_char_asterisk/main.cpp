@@ -14,7 +14,7 @@ int main () {
 
   oss << val1;
   assert(oss.str() == "testasd");
-  
-  
+
+
   return 0;
 }
