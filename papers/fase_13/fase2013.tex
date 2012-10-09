@@ -392,23 +392,23 @@ an element of a container $C$ in the position $n$.
 %-------------------------------
 
 To simulate appropriately the containers, our model makes 
-use of three variables: a variable $P$ called array that points 
-to the first element of the array, a natural value size that stores 
-the quantity of elements in the container, and a natural value capacity
+use of three variables: a variable $P$ called $array$ that points 
+to the first element of the array, a natural value $size$ that stores 
+the quantity of elements in the container, and a natural value $capacity$
 that stores the total capacity of a container (which is valid only for vectors). 
 Note that, as the elements are added in the container (specifically in vectors) 
 and the size grows, the capacity also grows at a rate of $2*size$, every time 
 the size reaches the capacity value. Similarly, iterators are modeled using 
-three variables: a variable $P$ called pointer, which contains the memory address 
-to the corresponding element $T$ in the container, a variable $N$ called position, 
+three variables: a variable $P$ called $ptr$, which contains the memory address 
+to the corresponding element $T$ in the container, a variable $N$ called $pos$, 
 which contains the index value pointed by the iterator in the container, and a 
-variable $P$ called source, which contains the memory address to the first 
+variable $P$ called $src$, which contains the memory address to the first 
 element $T$ stored in the container. 
 
 The vector container model has the following structure:
-$\mathit{C} = \{ \mathit{P}, \mathit{C.size}, \mathit{C.capacity}\}$,
-where $P$ is a memory address where the elements are stored in the container, 
-$C.size$ is the total number of elements in the container, and $C.capacity$ 
+$C = \{ array, size, capacity\}$,
+where $array$ is a memory address where the elements are stored in the container, 
+$size$ is the total number of elements in the container, and $capacity$ 
 is the total capacity of the vector, which is simulated internally in the model.
 The main methods of a vector (and sequential containers, in general) have only 
 three types of operation: \textit{insertion}, \textit{deletion}, and \textit{search}. 
@@ -419,38 +419,38 @@ a simplified variation of those main methods, which are optimized for some conta
 %
 To represent the model, consider a container $C\{cont\}$ with a method 
 $cont.insert \rightarrow It$ that returns an iterator result and 
-makes use of an iterator $It\{\iota\}$ that points to the desired 
-insertion position; a template value $T\{\tau\}$ with the element 
-to be inserted and an integer $N\{\theta\}$ that informs the amount 
+makes use of an iterator $It\{ipos\}$ that points to the desired 
+insertion position; a template value $T\{val\}$ with the element 
+to be inserted and an integer $N\{qtd\}$ that informs the amount 
 of elements to be inserted in the desired position.
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
-cont.insert(\iota, \tau, \theta) \Longrightarrow & cont'.size = cont.size \\
-  & \wedge \: *\iota = \tau \\
+cont.insert(ipos, val, qtd) \Longrightarrow & cont'.size = cont.size \\
+  & \wedge \: *ipos = val \\
   & \ldots \\
-  & \wedge \: *(\iota + \theta - 1) = \tau \\
+  & \wedge \: *(ipos + qtd - 1) = val \\
 \end{array}\]
 
 There is also another way to represent the insert method. 
 It is possible to insert a sequence of elements in the desired 
 insertion position, using both iterator or pointer bounds. 
-Let $It\{\alpha_0\}$ be an iterator that marks the first element 
-to be inserted, $It\{\alpha_k\}$ be another iterator that 
+Let $It\{it_0\}$ be an iterator that marks the first element 
+to be inserted, $It\{it_k\}$ be another iterator that 
 points to the first element after the end of the sequence to be inserted 
-in the required position and let $N\{k\}$ be the length of the array $[\alpha_0\, \alpha_k)$. 
+in the required position and let $N\{k\}$ be the length of the array $[it_0\, it_k)$. 
 
 Therefore, we have:\\
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
-cont.insert(\iota, \alpha_0, \alpha_k) \Longrightarrow & cont'.size = cont.size + k\\
-  & \wedge \: *\iota = *\alpha_0 \\
+cont.insert(ipos, it_0, it_k) \Longrightarrow & cont'.size = cont.size + k\\
+  & \wedge \: *ipos = *it_0 \\
   & \ldots \\
-  & \wedge \: *(\iota + k - 1) = *(\alpha_k - 1)
+  & \wedge \: *(ipos + k - 1) = *(it_k - 1)
 \end{array}\]
 
-The same model above is valid for pointers $P\{\alpha_0\}$ and $P\{\alpha_k\}$. 
+The same model above is valid for pointers $P\{pt_0\}$ and $P\{pt_k\}$. 
 This kind of insertion (with pointers) does not return a iterator.
 
 The erase method works similarly to the insert method. It also uses iterator 
@@ -461,8 +461,8 @@ The next model shows an erase method that deletes a single element:
 %
 \[\begin{array}{ll}
 \label{erase1-model}
-cont.erase (\iota) \Longrightarrow & cont'.size = cont.size - 1\\
-  & \wedge \: \iota' = \iota + 1 \\
+cont.erase (ipos) \Longrightarrow & cont'.size = cont.size - 1\\
+  & \wedge \: ipos' = ipos + 1 \\
 \end{array}\]
 
 It is also possible to delete a number of elements from the container, 
@@ -471,8 +471,8 @@ insert method:
 
 \[\begin{array}{ll}
 \label{erase2-model}
-cont.erase (\iota, \alpha_0, \alpha_k) \Longrightarrow & 	cont'.size = cont.size - k\\
-  & \wedge \:	\iota' = \alpha_k \\
+cont.erase (ipos, it_0, it_k) \Longrightarrow & 	cont'.size = cont.size - k\\
+  & \wedge \:	ipos' = it_k \\
 \end{array}\]
 
 Searches are made in a container by using reference operators 
@@ -480,11 +480,11 @@ and a pointing type (pointer or iterator), and return the reference
 value (the element stored itself). It can be considered as values 
 $N\{*It\}$, $N\{*P\}$ or $N\{C_n\}$.	The structure of iterators 
 is treated differently from other types. The model is the following:
-$It = \{ ptr, n, cont\_n\}$,
-where $\ptr$ is a memory address that points to the 
+$It = \{ ptr, n, addr\}$,
+where $ptr$ is a memory address that points to the 
 real position of the required element in the container 
 (pointed by the iterator), $n$ is the iterator indexed 
-internally in the container, and $cont\_n$ is a memory 
+internally in the container, and $addr$ is a memory 
 address equivalent to $cont.array$, being $cont$ the container 
 pointed by the iterator.
 
