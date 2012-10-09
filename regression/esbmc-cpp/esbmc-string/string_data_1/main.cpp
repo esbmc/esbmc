@@ -1,6 +1,8 @@
 // str// string::data
 #include <iostream>
 #include <string>
+#include <cstring>
+#include <cassert>
 using namespace std;
 
 int main ()
