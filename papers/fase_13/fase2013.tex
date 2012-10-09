@@ -77,16 +77,15 @@ programs~\cite{Blanc07,Florian12}. The main challenge here is to handle large
 programs and support the features that the languages offers, such as templates, 
 containers and exception handling.
 
-Systems (e.g., model checkers, information retrieval 
-machines, databases, simulators, and embedded systems) that make use 
-of the C++ language (and its functionalities) tend to require a high 
-verification effort since the errors are hard to find as its own structure 
-grows. In this sense, C++ arises much more challenges (than the ANSI-C programming 
-laguage) since it provides a wider set of features (e.g., object-oriented programming), 
-libraries (e.g., specialized input-output), and functionalities (e.g., template usage) that 
-would require too much effort to develop from scratch. To hunt bugs in C++ applications, 
-model checkers have to deal with crucial characteristics (e.g., speed, accuracy, efficiency, 
-and friendliness) to make it attractive to be used in the mainstream software development. 
+C++ is widely used, but systems that make use of the C++ language and its functionalities
+tend to require a high verification effort since the errors are hard to find. 
+C++ verification involves many more challenges than that of plain ANSI-C since 
+it provides a wider set of features (e.g., object-oriented
+programming), libraries (e.g., specialized input-output), and functionalities 
+(e.g., template usage) that would require too much effort to develop from scratch. 
+In order to be attractive for mainstream software development, C++ model checkers have 
+to exhibit several crucial characteristics (e.g., speed,
+accuracy, efficiency, and friendliness).
 
 To tackle this problem, our proposed approach aims to apply Bounded Model Checking (BMC) 
 to C++ programs using an operational model of the C++ libraries. This operational model 
