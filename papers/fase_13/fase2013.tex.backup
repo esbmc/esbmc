@@ -524,37 +524,21 @@ exception handling, dynamic allocation of memory and types information have been
 ESBMC's kernel, however is important to have one representation about the libraries relationship to
 this functionalities so that ESBMC is capable of identify all methods and definitions related to same.
 
-\begin{figure*}[ht]
-\centering
-\includegraphics[scale=0.23]{figures/stdexcept.eps}
-\caption{Diagram about hierarchical structure pf the stdexcept library.}
-\label{figure:stdexcept}
-\end{figure*}
-
 The stdexcept library is the only one the form the Diagnostic category, seeing that it
-implements kind of standard exceptions divide in two subcategories: logic errors and runtime errors. The relationship between 
-classes that represent the Diagnostic category builded in the operational model is really similiar to real and can be observed 
-in the Figure \ref{figure:stdexcept}. To build it model, we defined the exception set $E$ assuming that
+implements kind of standard exceptions divide in two subcategories: logic errors and runtime errors. To build it model, we defined the exception set 
+$E$ assuming that
  
 \begin{equation}
-\label{kind-of-exceptions}
-\left\{ \begin{array}{ll} 
-              logic, domain, invalid\_argument, length, out\_of\_range,\\ runtime, range, overflow, underflow
-        \end{array} \right\} \subset E
+\label{ste-exception}
+\left\{logic, domain, invalid\_argument, length, out\_of\_range, runtime, range, overflow, underflow\right\} \subset E
 \end{equation}
 
-furthermore we assume that $e$ represent an element within the set $E$ such that for each $e$ exist one class $\varphi$ that 
-represent it, being that all $\varphi$ contains a constructor that sets a message to be thrown if there is any errors during 
-the program execution. In order to identify this errors in the verification, whenever one of the constructors of these classes is 
-called, one $assert(0)$ is throwing, forcing the ESBMC to identify this error and report it in the counterexample.
-Therefore we can represent the model of the stdexcept library as:
-
-\begin{equation}
-\label{stdexcept}
-\left( e \in E \right) 
-\Rightarrow \left(\forall e\right)\left(\exists\varphi\right)\left(\left(e\equiv\varphi\right) 
-\Rightarrow assert\left(0\right)\right)
-\end{equation}
+being that represent an element within to set $E$ such that for each $e_{i}$exist
+one class $\varphi(e_{i})$ that represent it, being that all $\varphi(e_{i})$ conatins one construtor that define a message contains a
+constructor that sets a message to be thrown if there is of these errors in the program. Whenever one
+of the constructors of these classes is called, one $assert(0)$ is throwing, forcing the ESBMC to identify this
+error and report it in the counterexample. A hierarchical representation of the model can be observed
+in Figure 5 and the formalization of the same in Figure 6.
 
 The General Libraries category also includes definitions about the manipulation of characters sequences, such definitions are implemented in 
 the library string. In the model constructed to represent this library, we implemented it structure through the class called string that contains 
@@ -566,7 +550,7 @@ Therefore, firstly we assume $S$ as the set of string variables, $c$ as characte
 and we define that s representing a string, the same has two attributes: the string size described by $length$, and a character sequence that 
 represent it described by $str_{i}$, such that $i$ represent the position of some character inside to string. Keep this in mind, can be defined a 
 constructor method that creates a string containing $n$ times the character $c$ and, furthermore the find method that search a character within a 
-certain string from a given position described by $pos$. Therefore, we can model the respective $constructor$ of the string library as:
+certain string from a given position described by $pos$. Such formalizations can be observed in the following.
 
 \begin{equation}
 \label{cconstructor-string}
@@ -585,9 +569,7 @@ P := \left [ \begin{array}{ll}
                 \wedge \, \, n_{0} > 0\\
               \end{array} \right ]  \\ 
 \end{equation}
-
-The $find$ method can be modeled as:
-
+%
 \begin{equation}
 \label{cfind-string}
 C := \left [ \begin{array}{ll} 
