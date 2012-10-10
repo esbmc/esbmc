@@ -12,6 +12,8 @@
 
 \begin{document}
 
+\lstdefinestyle{nonumbers}
+{numbers=none}
 \lstset{language=C,basicstyle=\small}
 \lstset{numbers=left, numberstyle=\tiny, stepnumber=1, numbersep=5pt}
 \lstset{tabsize=2}
@@ -763,36 +765,98 @@ This graph G is formed of a tuple $<$ \textbf{C},  $\prec s$, $\prec r >$,\textb
 
 We made an intermediate representation, see Figure~\ref{figure:multiple-inheritance-IR}.
 
-\begin{figure*}[ht]
-\centering
-%\includegraphics[scale=0.7]{figures/multiple-inheritance}
-\caption{Multiple inheritance: (a) C++ program, (b) class-inheritance graph.}
-\label{figure:multiple-inheritance}
-\end{figure*}
+\begin{figure}[h]
 
-\begin{figure*}[ht]
+\begin{minipage}[b]{.6\linewidth}
+\begin{lstlisting}
+class Base1 {int tf;}
+class Base2: {int lf;}
+class Derived: public Base1, 
+               public Base2 {int rf;}
+\end{lstlisting}
+%  \vspace{1.5cm}
+  \centerline{(a)}\medskip
+\end{minipage}
+\label{figure:multiple-inheritance-code}
+%
+%\hfill
+\begin{minipage}[b]{.48\linewidth}
+  \centering
+  \centerline{\includegraphics[scale=0.5]{figures/multiple_inheritance_graph.png}}
+%  \vspace{1.5cm}
+  \centerline{(b)}\medskip
+\end{minipage}
+%
+\caption{Multiple Inheritance: (a) C++ program, (b) class-inheritance graph}
+\label{fig:multiple-inheritance-graph}
+\end{figure}
+
+
+\begin{figure}[h]
 \centering
-%\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
-\caption{Multiple inheritance intermediate representation.}
+\begin{minipage}{0.9\textwidth}
+\begin{lstlisting}[style=nonumbers]
+cpp::struct.Derived
+    type:  struct
+      * name: cpp::struct.Derived
+components: 
+        0: 
+          * name: cpp::struct.Base1::@vtable_pointer
+        1: 
+          * name: cpp::struct.Base2::@vtable_pointer
+        2: 
+          * name: cpp::struct.Derived::@vtable_pointer
+\end{lstlisting}
+\end{minipage}
+\caption{Multiple Inheritance: Intermediate Representation}
 \label{figure:multiple-inheritance-IR}
-\end{figure*}
+\end{figure}
 
 This model transforms all the classes in structures and joins all methods and attributes of its parent classes.  This approach has the advantage in verification due the direct access, allowing an easier validation. On the other hand, we replicate information to any new class, wasting memory resources.
 The indirect inheritance:
 
-\begin{figure*}[ht]
-\centering
-%\includegraphics[scale=0.7]{figures/indirect-inheritance}
-\caption{Indirect inheritance: (a) C++ program, (b) class-inheritance graph.}
-\label{figure:indirect-inheritance}
-\end{figure*}
+\begin{figure}[h]
 
-\begin{figure*}[ht]
+\begin{minipage}[b]{.48\linewidth}
+\begin{lstlisting}
+class A {int tf;}
+class B: public A {int lf;}
+class C: public B {int rf;}
+\end{lstlisting}
+%  \vspace{1.5cm}
+  \centerline{(a)}\medskip
+\end{minipage}
+\label{figure:indirect-inheritance-code}
+%
+%\hfill
+\begin{minipage}[b]{.48\linewidth}
+  \centering
+  \centerline{\includegraphics[scale=0.6]{figures/indirect_inheritance.png}}
+%  \vspace{1.5cm}
+  \centerline{(b)}\medskip
+\end{minipage}
+%
+\caption{Indirect Inheritance: (a) C++ program, (b) class-inheritance graph}
+\label{fig:indirect-inheritance-graph}
+\end{figure}
+
+\begin{figure}[h]
 \centering
-%\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
-\caption{Indirect inheritance intermediate representation.}
+\begin{minipage}{0.9\textwidth}
+\begin{lstlisting}[style=nonumbers]
+cpp::struct.C
+    type:  struct
+      * name: cpp::struct.C
+components: 
+        0: 
+          * name: cpp::struct.B::@vtable_pointer
+        1: 
+          * name: cpp::struct.C::@vtable_pointer
+\end{lstlisting}
+\end{minipage}
+\caption{Multiple Inheritance: Intermediate Representation}
 \label{figure:indirect-inheritance-IR}
-\end{figure*}
+\end{figure}
 
 \subsection{Exception Handling}
 
@@ -912,6 +976,15 @@ and create a exception-free program. The exception-free program creation starts 
 The IECFG is refined using a algorithm based on a compact representation for a set of types called the Signed-TypeSet domain and the result is used 
 to generate the exception-free program. Finally, the exception-free program is verified using F-SOFT~\cite{Fsoft}. The verification focused on two properties:
 "no throw", the percentage of the code that does not raise an exception and "no leak", the number memory leaks on try-catch blocks.~\cite{PrabhuMBIG11}
+
+Jing Yang et al. present a translation tool called Class Hierarchy Representation Object Model Extension (CHROME) that is targeted towards 
+making static program analyzers for C++ easier to write and provide more precise results. This model makes a source-to-source transformation 
+from a C++ program with inheritance into a semantically equivalent without inheritance by treating the inheritance as separate memory regions 
+that are linked to each other via additional base class and derived class pointer fields. 
+This transformation comprises a clarifier which makes implicit C++ features explicit and the CHROME model. 
+This approach was verified with a bug finding tool called F-SOFT~\cite{Fsoft}. 
+CHROME has a different memory behavior from the original program and does not permit the use of low-level primitives like memset. 
+The CHROME-lowered C program is three to five times bigger than the size of the original program ~\cite{Yang12}.
 
 \section{Conclusions}
 %
@@ -1038,6 +1111,11 @@ R.~Brummayer and A.~Biere, ``Boolector: An efficient {SMT} solver for
 \bibitem{Z08}
 L.~M. de~Moura and N.~Bj{\o}rner, ``Z3: An efficient {SMT} solver,'' in
   \emph{Intl. Conf. on Tools and Algorithms for the Construction and Analysis of Systems (TACAS)}, LNCS 4963, pp. 337--340, 2008.
+
+\bibitem{Yang12}
+J.~Yang, G.~Balakrishman, N.~Maeda, F.~Ivan\v{c}i\'c, A.~Gupta, N.~Sinha, S.~Sankaranarayanan and N.~Sharma.
+\newblock {Object Model Construction for Inheritance in C++ and its Applications to Program Analysis}
+\newblock {\em International Conference on Compiler Construction (CC).} March 2012.
 
 \end{thebibliography}}
 
