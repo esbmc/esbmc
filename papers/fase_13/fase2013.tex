@@ -279,14 +279,12 @@ libraries such as classes, methods, and types while the features
 in ESBMC++ in different levels (i.e., scan, parser, and type-check).
 In this sense, we developed a simplified representation of the C++ libraries 
 called C++ Operational Model (COM) to represent the classes, methods, 
-and other features.
-
-The development process of the COM can be divided into two phases: \textit{structural} 
-and \textit{modeling}. In the structural phase, we built a set of classes with a specific 
-hierarchical relationship and the signature of their methods and specific data, 
-which resulted in a simplified structure to represent the set of the standard C++ libraries. 
-From this structure, we modeled the methods of each class and this modeling is focused 
-on the verification of all properties that a specific method includes.
+and other features. The development process of the COM can be split into 
+two phases: \textit{structural} and \textit{modeling}. In the structural phase, 
+we built a set of classes with a specific hierarchical relationship, the signature 
+of their methods, and specific data. In the modeling phase, we focus on the pre-
+and post-conditions and how these are used to verify real-world programs that 
+depend on the C++ libraries.
 
 %------------------------------
 \subsection{Structure and Model}
@@ -297,15 +295,16 @@ so that ESBMC++ can rely on it to identify the definitions and to verify all
 the properties related to these definitions. This operational model is inserted 
 into the verification process at the level of the source code (i.e., both model and 
 program are passed as parameters at the beginning of the verification process).
-The first step in the construction process of the operational model is the creation 
-of a simplified structure, which is similar to the actual structure. Based 
-on the documentation of the C++ language~\cite{CppReference12} the set of libraries 
-was split, according to their functionalities, into four subsets called C Libraries, 
-Input/Output Stream, Standard Template Libraries, and General Libraries. Each library 
-presents in a subset is particularly related to the other libraries, not only in its 
+The first step in the construction of the operational model is the creation 
+of a simplified structure, which is similar to the actual structure~\cite{CppReference12}. 
+
+Based on the documentation of the C++ language~\cite{CppReference12}, the set of libraries 
+was split, according to their functionalities, into four subsets called \textit{C libraries}, 
+\textit{input/output stream}, \textit{standard template libraries}, and \textit{general libraries}. 
+Each library presents in a subset is particularly related to the other libraries, not only in its 
 functionality but also in its structure due to the fact that many libraries depend on 
-definitions of others. From this, we performed an analysis in the respective subsets 
-as shown in Figure~\ref{figure:cpp-diagram} in such a way that we could identify dependencies 
+definitions of others. We performed an analysis in the respective subsets 
+as shown in Figure~\ref{figure:cpp-diagram} with the purpose of identifying dependencies 
 between each library and thus develop a simplified structure of each one. In the next sections, 
 we describe the structure of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
 %
@@ -329,8 +328,8 @@ define this libraries' set in a simplified structure, which consists
 essentially of macro definitions and functions. From this ANSI-C libraries' set, 
 there are libraries that contains only macro definitions (e.g., the \textit{ciso646} library 
 defines a spelling set to the logic operators). To build the structure of this 
-library, we distingue two kinds of spelling: we define the macro set and operators set. 
-For convention, we assume the macro set $M$ as follows: 
+library, we distingue between two kinds of spelling: macros and operators. 
+For convention, we assume the macros set $M$ as follows: 
 %
 \begin{eqnarray}
 \label{ciso646-macro-set}
@@ -368,18 +367,17 @@ library, which deals with signals that are emitted to a given code.
 We thus define that the operational model of this library can been represented 
 by signals that raise functions. For a vector $v$ of size $N$ and 
 for a finite signals set $S$ where $\left\{s_{1},\ldots, s_{n}\right\}\:\subset\:S$ 
-and $n < N$, the function signal records a certain function in one specific signal such that when 
-the raising function is called with the respective signal, the registered function 
-is called. Let $f$ be a function, $\varphi$ be a signal, and $\eta$ be a NULL element. 
-We can thus model the signal of the \textit{csginal} library as:
-%
+and $n < N$, the function signal records a certain function in one specific signal 
+such that when the raising function is called with the respective signal, 
+the registered function is called. Let $f$ be a function, $\varphi$ be a signal, 
+and $\eta$ be a NULL element. We can thus model the signal of the \textit{csginal} library as:
 %
 \begin{eqnarray}
 \label{c-csignal}
 \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \Rightarrow store\left(v,\varphi,f\right)
 \end{eqnarray}
 
-The raise function can be modeled as:  
+The raise function can be modeled in our operational model as:  
 %
 \begin{eqnarray}
 \label{r-csignal}
@@ -409,12 +407,13 @@ to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}.
 %-------------------------------------------
 
 The Standard Template Libraries (STL) is split into 
-four categories: \textit{algorithms}, \textit{numeric}, \textit{containers},
-and \textit{iterators}. The operational model of the \textit{algorithms} library 
-is composed by a set of algorithms related to manipulation 
-of STL containers, arrays and string objects. To given an idea of the basic 
-operations of this library, we describe the implemenation of the
-functions $find$ and $for\_each$ in our operational model. 
+four categories: \textit{algorithms}, \textit{numeric}, 
+\textit{containers}, and \textit{iterators}. The operational model 
+of the \textit{algorithms} library is composed by a set of algorithms 
+related to manipulation of STL containers, arrays and string objects. 
+To given an idea of the basic operations of this library, we describe 
+the implemenation of the functions $find$ and $for\_each$ in our 
+operational model. 
 
 The $find$ function looks for a certain element within a range while 
 $for\_each$ function applies a given function to a range. For this, 
@@ -443,10 +442,13 @@ The $find$ function can be modeled as:
 \label{eq:model-for-each}
 \end{equation}
 
-The operational model created to represent the Numeric category is formed by the numeric library and contains 4 algorithms that work 
-objectively in the manipulation of numerical sequences. One of the algorithms implemented in this model is called $accumulate$, whose main 
-functionality is to accumulate the values belonging a numerical sequence. In order to exemplify the implementation of this model, we assume 
-that $\alpha$ be an accumulator.We can thus model the $accumulate$ of the algorithm library as
+The operational model created to represent the category \textit{Numeric} is 
+composed by the \texit{numeric} library and contains four algorithms that work 
+objectively in the manipulation of numerical sequences. One of the algorithms 
+implemented in this model is called $accumulate$, whose main purpose is 
+to accumulate the values that belong to a numerical sequence. To given an exmample 
+of the implementation of this model, we assume that $\alpha$ is an accumulator.
+We can thus model the $accumulate$ of the algorithm library as
 
 \begin{equation}
 \left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
