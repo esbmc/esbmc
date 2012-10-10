@@ -423,23 +423,23 @@ represents the pointer to the beginning of the range, $last$ represents
 the pointer to the ending of the range, $n$ represents the number of elements 
 contained between $first$ and $last$, and $i$ represents a certain position 
 within the range. For the formalization of the $for\_each$ function, 
-we assume that $f$ is a function and for the $find$ function 
-we assume that $\alpha$ is a non-deterministic value, and $\beta$ 
-is a Boolean value that assumes $true$ if the element sought is contained 
-in the range and $false$ otherwise. We can thus model the $for\_each$ of the 
+we assume that $f$ be a pointer to function and for the $find$ function 
+we assume that $\alpha$ be a pointer to the value sought
+%, and $\beta$ is a Boolean value that assumes $true$ if the element sought is contained in the range and $false$ otherwise.
+ We can thus model the $for\_each$ of the 
 algorithm library as:
 %
 \begin{equation}
 \left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(\left(store\left(first, i+1, first_{i} + 1\right)\right) \wedge \left(f\left(first_{i}\right)\right)\right)
+\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right) \wedge \left(f\left(first_{i}\right)\right)
 \label{eq:model-for-each}
 \end{equation}
 
 The $find$ function can be modeled as:
 
 \begin{equation}\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(\left(store\left(first, i+1, first_{i} + 1\right)\right)\\ \wedge \left(ite\left(first_{i} = \alpha, \beta = 1,  \beta = 0\right)\right)\right)
-\label{eq:model-for-each}
+\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right)\\ \wedge \left(ite\left(first_{i} = \alpha, true,  false\right)\right)
+\label{eq:model-find}
 \end{equation}
 
 The operational model created to represent the category \textit{Numeric} is 
@@ -452,7 +452,7 @@ We can thus model the $accumulate$ of the algorithm library as
 
 \begin{equation}
 \left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(\left(store\left(first, i+1, first_{i} + 1\right)\right) \wedge \left(\alpha = \alpha + first_{i}\right)\right)
+\bigwedge^{n}_{i=0} \left(\left(first_{i+1} = first_{i} +1\right)\right) \wedge \left(\delta = \delta + first_{i}\right)
 \label{eq:accumulate}
 \end{equation}
 
@@ -702,21 +702,21 @@ stdexcept library can thus represented as:
 \end{equation}
 
 The General Libraries category also includes definitions about the manipulation of characters sequences, such definitions are implemented in 
-the library string. In the model constructed to represent this library, we implemented it structure through the class called string that contains 
+the $string$ library. In the model constructed to represent this library, we implemented it structure through the class called string that contains 
 the main features of the library, and the iterator class containing the representation of the iterator for strings. In general, we define the 
-string object as an array of char, so that all heuristics that must be observed in handling vectors are therefore approached in this model. 
+string object as array of char, so that all heuristics that must be observed in handling vectors are therefore approached in this model. 
 From of the principle that main operations implemented by this library are restricted to creation, insertion, deletion and search of elements 
 inside to object string, we take as example the creation and search operations to exemplify and formalize the model created for this library. 
-Therefore, firstly we assume $S$ as the set of string variables, $c$ as character non-deterministic, the set $\left\{n, i, pos, length\right\} \subset N$, 
-and we define that s representing a string, the same has two attributes: the string size described by $length$, and a character sequence that 
-represent it described by $str_{i}$, such that $i$ represent the position of some character inside to string. Keep this in mind, can be defined a 
-constructor method that creates a string containing $n$ times the character $c$ and, furthermore the find method that search a character within a 
-certain string from a given position described by $pos$. Therefore, we can model the respective $constructor$ of the string library as:
+Therefore, firstly we assume $S$ as the set of string variables, $\eta$ as $NULL$ element, $c$ as character non-deterministic, the set $\left\{n, i, pos, length\right\} \subset N$, 
+and we define that s representing a string, the same has two attributes: the string size described by $length$, a character sequence that 
+represent it described by $str$. Keep this in mind, can be defined a constructor method that creates a string containing $n$ times the 
+character $c$ and, furthermore the find method that search a character within a certain string from a given position described by $pos$. 
+Therefore, we can model the $constructor$ of the string library as:
 
 \begin{equation}
 \label{cconstructor-string}
 C := \left [ \begin{array}{ll} 
-                \bigvee^{n}_{j=0} str_{j} = store\left(str_{j}, i_{j}, c_{0}\right) 
+                \bigvee^{n}_{i=0} store\left(str, i, c_{0}\right) 
               \end{array} \right ]  \\ 
 \end{equation}
 %
@@ -726,7 +726,7 @@ P := \left [ \begin{array}{ll}
                 \left(i_{0} \geq 0\right)  \, \, \wedge \, \, \left(i_{0} < \left(n_{0} + 1\right)\right)\\
                 \ldots \\
                 \wedge \, \, \left(i_{n} \geq 0\right)  \, \, \wedge \, \, \left(i_{n} < \left(n_{0} + 1\right)\right)\\
-                \wedge \, \, c_{0} \neq 0\\
+                \wedge \, \, c_{0} \neq \eta\\
                 \wedge \, \, n_{0} > 0\\
               \end{array} \right ]  \\ 
 \end{equation}
@@ -736,16 +736,15 @@ The $find$ method can be modeled as:
 \begin{equation}
 \label{cfind-string}
 C := \left [ \begin{array}{ll} 
-                \left(c_{0} \neq \phi\right)\\
+                \left(c_{0} \neq \eta\right)\\
                 \wedge \, \, \left(0 \leq pos \leq length\right)\\
-                \wedge \, \, \left(0 \leq i_{n} \leq length\right)\\
               \end{array} \right ]  \\ 
 \end{equation}
 %
 \begin{equation}
 \label{pfind-string}
 P := \left [ \begin{array}{ll} 
-                \bigwedge^{length}_{j=0} str_{j+1} = ite\left(select\left(str_{j}, i_{j}\right) = c_{0}, i_{j}, -1\right)
+                \bigwedge^{length}_{i=0} ite\left(select\left(str, i\right) = c_{0}, i, -1\right)
               \end{array} \right ]  \\ 
 \end{equation}
 
@@ -766,14 +765,14 @@ We made an intermediate representation, see Figure~\ref{figure:multiple-inherita
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/multiple-inheritance}
+%\includegraphics[scale=0.7]{figures/multiple-inheritance}
 \caption{Multiple inheritance: (a) C++ program, (b) class-inheritance graph.}
 \label{figure:multiple-inheritance}
 \end{figure*}
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
+%\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
 \caption{Multiple inheritance intermediate representation.}
 \label{figure:multiple-inheritance-IR}
 \end{figure*}
@@ -783,14 +782,14 @@ The indirect inheritance:
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/indirect-inheritance}
+%\includegraphics[scale=0.7]{figures/indirect-inheritance}
 \caption{Indirect inheritance: (a) C++ program, (b) class-inheritance graph.}
 \label{figure:indirect-inheritance}
 \end{figure*}
 
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
+%\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
 \caption{Indirect inheritance intermediate representation.}
 \label{figure:indirect-inheritance-IR}
 \end{figure*}
