@@ -78,29 +78,29 @@ programs and support the features that the languages offers, such as templates,
 containers and exception handling.
 
 C++ is widely used, but systems that make use of the C++ language and its functionalities
-tend to require a high verification effort since the errors are hard to find. 
-C++ verification involves many more challenges than that of plain ANSI-C since 
-it provides a wider set of features (e.g., object-oriented
-programming), libraries (e.g., specialized input-output), and functionalities 
-(e.g., template usage) that would require too much effort to develop from scratch. 
-In order to be attractive for mainstream software development, C++ model checkers have 
-to exhibit several crucial characteristics (e.g., speed,
+tend to require a high verification effort since the errors are hard to find. C++
+verification involves many more challenges than that of plain ANSI-C since the language provides
+a wider set of features (e.g., object-oriented programming), libraries (e.g., specialized
+input-output), and functionalities (e.g., template usage). In order to be attractive for mainstream software development,
+C++ model checkers have to support these and at the same time exhibit several crucial characteristics (e.g., speed,
 accuracy, efficiency, and friendliness).
 
-To tackle this problem, our proposed approach aims to apply Bounded Model Checking (BMC) 
-to C++ programs using an operational model of the C++ libraries. This operational model 
-is an abstract representation of the standard C++ library, which conservatively approximates 
-its semantics. To support this operational mode, we extended our Efficient SMT-Based Bounded
-Model Checker (ESBMC) tool~\cite{Cordeiro12} that builds on the front-end of the C Bounded Model 
-Checker (CBMC) to support C++ features such as inheritance, polymorphism, templates, and 
-exception handling.
 
-In particular, we develop novel approaches to handle excpetions in C++ code that previous approaches
-are not able to deal with~\cite{Florian12,PrabhuMBIG11}. Additionally, we focus on the STL sequential 
-containers (which have the most popular data structures in Computing Science) operational model, 
-its preconditions and simulation features (e.g., how we store the elements values 
-of the containers and intern class methods), and how these are used in order to verify real-world 
-C++ programs.
+We propose to apply BoundedModel Checking
+(BMC) to C++ programs using an operational model of the C++ libraries. This
+operational model is an abstract representation of the standard C++ library, which conservatively
+approximates its semantics. To support this operational model, we extended
+our Efficient SMT-Based Bounded Model Checker (ESBMC) tool~\cite{Cordeiro12} that in turn builds on
+the front-end of the C Bounded Model Checker (CBMC) to support C++ features such
+as inheritance, polymorphism, templates, and exception handling.
+
+
+In particular, we develop novel approaches to handle exceptions in C++ code that
+previous approaches are not able to deal with~\cite{Florian12,PrabhuMBIG11}. 
+Additionally, we focus on the operational model of the
+sequential STL containers, its preconditions and simulation features (e.g., how we
+store the elements values of the containers), and how these are
+used in order to verify real-world C++ programs.
 
 %------------------------------
 \section{Background}
@@ -112,8 +112,8 @@ It can process C/C++ code into equivalent GOTO-programs
 processed by the symbolic execution engine. ESBMC++ uses CBMC's 
 internal parser, which is based on the OpenC++~\cite{OpenCpp12}, 
 to process the C/C++ files and to build an abstract syntax tree (AST). 
-The typechecker of ESBMC++’s front end annotates this AST with types and 
-generates a symbol table. ESBMC++’s IRep class then converts the annotated 
+The typechecker of ESBMC++'s front end annotates this AST with types and 
+generates a symbol table. ESBMC++'s IRep class then converts the annotated 
 AST into an internal, language-independent format used by the remaining phase 
 of the front-end.
 
@@ -123,11 +123,11 @@ properties (i.e., safety conditions and user-defined assertions).
 In addition, ESBMC++ automatically generates safety
 conditions that check for arithmetic overflow and underflow,
 array bounds violations, and NULL-pointer dereferences,
-in the spirit of Sites’ clean termination~\cite{Sites74}. Both
+in the spirit of Sites' clean termination~\cite{Sites74}. Both
 functions accumulate the control flow predicates to each
 program point and use these predicates to guard both the
 constraints and the properties so that they properly reflect
-the program’s semantics. ESBMC++’s VC generator (VCG) then
+the program's semantics. ESBMC++'s VC generator (VCG) then
 derives the VCs from these.
 
 %------------------------------
@@ -621,14 +621,14 @@ We made an intermediate representation, see Figure~\ref{figure:multiple-inherita
 
 \begin{figure*}[ht]
 \centering
-%\includegraphics[scale=0.7]{figures/multiple-inheritance}
+\includegraphics[scale=0.7]{figures/multiple-inheritance}
 \caption{Multiple inheritance: (a) C++ program, (b) class-inheritance graph.}
 \label{figure:multiple-inheritance}
 \end{figure*}
 
 \begin{figure*}[ht]
 \centering
-%\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
+\includegraphics[scale=0.7]{figures/multiple-inheritance-IR}
 \caption{Multiple inheritance intermediate representation.}
 \label{figure:multiple-inheritance-IR}
 \end{figure*}
@@ -638,14 +638,14 @@ The indirect inheritance:
 
 \begin{figure*}[ht]
 \centering
-%\includegraphics[scale=0.7]{figures/indirect-inheritance}
+\includegraphics[scale=0.7]{figures/indirect-inheritance}
 \caption{Indirect inheritance: (a) C++ program, (b) class-inheritance graph.}
 \label{figure:indirect-inheritance}
 \end{figure*}
 
 \begin{figure*}[ht]
 \centering
-%\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
+\includegraphics[scale=0.7]{figures/indirect-inheritance-IR}
 \caption{Indirect inheritance intermediate representation.}
 \label{figure:indirect-inheritance-IR}
 \end{figure*}
