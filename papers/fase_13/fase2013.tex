@@ -25,16 +25,15 @@
 %\mainmatter  % start of an individual contribution
 
 \title{SMT-Based Bounded Model Checking of C++ Programs}
-%\title{Context-Bounded Symbolic Model Checking with ESBMC 1.17}
-%\title{SMT-Based Bounded Model Checking of C++ Programs}
 %\subtitle{(Competition Contribution)}
 %\titlerunning{}
-\comment{
-\author{Lucas Cordeiro$^1$ \and
-	Jeremy Morse$^2$   \and
-	Denis Nicole$^2$   \and
+\author{Mikhail Ramalho$^1$ 	\and
+	Felipe Rodrigues$^1$   	\and
+	Hendrio Marques$^1$   	\and
+	Mauro Lopes$^1$   	\and
+	Lucas Cordeiro$^1$   	\and
 	Bernd Fischer$^2$}
-\authorrunning{Lucas Cordeiro, Jeremy Morse, Denis Nicole, Bernd Fischer}
+\authorrunning{Mikhail Ramalho, Felipe Rodrigues, Hendrio Marques, Mauro Lopes, Lucas Cordeiro, Bernd Fischer}
 \institute{
   $^1$ Electronic and Information Research Center, %\\
   Federal University of Amazonas, Brazil\\
@@ -45,7 +44,6 @@
   %\url{{jcmm106,dan,bf}@ecs.soton.ac.uk}
   %\url{http://www.ecs.soton.ac.uk}
   \url{esbmc@ecs.soton.ac.uk}
-}
 }
 
 \maketitle
@@ -661,13 +659,14 @@ pointed by the iterator.
 
 The \textit{General Libraries} category is split in three 
 sub-categories: \textit{language support}, \textit{diagnostics}, 
-and \textit{general utilities}. The language support category is compose by four 
-libraries that deal with exception handling (i.e., exception library), 
-types information (i.e., typeinfo library), dynamic allocation of memory 
-(i.e., new library), and numeric limits (i.e., limits library). 
-The diagnostic category is composed by the stdexcept library, which implements 
-standard exceptions (i.e., logic and runtime errors). Figure~\ref{figure:stdexcept}
-shows the hierarchical structure of the stdexcept library.
+and \textit{general utilities}. The category \textit{language support} 
+is compose by four libraries that deal with exception handling 
+(i.e., exception library), types information (i.e., typeinfo library), 
+dynamic allocation of memory (i.e., new library), and numeric limits 
+(i.e., limits library). The category \textit{diagnostic} is composed by 
+the \textit{stdexcept} library, which implements standard exceptions 
+(e.g., logic and runtime errors). Figure~\ref{figure:stdexcept}
+shows the hierarchical structure of the \textit{stdexcept} library.
 
 \begin{figure*}[ht]
 \centering
@@ -676,13 +675,14 @@ shows the hierarchical structure of the stdexcept library.
 \label{figure:stdexcept}
 \end{figure*}
 
-To define the types of errors, we assume that $e$ represents an element within the set 
-$E$ such that for each $e$ exists one class $\varphi$ that represents the erro given that all 
-$\varphi$ contains a constructor that sets a message to be thrown if there is any errors during 
-the program execution. To identify these errors during the verification, whenever one of the 
+To define the types of errors in the \textit{stdexcept} library, we assume that 
+$e$ represents an element within the set $E$ such that for each $e$ exists one class 
+$\varphi$ that represents the erro. Thus, $\varphi$ contains a constructor that sets an 
+error message to be thrown if there is any errors during the program execution. 
+To identify these errors during the verification, whenever one of the 
 constructors of these classes is called, an $assert(0)$ is throwing, which forces ESBMC++ to 
-identify this error and report it in the counter-example. We can thus represent the model 
-of the stdexcept library as:
+identify this error and report it in the counter-example. The operational model of the 
+stdexcept library can thus represented as:
 
 \begin{equation}
 \label{kind-of-exceptions}
