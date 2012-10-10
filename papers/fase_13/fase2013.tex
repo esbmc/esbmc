@@ -410,17 +410,28 @@ to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}.
 \subsection{Standard Template Libraries}
 %-------------------------------------------
 
-This set is subdivided in four categories: Algorithms, Numeric, Containers and Iterators. The algorithm library is the only one that composes 
-the Algorithms categories. The operational model of this library is formed by $66$ functions that present a lot of algorithms related to 
-manipulation of STL containers, arrays and string objects. The operation of this model can be illustrated by the formalization of the 
-functions $find$ and $for\_each$. The find function looking for a certain element within a range and $for\_each$ function applies each 
-element of a range in a certain function. For this, we assume that $\eta$ be a NULL element and $I$ represent a range, such that 
-$\left\{first, last, n, i\right\}\:\subset\:I$, so that $first$ represent the pointer to beginning of range, $last$ represent the pointer to ending of range, 
-$n$ be the number of elements contained between $first$ and $last$, and $i$ be a certain position within the range. Furthermore, by 
-virtue of formalization of the $for\_each$ function we assume $f$ be a function and by virtue of formalization of the $find$ function 
-we assume that $\alpha$ be a non-deterministic value and $\beta$ be a boolean value that assume $true$ if the element sought is contained 
-in the range and $false$ otherwise. We can thus model the $for\_each$ of the algorithm library as:
-\\
+The Standard Template Libraries (STL) is split into 
+four categories: \textit{algorithms}, \textit{numeric}, \textit{containers},
+and \textit{iterators}. The operational model of the \textit{algorithms} library 
+is composed by a set of algorithms related to manipulation 
+of STL containers, arrays and string objects. To given an idea of the basic 
+operations of this library, we describe the implemenation of the
+functions $find$ and $for\_each$ in our operational model. 
+
+The $find$ function looks for a certain element within a range while 
+$for\_each$ function applies a given function to a range. For this, 
+we assume that $\eta$ is a $NULL$ element and $I$ represents a range, 
+such that $\left\{first, last, n, i\right\}\:\subset\:I$. $first$ 
+represents the pointer to the beginning of the range, $last$ represents 
+the pointer to the ending of the range, $n$ represents the number of elements 
+contained between $first$ and $last$, and $i$ represents a certain position 
+within the range. For the formalization of the $for\_each$ function, 
+we assume that $f$ is a function and for the $find$ function 
+we assume that $\alpha$ is a non-deterministic value, and $\beta$ 
+is a Boolean value that assumes $true$ if the element sought is contained 
+in the range and $false$ otherwise. We can thus model the $for\_each$ of the 
+algorithm library as:
+%
 \begin{equation}
 \left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
 \bigwedge^{n}_{i=0} \left(\left(store\left(first, i+1, first_{i} + 1\right)\right) \wedge \left(f\left(first_{i}\right)\right)\right)
