@@ -659,33 +659,31 @@ pointed by the iterator.
 \subsection{General Libraries}
 %---------------------------------
 
-There is a libraries' set that performing more specific functions in the context of the C++ Standard Libraries. 
-In order to build the operational model about this libraries' set we defined a category that represent it. 
-This category is called General Libraries and is subdivide in four particular categories: Language Support, 
-Diagnostics and General Utilities.
-The Language Support category is compose by four libraries that work respectively with
-exception handling (exception library), types information (typeinfo library), dynamic allocation of memory (new library) and 
-numeric limits (limits library). The model of each library contains an structure formed by classes, specific types, methods
-and functions, however the limits library is one exception, seeing that it implements the definitions
-related to numeric elements, therefore, your structure is formed by one class with the numeric
-elements definitions and eight functions for manipulate this elements. The verification of all properties related to libraries 
-is implemented utilizing assertives within each model.A lot of functionalities related to
-exception handling, dynamic allocation of memory and types information have been implement in the
-ESBMC's kernel, however is important to have one representation about the libraries relationship to
-this functionalities so that ESBMC is capable of identify all methods and definitions related to same.
+The \textit{General Libraries} category is split in three 
+sub-categories: \textit{language support}, \textit{diagnostics}, 
+and \textit{general utilities}. The language support category is compose by four 
+libraries that deal with exception handling (i.e., exception library), 
+types information (i.e., typeinfo library), dynamic allocation of memory 
+(i.e., new library), and numeric limits (i.e., limits library). 
+The diagnostic category is composed by the stdexcept library, which implements 
+standard exceptions (i.e., logic and runtime errors). Figure~\ref{figure:stdexcept}
+shows the hierarchical structure of the stdexcept library.
 
 \begin{figure*}[ht]
 \centering
 \includegraphics[scale=0.23]{figures/stdexcept.eps}
-\caption{Diagram about hierarchical structure pf the stdexcept library.}
+\caption{Diagram about hierarchical structure of the stdexcept library.}
 \label{figure:stdexcept}
 \end{figure*}
 
-The stdexcept library is the only one the form the Diagnostic category, seeing that it
-implements kind of standard exceptions divide in two subcategories: logic errors and runtime errors. The relationship between 
-classes that represent the Diagnostic category builded in the operational model is really similiar to real and can be observed 
-in the Figure \ref{figure:stdexcept}. To build it model, we defined the exception set $E$ assuming that
- 
+To define the types of errors, we assume that $e$ represents an element within the set 
+$E$ such that for each $e$ exists one class $\varphi$ that represents the erro given that all 
+$\varphi$ contains a constructor that sets a message to be thrown if there is any errors during 
+the program execution. To identify these errors during the verification, whenever one of the 
+constructors of these classes is called, an $assert(0)$ is throwing, which forces ESBMC++ to 
+identify this error and report it in the counter-example. We can thus represent the model 
+of the stdexcept library as:
+
 \begin{equation}
 \label{kind-of-exceptions}
 \left\{ \begin{array}{ll} 
@@ -693,11 +691,6 @@ in the Figure \ref{figure:stdexcept}. To build it model, we defined the exceptio
         \end{array} \right\} \subset E
 \end{equation}
 
-furthermore we assume that $e$ represent an element within the set $E$ such that for each $e$ exist one class $\varphi$ that 
-represent it, being that all $\varphi$ contains a constructor that sets a message to be thrown if there is any errors during 
-the program execution. In order to identify this errors in the verification, whenever one of the constructors of these classes is 
-called, one $assert(0)$ is throwing, forcing the ESBMC to identify this error and report it in the counterexample.
-Therefore we can represent the model of the stdexcept library as:
 
 \begin{equation}
 \label{stdexcept}
