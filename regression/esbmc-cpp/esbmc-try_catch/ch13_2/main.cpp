@@ -1,6 +1,7 @@
 // Fig. 13.2: fig13_02.cpp
 // Demonstrating exception rethrowing.
 #include <iostream>
+#include <cassert>
 using std::cout;
 using std::endl;
 
