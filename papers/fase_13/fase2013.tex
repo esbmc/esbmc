@@ -106,29 +106,168 @@ used in order to verify real-world C++ programs.
 \section{Background}
 %------------------------------
 
-ESBMC++ implements BMC for C++ programs using SMT solvers. 
-It can process C/C++ code into equivalent GOTO-programs 
-(i.e., control-flow graphs). The GOTO-programs can then be 
-processed by the symbolic execution engine. ESBMC++ uses CBMC's 
-internal parser, which is based on the OpenC++~\cite{OpenCpp12}, 
-to process the C/C++ files and to build an abstract syntax tree (AST). 
-The typechecker of ESBMC++'s front end annotates this AST with types and 
-generates a symbol table. ESBMC++'s IRep class then converts the annotated 
-AST into an internal, language-independent format used by the remaining phase 
-of the front-end.
+ESBMC++ builds on the front-end of CBMC to generate the VCs for a given C++ program
+and on the back-end of ESBMC to encode the VCs using different background theories 
+and SMT solvers. In this section, we describe the main features of CBMC that we use, 
+and present the background theories used in the back-end of ESBMC.
 
-ESBMC++ uses two recursive functions that compute the
-constraints (i.e., assumptions and variable assignments) and
-properties (i.e., safety conditions and user-defined assertions).
-In addition, ESBMC++ automatically generates safety
-conditions that check for arithmetic overflow and underflow,
-array bounds violations, and NULL-pointer dereferences,
-in the spirit of Sites' clean termination~\cite{Sites74}. Both
-functions accumulate the control flow predicates to each
-program point and use these predicates to guard both the
-constraints and the properties so that they properly reflect
-the program's semantics. ESBMC++'s VC generator (VCG) then
+%------------------------------------------------------
+\subsection{C Bounded Model Checker}
+\label{02-CBoundedModelChecker}
+%------------------------------------------------------
+
+CBMC implements BMC for ANSI-C/C++ programs using SAT/SMT solvers~\cite{Clarke04}. 
+It can process C/C++ code using the goto-cc tool~\cite{Wintersteiger09}, 
+which compiles the C/C++ code into equivalent GOTO-programs (i.e., control-flow graphs) 
+using a gcc-compliant style. The GOTO-programs can then be processed by the symbolic 
+execution engine. Alternatively, CBMC uses its own, internal parser based on Flex/Bison, 
+to process the C/C++ files and to build an abstract syntax tree (AST). The typechecker 
+of CBMC's front-end annotates this AST with types and generates a symbol table. CBMC's 
+IRep class then converts the annotated AST into an internal, language-independent format 
+used by the remaining phase of the front-end. 
+
+CBMC uses two recursive functions that compute the \textit{constraints} 
+(i.e., assumptions and variable assignments) and \textit{properties} 
+(i.e., safety conditions and user-defined assertions). In addition, 
+CBMC automatically generates safety conditions that check for 
+arithmetic overflow and underflow, array bounds violations, 
+and NULL-pointer dereferences, in the spirit of Site's clean 
+termination~\cite{Sites74}. Both functions accumulate the control 
+flow predicates to each program point and use these predicates 
+to guard both the constraints and the properties, so that they properly 
+reflect the program's semantics. CBMC's VC generator (VCG) then 
 derives the VCs from these.
+
+%------------------------------------------------------
+\subsection{Satisfiability Modulo Theories}
+\label{02-SatisfiabilityModuloTheories}
+%------------------------------------------------------
+
+SMT decides the satisfiability of first-order formulae using a
+combination of different background theories and thus generalizes propositional
+satisfiability by supporting uninterpreted functions, linear and non-linear
+arithmetic, bit-vectors, tuples, arrays, and other decidable first-order
+theories. Given a theory ${\cal T}$ and a quantifier-free formula $\psi$, we
+say that $\psi$ is $\cal T$-satisfiable if and only if there exists a structure
+that satisfies both the formula and the sentences of ${\cal T}$, or
+equivalently, if ${\cal T}\cup \{\psi\}$ is satisfiable~\cite{Bradley07}. Given
+a set $\Gamma\cup \{\psi\}$ of formulae over $\cal T$, we say that $\psi$ is a
+$\cal T$-consequence of $\Gamma$, and write $\Gamma\models_{\cal T}\psi$, if
+and only if every model of ${\cal T}\cup\Gamma$ is also a model of $\psi$.
+Checking $\Gamma\models_{\cal T}\psi$ can be reduced in the usual way to
+checking the $\cal T$-satisfiability of $\Gamma\cup\{\neg\psi\}$.
+
+The SMT-LIB initiative~\cite{smtlib09} aims at establishing a common standard 
+for the specification of background theories, but most SMT solvers provide functions 
+in addition to those specified in the SMT-LIB. Therefore, we describe here the fragments 
+that we found in the SMT solvers Boolector, CVC3, and Z3 for the theory of linear, non-linear, 
+and bit-vector arithmetic. We summarize the syntax of these background theories as follows, 
+using standard notations where appropriate:
+
+\[\begin{array}{r@{\:\:}c@{\:\:}l}
+\\[-5ex]
+\mathit{F}  & ::= & \mathit{F} \: \mathit{con} \: \mathit{F} \:
+                    | \: \neg\mathit{F} \:
+                    | \: A \\
+\mathit{con}  & ::= & \: \wedge \: 
+                    | \: \vee \: 
+                    | \: \oplus \:
+                    | \: \Rightarrow \:
+                    | \: \Leftrightarrow \: \\                    
+\mathit{A} & ::= &  \mathit{T} \: \mathit{rel} \: \mathit{T} \:
+                    | \: \mathit{Id} \: | \: true \: | \: false \\
+\mathit{rel}  & ::= & \: < \: 
+                    | \: \leq \: 
+                    | \: > \: 
+                    | \: \geq
+                    | \: = \: 
+                    | \: \neq \: \\
+\mathit{T}  & ::= &  \mathit{T} \: op \: \mathit{T} \: 
+                    | \: \sim T \:
+                    | \: \mathit{ite}(\mathit{F}, \: \mathit{T}, \mathit{T}) \: 
+                    | \: \mathit{Const} \: 
+                    | \: \mathit{Id} \: | \\  
+              &   & \mathit{Extract}(T, i, j) 
+                    | \: \mathit{SignExt}(T, k)
+                    | \: \mathit{ZeroExt}(T, k) \\
+\mathit{op}   & ::= & + \: 
+                    | \: - \: 
+                    | \: * \: 
+                    | \: / \: 
+                    | \: rem \: 
+                    | \: \texttt{<<} \: 
+                    | \: \texttt{>>} \: 
+                    | \: \texttt{\&} \: 
+                    | \: \texttt{|} \: 
+                    | \: \oplus \: 
+                    | \: @ \:  
+\end{array}
+\]
+
+\noindent 
+Here, $F$ denotes Boolean-valued expressions with atoms $A$, and $T$ denotes terms
+built over integers, reals, and bit-vectors.
+%%% using the binary operators \emph{op}. 
+The logical connectives $\mathit{con}$ consist of conjunction
+($\wedge$), disjunction ($\vee$), exclusive-or ($\oplus$), implication
+($\Rightarrow$), and equivalence ($\Leftrightarrow$). 
+The bit-level operators are and
+(\texttt{\&}), or (\texttt{|}), exclusive-or ($\oplus$), complement ($\sim$),
+right-shift (\texttt{>>}), and left-shift (\texttt{<<}).
+$\mathit{Extract}\left(T, i,j\right)$ denotes bit-vector extraction from bits
+\textit{i} down to \textit{j} to yield a new bit-vector of size  $i-j+1$ while
+$@$ denotes the concatenation of the given bit-vectors.
+$\mathit{SignExt}\left(T, k\right)$ extends a bit-vector of size $w$ 
+to the signed
+equivalent bit-vector of size $w+k$, 
+while $\mathit{ZeroExt}\left(T, k\right)$ extends the bit-vector
+with zeros to the unsigned equivalent bit-vector of size $w+k$. The conditional
+expression $\mathit{ite}(f, t_1, t_2)$ takes a Boolean formula $f$ and
+depending on its value selects either the second or the third argument. 
+The interpretation of the
+relational operators (i.e., $<$, $\leq$, $>$, $\geq$), the non-linear
+arithmetic operators $*$, $/$, remainder (\emph{rem}) and the right-shift
+operator (\texttt{>>}) depends on whether their arguments are unsigned or
+signed bit-vectors, integers or real numbers.  The arithmetic operators 
+induce checks to ensure that the arithmetic operations do not overflow
+and/or underflow. 
+
+The array theories of SMT solvers are typically based on the 
+McCarthy axioms~\cite{McCarthy62}. The function \emph{select(a, i)} 
+denotes the value of $a$ at index position $i$ and \emph{store(a, i, v)} 
+denotes an array that is exactly the same as array $a$ except that the 
+value at index position $i$ is $v$. %%% (if $i$ is within the array bounds). 
+Formally, the functions \emph{select} and \emph{store} can then be characterized 
+by the following two axioms~\cite{CVC07,Boolector09,Z08}:
+%
+\[
+\begin{array}{l}
+  i=j      \Rightarrow select\left(store\left(a,i,v\right),j\right)=v \\
+  i \neq j \Rightarrow select\left(store\left(a,i,v\right),j\right)=select\left(a,j\right)
+\end{array}
+\]
+
+\noindent
+Note that array bounds checks need to be encoded separately; the array theories employ 
+the notion of unbounded arrays size, but arrays in software are typically of bounded size. 
+\noindent Equality on array elements is defined by the theory of equality with uninterpreted
+functions (i.e., $a = b \wedge i = j \Rightarrow select\left(a,i\right) = select\left(b,j\right)$)
+and the extensional theory of arrays then allows reasoning about array equality as follows~\cite{CVC07,Boolector09,Z08}:
+\[
+\begin{array}{l}
+  a = b    \Leftarrow  \forall i \cdot select\left(a,i\right) = select\left(b,i\right)  \\
+  a \neq b \Rightarrow \exists i \cdot select\left(a,i\right) \neq select\left(b,i\right)
+\end{array}
+\]
+
+\noindent
+Tuples are used to model the ANSI-C union and struct datatypes. They provide
+\mbox{store} and \mbox{select} operations similar to those in arrays, but work
+on the tuple \mbox{elements}. Each field of the tuple is represented by an
+integer constant. Hence, the expression $\mathit{select}(t, f)$ denotes the field $f$
+of tuple $t$ while the expression $\mathit{store}(t, f, v)$ denotes a tuple $t$
+that at field $f$ has the value $v$ and all other fields remain the
+same.
 
 %------------------------------
 \section{C++ Operational Model}
@@ -784,6 +923,15 @@ Acknowledgments here (Lucas)...
 {\begin{thebibliography}{10}
 \vspace{-0.5ex}
 
+\bibitem{Bradley07}
+A.~R. Bradley and Z.~Manna, \emph{The Calculus of Computation: Decision
+  Procedures with Applications to Verification}.\hskip 1em plus 0.5em minus
+  0.4em\relax Springer, 2007.
+
+\bibitem{Wintersteiger09}
+C.~Wintersteiger, \emph{Compiling GOTO-Programs},
+  http://www.cprover.org/goto-cc/, 2009.
+
 \bibitem{Sites74}
 R.~L. Sites, ``Some thoughts on proving clean termination of programs.''
   Stanford, CA, USA, Tech. Rep., 1974.
@@ -865,6 +1013,26 @@ Reference of the C++ Language Library, http://www.cplusplus.com/reference/, 2012
 F.~Ivancic, I.~Shlyakhter, A.~Gupta, M.~Ganai, V.~Kahlon, C.~Wang, Z.~Yang.
 \newblock {Model Checking C programs using F-Soft.}
 \newblock {\em IEEE International Conference on Computer Design.} pp.\ 297--308, October, 2005.
+
+\bibitem{CVC07}
+C.~Barrett and C.~Tinelli, ``{CVC}3,'' in \emph{Intl. Conf. on Computer Aided Verification (CAV}, LNCS 4590, pp. 298--302, 2007.
+
+\bibitem{smtlib09}
+{SMT}-LIB, \emph{The Satisfiability Modulo Theories Library},
+  http://combination.cs.uiowa.edu/smtlib, 2009.
+
+\bibitem{McCarthy62}
+J.~Mccarthy, ``Towards a mathematical science of computation,'' in \emph{
+  IFIP Congress}.\hskip 1em plus 0.5em minus 0.4em\relax North-Holland,
+  pp. 21--28, 1962.
+
+\bibitem{Boolector09}
+R.~Brummayer and A.~Biere, ``Boolector: An efficient {SMT} solver for
+  bit-vectors and arrays,'' in \emph{Intl. Conf. on Tools and Algorithms for the Construction and Analysis of Systems (TACAS)}, LNCS 5505, pp. 174--177, 2009.
+
+\bibitem{Z08}
+L.~M. de~Moura and N.~Bj{\o}rner, ``Z3: An efficient {SMT} solver,'' in
+  \emph{Intl. Conf. on Tools and Algorithms for the Construction and Analysis of Systems (TACAS)}, LNCS 4963, pp. 337--340, 2008.
 
 \end{thebibliography}}
 
