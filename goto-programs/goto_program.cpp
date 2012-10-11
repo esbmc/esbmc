@@ -155,10 +155,13 @@ std::ostream& goto_programt::output_instruction(
         it->code.find("exception_list").get_sub();
 
       for(irept::subt::const_iterator
-          it=exception_list.begin();
-          it!=exception_list.end();
-          it++)
-        out << " " << it->id();
+          t_it=exception_list.begin();
+          t_it!=exception_list.end();
+          t_it++)
+      {
+      	if(t_it!=exception_list.begin()) out << ",";
+        out << " " << t_it->id();
+      }
     }
 
     if(it->code.operands().size()==1)
