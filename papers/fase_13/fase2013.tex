@@ -73,7 +73,7 @@ with growing system complexity, SAT solvers are increasingly
 replaced by Satisfiability Modulo Theories (SMT) solvers to prove the generated 
 verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.\
 There have also been attempts to extend BMC to the verification of C++ 
-programs~\cite{Blanc07,Florian12}. The main challenge here is to handle large 
+programs~\cite{Florian12,Yang12}. The main challenge here is to handle large 
 programs and support the features that the languages offers, such as templates, 
 containers and exception handling.
 
@@ -96,7 +96,7 @@ as inheritance, polymorphism, templates, and exception handling.
 
 
 In particular, we develop novel approaches to handle exceptions in C++ code that
-previous approaches are not able to deal with~\cite{Florian12,PrabhuMBIG11}. 
+previous approaches are not able to deal with~\cite{Blanc07,Florian12,PrabhuMBIG11}. 
 Additionally, we focus on the operational model of the
 sequential STL containers, its preconditions and simulation features (e.g., how we
 store the elements values of the containers), and how these are
@@ -824,12 +824,9 @@ cpp::struct.Derived
     type:  struct
       * name: cpp::struct.Derived
 components: 
-        0: 
-          * name: cpp::struct.Base1::@vtable_pointer
-        1: 
-          * name: cpp::struct.Base2::@vtable_pointer
-        2: 
-          * name: cpp::struct.Derived::@vtable_pointer
+        0: name: cpp::struct.Base1::@vtable_pointer
+        1: name: cpp::struct.Base2::@vtable_pointer
+        2: name: cpp::struct.Derived::@vtable_pointer
 \end{lstlisting}
 \end{minipage}
 \caption{Multiple Inheritance: Intermediate Representation}
@@ -872,10 +869,8 @@ cpp::struct.C
     type:  struct
       * name: cpp::struct.C
 components: 
-        0: 
-          * name: cpp::struct.B::@vtable_pointer
-        1: 
-          * name: cpp::struct.C::@vtable_pointer
+        0: name: cpp::struct.B::@vtable_pointer
+        1: name: cpp::struct.C::@vtable_pointer
 \end{lstlisting}
 \end{minipage}
 \caption{Multiple Inheritance: Intermediate Representation}
@@ -1060,6 +1055,17 @@ implemented with a bug finding tool called F-SOFT~\cite{Fsoft}. CHROME has a
 different memory behavior from the original program and does not allow the use 
 of low-level primitives like \textit{memset}. The CHROME-lowered C program is 
 three to five times bigger than the size of the original program ~\cite{Yang12}.
+
+Blanc et~al.\ describes the verification of C++ programs (that use the STL containers)
+via predicate abstraction~\cite{Blanc07}. They make use of abstract data types for the STL 
+usage verification rather than the actual STL implementation and behavior~\cite{Blanc07}. 
+Blanc et~al.\ show that it suffices to verify correctness using an operational model 
+by proving that the pre-conditions on operations in the model imply the pre-conditions 
+guaranteed by the language definition for those operations; similarly, the post-conditions 
+given by the standard imply the strongest post-conditions for the operational model. 
+This approach is very efficient in finding elemental errors in a C++ program, but it lacks 
+on a deeper seach for bugs and misleading operations (in particular, those that involve internal 
+modeling of the methods).
 
 \section{Conclusions}
 %
