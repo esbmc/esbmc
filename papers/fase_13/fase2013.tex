@@ -964,12 +964,12 @@ for the code that was inside the try block, ESBMC++ will continue
 untill it finds a throw expression. When this happens, ESBMC++ will 
 look at the map for a valid catch for the exception thrown, if it finds 
 a valid catch, the label will be saved for now and handled later; 
-if it was unable to find an exception an error will be shown to the user. 
+if it was unable to find an exception an error will be shown.
 ESBMC++ will also ignore any other throw or goto instruction after 
 the first throw is found but will continue to verify all the try 
 block code. When the second CATCH is found, which means that the try 
 block ended, the catch map is unstacked for memory efficiency 
-and the GOTO instruction is updated if necessary.
+and the GOTO instruction is updated if needed.
 
 \subsubsection{Throwing and Catching an Exception.}
 A C++ code can throw an exceptions in several situations other 
@@ -1005,9 +1005,24 @@ one of the following rules is true, the code will jump from the throw expression
        instruction if one exists.
 \end{itemize}
 
-\subsubsection{Rethrows.}
+\subsubsection{Rethrows.} Another feature that C++ provides for exception handling is the rethrow. The rethrow is an expression formed by
+a throw with no argument. The rethrow function is to throw the last thrown exception so it can be handled further. To handle rethrows, 
+ESBMC++ always keeps a pointer to the last thrown exception and when it finds an throw without arguments (rethrow) it checks if this pointer
+is not NULL, if it is NULL than the code is trying to rethrow an exception without a previous throw. If the pointer is not NULL than we have
+a valid last thrown exception and the rethrow expression is replaced by a throw expression with the last expection as argument.
 
-\subsubsection{Exception Specifications.}
+\subsubsection{Exception Specification.} The exception specifications define which exceptions a function or method (including constructors
+and desctructors) can throw. Alongside a method or function declaration a throw expression containing the exceptions list can define none or
+multiple exceptions, which will forbid that any exception that is not in the exception specification to go out the function or method. Note 
+that an exception can still be handled inside a try-catch block inside the funcion or method even if it isn't on the exception specification.
+
+The exception specification is handled inside ESBMC++ by inserting a THROW\_DECL instruction after the declaration of each function or method.
+On the symbolic execution phase, the exception specification is stacked and removed on the END\_FUNCTION instruction by the end of every 
+function or method. The idea for stacking the exception specification is the same for catch maps, ESBMC++ may find function calls to other
+function and they may also have their own exception specifications. Finally, when an exception is thrown, ESBMC++ checks if there is an
+exception specification currently valid and if the exception thrown is allowed to be thrown outside the function. If it is allowed, the 
+exception handling follows and try to look for an match on the catch map or will return an error, otherwise.
+
 
 \section{Experimental Results}
 %
