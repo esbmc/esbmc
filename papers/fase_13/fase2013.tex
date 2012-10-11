@@ -1021,6 +1021,29 @@ exception handling follows and try to look for an match on the catch map or will
 %-----------------------------------
 \section{Experimental Results}
 %-----------------------------------
+The experimental results is divided in two parts. The setup is described on section 4.1, followed by a comparison between ESBMC++ and LLBMC using a benchmark provided by the authors.
+
+\subsection{Experimental Setup}
+
+The benchmark used on the tests consist in 1113 test cases. Around 290 tests come from the Deitel Book~\cite{Deitel} and the others were developed to test all the features the C++ provides. The test suite is divided in 9 modules:
+
+\begin{itemize}
+ \item Algorithm: Tests involving algorithm lib.
+ \item Cpp: General tests.
+ \item Deque: Tests involving deque lib.
+ \item Inheritance: Tests involving inheritance and polymorphism.
+ \item List: Tests involving list lib.
+ \item Stream: Tests involving I/O stream libs.
+ \item String: Tests involving string lib.
+ \item Try\_catch: Tests involving exception Handling
+ \item Vector: Tests involving vector lib.
+\end{itemize}
+
+All the experiments were conducted on an otherwise idle Intel Core i7-2600, 3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules, the individual time limit and memory limit for each test has been set to 900 seconds (15 minutes) and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured using the unix time command.
+
+\subsection{Comparison to LLBMC}
+
+This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. The ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarize the results.
 
 \begin{table*}[t]
 \renewcommand\arraystretch{1.18}
@@ -1233,6 +1256,11 @@ L.~M. de~Moura and N.~Bj{\o}rner, Z3: An efficient {SMT} solver.
 J.~Yang, G.~Balakrishman, N.~Maeda, F.~Ivan\v{c}i\'c, A.~Gupta, N.~Sinha, S.~Sankaranarayanan and N.~Sharma.
 \newblock {Object Model Construction for Inheritance in C++ and its Applications to Program Analysis.}
 \newblock In {\em CC}, LNCS 7210, pp. 144--164, 2012.
+
+\bibitem{Deitel}
+P.~Deitel, H.~Deitel
+\newblock {C++ How to Program}
+\newblock Prentice Hall, 5th Edition, 2006.
 
 \end{thebibliography}}
 
