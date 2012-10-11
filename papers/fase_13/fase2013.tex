@@ -881,108 +881,80 @@ components:
 
 \subsection{Exception Handling}
 
-One of the features that C++ provides over C is exception handling. The exceptions are unexpected situations on the program, situations 
-that the program was not designed to handle. On C++, the exception handling is divided in two blocks: a try block and a catch block. 
-
-The try block contains the code that is expected to run without errors and on the catch block, the code to handle errors from the try 
-block. The connection between the two blocks is made by a throw expression. The throw statement is an expression of type void that 
-invokes the handler from inside the try block and accepts one parameter, which is passed as parameter to the handler.
-
-The exception handling brings a lot of advantages to the C++ development, because it allows the separation between code and error 
-handling code. Futhermore, the exceptions propagates up in the stack, meaning that if a C++ program calls several functions, only 
-one of than needs to handle the exceptions thrown.
+One of the features that C++ provides is the exception handling. The exceptions are unexpected situations on the program, situations 
+that the program was not designed to handle. Basically, the exception handling is divided in three elements: a try block, where an 
+exception may occur, a catch block, where an exception can be handled and a throw expression to connect the two blocks. The 
+Figure~\ref{figure:try-catch-example} shows an example of a C++ code with exception handling.
 
 \begin{figure}[ht]
 \centering
-\begin{minipage}{0.7\textwidth}
+\begin{minipage}{1.0\textwidth}
 \begin{lstlisting}
 int main() {
   // try block
   try {
-    throw 20;
+    // throw expression
+    throw 20; 
   }
   // catch block
-  catch (int) { /* error handling */ }
+  catch (int) { /* error handling for integer exceptions */ }
+  catch (float) { /* error handling for float exceptions */ }
   return 0;
 }
 \end{lstlisting}
 \end{minipage}
-\caption{Try-catch example: Throwing an int type.}
+\caption{Try-catch example: Throwing an integer exception.}
 \label{figure:try-catch-example}
 \end{figure}
 
-\subsubsection{Throwing an Catching an Exception.}
-
-There are also other ways to an exception be thrown by an program, other than the throw statement, such as the new operator can throw 
-bad\_alloc exception, dynamic\_cast can throw bad\_cast exception and typeid can throw bad\_typeid exception. Also those exception are 
-builtin on C++ and are supposed to be handled by the programmer during the development.
-
-When throwing an exception the control and all the information are transferred to the handler. The rules to connect the exception with it´s
-handler are defined on the C++ standard draft~\cite{CppDraft} as follow:
-
-\begin{itemize}
- \item The handler that will catch the exception will be the first catch with a matching type.
- \item A handler will catch a exception thrown if the type of the throw and the type of the handler are the same (ignoring const-volatile
-       qualifiers.
- \item Throwing "arrays of type T" and "functions returning type T" with be handled by handles with "pointer to type T" 
-       and "pointer to function returning type T" types.
- \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T.
- \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
-       qualification conversion or standard pointer conversion.
- \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it.
- \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block.
-\end{itemize}
-
-\subsubsection{Rethrows and Exception Specifications.}
-
-C++ also provides features as rethrows and exception specifications. The rethrows allows us to rethrow the last thrown exception, 
-as shown on Figure~\ref{figure:try-catch-example-rethrowing-an-int-type}. Rethrows are useful for propagating the exception up in stacks with lots of try-catch blocks.
+On ESBMC++, the exception handling happens on two steps: during the typechecking phase and the symbolic execution phase. On the 
+typechecking phase, an AST is builded based on the code inside the try block, with a few adaptations: before the code inside the 
+try block starts, a CATCH instruction with a empty map (which will be filled later on the typechecking) is inserted, followed by
+the code inside the try block, another CATCH instruction (to represent the end of the try block and the beginning of the catch block)
+and a GOTO instruction pointing to the code after the catch block. This GOTO will only change if an exception is thrown, otherwise 
+it will remain the same.
+After typechecking the try block, ESBMC++ typechecks the catch block that will contain one or more catchs. Again, the AST will be 
+created by based on the code inside the catchs with only one adaptation: a GOTO instruction is inserted by the end of each catch code
+pointing to the code after the catchs. Each catch code will receive an label so ESBMC++ can decide which catch should be called 
+during the symbolic execution phase if an exception is thrown. By the end of the catch block verification, the map of the first 
+CATCH instruction inserted before the try block code is filled with the label created for each catch mapped on the type of exception.
+The Figure~\ref{figure:try-catch-goto} shows the code from Figure~\ref{figure:try-catch-example} already converted.
 
 \begin{figure}[ht]
 \centering
-\begin{minipage}{0.7\textwidth}
+\begin{minipage}{1.0\textwidth}
 \begin{lstlisting}
-int main() {
-  try {
-    throw 20;
-  }
-  catch(...)  { 
-    throw; // Rethrows type int
-  }
-  return 0;
-}
+main() (c::main):
+   CATCH signed_int->1, float->2
+  
+   THROW signed_int: 20
+
+   CATCH 
+   GOTO 3
+
+1: int #anon;
+   /* error handling for integer exceptions */
+   GOTO 3
+
+2: float #anon;
+   /* error handling for float exceptions */
+
+3: return 0;
+
+END_FUNCTION
 \end{lstlisting}
 \end{minipage}
-\caption{Try-catch example: Rethrowing an int type.}
-\label{figure:try-catch-example-rethrowing-an-int-type}
+\caption{Try-catch conversion to goto functions.}
+\label{figure:try-catch-goto}
 \end{figure}
 
-Exception specifications define which exceptions a function or method can throw. Figure~\ref{figure:try-catch-example-allowing-that-only-int-type-can-be-thrown} shows an example of exception specifications
-usage. They are useful when we want to forbid that certain types of exceptions can be thrown, for example, we can define that an function
-or method cannot throw any exception.
-
-\begin{figure}[ht]
-\centering
-\begin{minipage}{0.7\textwidth}
-\begin{lstlisting}
-// This function can only throw int types
-void x() throw (int) { 
-  throw 20;
-}
-int main() {
-  try {
-    x()
-  }
-  catch(...)  { 
-    throw; // Rethrows type int
-  }
-  return 0;
-}
-\end{lstlisting}
-\end{minipage}
-\caption{Try-catch example: Allowing that only int type can be thrown.}
-\label{figure:try-catch-example-allowing-that-only-int-type-can-be-thrown}
-\end{figure}
+During the symbolic execution phase, when the first CATCH instruction is found, the catch map is stacked for later usage. The idead behind
+using an stack is that we may have try-catch blocks inside other try-catchs block and ESBMC++ should always handle the most internal first.
+Following the symbolic execution for the code that was inside the try block, ESBMC++ will continue untill it finds a throw expression. When
+this happens, ESBMC++ will look on the map for a valid catch for the exception thrown, if it finds a valid catch, the label will be saved
+for now and handled later, if it couldn't find an exception an error will be shown to the user. ESBMC++ will also ignore any other 
+throw or goto instruction after the first throw is found but will continue to verify all the try block code. When the second CATCH is found,
+which means that the try block ended, the catch map is unstacked for memory efficiency and the GOTO instruction is updated if necessary.
 
 \section{Experimental Results}
 %

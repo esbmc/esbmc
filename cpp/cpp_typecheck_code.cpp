@@ -147,6 +147,7 @@ void cpp_typecheckt::typecheck_catch(codet &code)
     {
       const code_blockt &code_block=to_code_block(block);
       assert(code_block.operands().size()>=1);
+
       const codet &first_instruction=to_code(code_block.op0());
       assert(first_instruction.get_statement()=="decl");
 
