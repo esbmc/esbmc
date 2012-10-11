@@ -682,18 +682,18 @@ shows the hierarchical structure of the \textit{stdexcept} library.
 \begin{figure*}[ht]
 \centering
 \includegraphics[scale=0.23]{figures/stdexcept.eps}
-\caption{Diagram about hierarchical structure of the stdexcept library.}
+\caption{Diagram about the hierarchical structure of the \textit{stdexcept} library.}
 \label{figure:stdexcept}
 \end{figure*}
 
 To define the types of errors in the \textit{stdexcept} library, we assume that 
 $e$ represents an element within the set $E$ such that for each $e$ exists one class 
 $\varphi$ that represents the erro. Thus, $\varphi$ contains a constructor that sets an 
-error message to be thrown if there is any errors during the program execution. 
+error message to be thrown if there is an error during the program execution. 
 To identify these errors during the verification, whenever one of the 
-constructors of these classes is called, an $assert(0)$ is throwing, which forces ESBMC++ to 
+constructors of these classes is called, an $assert(0)$ is thrown, which forces ESBMC++ to 
 identify this error and report it in the counter-example. The operational model of the 
-stdexcept library can thus represented as:
+\textit{stdexcept} library can thus represented as:
 
 \begin{equation}
 \label{kind-of-exceptions}
@@ -710,22 +710,36 @@ stdexcept library can thus represented as:
 \Rightarrow assert\left(0\right)\right)
 \end{equation}
 
-The General Libraries category also includes definitions about the manipulation of characters sequences, such definitions are implemented in 
-the $string$ library. In the model constructed to represent this library, we implemented it structure through the class called string that contains 
-the main features of the library, and the iterator class containing the representation of the iterator for strings. In general, we define the 
-string object as array of char, so that all heuristics that must be observed in handling vectors are therefore approached in this model. 
-From of the principle that main operations implemented by this library are restricted to creation, insertion, deletion and search of elements 
-inside to object string, we take as example the creation and search operations to exemplify and formalize the model created for this library. 
-Therefore, firstly we assume $S$ as the set of string variables, $\eta$ as $NULL$ element, $c$ as character non-deterministic, the set $\left\{n, i, pos, length\right\} \subset N$, 
-and we define that s representing a string, the same has two attributes: the string size described by $length$, a character sequence that 
-represent it described by $str$. Keep this in mind, can be defined a constructor method that creates a string containing $n$ times the 
-character $c$ and, furthermore the find method that search a character within a certain string from a given position described by $pos$. 
-Therefore, we can model the $constructor$ of the string library as:
+The category \textit{general libraries} also includes definitions 
+about the manipulation of characters sequences. Such definitions 
+are implemented in the \textit{string} library. In our operational 
+model, we implemented the main features of the \textit{string}
+library through the iterator class that contains the 
+representation of the iterator for strings. In general, 
+we define the string object as an array of \textit{char} so that all 
+heuristics that must be observed in handling arrays are therefore 
+treated in this model. The main operations implemented by this library 
+are restricted to creation, insertion, deletion and search of elements 
+inside to object string. 
 
+As an example, we describe the implementation of the creation and search 
+operations. Firstly, we assume $S$ as the set of string variables, 
+$\eta$ as $NULL$ element, $c$ as a non-deterministic character, 
+the set $\left\{n, i, pos, length\right\} \subset N$, 
+and we define that $s$ represents a string, which has two attributes: 
+the string size described by $length$ and a character sequence that 
+represents it described by $str$. A constructor method can be defined 
+that creates a string containing $n$ times the character $c$. The method 
+\textit{find} that searchs a character within a certain string from a 
+given position described by $pos$. We can thus model the $constructor$ 
+of the string library as:
+%
 \begin{equation}
 \label{cconstructor-string}
 C := \left [ \begin{array}{ll} 
-                \bigvee^{n}_{i=0} store\left(str, i, c_{0}\right) 
+                str_{1} = store\left(str_{0}, i_{0}, c_{0}\right) \wedge i_{1} = i_{0} + 1  \\
+		\ldots \\
+		\wedge \, \, str_{n} = store\left(str_{n-1}, i_{n-1}, c_{0}\right)
               \end{array} \right ]  \\ 
 \end{equation}
 %
