@@ -385,22 +385,27 @@ The raise function can be modeled in our operational model as:
 \label{r-csignal}
 \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(v,\varphi\right) \neq \eta\right) \Rightarrow select\left(v,\varphi\right)  
 \end{eqnarray}
-\\
-
 
 %---------------------------------------------
 \subsection{Input / Output Stream Libraries}
 %---------------------------------------------
 
-In the process of building the operational model is really important to define a class structure closest to the real, so that from it the ESBMC++ can correctly identify the relationships between classes in a given program and thus can introduce such relationships in building of the AST. Keeping that in mind, we elaborated a hierarchical structure really similar to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}. In general, we can exemplify the implementations for the input data through formalization the operator $>>$, assuming $\eta$ be a NULL element and $\omega$ be a given variable. We can thus model as:
-%
-%
-\begin{eqnarray}
-\label{input-stream}
-C := \left[\omega \neq \eta\right] 
-\end{eqnarray}
+To build the operational model, it is important 
+to define a class structure that is as close as to the 
+real implementation so that ESBMC++ can correctly identify 
+the relationships between classes in a given program and 
+then introduce such relationships to build the AST. 
+We have thus elaborated a hierarchical structure for the
+input/output (I/O) stream library that is similar to the actual 
+one (as shown in Figure~\ref{figure:cpp-inputoutputdiagram}). 
+In our I/O stream operational model, the input operator $>>$ 
+is simply modelled as a non-deterministic variable and we do not check 
+any safety property. Similarly, the output operator $<<$ does not 
+present any contraints or properties to be checked since
+we do not check whether a given value has been printed on the screen
+(ESBMC++ is interested in checking only the properties related to 
+software and not that of hardware).
 
-To this operator there isn't property to be checked in terms of verification, furthermore, the values assigned to $\omega$ are considered non-deterministic. Similarly, the operator data output $<<$ not presents restrictions or properties to be checked, because it isn't necessary to check if a value has been printed or not, since the ESBMC++ checks only the properties of software and not hardware.
 
 \begin{figure*}[ht]
 \centering
