@@ -962,7 +962,7 @@ try-catchs block and ESBMC++ should always handle
 the most internal first. Following the symbolic execution 
 for the code that was inside the try block, ESBMC++ will continue 
 untill it finds a throw expression. When this happens, ESBMC++ will 
-look on the map for a valid catch for the exception thrown, if it finds 
+look at the map for a valid catch for the exception thrown, if it finds 
 a valid catch, the label will be saved for now and handled later; 
 if it was unable to find an exception an error will be shown to the user. 
 ESBMC++ will also ignore any other throw or goto instruction after 
