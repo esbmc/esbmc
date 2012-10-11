@@ -32,10 +32,10 @@
 \author{Mikhail Ramalho$^1$ 	\and
 	Felipe Rodrigues$^1$   	\and
 	Hendrio Marques$^1$   	\and
-	Mauro Lopes$^1$   	\and
+	Mauro Freitas$^1$   	\and
 	Lucas Cordeiro$^1$   	\and
 	Bernd Fischer$^2$}
-\authorrunning{Mikhail Ramalho, Felipe Rodrigues, Hendrio Marques, Mauro Lopes, Lucas Cordeiro, Bernd Fischer}
+\authorrunning{Mikhail Ramalho, Felipe Rodrigues, Hendrio Marques, Mauro Freitas, Lucas Cordeiro, Bernd Fischer}
 \institute{
   $^1$ Electronic and Information Research Center, %\\
   Federal University of Amazonas, Brazil\\
@@ -776,16 +776,28 @@ P := \left [ \begin{array}{ll}
 
 \subsection{Inheritance and Polymorphism}
 
-Modeling C++ features like inheritance makes static analysis difficult to implement. We highlight the difficult in relation to other
-object-oriented languages, such as Java, the hierarchy of classes. C++ allows multiple inheritance, when a class may inherit from
-one or more classes, disallowing the direct use of tools already created for other languages like Java.
-When a class inherits from a base class features not virtual, this is called replicated inheritance. If a class inherits from a base
-class virtual, has the name of shared inheritance.
-A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG).
-This graph G is formed of a tuple $<$ \textbf{C},  $\prec s$, $\prec r >$,\textbf{C} being the set of classes. $
-\prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq
-\textbf{C} \times \textbf{C}$, are replicated inheritance edge. E $\prec_{sr} = \prec_s \bigcup \prec_r$.
+Modeling C++ features like inheritance and polymorphism make static analysis difficult to
+implement.
+Inheritance is one of the main benefits of object-oriented which allows a class (derived class)
+absorbs data and behavior
+from existing classes (base class) and enhances it with new features.
+This is the vital concept behind the creation of reusable software and has received
+much attention because is one of the promissing ways to improve software quality.
 
+C++ and Java allow single inheritance, when derived classes have only one base class.
+In addition, C++ allows multiple inheritance, when a class may inherit from
+one or more base classes, probably not related. This is a difficult in relation to other
+object-oriented languages, such as Java, disallowing the direct use of tools already created for other
+languages.
+
+When a class inherits from a base class features not virtual, this is called replicated inheritance. If exists a path from class X to class Y
+whose first edge is virtual, we call this a shared inheritance.
+A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
+This graph $\zeta$ is formed of a tuple $<\textbf{C},  \prec_{s}, \prec_{r}>$, \textbf{C} being the set of classes. $
+\prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
+\textbf{C} \times \textbf{C}$, are replicated inheritance edge. $\prec_{s}$ and $\prec_{r}$ is the set of edges representing inheritance relationship between classes.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$), being $\leq_{sr}$ a partially ordered set.
+A class X is said to be base class of another Y iff exists a nonempty path from X to Y in the CHG.
 
 We made an intermediate representation, see Figure~\ref{figure:multiple-inheritance-IR}.
 
@@ -833,7 +845,33 @@ components:
 \label{figure:multiple-inheritance-IR}
 \end{figure}
 
-This model transforms all the classes in structures and joins all methods and attributes of its parent classes.  This approach has the advantage in verification due the direct access, allowing an easier validation. On the other hand, we replicate information to any new class, wasting memory resources.
+This model transforms all the classes in structures and joins all methods and attributes of its parent classes.  This approach has the advantage in verification due the direct access,
+allowing an easier validation. On the other hand, we replicate information to any new class, wasting memory resources.
+
+Polymorphism permits variable instances to be bound to references of different types according to the
+structure of the inheritance hierarchy ~\cite{Alexander02}. It is the principle whereby two or more derived classes from the same base class can invoke
+methods with same signature but distinct behaviors, specialized for each derived class, using for this one reference to each object of this base class type.
+The decision of which method must be used, according to the type of the derived class, is choosen in execution timing using the late binding (falta citação).
+The advantage is creation of reusable code by programmers by changing only specific features from the base class.
+
+
+
+Our tool does not support dynamic cast.
+
+
+% Polymorphism is a mechanism whereby we can abstract over type. It is the principle whereby two or more derived classes from the same base class can invoke
+% methods with same signature but distinct behaviors. For instance, we can write polymorphism in Napier~\cite{Morrison87,MorrNap87} as
+%
+% \begin{equation}
+% \label{polymorphism-eq}
+% let\;id = proc [t:type] (x : t \rightarrow t);\;x
+% \end{equation}
+%
+% Id procedure is parametrised by the type into brackets from t to t. Thus this procedure is in fact an infinite number of identity procedures which implements several types.
+% The advantage of the polymorphic abstraction reside in the context of software re-use. Using this feature we can write one procedure for all types, instead of different one
+% for each type.
+% Thereby this feature improves the complexity for static verification.
+
 The indirect inheritance:
 
 \begin{figure}[h]
@@ -1261,6 +1299,23 @@ J.~Yang, G.~Balakrishman, N.~Maeda, F.~Ivan\v{c}i\'c, A.~Gupta, N.~Sinha, S.~San
 P.~Deitel, H.~Deitel
 \newblock {C++ How to Program}
 \newblock Prentice Hall, 5th Edition, 2006.
+
+\bibitem{Alexander02}
+R. T.~Alexander, J.~Offutt and J. M.~Bieman. .
+\newblock {Fault Detection Capabilities of Coupling-based OO Testing}
+\newblock {\em In Proceedings of the 13th International Symposium on Software Reliability Engineering (ISSRE '02)} pp. 207-. 2002,
+IEEE Computer Society, Washington, DC, USA.
+
+% \bibitem{Morrison87}
+% R.~Morrison, A. L.~Brown, R.~Carrick and R. C. H.~Connor
+% \newblock {Polymorphism, persistence and software re-use in a strongly typed object-oriented environment.}
+% \newblock {\em Softw. Eng. J. 2, 6. } pp.\ 199-204, November, 1987.
+%
+% \bibitem{MorrNap87}
+% R.~Morrison
+% \newblock {Napier language reference manual}.
+% \newblock {\em Universit of St. Andrews } Scotland, 1987.
+
 
 \end{thebibliography}}
 
