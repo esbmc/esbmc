@@ -760,14 +760,17 @@ The $find$ method can be modeled as:
 \label{cfind-string}
 C := \left [ \begin{array}{ll} 
                 \left(c_{0} \neq \eta\right)\\
-                \wedge \, \, \left(0 \leq pos \leq length\right)\\
               \end{array} \right ]  \\ 
 \end{equation}
 %
 \begin{equation}
 \label{pfind-string}
 P := \left [ \begin{array}{ll} 
-                \bigwedge^{length}_{i=0} ite\left(select\left(str, i\right) = c_{0}, i, -1\right)
+	       \left(pos \leq 0\right)\\
+               \wedge \, \, \left(pos < length\right)\\
+               \wedge \, \, ite\left(select\left(str, i\right) = c_{0}, i, -1\right)\\
+	       ...\\
+	       \wedge \, \, ite\left(select\left(str, i\right) = c_{0}, i, -1\right)\\
               \end{array} \right ]  \\ 
 \end{equation}
 
