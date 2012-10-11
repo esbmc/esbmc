@@ -1026,29 +1026,29 @@ exception handling follows and try to look for an match on the catch map or will
 \renewcommand\arraystretch{1.18}
 \setlength{\tabcolsep}{4pt}
 \begin{center} {\small
-\begin{tabular}{|c|l|r|r|r|r|r|r|r|r|r|r|r|r|r|r|r|}
+\begin{tabular}{|c|l|r|r||r|r|r|r|r|r|r|r|r|r|r|r|r|r|}
 \hline 
-  & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\\hline 
-  & Testsuite & $N$  & Time & P   & FP  & FN  & crash & TO  & MO & Time & P   & FP  & FN  & crash & TO  & MO \\\hline
-1 & try\_catch & 67 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\
+  & & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\  \cline{5-18}
+  & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & crash & TO  & MO & Time & P   & FP  & FN  & crash & TO  & MO \\\hline
+1 & try\_catch & 67 & & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\
 \hline
-2 & vector & 146 & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & 252 & 118 & 17 & 3 & 4 & 0 & 4\\
+2 & vector & 146 & & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & 252 & 118 & 17 & 3 & 4 & 0 & 4\\
 \hline
-3 & string & 231 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 34 & 122 & 4 & 105 & 0 & 0 & 0\\
+3 & string & 231 & & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 34 & 122 & 4 & 105 & 0 & 0 & 0\\
 \hline
-4 & stream & 66 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\
+4 & stream & 66 & & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\
 \hline
-5 & list & 54 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 79 & 28 & 10 & 16 & 0 & 0 & 0\\
+5 & list & 54 & & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 79 & 28 & 10 & 16 & 0 & 0 & 0\\
 \hline
-6 & inheritance & 40 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 42 & 33 & 1 & 2 & 3 & 0 & 1\\
+6 & inheritance & 40 & & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 42 & 33 & 1 & 2 & 3 & 0 & 1\\
 \hline
-7 & deque & 43 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 1054 & 30 & 5 & 1 & 0 & 1 & 6\\
+7 & deque & 43 & & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 1054 & 30 & 5 & 1 & 0 & 1 & 6\\
 \hline
-8 & algorithm & 127 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
+8 & algorithm & 127 & & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
 \hline
-9 & cpp & 339 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
+9 & cpp & 339 & & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
 \hline\hline 
-  &     &  1113 & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & 8066 & 698 & 79 & 215 & 90 & 8 & 23 \\
+  &     &  1113 & & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & 8066 & 698 & 79 & 215 & 90 & 8 & 23 \\
 \hline
 \end{tabular} }
 \end{center}
