@@ -971,36 +971,37 @@ block code. When the second CATCH is found, which means that the try
 block ended, the catch map is unstacked for memory efficiency 
 and the GOTO instruction is updated if necessary.
 
-\subsubsection{Throwing an Catching an Exception.}
-A C++ code can throw an exceptions in several situations other than explicit throw exception: (a) the new operator can throw a bad\_alloc
-exception, (b) the operator dynamic_cast can throw bad\_cat exception and the typeid funtion can throw bad\_typeid exception. Those 
-exceptions are builtin on C++ and are supposed to be handled by the program.
-On the C++ draft standard~\cite{CppDraft} several rules are defined on how an exception thrown is connected to an catch (called handlers),
-everytime an exception is thrown and one of the following rules ia true, the code will jump from the throw expression to the catch code:
+\subsubsection{Throwing and Catching an Exception.}
+A C++ code can throw an exceptions in several situations other 
+than explicit throw exception: (a) the new operator can throw a \textit{bad\_alloc}
+exception, (b) the operator \textit{dynamic$\_$cast} can throw \textit{bad\_catch} 
+exception and the \textit{typeid} funtion can throw \textit{bad\_typeid} exception. 
+Those exceptions are built-in on C++ and are supposed to be handled by the program.
+On the C++ draft standard~\cite{CppDraft} several rules are defined of how an exception 
+thrown is connected to a catch (called handlers), everytime an exception is thrown and 
+one of the following rules is true, the code will jump from the throw expression to the catch code:
 
 \begin{itemize}
  \item The handler that will catch the exception will be the first catch with a matching type: ESBMC++ mantains a list with the order of
        the catchs and always gets the catch with the lower value.
- \item A handler will catch a exception thrown if the type thrown and the type of the handler are the same (ignoring const-volatile
+ \item A handler will catch an exception thrown if the type thrown and the type of the handler are the same (ignoring const-volatile
        qualifiers: ESBMC++ simply looks for the type of the exception in the catch map and update the GOTO instruction if it founds a 
-       match or returns an error otherwise.
+       match or returns an error otherwise).
  \item Throwing ''arrays of type T'' and ''functions returning type T'' with be catched by handlers with ''pointer to type T'' and 
-       ''pointer to function returning type T'' types: the conversion is made on the typechecking phase and the throw expression throws 
+       ''pointer to function returning type T'' types: the conversion is made on the type-checking phase and the throw expression throws 
        two exceptions: ''array of type T'' and ''pointer of type T'', and ''function returning type T'' and ''pointer to function returning 
        type T'', respectively. The handler that will catch the exception thrown will be defined by the first rule in cases of multiple
        matchs.
  \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T: The conversion is similar
        to the conversion of the last rule but in this case several exception may be thrown: the type of the object and the type of it's 
        bases. Again, the handler will be defined by the first rule in cases of multiple matchs.
- \item The handler will catch an exception of type pointer T if T´s type can be converted to the type of the handler, either by 
-       qualification conversion or standard pointer conversion: Similar to the last rules, on the typechecking phase the possible 
+ \item The handler will catch an exception of type pointer T if T's type can be converted to the type of the handler, either by 
+       qualification conversion or standard pointer conversion: Similar to the last rules, on the type-checking phase the possible 
        conversions based on the catchs types will be thrown with the original pointer type, with the handler being defined by the first rule
        in cases of multiple matchs.
- \item If the exception throw is a pointer then a handler with type void* or nullptr\_t can also catch it: during the symbolic execution
-       phase, if no match is found on the map and the exception thrown is a pointer, we look for a void* or nullptr\_t catch and update the
-       GOTO instruction. If the pointer had a match this rules is ignored.
+ \item If the exception throw is a pointer then a handler with type \textit{void*} or \textit{nullptr\_t} can also catch it: during the symbolic execution phase, if no match is found on the map and the exception thrown is a pointer, we look for a \textit{void*} or \textit{nullptr\_t} catch and update the GOTO instruction. If the pointer had a match this rules is ignored.
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block: Similar to the 
-       last rule but works for every type, if no match is found, ESBMC++ looks for an handler of type ellipsis and update the GOTO 
+       last rule but works for every type, if no match is found, ESBMC++ looks for a handler of type ellipsis and update the GOTO 
        instruction if one exists.
 \end{itemize}
 
