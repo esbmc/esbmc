@@ -387,22 +387,28 @@ The raise function can be modeled in our operational model as:
 \end{eqnarray}
 \\
 
+
+%---------------------------------------------
+\subsection{Input / Output Stream Libraries}
+%---------------------------------------------
+
+In the process of building the operational model is really important to define a class structure closest to the real, so that from it the ESBMC++ can correctly identify the relationships between classes in a given program and thus can introduce such relationships in building of the AST. Keeping that in mind, we elaborated a hierarchical structure really similar to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}. In general, we can exemplify the implementations for the input data through formalization the operator $>>$, assuming $\eta$ be a NULL element and $\omega$ be a given variable. We can thus model as:
+%
+%
+\begin{eqnarray}
+\label{input-stream}
+C := \left[\omega \neq \eta\right] 
+\end{eqnarray}
+
+To this operator there isn't property to be checked in terms of verification, furthermore, the values assigned to $\omega$ are considered non-deterministic. Similarly, the operator data output $<<$ not presents restrictions or properties to be checked, because it isn't necessary to check if a value has been printed or not, since the ESBMC++ checks only the properties of software and not hardware.
+
 \begin{figure*}[ht]
 \centering
-\includegraphics[scale=0.22]{figures/inputoutputdiagram}
-\caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.}
+\includegraphics[scale=0.24]{figures/inputoutputdiagram}
+\caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.
+Dotted gray square represents the library, white square represents the class and dark gray square represents the access objects.}
 \label{figure:cpp-inputoutputdiagram}
 \end{figure*}
-
-\subsection{Input / Output Stream Libraries}
-%
-
-The libraries group related to flow control of input and output data inside to certain program is represented for the libraries set 
-called Input / Output Stream. Aiming to build the operational model of this set, we elaborated a hierarchical structure really similar 
-to real that can be observed in Figure \ref{figure:cpp-inputoutputdiagram}.
-\\
-%to do formalization
-\\
 
 %-------------------------------------------
 \subsection{Standard Template Libraries}
