@@ -793,13 +793,14 @@ languages.
 When a class inherits from a base class features not virtual, this is called replicated inheritance. If exists a path from class X to class Y
 whose first edge is virtual, we call this a shared inheritance.
 A formal description to represent the relationship between the classes can be described by the Class Hierarchy Graph (CHG). 
-This graph $\zeta$ is formed of a tuple $<\textbf{C},  \prec_{s}, \prec_{r}>$, \textbf{C} being the set of classes. $
-\prec_s \subseteq \textbf{C} \times \textbf{C}$, referring to shared inheritance edges and $\prec_r \subseteq 
-\textbf{C} \times \textbf{C}$, are replicated inheritance edge. $\prec_{s}$ and $\prec_{r}$ is the set of edges representing inheritance relationship between classes.
-$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$), being $\leq_{sr}$ a partially ordered set.
-A class X is said to be base class of another Y iff exists a nonempty path from X to Y in the CHG.
+This graph $\zeta$ is formed of a tuple $ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} being the set of classes. $
+\prec_s $, referring to shared inheritance edges and $\prec_r$, are replicated inheritance edge. 
+$\prec_{s}$ and $\prec_{r}$ is the set of edges representing inheritance relationship between classes and $\subseteq \textbf{C} \times \textbf{C}$.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$) a partially ordered set and $\leq_{sr}$ antisymmetric.
 
-We made an intermediate representation, see Figure~\ref{figure:multiple-inheritance-IR}.
+Our tool creates an intermediate representation. For instance, Figure~\ref{figure:multiple-inheritance-IR} shows an multiple inheritance with two sub-objects: 
+($\textbf{C}, <Derived, Base1>)$ 
+and ($\textbf{C}, <Derived, Base2>)$.
 
 \begin{figure}[h]
 
@@ -845,17 +846,23 @@ components:
 \label{figure:multiple-inheritance-IR}
 \end{figure}
 
-This model transforms all the classes in structures and joins all methods and attributes of its parent classes.  This approach has the advantage in verification due the direct access,
-allowing an easier validation. On the other hand, we replicate information to any new class, wasting memory resources.
+This model transforms all the classes in structures and joins all methods and attributes of its parent classes. This approach has the advantage in verification due the direct access,
+allowing an easier validation, as the tool must not look for attributes or methods from base classes on each access. 
+On the other hand, we replicate information to any new class, wasting memory resources.
+
+
 
 Polymorphism permits variable instances to be bound to references of different types according to the
 structure of the inheritance hierarchy ~\cite{Alexander02}. It is the principle whereby two or more derived classes from the same base class can invoke
 methods with same signature but distinct behaviors, specialized for each derived class, using for this one reference to each object of this base class type.
 The decision of which method must be used, according to the type of the derived class, is choosen in execution timing using the late binding (falta citação).
 The advantage is creation of reusable code by programmers by changing only specific features from the base class.
-
-
-
+%explicar como a ferramenta trata polimorfismo, utilizar diagrama UML.
+%Inicialização rapida de construtor
+%Herança virtual
+%Explicar herança virtual com diagramas
+%Explicar destrutor virtual
+%Nao suporta dynamic_cast
 Our tool does not support dynamic cast.
 
 
