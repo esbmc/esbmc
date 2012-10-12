@@ -778,37 +778,38 @@ P := \left [ \begin{array}{ll}
 \section{Inheritance and Polymorphism}
 %------------------------------------------------
 
-Modeling C++ features like inheritance and polymorphism 
+Modeling C++ features like inheritance and polymorphism
 make static analysis difficult to implement.
 Inheritance is one of the main benefits of object-oriented paradigm,
 which allows a class (derived class) absorbs data and behavior
 from existing classes (base class) and thus enhances it with new features.
 This is the vital concept behind the creation of reusable software components
-and has received much attention because it is one of the promissing ways to 
+and has received much attention because it is one of the promissing ways to
 improve software quality.
 
 C++ and Java allow single inheritance, when derived classes have only one base class.
+
 Additionally, C++ allows multiple inheritance, when a class may inherit from
-one or more base classes (probably not related). This is a particular feature 
-that makes it harder to model check C++ programs in relation to other 
+one or more base classes (probably not related). This is a particular feature
+that makes it harder to model check C++ programs in relation to other
 object-oriented programming languages (e.g., Java). It also disallows
 the direct use of tools already created to other programming languages.
 
-If a class inherits from a base class that does not contain virtual methods, 
-then we call this as \textit{replicated inheritance}. If there is a path from 
+If a class inherits from a base class that does not contain virtual methods,
+then we call this as \textit{replicated inheritance}. If there is a path from
 class X to class Y whose first edge is virtual, then we call this as \textit{shared inheritance}.
-A formal description to represent the relationship between the classes 
-can be described by the class hierarchy graph (CHG). This graph $\zeta$ is composed of a tuple 
-$ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} is the set of classes, 
-$\prec_s $ refers to shared inheritance edges, and $\prec_r$ are replicated inheritance edge. 
-$\prec_{s}$ and $\prec_{r}$ are the set of edges that represent inheritance relationship between 
-classes and $\subseteq \textbf{C} \times \textbf{C}$. 
-$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$) 
+A formal description to represent the relationship between the classes
+can be described by the class hierarchy graph (CHG). This graph $\zeta$ is composed of a tuple
+$ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} is the set of classes,
+$\prec_s $ refers to shared inheritance edges, and $\prec_r$ are replicated inheritance edge.
+$\prec_{s}$ and $\prec_{r}$ are the set of edges that represent inheritance relationship between
+classes and $\subseteq \textbf{C} \times \textbf{C}$.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$)
 are a partially ordered set and $\leq_{sr}$ is anti-symmetric.
 
-Our tool creates an intermediate representation (IR) for single and multiple inheritance. 
+Our tool creates an intermediate representation (IR) for single and multiple inheritance.
 As an example, consider the C++ program shown in Figure~\ref{fig:multiple-inheritance-graph}(a)
-that contains multiple inheritance with two sub-objects 
+that contains multiple inheritance with two sub-objects
 ($\left(C, \left\langle Derived, Base1 \right\rangle \right)$,
 $\left(C, \left\langle Derived, \\ Base2 \right\rangle \right)$)
 and its respective class-inheritance graph shown in Figure~\ref{fig:multiple-inheritance-graph}(b).
@@ -859,21 +860,22 @@ components:
 \label{figure:multiple-inheritance-IR}
 \end{figure}
 
-This model transforms all the classes in structures and joins all 
-methods and attributes of its parent classes. This approach has 
+This model transforms all the classes in structures and joins all
+methods and attributes of its parent classes. This approach has
 the advantage of having direct access to the attributes and methods
-of the derived class and thus allows an easier validation, as the tool 
-does not look for attributes or methods from base classes on each access. 
-On the other hand, we replicate information to any new class, thus wasting 
+of the derived class and thus allows an easier validation, as the tool
+does not look for attributes or methods from base classes on each access.
+On the other hand, we replicate information to any new class, thus wasting
 memory resources.
 
-Polymorphism permits variable instances to be bounded to references of 
-different types according to the structure of the inheritance hierarchy~\cite{Alexander02}. 
+Polymorphism permits variable instances to be bounded to references of
+different types according to the structure of the inheritance hierarchy~\cite{Alexander02}.
 It is the principle whereby two or more derived classes from the same base class can invoke
-methods with same signature but distinct behaviors, specialized for each derived class, 
+methods with same signature but distinct behaviors, specialized for each derived class,
 using for this one reference to each object of this base class type.
-The decision of which method must be used, according to the type of the derived class, 
+The decision of which method must be used, according to the type of the derived class,
 is choosen in runt-time using the late binding (falta citação).
+
 The advantage is creation of reusable code by programmers by changing only specific features from the base class.
 %explicar como a ferramenta trata polimorfismo, utilizar diagrama UML.
 %Inicialização rapida de construtor
@@ -1101,19 +1103,8 @@ The experimental results is divided in two parts. The setup is described on sect
 
 \subsection{Experimental Setup}
 
-The benchmark used on the tests consist in 1113 test cases. Around 290 tests come from the Deitel Book~\cite{Deitel} and the others were developed to test all the features the C++ provides. The test suite is divided in 9 modules:
-
-\begin{itemize}
- \item Algorithm: Tests involving algorithm lib.
- \item Cpp: General tests.
- \item Deque: Tests involving deque lib.
- \item Inheritance: Tests involving inheritance and polymorphism.
- \item List: Tests involving list lib.
- \item Stream: Tests involving I/O stream libs.
- \item String: Tests involving string lib.
- \item Try\_catch: Tests involving exception Handling
- \item Vector: Tests involving vector lib.
-\end{itemize}
+The benchmark used on the tests consist in 1113 test cases. Around 290 tests come from the Deitel Book~\cite{Deitel}, 16 from NEC Labs~\cite{NeclabsBenchmarkExceptions}, 16 from LLBMC~\cite{PrabhuMBIG11} and the others were developed to test all the features the C++ provides. The test suite is divided in 9 modules: Algorithm, with test cases for methods involving the algorithm library; Cpp, with general test cases in C++ involving the general libraries, multi-thread, templates etc, also the LLBMC's test cases and most of Deitel's test cases are on this suite.
+Deque, List, Stream, String and Vector are contain test cases involving deques, lists, stream, strings and vectors manipulations, respectively. Finally, Inheritance, with test cases involving inheritance and polymorphism and Try\_catch, with test cases involving exception handling (NEC Labs' test cases are on this suite).
 
 All the experiments were conducted on an otherwise idle Intel Core i7-2600, 3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules, the individual time limit and memory limit for each test has been set to 900 seconds (15 minutes) and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured using the unix time command.
 
@@ -1129,23 +1120,23 @@ This subsection describes the evaluation of ESBMC++ against another BMC tool dev
 \hline
   & & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\  \cline{5-18}
   & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & crash & TO  & MO & Time & P   & FP  & FN  & crash & TO  & MO \\\hline
-1 & try\_catch & 67 & 4743 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\
+1 & Algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
 \hline
-2 & vector & 146 & 6927 & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & 252 & 118 & 17 & 3 & 4 & 0 & 4\\
+2 & Cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
 \hline
-3 & string & 231 & 5022 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 34 & 122 & 4 & 105 & 0 & 0 & 0\\
+3 & Deque & 43 & 1239 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 1054 & 30 & 5 & 1 & 0 & 1 & 6\\
 \hline
-4 & stream & 66 & 1828 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\
+4 & List & 54 & 1731 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 79 & 28 & 10 & 16 & 0 & 0 & 0\\
 \hline
-5 & list & 54 & 1731 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 79 & 28 & 10 & 16 & 0 & 0 & 0\\
+5 & Stream & 66 & 1828 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\
 \hline
-6 & inheritance & 40 & 3052 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 42 & 33 & 1 & 2 & 3 & 0 & 1\\
+6 & String & 231 & 5022 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 34 & 122 & 4 & 105 & 0 & 0 & 0\\
 \hline
-7 & deque & 43 & 1239 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 1054 & 30 & 5 & 1 & 0 & 1 & 6\\
+7 & Vector & 146 & 6927 & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & 252 & 118 & 17 & 3 & 4 & 0 & 4\\
 \hline
-8 & algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
+8 & Inheritance & 40 & 3052 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 42 & 33 & 1 & 2 & 3 & 0 & 1\\
 \hline
-9 & cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
+9 & Try\_catch & 67 & 4743 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\
 \hline\hline
   &     &  1113 & 54636 & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & 8066 & 698 & 79 & 215 & 90 & 8 & 23 \\
 \hline
@@ -1354,6 +1345,9 @@ R. T.~Alexander, J.~Offutt and J. M.~Bieman. .
 \newblock {Fault Detection Capabilities of Coupling-based OO Testing}
 \newblock {\em In Proceedings of the 13th International Symposium on Software Reliability Engineering (ISSRE '02)} pp. 207-. 2002,
 IEEE Computer Society, Washington, DC, USA.
+
+\bibitem{NeclabsBenchmarkExceptions}
+Benchmarks by NEC Labs, http://www.nec-labs.com/research/system/systems_SAV-website/benchmarks.php, 2012.
 
 % \bibitem{Morrison87}
 % R.~Morrison, A. L.~Brown, R.~Carrick and R. C. H.~Connor
