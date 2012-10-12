@@ -1099,16 +1099,44 @@ exception handling follows and try to look for an match on the catch map or will
 %-----------------------------------
 \section{Experimental Results}
 %-----------------------------------
-The experimental results is divided in two parts. The setup is described on section 4.1, followed by a comparison between ESBMC++ and LLBMC using a benchmark provided by the authors.
 
+The experimental results is divided into two parts. 
+The setup is described in Section~\ref{experimental-setup}
+while Section~\ref{comparison-to-LLBMC} describes a comparison 
+between ESBMC++ and LLBMC using a set of standard C++ benchmarks.
+
+%-----------------------------------
 \subsection{Experimental Setup}
+\label{experimental-setup}
+%-----------------------------------
 
-The benchmark used on the tests consist in 1113 test cases. Around 290 tests come from the Deitel Book~\cite{Deitel}, 16 from NEC Labs~\cite{NeclabsBenchmarkExceptions}, 16 from LLBMC~\cite{PrabhuMBIG11} and the others were developed to test all the features the C++ provides. The test suite is divided in 9 modules: Algorithm, with test cases for methods involving the algorithm library; Cpp, with general test cases in C++ involving the general libraries, multi-thread, templates etc, also the LLBMC's test cases and most of Deitel's test cases are on this suite.
-Deque, List, Stream, String and Vector are contain test cases involving deques, lists, stream, strings and vectors manipulations, respectively. Finally, Inheritance, with test cases involving inheritance and polymorphism and Try\_catch, with test cases involving exception handling (NEC Labs' test cases are on this suite).
+The benchmark that are used in our comparison consist of 1113 C++ programs. 
+Around 290 programs are extracted from Deitel~\cite{Deitel}, 
+16 programs are extracted from NEC~\cite{NeclabsBenchmarkExceptions}, 
+16 programs are extracted from LLBMC~\cite{PrabhuMBIG11}, 
+and the others were developed to test all the features that the C++ language 
+provides. The benchmarks are split into nine modules, as follows: 
+\textit{algorithm} contains test cases for methods that involve the 
+algorithm library; \textit{cpp} contains general test cases of the C++ 
+language that involve the general libraries, multi-thread, and templates.
+Additionally, it also contains the LLBMC's benchmarks and most of Deitel's 
+benchmarks are on this suite. The benchmarks \textit{deque}, \textit{list}, 
+\textit{stream}, \textit{string}, and \textit{vector} contain test cases 
+related to deques, lists, stream, strings and vectors manipulations, respectively. 
+Finally, \textit{inheritance} contains test cases related to inheritance and 
+polymorphism while \textit{try\_catch} contains test cases related to exception handling 
+(NEC Labs' test cases are on this suite).
 
-All the experiments were conducted on an otherwise idle Intel Core i7-2600, 3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules, the individual time limit and memory limit for each test has been set to 900 seconds (15 minutes) and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured using the unix time command.
+All the experiments were conducted on an otherwise idle Intel Core i7-2600, 
+3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules, 
+the individual time limit and memory limit for each test has been set to 900 seconds 
+and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured 
+using the unix time command.
 
+%-----------------------------------
 \subsection{Comparison to LLBMC}
+\label{comparison-to-LLBMC}
+%-----------------------------------
 
 This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. The ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarize the results.
 
