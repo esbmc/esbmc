@@ -881,26 +881,26 @@ using for this one reference to each object of this base class type.
 The decision of which method must be used, according to the type of the
 derived class, is choosen in runt-time using the late binding (falta citação).
 
-The advantage is creation of reusable code by programmers by changing only 
+The advantage is creation of reusable code by programmers by changing only
 specific features from the base class.
 %explicar como a ferramenta trata polimorfismo, utilizar diagrama UML.
-The intermediate representation grant an model to treat polymorphism in 
+The intermediate representation grant an model to treat polymorphism in
 order it simplifies the class hierarchy,
-easing the access to methods with same name without ambiguity between 
+easing the access to methods with same name without ambiguity between
 base and derived classes.
-For instance, Figure~\ref{figure:uml_diagram} shows an UML diagram 
+For instance, Figure~\ref{figure:uml_diagram} shows an UML diagram
 representing
-the Shape class hierarchy. The Rectangle class relation can be 
+the Shape class hierarchy. The Rectangle class relation can be
 formalized by
 $\left(C, \left\langle Rectangle, Shape \right\rangle \right)$. Our tool can
-handle with the polymorphic area method using this representation, 
+handle with the polymorphic area method using this representation,
 see Figure~\ref{figure:IR_uml_rec}.
 
-Our tool supports the indirect inheritance, a class inherits features 
+Our tool supports the indirect inheritance, a class inherits features
 from a derived class throw one or more classes
 not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
 $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
-thus Square class can access features from Shape class, 
+thus Square class can access features from Shape class,
 but they are not directly connected. We treat this difficult in verification
 looking for the features using depth search from derived to base classes and adding to our
 IR if necessary, see Figure~\ref{figure:IR_uml_square}.
@@ -949,9 +949,9 @@ methods:
 \label{figure:IR_uml_square}
 \end{figure}
 
-In object-oriented programming the use of \textit{shared inheritance} is common. 
-ESBMC verifies this inheritance according to Figure~\ref{figure:virtual_flow}. 
-If a class has pure virtual methods, this class must not implement these methods, 
+In object-oriented programming the use of \textit{shared inheritance} is common.
+ESBMC verifies this inheritance according to Figure~\ref{figure:virtual_flow}.
+If a class has pure virtual methods, this class must not implement these methods,
 this need for implementation belongs to derived classes.
 Otherwise, if a class is only virtual it must have an implementation or
 the verication fails. ESBMC also handles with virtual destructors successfully
@@ -965,12 +965,8 @@ Our tool does not support dynamic cast.
 \label{figure:virtual_flow}
 \end{figure}
 
-
-
 %Explicar destrutor virtual
 %Nao suporta dynamic_cast
-
-
 
 %--------------------------------------------
 \section{Exception Handling}
@@ -1177,26 +1173,26 @@ This subsection describes the evaluation of ESBMC++ against another BMC tool dev
 \begin{tabular}{|c|l|r|r||r|r|r|r|r|r|r|r|r|r|r|r|r|r|}
 \hline
   & & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\  \cline{5-18}
-  & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & Crash & TO  & MO & Time & P   & FP  & FN  & IE & TO  & MO \\\hline
-1 & Algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
+  & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & Crash & TO  & MO & Time & P   & FP  & FN  & Crash & TO  & MO \\\hline
+1 & Algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 23566 & 98 & 1 & 2 & 0 & 25 & 1\\ % OK
 \hline
-2 & Cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
+2 & Cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 3992 & 261 & 7 & 52 & 15 & 3 & 1\\ % OK
 \hline
-3 & Deque & 43 & 1239 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 1054 & 30 & 5 & 1 & 0 & 1 & 6\\
+3 & Deque & 43 & 1239 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & & & & & & & \\
 \hline
-4 & List & 54 & 1731 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 79 & 28 & 10 & 16 & 0 & 0 & 0\\
+4 & List & 54 & 1731 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 1961 & 26 & 4 & 22 & 0 & 0 & 2\\ % OK
 \hline
-5 & Stream & 66 & 1828 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\
+5 & Stream & 66 & 1828 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\ % OK
 \hline
-6 & String & 231 & 5022 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 34 & 122 & 4 & 105 & 0 & 0 & 0\\
+6 & String & 231 & 5022 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 28 & 122 & 4 & 105 & 0 & 0 & 0\\ % OK
 \hline
-7 & Vector & 146 & 6927 & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & 252 & 118 & 17 & 3 & 4 & 0 & 4\\
+7 & Vector & 146 & 6927 & 3263 & 137 & 3 & 6 & 0 & 0 & 0  & & & & & & & \\
 \hline
-8 & Inheritance & 40 & 3052 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 42 & 33 & 1 & 2 & 3 & 0 & 1\\
+8 & Inheritance & 40 & 3052 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 106 & 35 & 1 & 2 & 2 & 0 & 0\\ % OK
 \hline
-9 & Try\_catch & 67 & 4743 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\
+9 & Try\_catch & 67 & 4743 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\ % OK
 \hline\hline
-  &     &  1113 & 54636 & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & 8066 & 698 & 79 & 215 & 90 & 8 & 23 \\
+  &     &  1113 & 54636 & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & & & & & & & \\
 \hline
 \end{tabular} }
 \end{center}
