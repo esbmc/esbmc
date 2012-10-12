@@ -807,7 +807,9 @@ classes and $\subseteq \textbf{C} \times \textbf{C}$.
 $\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$)
 are a partially ordered set and $\leq_{sr}$ is anti-symmetric.
 
-Our tool creates an intermediate representation (IR) for single and multiple inheritance.
+Our tool creates an intermediate representation (IR) for single and multiple inheritance, handling
+with replicated and shared inheritance.
+
 As an example, consider the C++ program shown in Figure~\ref{fig:multiple-inheritance-graph}(a)
 that contains multiple inheritance with two sub-objects
 ($\left(C, \left\langle Derived, Base1 \right\rangle \right)$,
@@ -868,79 +870,83 @@ does not look for attributes or methods from base classes on each access.
 On the other hand, we replicate information to any new class, thus wasting
 memory resources.
 
-Polymorphism permits variable instances to be bounded to references of
-different types according to the structure of the inheritance hierarchy~\cite{Alexander02}.
-It is the principle whereby two or more derived classes from the same base class can invoke
-methods with same signature but distinct behaviors, specialized for each derived class,
+One other important feature from oriented-object program that our tool
+supports is the polymorphism. Polymorphism permits variable instances to be
+bounded to references of different types according to the structure of the
+inheritance hierarchy~\cite{Alexander02}.
+It is the principle whereby two or more derived classes from the same base
+class can invoke methods with same signature but distinct behaviors, specialized
+for each derived class,
 using for this one reference to each object of this base class type.
-The decision of which method must be used, according to the type of the derived class,
-is choosen in runt-time using the late binding (falta citação).
+The decision of which method must be used, according to the type of the
+derived class, is choosen in runt-time using the late binding (falta citação).
 
 The advantage is creation of reusable code by programmers by changing only specific features from the base class.
 %explicar como a ferramenta trata polimorfismo, utilizar diagrama UML.
-%Inicialização rapida de construtor
-%Herança virtual
-%Explicar herança virtual com diagramas
-%Explicar destrutor virtual
-%Nao suporta dynamic_cast
-Our tool does not support dynamic cast.
+The intermediate representation grant an model to treat polymorphism in order it simplifies the class hierarchy,
+easing the access to methods with same name without ambiguity between base and derived classes.
+For instance, Figure~\ref{figure:uml_diagram} shows an UML diagram representing
+the Shape class hierarchy. The Rectangle class relation can be formalized by
+$\left(C, \left\langle Rectangle, Shape \right\rangle \right)$. Our tool can
+handle with the area method polymorphism this representation, see Figure~\ref{figure:IR_uml_rec} .
+
+Our tool supports the indirect inheritance, a class inherits features from a derived class throw one or more classes
+not directly connected. In Figure~\ref{figure:uml_diagram}, 
+$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
+Square class can access features from Shape class, but it is not directly connected. This is one
+difficult to verification that we treat by looking for the tree using depth search from derived to base classes and adding to our
+IR, see Figure~\ref{figure:IR_uml_square}.
 
 
-% Polymorphism is a mechanism whereby we can abstract over type. It is the principle whereby two or more derived classes from the same base class can invoke
-% methods with same signature but distinct behaviors. For instance, we can write polymorphism in Napier~\cite{Morrison87,MorrNap87} as
-%
-% \begin{equation}
-% \label{polymorphism-eq}
-% let\;id = proc [t:type] (x : t \rightarrow t);\;x
-% \end{equation}
-%
-% Id procedure is parametrised by the type into brackets from t to t. Thus this procedure is in fact an infinite number of identity procedures which implements several types.
-% The advantage of the polymorphic abstraction reside in the context of software re-use. Using this feature we can write one procedure for all types, instead of different one
-% for each type.
-% Thereby this feature improves the complexity for static verification.
-
-The indirect inheritance:
-
-\begin{figure}[h]
-
-\begin{minipage}[b]{.48\linewidth}
-\begin{lstlisting}
-class A {int tf;}
-class B: public A {int lf;}
-class C: public B {int rf;}
-\end{lstlisting}
-%  \vspace{1.5cm}
-  \centerline{(a)}\medskip
-\end{minipage}
-\label{figure:indirect-inheritance-code}
-%
-%\hfill
-\begin{minipage}[b]{.48\linewidth}
-  \centering
-  \centerline{\includegraphics[scale=0.6]{figures/indirect_inheritance}}
-%  \vspace{1.5cm}
-  \centerline{(b)}\medskip
-\end{minipage}
-%
-\caption{Indirect Inheritance: (a) C++ program, (b) class-inheritance graph}
-\label{fig:indirect-inheritance-graph}
+\begin{figure}[ht]
+\centering
+\includegraphics[scale=0.28]{figures/heranca_simples}
+\caption{UML diagram from Shape class hierarchy}
+\label{figure:uml_diagram}
 \end{figure}
+
 
 \begin{figure}[h]
 \centering
 \begin{minipage}{0.9\textwidth}
 \begin{lstlisting}[style=nonumbers]
-cpp::struct.C
+cpp::struct.Rectangle
     type:  struct
-      * name: cpp::struct.C
-components:
-        0: name: cpp::struct.B::@vtable_pointer
-        1: name: cpp::struct.C::@vtable_pointer
+      * name: cpp::struct.Rectangle
+methods:
+        0: name: cpp::struct.Shape::area(this)
+        1: name: cpp::struct.Rectangle::area(this)
 \end{lstlisting}
 \end{minipage}
-\caption{Multiple Inheritance: Intermediate Representation}
-\label{figure:indirect-inheritance-IR}
+\caption{UML diagram: Intermediate Representation of Rectangle class}
+\label{figure:IR_uml_rec}
 \end{figure}
+
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.9\textwidth}
+\begin{lstlisting}[style=nonumbers]
+cpp::struct.Square
+    type:  struct
+      * name: cpp::struct.Square
+methods:
+        0: name: cpp::struct.Shape::area(this)
+        1: name: cpp::struct.Rectangle::area(this)
+        2: name: cpp::struct.Square::area(this)
+\end{lstlisting}
+\end{minipage}
+\caption{UML diagram: Intermediate Representation of Square class}
+\label{figure:IR_uml_square}
+\end{figure}
+
+%Inicializa\E7\E3o rapida de construtor
+%Heran\E7a virtual
+%Explicar heran\E7a virtual com diagramas
+%Explicar destrutor virtual
+%Nao suporta dynamic_cast
+Our tool does not support dynamic cast.
+
 
 %--------------------------------------------
 \section{Exception Handling}
