@@ -1138,7 +1138,7 @@ using the unix time command.
 \label{comparison-to-LLBMC}
 %-----------------------------------
 
-This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. The ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarize the results. Here, \textit{N} is the number os tests,  \textit{L} is the total lines of code on each suite, \textit{Time} is the total time of verification on each module, \textit{P} the number of positive results on the verification, \textit{FP} the number of false positive results on the verification, \textit{FN} the number of false negative results on the verification, \textit{Crash} the number of crashes during the verification of each module, \textit{TO} the number of Time-outs ($>900$ seconds) and \textit{MO} the number of Memory-outs ($>24$ GB).
+This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarizes the results. Here, \textit{N} is the number of programs,  \textit{L} is the total lines of code of each suite, \textit{Time} is the total time of verification on each module, \textit{P} is the number of positive results of the verification, \textit{FP} the number of false positive results, \textit{FN} is the number of false negative results, \textit{IE} is the number of internal errors during the verification of each module, \textit{TO} the number of time-outs ($>900$ seconds) and \textit{MO} is the number of memory-outs ($>24$ GB).
 
 \begin{table*}[t]
 \renewcommand\arraystretch{1.18}
@@ -1147,7 +1147,7 @@ This subsection describes the evaluation of ESBMC++ against another BMC tool dev
 \begin{tabular}{|c|l|r|r||r|r|r|r|r|r|r|r|r|r|r|r|r|r|}
 \hline
   & & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\  \cline{5-18}
-  & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & Crash & TO  & MO & Time & P   & FP  & FN  & Crash & TO  & MO \\\hline
+  & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & Crash & TO  & MO & Time & P   & FP  & FN  & IE & TO  & MO \\\hline
 1 & Algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 6589 & 78 & 34 & 1 & 0 & 7 & 7\\
 \hline
 2 & Cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 290 & 259 & 8 & 51 & 16 & 0 & 5\\
@@ -1217,11 +1217,11 @@ This approach is very efficient in finding elemental errors in a C++ program, bu
 on a deeper seach for bugs and misleading operations (in particular, those that involve internal
 modeling of the methods).
 
-Florian et~al.\ describe the LLBMC tool, which also applies BMC to the verification
+Merz et~al.\ describe the LLBMC tool, which also applies BMC to the verification
 of C++ programs~\cite{Florian12}. However, they use the LLVM compiler to convert C++
 programs into the LLVM's intermediate representation, which thus looses high-level
 information about the structure of the C++ programs (i.e., the relationship between
-the classes). Similarly, Florian et~al.\ also apply SMT solvers to check the verification
+the classes). Similarly to ESBMC++, Merz et~al.\ also apply SMT solvers to check the verification
 conditions that are generated from the C++ programs. In contrast to our approach, however,
 they do not handle exceptions, which thus make it difficult to verify realistic C++ programs
 (e.g., programs that depend on the STL library).
