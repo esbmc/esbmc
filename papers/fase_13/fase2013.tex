@@ -1100,9 +1100,9 @@ exception handling follows and try to look for an match on the catch map or will
 \section{Experimental Results}
 %-----------------------------------
 
-The experimental results is divided into two parts. 
+The experimental results is divided into two parts.
 The setup is described in Section~\ref{experimental-setup}
-while Section~\ref{comparison-to-LLBMC} describes a comparison 
+while Section~\ref{comparison-to-LLBMC} describes a comparison
 between ESBMC++ and LLBMC using a set of standard C++ benchmarks.
 
 %-----------------------------------
@@ -1110,27 +1110,27 @@ between ESBMC++ and LLBMC using a set of standard C++ benchmarks.
 \label{experimental-setup}
 %-----------------------------------
 
-The benchmark that are used in our comparison consist of 1113 C++ programs. 
-Around 290 programs are extracted from Deitel~\cite{Deitel}, 
-16 programs are extracted from NEC~\cite{NeclabsBenchmarkExceptions}, 
-16 programs are extracted from LLBMC~\cite{PrabhuMBIG11}, 
-and the others were developed to test all the features that the C++ language 
-provides. The benchmarks are split into nine modules, as follows: 
-\textit{algorithm} contains test cases for methods that involve the 
-algorithm library; \textit{cpp} contains general test cases of the C++ 
+The benchmark that are used in our comparison consist of 1113 C++ programs.
+Around 290 programs are extracted from Deitel~\cite{Deitel},
+16 programs are extracted from NEC~\cite{NeclabsBenchmarkExceptions},
+16 programs are extracted from LLBMC~\cite{PrabhuMBIG11},
+and the others were developed to test all the features that the C++ language
+provides. The benchmarks are split into nine modules, as follows:
+\textit{algorithm} contains test cases for methods that involve the
+algorithm library; \textit{cpp} contains general test cases of the C++
 language that involve the general libraries, multi-thread, and templates.
-Additionally, it also contains the LLBMC's benchmarks and most of Deitel's 
-benchmarks are on this suite. The benchmarks \textit{deque}, \textit{list}, 
-\textit{stream}, \textit{string}, and \textit{vector} contain test cases 
-related to deques, lists, stream, strings and vectors manipulations, respectively. 
-Finally, \textit{inheritance} contains test cases related to inheritance and 
-polymorphism while \textit{try\_catch} contains test cases related to exception handling 
+Additionally, it also contains the LLBMC's benchmarks and most of Deitel's
+benchmarks are on this suite. The benchmarks \textit{deque}, \textit{list},
+\textit{stream}, \textit{string}, and \textit{vector} contain test cases
+related to deques, lists, stream, strings and vectors manipulations, respectively.
+Finally, \textit{inheritance} contains test cases related to inheritance and
+polymorphism while \textit{try\_catch} contains test cases related to exception handling
 (NEC Labs' test cases are on this suite).
 
-All the experiments were conducted on an otherwise idle Intel Core i7-2600, 
-3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules, 
-the individual time limit and memory limit for each test has been set to 900 seconds 
-and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured 
+All the experiments were conducted on an otherwise idle Intel Core i7-2600,
+3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules,
+the individual time limit and memory limit for each test has been set to 900 seconds
+and 24 GB (22 GB of RAM and 2 GB of virtual memory). The times given were measured
 using the unix time command.
 
 %-----------------------------------
