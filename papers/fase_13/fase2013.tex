@@ -808,7 +808,7 @@ $\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\text
 are a partially ordered set and $\leq_{sr}$ is anti-symmetric.
 
 Our tool creates an intermediate representation (IR) for single and multiple inheritance, handling
-with replicated and shared inheritance.
+replicated and shared inheritance.
 
 As an example, consider the C++ program shown in Figure~\ref{fig:multiple-inheritance-graph}(a)
 that contains multiple inheritance with two sub-objects
@@ -903,13 +903,13 @@ $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
 thus Square class can access features from Shape class, 
 but they are not directly connected. We treat this difficult in verification
 looking for the features using depth search from derived to base classes and adding to our
-IR, see Figure~\ref{figure:IR_uml_square}.
+IR if necessary, see Figure~\ref{figure:IR_uml_square}.
 
 
 \begin{figure}[ht]
 \centering
-\includegraphics[scale=0.28]{figures/heranca_simples}
-\caption{UML diagram from Shape class hierarchy}
+\includegraphics[scale=0.5]{figures/inheritance_uml}
+\caption{Shape class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
 
@@ -954,9 +954,9 @@ ESBMC verifies this inheritance according to Figure~\ref{figure:virtual_flow}.
 If a class has pure virtual methods, this class must not implement these methods, 
 this need for implementation belongs to derived classes.
 Otherwise, if a class is only virtual it must have an implementation or
-the verication fails. ESBMC also handles with virtual destructors successfully. Our tool does 
-not support dynamic cast.
-
+the verication fails. ESBMC also handles with virtual destructors successfully
+and supports default constructor.
+Our tool does not support dynamic cast.
 
 \begin{figure}[ht]
 \centering
