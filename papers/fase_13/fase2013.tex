@@ -879,7 +879,7 @@ class can invoke methods with same signature but distinct behaviors, specialized
 for each derived class,
 using for this one reference to each object of this base class type.
 The decision of which method must be used, according to the type of the
-derived class, is choosen in runt-time using the late binding (falta citação).
+derived class, is choosen in runt-time using the late binding.
 
 The advantage is creation of reusable code by programmers by changing only
 specific features from the base class.
@@ -1252,6 +1252,17 @@ conditions that are generated from the C++ programs. In contrast to our approach
 they do not handle exceptions, which thus make it difficult to verify realistic C++ programs
 (e.g., programs that depend on the STL library).
 
+Pasareanu and Visser developed a symbolic execution framework 
+for proving specifications of Java programs that contains loops, 
+also making use of invariant generation, strengthening and approximation 
+for discovering these loop invariants automatically~\cite{Pasareanu04}. 
+The invariant refinement gets close to the predicate abstraction concept, 
+by creating pre-conditions and boolean expressions to verify the code validity. 
+It provides a stable technique that handles uniformly the different constraints.
+Additionally, Pasareanu and Visser present a consistent verification and a high 
+flexible framework, but it is shares the lacks that predicate abstraction might 
+expose.
+
 %------------------------------------------------------
 \section{Conclusions}
 %------------------------------------------------------
@@ -1286,6 +1297,11 @@ R.~L. Sites, ``Some thoughts on proving clean termination of programs.''
 P.~Prabhu, N.~Maeda, G.~Balakrishnan, F.~Ivancic, and A.~Gupta,
 \newblock Interprocedural Exception Analysis for C++.
 \newblock In {\em ECOOP}, pp. 583--608. 2011.
+
+\bibitem{Pasareanu04}
+C.~Pasareanu and W.~Visser, 
+\newblock Verification of Java Programs Using Symbolic Execution and Invariant Generation. 
+\newblock In {\em SPIN}, LNCS 2989, pp. 164--181, 2004.
 
 \bibitem{Blanc07}
 N.~Blanc, A.~Groce, and D.~Kroening,
