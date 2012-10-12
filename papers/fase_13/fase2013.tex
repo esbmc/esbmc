@@ -870,40 +870,39 @@ does not look for attributes or methods from base classes on each access.
 On the other hand, we replicate information to any new class, thus wasting
 memory resources.
 
-One other important feature from object-oriented program that our tool
-supports is the polymorphism. Polymorphism permits variable instances to be
+Another important feature from object-oriented programing that our tool
+supports is the concept of polymorphism. Polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
 It is the principle whereby two or more derived classes from the same base
 class can invoke methods with same signature but distinct behaviors, specialized
-for each derived class,
-using for this one reference to each object of this base class type.
+for each derived class, using for this one reference to each object of this base class type.
 The decision of which method must be used, according to the type of the
 derived class, is choosen in runt-time using the late binding.
 
-The advantage is creation of reusable code by programmers by changing only
+The advantage is the creation of reusable code by programmers by changing only
 specific features from the base class.
 %explicar como a ferramenta trata polimorfismo, utilizar diagrama UML.
-The intermediate representation grant an model to treat polymorphism in
-order it simplifies the class hierarchy,
-easing the access to methods with same name without ambiguity between
+The intermediate representation provides a model to treat polymorphism in
+order to simplify the class hierarchy,
+easing the access to methods with the same name without ambiguity between
 base and derived classes.
-For instance, Figure~\ref{figure:uml_diagram} shows an UML diagram
-representing
-the Shape class hierarchy. The Rectangle class relation can be
-formalized by
+As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
+that represents the \textit{Shape} class hierarchy. 
+The Rectangle class relation can be formalized by
 $\left(C, \left\langle Rectangle, Shape \right\rangle \right)$. Our tool can
-handle with the polymorphic area method using this representation,
-see Figure~\ref{figure:IR_uml_rec}.
+handle the polymorphic area method using this representation,
+as shown in Figure~\ref{figure:IR_uml_rec}.
 
-Our tool supports the indirect inheritance, a class inherits features
-from a derived class throw one or more classes
+Our tool also supports the indirect inheritance, which is a class that
+inherits features from a derived class with one or more classes
 not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
 $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
-thus Square class can access features from Shape class,
-but they are not directly connected. We treat this difficult in verification
-looking for the features using depth search from derived to base classes and adding to our
-IR if necessary, see Figure~\ref{figure:IR_uml_square}.
+thus Square class can access features from \textit{Shape} class,
+but they are not directly connected. We tackle this problem by
+looking for the features using depth search from the derived to base classes 
+and adding them to our intermediate representation if necessary, 
+as shown in Figure~\ref{figure:IR_uml_square}.
 
 
 \begin{figure}[ht]
@@ -949,14 +948,14 @@ methods:
 \label{figure:IR_uml_square}
 \end{figure}
 
-In object-oriented programming the use of \textit{shared inheritance} is common.
-ESBMC verifies this inheritance according to Figure~\ref{figure:virtual_flow}.
+In object-oriented programming, the use of \textit{shared inheritance} is very common.
+ESBMC++ verifies this inheritance according to Figure~\ref{figure:virtual_flow}.
 If a class has pure virtual methods, this class must not implement these methods,
-this need for implementation belongs to derived classes.
-Otherwise, if a class is only virtual it must have an implementation or
-the verication fails. ESBMC also handles with virtual destructors successfully
-and supports default constructor.
-Our tool does not support dynamic cast.
+this needs for implementation belongs to derived classes.
+Otherwise, if a class is only virtual, it must have an implementation or
+the verication fails. ESBMC++ also handles virtual destructors successfully
+and supports default constructor. However, ESBMC++ currently does not support 
+dynamic cast.
 
 \begin{figure}[ht]
 \centering
