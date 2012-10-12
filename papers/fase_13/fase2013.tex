@@ -94,10 +94,10 @@ our Efficient SMT-Based Bounded Model Checker (ESBMC) tool~\cite{Cordeiro12} tha
 the front-end of the C Bounded Model Checker (CBMC) to support C++ features such
 as inheritance, polymorphism, templates, and exception handling.
 
-
-In particular, we develop novel approaches to handle exceptions in C++ code that
-previous approaches are not able to deal with~\cite{Blanc07,Florian12,PrabhuMBIG11}.
-Additionally, we focus on the operational model of the
+We develop novel approaches to handle exceptions in C++ programs (in particular, 
+exception specification for functions and methods) that previous approaches are not 
+able to deal with~\cite{PrabhuMBIG11,Blanc07,Florian12}. Additionally, we present a 
+novel implementation of an operational model of the
 sequential STL containers, its preconditions and simulation features (e.g., how we
 store the elements values of the containers), and how these are
 used in order to verify real-world C++ programs.
@@ -387,7 +387,7 @@ The raise function can be modeled in our operational model as:
 \end{eqnarray}
 
 %---------------------------------------------
-\subsection{Input / Output Stream Libraries}
+\subsection{Input/Output Stream Libraries}
 %---------------------------------------------
 
 To build the operational model, it is important
@@ -775,7 +775,7 @@ P := \left [ \begin{array}{ll}
 \end{equation}
 
 %------------------------------------------------
-\subsection{Inheritance and Polymorphism}
+\section{Inheritance and Polymorphism}
 %------------------------------------------------
 
 Modeling C++ features like inheritance and polymorphism 
@@ -940,7 +940,9 @@ components:
 \label{figure:indirect-inheritance-IR}
 \end{figure}
 
-\subsection{Exception Handling}
+%--------------------------------------------
+\section{Exception Handling}
+%--------------------------------------------
 
 One of the features that C++ provides is the exception handling. The exceptions are unexpected situations on the program, situations
 that the program was not designed to handle. Basically, the exception handling is divided into three elements: a try block, where an
@@ -1029,7 +1031,10 @@ block code. When the second CATCH is found, which means that the try
 block ended, the catch map is unstacked for memory efficiency
 and the GOTO instruction is updated if needed.
 
-\subsubsection{Throwing and Catching an Exception.}
+%------------------------------------------------------
+\subsection{Throwing and Catching an Exception}
+%------------------------------------------------------
+
 A C++ code can throw an exceptions in several situations other
 than explicit throw exception: (a) the new operator can throw a \textit{bad\_alloc}
 exception, (b) the operator \textit{dynamic$\_$cast} can throw \textit{bad\_catch}
@@ -1063,13 +1068,21 @@ one of the following rules is true, the code will jump from the throw expression
        instruction if one exists.
 \end{itemize}
 
-\subsubsection{Rethrows.} Another feature that C++ provides for exception handling is the rethrow. The rethrow is an expression formed by
+%------------------------------------------------------
+\subsection{Rethrows} 
+%------------------------------------------------------
+
+Another feature that C++ provides for exception handling is the rethrow. The rethrow is an expression formed by
 a throw with no argument. The rethrow function is to throw the last thrown exception so it can be handled further. To handle rethrows,
 ESBMC++ always keeps a pointer to the last thrown exception and when it finds an throw without arguments (rethrow) it checks if this pointer
 is not NULL, if it is NULL than the code is trying to rethrow an exception without a previous throw. If the pointer is not NULL than we have
 a valid last thrown exception and the rethrow expression is replaced by a throw expression with the last expection as argument.
 
-\subsubsection{Exception Specification.} The exception specifications define which exceptions a function or method (including constructors
+%------------------------------------------------------
+\subsection{Exception Specification} 
+%------------------------------------------------------
+
+The exception specifications define which exceptions a function or method (including constructors
 and desctructors) can throw. Alongside a method or function declaration a throw expression containing the exceptions list can define none or
 multiple exceptions, which will forbid that any exception that is not in the exception specification to go out the function or method. Note
 that an exception can still be handled inside a try-catch block inside the funcion or method even if it isn't on the exception specification.
@@ -1188,8 +1201,19 @@ This approach is very efficient in finding elemental errors in a C++ program, bu
 on a deeper seach for bugs and misleading operations (in particular, those that involve internal
 modeling of the methods).
 
+Florian et~al.\ describes the LLBMC tool, which also applies BMC to the verification 
+of C++ programs~\cite{Florian12}. However, they use the LLVM compiler to convert C++ 
+programs into the LLVM's intermediate representation, which thus looses high-level 
+information about the structure of the C++ programs (i.e., the relationship between 
+the classes). Similarly, Florian et~al.\ also apply SMT solvers to check the verification 
+conditions that are generated from the C++ programs. In contrast to our approach, however,
+they do not handle exceptions, which thus make it difficult to verify realistic C++ programs
+(e.g., programs that depend on the STL library).
+
+%------------------------------------------------------
 \section{Conclusions}
-%
+%------------------------------------------------------
+
 Conclusions here (Lucas)...
 
 
