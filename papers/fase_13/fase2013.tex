@@ -78,16 +78,16 @@ programs and support the features that the languages offers, such as templates,
 containers and exception handling.
 
 C++ is widely used, but systems that make use of the C++ language and its functionalities
-tend to require a high verification effort since the errors are hard to find. C++
+tend to require a high verification effort. C++
 verification involves many more challenges than that of plain ANSI-C since the language provides
 a wider set of features (e.g., object-oriented programming), libraries (e.g., specialized
-input-output), and functionalities (e.g., template usage). In order to be attractive for mainstream software development,
-C++ model checkers have to support these and at the same time exhibit several crucial characteristics (e.g., speed,
-accuracy, efficiency, and friendliness).
+input-output), and functionalities (e.g., templates). In order to be attractive for mainstream software development,
+C++ model checkers have to support these and at the same time maintain 
+hihg speed, accuracy, efficiency, and user-friendliness.
 
 
-We propose to apply BoundedModel Checking
-(BMC) to C++ programs using an operational model of the C++ libraries. This
+We propose to apply 
+BMC to C++ programs using an operational model of the C++ libraries. This
 operational model is an abstract representation of the standard C++ library, which conservatively
 approximates its semantics. To support this operational model, we extended
 our Efficient SMT-Based Bounded Model Checker (ESBMC) tool~\cite{Cordeiro12} that in turn builds on
@@ -103,135 +103,152 @@ store the elements values of the containers), and how these are
 used in order to verify real-world C++ programs.
 
 %------------------------------
-\section{Background}
+\section{Background and Architecture}
 %------------------------------
 
 ESBMC++ builds on the front-end of CBMC to generate the VCs for a given C++ program
 and on the back-end of ESBMC to encode the VCs using different background theories
-and SMT solvers. In this section, we describe the main features of CBMC that we use,
-and present the background theories used in the back-end of ESBMC.
+and SMT solvers. 
+%%% In this section, we describe the main features of CBMC that we use,
+%%% and present the background theories used in the back-end of ESBMC.
+
+%------------------------------------------------------ \subsection{C
+%Bounded Model Checker} \label{02-CBoundedModelChecker}
+\smallskip\noindent{\bf C Bounded Model Checker.}
+%------------------------------------------------------
+%
+CBMC implements BMC for ANSI-C/C++ programs using SAT/SMT
+solvers~\cite{Clarke04}.  It can process C/C++ code using the goto-cc
+tool~\cite{Wintersteiger09}, which compiles the C/C++ code into
+equivalent GOTO-programs (i.e., control-flow graphs) using a
+gcc-compliant style. The GOTO-programs can then be processed by the
+symbolic execution engine. Alternatively, CBMC uses its own, internal
+parser based on Flex/Bison, to process the C/C++ files and to build an
+abstract syntax tree (AST). The typechecker of CBMC's front-end
+annotates this AST with types and generates a symbol table. CBMC's IRep
+class then converts the annotated AST into an internal,
+language-independent format used by the remaining phase of the
+front-end.  ESBMC++ modifies this front-end to handle the definitions of
+the standard C++ libraries and other the features (e.g., inheritance,
+template, and exception handling) are treated internally.
+
+CBMC (and ESBMC) use two recursive functions that compute the
+\emph{constraints} (i.e., assumptions and variable assignments) and
+\emph{properties} (i.e., safety conditions and user-defined
+assertions). In addition, both tools automatically generate safety conditions
+that check for example for arithmetic overflow and underflow, array bounds
+violations, and NULL-pointer dereferences, in the spirit of Site's clean
+termination~\cite{Sites74}. Both functions accumulate the control flow
+predicates to each program point and use these predicates to guard both
+the constraints and the properties, so that they properly reflect the
+program's semantics. A VC generator (VCG) then derives the VCs from
+these.
 
 %------------------------------------------------------
-\subsection{C Bounded Model Checker}
-\label{02-CBoundedModelChecker}
+%\subsection{Satisfiability Modulo Theories}
+%\label{02-SatisfiabilityModuloTheories}
+\smallskip\noindent{\bf Satisfiability Modulo Theories.}
 %------------------------------------------------------
-
-CBMC implements BMC for ANSI-C/C++ programs using SAT/SMT solvers~\cite{Clarke04}.
-It can process C/C++ code using the goto-cc tool~\cite{Wintersteiger09},
-which compiles the C/C++ code into equivalent GOTO-programs (i.e., control-flow graphs)
-using a gcc-compliant style. The GOTO-programs can then be processed by the symbolic
-execution engine. Alternatively, CBMC uses its own, internal parser based on Flex/Bison,
-to process the C/C++ files and to build an abstract syntax tree (AST). The typechecker
-of CBMC's front-end annotates this AST with types and generates a symbol table. CBMC's
-IRep class then converts the annotated AST into an internal, language-independent format
-used by the remaining phase of the front-end.
-
-CBMC uses two recursive functions that compute the \textit{constraints}
-(i.e., assumptions and variable assignments) and \textit{properties}
-(i.e., safety conditions and user-defined assertions). In addition,
-CBMC automatically generates safety conditions that check for
-arithmetic overflow and underflow, array bounds violations,
-and NULL-pointer dereferences, in the spirit of Site's clean
-termination~\cite{Sites74}. Both functions accumulate the control
-flow predicates to each program point and use these predicates
-to guard both the constraints and the properties, so that they properly
-reflect the program's semantics. CBMC's VC generator (VCG) then
-derives the VCs from these.
-
-%------------------------------------------------------
-\subsection{Satisfiability Modulo Theories}
-\label{02-SatisfiabilityModuloTheories}
-%------------------------------------------------------
-
+%
 SMT decides the satisfiability of first-order formulae using a
-combination of different background theories and thus generalizes propositional
-satisfiability by supporting uninterpreted functions, linear and non-linear
-arithmetic, bit-vectors, tuples, arrays, and other decidable first-order
-theories. Given a theory ${\cal T}$ and a quantifier-free formula $\psi$, we
-say that $\psi$ is $\cal T$-satisfiable if and only if there exists a structure
-that satisfies both the formula and the sentences of ${\cal T}$, or
-equivalently, if ${\cal T}\cup \{\psi\}$ is satisfiable~\cite{Bradley07}. Given
-a set $\Gamma\cup \{\psi\}$ of formulae over $\cal T$, we say that $\psi$ is a
-$\cal T$-consequence of $\Gamma$, and write $\Gamma\models_{\cal T}\psi$, if
-and only if every model of ${\cal T}\cup\Gamma$ is also a model of $\psi$.
-Checking $\Gamma\models_{\cal T}\psi$ can be reduced in the usual way to
-checking the $\cal T$-satisfiability of $\Gamma\cup\{\neg\psi\}$.
+combination of different background theories and thus generalizes
+propositional satisfiability by supporting uninterpreted functions,
+linear and non-linear arithmetic, bit-vectors, tuples, arrays, and other
+decidable first-order theories. Given a theory ${\cal T}$ and a
+quantifier-free formula $\psi$, we say that $\psi$ is $\cal
+T$-satisfiable if and only if there exists a structure that satisfies
+both the formula and the sentences of ${\cal T}$, or equivalently, if
+${\cal T}\cup \{\psi\}$ is satisfiable~\cite{Bradley07}. Given a set
+$\Gamma\cup \{\psi\}$ of formulae over $\cal T$, we say that $\psi$ is a
+$\cal T$-consequence of $\Gamma$, and write $\Gamma\models_{\cal
+T}\psi$, if and only if every model of ${\cal T}\cup\Gamma$ is also a
+model of $\psi$.  Checking $\Gamma\models_{\cal T}\psi$ can be reduced
+in the usual way to checking the $\cal T$-satisfiability of
+$\Gamma\cup\{\neg\psi\}$.
 
-The SMT-LIB initiative~\cite{smtlib09} aims at establishing a common standard
-for the specification of background theories, but most SMT solvers provide functions
-in addition to those specified in the SMT-LIB. Therefore, we describe here the fragments
-that we found in the SMT solvers Boolector, CVC3, and Z3 for the theory of linear, non-linear,
-and bit-vector arithmetic. We summarize the syntax of these background theories as follows,
-using standard notations where appropriate:
+%%% The SMT-LIB initiative~\cite{smtlib09} aims at establishing a common standard
+%%% for the specification of background theories, but most SMT solvers provide functions
+%%% in addition to those specified in the SMT-LIB. Therefore, we describe here the fragments
+%%% that we found in the SMT solvers Boolector, CVC3, and Z3 for the theory of linear, non-linear,
+%%% and bit-vector arithmetic. We summarize the syntax of these background theories as follows,
+%%% using standard notations where appropriate:
+%%% 
+%%% \[\begin{array}{r@{\:\:}c@{\:\:}l}
+%%% \\[-5ex]
+%%% \mathit{F}  & ::= & \mathit{F} \: \mathit{con} \: \mathit{F} \:
+                    %%% | \: \neg\mathit{F} \:
+                    %%% | \: A \\
+%%% \mathit{con}  & ::= & \: \wedge \:
+                    %%% | \: \vee \:
+                    %%% | \: \oplus \:
+                    %%% | \: \Rightarrow \:
+                    %%% | \: \Leftrightarrow \: \\
+%%% \mathit{A} & ::= &  \mathit{T} \: \mathit{rel} \: \mathit{T} \:
+                    %%% | \: \mathit{Id} \: | \: true \: | \: false \\
+%%% \mathit{rel}  & ::= & \: < \:
+                    %%% | \: \leq \:
+                    %%% | \: > \:
+                    %%% | \: \geq
+                    %%% | \: = \:
+                    %%% | \: \neq \: \\
+%%% \mathit{T}  & ::= &  \mathit{T} \: op \: \mathit{T} \:
+                    %%% | \: \sim T \:
+                    %%% | \: \mathit{ite}(\mathit{F}, \: \mathit{T}, \mathit{T}) \:
+                    %%% | \: \mathit{Const} \:
+                    %%% | \: \mathit{Id} \: | \\
+              %%% &   & \mathit{Extract}(T, i, j)
+                    %%% | \: \mathit{SignExt}(T, k)
+                    %%% | \: \mathit{ZeroExt}(T, k) \\
+%%% \mathit{op}   & ::= & + \:
+                    %%% | \: - \:
+                    %%% | \: * \:
+                    %%% | \: / \:
+                    %%%%%%  | \: rem \:
+                    %%% | \: \texttt{<<} \:
+                    %%% | \: \texttt{>>} \:
+                    %%% | \: \texttt{\&} \:
+                    %%% | \: \texttt{|} \:
+                    %%% | \: \oplus \:
+                    %%% | \: @ \:
+%%% \end{array}
+%%% \]
+%%% 
+%%% \noindent
+%%% Here, $F$ denotes Boolean-valued expressions with atoms $A$, and $T$ denotes terms
+%%% built over integers, reals, and bit-vectors.
+%%% %%% using the binary operators \emph{op}.
+%%% The logical connectives $\mathit{con}$ consist of conjunction
+%%% ($\wedge$), disjunction ($\vee$), exclusive-or ($\oplus$), implication
+%%% ($\Rightarrow$), and equivalence ($\Leftrightarrow$).
+%%% The bit-level operators are and
+%%% (\texttt{\&}), or (\texttt{|}), exclusive-or ($\oplus$), complement ($\sim$),
+%%% right-shift (\texttt{>>}), and left-shift (\texttt{<<}).
+%%% $\mathit{Extract}\left(T, i,j\right)$ denotes bit-vector extraction from bits
+%%% \textit{i} down to \textit{j} to yield a new bit-vector of size  $i-j+1$ while
+%%% $@$ denotes the concatenation of the given bit-vectors.
+%%% $\mathit{SignExt}\left(T, k\right)$ extends a bit-vector of size $w$
+%%% to the signed
+%%% equivalent bit-vector of size $w+k$,
+%%% while $\mathit{ZeroExt}\left(T, k\right)$ extends the bit-vector
+%%% with zeros to the unsigned equivalent bit-vector of size $w+k$. The conditional
+%%% expression $\mathit{ite}(f, t_1, t_2)$ takes a Boolean formula $f$ and
+%%% depending on its value selects either the second or the third argument.
+%%% The interpretation of the
+%%% relational operators (i.e., $<$, $\leq$, $>$, $\geq$), the non-linear
+%%% arithmetic operators $*$, $/$, remainder (\emph{rem}) and the right-shift
+%%% operator (\texttt{>>}) depends on whether their arguments are unsigned or
+%%% signed bit-vectors, integers or real numbers.  The arithmetic operators
+%%% induce checks to ensure that the arithmetic operations do not overflow
+%%% and/or underflow.
+%%% 
 
-\[\begin{array}{r@{\:\:}c@{\:\:}l}
-\\[-5ex]
-\mathit{F}  & ::= & \mathit{F} \: \mathit{con} \: \mathit{F} \:
-                    | \: \neg\mathit{F} \:
-                    | \: A \\
-\mathit{con}  & ::= & \: \wedge \:
-                    | \: \vee \:
-                    | \: \oplus \:
-                    | \: \Rightarrow \:
-                    | \: \Leftrightarrow \: \\
-\mathit{A} & ::= &  \mathit{T} \: \mathit{rel} \: \mathit{T} \:
-                    | \: \mathit{Id} \: | \: true \: | \: false \\
-\mathit{rel}  & ::= & \: < \:
-                    | \: \leq \:
-                    | \: > \:
-                    | \: \geq
-                    | \: = \:
-                    | \: \neq \: \\
-\mathit{T}  & ::= &  \mathit{T} \: op \: \mathit{T} \:
-                    | \: \sim T \:
-                    | \: \mathit{ite}(\mathit{F}, \: \mathit{T}, \mathit{T}) \:
-                    | \: \mathit{Const} \:
-                    | \: \mathit{Id} \: | \\
-              &   & \mathit{Extract}(T, i, j)
-                    | \: \mathit{SignExt}(T, k)
-                    | \: \mathit{ZeroExt}(T, k) \\
-\mathit{op}   & ::= & + \:
-                    | \: - \:
-                    | \: * \:
-                    | \: / \:
-                    | \: rem \:
-                    | \: \texttt{<<} \:
-                    | \: \texttt{>>} \:
-                    | \: \texttt{\&} \:
-                    | \: \texttt{|} \:
-                    | \: \oplus \:
-                    | \: @ \:
-\end{array}
-\]
-
-\noindent
-Here, $F$ denotes Boolean-valued expressions with atoms $A$, and $T$ denotes terms
-built over integers, reals, and bit-vectors.
-%%% using the binary operators \emph{op}.
-The logical connectives $\mathit{con}$ consist of conjunction
-($\wedge$), disjunction ($\vee$), exclusive-or ($\oplus$), implication
-($\Rightarrow$), and equivalence ($\Leftrightarrow$).
-The bit-level operators are and
-(\texttt{\&}), or (\texttt{|}), exclusive-or ($\oplus$), complement ($\sim$),
-right-shift (\texttt{>>}), and left-shift (\texttt{<<}).
-$\mathit{Extract}\left(T, i,j\right)$ denotes bit-vector extraction from bits
-\textit{i} down to \textit{j} to yield a new bit-vector of size  $i-j+1$ while
-$@$ denotes the concatenation of the given bit-vectors.
-$\mathit{SignExt}\left(T, k\right)$ extends a bit-vector of size $w$
-to the signed
-equivalent bit-vector of size $w+k$,
-while $\mathit{ZeroExt}\left(T, k\right)$ extends the bit-vector
-with zeros to the unsigned equivalent bit-vector of size $w+k$. The conditional
-expression $\mathit{ite}(f, t_1, t_2)$ takes a Boolean formula $f$ and
-depending on its value selects either the second or the third argument.
-The interpretation of the
-relational operators (i.e., $<$, $\leq$, $>$, $\geq$), the non-linear
-arithmetic operators $*$, $/$, remainder (\emph{rem}) and the right-shift
-operator (\texttt{>>}) depends on whether their arguments are unsigned or
-signed bit-vectors, integers or real numbers.  The arithmetic operators
-induce checks to ensure that the arithmetic operations do not overflow
-and/or underflow.
-
+%------------------------------------------------------
+\smallskip\noindent{\bf Arrays and Tuples.}
+%------------------------------------------------------
+%
+The most important theories for ESBMC are the array and tuple theories,
+which are used to model container data structures and objects,
+respectively.
 The array theories of SMT solvers are typically based on the
 McCarthy axioms~\cite{McCarthy62}. The function \emph{select(a, i)}
 denotes the value of $a$ at index position $i$ and \emph{store(a, i, v)}
@@ -248,20 +265,22 @@ by the following two axioms~\cite{CVC07,Boolector09,Z08}:
 \]
 
 \noindent
-Note that array bounds checks need to be encoded separately; the array theories employ
-the notion of unbounded arrays size, but arrays in software are typically of bounded size.
-\noindent Equality on array elements is defined by the theory of equality with uninterpreted
-functions (i.e., $a = b \wedge i = j \Rightarrow select\left(a,i\right) = select\left(b,j\right)$)
-and the extensional theory of arrays then allows reasoning about array equality as follows~\cite{CVC07,Boolector09,Z08}:
-\[
-\begin{array}{l}
-  a = b    \Leftarrow  \forall i \cdot select\left(a,i\right) = select\left(b,i\right)  \\
-  a \neq b \Rightarrow \exists i \cdot select\left(a,i\right) \neq select\left(b,i\right)
-\end{array}
-\]
+Array bounds checks need to be encoded separately, as the array theories
+employ the notion of unbounded arrays size, but arrays in software are
+typically of bounded size.
 
-\noindent
-Tuples are used to model the ANSI-C union and struct datatypes. They provide
+%%% \noindent Equality on array elements is defined by the theory of equality with uninterpreted
+%%% functions (i.e., $a = b \wedge i = j \Rightarrow select\left(a,i\right) = select\left(b,j\right)$)
+%%% and the extensional theory of arrays then allows reasoning about array equality as follows~\cite{CVC07,Boolector09,Z08}:
+%%% \[
+%%% \begin{array}{l}
+  %%% a = b    \Leftarrow  \forall i \cdot select\left(a,i\right) = select\left(b,i\right)  \\
+  %%% a \neq b \Rightarrow \exists i \cdot select\left(a,i\right) \neq select\left(b,i\right)
+%%% \end{array}
+%%% \]
+
+Tuples %%% are used to model the ANSI-C union and struct datatypes. They 
+provide
 \mbox{store} and \mbox{select} operations similar to those in arrays, but work
 on the tuple \mbox{elements}. Each field of the tuple is represented by an
 integer constant. Hence, the expression $\mathit{select}(t, f)$ denotes the field $f$
@@ -273,59 +292,56 @@ same.
 \section{C++ Operational Model}
 %------------------------------
 
-During the verification process, ESBMC++ has to identify all the
-specifications and features of the C++ program to generate the AST.
-The specifications are related to the definitions of the standard C++
-libraries such as classes, methods, and types while the features
-(e.g., inheritance, template, and exception handling) are treated internally
-in ESBMC++ in different levels (i.e., scan, parser, and type-check).
-In this sense, we developed a simplified representation of the C++ libraries
-called C++ Operational Model (COM) to represent the classes, methods,
-and other features. The development process of the COM can be split into
-two phases: \textit{structural} and \textit{modeling}. In the structural phase,
-we built a set of classes with a specific hierarchical relationship, the signature
-of their methods, and specific data. In the modeling phase, we focus on the pre-
-and post-conditions and how these are used to verify real-world programs that
-depend on the C++ libraries.
+%%% During the verification process, ESBMC++ has to identify all the
+%%% specifications and features of the C++ program to generate the AST.
+%%% The specifications are related to the definitions of the standard C++
+%%% libraries such as classes, methods, and types while the features
+%%% (e.g., inheritance, template, and exception handling) are treated internally
+%%% in ESBMC++ in different levels (i.e., scan, parser, and type-check).
+%%% In this sense, we developed a simplified representation of the C++ libraries
+%%% called C++ Operational Model (COM) to represent the classes, methods,
+%%% and other features. The development process of the COM can be split into
+%%% two phases: \textit{structural} and \textit{modeling}. In the structural phase,
+%%% we built a set of classes with a specific hierarchical relationship, the signature
+%%% of their methods, and specific data. In the modeling phase, we focus on the pre-
+%%% and post-conditions and how these are used to verify real-world programs that
+%%% depend on the C++ libraries.
 
 %------------------------------
-\subsection{Structure and Model}
+%%% \subsection{Structure and Model}
 %------------------------------
 
-The goal here is to build an operational model of the standard C++ library
-so that ESBMC++ can rely on it to identify the definitions and to verify all
-the properties related to these definitions. This operational model is inserted
-into the verification process at the level of the source code (i.e., both model and
-program are passed as parameters at the beginning of the verification process).
-The first step in the construction of the operational model is the creation
-of a simplified structure, which is similar to the actual structure~\cite{CppReference12}.
+ESBMC++ relies on an operational model of the standard C++ library to
+verify all properties related to the definitions in the supported data
+types.  We thus developed a simplified representation of the C++
+libraries called the C++ Operational Model (COM), which represents the
+classes, methods, and other features similar to the actual
+structure~\cite{CppReference12}.  This operational model is inserted
+into the verification process at the level of the source code (i.e.,
+both model and program are passed as parameters at the beginning of the
+verification process). The COM consists of four groups of libraries, as
+shown in Figure~\ref{figure:cpp-diagram}: \emph{C libraries},
+\emph{input/output stream}, \emph{standard template libraries}, and
+\emph{general libraries}.
 
-Based on the documentation of the C++ language~\cite{CppReference12}, the set of libraries
-was split, according to their functionalities, into four subsets called \textit{C libraries},
-\textit{input/output stream}, \textit{standard template libraries}, and \textit{general libraries}.
-Each library presents in a subset is particularly related to the other libraries, not only in its
-functionality but also in its structure due to the fact that many libraries depend on
-definitions of others. We performed an analysis in the respective subsets
-as shown in Figure~\ref{figure:cpp-diagram} with the purpose of identifying dependencies
-between each library and thus develop a simplified structure of each one. In the next sections,
-we describe the structure of the libraries subsets shown in Figure~\ref{figure:cpp-diagram}.
-%
-\begin{figure*}[ht]
-\centering
-\includegraphics[scale=0.28]{figures/diagramascpp}
-\caption{Representation of the configuration and functional classification of the operational model.}
-\label{figure:cpp-diagram}
+\begin{figure*}[ht] \centering
+\includegraphics[scale=0.28]{figures/diagramascpp} 
+\caption{Configuration and functional classification of the operational model.}
+\label{figure:cpp-diagram} 
 \end{figure*}
 
 %------------------------------
 \subsection{C Libraries}
 %------------------------------
 
-The standard C++ libraries also include all the ANSI-C libraries.
-However, for the verification of C++ programs, ESBMC++
-follows a different path to parse the C++ programs.
-For this reason, we also have to build a representation
-of the ANSI-C libraries in the operational model. We can thus
+The standard C++ libraries also include all the ANSI-C libraries, which
+are already supported by ESBMC.  However, for the verification of C++
+programs, ESBMC++ follows a different path to parse the C++ programs.
+For this reason, we also have to build a representation of the ANSI-C
+libraries into the operational model; otherwise, ESBMC++ does not recognize
+the methods of the library and thus fails due to parsing errors.
+
+We can thus
 define this libraries' set in a simplified structure, which consists
 essentially of macro definitions and functions. From this ANSI-C libraries' set,
 there are libraries that contains only macro definitions (e.g., the \textit{ciso646} library
@@ -362,29 +378,40 @@ Therefore, we define the syntax for these definitions sets as:
 \left( \alpha \in M \wedge \beta \in O \right) \Rightarrow \left(\forall\alpha\right)\left(\exists\beta\right)\left(\alpha\equiv\beta\right)
 \label{eq:csi646-definitions}
 \end{equation}
-
 Within the ANSI-C libraries set, we can also represent the structure
 of others libraries with functions only. This is case of the \textit{csignal}
 library, which deals with signals that are emitted to a given code.
 We thus define that the operational model of this library can been represented
-by signals that raise functions. For a vector $v$ of size $N$ and
+by signals that raise functions. For an array $a$ of size $N$ and
 for a finite signals set $S$ where $\left\{s_{1},\ldots, s_{n}\right\}\:\subset\:S$
 and $n < N$, the function signal records a certain function in one specific signal
 such that when the raising function is called with the respective signal,
 the registered function is called. Let $f$ be a function, $\varphi$ be a signal,
-and $\eta$ be a NULL element. We can thus model the signal of the \textit{csginal} library as:
+and $\eta$ be a NULL element. We can thus model the constraints and properties 
+of the signal function as:
 %
-\begin{eqnarray}
-\label{c-csignal}
-\left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \Rightarrow store\left(v,\varphi,f\right)
-\end{eqnarray}
+\begin{equation}
+\label{quantifier-free-formulae-sginal}
+C := \left [ \begin{array}{ll} 
+                a' = store\left(a,\varphi,f\right) \\
+              \end{array} \right ],  \\ 
+P := \left [ \begin{array}{ll} 
+                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \\
+              \end{array} \right ]  \\               
+\end{equation}
 
 The raise function can be modeled in our operational model as:
 %
-\begin{eqnarray}
-\label{r-csignal}
-\left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(v,\varphi\right) \neq \eta\right) \Rightarrow select\left(v,\varphi\right)
-\end{eqnarray}
+%
+\begin{equation}
+\label{quantifier-free-formulae-raise}
+C := \left [ \begin{array}{ll} 
+                f = select\left(a,\varphi\right) \\
+              \end{array} \right ],  \\  
+P := \left [ \begin{array}{ll} 
+                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a,\varphi\right) \neq \eta\right) \\
+              \end{array} \right ]  \\               
+\end{equation}
 
 %---------------------------------------------
 \subsection{Input/Output Stream Libraries}
@@ -437,6 +464,8 @@ contained between $first$ and $last$, and $i$ represents a certain position
 within the range. For the function $for\_each$, we assume that $f$ is a pointer
 to a function and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
 We can thus model the function $for\_each$ of the algorithm library as:
+\blurb{first/last are not  predicates - or is this supposed to mean first 
+$\neq \eta \wedge last\neq\eta$ etc.? What's the interpretation of "$f(first_i)$"}
 %
 \begin{equation}
 \left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
