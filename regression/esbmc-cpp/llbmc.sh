@@ -76,6 +76,17 @@ do
     fi
     ############# TIMEOUT
 
+    ############# SEG FAULT
+    RESULT=`cat $TMPFILE1 | grep 'fault'`
+
+    if [ "$RESULT" != "" ]; 
+    then
+      echo "CRASH_CONT++ SEG FAULT"
+      CRASH_CONT=$((CRASH_CONT+1))
+      continue
+    fi
+    ############# SEG FAULT
+
     ############# BAD ALLOC
     RESULT=`cat $TMPFILE1 | grep 'bad_alloc'`
 
