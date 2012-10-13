@@ -409,7 +409,7 @@ C := \left [ \begin{array}{ll}
                 f = select\left(a,\varphi\right) \\
               \end{array} \right ],  \\  
 P := \left [ \begin{array}{ll} 
-                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a,\varphi\right) \neq \eta\right) \\
+                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a',\varphi\right) \neq \eta\right) \\
               \end{array} \right ]  \\               
 \end{equation}
 
@@ -460,39 +460,80 @@ function $for\_each$ applies a given function to a range. Let $\eta$ be
 a $NULL$ element and $I$ be a range, such that $\left\{first, last, n, i\right\}\:\subset\:I$.
 Here, $first$ represents the pointer to the beginning of the range, $last$ represents
 the pointer to the ending of the range, $n$ represents the number of elements
-contained between $first$ and $last$, and $i$ represents a certain position
-within the range. For the function $for\_each$, we assume that $f$ is a pointer
-to a function and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
-We can thus model the function $for\_each$ of the algorithm library as:
-\blurb{first/last are not  predicates - or is this supposed to mean first 
-$\neq \eta \wedge last\neq\eta$ etc.? What's the interpretation of "$f(first_i)$"}
+contained between $first$ and $last$, $i$ represents a certain position
+within the range, and $f\left(first_{i}\right)$ represents an element $first_{i}$ applied in the function $f$. For the function $for\_each$, we assume that $f$ is a pointer
+to a function without return and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
+We can thus model the constraints and properties of the $for\_each$ function  of the algorithm library as:
 %
 \begin{equation}
-\left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right) \wedge \left(f\left(first_{i}\right)\right)
-\label{eq:model-for-each}
+\label{quantifier-free-formulae-for-each}
+C := \left [ \begin{array}{ll} 
+            f\left(first_{0}\right) \\
+            \wedge \:first_{1} = first_{0} +1 \\
+            \wedge \:... \\
+            \wedge \:first_{n} = first_{n-1} +1 \\
+            \wedge \:f\left(first_{n}\right) \\
+              \end{array} \right ], \\   
+P := \left [ \begin{array}{ll} 
+            first \neq \eta \wedge last \neq \eta \wedge f \neq \eta \\
+              \end{array} \right ]  \\               
 \end{equation}
+%
+
+%\begin{equation}
+%\left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
+%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right) \wedge \left(f\left(first_{i}\right)\right)
+%\label{eq:model-for-each}
+%\end{equation}
 
 The $find$ function can be modeled as:
-
-\begin{equation}\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right)\\ \wedge \left(ite\left(first_{i} = \alpha, true,  false\right)\right)
-\label{eq:model-find}
+%
+\begin{equation}
+\label{quantifier-free-formulae-find}
+C := \left [ \begin{array}{ll} 
+            tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
+            \wedge \:\neg tmp_{0} \Rightarrow first_{1} = first_{0} + 1 \\
+            \wedge \:... \\
+            \wedge \:\neg tmp_{0} \Rightarrow first_{n} = first_{n-1} + 1 \\
+              \end{array} \right ],  \\ 
+P := \left [ \begin{array}{ll} 
+            first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
+              \end{array} \right ]  \\               
 \end{equation}
+%
+
+%\begin{equation}\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
+%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right)\\ \wedge \left(ite\left(first_{i} = \alpha, true,  false\right)\right)
+%\label{eq:model-find}
+%\end{equation}
 
 The operational model created to represent the category \textit{Numeric} is
 composed by the \textit{numeric} library and contains four algorithms that work
 objectively in the manipulation of numerical sequences. One of the algorithms
 implemented in this model is called $accumulate$, whose main purpose is
 to accumulate the values that belong to a numerical sequence. To give an exmample
-of the implementation of this model, we assume that $\alpha$ is an accumulator.
-We can thus model the $accumulate$ of the algorithm library as
-
+of the implementation of this model, we assume that $\delta$ is an accumulator.
+We can thus model the $accumulate$ of the algorithm library as:
+%
 \begin{equation}
-\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
-\bigwedge^{n}_{i=0} \left(\left(first_{i+1} = first_{i} +1\right)\right) \wedge \left(\delta = \delta + first_{i}\right)
-\label{eq:accumulate}
+\label{quantifier-free-formulae-accumulate}
+C := \left [ \begin{array}{ll} 
+            \delta = \delta + first_{0} \\
+            \wedge \:first_{1} = first_{0} +1 \\
+            \wedge \:... \\
+            \wedge \:first_{n} = first_{n-1} +1 \\
+            \wedge \:\delta = \delta + first_{n} \\
+              \end{array} \right ],  \\ 
+P := \left [ \begin{array}{ll} 
+            first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
+              \end{array} \right ]  \\               
 \end{equation}
+
+%\begin{equation}
+%\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
+%\bigwedge^{n}_{i=0} \left(\left(first_{i+1} = first_{i} +1\right)\right) \wedge \left(\delta = \delta + first_{i}\right)
+%\label{eq:accumulate}
+%\end{equation}
 
 %-------------------------------------------
 \subsubsection{Structure.}
@@ -1192,7 +1233,7 @@ using the unix time command.
 \label{comparison-to-LLBMC}
 %-----------------------------------
 
-This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarizes the results. Here, \textit{N} is the number of programs,  \textit{L} is the total lines of code of each suite, \textit{Time} is the total time of verification on each module, \textit{P} is the number of positive results of the verification, \textit{FP} the number of false positive results, \textit{FN} is the number of false negative results, \textit{IE} is the number of internal errors during the verification of each module, \textit{TO} the number of time-outs ($>900$ seconds) and \textit{MO} is the number of memory-outs ($>24$ GB).
+This subsection describes the evaluation of ESBMC++ against another BMC tool developed by Merz et al.~\cite{Florian12}. Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} summarizes the results. Here, \textit{N} is the number of C++ programs, \textit{L} is the total lines of code of each suite, \textit{Time} is the total time of the verification of each module, \textit{P} is the number of positive results, \textit{FP} is the number of false positive results, \textit{FN} is the number of false negative results, \textit{IE} is the number of internal errors during the verification of each module, \textit{TO} represents the number of time-outs ($>900$ seconds), and \textit{MO} represents the number of memory-outs ($>24$ GB).
 
 \begin{table*}[t]
 \renewcommand\arraystretch{1.18}
