@@ -1029,8 +1029,8 @@ int main() {
     throw 20; // throw expression
   }
   // catch block
-  catch (int) { /* error handling for integer exceptions */ }
-  catch (float) { /* error handling for float exceptions */ }
+  catch (int i) { /* error handling for integer exceptions */ }
+  catch (float f) { /* error handling for float exceptions */ }
   return 0;
 }
 \end{lstlisting}
@@ -1059,7 +1059,8 @@ during the symbolic execution phase if an exception is thrown. By the end
 of the catch block verification, the map of the first CATCH instruction
 inserted before the try block code is filled with the label created
 for each catch mapped on the type of exception. The Figure~\ref{figure:try-catch-goto}
-shows the code from Figure~\ref{figure:try-catch-example} already converted.
+shows the internal flow on ESBMC++ for exception handling of the code from
+Figure~\ref{figure:try-catch-example}.
 
 \begin{figure}[ht]
 \centering
@@ -1067,12 +1068,25 @@ shows the code from Figure~\ref{figure:try-catch-example} already converted.
 \begin{lstlisting}
 main() (c::main):
    CATCH signed_int->1, float->2
-   THROW signed_int: 20
+
+   THROW 20
+
+   $TARGET = 3;
+   if(THROW_TYPE == signed_int)
+     $TARGET = 1
+   else if(THROW_TYPE == float)
+     $TARGET = 2
+
    CATCH
+   GOTO $TARGET
+
+1: int i;
+   /* error handling for integer exceptions */
    GOTO 3
-1: int #anon; /* error handling for integer exceptions */
-   GOTO 3
-2: float #anon; /* error handling for float exceptions */
+
+2: float f;
+   /* error handling for float exceptions */
+
 3: return 0;
 END_FUNCTION
 \end{lstlisting}
