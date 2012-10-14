@@ -1352,9 +1352,18 @@ expose.
 \section{Conclusions}
 %------------------------------------------------------
 
-In this work, we have investigated SMT-based verification of C++ programs, exploring the major features that the language has to offer. We have described an implementation of an operational model of the sequential STL containers, an novel approaches to handle inheritance, polymorphism and exception handling (in particular, exception specification, a feature not supported by others BMC tools). Our experiments consist of several test cases, intended to provide programs with most of the features that C++ has to offer. The results show that ESBMC++ outperforms LLBMC~\cite{Florian12} if we consider the verification of C++ programs. ESBMC++ is able to verify most of the test cases with an advantage: we are able to verify programs with exceptions enabled, a missing feature on LLBMC that decrease the verification accuracy of C++ programs.
-For future works, we are extending the operational model of STL containers to support not only sequential containers but also mapped ones (e.g., map and multimap)~\ref{CppReference12}.
-
+In this work, we have investigated SMT-based verification of C++ programs
+by focusing on the major features that the language offers. We have described
+an implementation of an operational model of the sequential STL containers
+as well as novel approaches to handle inheritance, polymorphism and exception handling
+(in particular, exception specification, which is a feature that is not supported by others
+BMC tools). Our experiments consist of several test cases, which contain C++ programs
+with most of the features that C++ language has to offer. The results show that
+ESBMC++ outperforms LLBMC~\cite{Florian12} if we consider the verification of C++ programs.
+ESBMC++ is also able to verify most of the test cases with an advantage: we are able to verify programs
+with exceptions enabled (a missing feature of LLBMC that decreases the verification accuracy of
+C++ programs). For future work, we intend to extend the operational model of STL containers
+to support not only sequential containers but also mapped ones (e.g., map and multimap).
 
 %\smallskip{\small\noindent{\bf Acknowledgments.}
 %
