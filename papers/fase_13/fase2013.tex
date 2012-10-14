@@ -1189,17 +1189,8 @@ one of the following rules is true, the code will jump from the throw expression
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block: Similar to the
        last rule but works for every type, if no match is found, ESBMC++ looks for a handler of type ellipsis and update the GOTO
        instruction if one exists.
+ \item If the throw has no arguments then it should rethrow the last thrown exception: ESBMC++ always keeps a reference of the last thrown exception and updates a rethrow if this reference is not NULL.
 \end{itemize}
-
-%------------------------------------------------------
-\subsection{Rethrows}
-%------------------------------------------------------
-
-Another feature that C++ provides for exception handling is the rethrow. The rethrow is an expression formed by
-a throw with no argument. The rethrow function is to throw the last thrown exception so it can be handled further. To handle rethrows,
-ESBMC++ always keeps a pointer to the last thrown exception and when it finds an throw without arguments (rethrow) it checks if this pointer
-is not NULL, if it is NULL than the code is trying to rethrow an exception without a previous throw. If the pointer is not NULL than we have
-a valid last thrown exception and the rethrow expression is replaced by a throw expression with the last expection as argument.
 
 %------------------------------------------------------
 \subsection{Exception Specification}
