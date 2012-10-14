@@ -568,6 +568,7 @@ and $pop\_front\left(\right)$ methods~\cite{CppReference12}.
 \subsubsection{Model Semantics.}
 %-------------------------------------------
 
+\comment{
 Let us consider that a container model is composed
 by five types of variables, which are: $I$, $C$,
 $N$, $P$ and $T$. Let $I$ be an iterator that points
@@ -578,33 +579,35 @@ the memory address where $T$ is located; and $T$ be the
 values stored in the container.
 For convention, we assume that
 $\left(c, v, d, l\right) \subset C, \{i, j, n\}
-\subset N$ and $\{it1, it2\} \subset I$.
+\subset N$ and $\{it1, it2\} \subset I$.}
 
-The containers contain an array of elements $T$ and their
-positions in the memory are represented by pointers $P$.
-Therefore, the syntax for the integer expression is:
+
+In order to formalize the verification of the STL containers,
+we define a core container expression language, and extend the translation
+functions $\cal C$ and  $\cal P$ of constraints and properties to this.
+The container language comprises several syntactic domains, starting with
+the base elements $\mathit{T}$, iterators $\mathit{It}$, pointers $\mathit{P}$,
+and integer indices $\mathit{Int}$, and of course the (proper)
+container expressions $\mathit{C}$. The syntax for \emph{T} values is the following:
 %
-\[\begin{array}{r@{\:\:}c@{\:\:}l}
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
 \\[-5ex]
-\mathit{Int}  & ::= & \: \mathit{N} \: | \: \mathit{Z} \: | \: \mathit{C.size} \: | \: \mathit{C.capacity} \: | \\
-              &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: | \\
-              &     & \: \textit{It} \: ( + \: | \: - ) \:  \textit{It}
+\mathit{T}   & ::= & \: \mathit{t} \: | \: \mathit{*It} \: | \: \mathit{*P} \: | \: \mathit{C_n} \:  \\
 \end{array}
 \]
-
-Where variables included in the containers
-like \emph{size} and \emph{capacity} return
-a integer value as well as the arithmetics
-operations between integer values.
-Similarly, the syntax for iterator
-expressions is:
+%
+Where $\mathit{*It}$ is the value stored in the position pointed
+by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value
+stored in the $P$ position of the memory, and $\mathit{C_n}$ is
+an element of a container $C$ in the position $n$.
+Similarly, the syntax for iterator expressions is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 \\[-5ex]
 \mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
 \end{array}
 \]
-
+%
 Where $begin$ and $end$ are methods
 that return iterators, which point to the beginning
 and the ending of a container, respectively. We also have
@@ -623,20 +626,25 @@ in the container pointed by the iterator, $array$ is another
 memory address that stores the beginning of the container,
 $source$ is the address that makes the link between the iterator
 and its pointed container (which stores the container $array$ value).
-
 There is also the pointer return from pointer operations.
-The syntax for \emph{T} values is the following:
+The containers contain an array of elements $T$ and their
+positions in the memory are represented by pointers $P$.
+Therefore, the syntax for the integer expression is:
 %
-\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
+\[\begin{array}{r@{\:\:}c@{\:\:}l}
 \\[-5ex]
-\mathit{T}   & ::= & \: \mathit{t} \: | \: \mathit{*It} \: | \: \mathit{*P} \: | \: \mathit{C_n} \:  \\
+\mathit{Int}  & ::= & \: \mathit{N} \: | \: \mathit{Z} \: | \: \mathit{C.size} \: | \: \mathit{C.capacity} \: | \\
+              &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: | \\
+              &     & \: \textit{It} \: ( + \: | \: - ) \:  \textit{It}
 \end{array}
 \]
-%
-Where $*It$ is the value stored in the position pointed
-by a iterator $It$. Similarly, $*P$ is the value stored
-in the $P$ position of the memory, and $\mathit{C_n}$ is
-an element of a container $C$ in the position $n$.
+
+Where variables included in the containers
+like $\mathit{size}$ and $\mathit{capacity}$ return
+a integer value as well as the arithmetics
+operations between integer values.
+
+
 
 %-------------------------------
 \subsubsection{Model.}
