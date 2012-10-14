@@ -525,7 +525,7 @@ C := \left [ \begin{array}{ll}
             \wedge \:\delta = \delta + first_{n} \\
               \end{array} \right ],  \\ 
 P := \left [ \begin{array}{ll} 
-            first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
+            first \neq \eta \wedge last \neq \eta \wedge \delta \neq \eta \\
               \end{array} \right ]  \\               
 \end{equation}
 
@@ -738,7 +738,7 @@ pointed by the iterator.
 \subsection{General Libraries}
 %---------------------------------
 
-The \textit{General Libraries} category is split in three
+The \textit{General Libraries} category is split into three
 sub-categories: \textit{language support}, \textit{diagnostics},
 and \textit{general utilities}. The category \textit{language support}
 is compose by four libraries that deal with exception handling
@@ -805,16 +805,13 @@ given position described by $pos$. We can thus model the $constructor$
 of the string library as:
 %
 \begin{equation}
-\label{cconstructor-string}
+\label{constructor-string}
 C := \left [ \begin{array}{ll}
-                str_{1} = store\left(str_{0}, i_{0}, c_{0}\right) \wedge i_{1} = i_{0} + 1  \\
+                str_{1} = store\left(str_{0}, i_{0}, c_{0}\right) \\
+		\wedge i_{1} = i_{0} + 1  \\
 		\ldots \\
 		\wedge \, \, str_{n} = store\left(str_{n-1}, i_{n-1}, c_{0}\right)
-              \end{array} \right ]  \\
-\end{equation}
-%
-\begin{equation}
-\label{pconstructor-string}
+              \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
                 \left(i_{0} \geq 0\right)  \, \, \wedge \, \, \left(i_{0} < \left(n_{0} + 1\right)\right)\\
                 \ldots \\
@@ -829,41 +826,42 @@ The $find$ method can be modeled as:
 \begin{equation}
 \label{cfind-string}
 C := \left [ \begin{array}{ll}
-                \left(c_{0} \neq \eta\right)\\
-              \end{array} \right ]  \\
-\end{equation}
-%
-\begin{equation}
-\label{pfind-string}
+              found_{0} = ite\left(select\left(str, pos_{0}\right) = c_{0}, pos_{0}, -1\right)\\
+              \ldots \\
+               \wedge \, \, found_{n-1} = ite\left(select\left(str, pos_{n-1}\right) = c_{0}, pos_{n-1}, -1\right)\\      
+              \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-	       \left(pos \leq 0\right)\\
-               \wedge \, \, \left(pos < length\right)\\
-               \wedge \, \, ite\left(select\left(str, i\right) = c_{0}, i, -1\right)\\
-	       ...\\
-	       \wedge \, \, ite\left(select\left(str, i\right) = c_{0}, i, -1\right)\\
+				 \left(c_{0} \neq \eta\right) \\
+	       \left(pos_{0} \leq 0\right) \\
+         \wedge \, \, \left(pos_{0} < length\right)\\
+	       \ldots \\
+	       \wedge \, \, \left(pos_{n-1} \leq 0\right)\\
+	       \wedge \, \, \left(pos_{n-1} < length\right)\\
+	       
               \end{array} \right ]  \\
 \end{equation}
 
 %------------------------------------------------
 \section{Inheritance and Polymorphism}
+\label{inheritance-and-polymorphism}
 %------------------------------------------------
 
 Modeling C++ features like inheritance and polymorphism
-make static analysis difficult to implement.
+makes static analysis difficult to implement.
+\comment{
 Inheritance is one of the main benefits of object-oriented paradigm,
 which allows a class (derived class) absorbs data and behavior
 from existing classes (base class) and thus enhances it with new features.
 This is the vital concept behind the creation of reusable software components
 and has received much attention because it is one of the promissing ways to
-improve software quality.
-
-C++ and Java allow single inheritance, when derived classes have only one base class.
-
-Additionally, C++ allows multiple inheritance, when a class may inherit from
-one or more base classes (probably not related). This is a particular feature
-that makes it harder to model check C++ programs in relation to other
-object-oriented programming languages (e.g., Java). It also disallows
-the direct use of tools already created to other programming languages.
+improve software quality.}
+In contrast to Java, which only allows single inheritance, where derived classes have only one base
+class, C++ also allows multiple inheritance, where a class may inherit from one
+or more unrelated base classes. This particular feature makes C++ programs
+harder to model check than programs in other object-oriented programming
+languages (e.g., Java). In this case, we have to replicate the methods and atributes of the base
+classes to the inherited class to have direct access them, which thus disallows the direct use 
+of tools already created to other programming languages
 
 If a class inherits from a base class that does not contain virtual methods,
 then we call this as \textit{replicated inheritance}. If there is a path from
@@ -996,7 +994,7 @@ methods:
         1: name: cpp::struct.Rectangle::area(this)
 \end{lstlisting}
 \end{minipage}
-\caption{UML diagram: Intermediate Representation of Rectangle class}
+\caption{Intermediate Representation of Rectangle class}
 \label{figure:IR_uml_rec}
 \end{figure}
 
@@ -1014,25 +1012,26 @@ methods:
         2: name: cpp::struct.Square::area(this)
 \end{lstlisting}
 \end{minipage}
-\caption{UML diagram: Intermediate Representation of Square class}
+\caption{Intermediate Representation of Square class}
 \label{figure:IR_uml_square}
 \end{figure}
 
-In object-oriented programming, the use of \textit{shared inheritance} is very common.
-ESBMC++ verifies this inheritance according to Figure~\ref{figure:virtual_flow}.
-If a class has pure virtual methods, this class must not implement these methods,
-this needs for implementation belongs to derived classes.
-Otherwise, if a class is only virtual, it must have an implementation or
-the verification fails. ESBMC++ also handles virtual destructors successfully
-and supports default constructor. However, ESBMC++ currently does not support
-dynamic cast.
+In OO programming, the use of \textit{shared inheritance} is very common.
+In constrat to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to 
+verify this kind of inheritance. If a class has pure virtual methods only,
+then this class does not contain implementation for these methods and they will 
+thus be implemented in the derived classes. Otherwise, if a class has only virtual
+methods, it must contain an implementation for them or the verification will fail
+with a ``conversio error''. ESBMC++ also handles  virtual destructors successfully 
+and supports the default constructor creation. However, ESBMC++ currently does not 
+support dynamic cast.
 
-\begin{figure}[ht]
-\centering
-\includegraphics[scale=0.4]{figures/virtual-fluxograma}
-\caption{Virtual: Flowchart}
-\label{figure:virtual_flow}
-\end{figure}
+%\begin{figure}[ht]
+%\centering
+%\includegraphics[scale=0.4]{figures/virtual-fluxograma}
+%\caption{Virtual: Flowchart}
+%\label{figure:virtual_flow}
+%\end{figure}
 
 %Explicar destrutor virtual
 %Nao suporta dynamic_cast
@@ -1198,7 +1197,8 @@ exception handling follows and try to look for an match on the catch map or will
 The experimental results is divided into two parts.
 The setup is described in Section~\ref{experimental-setup}
 while Section~\ref{comparison-to-LLBMC} describes a comparison
-between ESBMC++ and LLBMC using a set of standard C++ benchmarks.
+between ESBMC++ and LLBMC (Low-Level Bounded Model Checker) 
+using a set of standard C++ benchmarks.
 
 %-----------------------------------
 \subsection{Experimental Setup}
@@ -1269,18 +1269,55 @@ This subsection describes the evaluation of ESBMC++ against another BMC tool dev
 \label{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 \end{table*}
 
-The tool developed by Merz et al.~\cite{Florian12} is called LLBMC (Low-Level Bounded Model Checker). We invoked both tools using two scripts: one for ESBMC++, that reads the parameters from a file and calls the tool\footnote[1]{esbmc --unwind \textit{B} --no-unwinding-assertions -I ~/libraries/} and other for LLBMC, that first compile the code to bytecode using CLANG\footnote[2]{/usr/bin/clang++ -c -g -emit-llvm *.cpp -fno-exceptions \newline /usr/bin/llvm-link *.o -o main.bc}~\cite{CLANG}, reads the parameters from a file and calls the tool\footnote[3]{llbmc --ignore-missing-function-bodies --no-max-loop-iterations-checks --max-loop-iterations=\textit{B}}. The bound set for both tools (value of \textit{B}) depends of each test case. LLBMC currently does not support exception handling and all the bytecodes were generated without exception support (flag -fno-exceptions) while verifying with LLBMC. Enabling exceptions resulted in LLBMC aborting in must of the cases.
+The tool developed by Merz et al.~\cite{Florian12} is called LLBMC. 
+We invoked both tools using two scripts: one for ESBMC++, that reads 
+the parameters from a file and calls the tool
+\footnote[1]{esbmc --unwind \textit{B} --no-unwinding-assertions -I ~/libraries/} 
+and another for LLBMC, that first compiles the code to bytecode using CLANG
+\footnote[2]{/usr/bin/clang++ -c -g -emit-llvm *.cpp -fno-exceptions \newline /usr/bin/llvm-link *.o -o main.bc}~\cite{CLANG}, 
+reads the parameters from a file and calls the tool\footnote[3]
+{llbmc --ignore-missing-function-bodies --no-max-loop-iterations-checks --max-loop-iterations=\textit{B}}. 
+The bound set for both tools (value of \textit{B}) depends of each test case. 
+LLBMC currently does not support exception handling and all the bytecodes were generated without 
+exception support (flag -fno-exceptions) while verifying with LLBMC. 
+Enabling exceptions resulted in LLBMC aborting in most of the cases.
 
-As we can see in Table ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC}, LLBMC timeout 25 times on algorithm module and run out of memory in 1 case. Looking into those cases, most of them used iterators which maybe causing the slow down on verification, a situation that repeats on others modules. On the Deque, Vector and List modules, the slowdowns still happens but with minor values. The module that had the most unsuccessful verification was the list module, and most of the errors were related to the container size (e.g. assertions if the container is empty or if it has a particular size). On ESBMC++, most of the errors on those modules are due to a missing operational model of the libraries, which are currently under development.
+As we can see in Table ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC}, 
+LLBMC time-outs 25 times in the algorithm module and runs out of memory in 1 test case. 
+Looking at those test cases, most of them use iterators, which maybe causing the slow down 
+on verification, a situation that repeats on others modules. On the Deque, Vector and List modules, 
+the slowdowns still happens but with small values. The module that had the most unsuccessful verification 
+results was the list module, and most of the errors were related to the container size 
+(e.g., assertions if the container is empty or if it has a particular size). 
+On ESBMC++, most of the errors on those modules are due to a missing operational model 
+of the libraries, which are currently under development.
 
-On the stream module, most of the errors where related to assertions on the size of the stream (using the method gcount()) and to internal flags (such as ios::hex and iostream::hex). On ESBMC++, most of the error were related to bad operational model of internal flags. On the string module, the errors are related to assertions on the string itself, usually if the string is equal to another string. On Inheritance module, LLBMC report some incorrect errors about memory write and integer overflows while ESBMC++ failed on the verification of test cases involving dynamic\_cast.
+On the stream module, most of the errors where related to assertions on the size 
+of the stream (using the method $gcount\left(\right)$) and to internal flags (such as 
+\textit{ios::hex} and \textit{iostream::hex}). On ESBMC++, most of the error were related 
+to bad operational model of internal flags. On the string module, the errors are related 
+to assertions on the string itself, usually if the string is equal to another string. 
+On Inheritance module, LLBMC reports some incorrect errors about memory write and 
+integer overflows while ESBMC++ failed on the verification of test cases involving 
+\textit{dynamic\_cast} (as described in Section~\ref{inheritance-and-polymorphism}).
 
-On the try\_catch module, LLBMC failed in most of the tests due to the tool missing support to exception handling. ESBMC++ was able to verify must of the cases, the errors occurs on a missing implementation of exception specifications when using on classes constructors. And lastly, on the cpp module , which has test cases involving all the others modules, most of the errors presented were already seen during the verification of others modules.
+On the \textit{try\_catch} module, LLBMC failed in most of the tests due to the fact that 
+the tool is missing support to exception handling. ESBMC++ was able to verify must of the cases. 
+The errors that occur are related to a missing implementation of exception specifications when 
+using classes constructors. And lastly, on the cpp module, which has test cases involving all 
+the others modules (but are not redundant), most of the errors presented were already seen during 
+the verification of others modules.
 
-By the end, ESBMC++ verified the modules in 33327 seconds (approximately 9.25 hours) and successfully verified 979 out of 1113 (~87.96\%) while LLBMC verified the modules in 45687 seconds (approximately 12.69 hours) and successfully verified 734 out of 1113 (65.94\%). We can see that LLBMC is slower than ESBMC++ on the containers and algorithm modules, while is faster on stream and string modules but looses on successfully verified test cases. On the inheritance module, the results of both tools are even.
+By the end, ESBMC++ verified the modules in 33327 seconds (approximately 9.25 hours) and successfully 
+verified 979 out of 1113 (~87.96\%) while LLBMC verified the modules in 45687 seconds (approximately 12.69 hours) 
+and successfully verified 734 out of 1113 (65.94\%). We can see that LLBMC is slower than ESBMC++ on the containers 
+and algorithm modules, while it is faster on stream and string modules but looses on successfully verified test cases. 
+On the inheritance module, the results of both tools are even.
 
-On the try\_catch module, ESBMC++ is able to verify almost all the tests, something that LLBMC can't due to its lack of support of exception handling. On the cpp module, ESBMC++ is able to successfully verify a lot more test than LLBMC. Also note that ESBMC++ haven't crash, memory out or timeout in any module.
-
+On the \textit{try\_catch} module, ESBMC++ is able to verify almost all the tests, 
+something that LLBMC cannot due to its lack of support of exception handling. On the cpp module, 
+ESBMC++ is able to successfully verify many more test cases than LLBMC. 
+Also note that ESBMC++ does not crash, memory out or timeout in any module.
 
 %-----------------------------------
 \section{Related Work}
