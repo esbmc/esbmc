@@ -404,19 +404,19 @@ P := \left [ \begin{array}{ll}
               \end{array} \right ]  \\
 \end{equation}
 
+%%\blurb{Shouldn't this call the function set by signal?}
+The function $raise\left(\sigma\right)$ can be modeled in our operational model as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-raise}
 C := \left [ \begin{array}{ll}
-                select\left(a,\sigma\right) \Rightarrow f \\
+                f = select\left(a',\varphi\right) \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-                \left(\sigma = s_{1}\right) \vee \ldots \vee \left(\sigma = s_{n}\right) \\
-		\wedge \,\,\left(select\left(a',\sigma\right) \neq \eta\right) \\
+                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a',\varphi\right) \neq \eta\right) \\
               \end{array} \right ]  \\
 \end{equation}
 \vspace*{-4ex}
-
 %---------------------------------------------
 \subsection{Input/Output Stream Libraries}
 %---------------------------------------------
@@ -450,9 +450,7 @@ Dotted gray square represents the library, white square represents the class and
 \subsection{Standard Template Libraries}
 %-------------------------------------------
 
-The Standard Template Libraries (STL) is split into
-four categories: \textit{algorithms}, \textit{numeric},
-\textit{containers}, and \textit{iterators}. The operational model
+\comment{The operational model
 of the \textit{algorithms} library is composed by a set of algorithms
 related to manipulation of STL containers, arrays, and string objects.
 To given an idea of the basic operations of this library, we describe
@@ -464,48 +462,52 @@ function $for\_each$ applies a given function to a range. Let $\eta$ be
 a $NULL$ element and $I$ be a range, such that $\left\{first, last, n, i\right\}\:\subset\:I$.
 Here, $first$ represents the pointer to the beginning of the range, $last$ represents
 the pointer to the ending of the range, $n$ represents the number of elements
-contained between $first$ and $last$ and $i$ represents a certain position
-within the range. For the function $for\_each$, we assume that $f$ is a pointer to a function without
-return and $f\left(first_{i}\right)$ represents the constraints coming from applying $f$ to $first_{i}$, furthermore,
-for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
+contained between $first$ and $last$, $i$ represents a certain position
+within the range, and $f\left(first_{i}\right)$ represents an element $first_{i}$ applied in the function $f$. For the function $for\_each$, we assume that $f$ is a pointer
+to a function without return and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
 We can thus model the $C$ and $P$ of the $for\_each$ function  of the algorithm library as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-for-each}
 C := \left [ \begin{array}{ll}
-            select\left(first, 0\right) \\
-            \wedge \:f\left(first_{0}\right)\\
+            f\left(first_{0}\right) \\
+            \wedge \:first_{1} = first_{0} +1 \\
             \wedge \:... \\
-            \wedge \:select\left(first, n\right) \\
+            \wedge \:first_{n} = first_{n-1} +1 \\
             \wedge \:f\left(first_{n}\right) \\
               \end{array} \right ], \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \\
-	    \wedge \:last \neq \eta \\
-	    \wedge \:f \neq \eta \\
-	    \wedge \:first < last \\
+            first \neq \eta \wedge last \neq \eta \wedge f \neq \eta \\
               \end{array} \right ]  \\
 \end{equation}
 %
+
+%\begin{equation}
+%\left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
+%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right) \wedge \left(f\left(first_{i}\right)\right)
+%\label{eq:model-for-each}
+%\end{equation}
+
 The $find$ function can be modeled as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-find}
 C := \left [ \begin{array}{ll}
-            select\left(first, 0\right) \\
-	    \wedge \:tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
-            \wedge \:\neg tmp_{0} \Rightarrow select\left(first, 1\right) \\
+            tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
+            \wedge \:\neg tmp_{0} \Rightarrow first_{1} = first_{0} + 1 \\
             \wedge \:... \\
-            \wedge \:\neg tmp_{0} \Rightarrow select\left(first, n\right) \\
+            \wedge \:\neg tmp_{0} \Rightarrow first_{n} = first_{n-1} + 1 \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \\
-	    \wedge \:last \neq \eta \\
-	    \wedge \:\alpha \neq \eta \\
-	    \wedge \:first < last \\
+            first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
               \end{array} \right ]  \\
 \end{equation}
 %
+
+%\begin{equation}\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
+%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right)\\ \wedge \left(ite\left(first_{i} = \alpha, true,  false\right)\right)
+%\label{eq:model-find}
+%\end{equation}
 
 The operational model created to represent the category \textit{Numeric} is
 composed by the \textit{numeric} library and contains four algorithms that work
@@ -518,17 +520,14 @@ We can thus model the $accumulate$ of the algorithm library as:
 \begin{equation}
 \label{quantifier-free-formulae-accumulate}
 C := \left [ \begin{array}{ll}
-            select\left(first, 0\right) \\
-            \wedge \:\delta = \delta + first_{0}\\
+            \delta = \delta + first_{0} \\
+            \wedge \:first_{1} = first_{0} +1 \\
             \wedge \:... \\
-            \wedge \:select\left(first, n\right) \\
+            \wedge \:first_{n} = first_{n-1} +1 \\
             \wedge \:\delta = \delta + first_{n} \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \\
-	    \wedge \:last \neq \eta \\
-	    \wedge \:\delta \neq \eta \\
-	    \wedge \:first < last \\
+            first \neq \eta \wedge last \neq \eta \wedge \delta \neq \eta \\
               \end{array} \right ]  \\
 \end{equation}
 
@@ -537,12 +536,12 @@ P := \left [ \begin{array}{ll}
 %\bigwedge^{n}_{i=0} \left(\left(first_{i+1} = first_{i} +1\right)\right) \wedge \left(\delta = \delta + first_{i}\right)
 %\label{eq:accumulate}
 %\end{equation}
+}
 
-%-------------------------------------------
-\subsubsection{Structure.}
-%-------------------------------------------
-
-In this section, we will focus on the STL sequential
+The Standard Template Libraries (STL) is split into
+four categories: \textit{algorithms}, \textit{numeric},
+\textit{containers}, and \textit{iterators}.
+In this paper, however, we focus on the STL sequential
 containers operational model, its preconditions and
 simulation features (e.g., how we store the elements
 values of the containers and intern class methods),
@@ -642,7 +641,22 @@ like $\mathit{size}$ and $\mathit{capacity}$ return
 a integer value as well as the arithmetics
 operations between integer values.
 
+\comment{
+For the proper container expressions, we model the operations
+$\mathit{insert\left(It, T, N\right)}$ and
+$\mathit{erase \left(ipos, it_0, it_k\right)}$
+As part of the single static assign (SSA) transformation, side-effects
+on the containers are made explicit, so that every operation returns a new
+container as a result. For example, $\mathit{c.insert\left(x,y,z\right)}$
+becomes $\mathit{c' = c.insert\left(x,y,z\right)}$. Each $T$-container $c$
+is modelled as a structure
 
+struct {
+  int size;
+  int capacity;
+  T[capacity] elems
+}
+}
 
 %-------------------------------
 \subsubsection{Model.}
@@ -668,18 +682,25 @@ where $array$ is a memory address where the elements are stored in the container
 $size$ is the total number of elements in the container, and $capacity$
 is the total capacity of the vector, which is simulated internally in the model.
 The main methods of a vector (and sequential containers) have only
-three types of operation: \textit{insertion}, \textit{deletion}, and \textit{search}.
-Methods such as $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$,
+three types of operation: $\mathit{insert\left(It, T, N\right)}$,
+$\mathit{insert\left(It, It, It\right)}$, $\mathit{erase\left(It, It, It\right)}$,
+$\mathit{erase\left(It\right)}$, and $\mathit{search\left(It\right)}$.
+Methods $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$,
 $back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ are only
 a simplified variation of those main methods, which are optimized for some containers
 (e.g., popping the last element of a stack).
-%
-To represent the model, consider a container $C\{cont\}$ with a method
-$cont.insert \rightarrow It$ that returns an iterator result and
+As part of the SSA-transformation, side-effects on the containers are made explicit,
+so that every operation returns a new container as a result. For example,
+$\mathit{c.insert\left(x,y,z\right)}$ becomes $\mathit{c' = c.insert\left(x,y,z\right)}$.
+The translation function $\cal C$ then describes the constraints relating the ``before''
+and ``after'' versions of this structure.
+
+To represent the model, consider a container $C\{cont\}$ with a
+method $cont.insert \rightarrow It$ that returns an iterator result and
 makes use of an iterator $It\{ipos\}$ that points to the desired
-insertion position; a template value $T\{val\}$ with the element
+(insertion) position; a template value $T\{val\}$ with the element
 to be inserted and an integer $N\{qtd\}$ that informs the amount
-of elements to be inserted in the desired position.
+of elements to be inserted.
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
@@ -696,9 +717,8 @@ Let $It\{it_0\}$ be an iterator that marks the first element
 to be inserted, $It\{it_k\}$ be another iterator that
 points to the first element after the end of the sequence to be inserted
 in the required position and let $N\{k\}$ be the length of the array $[it_0\, it_k)$.
-
-Therefore, we have:\\
-
+Thus, we have:
+%
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
 cont.insert(ipos, it_0, it_k) \Longrightarrow & cont'.size = cont.size + k\\
@@ -745,6 +765,7 @@ internally in the container, and $addr$ is a memory
 address equivalent to $cont.array$, being $cont$ the container
 pointed by the iterator.
 
+\comment{
 %---------------------------------
 \subsection{General Libraries}
 %---------------------------------
@@ -859,7 +880,7 @@ P := \left [ \begin{array}{ll}
 
               \end{array} \right ]  \\
 \end{equation}
-
+}
 %------------------------------------------------
 \section{Inheritance and Polymorphism}
 \label{inheritance-and-polymorphism}
@@ -1070,25 +1091,19 @@ Figure~\ref{figure:try-catch-example}.
 \begin{lstlisting}
 main() (c::main):
    CATCH signed_int->1, float->2
-
    THROW 20
-
    $TARGET = 3;
    if(THROW_TYPE == signed_int)
      $TARGET = 1
    else if(THROW_TYPE == float)
      $TARGET = 2
-
    CATCH
    GOTO $TARGET
-
 1: int i;
    /* error handling for integer exceptions */
    GOTO 3
-
 2: float f;
    /* error handling for float exceptions */
-
 3: return 0;
 END_FUNCTION
 \end{lstlisting}
