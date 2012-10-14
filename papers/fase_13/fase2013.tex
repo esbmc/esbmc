@@ -83,11 +83,11 @@ tend to require a high verification effort. C++
 verification involves many more challenges than that of plain ANSI-C since the language provides
 a wider set of features (e.g., object-oriented programming), libraries (e.g., specialized
 input-output), and functionalities (e.g., templates). In order to be attractive for mainstream software development,
-C++ model checkers have to support these and at the same time maintain 
+C++ model checkers have to support these and at the same time maintain
 high speed, accuracy, efficiency, and user-friendliness.
 
 
-We propose to apply 
+We propose to apply
 BMC to C++ programs using an operational model,  which
 is an abstract representation of the standard C++ libraries that
 conservatively approximates their semantics. To support this operational model, we extended
@@ -101,7 +101,7 @@ elements values of the containers), and how these are used in order to verify
 real-world C++ programs.  Additionally, we develop novel approaches to handle
 exceptions in C++ programs (in particular, exception specification for
 functions and methods) that previous approaches are not able to deal
-with~\cite{PrabhuMBIG11,Blanc07,Florian12}. 
+with~\cite{PrabhuMBIG11,Blanc07,Florian12}.
 %
 %------------------------------
 \section{Background and System Architecture}
@@ -109,7 +109,7 @@ with~\cite{PrabhuMBIG11,Blanc07,Florian12}.
 
 ESBMC++ builds on the front-end of CBMC to generate the VCs for a given C++ program,
 and on the back-end of ESBMC to encode the VCs using different background theories
-and SMT solvers. 
+and SMT solvers.
 %%% In this section, we describe the main features of CBMC that we use,
 %%% and present the background theories used in the back-end of ESBMC.
 
@@ -173,7 +173,7 @@ $\Gamma\cup\{\neg\psi\}$.
 %%% that we found in the SMT solvers Boolector, CVC3, and Z3 for the theory of linear, non-linear,
 %%% and bit-vector arithmetic. We summarize the syntax of these background theories as follows,
 %%% using standard notations where appropriate:
-%%% 
+%%%
 %%% \[\begin{array}{r@{\:\:}c@{\:\:}l}
 %%% \\[-5ex]
 %%% \mathit{F}  & ::= & \mathit{F} \: \mathit{con} \: \mathit{F} \:
@@ -213,7 +213,7 @@ $\Gamma\cup\{\neg\psi\}$.
                     %%% | \: @ \:
 %%% \end{array}
 %%% \]
-%%% 
+%%%
 %%% \noindent
 %%% Here, $F$ denotes Boolean-valued expressions with atoms $A$, and $T$ denotes terms
 %%% built over integers, reals, and bit-vectors.
@@ -241,7 +241,7 @@ $\Gamma\cup\{\neg\psi\}$.
 %%% signed bit-vectors, integers or real numbers.  The arithmetic operators
 %%% induce checks to ensure that the arithmetic operations do not overflow
 %%% and/or underflow.
-%%% 
+%%%
 
 %------------------------------------------------------
 \smallskip\noindent{\bf Arrays and Tuples.}
@@ -280,7 +280,7 @@ typically of bounded size.
 %%% \end{array}
 %%% \]
 
-Tuples %%% are used to model the ANSI-C union and struct datatypes. They 
+Tuples %%% are used to model the ANSI-C union and struct datatypes. They
 provide
 \mbox{store} and \mbox{select} operations similar to those in arrays, but work
 on the tuple \mbox{elements}. Each field of the tuple is represented by an
@@ -326,9 +326,9 @@ shown in Figure~\ref{figure:cpp-diagram}: \emph{C libraries},
 \emph{general libraries}.
 
 \begin{figure*}[ht] \centering
-\includegraphics[scale=0.25]{figures/diagramascpp} 
+\includegraphics[scale=0.25]{figures/diagramascpp}
 \caption{Configuration and functional classification of the operational model.}
-\label{figure:cpp-diagram} 
+\label{figure:cpp-diagram}
 \end{figure*}
 
 %------------------------------
@@ -391,17 +391,17 @@ for a finite signals set $S$ where $\left\{s_{1},\ldots, s_{n}\right\}\:\subset\
 and $n < N$, the function signal records a certain function in one specific signal
 such that when the raising function is called with the respective signal,
 the registered function is called. Let $f$ be a function, $\sigma$ be a signal,
-and $\eta$ be a NULL element. We can thus model $C$ and $P$ 
+and $\eta$ be a NULL element. We can thus model $C$ and $P$
 of the function $signal\left(\sigma, f\right)$ as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-sginal}
-C := \left [ \begin{array}{ll} 
+C := \left [ \begin{array}{ll}
                 a' = store\left(a,\sigma,f\right) \\
-              \end{array} \right ],  \\ 
-P := \left [ \begin{array}{ll} 
+              \end{array} \right ],  \\
+P := \left [ \begin{array}{ll}
                 \left(\sigma = s_{1}\right) \vee \ldots \vee \left(\sigma = s_{n}\right) \\
-              \end{array} \right ]  \\               
+              \end{array} \right ]  \\
 \end{equation}
 
 \blurb{Shouldn't this call the function set by signal?}
@@ -410,12 +410,12 @@ The function $raise\left(\sigma\right)$ can be modeled in our operational model 
 
 \begin{equation}
 \label{quantifier-free-formulae-raise}
-C := \left [ \begin{array}{ll} 
+C := \left [ \begin{array}{ll}
                 f = select\left(a,\varphi\right) \\
-              \end{array} \right ],  \\  
-P := \left [ \begin{array}{ll} 
+              \end{array} \right ],  \\
+P := \left [ \begin{array}{ll}
                 \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a',\varphi\right) \neq \eta\right) \\
-              \end{array} \right ]  \\               
+              \end{array} \right ]  \\
 \end{equation}
 \vspace*{-4ex}
 %---------------------------------------------
@@ -472,16 +472,16 @@ We can thus model the $C$ and $P$ of the $for\_each$ function  of the algorithm 
 %
 \begin{equation}
 \label{quantifier-free-formulae-for-each}
-C := \left [ \begin{array}{ll} 
+C := \left [ \begin{array}{ll}
             f\left(first_{0}\right) \\
             \wedge \:first_{1} = first_{0} +1 \\
             \wedge \:... \\
             \wedge \:first_{n} = first_{n-1} +1 \\
             \wedge \:f\left(first_{n}\right) \\
-              \end{array} \right ], \\   
-P := \left [ \begin{array}{ll} 
+              \end{array} \right ], \\
+P := \left [ \begin{array}{ll}
             first \neq \eta \wedge last \neq \eta \wedge f \neq \eta \\
-              \end{array} \right ]  \\               
+              \end{array} \right ]  \\
 \end{equation}
 %
 
@@ -495,15 +495,15 @@ The $find$ function can be modeled as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-find}
-C := \left [ \begin{array}{ll} 
+C := \left [ \begin{array}{ll}
             tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
             \wedge \:\neg tmp_{0} \Rightarrow first_{1} = first_{0} + 1 \\
             \wedge \:... \\
             \wedge \:\neg tmp_{0} \Rightarrow first_{n} = first_{n-1} + 1 \\
-              \end{array} \right ],  \\ 
-P := \left [ \begin{array}{ll} 
+              \end{array} \right ],  \\
+P := \left [ \begin{array}{ll}
             first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
-              \end{array} \right ]  \\               
+              \end{array} \right ]  \\
 \end{equation}
 %
 
@@ -522,16 +522,16 @@ We can thus model the $accumulate$ of the algorithm library as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-accumulate}
-C := \left [ \begin{array}{ll} 
+C := \left [ \begin{array}{ll}
             \delta = \delta + first_{0} \\
             \wedge \:first_{1} = first_{0} +1 \\
             \wedge \:... \\
             \wedge \:first_{n} = first_{n-1} +1 \\
             \wedge \:\delta = \delta + first_{n} \\
-              \end{array} \right ],  \\ 
-P := \left [ \begin{array}{ll} 
+              \end{array} \right ],  \\
+P := \left [ \begin{array}{ll}
             first \neq \eta \wedge last \neq \eta \wedge \delta \neq \eta \\
-              \end{array} \right ]  \\               
+              \end{array} \right ]  \\
 \end{equation}
 
 %\begin{equation}
@@ -833,8 +833,8 @@ The $find$ method can be modeled as:
 C := \left [ \begin{array}{ll}
               found_{0} = ite\left(select\left(str, pos_{0}\right) = c_{0}, pos_{0}, -1\right)\\
               \ldots \\
-               \wedge \, \, found_{n-1} = ite\left(select\left(str, pos_{n-1}\right) = c_{0}, pos_{n-1}, -1\right)\\      
-              \end{array} \right ],  \\ 
+               \wedge \, \, found_{n-1} = ite\left(select\left(str, pos_{n-1}\right) = c_{0}, pos_{n-1}, -1\right)\\
+              \end{array} \right ],  \\
 \nonumber
 \end{equation}
 
@@ -847,7 +847,7 @@ P := \left [ \begin{array}{ll}
 	       \ldots \\
 	       \wedge \, \, \left(pos_{n-1} \leq 0\right)\\
 	       \wedge \, \, \left(pos_{n-1} < length\right)\\
-	       
+
               \end{array} \right ]  \\
 \end{equation}
 
@@ -870,8 +870,8 @@ class, C++ also allows multiple inheritance, where a class may inherit from one
 or more unrelated base classes. This particular feature makes C++ programs
 harder to model check than programs in other object-oriented programming
 languages (e.g., Java). In this case, we have to replicate the methods and attributes of the base
-classes to the inherited class to have direct access to them, 
-which thus disallows the direct use of tools already created 
+classes to the inherited class to have direct access to them,
+which thus disallows the direct use of tools already created
 to other programming languages.
 
 If a class inherits from a base class that does not contain virtual methods,
@@ -889,8 +889,8 @@ are a partially ordered set and $\leq_{sr}$ is anti-symmetric.
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
 that represents the \textit{Shape} class hierarchy, that contains multiple inheritance.
 The Rectangle class relation can be formalized by
-($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$, 
-$\left(C, \left\langle Rectangle, Display \right\rangle \right)$). 
+($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$,
+$\left(C, \left\langle Rectangle, Display \right\rangle \right)$).
 Our tool creates an intermediate representation (IR) for single and multiple inheritance, handling
 replicated and shared inheritance, see Figure~\ref{figure:multiple-inheritance-IR}.
 
@@ -994,13 +994,13 @@ methods:
 \end{figure}
 
 In OO programming, the use of \textit{shared inheritance} is very common.
-In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to 
+In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to
 verify this kind of inheritance. If a class has pure virtual methods only,
-then this class does not contain implementation for these methods and they will 
+then this class does not contain implementation for these methods and they will
 thus be implemented in the derived classes. Otherwise, if a class has only virtual
 methods, it must contain an implementation for them or the verification will fail
-with a ``conversion error''. ESBMC++ also handles  virtual destructors successfully 
-and supports the default constructor creation. However, ESBMC++ currently does not 
+with a ``conversion error''. ESBMC++ also handles  virtual destructors successfully
+and supports the default constructor creation. However, ESBMC++ currently does not
 support dynamic cast.
 
 %--------------------------------------------
@@ -1017,7 +1017,7 @@ Figure~\ref{figure:try-catch-example} shows an example of a C++ code with except
 \begin{minipage}{1.0\textwidth}
 \begin{lstlisting}
 int main() {
-  try { // try block    
+  try { // try block
     throw 20; // throw expression
   }
   // catch block
@@ -1160,11 +1160,11 @@ exception handling follows and try to look for an match on the catch map or will
 The experimental results is divided into two parts.
 The setup is described in Section~\ref{experimental-setup}
 while Section~\ref{comparison-to-LLBMC} describes a comparison
-between ESBMC++\footnote{Available at http://esbmc.org/} and 
+between ESBMC++\footnote{Available at http://esbmc.org/} and
 LLBMC (Low-Level Bounded Model Checker)\footnote{Available at http://llbmc.org/}
-using a set of standard C++ benchmarks. In our experiments, we also tried to 
-use the CBMC model checker~\cite{Clarke04}, but it has failed in most of the 
-benchmarks (as reported previously by Merz et~al.\~cite{Florian12}). 
+using a set of standard C++ benchmarks. In our experiments, we also tried to
+use the CBMC model checker~\cite{Clarke04}, but it has failed in most of the
+benchmarks (as reported previously by Merz et~al.\~cite{Florian12}).
 
 %-----------------------------------
 \subsection{Experimental Setup}
@@ -1235,54 +1235,54 @@ This subsection describes the evaluation of ESBMC++ against another BMC tool dev
 \label{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 \end{table*}
 
-The tool developed by Merz et al.~\cite{Florian12} is called LLBMC. 
-We invoked both tools using two scripts: one for ESBMC++, that reads 
+The tool developed by Merz et al.~\cite{Florian12} is called LLBMC.
+We invoked both tools using two scripts: one for ESBMC++, that reads
 the parameters from a file and calls the tool
-\footnote[1]{esbmc --unwind \textit{B} --no-unwinding-assertions -I ~/libraries/} 
+\footnote[1]{esbmc --unwind \textit{B} --no-unwinding-assertions -I ~/libraries/}
 and another for LLBMC, that first compiles the code to bytecode using CLANG
-\footnote[2]{/usr/bin/clang++ -c -g -emit-llvm *.cpp -fno-exceptions \newline /usr/bin/llvm-link *.o -o main.bc}~\cite{CLANG}, 
+\footnote[2]{/usr/bin/clang++ -c -g -emit-llvm *.cpp -fno-exceptions \newline /usr/bin/llvm-link *.o -o main.bc}~\cite{CLANG},
 reads the parameters from a file and calls the tool\footnote[3]
-{llbmc --ignore-missing-function-bodies --no-max-loop-iterations-checks --max-loop-iterations=\textit{B}}. 
-The bound set for both tools (value of \textit{B}) depends of each test case. 
-LLBMC currently does not support exception handling and all the bytecodes were generated without 
-exception support (flag -fno-exceptions) while verifying with LLBMC. 
+{llbmc --ignore-missing-function-bodies --no-max-loop-iterations-checks --max-loop-iterations=\textit{B}}.
+The bound set for both tools (value of \textit{B}) depends of each test case.
+LLBMC currently does not support exception handling and all the bytecodes were generated without
+exception support (flag -fno-exceptions) while verifying with LLBMC.
 Enabling exceptions resulted in LLBMC aborting in most of the cases.
 
-As we can see in Table ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC}, 
-LLBMC time-outs 25 times in the algorithm module and runs out of memory in 1 test case. 
-Looking at those test cases, most of them use iterators, which maybe causing the slow down 
-on verification, a situation that repeats on others modules. On the Deque, Vector and List modules, 
-the slowdowns still happens but with small values. The module that had the most unsuccessful verification 
-results was the list module, and most of the errors were related to the container size 
-(e.g., assertions if the container is empty or if it has a particular size). 
-On ESBMC++, most of the errors on those modules are due to a missing operational model 
+As we can see in Table ~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC},
+LLBMC time-outs 25 times in the algorithm module and runs out of memory in 1 test case.
+Looking at those test cases, most of them use iterators, which maybe causing the slow down
+on verification, a situation that repeats on others modules. On the Deque, Vector and List modules,
+the slowdowns still happens but with small values. The module that had the most unsuccessful verification
+results was the list module, and most of the errors were related to the container size
+(e.g., assertions if the container is empty or if it has a particular size).
+On ESBMC++, most of the errors on those modules are due to a missing operational model
 of the libraries, which are currently under development.
 
-On the stream module, most of the errors where related to assertions on the size 
-of the stream (using the method $gcount\left(\right)$) and to internal flags (such as 
-\textit{ios::hex} and \textit{iostream::hex}). On ESBMC++, most of the error were related 
-to bad operational model of internal flags. On the string module, the errors are related 
-to assertions on the string itself, usually if the string is equal to another string. 
-On Inheritance module, LLBMC reports some incorrect errors about memory write and 
-integer overflows while ESBMC++ failed on the verification of test cases involving 
+On the stream module, most of the errors where related to assertions on the size
+of the stream (using the method $gcount\left(\right)$) and to internal flags (such as
+\textit{ios::hex} and \textit{iostream::hex}). On ESBMC++, most of the error were related
+to bad operational model of internal flags. On the string module, the errors are related
+to assertions on the string itself, usually if the string is equal to another string.
+On Inheritance module, LLBMC reports some incorrect errors about memory write and
+integer overflows while ESBMC++ failed on the verification of test cases involving
 \textit{dynamic\_cast} (as described in Section~\ref{inheritance-and-polymorphism}).
 
-On the \textit{try\_catch} module, LLBMC failed in most of the tests due to the fact that 
-the tool is missing support to exception handling. ESBMC++ was able to verify must of the cases. 
-The errors that occur are related to a missing implementation of exception specifications when 
-using classes constructors. And lastly, on the cpp module, which has test cases involving all 
-the others modules (but are not redundant), most of the errors presented were already seen during 
+On the \textit{try\_catch} module, LLBMC failed in most of the tests due to the fact that
+the tool is missing support to exception handling. ESBMC++ was able to verify must of the cases.
+The errors that occur are related to a missing implementation of exception specifications when
+using classes constructors. And lastly, on the cpp module, which has test cases involving all
+the others modules (but are not redundant), most of the errors presented were already seen during
 the verification of others modules.
 
-By the end, ESBMC++ verified the modules in 33327 seconds (approximately 9.25 hours) and successfully 
-verified 979 out of 1113 (~87.96\%) while LLBMC verified the modules in 45687 seconds (approximately 12.69 hours) 
-and successfully verified 734 out of 1113 (65.94\%). We can see that LLBMC is slower than ESBMC++ on the containers 
-and algorithm modules, while it is faster on stream and string modules but looses on successfully verified test cases. 
+By the end, ESBMC++ verified the modules in 33327 seconds (approximately 9.25 hours) and successfully
+verified 979 out of 1113 (~87.96\%) while LLBMC verified the modules in 45687 seconds (approximately 12.69 hours)
+and successfully verified 734 out of 1113 (65.94\%). We can see that LLBMC is slower than ESBMC++ on the containers
+and algorithm modules, while it is faster on stream and string modules but looses on successfully verified test cases.
 On the inheritance module, the results of both tools are even.
 
-On the \textit{try\_catch} module, ESBMC++ is able to verify almost all the tests, 
-something that LLBMC cannot due to its lack of support of exception handling. On the cpp module, 
-ESBMC++ is able to successfully verify many more test cases than LLBMC. 
+On the \textit{try\_catch} module, ESBMC++ is able to verify almost all the tests,
+something that LLBMC cannot due to its lack of support of exception handling. On the cpp module,
+ESBMC++ is able to successfully verify many more test cases than LLBMC.
 Also note that ESBMC++ does not crash, memory out or timeout in any module.
 
 %-----------------------------------
@@ -1311,9 +1311,9 @@ from a C++ program with inheritance into a semantically equivalent without
 inheritance by treating the inheritance as separate memory regions
 that are linked to each other via additional base class and derived class
 pointer fields. This transformation comprises a clarifier, which makes
-implicit C++ features explicit. This approach was implemented with a bug 
+implicit C++ features explicit. This approach was implemented with a bug
 finding tool called F-SOFT~\cite{Fsoft}. CHROME has a
-different memory behavior from the original program and therefore does not allow 
+different memory behavior from the original program and therefore does not allow
 the use of low-level primitives (e.g, \textit{memset}). The CHROME-lowered C program is
 three to five times bigger than the size of the original C++ program ~\cite{Yang12}.
 
