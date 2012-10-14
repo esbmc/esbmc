@@ -404,20 +404,19 @@ P := \left [ \begin{array}{ll}
               \end{array} \right ]  \\
 \end{equation}
 
-\blurb{Shouldn't this call the function set by signal?}
-The function $raise\left(\sigma\right)$ can be modeled in our operational model as:
 %
-
 \begin{equation}
 \label{quantifier-free-formulae-raise}
 C := \left [ \begin{array}{ll}
-                f = select\left(a,\varphi\right) \\
+                select\left(a,\sigma\right) \Rightarrow f \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-                \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a',\varphi\right) \neq \eta\right) \\
+                \left(\sigma = s_{1}\right) \vee \ldots \vee \left(\sigma = s_{n}\right) \\
+		\wedge \,\,\left(select\left(a',\sigma\right) \neq \eta\right) \\
               \end{array} \right ]  \\
 \end{equation}
 \vspace*{-4ex}
+
 %---------------------------------------------
 \subsection{Input/Output Stream Libraries}
 %---------------------------------------------
@@ -465,52 +464,48 @@ function $for\_each$ applies a given function to a range. Let $\eta$ be
 a $NULL$ element and $I$ be a range, such that $\left\{first, last, n, i\right\}\:\subset\:I$.
 Here, $first$ represents the pointer to the beginning of the range, $last$ represents
 the pointer to the ending of the range, $n$ represents the number of elements
-contained between $first$ and $last$, $i$ represents a certain position
-within the range, and $f\left(first_{i}\right)$ represents an element $first_{i}$ applied in the function $f$. For the function $for\_each$, we assume that $f$ is a pointer
-to a function without return and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
+contained between $first$ and $last$ and $i$ represents a certain position
+within the range. For the function $for\_each$, we assume that $f$ is a pointer to a function without
+return and $f\left(first_{i}\right)$ represents the constraints coming from applying $f$ to $first_{i}$, furthermore,
+for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
 We can thus model the $C$ and $P$ of the $for\_each$ function  of the algorithm library as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-for-each}
 C := \left [ \begin{array}{ll}
-            f\left(first_{0}\right) \\
-            \wedge \:first_{1} = first_{0} +1 \\
+            select\left(first, 0\right) \\
+            \wedge \:f\left(first_{0}\right)\\
             \wedge \:... \\
-            \wedge \:first_{n} = first_{n-1} +1 \\
+            \wedge \:select\left(first, n\right) \\
             \wedge \:f\left(first_{n}\right) \\
               \end{array} \right ], \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \wedge last \neq \eta \wedge f \neq \eta \\
+            first \neq \eta \\
+	    \wedge \:last \neq \eta \\
+	    \wedge \:f \neq \eta \\
+	    \wedge \:first < last \\
               \end{array} \right ]  \\
 \end{equation}
 %
-
-%\begin{equation}
-%\left(\left(first \wedge last \wedge f\right) \neq \eta\right) \Rightarrow
-%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right) \wedge \left(f\left(first_{i}\right)\right)
-%\label{eq:model-for-each}
-%\end{equation}
-
 The $find$ function can be modeled as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-find}
 C := \left [ \begin{array}{ll}
-            tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
-            \wedge \:\neg tmp_{0} \Rightarrow first_{1} = first_{0} + 1 \\
+            select\left(first, 0\right) \\
+	    \wedge \:tmp_{0} = ite\left(first_{0} = \alpha, true,  false\right) \\
+            \wedge \:\neg tmp_{0} \Rightarrow select\left(first, 1\right) \\
             \wedge \:... \\
-            \wedge \:\neg tmp_{0} \Rightarrow first_{n} = first_{n-1} + 1 \\
+            \wedge \:\neg tmp_{0} \Rightarrow select\left(first, n\right) \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \wedge last \neq \eta \wedge \alpha \neq \eta \\
+            first \neq \eta \\
+	    \wedge \:last \neq \eta \\
+	    \wedge \:\alpha \neq \eta \\
+	    \wedge \:first < last \\
               \end{array} \right ]  \\
 \end{equation}
 %
-
-%\begin{equation}\left(\left(first \wedge last \wedge \alpha\right) \neq \eta\right) \Rightarrow
-%\bigwedge^{n}_{i=0} \left(first_{i+1} = first_{i} +1\right)\\ \wedge \left(ite\left(first_{i} = \alpha, true,  false\right)\right)
-%\label{eq:model-find}
-%\end{equation}
 
 The operational model created to represent the category \textit{Numeric} is
 composed by the \textit{numeric} library and contains four algorithms that work
@@ -530,7 +525,10 @@ C := \left [ \begin{array}{ll}
             \wedge \:\delta = \delta + first_{n} \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
-            first \neq \eta \wedge last \neq \eta \wedge \delta \neq \eta \\
+            first \neq \eta \\
+	    \wedge \:last \neq \eta \\
+	    \wedge \:\delta \neq \eta \\
+	    \wedge \:first < last \\
               \end{array} \right ]  \\
 \end{equation}
 
