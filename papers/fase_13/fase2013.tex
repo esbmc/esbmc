@@ -520,10 +520,10 @@ We can thus model the $accumulate$ of the algorithm library as:
 \begin{equation}
 \label{quantifier-free-formulae-accumulate}
 C := \left [ \begin{array}{ll}
-            select\left(first, 0\right) \\
-            \wedge \:\delta = \delta + first_{0}\\
+            \delta = \delta + first_{0} \\
+            \wedge \:first_{1} = first_{0} +1 \\
             \wedge \:... \\
-            \wedge \:select\left(first, n\right) \\
+            \wedge \:first_{n} = first_{n-1} +1 \\
             \wedge \:\delta = \delta + first_{n} \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
@@ -764,6 +764,31 @@ real position of the required element in the container
 internally in the container, and $addr$ is a memory
 address equivalent to $cont.array$, being $cont$ the container
 pointed by the iterator.
+
+%---------------------------------
+\subsection{General Libraries}
+%---------------------------------
+
+The \textit{general libraries} category is split into three
+sub-categories: \textit{language support}, \textit{diagnostics},
+and \textit{general utilities}. The category \textit{language support}
+is compose by four libraries that deal with exception handling
+(i.e., exception library), types information (i.e., typeinfo library),
+dynamic allocation of memory (i.e., new library), and numeric limits
+(i.e., limits library). The category \textit{diagnostic} is composed by
+the \textit{stdexcept} library, which implements standard exceptions
+(e.g., logic and runtime errors).
+The category \textit{general libraries} includes definitions
+about the manipulation of characters sequences. Such definitions
+are implemented in the \textit{string} library. In our operational
+model, we implemented the main features of the \textit{string}
+library through the iterator class that contains the
+representation of the iterator for strings. In general,
+we define the string object as an array of \textit{char} so that all
+heuristics that must be observed in handling arrays are therefore
+treated in this model. The main operations implemented by this library
+are restricted to creation, insertion, deletion and search of elements
+inside to object string.
 
 \comment{
 %---------------------------------
@@ -1202,7 +1227,7 @@ while Section~\ref{comparison-to-LLBMC} describes a comparison
 between ESBMC++\footnote{Available at http://esbmc.org/} and
 LLBMC (Low-Level Bounded Model Checker)\footnote{Available at http://llbmc.org/}
 using a set of standard C++ benchmarks. In our experiments, we also tried to
-use the CBMC model checker~\cite{Clarke04}, but it has failed in most of the
+use the CBMC model checker~\cite{Clarke04}, but it has failed in most of our
 benchmarks (as reported previously by Merz et~al.\~cite{Florian12}).
 
 %-----------------------------------
