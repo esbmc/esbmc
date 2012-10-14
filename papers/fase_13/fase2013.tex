@@ -773,8 +773,11 @@ $\varphi$ that represents the error. Thus, $\varphi$ contains a constructor that
 error message to be thrown if there is an error during the program execution.
 To identify these errors during the verification, whenever one of the
 constructors of these classes is called, an $assert(0)$ is thrown, which forces ESBMC++ to
-identify this error and report it in the counter-example. The operational model of the
-\textit{stdexcept} library can thus represented as:
+identify this error and report it in the counter-example. Note that ESBMC++
+does not handle those exception as explained in section~\ref{exception-handling}, this
+decision was made based on the fact that those exception are thrown when the C++ program
+contains errors that can be potentially harmful to an application. The operational model
+of the \textit{stdexcept} library can thus represented as:
 
 \begin{equation}
 \label{kind-of-exceptions}
@@ -1005,12 +1008,13 @@ verify this kind of inheritance. If a class has pure virtual methods only,
 then this class does not contain implementation for these methods and they will
 thus be implemented in the derived classes. Otherwise, if a class has only virtual
 methods, it must contain an implementation for them or the verification will fail
-with a ``conversion error''. ESBMC++ also handles  virtual destructors successfully
+with a ``conversion error''. ESBMC++ also handles virtual destructors successfully
 and supports the default constructor creation. However, ESBMC++ currently does not
 support dynamic cast.
 
 %--------------------------------------------
 \section{Exception Handling}
+\label{exception-handling}
 %--------------------------------------------
 
 One of the features that C++ provides is the exception handling. The exceptions are unexpected situations on the program, situations
