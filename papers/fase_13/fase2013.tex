@@ -60,7 +60,7 @@ by an SMT Solver.\ ESBMC++ uses an operational model,
 an abstract representation of
 the standard C++ libraries, which conservatively approximates their semantics.\ Our
 experimental results show that our approach can handle a wider range of the C++
-constructs than existing model checkers and substantially reduce the verification time.
+constructs than existing approaches and substantially reduce the verification time.
 \end{abstract}
 %
 %------------------------------
@@ -391,7 +391,7 @@ for a finite signals set $S$ where $\left\{s_{1},\ldots, s_{n}\right\}\:\subset\
 and $n < N$, the function signal records a certain function in one specific signal
 such that when the raising function is called with the respective signal,
 the registered function is called. Let $f$ be a function, $\sigma$ be a signal,
-and $\eta$ be a NULL element. We can thus model the constraints and properties 
+and $\eta$ be a NULL element. We can thus model $C$ and $P$ 
 of the function $signal\left(\sigma, f\right)$ as:
 %
 \begin{equation}
@@ -417,7 +417,7 @@ P := \left [ \begin{array}{ll}
                 \left(\varphi = s_{1}\right) \vee \ldots \vee \left(\varphi = s_{n}\right) \wedge \left(select\left(a',\varphi\right) \neq \eta\right) \\
               \end{array} \right ]  \\               
 \end{equation}
-
+\vspace*{-4ex}
 %---------------------------------------------
 \subsection{Input/Output Stream Libraries}
 %---------------------------------------------
@@ -442,7 +442,7 @@ software and not that of hardware).
 \begin{figure*}[ht]
 \centering
 \includegraphics[scale=0.24]{figures/inputoutputdiagram}
-\caption{Diagram about hierarchical structure of the Input / Output Stream Libraries.
+\caption{Hierarchical structure of the Input / Output Stream Libraries.
 Dotted gray square represents the library, white square represents the class and dark gray square represents the access objects.}
 \label{figure:cpp-inputoutputdiagram}
 \end{figure*}
@@ -468,7 +468,7 @@ the pointer to the ending of the range, $n$ represents the number of elements
 contained between $first$ and $last$, $i$ represents a certain position
 within the range, and $f\left(first_{i}\right)$ represents an element $first_{i}$ applied in the function $f$. For the function $for\_each$, we assume that $f$ is a pointer
 to a function without return and for the function $find$ we assume that $\alpha$ is a pointer to the value sought.
-We can thus model the constraints and properties of the $for\_each$ function  of the algorithm library as:
+We can thus model the $C$ and $P$ of the $for\_each$ function  of the algorithm library as:
 %
 \begin{equation}
 \label{quantifier-free-formulae-for-each}
