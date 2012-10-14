@@ -518,10 +518,10 @@ We can thus model the $accumulate$ of the algorithm library as:
 \begin{equation}
 \label{quantifier-free-formulae-accumulate}
 C := \left [ \begin{array}{ll}
-            \delta = \delta + first_{0} \\
-            \wedge \:first_{1} = first_{0} +1 \\
+            select\left(first, 0\right) \\
+            \wedge \:\delta = \delta + first_{0}\\
             \wedge \:... \\
-            \wedge \:first_{n} = first_{n-1} +1 \\
+            \wedge \:select\left(first, n\right) \\
             \wedge \:\delta = \delta + first_{n} \\
               \end{array} \right ],  \\
 P := \left [ \begin{array}{ll}
