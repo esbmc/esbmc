@@ -1352,7 +1352,8 @@ expose.
 \section{Conclusions}
 %------------------------------------------------------
 
-Conclusions here (Lucas)...
+In this work, we have investigated SMT-based verification of C++ programs, exploring the major features that the language has to offer. We have described an implementation of an operational model of the sequential STL containers, an novel approaches to handle inheritance, polymorphism and exception handling (in particular, exception specification, a feature not supported by others BMC tools). Our experiments consist of several test cases, intended to provide programs with most of the features that C++ has to offer. The results show that ESBMC++ outperforms LLBMC~\cite{Florian12} if we consider the verification of C++ programs. ESBMC++ is able to verify most of the test cases with an advantage: we are able to verify programs with exceptions enabled, a missing feature on LLBMC that decrease the verification accuracy of C++ programs.
+For future works, we are extending the operational model of STL containers to support not only sequential containers but also mapped ones (e.g., map and multimap)~\ref{CppReference12}.
 
 
 %\smallskip{\small\noindent{\bf Acknowledgments.}
