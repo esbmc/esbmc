@@ -3,19 +3,27 @@
 
  Author: Felipe Rodrigues
 
- Date: September 2012
+ Date: October 2012
 
  \*******************************************************************/
 
 #ifndef __STL_LIST
 #define __STL_LIST
 
-#include "iterator"
+//#include "iterator"
 
 namespace std {
 
 template<class T>
-struct list {
+class list {
+public:
+	typedef T& reference;
+	typedef const T& const_reference;
+	typedef int size_type;
+	typedef int difference_type;
+	typedef T value_type;
+	typedef T* pointer;
+	typedef const T* const_pointer;
 
 	struct node {
 		T data;
@@ -30,26 +38,49 @@ struct list {
 	node* tail;
 	int _size;
 
-public:
-
 	class iterator {
 	public:
-		iterator(const iterator&);
-		iterator();
-		iterator& operator=(const iterator&);
+		node* it;
+		int it_size;
+
+		iterator(const iterator& x): it(x.it), it_size(x.it_size){}
+		iterator(): it(NULL), it_size(0){}
+		iterator& operator=(const iterator& x){
+			this->it = x.it;
+			this->it_size = x.it_size;
+			return *this;
+		}
 
 		T* operator ->();
 
-		T& operator *();
+		T operator *(){
+			return this->it->data;
+		}
 
-		iterator& operator ++();
-		iterator& operator ++(int);
+		iterator operator ++(){ //error
+			this->it = this->it->next;
+			return *this;
+		}
+		iterator operator ++(int){ //error
+			this->it = this->it->next;
+			return *this;
+		}
 
-		iterator& operator --();
-		iterator& operator --(int);
+		iterator operator --(){
+			this->it = this->it->prev;
+			return *this;
+		}
+		iterator& operator --(int){
+			this->it = this->it->prev;
+			return *this;
+		}
 
-		bool operator ==(const iterator&) const;
-		bool operator !=(const iterator&) const;
+		bool operator ==(const iterator& x) const{
+			return (x.it == this->it && x.it_size == this->it_size);
+		}
+		bool operator !=(const iterator& x) const{
+			return (x.it != this->it && x.it_size != this->it_size);
+		}
 
 		bool operator <(const iterator&) const;
 		bool operator >(const iterator&) const;
@@ -64,56 +95,51 @@ public:
 		iterator& operator -=(int);
 	};
 
-	class const_iterator {
-	public:
-		const_iterator(const const_iterator&);
-		const_iterator();
-		const_iterator& operator=(const const_iterator&);
-
-		const T* operator ->();
-
-		const T& operator *();
-
-		const_iterator& operator ++();
-		const_iterator& operator ++(int);
-
-		const_iterator& operator --();
-		const_iterator& operator --(int);
-
-		bool operator ==(const const_iterator&) const;
-		bool operator !=(const const_iterator&) const;
-
-		bool operator <(const const_iterator&) const;
-		bool operator >(const const_iterator&) const;
-
-		bool operator <=(const const_iterator&) const;
-		bool operator >=(const const_iterator&) const;
-
-		const_iterator operator +(int) const;
-		const_iterator operator -(int) const;
-
-		const_iterator& operator +=(int);
-		const_iterator& operator -=(int);
-	};
-
 	class reverse_iterator {
 	public:
-		reverse_iterator(const reverse_iterator&);
-		reverse_iterator();
-		reverse_iterator& operator=(const reverse_iterator&);
+		node* it;
+		int it_size;
+
+		reverse_iterator(const reverse_iterator& x): it(x.it), it_size(x.it_size){}
+
+		reverse_iterator(): it(NULL), it_size(0){}
+		reverse_iterator& operator=(const reverse_iterator& x){
+			this->it = x.it;
+			this->it_size = x.it_size;
+			return *this;
+		}
 
 		T* operator ->();
 
-		T& operator *();
+		T operator *(){
+			return this->it->data;
+		}
 
-		reverse_iterator& operator ++();
-		reverse_iterator& operator ++(int);
+		reverse_iterator operator ++(){ //error
+			this->it = this->it->next;
+			return *this;
+		}
+		reverse_iterator operator ++(int){ //error
+			this->it = this->it->next;
+			return *this;
+		}
 
-		reverse_iterator& operator --();
-		reverse_iterator& operator --(int);
+		reverse_iterator operator --(){
+			//this->it = this->it->prev;
+			assert(this->it->data == 1);
+			return *this;
+		}
+		reverse_iterator& operator --(int){
+			this->it = this->it->prev;
+			return *this;
+		}
 
-		bool operator ==(const reverse_iterator&) const;
-		bool operator !=(const reverse_iterator&) const;
+		bool operator ==(const reverse_iterator& x) const{
+			return (x.it == this->it && x.it_size == this->it_size);
+		}
+		bool operator !=(const reverse_iterator& x) const{
+			return (x.it != this->it && x.it_size != this->it_size);
+		}
 
 		bool operator <(const reverse_iterator&) const;
 		bool operator >(const reverse_iterator&) const;
@@ -128,68 +154,20 @@ public:
 		reverse_iterator& operator -=(int);
 	};
 
-	class const_reverse_iterator {
-	public:
-		const_reverse_iterator(const const_reverse_iterator&);
-		const_reverse_iterator();
-		const_reverse_iterator& operator=(const const_reverse_iterator&);
-
-		const T* operator ->();
-
-		const T& operator *();
-
-		const_reverse_iterator& operator ++();
-		const_reverse_iterator& operator ++(int);
-
-		const_reverse_iterator& operator --();
-		const_reverse_iterator& operator --(int);
-
-		bool operator ==(const const_reverse_iterator&) const;
-		bool operator !=(const const_reverse_iterator&) const;
-
-		bool operator <(const const_reverse_iterator&) const;
-		bool operator >(const const_reverse_iterator&) const;
-
-		bool operator <=(const const_reverse_iterator&) const;
-		bool operator >=(const const_reverse_iterator&) const;
-
-		const_reverse_iterator operator +(int) const;
-		const_reverse_iterator operator -(int) const;
-
-		const_reverse_iterator& operator +=(int);
-		const_reverse_iterator& operator -=(int);
-	};
-
-	typedef T& reference;
-	typedef const T& const_reference;
-	typedef int size_type;
-	typedef int difference_type;
-	typedef T value_type;
-	typedef T* pointer;
-	typedef const T* const_pointer;
-
-	explicit list() :
-			head(NULL), tail(NULL), _size(0) {
+	explicit list() : head(NULL), tail(NULL), _size(0) {}
+	explicit list ( size_type n, const T& value = T() ){
+		int i;
+		this->_size = 0;
+		for(i=0; i<n; i++)
+			this->push_back(value);
 	}
-	explicit list(T t1, T t2) :
-			head(NULL), tail(NULL), _size(0) {
-		push_back(t1);
-		push_back(t2);
+	explicit list (T* t1, T* t2){
+		this->_size = 0;
+		for(; t1!=t2; t1++)
+			this->push_back(*t1);
 	}
-	explicit list(T *t1, T *t2) :
-			head(NULL), tail(NULL), _size(0) {
-		//model
-	}
-	explicit list(iterator t1, iterator t2) :
-			head(NULL), tail(NULL), _size(0) {
-		//model
-	}
-	explicit list(size_type t) :
-			head(NULL), tail(NULL), _size(0) {
-		push_back(t);
-	}
-
-	list(const list<T>& x);
+	list ( iterator first, iterator last) : head(first.it), tail(last.it), _size(first.it_size) {}
+	list(const list<T>& x) : head(x.head), tail(x.tail), _size(x._size) {}
 
 	~list() {
 		while (head) {
@@ -199,91 +177,126 @@ public:
 		}
 	}
 
-	list<T>& operator=(const list<T>& x);
-
-	iterator begin();
-	const_iterator begin() const;
-	iterator end();
-	const_iterator end() const;
-	reverse_iterator rbegin();
-	const_reverse_iterator rbegin() const;
-	const_reverse_iterator rend() const;
-
-	bool empty() const {
-		return (!head || !tail);
+	iterator begin (){
+		iterator it;
+		it.it = new node(this->head->data, this->head->prev, this->head->next);
+		it.it_size = this->_size;
+		return it;
+	}
+	iterator end (){
+		iterator it;
+		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+		it.it_size = this->_size;
+		return it;
+	}
+	reverse_iterator rbegin(){
+		reverse_iterator it;
+		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+		it.it_size = this->_size;
+		return it;
+	}
+	reverse_iterator rend(){
+		reverse_iterator it;
+		it.it = new node(this->head->data, this->head->prev, this->head->next);
+		it.it_size = this->_size;
+		return it;
 	}
 
-	size_type size() const {
-		return _size;
+	size_type size() const{
+		return this->_size;
 	}
-
-	size_type max_size() const;
-	void resize(size_type sz);
-	void resize(size_type sz, T t);
-
-	// element access:
-	T front() {
-		__ESBMC_assert(!empty(), "list is empty");
-		return head->data;
+	bool empty ( ) const{
+		if (this->_size == 0)
+			return true;
+		return false;
 	}
-	const_reference front() const {
-		__ESBMC_assert(!empty(), "list is empty");
-		return head->data;
+	size_type max_size () const{
+		return this->_size;
 	}
-
-	reference back() {
-		return tail->data;
-	}
-	const_reference back() const {
-		return tail->data;
-	}
-
-	// modifiers:
-	void push_front(const T& t) {
-		head = new node(t, NULL, head);
-		_size++;
-		if (head->next)
-			head->next->prev = head;
-		if (empty())
-			tail = head;
-	}
-
-	void pop_front() {
-		__ESBMC_assert(!empty(), "list is empty");
-		head = head->next;
-		if (head)
-			head->prev = NULL;
-		else
-			tail = NULL;
-	}
-
-	void push_back(const T& t) {
-		tail = new node(t, tail, NULL);
-		_size++;
-		if (tail->prev)
-			tail->prev->next = tail;
-		if (empty()) {
-			head = tail;
+	void resize ( size_type sz, T c = T() ){
+		int i;
+		int tmp_int;
+		if(this->_size > sz){
+			tmp_int = this->_size - sz;
+			for(i=0;i<tmp_int;i++){
+				this->tail = this->tail->prev;
+				this->tail->next = NULL;
+			}
+		}else{
+			tmp_int = sz - this->_size;
+			for(i=0;i<tmp_int;i++){
+				this->push_back(c);
+			}
 		}
 	}
-	void pop_back() {
+    T back ( ){
+    	__ESBMC_assert(!empty(), "list is empty");
+    	return this->tail->data;
+    }
+    T front ( ){
+    	__ESBMC_assert(!empty(), "list is empty");
+    	return this->head->data;
+    }
+	void pop_front(){
 		__ESBMC_assert(!empty(), "list is empty");
-		node* temp(tail);
-		T data(tail->data);
-		tail = tail->prev;
-		if (tail)
-			tail->next = NULL;
-		else
-			head = NULL;
-		delete temp;
+		this->_size--;
+		if (this->head == this->tail){
+			this->head = this->tail = NULL;
+		}else{
+			this->head = new node(this->head->data, this->head->prev, this->head->next);
+		}
+	}
+	void pop_back ( ){
+		__ESBMC_assert(!empty(), "list is empty");
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->tail = new node(this->tail->prev->data, this->tail->prev->prev, NULL);
+		}
+		this->_size--;
+	}
+	void push_back ( const T& x ){
+		if(this->empty()){
+			this->tail = new node(x, NULL, NULL);
+			this->head = this->tail;
+		}else{
+			this->tail->next = new node(x, this->tail, NULL);
+			this->tail = this->tail->next;
+		}
+		this->_size++;
+	}
+	void push_front ( const T& x ){
+		if(this->empty()){
+			this->head = new node(x, NULL, NULL);
+			this->tail = this->head;
+		}else{
+			this->head->prev = new node(x, NULL, this->head);
+			this->head = this->head->prev;
+		}
+		this->_size++;
 	}
 
 	iterator insert(iterator position, const T& x);
 	void insert(iterator position, size_type n, const T& x);
 
-	template <class InputIterator>
-	  void assign ( InputIterator first, InputIterator last );
-	void assign ( size_type n, const T& u );
+	void assign ( iterator first, iterator last ){
+		this->head = first.it;
+		this->_size = first.it_size;
+		this->tail = last.it;
+	}
+	void assign ( T* first, T* last ){
+		list <T> list (first, last);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
+	void assign ( size_type n, const T& u ){
+		list <T> list (n, u);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
+
 	iterator erase(iterator position);
 	iterator erase(iterator position, iterator last);
 	void swap(list<T>&);
@@ -302,6 +315,13 @@ public:
 	void sort();
 	void reverse();
 };
+
+  bool operator== ( const list<int>& x, const list<int>& y ){
+	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
+  }
+  bool operator!= ( const list<int>& x, const list<int>& y ){
+	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
+  }
 
 }
 
