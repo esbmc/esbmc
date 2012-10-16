@@ -71,7 +71,7 @@ public:
 			return *this;
 		}
 		iterator& operator --(int){
-			this->it = this->it->prev;
+			//this->it = this->it->prev;
 			return *this;
 		}
 
@@ -126,11 +126,10 @@ public:
 
 		reverse_iterator operator --(){
 			//this->it = this->it->prev;
-			assert(this->it->data == 1);
 			return *this;
 		}
 		reverse_iterator& operator --(int){
-			this->it = this->it->prev;
+			//this->it = this->it->prev;
 			return *this;
 		}
 
@@ -213,20 +212,22 @@ public:
 	size_type max_size () const{
 		return this->_size;
 	}
-	void resize ( size_type sz, T c = T() ){
+	void resize ( size_type sz, T c = 0 ){
 		int i;
 		int tmp_int;
 		if(this->_size > sz){
 			tmp_int = this->_size - sz;
 			for(i=0;i<tmp_int;i++){
 				this->tail = this->tail->prev;
-				this->tail->next = NULL;
 			}
+			this->tail->next = NULL;
+			this->_size = sz;
 		}else{
 			tmp_int = sz - this->_size;
 			for(i=0;i<tmp_int;i++){
 				this->push_back(c);
 			}
+			this->_size = sz;
 		}
 	}
     T back ( ){
@@ -239,19 +240,23 @@ public:
     }
 	void pop_front(){
 		__ESBMC_assert(!empty(), "list is empty");
-		this->_size--;
-		if (this->head == this->tail){
+		if (this->_size == 1){
 			this->head = this->tail = NULL;
 		}else{
-			this->head = new node(this->head->data, this->head->prev, this->head->next);
+			this->head->data = this->head->next->data;
+			this->head->prev = NULL;
+			this->head->next = this->head->next->next;
 		}
+		this->_size--;
 	}
 	void pop_back ( ){
 		__ESBMC_assert(!empty(), "list is empty");
 		if (this->_size == 1){
 			this->head = this->tail = NULL;
 		}else{
-			this->tail = new node(this->tail->prev->data, this->tail->prev->prev, NULL);
+			this->tail->data = this->tail->prev->data;
+			this->tail->prev = this->tail->prev->prev;
+			this->tail->next = NULL;
 		}
 		this->_size--;
 	}
@@ -299,8 +304,17 @@ public:
 
 	iterator erase(iterator position);
 	iterator erase(iterator position, iterator last);
-	void swap(list<T>&);
-	void clear();
+	void swap(list<T>& x){
+		list<T> y;
+		y = x;
+		x = *this;
+		*this = y;
+	}
+	void clear(){
+		this->_size = 0;
+		this->head = NULL;
+		this->tail = NULL;
+	}
 
 	// list operations:
 	void splice(iterator position, list<T>& x);
@@ -315,6 +329,12 @@ public:
 	void sort();
 	void reverse();
 };
+
+  void advance (list<unsigned int>::iterator it, int n){
+	  int i;
+	  for(i = 0; i < n; i++)
+		  it.it = it.it->next;
+  }
 
   bool operator== ( const list<int>& x, const list<int>& y ){
 	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
