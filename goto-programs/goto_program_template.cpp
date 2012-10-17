@@ -39,6 +39,7 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case FUNCTION_CALL: out << "FUNCTION_CALL"; break;
   case THROW: out << "THROW"; break;
   case CATCH: out << "CATCH"; break;
+  case THROW_DECL: out << "THROW_DECL"; break;
   default:
     out << "? (number: " << t << ")";
   }

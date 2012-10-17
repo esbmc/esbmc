@@ -138,10 +138,6 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     // already fine, just set type
     expr.type()=empty_typet();
   }
-  else if(expr.id()=="cpp-throw")
-  {
-	  // @TODO: we should still handle the cpp-throw, see test case ch13_8
-  }
   else
   {
     err_location(expr);

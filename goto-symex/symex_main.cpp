@@ -93,6 +93,22 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
+
+    // We must check if we can access right frame
+    if(cur_state->call_stack.size()>2)
+    {
+      // Get the correct frame
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
+      ++s_it;
+
+      // Clear the allowed exceptions, we're not on the function anymore
+      (*s_it).throw_list_set.clear();
+
+      // We don't have throw_decl anymore too
+      (*s_it).has_throw_decl = false;
+    }
+
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
@@ -103,13 +119,16 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-	//std::cout << "has_throw_target: " << has_throw_target << std::endl;
-	//std::cout << "has_catch: " << has_catch << std::endl;
-    if (has_throw_target && has_catch) {
-      instruction.targets.pop_back();
-      instruction.targets.push_back(throw_target);
-      has_throw_target = false;
-      has_catch = false;
+    if(cur_state->call_stack.size())
+    {
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
+
+      if((*s_it).has_throw_target)
+      {
+        cur_state->source.pc++;
+        break;
+      }
     }
 
     exprt tmp(instruction.guard);
@@ -205,6 +224,8 @@ goto_symext::symex_step(reachability_treet & art)
         dereference(deref_code.lhs(), true);
       }
 
+      dereference(deref_code.function(), false);
+
       Forall_expr(it, deref_code.arguments()) {
         dereference(*it, false);
       }
@@ -232,11 +253,15 @@ goto_symext::symex_step(reachability_treet & art)
 
   case CATCH:
     symex_catch();
-    cur_state->source.pc++;
     break;
 
   case THROW:
     symex_throw();
+    cur_state->source.pc++;
+    break;
+
+  case THROW_DECL:
+    symex_throw_decl();
     cur_state->source.pc++;
     break;
 

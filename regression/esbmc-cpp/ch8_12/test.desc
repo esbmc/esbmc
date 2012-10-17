@@ -1,3 +1,0 @@
-main.cpp 
-String1.cpp --unwind 2 --no-unwinding-assertions -I ~/libraries/ --no-bounds-check
-^VERIFICATION SUCCESSFUL$

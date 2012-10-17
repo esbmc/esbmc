@@ -3084,6 +3084,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
   } else   {
 	DEBUGLOC;
     if (expr.op0().type().id() == "struct") {
+      DEBUGLOC;
       const struct_typet &struct_type = to_struct_type(expr.op0().type());
       const struct_typet::componentst &components = struct_type.components();
       unsigned i = 0;
@@ -3131,11 +3132,22 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
       bv = Z3_mk_select(z3_ctx, op0, op1);
       return ;
     }
-
-    bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
     DEBUGLOC;
 
-    std::cout << "expr.op0().id(): " << expr.op0().id() << std::endl;
+    if (expr.op0().type().id() == "signedbv" ||
+        expr.op0().type().id() == "unsignedbv") {
+       Z3_ast tmp;
+       if (width >= upper)
+	     bv =
+	       Z3_mk_extract(z3_ctx, upper, lower, op0);
+       else
+	     bv =
+	       Z3_mk_extract(z3_ctx, upper - lower, 0, op0);
+    } else {
+      bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+    }
+
+  DEBUGLOC;
 
     DEBUGLOC;
     if (expr.op0().id() == "index") {

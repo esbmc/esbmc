@@ -373,6 +373,26 @@ protected:
   /** Register exception handler on stack. */
   void symex_catch();
 
+  /** Register throw handler on stack. */
+  void symex_throw_decl();
+
+  /** Update throw target. */
+  void update_throw_target(goto_symex_statet::framet* frame,
+    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+
+  /** Check if we can rethrow an exception:
+   *  if we can then update the target.
+   *  if we can't then gives a error.
+   */
+  bool handle_rethrow(irept::subt exceptions_thrown,
+    const goto_programt::instructiont instruction);
+
+  /** Check if we can throw an exception:
+   *  if we can't then gives a error.
+   */
+  void handle_throw_decl(goto_symex_statet::framet* frame,
+    const irep_idt &id);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with
@@ -540,8 +560,6 @@ protected:
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
 
   // exception
-  bool has_throw_target, has_catch;
-  goto_programt::targett throw_target;
   goto_programt::instructiont *last_throw;
 };
 

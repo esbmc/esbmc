@@ -1,0 +1,13 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+class QAbstractAnimation{
+public:
+	QAbstractAnimation(){}
+	~QAbstractAnimation(){}
+};

@@ -104,7 +104,18 @@ std::ostream& goto_programt::output_instruction(
   case OTHER:
   case FUNCTION_CALL:
   case ASSIGN:
-    out << from_expr(ns, identifier, it->code) << std::endl;
+
+    if(it->code.statement()!="typeid")
+    {
+      out << from_expr(ns, identifier, it->code) << std::endl;
+    }
+    else
+    {
+      // Get the identifier
+      out << "  return_value = ";
+      out << "typeid(" << it->code.op0().identifier() << ").name() ";
+      out << std::endl << std::endl;
+    }
     break;
 
   case ASSUME:
@@ -144,10 +155,13 @@ std::ostream& goto_programt::output_instruction(
         it->code.find("exception_list").get_sub();
 
       for(irept::subt::const_iterator
-          it=exception_list.begin();
-          it!=exception_list.end();
-          it++)
-        out << " " << it->id();
+          t_it=exception_list.begin();
+          t_it!=exception_list.end();
+          t_it++)
+      {
+      	if(t_it!=exception_list.begin()) out << ",";
+        out << " " << t_it->id();
+      }
     }
 
     if(it->code.operands().size()==1)
@@ -186,6 +200,24 @@ std::ostream& goto_programt::output_instruction(
 
   case ATOMIC_END:
     out << "ATOMIC_END" << std::endl;
+    break;
+
+  case THROW_DECL:
+    out << "THROW_DECL (";
+
+    {
+      const irept::subt &throw_list=
+        it->code.find("throw_list").get_sub();
+
+      for(unsigned int i=0; i<throw_list.size(); ++i)
+      {
+        if(i) out << ", ";
+        out << throw_list[i].id();
+      }
+      out << ")";
+    }
+
+    out << std::endl;
     break;
 
   default:

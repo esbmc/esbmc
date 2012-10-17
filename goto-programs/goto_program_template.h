@@ -34,7 +34,8 @@ typedef enum { NO_INSTRUCTION_TYPE=0,
                DEAD=15,         // marks the end-of-live of a local variable
                FUNCTION_CALL=16,// call a function
                THROW=17,        // throw an exception
-               CATCH=18         // catch an exception
+               CATCH=18,        // catch an exception
+               THROW_DECL=19    // list of throws that a function can throw
              }
   goto_program_instruction_typet;
 
@@ -130,6 +131,7 @@ public:
     inline void make_skip() { clear(SKIP); }
     inline void make_throw() { clear(THROW); }
     inline void make_catch() { clear(CATCH); }
+    inline void make_throw_decl() { clear(THROW_DECL); }
     inline void make_assertion(const guardT &g) { clear(ASSERT); guard=g; }
     inline void make_assumption(const guardT &g) { clear(ASSUME); guard=g; }
     inline void make_assignment() { clear(ASSIGN); }

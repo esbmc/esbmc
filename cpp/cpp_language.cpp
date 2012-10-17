@@ -131,6 +131,10 @@ void cpp_languaget::internal_additions(std::ostream &out)
   out << "extern \"C\" void __ESBMC_assert("
          "bool assertion, const char *description);" << std::endl;
 
+  // __ESBMC_atomic_{begin,end}
+  out << "extern \"C\" void __ESBMC_atomic_begin();" << std::endl;
+  out << "extern \"C\" void __ESBMC_atomic_end();" << std::endl;
+
   // __CPROVER namespace
   out << "namespace __CPROVER { }" << std::endl;
 

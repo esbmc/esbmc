@@ -621,7 +621,14 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
       return false;
 
     case decision_proceduret::D_SATISFIABLE:
-      if(!bmc.options.get_bool_option("inductive-step")
+      if (bmc.options.get_bool_option("inductive-step") &&
+    		  bmc.options.get_bool_option("show-counter-example"))
+      {
+        bmc.error_trace(*conv, equation);
+   	    bmc.report_failure();
+   	    return false;
+      }
+      else if(!bmc.options.get_bool_option("inductive-step")
     		  && !bmc.options.get_bool_option("forward-condition"))
       {
         bmc.error_trace(*conv, equation);
