@@ -28,14 +28,14 @@ namespace std {
       public:
 	  vector<T>::iterator it;
 
-	  iterator(vector<T>::iterator i){
-		  it = i;
+	  iterator(vector<T>::iterator in){
+		  it = in;
 	  }
 
       iterator(const iterator& i){
     	  it = i.it;
       }
-      iterator(){
+      iterator() : it(){
 
       }
       iterator& operator=(const iterator& i){
@@ -48,12 +48,15 @@ namespace std {
     	  return *it;
       }
 
-      iterator& operator ++ (){
-    	  return iterator(++it);
-      }
       iterator& operator ++ (int b){
-    	  return iterator(it++);
+    	  it++;
+    	  vector<T>::iterator it1 = it - 1;
+    	  return iterator(it1);
       }
+
+      iterator& operator ++ (){
+          	  return iterator(++it);
+            }
 
       iterator& operator -- (){
     	  return iterator(++it);
@@ -228,6 +231,11 @@ namespace std {
     void assign(iterator first, iterator last){
     	buf.assign(first.it, last.it);
     }
+
+    void assign(T n[], T* addr){
+    	buf.assign(n, addr);
+    }
+
     // iterators:
     iterator begin(){
     	return iterator(buf.begin());
