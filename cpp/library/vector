@@ -465,8 +465,15 @@ public:
 	size_type max_size() const;
 
 	void resize(size_type sz){
-		_size = sz;
+		if(sz < _size){
+			_size = sz;
+			return;
+		}
+		while(_size < sz){
+			push_back(int());
+		}
 		verify_capacity();
+		return;
 	}
 	void resize(size_type sz, T t){
 		if(sz < _size){
@@ -657,6 +664,13 @@ private:
 	T buf[VECTOR_CAPACITY];
 	int _size;
 	int _capacity;
+
+	T null_value(){
+		if(sizeof(T) == sizeof(int)){
+			return NULL;
+		}
+		return T();
+	}
 
 };
 
