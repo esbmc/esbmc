@@ -256,7 +256,6 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   }
   else
   {
-
     exprt e1 = expr.op1();
     exprt e2 = expr.op2();
 
@@ -793,7 +792,7 @@ void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
     // nothing really to do; one can throw _almost_ anything
     const typet &exception_type=expr.op0().type();
 
-    irep_idt id = follow(exception_type).id();
+    irep_idt id=follow(exception_type).id();
 
     if(id=="empty")
     {
@@ -831,10 +830,6 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
   expr.set("mode", "C++");
 
   // next, find out if we do an array
-
-//  const contextt &ctxt = namespacet::get_context();
-//  ctxt.show(std::cout);
-
 
   if(expr.type().id()=="array")
   {
@@ -904,7 +899,6 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 
   expr.add("initializer").swap(code);
   expr.remove("operands");
-
 }
 
 /*******************************************************************\
@@ -945,6 +939,8 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
     // Explicitly given value, e.g., int(1).
     // There is an expr-vs-type ambiguity, as it is possible to write
     // (f)(1), where 'f' is a function symbol and not a type.
+    // This also exists with a "comma expression", e.g.,
+    // (f)(1, 2, 3)
 
     if(expr.type().id()=="cpp-name")
     {
@@ -989,6 +985,7 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
        reinterpret_typecast(expr.op0(), expr.type(), new_expr, false))
     {
       expr=new_expr;
+      add_implicit_dereference(expr);
     }
     else
     {
@@ -1223,7 +1220,7 @@ void cpp_typecheckt::typecheck_expr_member(
                         cpp_typecheck_resolvet::VAR,
                         new_fargs);
 
-    if(symbol_expr.id()== "dereference")
+    if(symbol_expr.id()=="dereference")
     {
       assert(symbol_expr.implicit());
       exprt tmp=symbol_expr.op0();
@@ -1269,7 +1266,7 @@ void cpp_typecheckt::typecheck_expr_member(
       expr=symbol_expr;
       return;
     }
-    else if (symbol_expr.id()=="constant")
+    else if(symbol_expr.id()=="constant")
     {
       expr=symbol_expr;
       return;
@@ -1406,7 +1403,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
   add_implicit_dereference(cast_op);
 
   const irep_idt &id=
-  f_op.get_sub().front().identifier();
+    f_op.get_sub().front().identifier();
 
   if(f_op.get_sub().size()!=2 ||
      f_op.get_sub()[1].id()!="template_args")
