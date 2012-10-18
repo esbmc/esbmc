@@ -95,6 +95,7 @@ void goto_symext::symex_malloc(
     rhs.make_typecast(lhs.type());
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -112,7 +113,7 @@ void goto_symext::symex_malloc(
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
 
-  dynamic_memory.push_back(allocated_obj(lhs, guard));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 void goto_symext::symex_printf(
@@ -205,6 +206,7 @@ void goto_symext::symex_cpp_new(
     rhs.copy_to_operands(symbol_expr(symbol));
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -222,7 +224,7 @@ void goto_symext::symex_cpp_new(
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
 
-  dynamic_memory.push_back(allocated_obj(lhs, guard));
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 // XXX - implement as a call to free?
