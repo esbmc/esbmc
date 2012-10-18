@@ -118,7 +118,11 @@ void goto_symext::symex_malloc(
 
 void goto_symext::symex_free(const codet &code)
 {
-  return;
+  assert(code.op0().type().id() == "pointer");
+  exprt ptr_obj("pointer_offset", unsignedbv_typet(32));
+  ptr_obj.copy_to_operands(code.op0());
+  equality_exprt eq(ptr_obj, gen_zero(unsignedbv_typet(32)));
+  claim(eq, "Operand of free must have zero pointer offset");
 }
 
 void goto_symext::symex_printf(
