@@ -53,6 +53,14 @@ public:
   // Types
 
 public:
+  /** Records for dynamically allocated blobs of memory. */
+  class allocated_obj {
+    /** Symbol identifying the pointer that was allocated. Must have ptr type */
+    symbol_exprt obj;
+    /** Guard when allocation occured. */
+    guardt alloc_guard;
+  };
+
   friend class symex_dereference_statet;
   friend class bmct;
 
@@ -565,6 +573,10 @@ protected:
    *  modelling what pointers are active, which are freed, and so forth. As for
    *  why, well, that's a trainwreck. */
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
+  /** List of all allocated objects.
+   *  Used to track what we should level memory-leak-assertions against when the
+   *  program execution has finished */
+  std::list<allocated_obj> dynamic_memory;
 
   // exception
   goto_programt::instructiont *last_throw;
