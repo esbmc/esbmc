@@ -37,7 +37,7 @@ void goto_symext::symex_other(void)
   }
   else if(statement=="free")
   {
-    // ignore
+    symex_free(code);
   }
   else if(statement=="printf")
   {

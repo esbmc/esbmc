@@ -509,6 +509,8 @@ protected:
 
   /** Symbolic implementation of malloc. */
   void symex_malloc(const exprt &lhs, const side_effect_exprt &code);
+  /** Symbolic implementation of free */
+  void symex_free(const codet &code);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */

@@ -116,6 +116,11 @@ void goto_symext::symex_malloc(
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
+void goto_symext::symex_free(const codet &code)
+{
+  return;
+}
+
 void goto_symext::symex_printf(
   const exprt &lhs __attribute__((unused)),
   const exprt &rhs)
