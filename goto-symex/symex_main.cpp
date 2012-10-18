@@ -326,5 +326,7 @@ goto_symext::finish_formula(void)
     target->assertion(it->alloc_guard, eq,
                       "dereference failure: forgotten memory",
                       std::vector<dstring>(), cur_state->source);
+    total_claims++;
+    remaining_claims++;
   }
 }
