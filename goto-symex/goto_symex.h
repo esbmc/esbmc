@@ -55,10 +55,11 @@ public:
 public:
   /** Records for dynamically allocated blobs of memory. */
   class allocated_obj {
+  public:
     allocated_obj(const exprt &s, const guardt &g)
       : obj(s), alloc_guard(g) { }
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
-    symbol_exprt obj;
+    exprt obj;
     /** Guard when allocation occured. */
     guardt alloc_guard;
   };
