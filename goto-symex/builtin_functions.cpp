@@ -111,6 +111,8 @@ void goto_symext::symex_malloc(
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(lhs, guard));
 }
 
 void goto_symext::symex_printf(
@@ -219,6 +221,8 @@ void goto_symext::symex_cpp_new(
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(lhs, guard));
 }
 
 // XXX - implement as a call to free?
