@@ -868,19 +868,12 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
        lex->GetToken(tk2)!=TOK_IDENTIFIER)
       return false;
 
-    //irept cspec=new ireptClassSpec(new LeafReserved(tk1),
-    //                                  irept::Cons(new Leaf(tk2),nil),
-    //                                  nil);
-    //decl=irept::Snoc(decl, cspec);
     if(lex->LookAhead(0)=='=')
     {
       typet default_type;
       lex->GetToken(tk1);
       if(!rTypeName(default_type))
           return false;
-
-      //decl=irept::Nconc(decl, irept::List(new Leaf(tk1),
-      //                                      default_type));
     }
   }
   else
@@ -932,8 +925,6 @@ bool Parser::rExternTemplateDecl(irept &decl)
   if(!rDeclaration(body))
     return false;
 
-  //decl=new ireptExternTemplate(new Leaf(tk1),
-  //                               irept::List(new Leaf(tk2), body));
   return true;
 }
 
@@ -1091,17 +1082,10 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
   Token eqs;
   lex->GetToken(eqs);
 
-  //int t=lex->LookAhead(0);
-
   exprt e;
   if(!rExpression(e))
     return false;
 
-  //irept::Nconc(d, irept::List(new Leaf(eqs), e));
-
-  //statement=new ireptDeclaration(0, irept::List(integral,
-  //                                                irept::List(d)));
-  // TODO
   return true;
 }
 
@@ -1350,8 +1334,6 @@ bool Parser::rOtherDeclaration(
     {
       Token tk;
       lex->GetToken(tk);
-      //statement=new ireptDeclaration(head, irept::List(type_name,
-      //                                                   new Leaf(tk)));
       return true;
     }
     //else
@@ -1969,7 +1951,6 @@ bool Parser::rDeclaratorWithInit(
     if(!rExpression(e))
       return false;
 
-    //dw=irept::List(new Leaf(tk), e);
     return true;
   }
   else
@@ -2008,15 +1989,13 @@ bool Parser::rDeclaratorWithInit(
     else if(t==':')
     {
       // bit field
-      exprt e;
-
       Token tk;
-      lex->GetToken(tk);
+      lex->GetToken(tk); // get :
+
+      exprt e;
       if(!rExpression(e))
         return false;
 
-      //dw=irept::Nconc(d, irept::List(new Leaf(tk), e));
-      // TODO
       dw.swap(declarator);
       return true;
     }
@@ -3409,8 +3388,6 @@ bool Parser::rClassBody(exprt &body)
   if(lex->GetToken(tk)!='{')
     return false;
 
-  //irept ob=new Leaf(tk);
-
   exprt members=exprt("cpp-class-body");
 
   set_location(members, tk);
@@ -3426,12 +3403,8 @@ bool Parser::rClassBody(exprt &body)
 
       SkipTo('}');
       lex->GetToken(tk);
-      //body=irept::List(ob, nil, new Leaf(tk));
       return true;        // error recovery
     }
-
-    //lex->GetComments();
-    //mems=irept::Snoc(mems, m);
 
     #ifdef DEBUG
     std::cout << "Parser::rClassBody " << member << std::endl;
@@ -3531,8 +3504,6 @@ bool Parser::rAccessDecl(irept &mem)
   if(lex->GetToken(tk)!=';')
     return false;
 
-  //mem=new ireptAccessDecl(new ireptName(name, encode),
-  //                           irept::List(new Leaf(tk)));
   return true;
 }
 
@@ -5220,9 +5191,6 @@ bool Parser::rPrimaryExpr(exprt &exp)
         if(lex->LookAhead(0)==TOK_SCOPE)
         {
           lex->GetToken(tk);
-
-          //exp=new ireptStaticUserStatementExpr(exp,
-          //                        irept::Cons(new Leaf(tk), exp2));
           // TODO
         }
       }
