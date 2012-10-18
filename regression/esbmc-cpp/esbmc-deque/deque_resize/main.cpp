@@ -32,8 +32,8 @@ int main ()
   assert(mydeque[10] == 0);
 
   cout << "mydeque contains:";
-  for (it=mydeque.begin(); it<mydeque.end(); ++it)
-    cout << " " << *it;
+//  for (it=mydeque.begin(); it<mydeque.end(); ++it)
+//    cout << " " << *it;
 
   cout << endl;
 
