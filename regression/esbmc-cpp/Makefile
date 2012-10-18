@@ -27,6 +27,9 @@ all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector
 $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list):
 	$(MAKE) --directory=$@ $(TARGET)
 
+#Make only STL directories
+stl: $(algorithm) $(vector) $(deque) $(list)
+
 # Make each directory
 algorithm: $(algorithm)
 cpp: $(cpp)
