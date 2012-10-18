@@ -306,3 +306,9 @@ goto_symext::run_intrinsic(code_function_callt &call, reachability_treet &art,
 
   return;
 }
+
+void
+goto_symext::finish_formula(void)
+{
+  return;
+}

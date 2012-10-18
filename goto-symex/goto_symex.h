@@ -107,6 +107,13 @@ public:
    */
   virtual void symex_step(reachability_treet & art);
 
+  /**
+   *  Perform accounting checks / assertions at end of a program run.
+   *  This should contain anything that must happen at the end of a program run,
+   *  for example assertions about dynamic memory being freed.
+   */
+  void finish_formula(void);
+
 protected:
   /**
    *  Perform simplification on an expression.
