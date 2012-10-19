@@ -109,11 +109,11 @@ void irept::detatch()
     #ifdef IREP_DEBUG
     std::cout << "ALLOCATED " << data << std::endl;
     #endif
-    
+
     data->ref_count=1;
     remove_ref(old_data);
   }
-  
+
   assert(data->ref_count==1);
 
 
@@ -141,10 +141,10 @@ const irept::dt &irept::read() const
   #ifdef IREP_DEBUG
   std::cout << "READ: " << data << std::endl;
   #endif
-  
+
   if(data==NULL)
     return empty_d;
-  
+
   return *data;
 }
 #endif
@@ -162,7 +162,7 @@ Function: irept::remove_ref
 \*******************************************************************/
 
 #include <iostream>
-  
+
 #ifdef SHARING
 void irept::remove_ref(dt *old_data)
 {
@@ -173,18 +173,18 @@ void irept::remove_ref(dt *old_data)
   #ifdef IREP_DEBUG
   std::cout << "R: " << old_data << " " << old_data->ref_count << std::endl;
   #endif
-  
+
   old_data->ref_count--;
   if(old_data->ref_count==0)
   {
     #ifdef IREP_DEBUG
     std::cout << "D: " << pretty() << std::endl;
-    std::cout << "DELETING " << old_data->data 
+    std::cout << "DELETING " << old_data->data
               << " " << old_data << std::endl;
     old_data->clear();
     std::cout << "DEALLOCATING " << old_data << "\n";
     #endif
-    
+
     delete old_data;
 
     #ifdef IREP_DEBUG
@@ -318,7 +318,7 @@ Function: irept::set
 void irept::set(const irep_namet &name, const long value)
 {
   add(name).id(i2string((int)value));
-}  
+}
 
 /*******************************************************************\
 
@@ -340,7 +340,7 @@ void irept::remove(const irep_namet &name)
   named_subt::iterator it=s.find(name);
 
   if(it!=s.end()) s.erase(it);
-}  
+}
 
 /*******************************************************************\
 
@@ -357,7 +357,7 @@ Function: irept::set
 void irept::set(const irep_namet &name, const irept &irep)
 {
   add(name)=irep;
-}  
+}
 
 /*******************************************************************\
 
@@ -471,17 +471,17 @@ bool full_eq(const irept &i1, const irept &i2)
   {
     irept::named_subt::const_iterator i1_it=i1_named_sub.begin();
     irept::named_subt::const_iterator i2_it=i2_named_sub.begin();
-    
+
     for(; i1_it!=i1_named_sub.end(); i1_it++, i2_it++)
       if(i1_it->first!=i2_it->first ||
          !full_eq(i1_it->second, i2_it->second))
         return false;
   }
-  
+
   {
     irept::named_subt::const_iterator i1_it=i1_comments.begin();
     irept::named_subt::const_iterator i2_it=i2_comments.begin();
-    
+
     for(; i1_it!=i1_comments.end(); i1_it++, i2_it++)
       if(i1_it->first!=i2_it->first ||
          !full_eq(i1_it->second, i2_it->second))
@@ -895,7 +895,7 @@ const irep_idt irept::a_flavor = dstring("flavor");
 const irep_idt irept::a_cmt_active = dstring("#active");
 const irep_idt irept::a_code = dstring("code");
 const irep_idt irept::a_component = dstring("component");
-const irep_idt irept::a_c_size_type = dstring("#c_size_type");
+const irep_idt irept::a_c_sizeof_type = dstring("#c_sizeof_type");
 const irep_idt irept::a_end_location = dstring("#end_location");
 const irep_idt irept::a_guard = dstring("guard");
 const irep_idt irept::a_label = dstring("label");
