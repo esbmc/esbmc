@@ -353,6 +353,12 @@ void
 goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
 {
 
+  if (options.get_bool_option("k-induction")) {
+    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+    std::cerr  << std::endl;
+    abort();
+  }
+
   // As an argument, we expect the address of a symbol.
   const exprt &args = call.operands()[2];
   assert(args.id() == "arguments");
