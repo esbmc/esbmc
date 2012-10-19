@@ -10,7 +10,7 @@
 #ifndef __STL_LIST
 #define __STL_LIST
 
-//#include "iterator"
+#include "vector"
 
 namespace std {
 
@@ -44,9 +44,9 @@ public:
 		int it_size;
 
 		iterator(const iterator& x): it(x.it), it_size(x.it_size){}
-		iterator(): it(NULL), it_size(0){}
+		iterator(): it(NULL){}
 		iterator& operator=(const iterator& x){
-			this->it = x.it;
+			this->it = new node(x.it->data, x.it->prev, x.it->next);
 			this->it_size = x.it_size;
 			return *this;
 		}
@@ -57,11 +57,11 @@ public:
 			return this->it->data;
 		}
 
-		iterator operator ++(){ //error
+		iterator operator ++(){
 			this->it = this->it->next;
 			return *this;
 		}
-		iterator operator ++(int){ //error
+		iterator operator ++(int){
 			this->it = this->it->next;
 			return *this;
 		}
@@ -71,7 +71,7 @@ public:
 			return *this;
 		}
 		iterator& operator --(int){
-			//this->it = this->it->prev;
+			this->it = this->it->prev;
 			return *this;
 		}
 
@@ -94,18 +94,19 @@ public:
 		iterator& operator +=(int);
 		iterator& operator -=(int);
 	};
-
+/*
 	class reverse_iterator {
 	public:
 		node* it;
 		int it_size;
+		int pos;
 
-		reverse_iterator(const reverse_iterator& x): it(x.it), it_size(x.it_size){}
-
-		reverse_iterator(): it(NULL), it_size(0){}
+		reverse_iterator(const reverse_iterator& x): it(x.it), it_size(x.it_size), pos(x.pos){}
+		reverse_iterator(): it(NULL), it_size(0), pos(-1){}
 		reverse_iterator& operator=(const reverse_iterator& x){
-			this->it = x.it;
+			this->it = new node(x.it->data, x.it->prev, x.it->next);
 			this->it_size = x.it_size;
+			this->pos = x.pos;
 			return *this;
 		}
 
@@ -115,29 +116,27 @@ public:
 			return this->it->data;
 		}
 
-		reverse_iterator operator ++(){ //error
+		reverse_iterator operator ++(){
 			this->it = this->it->next;
+			this->pos++;
 			return *this;
 		}
-		reverse_iterator operator ++(int){ //error
+		reverse_iterator operator ++(int){
 			this->it = this->it->next;
+			this->pos++;
 			return *this;
 		}
 
 		reverse_iterator operator --(){
-			//this->it = this->it->prev;
 			return *this;
 		}
-		reverse_iterator& operator --(int){
-			//this->it = this->it->prev;
-			return *this;
-		}
+		iterator operator --(int);
 
 		bool operator ==(const reverse_iterator& x) const{
-			return (x.it == this->it && x.it_size == this->it_size);
+			return (x.it == this->it && x.it_size == this->it_size && this->pos == x.pos);
 		}
 		bool operator !=(const reverse_iterator& x) const{
-			return (x.it != this->it && x.it_size != this->it_size);
+			return (x.it != this->it && x.it_size != this->it_size && this->pos != x.pos);
 		}
 
 		bool operator <(const reverse_iterator&) const;
@@ -152,7 +151,7 @@ public:
 		reverse_iterator& operator +=(int);
 		reverse_iterator& operator -=(int);
 	};
-
+*/
 	explicit list() : head(NULL), tail(NULL), _size(0) {}
 	explicit list ( size_type n, const T& value = T() ){
 		int i;
@@ -165,7 +164,9 @@ public:
 		for(; t1!=t2; t1++)
 			this->push_back(*t1);
 	}
+
 	list ( iterator first, iterator last) : head(first.it), tail(last.it), _size(first.it_size) {}
+
 	list(const list<T>& x) : head(x.head), tail(x.tail), _size(x._size) {}
 
 	~list() {
@@ -178,28 +179,30 @@ public:
 
 	iterator begin (){
 		iterator it;
-		it.it = new node(this->head->data, this->head->prev, this->head->next);
+		it.it = this->head;
 		it.it_size = this->_size;
 		return it;
 	}
 	iterator end (){
 		iterator it;
-		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+		it.it = this->tail;
 		it.it_size = this->_size;
 		return it;
-	}
+	}/*
 	reverse_iterator rbegin(){
 		reverse_iterator it;
 		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
 		it.it_size = this->_size;
+		it.pos = this->_size-1;
 		return it;
 	}
 	reverse_iterator rend(){
 		reverse_iterator it;
 		it.it = new node(this->head->data, this->head->prev, this->head->next);
 		it.it_size = this->_size;
+		it.pos = 0;
 		return it;
-	}
+	}*/
 
 	size_type size() const{
 		return this->_size;
@@ -283,6 +286,7 @@ public:
 
 	iterator insert(iterator position, const T& x);
 	void insert(iterator position, size_type n, const T& x);
+	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x);
 
 	void assign ( iterator first, iterator last ){
 		this->head = first.it;
@@ -302,8 +306,76 @@ public:
 		this->tail = list.tail;
 	}
 
-	iterator erase(iterator position);
-	iterator erase(iterator position, iterator last);
+	iterator erase(iterator& position){
+		if(position.it == this->head){
+			this->pop_front();
+			position.it = new node(this->head->data, this->head->prev, this->head->next);
+			position.it_size = this->_size--;
+			return position;
+		}
+		if(position.it == this->tail){
+			this->pop_back();
+			position.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+			position.it_size = this->_size--;
+			return position;
+		}
+		node* tmp_ptr = this->head;
+		int i;
+		do{
+			tmp_ptr = tmp_ptr->next;
+		}while((tmp_ptr != position.it) && (tmp_ptr != NULL)) ;
+		if (tmp_ptr != NULL){
+			position.it = tmp_ptr->next;
+			position.it_size = this->_size--;
+			tmp_ptr->prev->next = tmp_ptr->next;
+			tmp_ptr->next->prev = tmp_ptr->prev;
+		}
+		return position;
+	}
+	iterator erase(iterator position, iterator last){
+		if((position.it == this->head) && (last.it == this->head)){
+			this->pop_front();
+			position.it = new node(this->head->data, this->head->prev, this->head->next);
+			position.it_size = this->_size--;
+			return position;
+		}
+		if((position.it == this->tail) && (last.it == this->tail)){
+			this->pop_back();
+			position.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+			position.it_size = this->_size--;
+			return position;
+		}
+		node* tmp_ptr = this->head;
+		node* tmp_ptr_last = this->head;
+		int i;
+
+		do{
+			tmp_ptr = tmp_ptr->next;
+		}while((tmp_ptr != position.it) && (tmp_ptr != NULL)) ;
+
+		if (position.it == last.it){
+			do{
+				tmp_ptr = tmp_ptr->next;
+			}while((tmp_ptr != position.it) && (tmp_ptr != NULL)) ;
+			if (tmp_ptr != NULL){
+				position.it = tmp_ptr->next;
+				position.it_size = this->_size--;
+				tmp_ptr->prev->next = tmp_ptr->next;
+				tmp_ptr->next->prev = tmp_ptr->prev;
+			}
+			return position;
+		}
+		do{
+			tmp_ptr_last = tmp_ptr->next;
+		}while((tmp_ptr_last != last.it) && (tmp_ptr_last != NULL)) ;
+		if (tmp_ptr != NULL){
+			last.it_size = this->_size--;
+			last.it = last.it->prev;
+			last->prev = tmp_ptr->next->prev;
+			tmp_ptr->next = last.it;
+		}
+		return last;
+	}
 	void swap(list<T>& x){
 		list<T> y;
 		y = x;
@@ -330,7 +402,7 @@ public:
 	void reverse();
 };
 
-  void advance (list<unsigned int>::iterator it, int n){
+  void advance (list<unsigned int>::iterator& it, int n){
 	  int i;
 	  for(i = 0; i < n; i++)
 		  it.it = it.it->next;
