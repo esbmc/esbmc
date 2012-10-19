@@ -640,7 +640,7 @@ public:
 
 	iterator erase(iterator position){
 		int j;
-		for(int i = position.pos + 1; i < _size ; i++){
+		for(int i = position.pos + 1; i <= _size ; i++){
 			j = i - 1;
 			buf[j] = buf[i];
 		}
