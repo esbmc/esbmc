@@ -837,7 +837,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     typecheck_type(expr.type().subtype());
 
     // typecheck the size
-    exprt &size=static_cast<exprt&>(expr.type().add("size"));
+    exprt &size=to_array_type(expr.type()).size();
     typecheck_expr(size);
 
     bool size_is_unsigned=(size.type().id()=="unsignedbv");
@@ -846,14 +846,6 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     implicit_typecast(size, integer_type);
 
     expr.statement("cpp_new[]");
-
-    // this must not have an initializer
-    if(expr.operands().size()!=0)
-    {
-      err_location(expr.op0());
-      str << "new with array type must not use explicit construction";
-      throw 0;
-    }
 
     // save the size expression
     expr.set("size", to_array_type(expr.type()).size());
@@ -884,21 +876,32 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     object_expr.swap(tmp);
   }
 
-  Forall_operands(it, expr)
+  // not yet typechecked-stuff
+  exprt &initializer=static_cast<exprt &>(expr.add("initializer"));
+
+  // arrays must not have an initializer
+  if(!initializer.operands().empty() &&
+     expr.statement()=="cpp_new[]")
   {
-    exprt tmp("already_typechecked");
-    tmp.move_to_operands(*it);
-    it->swap(tmp);
+    err_location(expr.op0());
+    str << "new with array type must not use initializer";
+    throw 0;
   }
 
   exprt code=
     cpp_constructor(
       expr.find_location(),
       object_expr,
-      expr.operands());
+      initializer.operands());
 
   expr.add("initializer").swap(code);
-  expr.remove("operands");
+
+  // we add the size of the object for convenience of the
+  // runtime library
+
+  exprt &sizeof_expr=static_cast<exprt &>(expr.add("sizeof"));
+  sizeof_expr=c_sizeof(expr.type().subtype(), *this);
+  sizeof_expr.add("#c_sizeof_type")=expr.type().subtype();
 }
 
 /*******************************************************************\

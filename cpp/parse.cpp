@@ -4544,10 +4544,8 @@ bool Parser::rAllocateExpr(exprt &exp)
     std::cout << "Parser::rAllocateExpr 4\n";
     #endif
 
-    // TODO: CBMC
-    //exp.add("initializer").swap(initializer);
-    //exp.operands().swap(arguments.operands());
-    exp.operands().swap(initializer.operands());
+    exp.add("initializer").swap(initializer);
+    exp.operands().swap(arguments.operands());
     return true;
   }
   else
