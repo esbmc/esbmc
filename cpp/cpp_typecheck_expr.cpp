@@ -492,9 +492,7 @@ bool cpp_typecheckt::overloadable(const exprt &expr)
 
   forall_operands(it, expr)
   {
-    typet t(it->type());
-
-    follow_symbol(t);
+    typet t=follow(it->type());
 
     if(is_reference(t))
       t=t.subtype();
@@ -827,8 +825,6 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 {
-  expr.set("mode", "C++");
-
   // next, find out if we do an array
 
   if(expr.type().id()=="array")
@@ -1677,14 +1673,14 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // It's NULL :( Let's add a throw bad_typeid
 
       // Let's create the bad_typeid exception
-      // We must check if the user included typeinfo
-      std::cout << "**** WARNING: throwing a null pointer: ";
-      std::cout << "ensure that the typeinfo lib is included" << std::endl;
+     irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
 
-      irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
+     // We must check if the user included typeinfo
+      const symbolt *bad_typeid_symbol;
+      bool is_included = lookup(bad_typeid_identifier, bad_typeid_symbol);
 
-      // If the user haven't included typeinfo, this will fail
-      symbolt bad_typeid_symbol=lookup(bad_typeid_identifier);
+      if(is_included)
+        throw "Error: must #include <typeinfo> before using typeid";
 
       // Ok! Let's create the temp object bad_typeid
       exprt bad_typeid;
