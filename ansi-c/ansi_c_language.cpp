@@ -129,6 +129,8 @@ static void internal_additions(std::string &code)
     "unsigned char __VERIFIER_nondet_uchar();\n"
     "signed char __VERIFIER_nondet_schar();\n"
 
+    "const char *__PRETTY_FUNCTION__;\n"
+
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
 
