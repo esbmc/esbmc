@@ -96,7 +96,7 @@ bool cpp_typecheckt::standard_conversion_array_to_pointer(
   pointer_typet pointer;
   pointer.subtype()=expr.type().subtype();
 
-  new_expr = exprt("address_of",pointer);
+  new_expr=exprt("address_of",pointer);
   new_expr.move_to_operands(index);
 
   return true;
@@ -156,7 +156,7 @@ bool cpp_typecheckt::standard_conversion_qualification(
   const typet &type,
   exprt &new_expr) const
 {
-  if(expr.type().id() != "pointer" ||
+  if(expr.type().id()!="pointer" ||
      is_reference(expr.type()))
     return false;
 
@@ -681,7 +681,7 @@ bool cpp_typecheckt::standard_conversion_pointer_to_member(
       code2.arguments().erase(code2.arguments().begin());
 
       if(this2.type().subtype().cmt_constant() &&
-          !this1.type().subtype().cmt_constant())
+         !this1.type().subtype().cmt_constant())
         return false;
 
       // give a second chance ignoring `this'
@@ -2055,7 +2055,6 @@ bool cpp_typecheckt::dynamic_typecast(
   {
     if(type.find("to-member").is_not_nil())
       return false;
-
 
     if(type.subtype().id()=="empty")
     {
