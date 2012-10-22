@@ -2462,6 +2462,20 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     // Note that in C++ (as opposed to C), the assignment yields
     // an lvalue!
     expr.set("#lvalue", true);
+
+    // If it was a type cast, we need to update the symbol
+    if(expr.operands().size()>0
+       && expr.op1().id()=="typecast")
+    {
+      symbolt &symbol=
+        context.symbols.find(expr.op0().identifier())->second;
+
+      exprt &initializer=
+        static_cast<exprt &>(expr.op1().op0().add("initializer"));
+
+      symbol.value = initializer.op0().op0();
+    }
+
     return;
   }
 
