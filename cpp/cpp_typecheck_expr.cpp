@@ -2470,12 +2470,20 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       symbolt &symbol=
         context.symbols.find(expr.op0().identifier())->second;
 
-      exprt &initializer=
-        static_cast<exprt &>(expr.op1().op0().add("initializer"));
+      if(expr.op1().has_operands())
+      {
+        exprt &initializer=
+            static_cast<exprt &>(expr.op1().op0().add("initializer"));
 
-      symbol.value = initializer.op0().op0();
+        if(initializer.has_operands())
+        {
+          if(initializer.op0().has_operands())
+          {
+            symbol.value = initializer.op0().op0();
+          }
+        }
+      }
     }
-
     return;
   }
 
