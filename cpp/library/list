@@ -10,7 +10,7 @@
 #ifndef __STL_LIST
 #define __STL_LIST
 
-#include "vector"
+#include <vector>
 
 namespace std {
 
@@ -26,6 +26,7 @@ public:
 	typedef const T* const_pointer;
 
 	typedef bool (pred)(const int &);
+	typedef bool (pred_double)(double, double);
 
 	struct node {
 		T data;
@@ -298,12 +299,12 @@ public:
 		}
 	}
 	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x){
-		//int tmp;
-		//while(n!=x){
-			//tmp = n.pointer;
-			//this->insert(position, tmp );
-			//n++;
-		//}
+		int tmp;
+		while(n!=x){
+			tmp = *n;
+			this->insert(position, tmp );
+			n++;
+		}
 	}
 
 	void assign ( iterator first, iterator last ){
@@ -438,8 +439,32 @@ public:
 		void remove_if ( Predicate pred );
 
 	void unique();
+	void unique(pred_double*);
+	template <class Predicate>
+		void unique ( Predicate pred );
 	void merge(list<T>& x);
-	void sort();
+	void sort(){
+		list<T> x;
+		node* tmp_x = x.head;
+		node* tmp = this->head;
+		while(tmp != NULL){
+			if(x._size == 0){
+				x.push_back(tmp->data);
+			}else{
+				while(tmp_x!=NULL){
+					if(tmp->data < tmp_x->data){
+						node* y = new node(tmp->data, tmp_x->prev, tmp_x);
+						break;
+					}else{
+						tmp_x = tmp_x->next;
+					}
+				}
+				if(tmp_x==NULL)
+					x.push_back(tmp->data);
+			}
+			tmp = tmp->next;
+		}
+	}
 	void reverse(){
 #if 0
 		list<T> tmp(this->_size,0);
