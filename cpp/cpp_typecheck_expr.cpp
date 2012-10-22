@@ -1449,6 +1449,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","const");
   }
   else if(id=="dynamic_cast")
   {
@@ -1460,6 +1461,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","dynamic");
   }
   else if(id=="reinterpret_cast")
   {
@@ -1471,6 +1473,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","reinterpret");
   }
   else if(id=="static_cast")
   {
@@ -1482,6 +1485,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","static");
   }
   else
     assert(false);
