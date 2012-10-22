@@ -25,6 +25,8 @@ public:
 	typedef T* pointer;
 	typedef const T* const_pointer;
 
+	typedef bool (pred)(const int &);
+
 	struct node {
 		T data;
 		node* prev;
@@ -124,11 +126,9 @@ public:
 		}
 
 		reverse_iterator operator --(){
-			this->it = this->it->prev;
 			return *this;
 		}
 		reverse_iterator& operator --(int){
-			this->it = this->it->prev;
 			return *this;
 		}
 
@@ -309,13 +309,13 @@ public:
 		if(position.it == this->head){
 			this->pop_front();
 			position.it = new node(this->head->data, this->head->prev, this->head->next);
-			position.it_size = this->_size--;
+			position.it_size = this->_size;
 			return position;
 		}
 		if(position.it == this->tail){
 			this->pop_back();
 			position.it = new node(this->tail->data, this->tail->prev, this->tail->next);
-			position.it_size = this->_size--;
+			position.it_size = this->_size;
 			return position;
 		}
 		node* tmp_ptr = this->head;
@@ -335,13 +335,13 @@ public:
 		if((position.it == this->head) && (last.it == this->head)){
 			this->pop_front();
 			position.it = new node(this->head->data, this->head->prev, this->head->next);
-			position.it_size = this->_size--;
+			position.it_size = this->_size;
 			return position;
 		}
 		if((position.it == this->tail) && (last.it == this->tail)){
 			this->pop_back();
 			position.it = new node(this->tail->data, this->tail->prev, this->tail->next);
-			position.it_size = this->_size--;
+			position.it_size = this->_size;
 			return position;
 		}
 		node* tmp_ptr = this->head;
@@ -393,14 +393,46 @@ public:
 	void splice(iterator position, list<T>& x);
 	void splice(iterator position, list<T>& x, iterator i);
 	void splice(iterator position, list<T>& x, iterator first, iterator last);
-	void remove(const T& value);
+	void remove(const T& value){
+		if(value == this->head->data){
+			this->pop_front();
+		} else {
+			if(value == this->tail->data){
+				this->pop_back();
+		}else{
+			node* tmp_ptr = this->head;
+			int i;
+			do{
+				tmp_ptr = tmp_ptr->next;
+			}while((tmp_ptr->data != value) && (tmp_ptr != NULL)) ;
+			if (tmp_ptr != NULL){
+				this->_size--;
+				tmp_ptr->prev->next = tmp_ptr->next;
+				tmp_ptr->next->prev = tmp_ptr->prev;
+			}
+		}
+		}
+	}
+
+	void remove_if ( pred* );
 	template <class Predicate>
-	  void remove_if ( Predicate pred );
+		void remove_if ( Predicate pred );
 
 	void unique();
 	void merge(list<T>& x);
 	void sort();
-	void reverse();
+	void reverse(){
+#if 0
+		list<T> tmp(this->_size,0);
+		node* obj_ptr = this->tail;
+		while(obj_ptr!=NULL){
+			tmp.push_back(obj_ptr->data);
+			obj_ptr = obj_ptr->prev;
+		}
+		this->head = tmp.head;
+		this->tail = tmp.tail;
+#endif
+	}
 };
 
   void advance (list<unsigned int>::iterator& it, int n){
