@@ -283,9 +283,28 @@ public:
 		this->_size++;
 	}
 
-	iterator insert(iterator position, const T& x);
-	void insert(iterator position, size_type n, const T& x);
-	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x);
+	iterator insert(iterator position, const T& x){
+		node* tmp;
+		tmp = new node(x, position.it->prev, position.it);
+		position.it->prev = tmp;
+		position.it_size++;
+		this->_size++;
+		return position;
+	}
+	void insert(iterator position, size_type n, const T& x){
+		int i;
+		for(i=0;i<n;i++){
+			this->insert(position,x);
+		}
+	}
+	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x){
+		//int tmp;
+		//while(n!=x){
+			//tmp = n.pointer;
+			//this->insert(position, tmp );
+			//n++;
+		//}
+	}
 
 	void assign ( iterator first, iterator last ){
 		this->head = first.it;
