@@ -443,40 +443,8 @@ public:
 	template <class Predicate>
 		void unique ( Predicate pred );
 	void merge(list<T>& x);
-	void sort(){
-		list<T> x;
-		node* tmp_x = x.head;
-		node* tmp = this->head;
-		while(tmp != NULL){
-			if(x._size == 0){
-				x.push_back(tmp->data);
-			}else{
-				while(tmp_x!=NULL){
-					if(tmp->data < tmp_x->data){
-						node* y = new node(tmp->data, tmp_x->prev, tmp_x);
-						break;
-					}else{
-						tmp_x = tmp_x->next;
-					}
-				}
-				if(tmp_x==NULL)
-					x.push_back(tmp->data);
-			}
-			tmp = tmp->next;
-		}
-	}
-	void reverse(){
-#if 0
-		list<T> tmp(this->_size,0);
-		node* obj_ptr = this->tail;
-		while(obj_ptr!=NULL){
-			tmp.push_back(obj_ptr->data);
-			obj_ptr = obj_ptr->prev;
-		}
-		this->head = tmp.head;
-		this->tail = tmp.tail;
-#endif
-	}
+	void sort();
+	void reverse(){}
 };
 
   void advance (list<unsigned int>::iterator& it, int n){
