@@ -998,6 +998,18 @@ void goto_convertt::convert_decl(
         break_globals2assignments(initializer, dest,code.location());
     }
 
+    if(initializer.is_typecast())
+    {
+      if(initializer.get("cast")=="dynamic")
+      {
+        constant_exprt null_expr;
+        null_expr.type() = initializer.type();
+        null_expr.set_value("NULL");
+
+        initializer.swap(null_expr);
+      }
+    }
+
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
