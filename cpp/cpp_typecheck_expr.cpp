@@ -2471,19 +2471,22 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     if(expr.operands().size()>0
        && expr.op1().id()=="typecast")
     {
-      symbolt &symbol=
-        context.symbols.find(expr.op0().identifier())->second;
-
-      if(expr.op1().has_operands())
+      if(expr.op0().identifier()!="")
       {
-        exprt &initializer=
+        symbolt &symbol=
+          context.symbols.find(expr.op0().identifier())->second;
+
+        if(expr.op1().has_operands())
+        {
+          exprt &initializer=
             static_cast<exprt &>(expr.op1().op0().add("initializer"));
 
-        if(initializer.has_operands())
-        {
-          if(initializer.op0().has_operands())
+          if(initializer.has_operands())
           {
-            symbol.value = initializer.op0().op0();
+            if(initializer.op0().has_operands())
+            {
+              symbol.value = initializer.op0().op0();
+            }
           }
         }
       }
