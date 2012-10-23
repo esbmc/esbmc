@@ -542,35 +542,33 @@ void goto_convertt::convert_block(
   }
 
   // see if we need to check for forgotten memory
-#if 1
   if (!for_block)
   {
-  if (options.get_bool_option("memory-leak-check"))
-  {
-    while(!allocated_objects.empty())
+    if (options.get_bool_option("memory-leak-check"))
     {
-      //tse paper
-      exprt deallocated_expr("deallocated_object", typet("bool"));
-      //exprt deallocated_expr("valid_object", typet("bool"));
+      while(!allocated_objects.empty())
+      {
+        //tse paper
+        exprt deallocated_expr("deallocated_object", typet("bool"));
+        //exprt deallocated_expr("valid_object", typet("bool"));
 
-      exprt lhs_pointer = allocated_objects.front();
-      allocated_objects.pop();
-	  deallocated_expr.copy_to_operands(lhs_pointer);
+        exprt lhs_pointer = allocated_objects.front();
+        allocated_objects.pop();
+        deallocated_expr.copy_to_operands(lhs_pointer);
 
-      goto_programt::targett t_d_a=dest.add_instruction(ASSERT);
-      //tse paper
-	  exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
-      //exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
+        goto_programt::targett t_d_a=dest.add_instruction(ASSERT);
+        //tse paper
+        exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
+        //exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
 
-	  t_d_a->guard.swap(deallocated_assert);
-	  t_d_a->location = lhs_pointer.location();
-	  t_d_a->location.comment("dereference failure: forgotten memory");
+        t_d_a->guard.swap(deallocated_assert);
+        t_d_a->location = lhs_pointer.location();
+        t_d_a->location.comment("dereference failure: forgotten memory");
+      }
     }
-  }
   }
   //else
     //for_block=false;
-#endif
 }
 
 /*******************************************************************\
@@ -1004,7 +1002,6 @@ void goto_convertt::convert_decl(
     copy(tmp, OTHER, dest);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
-
     copy(assign, ASSIGN, dest);
   }
 }
