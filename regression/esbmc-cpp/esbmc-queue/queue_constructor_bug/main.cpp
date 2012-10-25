@@ -18,9 +18,9 @@ int main ()
   queue<int,list<int> > fourth (mylist);
   
   assert(first.size() == 0);
-  assert(second.size() == 3);
+  assert(second.size() != 3);
   assert(third.size() == 0);
-  assert(fourth.size() == 2);
+  assert(fourth.size() != 2);
 
   cout << "size of first: " << (int) first.size() << endl;
   cout << "size of second: " << (int) second.size() << endl;
