@@ -25,13 +25,16 @@ namespace std {
 
   class exception {
   public:
-    exception() throw ();
-    exception(const exception&) throw ();
+    exception() throw () {};
+    exception(const exception&) throw () {};
+
     exception& operator=(const exception&) throw ();
+
     void unexpected();
     void terminate();
-    virtual ~exception() throw () {
-    }
+
+    virtual ~exception() throw () {}
+
     virtual const char* what() const throw () {
       /**
        *Returns a null terminated character sequence containing a generic description of the exception.
@@ -47,10 +50,10 @@ namespace std {
    **/
   class bad_exception: public exception {
   public:
-    bad_exception() {
-    }
-    virtual ~bad_exception() {
-    }
+    bad_exception() {}
+
+    virtual ~bad_exception() {}
+
     virtual const char* what() const {
       return (const char*) message;
     }
