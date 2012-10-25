@@ -166,7 +166,7 @@ public:
 			this->push_back(*t1);
 	}
 
-	list ( iterator first, iterator last) : head(first.it), tail(last.it), _size(first.it_size) {}
+	list ( iterator first, iterator last) : head(first.it), tail(last.it->prev), _size(first.it_size) {}
 
 	list(const list<T>& x) : head(x.head), tail(x.tail), _size(x._size) {}
 
@@ -310,7 +310,7 @@ public:
 	void assign ( iterator first, iterator last ){
 		this->head = first.it;
 		this->_size = first.it_size;
-		this->tail = last.it;
+		this->tail = last.it->prev;
 	}
 	void assign ( T* first, T* last ){
 		list <T> list (first, last);
