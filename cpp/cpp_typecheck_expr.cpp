@@ -2483,10 +2483,7 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
 
           if(initializer.has_operands())
           {
-            if(initializer.op0().has_operands())
-            {
-              symbol.value = initializer.op0().op0();
-            }
+            symbol.value = initializer.op0();
           }
         }
       }
