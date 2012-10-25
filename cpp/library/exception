@@ -14,47 +14,47 @@
 
 namespace std {
 
-const char* message;
+  const char* message;
 
-typedef void (*terminate_handler)();
-typedef void (*unexpected_handler)();
+  typedef void (*terminate_handler)();
+  typedef void (*unexpected_handler)();
 
-bool uncaught_exception() throw ();
-terminate_handler set_terminate(terminate_handler f) throw ();
-unexpected_handler set_unexpected(unexpected_handler f) throw ();
+  bool uncaught_exception() throw ();
+  terminate_handler set_terminate(terminate_handler f) throw ();
+  unexpected_handler set_unexpected(unexpected_handler f) throw ();
 
-class exception {
-public:
-	exception() throw ();
-	exception(const exception&) throw ();
-	exception& operator=(const exception&) throw ();
-	void unexpected();
-	void terminate();
-	virtual ~exception() throw () {
-	}
-	virtual const char* what() const throw () {
-		/**
-		 *Returns a null terminated character sequence containing a generic description of the exception.
-		 *Both the wording of such description and the character width are implementation-defined.
-		 *source: http://www.cplusplus.com/reference/std/exception/exception/
-		 **/
-		return (const char*) message;
-	}
-};
+  class exception {
+  public:
+    exception() throw ();
+    exception(const exception&) throw ();
+    exception& operator=(const exception&) throw ();
+    void unexpected();
+    void terminate();
+    virtual ~exception() throw () {
+    }
+    virtual const char* what() const throw () {
+      /**
+       *Returns a null terminated character sequence containing a generic description of the exception.
+       *Both the wording of such description and the character width are implementation-defined.
+       *source: http://www.cplusplus.com/reference/std/exception/exception/
+       **/
+      return (const char*) message;
+    }
+  };
 
-/** If an %exception is thrown which is not listed in a function's
- *  %exception specification, one of these may be thrown.
- **/
-class bad_exception: public exception {
-public:
-	bad_exception() {
-	}
-	virtual ~bad_exception() {
-	}
-	virtual const char* what() const {
-		return (const char*) message;
-	}
-};
+  /** If an %exception is thrown which is not listed in a function's
+   *  %exception specification, one of these may be thrown.
+   **/
+  class bad_exception: public exception {
+  public:
+    bad_exception() {
+    }
+    virtual ~bad_exception() {
+    }
+    virtual const char* what() const {
+      return (const char*) message;
+    }
+  };
 }
 
 #endif
