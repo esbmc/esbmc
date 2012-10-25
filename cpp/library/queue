@@ -12,6 +12,8 @@ Date: September 2012
 #define STL_QUEUE
 
 #include "vector"
+#include "deque"
+#include "list"
 
 namespace std
 {
@@ -35,7 +37,7 @@ namespace std
 	  void pop ( );
 	};
 
-  template<class T> class queue
+  template<class T, class Container = deque<T> > class queue
   {
     T buf[QUEUE_CAPACITY];
     int _size=0;
@@ -45,6 +47,8 @@ namespace std
     public:
 
     queue():_size(0), head(0), tail(0){}
+    queue(std::deque<int>& x):_size(x.size()), head(0), tail(0){}
+    queue(std::list<int>& x):_size(x.size()), head(0), tail(0){}
 
     void push ( const T& t )
     {
