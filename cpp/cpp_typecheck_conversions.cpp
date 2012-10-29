@@ -2077,7 +2077,42 @@ bool cpp_typecheckt::dynamic_typecast(
   else
     return false;
 
-  return static_typecast(e,type, new_expr);
+  bool res = static_typecast(e,type, new_expr);
+
+  if(res)
+  {
+    if(new_expr.has_operands())
+    {
+      if(new_expr.op0().identifier()!="")
+      {
+        if(type.id()=="pointer" && e.type().id()=="pointer")
+        {
+          if(type.find("to-member").is_nil()
+              && e.type().find("to-member").is_nil())
+          {
+            typet to = follow(type.subtype());
+            symbolt t = lookup(e.identifier());
+            typet from = follow(t.value.type());
+
+            if(t.type.subtype().id()=="empty")
+            {
+              return false;
+            }
+
+            if(from.id()=="empty")
+            {
+              e.make_typecast(type);
+              new_expr.swap(e);
+              return true;
+            }
+          }
+        }
+      }
+    }
+    return true;
+  }
+  else
+    return false;
 }
 
 /*******************************************************************\
