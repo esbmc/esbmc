@@ -1770,7 +1770,6 @@ bool cpp_typecheckt::subtype_typecast(
   std::set<irep_idt> bases;
 
   get_bases(from, bases);
-
   return bases.find(to.name()) != bases.end();
 }
 
