@@ -205,10 +205,9 @@ public:
   class exceptiont
   {
   public:
-    enum ERROR { NOCATCH, NOTALLOWED, NOLASTTHROW };
-
     exceptiont() :
-      has_throw_target(false)
+      has_throw_target(false),
+      has_throw_decl(false)
     {
     }
 
@@ -218,7 +217,10 @@ public:
     typedef std::map<irep_idt, unsigned> catch_ordert;
     catch_ordert catch_order;
 
-    bool has_throw_target;
+    typedef std::set<irep_idt> throw_list_sett;
+    throw_list_sett throw_list_set;
+
+    bool has_throw_target, has_throw_decl;
     goto_programt::targett throw_target;
   };
 

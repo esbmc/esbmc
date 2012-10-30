@@ -391,11 +391,8 @@ protected:
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
    */
-  void handle_throw_decl(goto_symex_statet::framet* frame,
+  void handle_throw_decl(goto_symex_statet::exceptiont* frame,
     const irep_idt &id);
-
-  void exception_error(goto_symex_statet::exceptiont::ERROR error,
-      const irep_idt &id=irep_idt("nil"));
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
