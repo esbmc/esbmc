@@ -205,14 +205,18 @@ public:
   class exceptiont
   {
   public:
-    exceptiont()
+    enum ERROR { NOCATCH, NOTALLOWED };
+
+    exceptiont() :
+      has_throw_target(false)
     {
     }
 
-    enum ERROR { NOCATCH, NOTALLOWED };
-
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
     catch_mapt catch_map;
+
+    bool has_throw_target;
+    goto_programt::targett throw_target;
   };
 
   // Macros

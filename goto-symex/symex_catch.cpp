@@ -75,13 +75,30 @@ void goto_symext::symex_throw()
     instruction.code.find("exception_list").get_sub();
 
   // Get the list of catchs
-  goto_symex_statet::exceptiont except=stack_catch.top();
+  goto_symex_statet::exceptiont* except=&stack_catch.top();
 
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
-  if(!except.catch_map.size())
+  if(!except->catch_map.size())
     exception_error(exceptions_thrown.begin()->id(),
       goto_symex_statet::exceptiont::NOCATCH);
+
+  for(irept::subt::const_iterator
+      e_it=exceptions_thrown.begin();
+      e_it!=exceptions_thrown.end();
+      e_it++)
+  {
+    // Search for a catch with a matching type
+    goto_symex_statet::exceptiont::catch_mapt::const_iterator
+      c_it=except->catch_map.find(e_it->id());
+
+    // Do we have a catch for it?
+    if(c_it!=except->catch_map.end())
+    {
+      // We do!
+      update_throw_target(except,c_it);
+    }
+  }
 
 }
 
@@ -131,10 +148,11 @@ Function: goto_symext::update_throw_target
 
 \*******************************************************************/
 
-void goto_symext::update_throw_target(goto_symex_statet::framet* frame,
+void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
   goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it)
 {
-
+  except->has_throw_target=true;
+  except->throw_target=(*c_it).second;
 }
 
 /*******************************************************************\
