@@ -194,12 +194,20 @@ public:
     declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep())),
+      return_value(static_cast<const exprt &>(get_nil_irep()))
+    {
+      level1._thread_id = thread_id;
+    }
+  };
+
+  class exceptiont
+  {
+  public:
+    exceptiont() :
       has_throw_target(false),
       has_throw_decl(false),
       has_catch(false)
     {
-      level1._thread_id = thread_id;
     }
 
     // exceptions
@@ -212,7 +220,7 @@ public:
     typedef std::set<irep_idt> throw_list_sett;
     throw_list_sett throw_list_set;
 
-    bool has_throw_target, has_throw_decl, has_catch;;
+    bool has_throw_target, has_throw_decl, has_catch;
     goto_programt::targett throw_target;
   };
 

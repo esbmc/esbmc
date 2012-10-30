@@ -378,7 +378,7 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(goto_symex_statet::framet* frame,
-    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+    goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
