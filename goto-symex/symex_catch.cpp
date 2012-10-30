@@ -99,19 +99,20 @@ void goto_symext::symex_throw()
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
 
-  // Get the list of catchs
-  goto_symex_statet::exceptiont* except=&stack_catch.top();
-
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
-  if(!except->catch_map.size())
+  if(!stack_catch.size())
   {
     // An un-caught exception. Error
     const std::string &msg="Throwing an exception of type " +
       exceptions_thrown.begin()->id().as_string() +
       " but there is not catch for it.";
     claim(false_exprt(), msg);
+    return;
   }
+
+  // Get the list of catchs
+  goto_symex_statet::exceptiont* except=&stack_catch.top();
 
   // Handle rethrows
   if(!handle_rethrow(exceptions_thrown, instruction))
@@ -309,6 +310,9 @@ void goto_symext::symex_throw_decl()
     // Set the flag that this frame has throw list
     // This is important because we can have empty throw lists
     except->has_throw_decl=true;
+
+    // Clear before insert new types
+    except->throw_list_set.clear();
 
     // Copy throw list to the set
     for(unsigned i=0; i<throw_decl_list.size(); ++i)
