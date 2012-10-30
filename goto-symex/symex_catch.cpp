@@ -27,11 +27,30 @@ void goto_symext::symex_catch()
   // there are two variants: 'push' and 'pop'
   const goto_programt::instructiont &instruction=*cur_state->source.pc;
 
-  if(instruction.targets.empty()) // pop
+  if(instruction.targets.empty()) // The second catch, pop from the stack
   {
+    // Copy the exception before pop
+    goto_symex_statet::exceptiont exception=stack_catch.top();
 
+    // Pop from the stack
+    stack_catch.pop();
+
+    // Increase the program counter
+    cur_state->source.pc++;
+
+    if(exception.has_throw_target)
+    {
+      // the next instruction is always a goto
+      const goto_programt::instructiont &goto_instruction=*cur_state->source.pc;
+
+      // Update target
+      goto_instruction.targets.pop_back();
+      goto_instruction.targets.push_back(exception.throw_target);
+
+      exception.has_throw_target = false;
+    }
   }
-  else // push
+  else // The first catch, push it to the stack
   {
     goto_symex_statet::exceptiont exception;
 
@@ -51,6 +70,9 @@ void goto_symext::symex_catch()
 
     // Stack it
     stack_catch.push(exception);
+
+    // Increase the program counter
+    cur_state->source.pc++;
   }
 }
 

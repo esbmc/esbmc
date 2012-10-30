@@ -225,7 +225,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case CATCH:
     symex_catch();
-    cur_state->source.pc++;
     break;
 
   case THROW:
