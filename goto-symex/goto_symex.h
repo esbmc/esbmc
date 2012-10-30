@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <map>
+#include <stack>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
@@ -559,7 +560,10 @@ protected:
    *  why, well, that's a trainwreck. */
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
 
-  // exception
+  // Exception Handling
+  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
+  stack_catcht stack_catch;
+
   goto_programt::instructiont *last_throw;
 };
 
