@@ -93,6 +93,16 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
+    // When we reach END_FUNCTION, we must clear any throw_decl
+    if(stack_catch.size())
+    {
+      // Get to the correct try (always the last one)
+      goto_symex_statet::exceptiont* except=&stack_catch.top();
+
+      except->has_throw_decl=false;
+      except->throw_list_set.clear();
+    }
+
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
