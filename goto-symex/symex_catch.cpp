@@ -66,7 +66,10 @@ void goto_symext::symex_catch()
         it=instruction.targets.begin();
         it!=instruction.targets.end();
         it++, i++)
+    {
       exception.catch_map[exception_list[i].id()]=*it;
+      exception.catch_order[exception_list[i].id()]=i;
+    }
 
     // Stack it
     stack_catch.push(exception);
@@ -102,8 +105,15 @@ void goto_symext::symex_throw()
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
   if(!except->catch_map.size())
-    exception_error(exceptions_thrown.begin()->id(),
-      goto_symex_statet::exceptiont::NOCATCH);
+    exception_error(goto_symex_statet::exceptiont::NOCATCH,
+        exceptions_thrown.begin()->id());
+
+  if(!handle_rethrow(exceptions_thrown, instruction))
+    return;
+
+  // It'll be used for catch ordering when throwing
+  // a derived object with multiple inheritance
+  unsigned old_id_number=-1, new_id_number=0;
 
   for(irept::subt::const_iterator
       e_it=exceptions_thrown.begin();
@@ -118,10 +128,49 @@ void goto_symext::symex_throw()
     if(c_it!=except->catch_map.end())
     {
       // We do!
-      update_throw_target(except,c_it);
+
+      // Get current catch number and update if needed
+      new_id_number = (*except->catch_order.find(e_it->id())).second;
+
+      if(new_id_number < old_id_number)
+        update_throw_target(except,c_it);
+
+      // Save old number id
+      old_id_number = new_id_number;
+    }
+    else // We don't have a catch for it
+    {
+      // If it's a pointer, we must look for a catch(void*)
+      if(e_it->id().as_string().find("_ptr") != std::string::npos)
+      {
+        // It's a pointer!
+
+        // Do we have an void*?
+        c_it=except->catch_map.find("void_ptr");
+
+        if(c_it!=except->catch_map.end() && !except->has_throw_target)
+          update_throw_target(except, c_it); // Make the jump to void*
+      }
+      else
+      {
+        // Do we have an ellipsis?
+        c_it=except->catch_map.find("ellipsis");
+
+        if(c_it!=except->catch_map.end() && !except->has_throw_target)
+          update_throw_target(except, c_it);
+      }
     }
   }
 
+  if(!except->has_throw_target)
+  {
+    // An un-caught exception. Error
+    exception_error(goto_symex_statet::exceptiont::NOCATCH,
+      e_it->id().as_string());
+  }
+
+  // save last throw for rethrow handling
+  last_throw = &instruction;
 }
 
 /*******************************************************************\
@@ -136,8 +185,9 @@ Function: goto_symext::update_throw_target
 
 \*******************************************************************/
 
-void goto_symext::exception_error(const irep_idt &id,
-  goto_symex_statet::exceptiont::ERROR error)
+void goto_symext::exception_error(
+    goto_symex_statet::exceptiont::ERROR error,
+    const irep_idt &id)
 {
   switch(error)
   {
@@ -153,7 +203,17 @@ void goto_symext::exception_error(const irep_idt &id,
   }
 
   case goto_symex_statet::exceptiont::NOTALLOWED:
+  {
     break;
+  }
+
+  case goto_symex_statet::exceptiont::NOLASTTHROW:
+  {
+    const std::string &msg="Trying to re-throw without last exception.";
+    claim(false_exprt(), msg);
+    break;
+  }
+
   }
 }
 
@@ -210,7 +270,26 @@ Function: goto_symext::handle_rethrow
 bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
   const goto_programt::instructiont instruction)
 {
+  // throw without argument, we must rethrow last exception
+  if(!exceptions_thrown.size())
+  {
+    if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
+    {
+      // get exception from last throw
+      irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
 
+      // update current state exception list
+      instruction.code.find("exception_list").get_sub().push_back((*e_it));
+
+      return true;
+    }
+    else
+    {
+      exception_error(goto_symex_statet::exceptiont::NOLASTTHROW);
+      return false;
+    }
+  }
+  return true;
 }
 
 /*******************************************************************\

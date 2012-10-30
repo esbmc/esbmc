@@ -205,7 +205,7 @@ public:
   class exceptiont
   {
   public:
-    enum ERROR { NOCATCH, NOTALLOWED };
+    enum ERROR { NOCATCH, NOTALLOWED, NOLASTTHROW };
 
     exceptiont() :
       has_throw_target(false)
@@ -214,6 +214,9 @@ public:
 
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
     catch_mapt catch_map;
+
+    typedef std::map<irep_idt, unsigned> catch_ordert;
+    catch_ordert catch_order;
 
     bool has_throw_target;
     goto_programt::targett throw_target;
