@@ -394,6 +394,9 @@ protected:
   void handle_throw_decl(goto_symex_statet::framet* frame,
     const irep_idt &id);
 
+  void exception_error(const irep_idt &id,
+      goto_symex_statet::exceptiont::ERROR error);
+
   /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with

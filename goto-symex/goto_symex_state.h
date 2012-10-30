@@ -200,6 +200,8 @@ public:
     }
   };
 
+  // Exception Handling
+
   class exceptiont
   {
   public:
@@ -207,11 +209,13 @@ public:
     {
     }
 
+    enum ERROR { NOCATCH, NOTALLOWED };
+
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
+    catch_mapt catch_map;
   };
 
   // Macros
-
   /**
    *  Perform both levels of renaming.
    *  @param identifier Identifier to rename.
