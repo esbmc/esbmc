@@ -2105,8 +2105,57 @@ bool cpp_typecheckt::dynamic_typecast(
               new_expr.swap(e);
               return true;
             }
+
+            if(to.id()=="struct" && from.id()=="struct")
+            {
+              if(e.cmt_lvalue())
+              {
+                exprt tmp(e);
+                if(!standard_conversion_lvalue_to_rvalue(tmp,e))
+                  return false;
+              }
+
+              struct_typet from_struct = to_struct_type(from);
+              struct_typet to_struct = to_struct_type(to);
+              if(subtype_typecast(to_struct, from_struct))
+              {
+
+                return true;
+              }
+            }
+
+            //Cannot make typecast
+
+            constant_exprt null_expr;
+            null_expr.type() = new_expr.type();
+            null_expr.set_value("NULL");
+
+            new_expr.swap(null_expr);
+            return true;
           }
+          else if (type.find("to-member").is_not_nil()
+              && e.type().find("to-member").is_not_nil())
+          {
+            if(type.subtype() != e.type().subtype())
+              return false;
+
+            struct_typet from_struct =
+                to_struct_type(follow(static_cast<const typet&>(e.type().find("to-member"))));
+
+            struct_typet to_struct =
+                to_struct_type(follow(static_cast<const typet&>(type.find("to-member"))));
+
+            if(subtype_typecast(from_struct, to_struct))
+            {
+              new_expr = e;
+              new_expr.make_typecast(type);
+              return true;
+            }
+          }
+          else
+            return false;
         }
+        return false;
       }
     }
     return true;

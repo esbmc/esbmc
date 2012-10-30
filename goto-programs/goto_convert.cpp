@@ -1002,11 +1002,8 @@ void goto_convertt::convert_decl(
     {
       if(initializer.get("cast")=="dynamic")
       {
-        constant_exprt null_expr;
-        null_expr.type() = initializer.type();
-        null_expr.set_value("NULL");
-
-        initializer.swap(null_expr);
+        exprt op0 = initializer.op0();
+        initializer.swap(op0);
       }
     }
 
