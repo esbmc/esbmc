@@ -207,7 +207,8 @@ public:
   public:
     exceptiont() :
       has_throw_target(false),
-      has_throw_decl(false)
+      has_throw_decl(false),
+      throw_target(NULL)
     {
     }
 

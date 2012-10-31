@@ -143,7 +143,7 @@ void goto_symext::symex_throw()
       new_id_number = (*except->catch_order.find(e_it->id())).second;
 
       if(new_id_number < old_id_number)
-        update_throw_target(except,c_it);
+        update_throw_target(except,c_it->second);
 
       // Save old number id
       old_id_number = new_id_number;
@@ -159,7 +159,7 @@ void goto_symext::symex_throw()
         c_it=except->catch_map.find("void_ptr");
 
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
-          update_throw_target(except, c_it); // Make the jump to void*
+          update_throw_target(except,c_it->second); // Make the jump to void*
       }
       else
       {
@@ -167,7 +167,7 @@ void goto_symext::symex_throw()
         c_it=except->catch_map.find("ellipsis");
 
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
-          update_throw_target(except, c_it);
+          update_throw_target(except,c_it->second);
       }
     }
   }
@@ -197,10 +197,10 @@ Function: goto_symext::update_throw_target
 \*******************************************************************/
 
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
-  goto_symex_statet::exceptiont::catch_mapt::const_iterator c_it)
+    goto_programt::targett target)
 {
   except->has_throw_target=true;
-  except->throw_target=(*c_it).second;
+  except->throw_target=target;
 }
 
 /*******************************************************************\
