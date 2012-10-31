@@ -1,6 +1,6 @@
 //dynamic cast test
 //#include <iostream>
-//#include <cassert>
+#include <cassert>
 //using namespace std;
 
 class CPolygon {
@@ -36,16 +36,15 @@ class CTriangle: public CPolygon {
   };
 
 int main () {
-  CPolygon* polygons;
 
-  polygons = new CRectangle(20,30);
+  CRectangle* polygons = new CRectangle(20,30);
 
-  CTriangle* trin = dynamic_cast <CTriangle *> (polygons);
-  if (trin != 0)
-  {
-    trin->set_values(10, 10);
-    assert(trin->area() == 300);
-  }
+  CPolygon* rec = dynamic_cast <CPolygon *> (polygons);
+  if (rec != 0)
+   {
+    rec->set_values(10, 10);
+    assert(rec->area() == 100);
+   }
 
-  return 0;
+   return 0;
 }

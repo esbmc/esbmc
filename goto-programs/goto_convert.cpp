@@ -1004,8 +1004,8 @@ void goto_convertt::convert_decl(
       {
         exprt op0 = initializer.op0();
         initializer.swap(op0);
-        std::cout << "initializer: "<< initializer << std::endl;
-        std::cout << "################################" << std::endl;
+        //std::cout << "initializer: "<< initializer << std::endl;
+        //std::cout << "################################" << std::endl;
         remove_sideeffects(initializer, dest);
         dest.output(std::cout);
       }

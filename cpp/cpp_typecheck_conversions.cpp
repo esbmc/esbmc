@@ -2060,7 +2060,6 @@ bool cpp_typecheckt::dynamic_typecast(
     {
       if(!e.cmt_lvalue())
         return false;
-      assert(0); // currently not supported
     }
     else if(follow(type.subtype()).id()=="struct")
     {
