@@ -86,7 +86,7 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
     typecheck_expr_explicit_typecast(expr);
   else if(expr.id()=="explicit-constructor-call")
     typecheck_expr_explicit_constructor_call(expr);
-  else if(expr.id()=="string_constant")
+  else if(expr.id()=="string-constant")
   {
     c_typecheck_baset::typecheck_expr_main(expr);
 
