@@ -1764,6 +1764,8 @@ bool cpp_typecheckt::subtype_typecast(
   const struct_typet &from,
   const struct_typet &to) const
 {
+  //std::cout << "from.name(): " << from.name() << std::endl;
+  //std::cout << "to.name(): " << to.name() << std::endl;
   if(from.name()==to.name())
     return true;
 
