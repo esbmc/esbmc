@@ -14,6 +14,7 @@ Date: September 2012
 #include "vector"
 #include "deque"
 #include "list"
+#include "functional"
 
 namespace std
 {
@@ -27,9 +28,10 @@ namespace std
 	public:
 	  priority_queue ( );
 	  explicit priority_queue ( const Compare& x, const Container& y );
-	  template <class InputIterator>
-	           priority_queue ( InputIterator first, InputIterator last,
-	                            const Compare& x, const Container& y );
+	  explicit priority_queue ( T* x, T* y );
+	  //explicit priority_queue ( T x = T() );
+	  //template <class InputIterator>
+	           //priority_queue ( InputIterator first, InputIterator last, Compare& x, Container& y );
 	  void push ( const float& x );
 	  bool empty ( ) const;
 	  size_t size ( ) const;
