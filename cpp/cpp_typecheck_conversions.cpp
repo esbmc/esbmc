@@ -2123,22 +2123,23 @@ bool cpp_typecheckt::dynamic_typecast(
             typet from = follow(t.value.type());
 
             //std::cout << "from: " << from << std::endl;
-            //std::cout << "from.id().empty(): " << from.id().empty() << std::endl;
-
-            if (from.id().empty())
-            {
-            	//are we doing a dynamic typecast between objects of the same class type?
-            	if ((type.id() == new_expr.type().id()) &&
-            			(type.subtype().id() == new_expr.type().subtype().id()) )
-            	{
-            		return true;
-            	}
-            }
+//            std::cout << "from.id().empty(): " << from.id().empty() << std::endl;
+//            std::cout << "type.id(): " << type.id() << std::endl;
+//            std::cout << "new_expr.type().id(): " << new_expr.type().id() << std::endl;
+//            std::cout << "type.subtype().id(): " << type.subtype().id() << std::endl;
+//            std::cout << "new_expr.type().subtype().id(): " << new_expr.type().subtype().id() << std::endl;
 
             if(t.type.subtype().id()=="empty")
             {
               return false;
             }
+
+           	//are we doing a dynamic typecast between objects of the same class type?
+           	if ((type.id() == new_expr.type().id()) &&
+           			(type.subtype().id() == new_expr.type().subtype().id()) )
+           	{
+           		return true;
+           	}
 
             if(from.id()=="empty")
             {
