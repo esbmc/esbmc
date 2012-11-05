@@ -1677,9 +1677,9 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // It's NULL :( Let's add a throw bad_typeid
 
       // Let's create the bad_typeid exception
-     irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
+      irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
 
-     // We must check if the user included typeinfo
+      // We must check if the user included typeinfo
       const symbolt *bad_typeid_symbol;
       bool is_included = lookup(bad_typeid_identifier, bad_typeid_symbol);
 
