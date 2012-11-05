@@ -19,18 +19,31 @@ const char* message;
 typedef void (*terminate_handler)();
 typedef void (*unexpected_handler)();
 
-terminate_handler t;
-
 bool uncaught_exception() throw ();
+
+// Default terminate function: calls abort
+void default_terminate() throw ()
+{
+  __ESBMC_assert(0, "Aborted");
+}
+
+// Default unexpected function: calls terminate
+void default_unexpected() throw ()
+{
+  default_terminate();
+}
+
+terminate_handler terminate_pf=default_terminate;
+unexpected_handler unexpected_pf=default_unexpected;
 
 terminate_handler set_terminate(terminate_handler f) throw ()
 {
-
+  terminate_pf=f;
 }
 
 unexpected_handler set_unexpected(unexpected_handler f) throw ()
 {
-
+  unexpected_pf=f;
 }
 
 class exception {
