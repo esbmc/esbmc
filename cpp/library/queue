@@ -28,10 +28,6 @@ namespace std
 	public:
 	  priority_queue ( );
 	  explicit priority_queue ( const Compare& x, const Container& y );
-	  //template <class InputIterator>
-	    //       priority_queue ( InputIterator first, InputIterator last,
-	      //                      const Compare& x = Compare(),
-	        //                    const Container& y = Container() );
 	  explicit priority_queue ( T* x, T* y );
 	  void push ( const float& x );
 	  bool empty ( ) const;
