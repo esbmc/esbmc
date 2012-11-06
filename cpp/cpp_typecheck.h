@@ -367,11 +367,6 @@ protected:
     bool has_body,
     bool tag_only_declaration);
 
-  irep_idt compound_identifier(
-    const irep_idt &_identifier,
-    const irep_idt &_base_name,
-    bool has_body);
-
   void typecheck_compound_declarator(
     const symbolt &symbol,
     const cpp_declarationt &declaration,
