@@ -130,7 +130,7 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
   {
     // these appear to have type "struct _GUID"
     // and they are lvalues!
-    expr.type()=symbol_typet("c::struct._GUID");
+    expr.type()=symbol_typet("c::tag._GUID");
     follow(expr.type());
     expr.set("#lvalue", true);
   }
@@ -1677,7 +1677,7 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // It's NULL :( Let's add a throw bad_typeid
 
       // Let's create the bad_typeid exception
-     irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
+     irep_idt bad_typeid_identifier="cpp::std::tag.bad_typeid";
 
      // We must check if the user included typeinfo
       const symbolt *bad_typeid_symbol;

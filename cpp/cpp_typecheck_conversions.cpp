@@ -1238,10 +1238,10 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
   else if(to.id() == "bool")
   {
     std::string name = expr.type().identifier().as_string();
-    if(name == "cpp::std::struct.istream"
-      || name == "cpp::std::struct.ostream"
-      || name == "cpp::std::struct.iostream"
-      || name == "cpp::std::struct.ifstream")
+    if(name == "cpp::std::tag.istream"
+      || name == "cpp::std::tag.ostream"
+      || name == "cpp::std::tag.iostream"
+      || name == "cpp::std::tag.ifstream")
     {
       exprt nondet_expr("nondet_symbol", bool_typet());
       new_expr.swap(nondet_expr);
