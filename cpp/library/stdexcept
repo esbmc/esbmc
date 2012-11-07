@@ -12,7 +12,6 @@
 
 #include "definitions.h"
 #include "exception"
-#include "string"
 
 namespace std {
 

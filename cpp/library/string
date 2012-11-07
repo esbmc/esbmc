@@ -12,8 +12,6 @@
 
 #include "definitions.h"
 #include "cstring"
-#include "ostream"
-#include "istream"
 #include "cassert"
 #include "iostream"
 #include "stdexcept"
