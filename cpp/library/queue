@@ -29,6 +29,7 @@ namespace std
 	  priority_queue ( );
 	  explicit priority_queue ( const Compare& x, const Container& y );
 	  explicit priority_queue ( T* x, T* y );
+	  explicit priority_queue ( T x = T() );
 	  void push ( const float& x );
 	  bool empty ( ) const;
 	  size_t size ( ) const;
