@@ -3,6 +3,7 @@
 // mismatch and lexicographical_compare.
 #include <iostream>
 #include <iterator> //Foi adicionada a biblioteca "iterator".
+#include <string>
 using std::cout;
 using std::endl;
 
