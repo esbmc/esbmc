@@ -3,6 +3,7 @@
 // replace_copy and replace_copy_if.
 #include <iostream>
 #include <iterator> //Foi adicionada a biblioteca "iterator".
+#include <string>
 using std::cout;
 using std::endl;
 
