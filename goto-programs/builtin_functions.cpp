@@ -449,6 +449,13 @@ void goto_convertt::do_cpp_new(
   t_d_i->location=rhs.find_location();
 #endif
 
+  exprt allocated_object = lhs;
+  allocated_object.location() = rhs.location();
+
+  if (options.get_bool_option("memory-leak-check")
+    && allocated_object.type().id()=="pointer")
+    allocated_objects.push(allocated_object);
+
   // run initializer
   dest.destructive_append(tmp_initializer);
 }
@@ -487,13 +494,15 @@ void goto_convertt::cpp_new_initializer(
     {
       // build loop
     }
-    else // cpp_new
+    else if(rhs.id()=="cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
       convert(to_code(initializer), dest);
     }
+    else
+      assert(0);
   }
 }
 
@@ -748,7 +757,6 @@ void goto_convertt::do_function_call_symbol(
   }
 
   bool is_assume=identifier==CPROVER_PREFIX "assume";
-
   bool is_assert=identifier=="c::assert";
 
   if(is_assume || is_assert)
