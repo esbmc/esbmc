@@ -1420,10 +1420,56 @@ void goto_convertt::convert_cpp_delete(
     throw "cpp_delete statement takes one operand";
   }
 
-  codet tmp(code);
+  exprt tmp_op=code.op0();
 
-  remove_sideeffects(tmp.op0(), dest);
-  copy(tmp, OTHER, dest);
+  // we call the destructor, and then free
+  const exprt &destructor=
+    static_cast<const exprt &>(code.find("destructor"));
+
+  if(destructor.is_not_nil())
+  {
+    if(code.statement()=="cpp_delete[]")
+    {
+      // build loop
+    }
+    else if(code.statement()=="cpp_delete")
+    {
+      exprt deref_op("dereference", tmp_op.type().subtype());
+      deref_op.copy_to_operands(tmp_op);
+
+      codet tmp_code=to_code(destructor);
+      replace_new_object(deref_op, tmp_code);
+      convert(tmp_code, dest);
+    }
+    else
+      assert(0);
+  }
+
+  // preserve the call
+  codet delete_statement("cpp_delete");
+  delete_statement.location()=code.location();
+  delete_statement.copy_to_operands(tmp_op);
+
+  goto_programt::targett t_f=dest.add_instruction(OTHER);
+  t_f->code=delete_statement;
+  t_f->location=code.location();
+
+  // now do "delete"
+  exprt valid_expr("valid_object", bool_typet());
+  valid_expr.copy_to_operands(tmp_op);
+
+  // clear alloc bit
+  goto_programt::targett t_c=dest.add_instruction(ASSIGN);
+  t_c->code=code_assignt(valid_expr, false_exprt());
+  t_c->location=code.location();
+
+  exprt deallocated_expr("deallocated_object", bool_typet());
+  deallocated_expr.copy_to_operands(tmp_op);
+
+  //indicate that memory has been deallocated
+  goto_programt::targett t_d=dest.add_instruction(ASSIGN);
+  t_d->code=code_assignt(deallocated_expr, true_exprt());
+  t_d->location=code.location();
 }
 
 /*******************************************************************\
