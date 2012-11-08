@@ -28,12 +28,5 @@ int main ()
   priority_queue< int, vector<int>, greater<int> > third (myints,myints+4);
   assert(third.size() != 4);
 
-  // using mycomparison:
-  priority_queue< int, vector<int>, mycomparison > fourth;
-  assert(fourth.size() != 0);
-  typedef priority_queue<int,vector<int>,mycomparison> mypq_type;
-  mypq_type fifth (mycomparison());
-  mypq_type sixth (mycomparison(true));
-
   return 0;
 }
