@@ -16,7 +16,7 @@ int main()
    priorities.push( 9.8 );
    priorities.push( 5.4 );
 
-   cout << "Popping from priorities: ";
+	cout << "Popping from priorities: ";
    
    while ( !priorities.empty() ) {
       cout << priorities.top() << ' ';  // view top element
@@ -25,7 +25,6 @@ int main()
    } // end while
 
    cout << endl;
-
    return 0;
 
 } // end main
