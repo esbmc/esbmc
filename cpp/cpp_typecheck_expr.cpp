@@ -1092,7 +1092,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   else
     assert(false);
 
-  typet pointer_type=expr.op0().type();
+  typet pointer_type=follow(expr.op0().type());
 
   if(pointer_type.id()!="pointer")
   {
@@ -1102,8 +1102,31 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
     throw 0;
   }
 
-  // these are always void
+  // remove any const-ness of the argument
+  // (which would impair the call to the destructor)
+  pointer_type.subtype().remove("#constant");
+
+  // delete expressions are always void
   expr.type()=typet("empty");
+
+  // we provide the right destructor, for the convenience
+  // of later stages
+  exprt new_object("new_object", pointer_type.subtype());
+  new_object.location()=expr.location();
+  new_object.set("#lvalue", true);
+
+  already_typechecked(new_object);
+
+  codet destructor_code=cpp_destructor(
+    expr.location(),
+    pointer_type.subtype(),
+    new_object);
+
+  // this isn't typechecked yet
+  if(destructor_code.is_not_nil())
+    typecheck_code(destructor_code);
+
+  expr.set("destructor", destructor_code);
 }
 
 /*******************************************************************\
