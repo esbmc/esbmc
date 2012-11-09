@@ -459,6 +459,12 @@ public:
   bool operator!= ( const list<int>& x, const list<int>& y ){
 	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
   }
+  bool operator== ( const list<double>& x, const list<double>& y ){
+	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
+  }
+  bool operator!= ( const list<double>& x, const list<double>& y ){
+	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
+  }
 
 }
 
