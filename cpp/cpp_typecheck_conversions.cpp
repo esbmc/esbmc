@@ -2080,144 +2080,119 @@ bool cpp_typecheckt::dynamic_typecast(
 
   if(res)
   {
-//    std::cout << "e.pretty()1: " << e.pretty() << std::endl;
-//    std::cout << "type.pretty()1: " << type.pretty() << std::endl;
-//    std::cout << "new_expr.pretty()1: " << new_expr.pretty() << std::endl;
-//    if(new_expr.has_operands())
-//    {
-//      if(new_expr.op0().identifier()!="")
-//      {
-        if(type.id()=="pointer" && e.type().id()=="pointer")
+    if(type.id()=="pointer" && e.type().id()=="pointer")
+    {
+      if(type.find("to-member").is_nil()
+          && e.type().find("to-member").is_nil())
+      {
+        //std::cout << "e.pretty(): " << e.pretty() << std::endl;
+        //std::cout << "type.pretty(): " << type.pretty() << std::endl;
+        //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
+
+        typet to = follow(type.subtype());
+        //std::cout << "to: " << to << std::endl;
+        symbolt t;
+        if(e.identifier()!="")
         {
-          if(type.find("to-member").is_nil()
-              && e.type().find("to-member").is_nil())
+          t = lookup(e.identifier());
+        }
+        //Array
+        else
+          if(e.op0().identifier()!="")
           {
-//            std::cout << "e.pretty(): " << e.pretty() << std::endl;
-//            std::cout << "type.pretty(): " << type.pretty() << std::endl;
-//            std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-
-            typet to = follow(type.subtype());
-            //std::cout << "to: " << to << std::endl;
-            symbolt t;
-            if(e.identifier()!="")
-            {
-              t = lookup(e.identifier());
-            }
-            //Array
-            else
-              if(e.op0().identifier()!="")
-              {
-                t = lookup(e.op0().identifier());
-              }
-              else
-                return false;
-
-            //std::cout << "t: " << t << std::endl;
-
-            //dynamic cast of array type
-            if (t.type.id() =="array")
-            {
-              return true;
-            }
-
-            typet from = follow(t.value.type());
-
-            //std::cout << "from: " << from << std::endl;
-//            std::cout << "from.id().empty(): " << from.id().empty() << std::endl;
-//            std::cout << "type.id(): " << type.id() << std::endl;
-//            std::cout << "new_expr.type().id(): " << new_expr.type().id() << std::endl;
-//            std::cout << "type.subtype().id(): " << type.subtype().id() << std::endl;
-//            std::cout << "new_expr.type().subtype().id(): " << new_expr.type().subtype().id() << std::endl;
-
-            if(t.type.subtype().id()=="empty")
-            {
-              return false;
-            }
-
-           	//are we doing a dynamic typecast between objects of the same class type?
-           	if ((type.id() == new_expr.type().id()) &&
-           			(type.subtype().id() == new_expr.type().subtype().id()) )
-           	{
-           		return true;
-           	}
-
-            if(from.id()=="empty")
-            {
-              e.make_typecast(type);
-              new_expr.swap(e);
-              return true;
-            }
-
-            //std::cout << "from.id(): " << from.id() << std::endl;
-            //std::cout << "to.id(): " << to.id() << std::endl;
-
-            if(to.id()=="struct" && from.id()=="struct")
-            {
-              if(e.cmt_lvalue())
-              {
-                exprt tmp(e);
-                if(!standard_conversion_lvalue_to_rvalue(tmp,e))
-                  return false;
-              }
-
-              struct_typet from_struct = to_struct_type(from);
-              struct_typet to_struct = to_struct_type(to);
-              if(subtype_typecast(from_struct, to_struct))
-              {
-
-                make_ptr_typecast(e,type);
-//                exprt tmp(e);
-//                std::cout << "tmp: " << tmp.pretty() << std::endl;
-                //std::cout << "antes new_expr.pretty(): " << new_expr.pretty() << std::endl;
-                new_expr.op0().swap(t.value);
-//                new_expr.swap(t.value);
-
-                //std::cout << "depois new_expr.pretty(): " << new_expr.pretty() << std::endl;
-                return true;
-              }
-            }
-
-            //Cannot make typecast
-
-            constant_exprt null_expr;
-            null_expr.type() = new_expr.type();
-            null_expr.set_value("NULL");
-
-            new_expr.swap(null_expr);
-            //std::cout << "new_expr.pretty(): " << new_expr.pretty() << std::endl;
-            return true;
-          }
-          else if (type.find("to-member").is_not_nil()
-              && e.type().find("to-member").is_not_nil())
-          {
-            if(type.subtype() != e.type().subtype())
-              return false;
-
-            struct_typet from_struct =
-                to_struct_type(follow(static_cast<const typet&>(e.type().find("to-member"))));
-
-            struct_typet to_struct =
-                to_struct_type(follow(static_cast<const typet&>(type.find("to-member"))));
-
-            if(subtype_typecast(from_struct, to_struct))
-            {
-              new_expr = e;
-              new_expr.make_typecast(type);
-              return true;
-            }
+            t = lookup(e.op0().identifier());
           }
           else
             return false;
+
+        //std::cout << "t: " << t << std::endl;
+        typet from;
+        //dynamic cast of array type
+        if (t.type.id()=="array")
+        {
+          if (type.id()==new_expr.type().id())
+          {
+            from = follow(t.value.op0().type());
+            e.make_typecast(type);
+            new_expr.op0().op0().operands() = t.value.operands();
+//            new_expr.operands() = t.value.operands();
+            std::cout << "depois new_expr.pretty(): " << new_expr.pretty() << std::endl;
+            return true;
+          }
         }
-        return false;
-        //     std::cout << "id: " << id << std::endl;
-        //     std::cout << "to: " << to << std::endl;
+
+        from = follow(t.value.type());
+        //could not dynamic_cast from void type
+        if(t.type.subtype().id()=="empty")
+        {
+          return false;
+        }
+
+        //are we doing a dynamic typecast between objects of the same class type?
+        if ((type.id() == new_expr.type().id()) &&
+            (type.subtype().id() == new_expr.type().subtype().id()) )
+        {
+          return true;
+        }
+
+        if(from.id()=="empty")
+        {
+          e.make_typecast(type);
+          new_expr.swap(e);
+          return true;
+        }
+
+        if(to.id()=="struct" && from.id()=="struct")
+        {
+          if(e.cmt_lvalue())
+          {
+            exprt tmp(e);
+            if(!standard_conversion_lvalue_to_rvalue(tmp,e))
+              return false;
+          }
+
+          struct_typet from_struct = to_struct_type(from);
+          struct_typet to_struct = to_struct_type(to);
+          if(subtype_typecast(from_struct, to_struct))
+          {
+            make_ptr_typecast(e,type);
+            new_expr.op0().swap(t.value);
+            return true;
+          }
+        }
+
+        //Cannot make typecast
+        constant_exprt null_expr;
+        null_expr.type() = new_expr.type();
+        null_expr.set_value("NULL");
+
+        new_expr.swap(null_expr);
+        return true;
       }
-//    }
-//    return true;
-//  }
-//  else
-//    return false;
+      else if (type.find("to-member").is_not_nil()
+          && e.type().find("to-member").is_not_nil())
+      {
+        if(type.subtype() != e.type().subtype())
+          return false;
+
+        struct_typet from_struct =
+            to_struct_type(follow(static_cast<const typet&>(e.type().find("to-member"))));
+
+        struct_typet to_struct =
+            to_struct_type(follow(static_cast<const typet&>(type.find("to-member"))));
+
+        if(subtype_typecast(from_struct, to_struct))
+        {
+          new_expr = e;
+          new_expr.make_typecast(type);
+          return true;
+        }
+      }
+      else
+        return false;
+    }
+    return false;
+  }
 }
 
 /*******************************************************************\
