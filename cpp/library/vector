@@ -414,6 +414,7 @@ public:
 	}
 
 	iterator end(){
+		assert(_size >= 0);
 		iterator buffer;
 		int n = _size + 1;
 		if(sizeof(int) == sizeof(T))
