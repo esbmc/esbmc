@@ -1390,10 +1390,6 @@ void value_sett::apply_code(
       assign(lhs, code.op0(), ns);
     }
   }
-  else if(statement=="cpp-try")
-  {
-    // doesn't do anything
-  }
   else if(statement=="typeid")
   {
     // doesn't do anything

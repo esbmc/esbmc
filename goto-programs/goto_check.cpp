@@ -730,8 +730,7 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       {
         check(i.code);
       }
-      else if(statement=="printf"
-    		  || statement=="cpp-try")
+      else if(statement=="printf")
       {
         forall_operands(it, i.code)
           check(*it);
