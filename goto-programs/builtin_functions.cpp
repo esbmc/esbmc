@@ -446,15 +446,31 @@ void goto_convertt::do_cpp_new(
   t_d_i->location=rhs.find_location();
 #endif
 
+  // run initializer
+  dest.destructive_append(tmp_initializer);
+
+  // Look for a this expression:
+  // If we find it, don't check memory-leak, it'll be checked on destructor
+  if(lhs.has_operands())
+  {
+    if(lhs.op0().has_operands())
+    {
+      exprt this_expr=lhs.op0().op0();
+      const symbolt &this_symbol=lookup(this_expr.identifier());
+
+      if(this_symbol.base_name=="this")
+        return;
+      else // TODO
+        assert(0);
+    }
+  }
+
   exprt allocated_object = lhs;
   allocated_object.location() = rhs.location();
 
   if (options.get_bool_option("memory-leak-check")
     && allocated_object.type().id()=="pointer")
     allocated_objects.push_front(allocated_object);
-
-  // run initializer
-  dest.destructive_append(tmp_initializer);
 }
 
 /*******************************************************************\
