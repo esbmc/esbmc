@@ -2474,16 +2474,38 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
       if(expr.op0().identifier()!="")
       {
         symbolt &symbol=
-          context.symbols.find(expr.op0().identifier())->second;
-
+            context.symbols.find(expr.op0().identifier())->second;
         if(expr.op1().has_operands())
         {
           exprt &initializer=
-            static_cast<exprt &>(expr.op1().op0().add("initializer"));
+              static_cast<exprt &>(expr.op1().op0().add("initializer"));
 
           if(initializer.has_operands())
           {
             symbol.value = initializer.op0();
+          }
+        }
+      }
+      //Array
+      else if (expr.op0().type().subtype().identifier()!="")
+      {
+        const symbolt *symbol;
+        bool is_included = lookup(expr.op0().op0().identifier(), symbol);
+
+        if(expr.op1().has_operands())
+        {
+          exprt &initializer=
+              static_cast<exprt &>(expr.op1().op0().add("initializer"));
+
+          if(initializer.has_operands())
+          {
+            if(!is_included) //find
+            {
+              symbolt &symbol_temp=
+                  context.symbols.find(expr.op0().op0().identifier())->second;
+              symbol_temp.value.id("array");
+              symbol_temp.value.operands().push_back(initializer.op0());
+            }
           }
         }
       }
