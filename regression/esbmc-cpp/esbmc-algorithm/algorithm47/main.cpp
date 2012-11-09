@@ -19,8 +19,8 @@ int main () {
   sort (v.begin(), v.end(), mygreater);                   // 30 30 20 20 20 10 10 10
   bounds=equal_range (v.begin(), v.end(), 20, mygreater); //       ^        ^
 
-  cout << "bounds at positions " << int(bounds.first - v.begin());
-  cout << " and " << int(bounds.second - v.begin()) << endl;
+//  cout << "bounds at positions " << int(bounds.first - v.begin());
+//  cout << " and " << int(bounds.second - v.begin()) << endl;
 
   return 0;
 }

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool myfunction (int i, int j) {
@@ -26,10 +27,11 @@ int main () {
                                                        //          ^
 
   myvector.resize( it - myvector.begin() );            // 10 20 30
+  assert(myvector.size() == 3);
 
-  // print out content:
+//   print out content:
   cout << "myvector contains:";
-  for (it=myvector.begin(); it!=myvector.end(); ++it)
+  for (it=myvector.begin(); it!=myvector.end(); it++)
     cout << " " << *it;
 
   cout << endl;
