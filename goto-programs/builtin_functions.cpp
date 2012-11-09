@@ -490,11 +490,11 @@ void goto_convertt::cpp_new_initializer(
 
   if(initializer.is_not_nil())
   {
-    if(rhs.id()=="cpp_new[]")
+    if(rhs.statement()=="cpp_new[]")
     {
       // build loop
     }
-    else if(rhs.id()=="cpp_new")
+    else if(rhs.statement()=="cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
