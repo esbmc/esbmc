@@ -574,7 +574,7 @@ values is the following:
 \end{array}
 \]
 %
-Where $\mathit{t}$ is an elment of type $\mathit{T}$ and 
+Where $\mathit{t}$ is a variable of type $\mathit{T}$ and 
 $\mathit{*It}$ is the value stored in the position pointed
 by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value 
 stored in the $\mathit{P}$ position of the memory, and $\mathit{C_n}$ is
@@ -583,11 +583,12 @@ Similarly, the syntax for iterator expressions is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 \\[-5ex]
-\mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
+\mathit{It}   & ::= & \: \mathit{i} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
 \end{array}
 \]
 %
-Where $\mathit{begin}$ and $\mathit{end}$ are methods
+Where $\mathit{i}$ is a variable of type $\mathit{It}$;
+$\mathit{begin}$ and $\mathit{end}$ are methods
 that return iterators, which point to the beginning
 and the ending of a container, respectively. We also have
 iterator operations that return iterators as well.
@@ -642,7 +643,7 @@ element $T$ stored in the container. Figure~\ref{figure:stl-iterator} gives
 an overview of our operational model for the STL sequantial container.
 %
 \begin{figure*}[ht] \centering
-\includegraphics[scale=0.25]{figures/stl-iterator} 
+\includegraphics[scale=0.3]{figures/stl-iterator} 
 \caption{Operational model of the STL sequantial container.}
 \label{figure:stl-iterator} 
 \end{figure*}
@@ -659,7 +660,7 @@ $\mathit{erase\left(It\right)}$, and $\mathit{search\left(It\right)}$.
 Methods $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$,
 $back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ are only
 a simplified variation of those main methods, which are optimized for some containers
-(e.g., popping the last element of a stack).
+(e.g., popping the last element of a \textit{stack}).
 As part of the SSA-transformation, side-effects on the containers are made explicit, 
 so that every operation returns a new container as a result. For example, 
 $\mathit{c.insert\left(x,y,z\right)}$ becomes $\mathit{c' = c.insert\left(x,y,z\right)}$.
@@ -699,13 +700,13 @@ cont.insert(ipos, it_0, it_k) \Longrightarrow & cont'.size = cont.size + k\\
 \end{array}\]
 
 The same model above is valid for pointers $P\{pt_0\}$ and $P\{pt_k\}$.
-This kind of insertion (with pointers) does not return a iterator.
+This kind of insertion (with pointers) does not return an iterator.
 
 The erase method works similarly to the insert method. It also uses iterator
-positions, integer values and pointers, but it does not use values, as the exclusion
+positions, integer values and pointers, but it does not use values since the exclusion
 is made by a given position, regardless the value. It also returns an iterator position,
 pointing to the position next to the previously erased part of the container.
-The next model shows an erase method that deletes a single element:
+The following model shows an \textit{erase} method that deletes a single element:
 %
 \[\begin{array}{ll}
 \label{erase1-model}
@@ -713,9 +714,9 @@ cont.erase (ipos) \Longrightarrow & cont'.size = cont.size - 1\\
   & \wedge \: ipos' = ipos + 1 \\
 \end{array}\]
 
-It is also possible to delete a number of elements from the container,
+It is also possible to delete a number of elements from the container by
 marking the bounds with iterators. It works similarly to the equivalent
-insert method:
+\textit{insert} method:
 
 \[\begin{array}{ll}
 \label{erase2-model}
@@ -731,9 +732,9 @@ is treated differently from other types. The model is the following:
 $It = \{ ptr, n, addr\}$,
 where $ptr$ is a memory address that points to the
 real position of the required element in the container
-(pointed by the iterator), $n$ is the iterator indexed
+(pointed by an iterator), $n$ is the iterator indexed
 internally in the container, and $addr$ is a memory
-address equivalent to $cont.array$, being $cont$ the container
+address equivalent to $cont.array$, where $cont$ is the container
 pointed by the iterator.
 
 %---------------------------------------------
