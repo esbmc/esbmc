@@ -657,7 +657,7 @@ OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
 
 template<class InIt, class OutIt, class Pr>
 OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
-#if 0
+#if 1
 	InIt value = first;
 	dest = first;
 	while (++first != last) {
@@ -725,10 +725,12 @@ T rand(T rand) {
 
 template<class RanIt>
 void random_shuffle(RanIt first, RanIt last) {
+#if 0
 	RanIt i, n;
 	n = (last - first);
 	for (i = n - 1; i > 0; --i)
-		swap(first[i], first[rand(i + 1)]);
+		swap(first+i, first+rand(i + 1));
+#endif
 }
 
 template<class RanIt, class Fn1>
