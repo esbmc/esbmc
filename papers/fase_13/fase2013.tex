@@ -92,7 +92,7 @@ BMC to C++ programs using an operational model,  which
 is an abstract representation of the standard C++ libraries that
 conservatively approximates their semantics. To support this operational model, we extended
 our ESBMC tool~\cite{Cordeiro12} that in turn builds on top
-of the CBMC's front-end \cite{Clarke04} to support C++ features such
+of the CBMC's front-end~\cite{Clarke04} to support C++ features such
 as inheritance, polymorphism, templates, and exception handling.
 
 We present a novel implementation of an operational model of the sequential STL
@@ -101,7 +101,11 @@ elements values of the containers), and how these are used in order to verify
 real-world C++ programs.  Additionally, we develop novel approaches to handle
 exceptions in C++ programs (in particular, exception specification for
 functions and methods) that previous approaches are not able to deal
-with~\cite{PrabhuMBIG11,Blanc07,Florian12}. 
+with~\cite{PrabhuMBIG11,Blanc07,Florian12}. In contrast to other previous 
+approaches (e.g.,~\cite{PrabhuMBIG11}), we implement the inheritance mechanism 
+during the construction of the intermediate representation of the program, which 
+thus avoids converting the C++ program to a C program and consequently produces 
+smaller models to be verified. 
 %
 %------------------------------
 \section{Background and System Architecture}
@@ -516,7 +520,13 @@ methods, functions, and intern variables. We thus split it into:
 iterations, capacity, element access, modifiers, and unique
 members. As the containers structure differs slightly
 between each other, some of their methods will vary too,
-changing its intern model as well. For example, a \textit{list} container
+changing its intern model as well (e.g., a \textit{list} 
+container does not have a reference operator and its elements
+are only reached by iterators).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+For example, a \textit{list} container
 does not have a reference operator (i.e., $operator\left[\right]$), and the elements
 are reached only by iterators (\textit{list} has a dynamic structure,
 unlike \textit{deque} or \textit{vector}). Lists also have unique methods, optimized by its
@@ -524,11 +534,15 @@ dynamic structure such as merging, elements sorting, and reverse order.
 Vector has also unique methods, related to size and capacity manipulation,
 and it also does not have $push\_front\left(\right)$
 and $pop\_front\left(\right)$ methods~\cite{CppReference12}.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 %-------------------------------------------
 \subsubsection{Model Semantics.}
 %-------------------------------------------
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \comment{
 Let us consider that a container model is composed
 by five types of variables, which are: $I$, $C$,
@@ -541,7 +555,8 @@ values stored in the container.
 For convention, we assume that
 $\left(c, v, d, l\right) \subset C, \{i, j, n\}
 \subset N$ and $\{it1, it2\} \subset I$.}
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 In order to formalize the verification of the STL containers, 
 we define a core container expression language, and extend the translation 
@@ -549,7 +564,8 @@ functions $\cal C$ and  $\cal P$ of constraints and properties to this.
 The container language comprises several syntactic domains, starting with 
 the base elements $\mathit{T}$, iterators $\mathit{It}$, pointers $\mathit{P}$, 
 and integer indices $\mathit{Int}$, and of course the (proper) 
-container expressions $\mathit{C}$. The syntax for \emph{T} values is the following:
+container expressions $\mathit{C}$. The syntax for $\mathit{T}$ 
+values is the following:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
 \\[-5ex]
@@ -557,10 +573,11 @@ container expressions $\mathit{C}$. The syntax for \emph{T} values is the follow
 \end{array}
 \]
 %
-Where $\mathit{*It}$ is the value stored in the position pointed
+Where $\mathit{t}$ is an elment of type $\mathit{T}$ and 
+$\mathit{*It}$ is the value stored in the position pointed
 by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value 
-stored in the $P$ position of the memory, and $\mathit{C_n}$ is
-an element of a container $C$ in the position $n$.
+stored in the $\mathit{P}$ position of the memory, and $\mathit{C_n}$ is
+an element of a container $\mathit{C}$ in the position $\mathit{n}$.
 Similarly, the syntax for iterator expressions is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
@@ -569,11 +586,11 @@ Similarly, the syntax for iterator expressions is:
 \end{array}
 \]
 %
-Where $begin$ and $end$ are methods
+Where $\mathit{begin}$ and $\mathit{end}$ are methods
 that return iterators, which point to the beginning
 and the ending of a container, respectively. We also have
 iterator operations that return iterators as well.
-For $P$ (memory address values), the syntax is as follows:
+For $\mathit{P}$ (memory address values), the syntax is as follows:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
 \\[-5ex]
@@ -581,16 +598,16 @@ For $P$ (memory address values), the syntax is as follows:
             &     & \: \mathit{It.source} \: | \: \mathit{P}  ( \: + \: | \: - \: )  \textit{P} \: \\
 \end{array}
 \]
-
-Where $pointer$ is a memory address that stores the element
-in the container pointed by the iterator, $array$ is another
+%
+Where $\mathit{It.pointer}$ is a memory address that stores the element
+in the container pointed by the iterator, $\mathit{C.array}$ is another
 memory address that stores the beginning of the container,
-$source$ is the address that makes the link between the iterator
+$\mathit{It.source}$ is the address that relates the iterator
 and its pointed container (which stores the container $array$ value).
-There is also the pointer return from pointer operations.
-The containers contain an array of elements $T$ and their
-positions in the memory are represented by pointers $P$.
-Therefore, the syntax for the integer expression is:
+There is also a pointer return from pointer operations.
+The containers contain an array of elements $\mathit{T}$ and their
+positions in the memory are represented by pointers $\mathit{P}$.
+Thus, the syntax for the integer expression is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}
 \\[-5ex]
@@ -598,14 +615,14 @@ Therefore, the syntax for the integer expression is:
               &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: | \\
 \end{array}
 \]
-
+%
 Where variables included in the containers
-like $\mathit{size}$ and $\mathit{capacity}$ return
-a integer value as well as the arithmetics
+like $\mathit{C.size}$ and $\mathit{C.capacity}$ return
+an integer value as well as the arithmetics
 operations between integer values.
 
 %-------------------------------
-\subsubsection{Model.}
+\subsubsection{Operational Model.}
 %-------------------------------
 
 To simulate appropriately the containers, our model makes
@@ -620,7 +637,14 @@ three variables: a variable $P$ called $ptr$, which contains the memory address
 to the corresponding element $T$ in the container, a variable $N$ called $pos$,
 which contains the index value pointed by the iterator in the container, and a
 variable $P$ called $src$, which contains the memory address to the first
-element $T$ stored in the container.
+element $T$ stored in the container. Figure~\ref{figure:stl-iterator} gives
+an overview of our operational model for the STL sequantial container.
+%
+\begin{figure*}[ht] \centering
+\includegraphics[scale=0.25]{figures/stl-iterator} 
+\caption{Operational model of the STL sequantial container.}
+\label{figure:stl-iterator} 
+\end{figure*}
 
 The vector container model has the following structure:
 $C = \{ array, size, capacity\}$,
