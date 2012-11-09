@@ -336,7 +336,7 @@ void goto_convertt::do_malloc(
 
   if (options.get_bool_option("memory-leak-check")
 	  && allocated_object.type().id()=="pointer")
-    allocated_objects.push(allocated_object);
+    allocated_objects.push_front(allocated_object);
 
   //the k-induction does not support dynamic memory allocation yet
   if (inductive_step)
@@ -424,9 +424,6 @@ void goto_convertt::do_cpp_new(
   t_a->location=rhs.find_location();
   t_a->guard=(neg_valid_expr, offset_is_zero_expr);
 
-  t_a->guard=valid_expr;
-  t_a->guard.make_not();
-
   // set size
   //nec: ex37.c
   exprt dynamic_size("dynamic_size", int_type()/*uint_type()*/);
@@ -454,7 +451,7 @@ void goto_convertt::do_cpp_new(
 
   if (options.get_bool_option("memory-leak-check")
     && allocated_object.type().id()=="pointer")
-    allocated_objects.push(allocated_object);
+    allocated_objects.push_front(allocated_object);
 
   // run initializer
   dest.destructive_append(tmp_initializer);
