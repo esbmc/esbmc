@@ -186,6 +186,7 @@ codet cpp_typecheckt::cpp_constructor(
   }
   else if(tmp_type.id()=="struct")
   {
+
     exprt::operandst operands_tc=operands;
 
     for(exprt::operandst::iterator
