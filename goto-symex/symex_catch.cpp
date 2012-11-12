@@ -241,6 +241,23 @@ bool goto_symext::terminate_handler()
 
 /*******************************************************************\
 
+Function: goto_symext::unexpected
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::unexpected_handler()
+{
+
+}
+
+/*******************************************************************\
+
 Function: goto_symext::update_throw_target
 
   Inputs:

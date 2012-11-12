@@ -418,6 +418,11 @@ protected:
   bool terminate_handler();
 
   /**
+   * Call unexpected function handler when needed.
+   */
+  void unexpected_handler();
+
+  /**
    *  Replace ireps regarding dynamic allocations with code.
    *  Things like "invalid-object" and suchlike are replaced here with
    *  references to array members, or more elaborate expressions, representing
