@@ -27,7 +27,13 @@ void goto_symext::symex_other(void)
   else if(statement=="cpp_delete" ||
           statement=="cpp_delete[]")
   {
-    // ignore
+    codet deref_code(code);
+
+    replace_dynamic_allocation(deref_code);
+    replace_nondet(deref_code);
+    dereference(deref_code, false);
+
+    symex_cpp_delete(deref_code);
   }
   else if(statement=="free")
   {
