@@ -929,10 +929,14 @@ support dynamic cast.
 \label{exception-handling}
 %--------------------------------------------
 
-One of the features that C++ provides is the exception handling. The exceptions are unexpected situations on the program, situations
-that the program was not designed to handle. Basically, the exception handling is divided into three elements: a try block, where an
-exception may occur, a catch block, where an exception can be handled and a throw expression to connect the two blocks. The
-Figure~\ref{figure:try-catch-example} shows an example of a C++ code with exception handling.
+One of the features that C++ provides is the exception handling. 
+The exceptions are unexpected situations about the program; situations
+that the program was not designed to handle. Basically, the exception handling 
+is divided into three elements: a try block, where an
+exception may occur, a catch block, where an exception can be handled and a throw 
+expression to connect two blocks.
+Figure~\ref{figure:try-catch-example} shows an example 
+of a C++ code with exception handling.
 %
 \begin{figure}[ht]
 \centering
@@ -953,11 +957,11 @@ int main() {
 \label{figure:try-catch-example}
 \end{figure}
 
-On ESBMC++, the exception handling happens on two steps:
+In ESBMC++, the exception handling happens in two steps:
 during the typechecking phase and the symbolic execution phase.
 On the typechecking phase, an AST is built based on the code
 inside the try block, with a few adaptations: before the code
-inside the try block starts, a CATCH instruction with a empty map
+inside the try block starts, a CATCH instruction with an empty map
 (which will be filled later on the typechecking) is inserted, followed by
 the code inside the try block, another CATCH instruction
 (to represent the end of the try block and the beginning of the
@@ -965,14 +969,14 @@ catch block) and a GOTO instruction pointing to the code after
 the catch block. This GOTO will only change if an exception is thrown,
 otherwise it will remain the same. After typechecking the try block,
 ESBMC++ typechecks the catch block that will contain one or more catchs.
-Again, the AST will be created by based on the code inside the catchs
+Again, the AST will be created based on the code inside the catchs
 with only one adaptation: a GOTO instruction is inserted by the end of
 each catch code pointing to the code after the catchs. Each catch code
-will receive a label so ESBMC++ can decide which catch should be called
+will be assigned a label so that ESBMC++ can decide which catch should be called
 during the symbolic execution phase if an exception is thrown. By the end
-of the catch block verification, the map of the first CATCH instruction
+of the catch block, the map of the first CATCH instruction is
 inserted before the try block code is filled with the label created
-for each catch mapped on the type of exception. The Figure~\ref{figure:try-catch-goto}
+for each catch mapped on the type of the exception. Figure~\ref{figure:try-catch-goto}
 shows the internal flow on ESBMC++ for exception handling of the code from
 Figure~\ref{figure:try-catch-example}.
 
@@ -1005,15 +1009,15 @@ END_FUNCTION
 
 During the symbolic execution phase, when the first
 CATCH instruction is found, the catch map is stacked
-for later usage. The idea behind using a stack is
+for later usage. The idea behind the use of a stack is
 that we may have try-catch blocks inside other
 try-catchs block and ESBMC++ should always handle
 the most internal first. Following the symbolic execution
 for the code that was inside the try block, ESBMC++ will continue
 until it finds a throw expression. When this happens, ESBMC++ will
-look at the map for a valid catch for the exception thrown, if it finds
-a valid catch, the label will be saved for now and handled later;
-if it was unable to find an exception an error will be shown.
+look at the map for a valid catch for the exception thrown; if it finds
+a valid catch, then the label will be saved for now and handled later;
+if it was unable to find an exception, then an error will be thrown.
 ESBMC++ will also ignore any other throw or goto instruction after
 the first throw is found but will continue to verify all the try
 block code. When the second CATCH is found, which means that the try
