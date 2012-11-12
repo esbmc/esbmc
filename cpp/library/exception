@@ -46,15 +46,26 @@ unexpected_handler set_unexpected(unexpected_handler f) throw ()
   unexpected_pf=f;
 }
 
+// Model for unexpected function: calls the current
+// unexpected handler function
+void unexpected()
+{
+  unexpected_pf();
+}
+
+// Model for terminate function: calls the current
+// terminate handler function
+void terminate()
+{
+  terminate_pf();
+}
+
 class exception {
 public:
   exception() throw () {};
   exception(const exception&) throw () {};
 
   exception& operator=(const exception&) throw ();
-
-  void unexpected();
-  void terminate();
 
   virtual ~exception() throw () {}
 
