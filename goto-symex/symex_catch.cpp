@@ -176,7 +176,7 @@ void goto_symext::symex_throw()
   {
     // An un-caught exception. Error
     const std::string &msg="Throwing an exception of type " +
-        e_it->id().as_string() + " but there is not catch for it.";
+      exceptions_thrown.begin()->id().as_string() + " but there is not catch for it.";
     claim(false_exprt(), msg);
   }
 
