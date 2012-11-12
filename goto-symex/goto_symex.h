@@ -53,6 +53,17 @@ public:
   // Types
 
 public:
+  /** Records for dynamically allocated blobs of memory. */
+  class allocated_obj {
+  public:
+    allocated_obj(const exprt &s, const guardt &g)
+      : obj(s), alloc_guard(g) { }
+    /** Symbol identifying the pointer that was allocated. Must have ptr type */
+    exprt obj;
+    /** Guard when allocation occured. */
+    guardt alloc_guard;
+  };
+
   friend class symex_dereference_statet;
   friend class bmct;
 
@@ -106,6 +117,13 @@ public:
    *  @param art Reachability tree we're working with.
    */
   virtual void symex_step(reachability_treet & art);
+
+  /**
+   *  Perform accounting checks / assertions at end of a program run.
+   *  This should contain anything that must happen at the end of a program run,
+   *  for example assertions about dynamic memory being freed.
+   */
+  void finish_formula(void);
 
 protected:
   /**
@@ -491,6 +509,8 @@ protected:
 
   /** Symbolic implementation of malloc. */
   void symex_malloc(const exprt &lhs, const side_effect_exprt &code);
+  /** Symbolic implementation of free */
+  void symex_free(const codet &code);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const codet &code);
   /** Symbolic implementation of c++'s new. */
@@ -558,6 +578,10 @@ protected:
    *  modelling what pointers are active, which are freed, and so forth. As for
    *  why, well, that's a trainwreck. */
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
+  /** List of all allocated objects.
+   *  Used to track what we should level memory-leak-assertions against when the
+   *  program execution has finished */
+  std::list<allocated_obj> dynamic_memory;
 
   // exception
   goto_programt::instructiont *last_throw;

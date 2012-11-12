@@ -95,6 +95,7 @@ void goto_symext::symex_malloc(
     rhs.make_typecast(lhs.type());
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -111,6 +112,17 @@ void goto_symext::symex_malloc(
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+}
+
+void goto_symext::symex_free(const codet &code)
+{
+  assert(code.op0().type().id() == "pointer");
+  exprt ptr_obj("pointer_offset", unsignedbv_typet(32));
+  ptr_obj.copy_to_operands(code.op0());
+  equality_exprt eq(ptr_obj, gen_zero(unsignedbv_typet(32)));
+  claim(eq, "Operand of free must have zero pointer offset");
 }
 
 void goto_symext::symex_printf(
@@ -203,6 +215,7 @@ void goto_symext::symex_cpp_new(
     rhs.copy_to_operands(symbol_expr(symbol));
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -219,6 +232,8 @@ void goto_symext::symex_cpp_new(
   exprt truth("constant", bool_typet());
   truth.set("value", "true");
   symex_assign_rec(index, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 // XXX - implement as a call to free?
@@ -337,6 +352,12 @@ goto_symext::intrinsic_get_thread_data(code_function_callt &call,
 void
 goto_symext::intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art)
 {
+
+  if (options.get_bool_option("k-induction")) {
+    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+    std::cerr  << std::endl;
+    abort();
+  }
 
   // As an argument, we expect the address of a symbol.
   const exprt &args = call.operands()[2];
