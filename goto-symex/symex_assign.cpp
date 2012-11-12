@@ -93,6 +93,8 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   deallocd_arr_name = sym.deallocd_arr_name;
   dyn_info_arr_name = sym.dyn_info_arr_name;
 
+  dynamic_memory = sym.dynamic_memory;
+
   // Art ptr is shared
   art1 = sym.art1;
 

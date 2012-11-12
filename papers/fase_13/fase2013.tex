@@ -92,7 +92,7 @@ BMC to C++ programs using an operational model,  which
 is an abstract representation of the standard C++ libraries that
 conservatively approximates their semantics. To support this operational model, we extended
 our ESBMC tool~\cite{Cordeiro12} that in turn builds on top
-of the CBMC's front-end \cite{Clarke04} to support C++ features such
+of the CBMC's front-end~\cite{Clarke04} to support C++ features such
 as inheritance, polymorphism, templates, and exception handling.
 
 We present a novel implementation of an operational model of the sequential STL
@@ -101,7 +101,11 @@ elements values of the containers), and how these are used in order to verify
 real-world C++ programs.  Additionally, we develop novel approaches to handle
 exceptions in C++ programs (in particular, exception specification for
 functions and methods) that previous approaches are not able to deal
-with~\cite{PrabhuMBIG11,Blanc07,Florian12}. 
+with~\cite{PrabhuMBIG11,Blanc07,Florian12}. In contrast to other previous 
+approaches (e.g.,~\cite{PrabhuMBIG11}), we implement the inheritance mechanism 
+during the construction of the intermediate representation of the program, which 
+thus avoids converting the C++ program to a C program and consequently produces 
+smaller models to be verified. 
 %
 %------------------------------
 \section{Background and System Architecture}
@@ -365,10 +369,8 @@ P := \left [ \begin{array}{ll}
 
 %%\blurb{Shouldn't this call the function set by signal?}
 Here, we simply store $f$ at index position $\sigma$ of the signal array $a$ and
-check whether $\sigma$ is a valid signal. To raise a function associated to signal
-$\rho$, we simply select it from the signal array $a$ and then check whether $\rho$
-is a valid signal and the function associated to $\rho$ is different than \verb|NULL|.
-The $raise\left(\sigma\right)$ function can thus be modeled in our operational 
+check whether $\sigma$ is a valid signal.
+The $raise\left(\sigma\right)$ function can be modeled in our operational 
 model as:
 %
 \begin{equation}
@@ -380,8 +382,10 @@ P := \left [ \begin{array}{ll}
                 \left(\sigma = s_{1}\right) \vee \ldots \vee \left(\sigma = s_{n}\right) \wedge \left(select\left(a',\sigma\right) \neq \eta\right) \\
               \end{array} \right ]  \\               
 \end{equation}
-
  
+To raise a function associated to signal
+$\sigma$, we simply select it from the signal array $a$ and then check whether $\sigma$
+is a valid signal and the function associated to $\sigma$ is different than \verb|NULL|.
 
 %---------------------------------
 \subsection{General Libraries}
@@ -516,19 +520,30 @@ methods, functions, and intern variables. We thus split it into:
 iterations, capacity, element access, modifiers, and unique
 members. As the containers structure differs slightly
 between each other, some of their methods will vary too,
-changing its intern model as well. For example, a \textit{list} container
+changing its intern model as well (e.g., a \textit{list} 
+container does not have a reference operator and its elements
+are only reached by iterators).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\comment{
+For example, a \textit{list} container
 does not have a reference operator (i.e., $operator\left[\right]$), and the elements
 are reached only by iterators (\textit{list} has a dynamic structure,
 unlike \textit{deque} or \textit{vector}). Lists also have unique methods, optimized by its
 dynamic structure such as merging, elements sorting, and reverse order.
 Vector has also unique methods, related to size and capacity manipulation,
 and it also does not have $push\_front\left(\right)$
-and $pop\_front\left(\right)$ methods~\cite{CppReference12}.
+and $pop\_front\left(\right)$ methods~\cite{CppReference12}.}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 %-------------------------------------------
 \subsubsection{Model Semantics.}
 %-------------------------------------------
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \comment{
 Let us consider that a container model is composed
 by five types of variables, which are: $I$, $C$,
@@ -541,7 +556,8 @@ values stored in the container.
 For convention, we assume that
 $\left(c, v, d, l\right) \subset C, \{i, j, n\}
 \subset N$ and $\{it1, it2\} \subset I$.}
-
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 In order to formalize the verification of the STL containers, 
 we define a core container expression language, and extend the translation 
@@ -549,7 +565,8 @@ functions $\cal C$ and  $\cal P$ of constraints and properties to this.
 The container language comprises several syntactic domains, starting with 
 the base elements $\mathit{T}$, iterators $\mathit{It}$, pointers $\mathit{P}$, 
 and integer indices $\mathit{Int}$, and of course the (proper) 
-container expressions $\mathit{C}$. The syntax for \emph{T} values is the following:
+container expressions $\mathit{C}$. The syntax for $\mathit{T}$ 
+values is the following:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
 \\[-5ex]
@@ -557,23 +574,25 @@ container expressions $\mathit{C}$. The syntax for \emph{T} values is the follow
 \end{array}
 \]
 %
-Where $\mathit{*It}$ is the value stored in the position pointed
+Where $\mathit{t}$ is a variable of type $\mathit{T}$ and 
+$\mathit{*It}$ is the value stored in the position pointed
 by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value 
-stored in the $P$ position of the memory, and $\mathit{C_n}$ is
-an element of a container $C$ in the position $n$.
+stored in the $\mathit{P}$ position of the memory, and $\mathit{C_n}$ is
+an element of a container $\mathit{C}$ in the position $\mathit{n}$.
 Similarly, the syntax for iterator expressions is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 \\[-5ex]
-\mathit{It}   & ::= & \: \mathit{I} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
+\mathit{It}   & ::= & \: \mathit{i} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  \\
 \end{array}
 \]
 %
-Where $begin$ and $end$ are methods
+Where $\mathit{i}$ is a variable of type $\mathit{It}$;
+$\mathit{begin}$ and $\mathit{end}$ are methods
 that return iterators, which point to the beginning
 and the ending of a container, respectively. We also have
 iterator operations that return iterators as well.
-For $P$ (memory address values), the syntax is as follows:
+For $\mathit{P}$ (memory address values), the syntax is as follows:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
 \\[-5ex]
@@ -581,16 +600,16 @@ For $P$ (memory address values), the syntax is as follows:
             &     & \: \mathit{It.source} \: | \: \mathit{P}  ( \: + \: | \: - \: )  \textit{P} \: \\
 \end{array}
 \]
-
-Where $pointer$ is a memory address that stores the element
-in the container pointed by the iterator, $array$ is another
+%
+Where $\mathit{It.pointer}$ is a memory address that stores the element
+in the container pointed by the iterator, $\mathit{C.array}$ is another
 memory address that stores the beginning of the container,
-$source$ is the address that makes the link between the iterator
+$\mathit{It.source}$ is the address that relates the iterator
 and its pointed container (which stores the container $array$ value).
-There is also the pointer return from pointer operations.
-The containers contain an array of elements $T$ and their
-positions in the memory are represented by pointers $P$.
-Therefore, the syntax for the integer expression is:
+There is also a pointer return from pointer operations.
+The containers contain an array of elements $\mathit{T}$ and their
+positions in the memory are represented by pointers $\mathit{P}$.
+Thus, the syntax for the integer expression is:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}
 \\[-5ex]
@@ -598,14 +617,14 @@ Therefore, the syntax for the integer expression is:
               &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: | \\
 \end{array}
 \]
-
+%
 Where variables included in the containers
-like $\mathit{size}$ and $\mathit{capacity}$ return
-a integer value as well as the arithmetics
+like $\mathit{C.size}$ and $\mathit{C.capacity}$ return
+an integer value as well as the arithmetics
 operations between integer values.
 
 %-------------------------------
-\subsubsection{Model.}
+\subsubsection{Operational Model.}
 %-------------------------------
 
 To simulate appropriately the containers, our model makes
@@ -620,7 +639,14 @@ three variables: a variable $P$ called $ptr$, which contains the memory address
 to the corresponding element $T$ in the container, a variable $N$ called $pos$,
 which contains the index value pointed by the iterator in the container, and a
 variable $P$ called $src$, which contains the memory address to the first
-element $T$ stored in the container.
+element $T$ stored in the container. Figure~\ref{figure:stl-iterator} gives
+an overview of our operational model for the STL sequantial container.
+%
+\begin{figure*}[ht] \centering
+\includegraphics[scale=0.3]{figures/stl-iterator} 
+\caption{Operational model of the STL sequantial container.}
+\label{figure:stl-iterator} 
+\end{figure*}
 
 The vector container model has the following structure:
 $C = \{ array, size, capacity\}$,
@@ -634,7 +660,7 @@ $\mathit{erase\left(It\right)}$, and $\mathit{search\left(It\right)}$.
 Methods $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$,
 $back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ are only
 a simplified variation of those main methods, which are optimized for some containers
-(e.g., popping the last element of a stack).
+(e.g., popping the last element of a \textit{stack}).
 As part of the SSA-transformation, side-effects on the containers are made explicit, 
 so that every operation returns a new container as a result. For example, 
 $\mathit{c.insert\left(x,y,z\right)}$ becomes $\mathit{c' = c.insert\left(x,y,z\right)}$.
@@ -674,13 +700,13 @@ cont.insert(ipos, it_0, it_k) \Longrightarrow & cont'.size = cont.size + k\\
 \end{array}\]
 
 The same model above is valid for pointers $P\{pt_0\}$ and $P\{pt_k\}$.
-This kind of insertion (with pointers) does not return a iterator.
+This kind of insertion (with pointers) does not return an iterator.
 
 The erase method works similarly to the insert method. It also uses iterator
-positions, integer values and pointers, but it does not use values, as the exclusion
+positions, integer values and pointers, but it does not use values since the exclusion
 is made by a given position, regardless the value. It also returns an iterator position,
 pointing to the position next to the previously erased part of the container.
-The next model shows an erase method that deletes a single element:
+The following model shows an \textit{erase} method that deletes a single element:
 %
 \[\begin{array}{ll}
 \label{erase1-model}
@@ -688,9 +714,9 @@ cont.erase (ipos) \Longrightarrow & cont'.size = cont.size - 1\\
   & \wedge \: ipos' = ipos + 1 \\
 \end{array}\]
 
-It is also possible to delete a number of elements from the container,
+It is also possible to delete a number of elements from the container by
 marking the bounds with iterators. It works similarly to the equivalent
-insert method:
+\textit{insert} method:
 
 \[\begin{array}{ll}
 \label{erase2-model}
@@ -706,39 +732,45 @@ is treated differently from other types. The model is the following:
 $It = \{ ptr, n, addr\}$,
 where $ptr$ is a memory address that points to the
 real position of the required element in the container
-(pointed by the iterator), $n$ is the iterator indexed
+(pointed by an iterator), $n$ is the iterator indexed
 internally in the container, and $addr$ is a memory
-address equivalent to $cont.array$, being $cont$ the container
+address equivalent to $cont.array$, where $cont$ is the container
 pointed by the iterator.
 
 %---------------------------------------------
 \subsection{Input/Output Stream Libraries}
 %---------------------------------------------
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\comment{
 To build the operational model, it is important
 to define a class structure that is as close as to the
 real implementation so that ESBMC++ can correctly identify
 the relationships between classes in a given program and
-then introduce such relationships to build the AST.
-We have thus elaborated a hierarchical structure for the
+then introduce such relationships to build the AST.}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+We have elaborated a hierarchical structure for the
 input/output (I/O) stream library that is similar to the actual
-one (as shown in Figure~\ref{figure:cpp-inputoutputdiagram}).
-In our I/O stream operational model, the input operator $>>$
+one (as described in~\cite{CppReference12}). However,
+in our I/O stream operational model, the input operator $>>$
 is simply modeled as a non-deterministic variable and we do not check
-any safety property. Similarly, the output operator $<<$ does not
+any related safety property. Similarly, the output operator $<<$ does not
 present any constraints or properties to be checked since
 we do not check whether a given value has been printed on the screen
-(ESBMC++ is interested in checking only the properties related to
+(ESBMC++ is only interested in checking the properties related to
 software and not that of hardware).
 
 
-\begin{figure*}[ht]
-\centering
-\includegraphics[scale=0.24]{figures/inputoutputdiagram}
-\caption{Hierarchical structure of the Input / Output Stream Libraries.
-Dotted gray square represents the library, white square represents the class and dark gray square represents the access objects.}
-\label{figure:cpp-inputoutputdiagram}
-\end{figure*}
+%\begin{figure*}[ht]
+%\centering
+%\includegraphics[scale=0.24]{figures/inputoutputdiagram}
+%\caption{Hierarchical structure of the Input / Output Stream Libraries.
+%Dotted gray square represents the library, white square represents the class and dark gray square represents the access objects.}
+%\label{figure:cpp-inputoutputdiagram}
+%\end{figure*}
 
 
 %------------------------------------------------
@@ -754,26 +786,33 @@ class, C++ also allows multiple inheritance,
 where a class may inherit from one or more unrelated base classes. 
 This particular feature makes C++ programs
 harder to model check than programs in other object-oriented (OO) programming
-languages (e.g., Java). In this case, we have to replicate the methods and attributes 
-of the base classes to the inherited class to have direct access to them, 
-which thus disallows the direct use of tools already created 
-to other programming languages.
+languages (e.g., Java). In this case, we simply replicate the methods and attributes 
+of the base classes to the inherited class to have direct access to them. 
+%%which thus disallows the direct use of tools already created 
+%%to other programming languages.
 
 If a class inherits from a base class that does not contain virtual methods,
 then we call this as \textit{replicated inheritance}. If there is a path from
-class $X$ to class $Y$ whose first edge is virtual, then we call this as \textit{shared inheritance}.
+class $\mathit{X}$ to class $\mathit{Y}$ whose first edge is virtual, 
+then we call this as \textit{shared inheritance}.
 A formal description to represent the relationship between the classes
-can be described by the class hierarchy graph (CHG). This graph $\zeta$ is composed of a tuple
-$ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} is the set of classes,
-$\prec_s $ refers to shared inheritance edges, and $\prec_r$ are replicated inheritance edge.
-$\prec_{s}$ and $\prec_{r}$ are the set of edges that represent inheritance relationship between
-classes and $\subseteq \textbf{C} \times \textbf{C}$.
-$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$)
-are a partially ordered set and $\leq_{sr}$ is anti-symmetric.
+can be described by the class hierarchy graph (CHG). 
+This graph $\zeta$ is composed of a tuple
+$ \textless \mathit{C}, \prec_{s}, \prec_{r}>$, 
+$\mathit{C}$ is the set of classes,
+$\prec_s $ refers to \textit{shared inheritance} edges, 
+and $\prec_r$ are \textit{replicated inheritance} edges.
+The symbols $\prec_{s}$ and $\prec_{r}$ are the set of 
+edges that represent inheritance relationship between
+classes and $\subseteq \mathit{C} \times \mathit{C}$.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and 
+$\leq_{sr} = (\prec_{sr})^*$. We denote ($\mathit{C}, \leq_{sr}$)
+as a partially ordered set and we consider that $\leq_{sr}$ 
+is anti-symmetric.
 
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
-that represents the \textit{Shape} class hierarchy, that contains multiple inheritance.
-The Rectangle class relation can be formalized by
+that represents the \textit{Shape} class hierarchy that contains 
+multiple inheritance. The Rectangle class relation can be formalized by
 ($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$, 
 $\left(C, \left\langle Rectangle, Display \right\rangle \right)$). 
 Our tool creates an intermediate representation for single and multiple inheritance, 
@@ -823,24 +862,12 @@ derived class, is chosen in run-time using the late binding.
 The advantage is the creation of reusable code by programmers by changing only
 specific features from the base class.
 
-The intermediate representation of our tool provides a model to treat polymorphism in
-order to simplify the class hierarchy,
-easing the access to methods with the same name without ambiguity between
-base and derived classes.
-Our tool can handle the polymorphic area method using this representation,
-as shown in Figure~\ref{figure:IR_uml_rec}.
-It also supports the indirect inheritance, which is a class that
-inherits features from a derived class with one or more classes
-not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
-$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
-thus Square class can access features from \textit{Shape} class,
-but they are not directly connected. We tackle this problem by
-looking for the features using depth search from the derived to base classes
-and adding them to our intermediate representation (if necessary).
-
-%as shown in Figure~\ref{figure:IR_uml_square}.
-
-\comment{
+The intermediate representation (IR) of our tool provides a model to handle 
+polymorphism in order to simplify the class hierarchy. It thus makes 
+easier the access to methods with the same name without ambiguity between
+base and derived classes. Our tool can handle the polymorphic area method 
+using this IR, as shown in Figure~\ref{figure:IR_uml_rec}.
+%
 \begin{figure}[h]
 \centering
 \begin{minipage}{0.9\textwidth}
@@ -857,8 +884,18 @@ methods:
 \caption{Intermediate Representation of Rectangle class}
 \label{figure:IR_uml_rec}
 \end{figure}
+%
+It also supports the indirect inheritance, which is a class that
+inherits features from a derived class with one or more classes
+not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
+$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
+thus Square class can access features from \textit{Shape} class,
+but they are not directly connected. We tackle this problem by
+looking for the features using depth search from the derived to base classes
+and adding them to our intermediate representation (if necessary) 
+as shown in Figure~\ref{figure:IR_uml_square}.
 
-
+%\comment{
 \begin{figure}[h]
 \centering
 \begin{minipage}{0.9\textwidth}
@@ -875,7 +912,7 @@ methods:
 \caption{Intermediate Representation of Square class}
 \label{figure:IR_uml_square}
 \end{figure}
-}
+%}
 
 In OO programming, the use of \textit{shared inheritance} is very common.
 In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to 
@@ -1304,11 +1341,11 @@ E.~Clarke, D.~Kroening, and F.~Lerda.
 \newblock A tool for checking {ANSI-C} programs.
 \newblock In {\em TACAS}, {\em LNCS} 2988, pp.\ 168--176, 2004.
 
-\bibitem{CordeiroPhD}
-L.~Cordeiro.
-\newblock {SMT}-Based Bounded Model Checking of Multi-Threaded Software in
-Embedded Systems.
-\newblock PhD Thesis, U Southampton, 2011.
+%\bibitem{CordeiroPhD}
+%L.~Cordeiro.
+%\newblock {SMT}-Based Bounded Model Checking of Multi-Threaded Software in
+%Embedded Systems.
+%\newblock PhD Thesis, U Southampton, 2011.
 
 \bibitem{icse11}
 L.~Cordeiro and B.~Fischer.

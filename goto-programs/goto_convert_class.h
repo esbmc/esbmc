@@ -61,7 +61,6 @@ protected:
   namespacet ns;
   unsigned temporary_counter;
   std::string tmp_symbol_prefix;
-  std::list<exprt> allocated_objects;
 
   void goto_convert_rec(const codet &code, goto_programt &dest);
 

@@ -425,11 +425,6 @@ void goto_convertt::convert_catch(
   goto_programt::targett end_target=end.add_instruction();
   end_target->make_skip();
 
-  // Save the allocated_objects to check after the try-catch block
-  // and clear the allocated_objects
-  std::list<exprt> tmp_allocated_objects(allocated_objects);
-  allocated_objects.clear();
-
   // the first operand is the 'try' block
   goto_programt tmp;
   convert(to_code(code.op0()), tmp);
@@ -460,12 +455,6 @@ void goto_convertt::convert_catch(
 
   // add end-target
   dest.destructive_append(end);
-
-  // Restore allocated_objects
-  if(!allocated_objects.size())
-    allocated_objects = tmp_allocated_objects;
-  else
-    assert(0); // Check if this situation occurs
 }
 
 /*******************************************************************\
@@ -551,34 +540,6 @@ void goto_convertt::convert_block(
 
     locals.pop_back();
   }
-
-  // see if we need to check for forgotten memory
-  if (!for_block)
-  {
-    if (options.get_bool_option("memory-leak-check"))
-    {
-      while(!allocated_objects.empty())
-      {
-        //tse paper
-        exprt deallocated_expr("deallocated_object", typet("bool"));
-        //exprt deallocated_expr("valid_object", typet("bool"));
-
-        exprt lhs_pointer = allocated_objects.front();
-        allocated_objects.pop_front();
-        deallocated_expr.copy_to_operands(lhs_pointer);
-
-        goto_programt::targett t_d_a=dest.add_instruction(ASSERT);
-        //tse paper
-        exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
-
-        t_d_a->guard.swap(deallocated_assert);
-        t_d_a->location = lhs_pointer.location();
-        t_d_a->location.comment("dereference failure: forgotten memory");
-      }
-    }
-  }
-  //else
-    //for_block=false;
 }
 
 /*******************************************************************\

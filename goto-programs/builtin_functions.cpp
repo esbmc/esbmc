@@ -330,14 +330,7 @@ void goto_convertt::do_malloc(
   t_d_i->code=code_assignt(deallocated_expr, false_exprt());
   t_d_i->location=location;
 #endif
-
-  exprt allocated_object = lhs;
-  allocated_object.location() = function.location();
-
-  if (options.get_bool_option("memory-leak-check")
-	  && allocated_object.type().id()=="pointer")
-    allocated_objects.push_front(allocated_object);
-
+  
   //the k-induction does not support dynamic memory allocation yet
   if (inductive_step)
   {
@@ -448,29 +441,6 @@ void goto_convertt::do_cpp_new(
 
   // run initializer
   dest.destructive_append(tmp_initializer);
-
-  // Look for a this expression:
-  // If we find it, don't check memory-leak, it'll be checked on destructor
-  if(lhs.has_operands())
-  {
-    if(lhs.op0().has_operands())
-    {
-      exprt this_expr=lhs.op0().op0();
-      const symbolt &this_symbol=lookup(this_expr.identifier());
-
-      if(this_symbol.base_name=="this")
-        return;
-      else // TODO
-        assert(0);
-    }
-  }
-
-  exprt allocated_object = lhs;
-  allocated_object.location() = rhs.location();
-
-  if (options.get_bool_option("memory-leak-check")
-    && allocated_object.type().id()=="pointer")
-    allocated_objects.push_front(allocated_object);
 }
 
 /*******************************************************************\
