@@ -103,11 +103,16 @@ void goto_symext::symex_throw()
   // If there is no catch, we return an error
   if(!stack_catch.size())
   {
-    // An un-caught exception. Error
-    const std::string &msg="Throwing an exception of type " +
-      exceptions_thrown.begin()->id().as_string() +
-      " but there is not catch for it.";
-    claim(false_exprt(), msg);
+    if(!terminate_handler())
+    {
+      // An un-caught exception. Error
+      const std::string &msg="Throwing an exception of type " +
+          exceptions_thrown.begin()->id().as_string() +
+          " but there is not catch for it.";
+      claim(false_exprt(), msg);
+      cur_state->source.pc++;
+    }
+
     return;
   }
 
@@ -174,14 +179,64 @@ void goto_symext::symex_throw()
 
   if(!except->has_throw_target)
   {
-    // An un-caught exception. Error
-    const std::string &msg="Throwing an exception of type " +
-      exceptions_thrown.begin()->id().as_string() + " but there is not catch for it.";
-    claim(false_exprt(), msg);
+    // Call terminate handler before showing error message
+    if(!terminate_handler())
+    {
+      // An un-caught exception. Error
+      const std::string &msg="Throwing an exception of type " +
+        exceptions_thrown.begin()->id().as_string() + " but there is not catch for it.";
+      claim(false_exprt(), msg);
+
+      cur_state->source.pc++;
+    }
+  }
+  else
+  {
+    // save last throw for rethrow handling
+    last_throw = &instruction;
+
+    // Update source counter
+    cur_state->source.pc++;
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_symext::terminate_handler
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+bool goto_symext::terminate_handler()
+{
+  // We must look on the context if the user included exception lib
+  const symbolt *tmp;
+  bool is_included=ns.lookup("cpp::std::terminate()",tmp);
+
+  // If it do, we must call the terminate function:
+  // It'll call the current function handler
+  if(!is_included) {
+    codet terminate_function=to_code(tmp->value.op0());
+    dereference(terminate_function,false);
+
+    // We only call it if the user replaced the default one
+    if(terminate_function.op1().identifier()=="cpp::std::default_terminate()")
+      return false;
+
+    // Call the function
+    symex_function_call(to_code_function_call(terminate_function));
+
+    return true;
   }
 
-  // save last throw for rethrow handling
-  last_throw = &instruction;
+  // If it wasn't included, we do nothing. The error message will be
+  // shown to the user as there is a throw without catch.
+  return false;
 }
 
 /*******************************************************************\
@@ -275,6 +330,7 @@ bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
     {
       const std::string &msg="Trying to re-throw without last exception.";
       claim(false_exprt(), msg);
+      cur_state->source.pc++;
       return false;
     }
   }
