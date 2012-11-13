@@ -133,7 +133,11 @@ void goto_symext::symex_throw()
       e_it++)
   {
     // Handle throw declarations
-    handle_throw_decl(except, e_it->id());
+    if(!handle_throw_decl(except, e_it->id()))
+    {
+      cur_state->source.pc++;
+      return;
+    }
 
     // Search for a catch with a matching type
     goto_symex_statet::exceptiont::catch_mapt::const_iterator
@@ -307,7 +311,7 @@ Function: goto_symext::handle_throw_decl
 
 \*******************************************************************/
 
-void goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
+bool goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   const irep_idt &id)
 {
   // Check if we can throw the exception
@@ -318,24 +322,22 @@ void goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
 
     if(s_it==except->throw_list_set.end())
     {
-      if(!unexpected_handler())
-      {
-        std::string msg=std::string("Trying to throw an exception ") +
-            std::string("but it's not allowed by declaration.\n\n");
-        msg += "  Exception type: " + id.as_string();
-        msg += "\n  Allowed exceptions:";
+      std::string msg=std::string("Trying to throw an exception ") +
+          std::string("but it's not allowed by declaration.\n\n");
+      msg += "  Exception type: " + id.as_string();
+      msg += "\n  Allowed exceptions:";
 
-        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
-            s_it1=except->throw_list_set.begin();
-            s_it1!=except->throw_list_set.end();
-            ++s_it1)
-          msg+= "\n   - " + std::string((*s_it1).c_str());
+      for(goto_symex_statet::exceptiont::throw_list_sett::iterator
+          s_it1=except->throw_list_set.begin();
+          s_it1!=except->throw_list_set.end();
+          ++s_it1)
+        msg+= "\n   - " + std::string((*s_it1).c_str());
 
-        claim(false_exprt(), msg);
-      }
-      return;
+      claim(false_exprt(), msg);
+      return false;
     }
   }
+  return true;
 }
 
 /*******************************************************************\
