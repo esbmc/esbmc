@@ -420,7 +420,7 @@ protected:
   /**
    * Call unexpected function handler when needed.
    */
-  void unexpected_handler();
+  bool unexpected_handler();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.

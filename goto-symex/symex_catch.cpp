@@ -230,7 +230,6 @@ bool goto_symext::terminate_handler()
 
     // Call the function
     symex_function_call(to_code_function_call(terminate_function));
-
     return true;
   }
 
@@ -251,9 +250,30 @@ Function: goto_symext::unexpected
 
 \*******************************************************************/
 
-void goto_symext::unexpected_handler()
+bool goto_symext::unexpected_handler()
 {
+  // We must look on the context if the user included exception lib
+  const symbolt *tmp;
+  bool is_included=ns.lookup("cpp::std::unexpected()",tmp);
 
+  // If it do, we must call the unexpected function:
+  // It'll call the current function handler
+  if(!is_included) {
+    codet unexpected_function=to_code(tmp->value.op0());
+    dereference(unexpected_function,false);
+
+    // We only call it if the user replaced the default one
+    if(unexpected_function.op1().identifier()=="cpp::std::default_unexpected()")
+      return false;
+
+    // Call the function
+    symex_function_call(to_code_function_call(unexpected_function));
+    return true;
+  }
+
+  // If it wasn't included, we do nothing. The error message will be
+  // shown to the user as there is a throw without catch.
+  return false;
 }
 
 /*******************************************************************\
@@ -298,18 +318,21 @@ void goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
 
     if(s_it==except->throw_list_set.end())
     {
-      std::string msg=std::string("Trying to throw an exception ") +
-          std::string("but it's not allowed by declaration.\n\n");
-      msg += "  Exception type: " + id.as_string();
-      msg += "\n  Allowed exceptions:";
+      if(!unexpected_handler())
+      {
+        std::string msg=std::string("Trying to throw an exception ") +
+            std::string("but it's not allowed by declaration.\n\n");
+        msg += "  Exception type: " + id.as_string();
+        msg += "\n  Allowed exceptions:";
 
-      for(goto_symex_statet::exceptiont::throw_list_sett::iterator
-          s_it1=except->throw_list_set.begin();
-          s_it1!=except->throw_list_set.end();
-          ++s_it1)
-        msg+= "\n   - " + std::string((*s_it1).c_str());
+        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
+            s_it1=except->throw_list_set.begin();
+            s_it1!=except->throw_list_set.end();
+            ++s_it1)
+          msg+= "\n   - " + std::string((*s_it1).c_str());
 
-      claim(false_exprt(), msg);
+        claim(false_exprt(), msg);
+      }
       return;
     }
   }
