@@ -343,6 +343,8 @@ void goto_convertt::convert(
     convert_catch(code, dest);
   else if(statement=="throw_decl")
     convert_throw_decl(code, dest);
+  else if(statement=="throw_decl_end")
+    convert_throw_decl_end(code,dest);
   else
   {
     copy(code, OTHER, dest);
@@ -354,6 +356,27 @@ void goto_convertt::convert(
     dest.add_instruction(SKIP);
     dest.instructions.back().code.make_nil();
   }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_throw_decl_end
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_throw_decl_end(const exprt &expr, goto_programt &dest)
+{
+  // add the THROW_DECL_END instruction to 'dest'
+  goto_programt::targett throw_decl_end_instruction=dest.add_instruction();
+  throw_decl_end_instruction->make_throw_decl_end();
+  throw_decl_end_instruction->code.set_statement("throw_decl_end");
+  throw_decl_end_instruction->location=expr.location();
 }
 
 /*******************************************************************\
@@ -373,7 +396,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // add the THROW_DECL instruction to 'dest'
   goto_programt::targett throw_decl_instruction=dest.add_instruction();
   throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->code.set_statement("throw-decl");
+  throw_decl_instruction->code.set_statement("throw_decl");
   throw_decl_instruction->location=expr.location();
 
   // the THROW_DECL instruction is annotated with a list of IDs,
