@@ -43,6 +43,10 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_throw_decl(code);
   }
+  else if(statement=="throw_decl_end")
+  {
+    // Ignore
+  }
   else if(statement=="member_initializer")
   {
     code.type()=typet("code");

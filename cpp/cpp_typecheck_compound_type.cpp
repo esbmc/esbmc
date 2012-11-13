@@ -1029,12 +1029,18 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         exprt &throw_decl = (exprt&) declaration.op0().add("throw_decl");
 
         // We always insert throw_decl to the begin of the function
-        if(throw_decl.statement() == "throw_decl")
+        if(throw_decl.statement()=="throw_decl")
         {
           value.operands().insert(
               value.operands().begin(),
               throw_decl);
-          throw_decl.clear();
+
+          // Insert flag to end of constructor
+          // so we know when to remove throw_decl
+          value.operands().push_back(codet("throw_decl_end"));
+
+          // Clear throw_decl
+          value.remove("throw_decl");
         }
       }
     }

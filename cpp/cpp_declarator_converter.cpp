@@ -486,10 +486,17 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.mode=cpp_typecheck.current_mode;
 
   // We always insert throw_decl to the begin of the function
-  if(declarator.throw_decl().statement() == "throw_decl")
+  if(declarator.throw_decl().statement()=="throw_decl")
+  {
     symbol.value.operands().insert(
-        symbol.value.operands().begin(),
-        declarator.throw_decl());
+      symbol.value.operands().begin(),
+      declarator.throw_decl());
+
+    // Insert flag to end of constructor
+    // so we know when to remove throw_decl
+    symbol.value.operands().push_back(
+      codet("throw_decl_end"));
+  }
 
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
