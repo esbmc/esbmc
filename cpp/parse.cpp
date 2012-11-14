@@ -1382,6 +1382,17 @@ bool Parser::rOtherDeclaration(
 
     if(!rFunctionBody((codet &)declaration.declarators().front().value()))
       return false;
+
+    // If there was member initializers on function try blocks
+    // We should move it up from the try statement
+    irept mi=
+      declaration.declarators().front().value().find("member_initializers");
+
+    if(mi.is_not_nil())
+    {
+      declaration.declarators().front().value().remove("member_initializers");
+      declaration.declarators().front().member_initializers().swap(mi);
+    }
   }
 
   return true;
@@ -5953,6 +5964,16 @@ bool Parser::rTryStatement(codet &statement)
   set_location(statement, tk);
 
   {
+    // Function try block inside constructor
+    if(lex->LookAhead(0)==':')
+    {
+      irept mi;
+      if(!rMemberInitializers(mi))
+        return false;
+
+      statement.set("member_initializers",mi);
+    }
+
     codet body;
 
     if(!rCompoundStatement(body))
