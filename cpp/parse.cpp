@@ -5447,6 +5447,10 @@ bool Parser::rCompoundStatement(codet &statement)
   std::cout << "Parser::rCompoundStatement 1\n";
   #endif
 
+  // Function try block
+  if(lex->LookAhead(0)==TOK_TRY)
+    return rTryStatement(statement);
+
   if(lex->GetToken(ob)!='{')
     return false;
 
