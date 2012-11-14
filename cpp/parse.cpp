@@ -5942,6 +5942,10 @@ bool Parser::rTryStatement(codet &statement)
 {
   Token tk;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 1\n";
+  #endif
+
   if(lex->GetToken(tk)!=TOK_TRY)
     return false;
 
@@ -5956,6 +5960,10 @@ bool Parser::rTryStatement(codet &statement)
 
     statement.move_to_operands(body);
   }
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 2\n";
+  #endif
 
   bool has_catch_ellipsis = false;
 
