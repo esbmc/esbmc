@@ -611,7 +611,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(context.move(static_symbol, new_symbol))
     {
       err_location(cpp_name.location());
-	str << "redeclaration of symbol `"
+      str << "redeclaration of symbol `"
 	    << static_symbol.base_name.as_string()
 	    << "'";
       throw 0;
