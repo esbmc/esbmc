@@ -1176,6 +1176,21 @@ void cpp_typecheckt::typecheck_expr_member(
   exprt &op0=expr.op0();
   add_implicit_dereference(op0);
 
+  // The notation for explicit calls to destructors can be used regardless
+  // of whether the type defines a destructor.  This allows you to make such
+  // explicit calls without knowing if a destructor is defined for the type.
+  // An explicit call to a destructor where none is defined has no effect.
+
+  if(expr.find("component_cpp_name").is_not_nil() &&
+     to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
+     follow(op0.type()).id()!="struct")
+  {
+    exprt tmp("cpp_dummy_destructor");
+    tmp.location()=expr.location();
+    expr.swap(tmp);
+    return;
+  }
+
   #ifdef CPP_SYSTEMC_EXTENSION
   if(expr.op0().type().id() == "signedbv" ||
      expr.op0().type().id() == "unsignedbv" ||
@@ -1873,6 +1888,13 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     // but usually just type adjustments.
     typecheck_cast_expr(expr);
     add_implicit_dereference(expr);
+    return;
+  }
+  else if(expr.function().id()=="cpp_dummy_destructor")
+  {
+    // these don't do anything, e.g., (char*)->~char()
+    expr.statement("skip");
+    expr.type()=empty_typet();
     return;
   }
 
