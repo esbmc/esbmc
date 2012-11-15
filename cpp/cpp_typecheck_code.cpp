@@ -125,24 +125,20 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   {
     code_blockt &block=to_code_block(to_code(*it));
 
-    // Hack to fix dereference bug. This is probably not the right
-    // thing to do but works
-    if(block.has_operands())
-    {
-      if(block.op0().has_operands())
-      {
-        if(block.op0().op0().has_operands())
-        {
-          typet &catch_type = block.op0().op0().op0().type();
-
-          if(catch_type.get_bool("#reference"))
+    // Delay catch instatiation to goto-symex
+    if(it!=operands.begin())
+      if(block.has_operands())
+        if(block.op0().has_operands())
+          if(block.op0().op0().has_operands())
           {
-            typet catch_type_nil("nil");
-            block.op0().op0().op0().type().swap(catch_type_nil);
+            irept name=block.op0().op0().op0().find("name");
+            if(block.op0().op0().op0().find("name").get_sub().size())
+              if(name.get_sub()[0].identifier() != irep_idt("#anon"))
+              {
+                name.set("catch_decl",true);
+                block.op0().op0().op0().set("name",name);
+              }
           }
-        }
-      }
-    }
 
     typecheck_code(block);
 
@@ -426,7 +422,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
       if(symbol.value.id()=="code")
         new_code.copy_to_operands(symbol.value);
     }
-    else
+    else if(!declarator.find("name").get_bool("catch_decl"))
     {
       exprt object_expr=cpp_symbol_expr(symbol);
 
