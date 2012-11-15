@@ -152,7 +152,12 @@ void goto_symext::symex_throw()
       new_id_number = (*except->catch_order.find(e_it->id())).second;
 
       if(new_id_number < old_id_number)
-        update_throw_target(except,c_it->second);
+      {
+        if(instruction.code.operands().size())
+          update_throw_target(except,c_it->second,instruction.code.op0());
+        else
+          update_throw_target(except,c_it->second);
+      }
 
       // Save old number id
       old_id_number = new_id_number;
@@ -278,6 +283,28 @@ bool goto_symext::unexpected_handler()
   // If it wasn't included, we do nothing. The error message will be
   // shown to the user as there is a throw without catch.
   return false;
+}
+
+/*******************************************************************\
+
+Function: goto_symext::update_throw_target
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
+    goto_programt::targett target, exprt value)
+{
+  except->has_throw_target=true;
+  except->throw_target=target;
+
+  // We must update the value
+  ns.lookup(target->code.op0().identifier()).value=value;
 }
 
 /*******************************************************************\
