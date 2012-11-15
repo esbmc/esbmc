@@ -1,4 +1,5 @@
 #include <iostream>
+#include <cassert>
 using namespace std;
 
 class E {
@@ -21,5 +22,6 @@ int main() try {
   B bull;
 }
 catch (E& e) {
+  assert(0);
   cout << e.error << endl;
 }
