@@ -292,8 +292,7 @@ Function: goto_symext::update_throw_target
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
     goto_programt::targett target, exprt value)
 {
-  except->has_throw_target=true;
-  except->throw_target=target;
+  update_throw_target(except, target);
 
   // We must update the value
   ns.lookup(target->code.op0().identifier()).value=value;
@@ -316,6 +315,17 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
 {
   except->has_throw_target=true;
   except->throw_target=target;
+
+  if(!options.get_bool_option("extended-try-analysis"))
+  {
+    statet::goto_state_listt &goto_state_list =
+      cur_state->top().goto_state_map[target];
+
+    goto_state_list.push_back(statet::goto_statet(*cur_state));
+
+    statet::goto_statet &new_state = goto_state_list.back();
+    cur_state->guard.make_false();
+  }
 }
 
 /*******************************************************************\
