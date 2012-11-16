@@ -984,7 +984,7 @@ bool string::operator>(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
 	int i;
-	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
 		if (this->str[i] > a.str[i])
 			return true;
 	}
@@ -1032,7 +1032,7 @@ bool string::operator<(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
 	int i;
-	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
 		if (this->str[i] < a.str[i])
 			return true;
 	}
@@ -1080,7 +1080,7 @@ bool string::operator >=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
 	int i;
-	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
 		if (this->str[i] >= a.str[i])
 			return true;
 	}
@@ -1102,7 +1102,7 @@ bool string::operator <=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
 	int i;
-	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
 		if (this->str[i] <= a.str[i])
 			return true;
 	}
