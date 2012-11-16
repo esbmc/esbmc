@@ -177,7 +177,6 @@ std::ostream& goto_programt::output_instruction(
       unsigned i=0;
       const irept::subt &exception_list=
         it->code.find("exception_list").get_sub();
-      assert(it->targets.size()==exception_list.size());
 
       for(instructiont::targetst::const_iterator
           gt_it=it->targets.begin();
