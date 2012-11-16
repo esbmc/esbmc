@@ -6,6 +6,19 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
+#define Q_OBJECT
+#define signals public
+#define slots
+#typedef qreal
+#define opacity
+#define READ
+#define opacity
+#define WRITE
+#define setOpacity
+//#define setPosition
+
+//qreal position;
+
 class QObject
 {
 public:
