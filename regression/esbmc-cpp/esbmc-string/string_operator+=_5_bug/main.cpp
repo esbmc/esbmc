@@ -1,8 +1,6 @@
 // string assigning
-
 //Case test operator
 //TEST FAILS
-
 #include <iostream>
 #include <string>
 #include <cassert>
@@ -16,7 +14,7 @@ int main ()
   str1 += str2;
   str3 = ", y, " + 'z';
   str1 += str3;
-  
+
   assert(str1 != "Test string: x, y, z"); //added
   cout << str1  << endl;
   return 0;

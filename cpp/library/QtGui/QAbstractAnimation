@@ -6,7 +6,9 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-class QAbstractAnimation{
+#include "QObject"
+
+class QAbstractAnimation : QObject{
 public:
 	QAbstractAnimation(){}
 	~QAbstractAnimation(){}

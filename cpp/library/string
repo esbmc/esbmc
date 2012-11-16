@@ -804,6 +804,7 @@ string::string(char *s) {
 
 string::string(const char * s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < strlen(s), "string overflow");
+	__ESBMC_HIDE: __ESBMC_assert( s != NULL, "invalid string");
 	int i;
 	str = new char[n + 1];
 	_size = n;
@@ -814,14 +815,13 @@ string::string(const char * s, size_t n) {
 
 string::string(string& s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
-	int i;
-	str = new char[n + 1];
-	_size = n;
-	if (n > s.length())
-		n = s.length();
-	for (i = 0; i < _size; i++)
-		str[i] = s.str[i];
-	str[i] = '\0';
+	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
+	int i,j;
+	this->str = new char[s._size - n + 1];
+	this->_size = s._size - n;
+	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
+		this->str[j] = s.str[i];
+	str[j] = '\0';
 }
 
 string::string(int len) {
@@ -984,16 +984,22 @@ bool string::operator!=(string& lhs, const char* rhs) {
 bool string::operator>(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() > a.length())
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
+		if (this->str[i] > a.str[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator>(const char* a) {
 	__ESBMC_HIDE: __ESBMC_assert(a != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() > strlen(a))
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+		if (this->str[i] > a[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1002,8 +1008,11 @@ bool string::operator>(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
-	if (strlen(lhs) > rhs.length())
-		return true;
+	int i;
+	for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++){
+		if (lhs[i] > rhs.str[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1012,26 +1021,33 @@ bool string::operator>(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
-	if (lhs.length() > strlen(rhs))
-		return true;
+	int i;
+	for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++){
+		if (lhs.str[i] > rhs[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator<(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() < a.length()) {
-		return true;
-	} else {
-		return false;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
+		if (this->str[i] < a.str[i])
+			return true;
 	}
+	return false;
 }
 
 bool string::operator<(const char* a) {
 	__ESBMC_HIDE: __ESBMC_assert(a != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() < strlen(a))
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+		if (this->str[i] < a[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1040,8 +1056,11 @@ bool string::operator<(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
-	if (strlen(lhs) < rhs.length())
-		return true;
+	int i;
+	for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++){
+		if (lhs[i] < rhs.str[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1050,41 +1069,56 @@ bool string::operator<(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
-	if (lhs.length() < strlen(rhs))
-		return true;
+	int i;
+	for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++){
+		if (lhs.str[i] < rhs[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator >=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() >= a.length())
+	int tmp = strcmp(this->str, a.str);
+	if (tmp > 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator>=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() >= (strlen(lhs)))
+	int tmp = strcmp(this->str, lhs);
+	if (tmp > 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator <=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() <= a.length())
+	int tmp = strcmp(this->str, a.str);
+	if (tmp < 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator <=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() <= strlen(lhs))
+	int tmp = strcmp(this->str, lhs);
+	if (tmp < 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 size_t string::length() const {

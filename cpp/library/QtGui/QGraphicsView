@@ -21,7 +21,9 @@ class QGraphicsView
 {
 public:
 	QGraphicsView ( QWidget * parent = 0 ){}
-	QGraphicsView ( QGraphicsScene * scene, QWidget * parent = 0 ){}
+	QGraphicsView ( QGraphicsScene * scene, QWidget * parent = 0 ){
+		__ESBMC_assert(scene!=NULL, "invalid parameter");
+	}
 	void	show (){}
 	~QGraphicsView (){}
 };

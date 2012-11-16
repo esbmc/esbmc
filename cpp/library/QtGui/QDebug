@@ -9,4 +9,4 @@ Author: Felipe Rodrigues
 class QDebug{
 	QDebug(){}
 	~QDebug(){}
-}
+};
