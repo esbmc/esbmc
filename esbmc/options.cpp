@@ -100,6 +100,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"memlimit",		string,		""	},
 { 0,	"state-hashing",	switc,		""	},
 { 0,	"symex-trace",		switc,		""	},
+{ 0,  "extended-try-analysis",    switc,    ""  },
 { 0,	"core-size",		number,		""	},
 { 0,	"smtlib-ileave-num",	number,		""	},
 { 0,	"direct-interleavings",	switc,		""	},
