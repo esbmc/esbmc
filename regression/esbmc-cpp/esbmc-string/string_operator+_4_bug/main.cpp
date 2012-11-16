@@ -11,7 +11,7 @@ int main ()
   str1 = "Test string: ";   // c-string
   str2 = 'x';               // single character
   str3 = str1 + str2;       // string
-  
+
   assert(str3 != "Test string: x"); 		//added
   cout << str3  << endl;
   return 0;
