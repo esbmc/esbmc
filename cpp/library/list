@@ -178,7 +178,7 @@ public:
 		}
 	}
 
-	iterator begin (){
+	iterator& begin (){
 		iterator it;
 		it.it = this->head;
 		it.it_size = this->_size;
@@ -287,6 +287,7 @@ public:
 	iterator insert(iterator position, const T& x){
 		node* tmp;
 		tmp = new node(x, position.it->prev, position.it);
+		position.it->prev->next = tmp;
 		position.it->prev = tmp;
 		position.it_size++;
 		this->_size++;
@@ -346,8 +347,10 @@ public:
 		if (tmp_ptr != NULL){
 			position.it = tmp_ptr->next;
 			position.it_size = this->_size--;
-			tmp_ptr->prev->next = tmp_ptr->next;
-			tmp_ptr->next->prev = tmp_ptr->prev;
+			if(tmp_ptr->prev != NULL)
+				tmp_ptr->prev->next = tmp_ptr->next;
+			if(tmp_ptr->next != NULL)
+				tmp_ptr->next->prev = tmp_ptr->prev;
 		}
 		return position;
 	}
@@ -405,14 +408,58 @@ public:
 	}
 	void clear(){
 		this->_size = 0;
-		this->head = NULL;
-		this->tail = NULL;
+		this->head = new node(0, NULL, NULL);
+		this->tail = new node(0, NULL, NULL);
 	}
 
 	// list operations:
-	void splice(iterator position, list<T>& x);
-	void splice(iterator position, list<T>& x, iterator i);
-	void splice(iterator position, list<T>& x, iterator first, iterator last);
+	void splice(iterator position, list<T>& x){
+		list<T>::iterator it1 = x.begin();
+		node* tmp;
+		int i;
+		for(i=0;i<it1.it_size;i++){
+			tmp = new node(it1.it->data, position.it->prev, position.it);
+			position.it->prev->next = tmp;
+			position.it->prev = tmp;
+			position.it_size++;
+			this->_size++;
+			it1++;
+		}
+		x.clear();
+	}
+	void splice(iterator position, list<T>& x, iterator i){
+		node* tmp;
+		tmp = new node(i.it->data, position.it->prev, position.it);
+		if (position.it->prev != NULL)
+			position.it->prev->next = tmp;
+		position.it->prev = tmp;
+		position.it_size++;
+		this->_size++;
+		x.erase(i);
+	}
+	void splice(iterator& position, list<T>& x, iterator first, iterator last){/*
+		list<T>::iterator tmp_next = first;
+		while(first.it != last.it){
+			tmp_next++;
+			if(first.it->prev != NULL)
+				first.it->prev->next = first.it->next;
+			if(first.it->next != NULL)
+				first.it->next->prev = first.it->prev;
+			first.it->next = this->head;
+			//if (first.it->next == NULL)
+				//this->tail = first.it;
+			first.it->prev = position.it->prev;
+			//if (first.it->prev == NULL)
+				//this->head = first.it;
+			position.it->prev =first.it;
+			x._size--;
+			this->_size++;
+			position.it_size++;
+			first.it = tmp_next.it;
+			if (first.it == NULL)
+				break;
+		}
+	*/}
 	void remove(const T& value){
 		if(value == this->head->data){
 			this->pop_front();
@@ -444,10 +491,34 @@ public:
 		void unique ( Predicate pred );
 	void merge(list<T>& x);
 	void sort();
-	void reverse(){}
+	void reverse(){/*
+		list<T> list;
+		int i;
+		for(i = 0; i < this->_size; i++){
+			list.push_back(this->tail->data);
+			this->tail = this->tail->prev;
+		}
+		this->_size = list._size;
+		this->head = list.head;
+		assert(this->head->data == 9);
+		this->tail = list.tail;
+		assert(this->tail->data == 1);
+		this->tail = this->tail->prev;
+		assert(this->tail->data == 2);
+		//assert(tmp_two == this->tail);
+		//tmp_two = this->head;
+		//this->head = this->tail;
+		//this->tail = tmp_two;
+	*/}
 };
 
   void advance (list<unsigned int>::iterator& it, int n){
+	  int i;
+	  for(i = 0; i < n; i++)
+		  it.it = it.it->next;
+  }
+
+  void advance (list<int>::iterator& it, int n){
 	  int i;
 	  for(i = 0; i < n; i++)
 		  it.it = it.it->next;
