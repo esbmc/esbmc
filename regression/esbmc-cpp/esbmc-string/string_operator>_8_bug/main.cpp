@@ -10,5 +10,4 @@ int main(){
 	str3 = string("AA", 6);
 	str4 = string('A',12);
 	assert( (str1 > str2)&&(str1 > str3)&&(str1 > str4) );
-
 }
