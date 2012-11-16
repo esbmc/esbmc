@@ -220,7 +220,7 @@ goto_symext::symex_step(reachability_treet & art)
       }
 
       symex_function_call(deref_code);
-    } else   {
+    } else {
       cur_state->source.pc++;
     }
     break;
