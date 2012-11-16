@@ -30,16 +30,6 @@ int main ()
 
   first.merge(second);
   assert(first != merged);
-  
-  second.push_back (2.1);
-  merged.assign(md2,md2+7);
-  first.merge(second,mycomparison);
-  assert(merged != first);
-
-  cout << "first contains:";
-  for (list<double>::iterator it=first.begin(); it!=first.end(); ++it)
-    cout << " " << *it;
-  cout << endl;
 
   return 0;
 }
