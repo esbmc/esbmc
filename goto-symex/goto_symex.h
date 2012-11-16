@@ -387,7 +387,7 @@ protected:
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw();
+  bool symex_throw();
 
   /** Register exception handler on stack. */
   void symex_catch();
@@ -598,10 +598,16 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  // Exception Handling
+  /* Exception Handling.
+   * This will stack the try-catch blocks, so we always know which catch
+   * we should jump.
+   */
   typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
+
+  /** Stack of try-catch blocks. */
   stack_catcht stack_catch;
 
+  /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
 };
 

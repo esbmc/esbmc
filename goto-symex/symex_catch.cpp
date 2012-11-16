@@ -91,7 +91,7 @@ Function: goto_symext::symex_throw
 
 \*******************************************************************/
 
-void goto_symext::symex_throw()
+bool goto_symext::symex_throw()
 {
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
@@ -110,10 +110,9 @@ void goto_symext::symex_throw()
           exceptions_thrown.begin()->id().as_string() +
           " but there is not catch for it.";
       claim(false_exprt(), msg);
-      cur_state->source.pc++;
+      return true;
     }
-
-    return;
+    return false;
   }
 
   // Get the list of catchs
@@ -121,7 +120,7 @@ void goto_symext::symex_throw()
 
   // Handle rethrows
   if(!handle_rethrow(exceptions_thrown, instruction))
-    return;
+    return false;
 
   // It'll be used for catch ordering when throwing
   // a derived object with multiple inheritance
@@ -135,8 +134,7 @@ void goto_symext::symex_throw()
     // Handle throw declarations
     if(!handle_throw_decl(except, e_it->id()))
     {
-      cur_state->source.pc++;
-      return;
+      return true;
     }
 
     // Search for a catch with a matching type
@@ -195,18 +193,12 @@ void goto_symext::symex_throw()
       const std::string &msg="Throwing an exception of type " +
         exceptions_thrown.begin()->id().as_string() + " but there is not catch for it.";
       claim(false_exprt(), msg);
-
-      cur_state->source.pc++;
     }
   }
-  else
-  {
-    // save last throw for rethrow handling
+  else // save last throw for rethrow handling
     last_throw = &instruction;
 
-    // Update source counter
-    cur_state->source.pc++;
-  }
+  return true;
 }
 
 /*******************************************************************\
