@@ -9,5 +9,5 @@ int main(){
   assert(str1.length() == 4);
   str2 = string(str1, 2);
   assert(str2.length() == 2);
-  assert(str2 > str1);
+  assert(str1 > str2);
 }
