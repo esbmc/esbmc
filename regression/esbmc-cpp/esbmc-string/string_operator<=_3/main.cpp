@@ -7,6 +7,6 @@ int main(){
   aux = 'D';
   string str1, str2;
   str1 = string("D");
-  str2 = string(str1, 2);
+  str2 = string(str1);
   assert((aux <= str2)&&(aux <= str1));
 }
