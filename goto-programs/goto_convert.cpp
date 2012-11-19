@@ -953,14 +953,13 @@ void goto_convertt::convert_decl(
   else
   {
     exprt initializer;
-
     codet tmp(code);
     initializer=code.op1();
     tmp.operands().resize(1); // just resize the vector, this will get rid of op1
 
     goto_programt sideeffects;
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
+
+
 
     if(options.get_bool_option("atomicity-check"))
     {
@@ -976,12 +975,47 @@ void goto_convertt::convert_decl(
         exprt op0 = initializer.op0();
         initializer.swap(op0);
         //std::cout << "initializer: "<< initializer << std::endl;
-        //std::cout << "################################" << std::endl;
-        remove_sideeffects(initializer, dest);
-        dest.output(std::cout);
+        if(!code.op1().is_empty())
+        {
+          exprt function = code.op1();
+          // We must check if the is a exception list
+          // If there is, we must throw the exception
+          if (function.has_operands())
+          {
+            if (function.op0().has_operands())
+            {
+              const exprt& exception_list=
+                  static_cast<const exprt&>(function.op0().op0().find("exception_list"));
+
+              if(exception_list.is_not_nil())
+              {
+                // Let's create an instruction for bad_cast
+
+                // Add new instruction throw
+                goto_programt::targett t=dest.add_instruction(THROW);
+                t->code=codet("cpp-throw");
+                t->location=function.location();
+                t->code.set("exception_list", exception_list);
+              }
+            }
+          }
+          else
+          {
+            remove_sideeffects(initializer, dest);
+            dest.output(std::cout);
+          }
+
+          // break up into decl and assignment
+          copy(tmp, OTHER, dest);
+          code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
+          assign.location()=tmp.location();
+          copy(assign, ASSIGN, dest);
+          return;
+        }
       }
     }
-
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
