@@ -3,7 +3,7 @@
 #include <set>
 using namespace std;
 
-main ()
+int main ()
 {
   int myints[]={12,75,10,32,20,25};
   set<int> first (myints,myints+3);     // 10,12,75

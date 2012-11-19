@@ -1,3 +1,4 @@
+#include <cassert>
 
 template < class T >
 T teste(T value1, T value2)
