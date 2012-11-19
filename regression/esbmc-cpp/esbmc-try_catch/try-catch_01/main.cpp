@@ -4,7 +4,7 @@
 using namespace std;
 
 void myfunction () {
-  throw 1;   // throws char (not in exception-specification)
+  throw 1;
 }
 
 int main (void) {
