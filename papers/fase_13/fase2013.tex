@@ -778,8 +778,8 @@ software and not that of hardware).
 \label{inheritance-and-polymorphism}
 %------------------------------------------------
 
-Modeling C++ features like inheritance and polymorphism
-makes static analysis difficult to implement.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 \comment{
 Inheritance is one of the main benefits of object-oriented paradigm,
 which allows a class (derived class) absorbs data and behavior
@@ -787,40 +787,46 @@ from existing classes (base class) and thus enhances it with new features.
 This is the vital concept behind the creation of reusable software components
 and has received much attention because it is one of the promising ways to
 improve software quality.}
-In contrast to Java, which only allows single inheritance, where derived classes have only one base
-class, C++ also allows multiple inheritance, where a class may inherit from one
-or more unrelated base classes. This particular feature makes C++ programs
-harder to model check than programs in other object-oriented programming
-languages (e.g., Java). In this case, we have to replicate the methods and attributes of the base
-classes to the inherited class to have direct access to them,
-which thus disallows the direct use of tools already created
-to other programming languages.
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Modeling C++ features like inheritance and polymorphism
+makes static analysis difficult to implement.
+In contrast to Java, which only allows single inheritance, where derived classes 
+have only one base class, C++ also allows multiple inheritance, where a class 
+may inherit from one or more unrelated base classes. This particular feature 
+makes C++ programs harder to model check than programs in other object-oriented 
+programming languages (e.g., Java) since it disallows the direct use of tools 
+already created to other programming languages. To deal with inheritance in ESBMC++, 
+we simply replicate the methods and attributes of the base classes to the inherited 
+class to have direct access to them.
 
 If a class inherits from a base class that does not contain virtual methods,
 then we call this as \textit{replicated inheritance}. If there is a path from
-class X to class Y whose first edge is virtual, then we call this as \textit{shared inheritance}.
-A formal description to represent the relationship between the classes
-can be described by the class hierarchy graph (CHG). This graph $\zeta$ is composed of a tuple
-$ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} is the set of classes,
-$\prec_s $ refers to shared inheritance edges, and $\prec_r$ are replicated inheritance edge.
-$\prec_{s}$ and $\prec_{r}$ are the set of edges that represent inheritance relationship between
-classes and $\subseteq \textbf{C} \times \textbf{C}$.
-$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$)
-are a partially ordered set~\cite{Neggers99} and $\leq_{sr}$ is anti-symmetric, thus if one element A of the set preceeds B,
-the opposite relation could not exist.
+class $\mathit{X}$ to class $\mathit{Y}$ whose first edge is virtual, then 
+we call this as \textit{shared inheritance}. A formal description to represent 
+the relationship between classes can be described by the class hierarchy graph 
+(CHG). This graph $\zeta$ is composed of a tuple $\textless \mathit{C}, \prec_{s}, \prec_{r}>$, 
+$\mathit{C}$ is the set of classes, $\prec_s $ refers to \textit{shared inheritance} edges, 
+and $\prec_r$ are \textit{replicated inheritance} edge. The symbols $\prec_{s}$ and $\prec_{r}$
+are the set of edges that represent the inheritance relationship between
+classes and $\subseteq \mathit{C} \times \mathit{C}$.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\mathit{C}, \leq_{sr}$)
+are a partially ordered set~\cite{Neggers99} and $\leq_{sr}$ is anti-symmetric (i.e., if one 
+element A of the set preceeds B, the opposite relation could not exist).
 
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
-that represents the \textit{Shape} class hierarchy, that contains multiple inheritance.
+that represents the \textit{Shape} class hierarchy that contains multiple inheritance.
 The Rectangle class relation can be formalized by
 ($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$,
 $\left(C, \left\langle Rectangle, Display \right\rangle \right)$).
 Our tool creates an intermediate representation (IR) for single and multiple inheritance, handling
-replicated and shared inheritance, see Figure~\ref{figure:multiple-inheritance-IR}.
+replicated and shared inheritance as shown in Figure~\ref{figure:multiple-inheritance-IR}.
 
 \begin{figure}[ht]
 \centering
 \includegraphics[scale=0.4]{figures/inheritance_uml}
-\caption{Shape class hierarchy UML diagram}
+\caption{\textit{Shape} class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
 
@@ -842,7 +848,7 @@ components:
 \label{figure:multiple-inheritance-IR}
 \end{figure}
 
-This model transforms all the classes in structures and joins all
+This IR model transforms all the classes in structures and joins all
 methods and attributes of its parent classes. This approach has
 the advantage of having direct access to the attributes and methods
 of the derived class and thus allows an easier validation, as the tool
@@ -850,39 +856,29 @@ does not look for attributes or methods from base classes on each access.
 On the other hand, we replicate information to any new class, thus wasting
 memory resources.
 
-Another important feature from object-oriented programing that our tool
-supports is the concept of polymorphism. Polymorphism allows variable instances to be
+Another important feature from object-oriented programming that our tool
+supports is the concept of polymorphism, which allows the creation of 
+reusable code by programmers by changing only specific features from the base class. 
+In this sense, polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
-It is the principle whereby two or more derived classes from the same base
-class can invoke methods with same signature but distinct behaviors, specialized
-for each derived class, using for this one reference to each object of this base class type.
-The decision of which method must be used, according to the type of the
-derived class, is chosen in run-time using the late binding.
+In the implementation of ESBMC++, we thus consider that two or more derived classes 
+from the same base class can invoke methods with the same signature but distinct behaviors, 
+specialized for each derived class, using for this one reference to each object of 
+this base class type. The decision of which method must be used, according to the type 
+of the derived class, is chosen in run-time using the late binding of ESBMC++.
 
-The advantage is the creation of reusable code by programmers by changing only
-specific features from the base class.
 
-The intermediate representation provides a model to treat polymorphism in
+The intermediate representation provides a model to handle polymorphism in
 order to simplify the class hierarchy,
 easing the access to methods with the same name without ambiguity between
 base and derived classes.
 Our tool can handle the polymorphic area method using this representation,
-as shown in (\ref{area-class}).
-
-Our tool also supports the indirect inheritance, which is a class that
-inherits features from a derived class with one or more classes
-not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
-$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
-thus Square class can access features from \textit{Shape} class,
-but they are not directly connected. We tackle this problem by
-looking for the features using depth search from the derived to base classes
-and adding them to our intermediate representation if necessary. 
-Figure~\ref{figure:IR_uml_square} shows this feature in symex representation.
-
-
+as shown in (\ref{area-class-c}) and (\ref{area-class-p})3), using the background
+theories of the SMT solvers.
+%
 \begin{equation}
-\label{area-class}
+\label{area-class-c}
 C := \left [ \begin{array}{ll}
                 w_{0} = 10 \wedge h_{0} = 10 \\
 		\wedge j_{1} = \left(j_{0} = Rectangle@Rectangle\right) \\
@@ -893,11 +889,25 @@ C := \left [ \begin{array}{ll}
 		\wedge j_{6}.width = \left(j_{5}.width = 10\right) \\
 		\wedge j_{7} = \left(j_{6}.width * j_{6}.width\right) \\
               \end{array} \right ],  \\
+\end{equation}
+%
+\begin{equation}
+\label{area-class-p}
 P := \left [ \begin{array}{ll}
                 j6_{valid\_object}\\
                 \wedge j7 = 100 \\
               \end{array} \right ]  \\
 \end{equation}
+%
+Our tool also supports the indirect inheritance, which is a class that
+inherits features from a derived class with one or more classes
+not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
+$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
+thus Square class can access features from \textit{Shape} class,
+but they are not directly connected. We tackle this problem by
+looking for the features using a depth search from the derived to base classes
+and adding them to our intermediate representation if necessary. 
+Figure~\ref{figure:IR_uml_square} shows this feature in symex representation.
 
 
 \begin{figure}[h]
@@ -1486,6 +1496,11 @@ J.~Yang, G.~Balakrishman, N.~Maeda, F.~Ivan\v{c}i\'c, A.~Gupta, N.~Sinha, S.~San
 P.~Deitel, H.~Deitel
 \newblock {C++ How to Program}
 \newblock Prentice Hall, 5th Edition, 2006.
+
+\bibitem{Neggers99}
+N.~Joseph and K.~Hee.
+\newblock {Basic Posets}
+\newblock World Scientific Pub Co Inc, First Edition, 1999.
 
 \bibitem{Alexander02}
 R. T.~Alexander, J.~Offutt and J. M.~Bieman. .
