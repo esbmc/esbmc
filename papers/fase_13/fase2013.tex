@@ -780,50 +780,42 @@ software and not that of hardware).
 
 Modeling C++ features like inheritance and polymorphism
 makes static analysis difficult to implement.
-In contrast to Java, which only allows single inheritance, 
-where derived classes have only one base
-class, C++ also allows multiple inheritance, 
-where a class may inherit from one or more unrelated base classes. 
-This particular feature makes C++ programs
-harder to model check than programs in other object-oriented (OO) programming
-languages (e.g., Java). In this case, we simply replicate the methods and attributes 
-of the base classes to the inherited class to have direct access to them. 
-%%which thus disallows the direct use of tools already created 
-%%to other programming languages.
+\comment{
+Inheritance is one of the main benefits of object-oriented paradigm,
+which allows a class (derived class) absorbs data and behavior
+from existing classes (base class) and thus enhances it with new features.
+This is the vital concept behind the creation of reusable software components
+and has received much attention because it is one of the promising ways to
+improve software quality.}
+In contrast to Java, which only allows single inheritance, where derived classes have only one base
+class, C++ also allows multiple inheritance, where a class may inherit from one
+or more unrelated base classes. This particular feature makes C++ programs
+harder to model check than programs in other object-oriented programming
+languages (e.g., Java). In this case, we have to replicate the methods and attributes of the base
+classes to the inherited class to have direct access to them,
+which thus disallows the direct use of tools already created
+to other programming languages.
 
 If a class inherits from a base class that does not contain virtual methods,
 then we call this as \textit{replicated inheritance}. If there is a path from
-class $\mathit{X}$ to class $\mathit{Y}$ whose first edge is virtual, 
-then we call this as \textit{shared inheritance}.
+class X to class Y whose first edge is virtual, then we call this as \textit{shared inheritance}.
 A formal description to represent the relationship between the classes
-can be described by the class hierarchy graph (CHG). 
-This graph $\zeta$ is composed of a tuple
-$ \textless \mathit{C}, \prec_{s}, \prec_{r}>$, 
-$\mathit{C}$ is the set of classes,
-$\prec_s $ refers to \textit{shared inheritance} edges, 
-and $\prec_r$ are \textit{replicated inheritance} edges.
-The symbols $\prec_{s}$ and $\prec_{r}$ are the set of 
-edges that represent inheritance relationship between
-classes and $\subseteq \mathit{C} \times \mathit{C}$.
-$\prec_{sr} = \prec_s \bigcup \prec_r$ and 
-$\leq_{sr} = (\prec_{sr})^*$. We denote ($\mathit{C}, \leq_{sr}$)
-as a partially ordered set and we consider that $\leq_{sr}$ 
-is anti-symmetric.
+can be described by the class hierarchy graph (CHG). This graph $\zeta$ is composed of a tuple
+$ \textless \textbf{C}, \prec_{s}, \prec_{r}>$, \textbf{C} is the set of classes,
+$\prec_s $ refers to shared inheritance edges, and $\prec_r$ are replicated inheritance edge.
+$\prec_{s}$ and $\prec_{r}$ are the set of edges that represent inheritance relationship between
+classes and $\subseteq \textbf{C} \times \textbf{C}$.
+$\prec_{sr} = \prec_s \bigcup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$. ($\textbf{C}, \leq_{sr}$)
+are a partially ordered set~\cite{Neggers99} and $\leq_{sr}$ is anti-symmetric, thus if one element A of the set preceeds B,
+the opposite relation could not exist.
 
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
-that represents the \textit{Shape} class hierarchy that contains 
-multiple inheritance. The Rectangle class relation can be formalized by
-($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$, 
-$\left(C, \left\langle Rectangle, Display \right\rangle \right)$). 
-Our tool creates an intermediate representation for single and multiple inheritance, 
-handling replicated and shared inheritance. It transforms all the classes in structures 
-and joins all methods and attributes of its parent classes. This approach has
-the advantage of having direct access to the attributes and methods
-of the derived class and thus allows an easier validation, as the tool
-does not look for attributes or methods from base classes on each access.
-On the other hand, we replicate information to any new class, thus wasting
-memory resources.
-
+that represents the \textit{Shape} class hierarchy, that contains multiple inheritance.
+The Rectangle class relation can be formalized by
+($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$,
+$\left(C, \left\langle Rectangle, Display \right\rangle \right)$).
+Our tool creates an intermediate representation (IR) for single and multiple inheritance, handling
+replicated and shared inheritance, see Figure~\ref{figure:multiple-inheritance-IR}.
 
 \begin{figure}[ht]
 \centering
@@ -833,24 +825,32 @@ memory resources.
 \end{figure}
 
 
-%\begin{figure}[h]
-%\centering
-%\begin{minipage}{0.9\textwidth}
-%\begin{lstlisting}[style=nonumbers]
-%cpp::struct.Rectangle
-%    type:  struct
-%      * name: cpp::struct.Rectangle
-%components:
-%        0: name: cpp::struct.Shape::@vtable_pointer
-%        1: name: cpp::struct.Display::@vtable_pointer
-%        2: name: cpp::struct.Rectangle::@vtable_pointer
-%\end{lstlisting}
-%\end{minipage}
-%\caption{Multiple Inheritance: Intermediate Representation}
-%\label{figure:multiple-inheritance-IR}
-%\end{figure}
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.9\textwidth}
+\begin{lstlisting}[style=nonumbers]
+cpp::struct.Rectangle
+    type:  struct
+      * name: cpp::struct.Rectangle
+components:
+        0: name: cpp::struct.Shape::@vtable_pointer
+        1: name: cpp::struct.Display::@vtable_pointer
+        2: name: cpp::struct.Rectangle::@vtable_pointer
+\end{lstlisting}
+\end{minipage}
+\caption{Multiple Inheritance: Intermediate Representation}
+\label{figure:multiple-inheritance-IR}
+\end{figure}
 
-Another important feature from OO programing that our tool
+This model transforms all the classes in structures and joins all
+methods and attributes of its parent classes. This approach has
+the advantage of having direct access to the attributes and methods
+of the derived class and thus allows an easier validation, as the tool
+does not look for attributes or methods from base classes on each access.
+On the other hand, we replicate information to any new class, thus wasting
+memory resources.
+
+Another important feature from object-oriented programing that our tool
 supports is the concept of polymorphism. Polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
@@ -859,70 +859,95 @@ class can invoke methods with same signature but distinct behaviors, specialized
 for each derived class, using for this one reference to each object of this base class type.
 The decision of which method must be used, according to the type of the
 derived class, is chosen in run-time using the late binding.
+
 The advantage is the creation of reusable code by programmers by changing only
 specific features from the base class.
 
-The intermediate representation (IR) of our tool provides a model to handle 
-polymorphism in order to simplify the class hierarchy. It thus makes 
-easier the access to methods with the same name without ambiguity between
-base and derived classes. Our tool can handle the polymorphic area method 
-using this IR, as shown in Figure~\ref{figure:IR_uml_rec}.
-%
-\begin{figure}[h]
-\centering
-\begin{minipage}{0.9\textwidth}
-\begin{lstlisting}[style=nonumbers]
-cpp::struct.Rectangle
-    type:  struct
-      * name: cpp::struct.Rectangle
-methods:
-        0: name: cpp::struct.Shape::area(this)
-        1: name: cpp::struct.Display::plot2D(this)
-        2: name: cpp::struct.Rectangle::area(this)
-\end{lstlisting}
-\end{minipage}
-\caption{Intermediate Representation of Rectangle class}
-\label{figure:IR_uml_rec}
-\end{figure}
-%
-It also supports the indirect inheritance, which is a class that
+The intermediate representation provides a model to treat polymorphism in
+order to simplify the class hierarchy,
+easing the access to methods with the same name without ambiguity between
+base and derived classes.
+Our tool can handle the polymorphic area method using this representation,
+as shown in (\ref{area-class}).
+
+Our tool also supports the indirect inheritance, which is a class that
 inherits features from a derived class with one or more classes
 not directly connected. In Figure~\ref{figure:uml_diagram}, \linebreak
 $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$
 thus Square class can access features from \textit{Shape} class,
 but they are not directly connected. We tackle this problem by
 looking for the features using depth search from the derived to base classes
-and adding them to our intermediate representation (if necessary) 
-as shown in Figure~\ref{figure:IR_uml_square}.
+and adding them to our intermediate representation if necessary. 
+Figure~\ref{figure:IR_uml_square} shows this feature in symex representation.
 
-%\comment{
+
+\begin{equation}
+\label{area-class}
+C := \left [ \begin{array}{ll}
+                w_{0} = 10 \wedge h_{0} = 10 \\
+		\wedge j_{1} = \left(j_{0} = Rectangle@Rectangle\right) \\
+		\wedge j_{2}.width = \left(j_{1}.width = 10\right) \\
+		\wedge j_{3}.height = \left(j_{2}.height = 10\right) \\
+		\wedge j_{4} = \left(j_{3} = Rectangle@Square\right) \\
+		\wedge j_{5} = \left(j_{4} = Square@Square\right) \\
+		\wedge j_{6}.width = \left(j_{5}.width = 10\right) \\
+		\wedge j_{7} = \left(j_{6}.width * j_{6}.width\right) \\
+              \end{array} \right ],  \\
+P := \left [ \begin{array}{ll}
+                j6_{valid\_object}\\
+                \wedge j7 = 100 \\
+              \end{array} \right ]  \\
+\end{equation}
+
+
 \begin{figure}[h]
 \centering
-\begin{minipage}{0.9\textwidth}
+\begin{minipage}{1.05\textwidth}
 \begin{lstlisting}[style=nonumbers]
-cpp::struct.Square
-    type:  struct
-      * name: cpp::struct.Square
-methods:
-        0: name: cpp::struct.Shape::area(this)
-        1: name: cpp::struct.Rectangle::area(this)
-        2: name: cpp::struct.Square::area(this)
-\end{lstlisting}
+this@1!0&0#1 == (struct Rectangle *)(&dynamic_1_value)
+w@1!0&0#1 == 10
+h@1!0&0#1 == 10
+dynamic_1_value&0#1 == 
+   (dynamic_1_value&0#0 WITH 
+   [Rectangle@vtable_pointer:=&virtual_table::Rectangle@Rectangle])
+dynamic_1_value&0#2 == 
+   (dynamic_1_value&0#1 WITH 
+   [width:=10])
+dynamic_1_value&0#3 == 
+   (dynamic_1_value&0#2 WITH 
+   [heigth:=10])
+dynamic_1_value&0#4 == 
+   (dynamic_1_value&0#3 WITH 
+   [Rectangle@vtable_pointer:=&virtual_table::Rectangle@Square])
+dynamic_1_value&0#5 == 
+   (dynamic_1_value&0#4 WITH 
+   [Square@vtable_pointer:=&virtual_table::Square@Square])
+dynamic_1_value&0#6 == 
+   (dynamic_1_value&0#5 WITH 
+   [width:=10])
+sqre@1!0&0#1 == &dynamic_1_value
+this@1!0&0#1 == &dynamic_1_value
+return_value@1!0&0#1 == 
+   dynamic_1_value&0#6.width * dynamic_1_value&0#6.width
+(assert)!__ESBMC_alloc&0#1[POINTER_OBJECT(&dynamic_1_value)] => 
+   return_value@1!0&0#1 == 100\end{lstlisting}
 \end{minipage}
 \caption{Intermediate Representation of Square class}
 \label{figure:IR_uml_square}
 \end{figure}
-%}
 
 In OO programming, the use of \textit{shared inheritance} is very common.
-In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to 
+In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to
 verify this kind of inheritance. If a class has pure virtual methods only,
-then this class does not contain implementation for these methods and they will 
+then this class does not contain implementation for these methods and they will
 thus be implemented in the derived classes. Otherwise, if a class has only virtual
 methods, it must contain an implementation for them or the verification will fail
-with a ``conversion error''. ESBMC++ also handles  virtual destructors successfully 
-and supports the default constructor creation. However, ESBMC++ currently does not 
-support dynamic cast.
+with a ``conversion error''. ESBMC++ also handles virtual destructors successfully
+and supports the default constructor creation. ESBMC++ currently
+supports dynamic cast between primitive types, same classes and from a derived 
+class to a base. The tool also handles with cast to a reference type, verifying the 
+correct use of bad\_cast thrown by dynamic cast.
+
 
 %--------------------------------------------
 \section{Exception Handling}
