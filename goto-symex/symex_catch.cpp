@@ -99,19 +99,26 @@ bool goto_symext::symex_throw()
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
 
+  // Log
+  std::cout << "*** Exception thrown of type "
+    << exceptions_thrown.begin()->id().as_string()
+    << " at file " << instruction.code.location().file()
+    << " line " << instruction.code.location().line() << std::endl;
+
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
   if(!stack_catch.size())
   {
-    if(!terminate_handler())
-    {
-      // An un-caught exception. Error
-      const std::string &msg="Throwing an exception of type " +
-        exceptions_thrown.begin()->id().as_string() +
-        " but there is not catch for it.";
-      claim(false_exprt(), msg);
-      return true;
-    }
+    if(!unexpected_handler())
+      if(!terminate_handler())
+      {
+        // An un-caught exception. Error
+        const std::string &msg="Throwing an exception of type " +
+            exceptions_thrown.begin()->id().as_string() +
+            " but there is not catch for it.";
+        claim(false_exprt(), msg);
+        return true;
+      }
     return false;
   }
 
@@ -120,17 +127,11 @@ bool goto_symext::symex_throw()
 
   // Handle rethrows
   if(!handle_rethrow(exceptions_thrown, instruction))
-    return false;
+    return true;
 
   // It'll be used for catch ordering when throwing
   // a derived object with multiple inheritance
   unsigned old_id_number=-1, new_id_number=0;
-
-  // Log
-  std::cout << "*** Exception thrown of type "
-    << exceptions_thrown.begin()->id().as_string()
-    << " at file " << instruction.code.location().file()
-    << " line " << instruction.code.location().line() << std::endl;
 
   codet catch_code("nil");
   for(irept::subt::const_iterator
@@ -139,9 +140,22 @@ bool goto_symext::symex_throw()
       e_it++)
   {
     // Handle throw declarations
-    if(!handle_throw_decl(except, e_it->id()))
+    switch(handle_throw_decl(except, e_it->id()))
     {
-      return true;
+      case 0:
+        return true;
+        break;
+
+      case 1:
+        return false;
+        break;
+
+      case 2:
+        break;
+
+      default:
+        assert(0);
+        break;
     }
 
     // Search for a catch with a matching type
@@ -345,7 +359,7 @@ Function: goto_symext::handle_throw_decl
 
 \*******************************************************************/
 
-bool goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
+int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
   const irep_idt &id)
 {
   // Check if we can throw the exception
@@ -354,24 +368,30 @@ bool goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
     goto_symex_statet::exceptiont::throw_list_sett::const_iterator
       s_it=except->throw_list_set.find(id);
 
+    // Is it allowed?
     if(s_it==except->throw_list_set.end())
     {
-      std::string msg=std::string("Trying to throw an exception ") +
-          std::string("but it's not allowed by declaration.\n\n");
-      msg += "  Exception type: " + id.as_string();
-      msg += "\n  Allowed exceptions:";
+      if(!unexpected_handler())
+      {
+        std::string msg=std::string("Trying to throw an exception ") +
+            std::string("but it's not allowed by declaration.\n\n");
+        msg += "  Exception type: " + id.as_string();
+        msg += "\n  Allowed exceptions:";
 
-      for(goto_symex_statet::exceptiont::throw_list_sett::iterator
-          s_it1=except->throw_list_set.begin();
-          s_it1!=except->throw_list_set.end();
-          ++s_it1)
-        msg+= "\n   - " + std::string((*s_it1).c_str());
+        for(goto_symex_statet::exceptiont::throw_list_sett::iterator
+            s_it1=except->throw_list_set.begin();
+            s_it1!=except->throw_list_set.end();
+            ++s_it1)
+          msg+= "\n   - " + std::string((*s_it1).c_str());
 
-      claim(false_exprt(), msg);
-      return false;
+        claim(false_exprt(), msg);
+        return 0;
+      }
+      else
+        return 1;
     }
   }
-  return true;
+  return 2;
 }
 
 /*******************************************************************\

@@ -409,7 +409,7 @@ protected:
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
    */
-  bool handle_throw_decl(goto_symex_statet::exceptiont* frame,
+  int handle_throw_decl(goto_symex_statet::exceptiont* frame,
     const irep_idt &id);
 
   /**
