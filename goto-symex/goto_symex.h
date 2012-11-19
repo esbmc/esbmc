@@ -609,6 +609,9 @@ protected:
 
   /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Flag to indicate if we are go into the unexpected flow. */
+  bool inside_unexpected;
 };
 
 #endif
