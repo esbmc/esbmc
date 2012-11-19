@@ -107,8 +107,8 @@ bool goto_symext::symex_throw()
     {
       // An un-caught exception. Error
       const std::string &msg="Throwing an exception of type " +
-          exceptions_thrown.begin()->id().as_string() +
-          " but there is not catch for it.";
+        exceptions_thrown.begin()->id().as_string() +
+        " but there is not catch for it.";
       claim(false_exprt(), msg);
       return true;
     }
@@ -126,6 +126,13 @@ bool goto_symext::symex_throw()
   // a derived object with multiple inheritance
   unsigned old_id_number=-1, new_id_number=0;
 
+  // Log
+  std::cout << "*** Exception thrown of type "
+    << exceptions_thrown.begin()->id().as_string()
+    << " at file " << instruction.code.location().file()
+    << " line " << instruction.code.location().line() << std::endl;
+
+  codet catch_code("nil");
   for(irept::subt::const_iterator
       e_it=exceptions_thrown.begin();
       e_it!=exceptions_thrown.end();
@@ -151,10 +158,9 @@ bool goto_symext::symex_throw()
 
       if(new_id_number < old_id_number)
       {
-        if(instruction.code.operands().size())
-          update_throw_target(except,c_it->second,instruction.code.op0());
-        else
-          update_throw_target(except,c_it->second);
+        update_throw_target(except,c_it->second,instruction.code);
+        catch_code=c_it->second->code;
+        catch_code.id(c_it->first);
       }
 
       // Save old number id
@@ -171,7 +177,11 @@ bool goto_symext::symex_throw()
         c_it=except->catch_map.find("void_ptr");
 
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
+        {
           update_throw_target(except,c_it->second); // Make the jump to void*
+          catch_code=c_it->second->code;
+          catch_code.id(c_it->first);
+        }
       }
       else
       {
@@ -179,7 +189,11 @@ bool goto_symext::symex_throw()
         c_it=except->catch_map.find("ellipsis");
 
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
+        {
           update_throw_target(except,c_it->second);
+          catch_code=c_it->second->code;
+          catch_code.id(c_it->first);
+        }
       }
     }
   }
@@ -196,7 +210,15 @@ bool goto_symext::symex_throw()
     }
   }
   else // save last throw for rethrow handling
+  {
     last_throw = &instruction;
+
+    // Log
+    std::cout << "*** Caught by catch("
+      << catch_code.id() << ") at file "
+      << catch_code.location().file()
+      << " line " << catch_code.location().line() << std::endl;
+  }
 
   return true;
 }
@@ -290,31 +312,14 @@ Function: goto_symext::update_throw_target
 \*******************************************************************/
 
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, exprt value)
-{
-  update_throw_target(except, target);
-
-  // We must update the value
-  ns.lookup(target->code.op0().identifier()).value=value;
-}
-
-/*******************************************************************\
-
-Function: goto_symext::update_throw_target
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target)
+    goto_programt::targett target, codet code)
 {
   except->has_throw_target=true;
   except->throw_target=target;
+
+  // We must update the value if it has operands
+  if(code.operands().size())
+    ns.lookup(target->code.op0().identifier()).value=code.op0();
 
   if(!options.get_bool_option("extended-try-analysis"))
   {

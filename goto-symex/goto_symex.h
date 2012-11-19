@@ -397,11 +397,7 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, exprt value);
-
-  /** Update throw target for catch ellipsis and void* . */
-  void update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target);
+    goto_programt::targett target, codet code=codet("nil"));
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
