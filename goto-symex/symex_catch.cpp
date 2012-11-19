@@ -99,6 +99,13 @@ bool goto_symext::symex_throw()
   const irept::subt &exceptions_thrown=
     instruction.code.find("exception_list").get_sub();
 
+  // Handle rethrows
+  if(!handle_rethrow(exceptions_thrown, instruction))
+    return true;
+
+  // Save the throw
+  last_throw = &instruction;
+
   // Log
   std::cout << "*** Exception thrown of type "
     << exceptions_thrown.begin()->id().as_string()
@@ -110,6 +117,7 @@ bool goto_symext::symex_throw()
   if(!stack_catch.size())
   {
     if(!unexpected_handler())
+    {
       if(!terminate_handler())
       {
         // An un-caught exception. Error
@@ -119,15 +127,12 @@ bool goto_symext::symex_throw()
         claim(false_exprt(), msg);
         return true;
       }
+    }
     return false;
   }
 
   // Get the list of catchs
   goto_symex_statet::exceptiont* except=&stack_catch.top();
-
-  // Handle rethrows
-  if(!handle_rethrow(exceptions_thrown, instruction))
-    return true;
 
   // It'll be used for catch ordering when throwing
   // a derived object with multiple inheritance
@@ -225,8 +230,6 @@ bool goto_symext::symex_throw()
   }
   else // save last throw for rethrow handling
   {
-    last_throw = &instruction;
-
     // Log
     std::cout << "*** Caught by catch("
       << catch_code.id() << ") at file "
@@ -259,7 +262,6 @@ bool goto_symext::terminate_handler()
   // It'll call the current function handler
   if(!is_included) {
     codet terminate_function=to_code(tmp->value.op0());
-    dereference(terminate_function,false);
 
     // We only call it if the user replaced the default one
     if(terminate_function.op1().identifier()=="cpp::std::default_terminate()")
@@ -289,6 +291,11 @@ Function: goto_symext::unexpected
 
 bool goto_symext::unexpected_handler()
 {
+  // Look if we already on the unexpected flow
+  // If true, we shouldn't call the unexpected handler again
+  if(inside_unexpected)
+    return false;
+
   // We must look on the context if the user included exception lib
   const symbolt *tmp;
   bool is_included=ns.lookup("cpp::std::unexpected()",tmp);
@@ -302,6 +309,9 @@ bool goto_symext::unexpected_handler()
     // We only call it if the user replaced the default one
     if(unexpected_function.op1().identifier()=="cpp::std::default_unexpected()")
       return false;
+
+    // Indicate there we're inside the unexpected flow
+    inside_unexpected=true;
 
     // Call the function
     symex_function_call(to_code_function_call(unexpected_function));
@@ -341,8 +351,6 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
       cur_state->top().goto_state_map[target];
 
     goto_state_list.push_back(statet::goto_statet(*cur_state));
-
-    statet::goto_statet &new_state = goto_state_list.back();
     cur_state->guard.make_false();
   }
 }
@@ -374,7 +382,7 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
       if(!unexpected_handler())
       {
         std::string msg=std::string("Trying to throw an exception ") +
-            std::string("but it's not allowed by declaration.\n\n");
+          std::string("but it's not allowed by declaration.\n\n");
         msg += "  Exception type: " + id.as_string();
         msg += "\n  Allowed exceptions:";
 
