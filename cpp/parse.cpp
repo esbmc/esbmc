@@ -985,7 +985,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
       return false;
 
   #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 3\n";
+  std::cout << "Parser::rDeclaration 2\n";
   #endif
 
   typet cv_q, integral;
@@ -1002,7 +1002,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     return false;
 
   #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 4\n";
+  std::cout << "Parser::rDeclaration 3\n";
   #endif
 
   if(!optIntegralTypeOrClassSpec(integral))
@@ -1016,7 +1016,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
   if(integral.is_not_nil())
   {
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 5\n";
+    std::cout << "Parser::rDeclaration 4\n";
     #endif
     return rIntegralDeclaration(declaration, storage_spec, member_spec, integral, cv_q);
   }
@@ -1025,11 +1025,11 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     int t=lex->LookAhead(0);
 
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 6 " << t << "\n";
+    std::cout << "Parser::rDeclaration 5 " << t << "\n";
     #endif
 
-    if(cv_q.is_not_nil() &&
-       ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
+    if(cv_q.is_not_nil()
+      && ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
       return rConstDeclaration(declaration, storage_spec, member_spec, cv_q);
     else
       return rOtherDeclaration(declaration, storage_spec, member_spec, cv_q);
@@ -5918,7 +5918,7 @@ bool Parser::rForStatement(codet &statement)
     if(!rCommaExpression(tmp))
       return false;
 
-	// TODO: Remove?
+    // TODO: Remove?
     exp3=exprt("code");
     exp3.statement("expression");
     exp3.location()=tmp.location();
