@@ -25,8 +25,8 @@ public:
 	typedef T* pointer;
 	typedef const T* const_pointer;
 
-	typedef bool (pred)(const int &);
 	typedef bool (pred_double)(double, double);
+	typedef bool (pred)(const int &);
 
 	struct node {
 		T data;
@@ -287,7 +287,7 @@ public:
 	iterator insert(iterator position, const T& x){
 		node* tmp;
 		tmp = new node(x, position.it->prev, position.it);
-		position.it->prev->next = tmp;
+		//position.it->prev->next = tmp;
 		position.it->prev = tmp;
 		position.it_size++;
 		this->_size++;
@@ -419,7 +419,8 @@ public:
 		int i;
 		for(i=0;i<it1.it_size;i++){
 			tmp = new node(it1.it->data, position.it->prev, position.it);
-			position.it->prev->next = tmp;
+			//if (position.it->prev != NULL)
+				//position.it->prev->next = tmp;
 			position.it->prev = tmp;
 			position.it_size++;
 			this->_size++;
@@ -471,7 +472,7 @@ public:
 			int i;
 			do{
 				tmp_ptr = tmp_ptr->next;
-			}while((tmp_ptr->data != value) && (tmp_ptr != NULL)) ;
+			}while((tmp_ptr != NULL) && (tmp_ptr->data != value)) ;
 			if (tmp_ptr != NULL){
 				this->_size--;
 				tmp_ptr->prev->next = tmp_ptr->next;
@@ -481,9 +482,38 @@ public:
 		}
 	}
 
-	void remove_if ( pred* );
+	void remove_if ( pred* x ){
+		int i;
+		node* tmp = this->head;
+		for(i = 0; i < this->_size; i++){/*
+			if (tmp->data == 7){
+				assert(tmp->data == 7);
+				//assert(!(x(tmp->data)));
+				assert(x(tmp->data));
+			}*/
+			//if (tmp->data == 7)
+				//assert(x(tmp->data));
+			if (x(tmp->data)){
+				assert(0);
+				this->_size--;
+				tmp->prev->next = tmp->next;
+				tmp->next->prev = tmp->prev;
+			}
+			//assert(tmp->data != 7);
+				//this->remove(tmp->data);*/
+			tmp = tmp->next;
+		}
+	}
 	template <class Predicate>
-		void remove_if ( Predicate pred );
+		void remove_if ( Predicate* pred ){
+		int i;
+		node* tmp = this->head;
+		for(i = 0; i < this->_size; i++){
+			if (pred(tmp->data))
+				this->remove(tmp->data);
+			tmp = tmp->next;
+		}
+	}
 
 	void unique();
 	void unique(pred_double*);
