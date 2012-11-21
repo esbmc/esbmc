@@ -2033,6 +2033,9 @@ bool cpp_typecheckt::dynamic_typecast(
   exprt &new_expr)
 {
   exprt e(expr);
+//  std::cout << "e: " << e << std::endl;
+//  std::cout << "type: " << type << std::endl;
+//  std::cout << "new_expr: " << new_expr << std::endl;
 
   if(type.id()=="pointer")
   {
@@ -2043,13 +2046,48 @@ bool cpp_typecheckt::dynamic_typecast(
        cast_away_constness(e.type(), type))
       return false;
   }
-
   add_implicit_dereference(e);
 
   if(is_reference(type))
   {
+    exprt typeid_function = new_expr;
+    exprt function = typeid_function;
+    irep_idt badcast_identifier="cpp::std::struct.bad_cast";
+    // We must check if the user included typeinfo
+    const symbolt *bad_cast_symbol;
+    bool is_included = lookup(badcast_identifier, bad_cast_symbol);
+
+    if(is_included)
+      throw "Error: must #include <typeinfo>. Bad_cast throw";
+
+    // Ok! Let's create the temp object badcast
+    exprt badcast;
+    badcast.identifier(badcast_identifier);
+    badcast.operands().push_back(exprt("sideeffect"));
+    badcast.op0().type()=typet("symbol");
+    badcast.op0().type().identifier(badcast_identifier);
+
+
+    // Check throw
+    typecheck_expr_throw(badcast);
+
+    // Save on the expression for handling on goto-program
+    function.set("exception_list", badcast.find("exception_list"));
+//    std::cout << "badcast: " << badcast << std::endl;
+
+//    std::cout << "e1: " << e << std::endl;
+    e.make_typecast(type);
+//    std::cout << "e2: " << e << std::endl;
+    new_expr.swap(e);
+    new_expr.op0().operands().push_back(badcast);
+//    std::cout << "new_expr2: " << new_expr << std::endl;
+    return true;
+
     if(follow(type.subtype()).id()!="struct")
+    {
       return false;
+    }
+
   }
   else if(type.id()=="pointer")
   {
