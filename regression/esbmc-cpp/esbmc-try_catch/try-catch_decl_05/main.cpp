@@ -18,3 +18,4 @@ int main (void) {
   catch (bad_exception be) { return 2; }
   return 0;
 }
+
