@@ -434,7 +434,6 @@ bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
     {
       const std::string &msg="Trying to re-throw without last exception.";
       claim(false_exprt(), msg);
-      cur_state->source.pc++;
       return false;
     }
   }
