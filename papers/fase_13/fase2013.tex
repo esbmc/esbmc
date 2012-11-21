@@ -837,7 +837,7 @@ memory resources.
 
 \begin{figure}[ht]
 \centering
-\includegraphics[scale=0.4]{figures/inheritance_uml}
+\includegraphics[scale=4.0]{figures/inheritance_uml}
 \caption{\textit{Shape} class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
@@ -889,22 +889,19 @@ area method using this representation, as shown in Formulas (\ref{area-class-c})
 \begin{equation}
 \label{area-class-c}
 C := \left [ \begin{array}{ll}
-                w_{0} = 10 \wedge h_{0} = 10 \\
-		\wedge j_{1} = \left(j_{0} = Rectangle@Rectangle\right) \\
-		\wedge j_{2}.width = \left(j_{1}.width = 10\right) \\
-		\wedge j_{3}.height = \left(j_{2}.height = 10\right) \\
-		\wedge j_{4} = \left(j_{3} = Rectangle@Square\right) \\
-		\wedge j_{5} = \left(j_{4} = Square@Square\right) \\
-		\wedge j_{6}.width = \left(j_{5}.width = 10\right) \\
-		\wedge j_{7} = \left(j_{6}.width * j_{6}.width\right) \\
+        j_{1} = store\left(j_{0}, vtable, Rectangle\right) \\
+        \wedge j_{2} = store\left(j_{1}, width, 10\right) \\
+        \wedge j_{3} = store\left(j_{2}, height, 10\right) \\
+        \wedge j_{4} = store\left(j_{3}, vtable, Square\right) \\
+        \wedge j_{5} = \left(j_{4}, width, 10\right) \\
+        \wedge return\_value = \left(select\left(j_{5}, width\right) \times select\left(j_{5}, width\right)\right) \\
               \end{array} \right ],  \\
 \end{equation}
 %
 \begin{equation}
 \label{area-class-p}
 P := \left [ \begin{array}{ll}
-                j6_{valid\_object}\\
-                \wedge j7 = 100 \\
+                j_{5}.\nu  \Rightarrow return\_value = 100 \\
               \end{array} \right ]  \\
 \end{equation}
 %
@@ -964,7 +961,7 @@ methods, it must contain an implementation for them or the verification will fai
 with a ``conversion error''. ESBMC++ also handles virtual destructors successfully
 and supports the default constructor creation. Currently, ESBMC++
 supports dynamic cast between primitive types, same classes and from a derived 
-class to a base. The tool also handles with cast to a reference type, verifying the 
+class to a base. ESBMC++ also handles with cast to a reference type, verifying the 
 correct use of \textit{bad\_cast} thrown by dynamic cast.
 
 
@@ -1525,4 +1522,5 @@ LLVM Tools, http://llvm.org/releases/, 2012.
 \end{thebibliography}}
 
 \end{document}
+
 
