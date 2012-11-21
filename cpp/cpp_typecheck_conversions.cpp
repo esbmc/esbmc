@@ -2116,7 +2116,7 @@ bool cpp_typecheckt::dynamic_typecast(
             e.make_typecast(type);
             new_expr.op0().op0().operands() = t.value.operands();
 //            new_expr.operands() = t.value.operands();
-            std::cout << "depois new_expr.pretty(): " << new_expr.pretty() << std::endl;
+//            std::cout << "depois new_expr.pretty(): " << new_expr.pretty() << std::endl;
             return true;
           }
         }
