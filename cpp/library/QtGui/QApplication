@@ -9,8 +9,7 @@ Author: Felipe Rodrigues
 class QApplication{
 public:
 	QApplication( int & argc, char ** argv ){
-		__ESBMC_assert(argc!=NULL, "invalid parameter");
-		__ESBMC_assert(argv!=NULL, "invalid parameter");
+		__ESBMC_assert(argc > 0, "invalid parameter");
 	}
 	int exec(){}
 };
