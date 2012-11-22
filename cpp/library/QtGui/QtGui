@@ -8,6 +8,7 @@ Author: Felipe Rodrigues
 
 #include "QString"
 #include "QApplication"
+//#include "QObject"
 
 # define SIGNAL(a)   qFlagLocation("2"#a)
 # define SLOT(a)     qFlagLocation("1"#a)
@@ -52,3 +53,26 @@ public:
 	QVBoxLayout	addWidget ( QPushButton * w ){}
 };
 
+class QObject
+{
+public:
+	QObject ( QObject * parent = 0 ){}
+	~QObject (){}
+	static bool connect(QPushButton *, const char *, const char *, const char *){}
+
+#if 0	
+	static bool connect(const QObject *sender, const char *signal,
+                        const QObject *receiver, const char *member, ConnectionType =
+#ifdef qdoc
+                        AutoConnection
+#else
+#ifdef QT3_SUPPORT
+                        AutoCompatConnection
+#else
+                        AutoConnection
+#endif
+#endif
+        ){}
+#endif
+
+};
