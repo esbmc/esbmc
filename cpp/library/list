@@ -494,10 +494,18 @@ public:
 			//if (tmp->data == 7)
 				//assert(x(tmp->data));
 			if (x(tmp->data)){
-				assert(0);
+				//assert(tmp->data != 7);
 				this->_size--;
-				tmp->prev->next = tmp->next;
-				tmp->next->prev = tmp->prev;
+				if(tmp->prev != NULL){
+					//assert(tmp->data != 7);
+					//assert(tmp->prev->next->data == 7);
+					//tmp->prev->next = tmp->next;
+					//assert(tmp->prev->next->data == 17);
+				}
+				if(tmp->next != NULL){
+					//assert(tmp->data != 7);
+					tmp->next->prev = tmp->prev;
+				}
 			}
 			//assert(tmp->data != 7);
 				//this->remove(tmp->data);*/
@@ -520,6 +528,7 @@ public:
 	template <class Predicate>
 		void unique ( Predicate pred );
 	void merge(list<T>& x);
+	void merge(list<T>& x, pred_double* y);
 	void sort();
 	void reverse(){/*
 		list<T> list;
