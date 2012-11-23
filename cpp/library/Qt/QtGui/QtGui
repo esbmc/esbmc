@@ -67,14 +67,14 @@ public:
 
 #if 0	
 	static bool connect(const QObject *sender, const char *signal,
-                        const QObject *receiver, const char *member, ConnectionType =
+                       const QObject *receiver, const char *member, ConnectionType =
 #ifdef qdoc
-                        AutoConnection
+	AutoConnection
 #else
 #ifdef QT3_SUPPORT
-                        AutoCompatConnection
+	AutoCompatConnection
 #else
-                        AutoConnection
+	AutoConnection
 #endif
 #endif
         ){}
