@@ -6,9 +6,13 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QString"
+#include "../QtCore/QString"
 #include "QApplication"
-//#include "QObject"
+//#include "../QtCore/QObject"
+//#include "QLayout"
+//#include "QWidget"
+//#include "QTextEdit"
+//#include "QVBoxLayout"
 
 # define SIGNAL(a)   qFlagLocation("2"#a)
 # define SLOT(a)     qFlagLocation("1"#a)
@@ -19,6 +23,7 @@ enum	ConnectionType { AutoConnection, DirectConnection, QueuedConnection, Blocki
 
 const char *qFlagLocation(const char *method){}
 void	clicked ( bool checked = false ){}
+
 
 class QLayout{
 	QLayout (){}

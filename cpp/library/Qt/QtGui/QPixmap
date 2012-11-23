@@ -6,7 +6,7 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "../fstream"
+#include "../../library/fstream"
 
 bool fexists(const char* filename){
 	std::ifstream file(filename);

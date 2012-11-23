@@ -6,7 +6,7 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QObject"
+#include "../QtCore/QObject"
 
 class QGraphicsScene{
 public:

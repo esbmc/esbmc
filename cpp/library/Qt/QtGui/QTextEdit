@@ -1,0 +1,18 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: November 2012
+
+\*******************************************************************/
+
+#include "../QtCore/QString"
+#include "QWidget"
+
+class QTextEdit{
+public:
+	QTextEdit ( QWidget * parent = 0 ){}
+	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
+	~QTextEdit (){}
+};
