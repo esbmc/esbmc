@@ -8,9 +8,9 @@
 \*******************************************************************/
 
 #include "../QtCore/QString"
-#include "QWidget"
+//#include "QWidget"
 
-class QString;
+class QWidget;
 
 class QPushButton{
 public:
