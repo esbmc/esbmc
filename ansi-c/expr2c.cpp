@@ -748,7 +748,6 @@ std::string expr2ct::convert_malloc(
   if(src.operands().size()!=1)
     return convert_norep(src, precedence);
 
-  std::cout << "src.pretty(): " << src.pretty() << std::endl;
   unsigned p0;
   std::string op0=convert(src.op0(), p0);
 
@@ -758,8 +757,6 @@ std::string expr2ct::convert_malloc(
   dest+=", ";
   dest+=op0;
   dest+=')';
-
-  std::cout << "dest: " << dest << std::endl;
 
   return dest;
 }
