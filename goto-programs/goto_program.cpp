@@ -121,9 +121,9 @@ std::ostream& goto_programt::output_instruction(
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
-      out << "ASSUME ";
+      out << "  ASSUME ";
     else
-      out << "ASSERT ";
+      out << "  ASSERT ";
 
     {
       out << from_expr(ns, identifier, it->guard);
