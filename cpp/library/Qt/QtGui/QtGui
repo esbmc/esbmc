@@ -6,8 +6,13 @@ Author: Felipe Rodrigues
 
 \*******************************************************************/
 
-#include "QString"
+#include "../QtCore/QString"
 #include "QApplication"
+//#include "../QtCore/QObject"
+//#include "QLayout"
+//#include "QWidget"
+//#include "QTextEdit"
+//#include "QVBoxLayout"
 
 # define SIGNAL(a)   qFlagLocation("2"#a)
 # define SLOT(a)     qFlagLocation("1"#a)
@@ -18,6 +23,7 @@ enum	ConnectionType { AutoConnection, DirectConnection, QueuedConnection, Blocki
 
 const char *qFlagLocation(const char *method){}
 void	clicked ( bool checked = false ){}
+
 
 class QLayout{
 	QLayout (){}
@@ -52,3 +58,26 @@ public:
 	QVBoxLayout	addWidget ( QPushButton * w ){}
 };
 
+class QObject
+{
+public:
+	QObject ( QObject * parent = 0 ){}
+	~QObject (){}
+	static bool connect(QPushButton *, const char *, const char *, const char *){}
+
+#if 0	
+	static bool connect(const QObject *sender, const char *signal,
+                       const QObject *receiver, const char *member, ConnectionType =
+#ifdef qdoc
+	AutoConnection
+#else
+#ifdef QT3_SUPPORT
+	AutoCompatConnection
+#else
+	AutoConnection
+#endif
+#endif
+        ){}
+#endif
+
+};

@@ -1,9 +1,16 @@
 /*******************************************************************\
 
-Module: 
 
 Author: Felipe Rodrigues
 
-Date: 
 
 \*******************************************************************/
+
+class QApplication{
+public:
+	QApplication( int & argc, char ** argv ){
+		__ESBMC_assert(argc > 0, "invalid parameter");
+	}
+	int exec(){}
+};
+

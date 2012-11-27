@@ -25,8 +25,8 @@ public:
 	typedef T* pointer;
 	typedef const T* const_pointer;
 
-	typedef bool (pred)(const int &);
 	typedef bool (pred_double)(double, double);
+	typedef bool (pred)(const int &);
 
 	struct node {
 		T data;
@@ -47,7 +47,7 @@ public:
 		int it_size;
 
 		iterator(const iterator& x): it(x.it), it_size(x.it_size){}
-		iterator(): it(NULL){}
+		iterator(): it(NULL), it_size(0){}
 		iterator& operator=(const iterator& x){
 			this->it = new node(x.it->data, x.it->prev, x.it->next);
 			this->it_size = x.it_size;
@@ -178,7 +178,7 @@ public:
 		}
 	}
 
-	iterator& begin (){
+	iterator begin (){
 		iterator it;
 		it.it = this->head;
 		it.it_size = this->_size;
@@ -270,6 +270,8 @@ public:
 		}else{
 			this->tail->next = new node(x, this->tail, NULL);
 			this->tail = this->tail->next;
+			if(this->_size == 1)
+				this->head->next == this->tail;
 		}
 		this->_size++;
 	}
@@ -280,6 +282,8 @@ public:
 		}else{
 			this->head->prev = new node(x, NULL, this->head);
 			this->head = this->head->prev;
+			if(this->_size == 1)
+				this->tail->prev == this->head;
 		}
 		this->_size++;
 	}
@@ -419,7 +423,8 @@ public:
 		int i;
 		for(i=0;i<it1.it_size;i++){
 			tmp = new node(it1.it->data, position.it->prev, position.it);
-			position.it->prev->next = tmp;
+			if (position.it->prev != NULL)
+				position.it->prev->next = tmp;
 			position.it->prev = tmp;
 			position.it_size++;
 			this->_size++;
@@ -437,7 +442,7 @@ public:
 		this->_size++;
 		x.erase(i);
 	}
-	void splice(iterator& position, list<T>& x, iterator first, iterator last){/*
+	void splice(iterator position, list<T>& x, iterator first, iterator last){/*
 		list<T>::iterator tmp_next = first;
 		while(first.it != last.it){
 			tmp_next++;
@@ -471,7 +476,7 @@ public:
 			int i;
 			do{
 				tmp_ptr = tmp_ptr->next;
-			}while((tmp_ptr->data != value) && (tmp_ptr != NULL)) ;
+			}while((tmp_ptr != NULL) && (tmp_ptr->data != value)) ;
 			if (tmp_ptr != NULL){
 				this->_size--;
 				tmp_ptr->prev->next = tmp_ptr->next;
@@ -481,15 +486,99 @@ public:
 		}
 	}
 
-	void remove_if ( pred* );
+	void remove_if ( pred* x ){
+		node* tmp = this->head;
+		while(tmp != NULL){
+			if (x(tmp->data)){
+				this->_size--;
+				if(tmp->prev != NULL){
+					tmp->prev->next = tmp->next;
+				}
+				if(tmp->next != NULL){
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			tmp = tmp->next;
+		}
+	}
 	template <class Predicate>
-		void remove_if ( Predicate pred );
+		void remove_if ( Predicate* pred ){
+		node* tmp = this->head;
+		while(tmp != NULL){
+			if (pred(tmp->data)){
+				this->_size--;
+				if(tmp->prev != NULL){
+					tmp->prev->next = tmp->next;
+				}
+				if(tmp->next != NULL){
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			tmp = tmp->next;
+		}
+	}
 
-	void unique();
-	void unique(pred_double*);
+	void unique() {
+		node* tmp = this->head;
+		node* sec_temp = this->head;
+		int b = 0;
+		while (tmp != NULL) {
+			while (sec_temp != NULL) {
+				if (sec_temp->data == tmp->data) {
+					b++;
+				}
+				if (b == 2) {
+					break;
+				}
+				sec_temp = sec_temp->next;
+			}
+			if (b == 2) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			b = 0;
+			sec_temp = this->head;
+			tmp = tmp->next;
+		}
+	}
+	void unique(pred_double* x) {
+		node* tmp = this->head;
+		node* sec_temp = this->head;
+		int b = 0;
+		while (tmp != NULL) {
+			while (sec_temp != NULL) {
+				if (x(sec_temp->data,tmp->data)) {
+					b++;
+				}
+				if (b == 2) {
+					break;
+				}
+				sec_temp = sec_temp->next;
+			}
+			if (b == 2) {
+				this->_size--;
+				if (tmp->prev != NULL) {
+					tmp->prev->next = tmp->next;
+				}
+				if (tmp->next != NULL) {
+					tmp->next->prev = tmp->prev;
+				}
+			}
+			b = 0;
+			sec_temp = this->head;
+			tmp = tmp->next;
+		}
+	}
+
 	template <class Predicate>
 		void unique ( Predicate pred );
 	void merge(list<T>& x);
+	void merge(list<T>& x, pred_double* y);
 	void sort();
 	void reverse(){/*
 		list<T> list;
