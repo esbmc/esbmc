@@ -14,7 +14,7 @@
 
 typedef void (*sighandler)(int);
 
-sighandler vetor[16];
+sighandler vector[16];
 
 void signal(int sig, sighandler func) {
 
@@ -23,7 +23,7 @@ void signal(int sig, sighandler func) {
 					|| (sig == 15),
 			"Signal must be equal to defined at lib csignal");
 
-	vetor[sig] = func;
+	vector[sig] = func;
 }
 
 int raise(int sig) {
@@ -33,8 +33,9 @@ int raise(int sig) {
 					|| (sig == 15),
 			"Signal must be equal to defined at lib csignal");
 
-	if (vetor[sig] != 0) {
-		vetor[sig];
+	if (vector[sig] != 0) {
+		void *ret;
+		(*(vector[sig]))(sig);
 		return 0;
 	}
 
