@@ -1072,16 +1072,14 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
       it++)
   {
     const irep_idt id=(*it)->identifier;
-    const symbolt &s=cpp_typecheck.lookup(id);
 
+    const symbolt &s=cpp_typecheck.lookup(id);
     if(!s.type.get_bool("is_template")) continue;
 
     const cpp_declarationt &cpp_declaration=to_cpp_declaration(s.type);
-
     if(!cpp_declaration.is_template_class()) continue;
 
     irep_idt specialization_of=cpp_declaration.get_specialization_of();
-
     if(specialization_of!="")
       primary_templates.insert(specialization_of);
     else
@@ -1151,7 +1149,6 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
     // alright, set up template arguments as 'unassigned'
 
     cpp_saved_template_mapt saved_map(cpp_typecheck.template_map);
-    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
 
     cpp_typecheck.template_map.build_unassigned(
       cpp_declaration.template_type());
@@ -1604,17 +1601,46 @@ exprt cpp_typecheck_resolvet::resolve(
       throw 0;
     }
 
+    // We're classes
     if(want==TYPE || have_classes)
     {
-      // Classes
+      // Look for class specialization
+      bool spec=false;
+      for(cpp_scopest::id_sett::const_iterator
+        it=id_set.begin();
+        it!=id_set.end();
+        it++)
+      {
+        const irep_idt id=(*it)->identifier;
+
+        const symbolt &s=cpp_typecheck.lookup(id);
+        if(!s.type.get_bool("is_template")) continue;
+
+        const cpp_declarationt &cpp_declaration=to_cpp_declaration(s.type);
+        if(!cpp_declaration.is_template_class()) continue;
+
+        irep_idt specialization_of=cpp_declaration.get_specialization_of();
+        if(specialization_of!="")
+          spec=true;
+      }
+
+      // Class specialization
+      if(spec)
+      {
+        const symbolt &instance=
+          disambiguate_template_classes(base_name, id_set, template_args);
+        identifiers.push_back(exprt("type", symbol_typet(instance.name)));
+      }
     }
 
-    // methods and functions
-    convert_identifiers(
-      id_set, want, fargs, identifiers);
+    if(!identifiers.size())
+    {
+      convert_identifiers(
+          id_set, want, fargs, identifiers);
 
-    apply_template_args(
-      identifiers, template_args, fargs);
+      apply_template_args(
+          identifiers, template_args, fargs);
+    }
   }
   else
   {
