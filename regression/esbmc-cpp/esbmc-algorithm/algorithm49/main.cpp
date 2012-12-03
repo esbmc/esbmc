@@ -6,7 +6,7 @@ using namespace std;
 
 int main () {
   int first[] = {5,10,15,20,25};
-  int second[] = {50,40,30,20,10};
+  int second[] = {10,20,30,40,50};
   vector<int> v(10);
   vector<int>::iterator it;
 

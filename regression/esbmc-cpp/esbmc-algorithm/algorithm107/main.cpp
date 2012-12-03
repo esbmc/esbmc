@@ -9,10 +9,12 @@ bool myfunction (int i,int j) { return (i<j); }
 
 int main () {
   int myints[] = {1,2,3,4,5,4,3,2,1};
+  int myints1[] = {1,1,2,2,3,3,4,4,5};
   vector<int> v(myints,myints+9);                         // 1 2 3 4 5 4 3 2 1
+  vector<int>::iterator it;
 
   // using default comparison:
-  sort (v.begin(), v.end());
+  v.assign(myints1,myints1+9);                      //  1 1 2 2 3 3 4 4 5
 
   cout << "looking for a 3... ";
   if (binary_search (v.begin(), v.end(), 3))
@@ -20,6 +22,9 @@ int main () {
 
   // using myfunction as comp:
   sort (v.begin(), v.end(), myfunction);
+  for(it = v.begin();it < v.end();it++)
+  	cout << " " << *it << " " ;
+  
   assert(binary_search (v.begin(), v.end(), 6, myfunction));
   cout << "looking for a 6... ";
   if (binary_search (v.begin(), v.end(), 6, myfunction))

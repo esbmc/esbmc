@@ -10,8 +10,8 @@ bool myfunction (int i, int j) {
 }
 
 int main () {
-  int myints[] = {10,20,30,30,20,10,10,20};
-  vector<int> myvector (myints,myints+8);
+  int myints[] = {10,20,30,30,20,10};
+  vector<int> myvector (myints,myints+6);
   vector<int>::iterator it;
 
   // using default comparison:

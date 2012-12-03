@@ -8,15 +8,17 @@ bool mygreater (int i,int j) { return (i>j); }
 
 int main () {
   int myints[] = {10,20,30,30,20,10,10,20};
+  int myints1[] = {10,10,10,20,20,20,30,30};
+  int myints2[] = {30,30,20,20,20,10,10,10};
   vector<int> v(myints,myints+8);                         // 10 20 30 30 20 10 10 20
   pair<vector<int>::iterator,vector<int>::iterator> bounds;
 
   // using default comparison:
-  sort (v.begin(), v.end());                              // 10 10 10 20 20 20 30 30
+  v.assign(myints1,myints1+8);                              // 10 10 10 20 20 20 30 30
   bounds=equal_range (v.begin(), v.end(), 20);            //          ^        ^
 
   // using "mygreater" as comp:
-  sort (v.begin(), v.end(), mygreater);                   // 30 30 20 20 20 10 10 10
+  v.assign(myints2,myints2+8);                   // 30 30 20 20 20 10 10 10
   bounds=equal_range (v.begin(), v.end(), 20, mygreater); //       ^        ^
 
 //  cout << "bounds at positions " << int(bounds.first - v.begin());
