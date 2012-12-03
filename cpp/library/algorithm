@@ -388,8 +388,16 @@ template<class InputIterator, class Distance>
 void advance(InputIterator& i, Distance n);
 
 template<class InputIterator>
-typename iterator_traits<InputIterator>::difference_type
-distance(InputIterator first, InputIterator last);
+int distance(InputIterator first, InputIterator last){
+	int i = 0;
+	int koef = first < last ? 1 : -1;
+	InputIterator pilgrim = first < last ? first : last;
+	while(pilgrim != last){
+		pilgrim = pilgrim + koef;
+		i++;
+	}
+	return i;
+}
 
 template<class FwdIt, class Diff, class Ty>
 FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& value) {
@@ -752,10 +760,54 @@ BidIt partition(BidIt first, BidIt last, Pr pred) {
 }
 
 template<class BidIt, class Pr>
-BidIt stable_partition(BidIt first, BidIt last, Pr pred);
+BidIt stable_partition(BidIt first, BidIt last, Pr pred){
+	while (true) {
+			while (first != last && pred(*first))
+				++first;
+			if (first == last--)
+				break;
+			while (first != last && !pred(*last))
+				--last;
+			if (first == last)
+				break;
+			swap(*first++, *last);
+		}
+		return first;
+}
+
+template<class InputIterator>
+InputIterator partition(InputIterator first, InputIterator last)
+{
+  InputIterator pivot = first + distance(first, last)/2;
+  InputIterator pilgrim, pos;
+  swap(*pivot, *first);
+  pivot = first;
+  for(pilgrim = first;pilgrim < last;pilgrim++)
+  {
+	  if(*pilgrim < *pivot)
+	  {
+		  swap(*pilgrim, *pivot);
+		  pivot = pilgrim;
+		  pos = pivot - 1;
+		  while(*pivot < *pos )
+		  {
+			  swap(*pivot, *pos);
+			  pivot = pos;
+			  pos--;
+		  }
+	  }
+  }
+  return pivot;
+}
 
 template<class RanIt>
-void sort(RanIt first, RanIt last);
+void sort(RanIt begin, RanIt end){
+	if (begin != end) {
+	        RanIt middle = partition (begin, end);
+	        sort (begin, middle);
+	        sort (middle+1, end);
+	    }
+}
 
 template<class RanIt>
 void sort(RanIt first[], RanIt last[]);
@@ -764,7 +816,13 @@ template<class RanIt, class Pr>
 void sort(RanIt first, RanIt last, Pr pred);
 
 template<class BidIt>
-void stable_sort(BidIt first, BidIt last);
+void stable_sort(BidIt begin, BidIt end){
+	if (begin != end) {
+		RanIt middle = partition (begin, end);
+		sort (begin, middle);
+		sort (middle+1, end);
+	}
+}
 
 template<class BidIt, class Pr>
 void stable_sort(BidIt first, BidIt last, Pr pred);
@@ -1182,7 +1240,13 @@ template<class RanIt, class Pr>
 void make_heap(RanIt first, RanIt last, Pr pred);
 
 template<class RanIt>
-void sort_heap(RanIt first, RanIt last);
+void sort_heap(RanIt first, RanIt last){
+	if (begin != end) {
+		RanIt middle = partition (begin, end);
+		sort (begin, middle);
+		sort (middle+1, end);
+	}
+}
 
 template<class RanIt, class Pr>
 void sort_heap(RanIt first, RanIt last, Pr pred);
