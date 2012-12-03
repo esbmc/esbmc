@@ -10,7 +10,7 @@
 #ifndef STL_ALGORITHM
 #define STL_ALGORITHM
 
-#include "iterator"
+//#include "iterator"
 #include "definitions.h"
 #include "utility"
 
