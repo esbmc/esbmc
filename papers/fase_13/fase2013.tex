@@ -52,15 +52,18 @@
 
 \begin{abstract}
 Bounded Model Checking (BMC) of C++ programs presents greater
-complexity than that of C programs due to the features that the language offers, such as
-templates, containers, and exception handling.\ We present ESBMC++, a bounded
-model checker for C++ programs, which encodes the verification conditions
+challenges than that of C programs due to the more complex
+features that the language offers, such as
+templates, containers, and exception handling.\ 
+We present ESBMC++, a bounded model checker for C++ programs.\
+ESBMC++ uses an operational model, an abstract representation 
+of the standard C++ libraries, which conservatively 
+approximates their semantics to encode the verification conditions
 using different background theories supported
-by an SMT Solver.\ ESBMC++ uses an operational model,
-an abstract representation of
-the standard C++ libraries, which conservatively approximates their semantics.\ Our
-experimental results show that our approach can handle a wider range of the C++
-constructs than existing approaches and substantially reduce the verification time.
+by an SMT Solver.\  Our experimental results show that 
+our approach can handle a wider range of the C++
+constructs than existing approaches and substantially 
+reduce the verification time.
 \end{abstract}
 %
 %------------------------------
@@ -74,41 +77,45 @@ with growing system complexity, SAT solvers are increasingly
 replaced by Satisfiability Modulo Theories (SMT) solvers to prove the generated
 verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.\
 There have been attempts to apply BMC to the verification of C++
-programs~\cite{Florian12,Yang12} but with limited success. The main challenge here is to handle large
-programs and to support the features that the languages offers, such as templates,
-containers and exception handling.
+programs~\cite{Florian12,Yang12} but with limited success. The main challenge 
+here is to handle large programs and to support the complex features that the 
+languages offers, such as templates, containers and exception handling. 
+In order to be attractive for mainstream software development,
+C++ model checkers have to support these and at the same time maintain 
+high speed, accuracy, efficiency, and user-friendliness.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\comment{
 C++ is widely used, but systems that use C++
 tend to require a high verification effort. C++
 verification involves many more challenges than that of plain ANSI-C since the language provides
 a wider set of features (e.g., object-oriented programming), libraries (e.g., specialized
-input-output), and functionalities (e.g., templates). In order to be attractive for mainstream software development,
-C++ model checkers have to support these and at the same time maintain 
-high speed, accuracy, efficiency, and user-friendliness.
+input-output), and functionalities (e.g., templates). }
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-We propose to apply 
-BMC to C++ programs using an operational model,  which
+We propose to apply BMC to C++ programs using an operational model, which
 is an abstract representation of the standard C++ libraries that
-conservatively approximates their semantics. To support this operational model, we extended
-our ESBMC tool~\cite{Cordeiro12} that in turn builds on top
+conservatively approximates their semantics. We support this operational model
+by extending our ESBMC tool~\cite{Cordeiro12} that in turn builds on top
 of the CBMC's front-end~\cite{Clarke04} to support C++ features such
 as inheritance, polymorphism, templates, and exception handling.
 
-We present a novel implementation of an operational model of the sequential STL
+We present the implementation of our operational model of the sequential STL
 containers, its preconditions and simulation features (e.g., how we store the
-elements values of the containers), and how these are used in order to verify
-real-world C++ programs.  Additionally, we develop novel approaches to handle
-exceptions in C++ programs (in particular, exception specification for
+elements values of the containers), and how these are used in order to verify 
+C++ applications.  Additionally, we develop novel approaches to handle
+exceptions in C++ programs (e.g., exception specification for
 functions and methods) that previous approaches are not able to deal
-with~\cite{PrabhuMBIG11,Blanc07,Florian12}. In contrast to other previous 
-approaches (e.g.,~\cite{PrabhuMBIG11}), we implement the inheritance mechanism 
-during the construction of the intermediate representation of the program, which 
-thus avoids converting the C++ program to a C program and consequently produces 
-smaller models to be verified. 
+with~\cite{PrabhuMBIG11,Blanc07,Florian12}. In particular, we implement the 
+inheritance mechanism during the construction of the intermediate 
+representation of the program, which thus avoids converting the C++ program 
+to a C program and consequently produces smaller models to be verified. 
 %
 %------------------------------
-\section{Background and System Architecture}
+\section{Background}
 %------------------------------
 
 ESBMC++ builds on the front-end of CBMC to generate the VCs for a given C++ program,
@@ -119,7 +126,7 @@ and SMT solvers.
 
 %------------------------------------------------------ \subsection{C
 %Bounded Model Checker} \label{02-CBoundedModelChecker}
-\smallskip\noindent{\bf C Bounded Model Checker.}
+\smallskip\noindent{\bf C Bounded Model Checking.}
 \label{sec:C-Bounded-Model-Checker}
 %------------------------------------------------------
 %
@@ -138,10 +145,11 @@ front-end.  ESBMC++ modifies this front-end to handle the definitions of
 the standard C++ libraries and the other features (e.g., inheritance,
 template, and exception handling) are treated internally.
 
-CBMC (and ESBMC) use two recursive functions that compute the
-\emph{constraints} $C$ (i.e., assumptions and variable assignments) and
-\emph{properties} $P$ (i.e., safety conditions and user-defined
-assertions). In addition, both tools automatically generate safety conditions
+CBMC (and the original ESBMC which builds on CBMC) use two recursive functions 
+$\cal C$ and $\cal P$ that compute the \emph{constraints} 
+(i.e., assumptions and variable assignments) and
+\emph{properties} (i.e., safety conditions and user-defined
+assertions), respectively. In addition, both tools automatically generate safety conditions
 that check for example for arithmetic overflow and underflow, array bounds
 violations, and \verb|NULL|-pointer dereferences, in the spirit of Site's clean
 termination~\cite{Sites74}. Both functions accumulate the control flow
@@ -322,13 +330,23 @@ verify properties related to the definitions in the supported data
 types.  We thus developed a simplified representation of the C++
 libraries called the C++ Operational Model (COM), which represents the
 classes, methods, and other features similar to the actual
-structure~\cite{CppReference12}.  This operational model is inserted
-into the verification process in the same level of the program (i.e.,
-both model and program are passed as parameters at the beginning of the
-verification process). In summary, the COM consists of four groups of libraries, 
+structure~\cite{CppReference12}.  
+The COM consists of four groups of libraries, 
 as shown in Figure~\ref{figure:cpp-diagram}: \emph{C libraries},
 \emph{input/output stream}, \emph{standard template libraries}, and
-\emph{general libraries}.
+\emph{general libraries}. In the verification process, the COM libraries 
+replace the corresponding actual C++ libraries.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\comment{
+This operational model is inserted
+into the verification process in the same level of the program (i.e.,
+both model and program are passed as parameters at the beginning of the
+verification process).}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 
 \begin{figure*}[ht] \centering
 \includegraphics[scale=0.25]{figures/diagramascpp} 
@@ -344,8 +362,8 @@ The standard C++ libraries also include all the ANSI-C libraries, which
 are already supported by ESBMC.  However, for the verification of C++
 programs, ESBMC++ follows a different path to parse the C++ programs.
 For this reason, we also have to build a representation of the ANSI-C
-libraries into that operational model; otherwise, ESBMC++ does not recognize
-the methods of the library and fails to parse the C++ programs. 
+libraries into that operational model; otherwise, ESBMC++ would not recognize
+the methods of the library and would fail to parse the C++ programs. 
 As an example, we show the operational model of the \textit{csignal} library, 
 which deals with signals that are emitted to a given code (i.e., signals that 
 raise functions). For an array $a$ of size $N$ and
@@ -393,7 +411,8 @@ is a valid signal and the function associated to $\sigma$ is different than \ver
 
 The \textit{general libraries} category is split into three
 sub-categories: \textit{language support}, \textit{diagnostics},
-and \textit{general utilities}. The category \textit{language support}
+\textit{strings}, and \textit{general utilities}. 
+The category \textit{language support}
 consists of four libraries that deal with exception handling
 (i.e., \textit{exception} library), types information 
 (i.e., \textit{typeinfo} library), dynamic allocation of memory 
@@ -505,14 +524,15 @@ P := \left [ \begin{array}{ll}
 %\end{equation}
 }
 
-The Standard Template Libraries (STL) is split into
+The Standard Template Libraries (STL) makes up the biggest 
+part of the COM. It is split into
 four categories: \textit{algorithms}, \textit{numeric},
 \textit{containers}, and \textit{iterators}. 
-In this paper, however, we focus on the STL sequential
-containers operational model, its preconditions and
-simulation features (e.g., how we store the elements
-values of the containers and intern class methods),
-and how these are used to verify real-world C++ programs.
+In this paper, we focus on the operational model of the 
+STL sequential containers, its preconditions and simulation features 
+(e.g., how we store the elements values of the containers 
+and intern class methods), and how these are used to 
+verify real-world C++ programs.
 
 The structure of the STL containers is based on the
 C++ structure itself, which includes classes, operators,
@@ -542,22 +562,6 @@ and $pop\_front\left(\right)$ methods~\cite{CppReference12}.}
 %-------------------------------------------
 \subsubsection{Model Semantics.}
 %-------------------------------------------
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\comment{
-Let us consider that a container model is composed
-by five types of variables, which are: $I$, $C$,
-$N$, $P$ and $T$. Let $I$ be an iterator that points
-to a position in the container; $C$ be a container itself;
-$N$ be a natural integer number used in the container
-such as size, capacity and elements index; $P$ be
-the memory address where $T$ is located; and $T$ be the
-values stored in the container.
-For convention, we assume that
-$\left(c, v, d, l\right) \subset C, \{i, j, n\}
-\subset N$ and $\{it1, it2\} \subset I$.}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 In order to formalize the verification of the STL containers, 
 we define a core container expression language, and extend the translation 
@@ -702,6 +706,56 @@ cont.insert(ipos, it_0, it_k) \Longrightarrow & cont'.size = cont.size + k\\
 The same model above is valid for pointers $P\{pt_0\}$ and $P\{pt_k\}$.
 This kind of insertion (with pointers) does not return an iterator.
 
+\comment{
+In terms of C++ code, we can represent the insertion method as the code:
+
+\begin{figure}[h]
+\centering
+\begin{minipage}{0.9\textwidth}
+\begin{lstlisting}[style=nonumbers]
+iterator insert(iterator it, T value){
+	assert(size >= 0 && capacity >= size );
+	assert(it.ptr != NULL && it.src != NULL);
+	int i = size;
+	while( i > it.pos - 1){
+		array[i+1] = array[i];
+		i--;
+	}
+	array[it.pos] = value;
+	size++;
+	return it;	
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Insertion code example}
+\label{figure:IR_uml_rec}
+\end{figure}
+
+We can also represent the insert method using $C$ and $P$ formulae. The $array$ variable stores the elements of a container, as $size$ 
+indicates the amount of elements stored in a container, and $capacity$ indicates the maximum size a container can reach before 
+being reallocated in the memory. . The following model
+%
+\begin{equation}
+\label{insertion-formula-c}
+C := \left [ \begin{array}{ll} 
+     array_{n} = store\left(array_{n-1},size_{0} - n - 1 ,select\left(array_{n-1}, size_{0} - n\right)\right) \\
+     \wedge array_{n+1} = store\left(array_{n}, size_{0} - n, value\right) \\
+              \end{array} \right ],  \\ 
+\end{equation}
+\\
+
+\begin{equation}
+\label{insertion-formula-P}
+P := \left [ \begin{array}{ll} 
+     \left( size \geq 0 \right) \wedge \left( capacity \geq size \right) \\
+     \wedge \left( it.ptr \neq NULL \right) \wedge \left( it.src \neq NULL \right)\\
+              \end{array} \right ],  \\                             
+\end{equation}
+
+represents the insertion of a element $value$ in a desired position (in this case, is represented by $size_{0} - 1$).
+}
+
+
 The erase method works similarly to the insert method. It also uses iterator
 positions, integer values and pointers, but it does not use values since the exclusion
 is made by a given position, regardless the value. It also returns an iterator position,
@@ -738,7 +792,7 @@ address equivalent to $cont.array$, where $cont$ is the container
 pointed by the iterator.
 
 %---------------------------------------------
-\subsection{Input/Output Stream Libraries}
+%\subsection{Input/Output Stream Libraries}
 %---------------------------------------------
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -752,6 +806,9 @@ then introduce such relationships to build the AST.}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+\comment{
 We have elaborated a hierarchical structure for the
 input/output (I/O) stream library that is similar to the actual
 one (as described in~\cite{CppReference12}). However,
@@ -761,7 +818,9 @@ any related safety property. Similarly, the output operator $<<$ does not
 present any constraints or properties to be checked since
 we do not check whether a given value has been printed on the screen
 (ESBMC++ is only interested in checking the properties related to
-software and not that of hardware).
+software and not that of hardware).}
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 %\begin{figure*}[ht]
@@ -796,8 +855,8 @@ In contrast to Java, which only allows single inheritance, where derived classes
 have only one base class, C++ also allows multiple inheritance, where a class 
 may inherit from one or more unrelated base classes. This particular feature 
 makes C++ programs harder to model check than programs in other object-oriented 
-programming languages (e.g., Java) since it disallows the direct use of existing 
-tools created to other programming languages. 
+programming languages (e.g., Java) since it disallows the direct transfer of
+techniques developed for other, simpler programming languages. 
 
 To deal with inheritance in ESBMC++, we simply replicate the methods 
 and attributes of the base classes to the inherited class to have 
@@ -837,7 +896,7 @@ memory resources.
 
 \begin{figure}[ht]
 \centering
-\includegraphics[scale=4.0]{figures/inheritance_uml}
+\includegraphics[scale=3.5]{figures/inheritance_uml}
 \caption{\textit{Shape} class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
@@ -913,44 +972,6 @@ Thus, \textit{Square} class can access features from \textit{Shape} class,
 but they are not directly connected. We tackle this problem by
 looking for the features using a depth search from the derived to base classes
 and adding them to our intermediate representation if necessary. 
-Figure~\ref{figure:IR_uml_square} shows this feature in symex representation.
-
-
-\begin{figure}[h]
-\centering
-\begin{minipage}{1.05\textwidth}
-\begin{lstlisting}[style=nonumbers]
-this1 == (struct Rectangle *)(&dynamic_1_value)
-w1 == 10
-h1 == 10
-dynamic_1_value1 == 
-   (dynamic_1_value0 WITH 
-   [Rectangle@vtable_pointer:=&virtual_table::Rectangle@Rectangle])
-dynamic_1_value2 == 
-   (dynamic_1_value1 WITH 
-   [width:=10])
-dynamic_1_value3 == 
-   (dynamic_1_value2 WITH 
-   [heigth:=10])
-dynamic_1_value4 == 
-   (dynamic_1_value3 WITH 
-   [Rectangle@vtable_pointer:=&virtual_table::Rectangle@Square])
-dynamic_1_value5 == 
-   (dynamic_1_value4 WITH 
-   [Square@vtable_pointer:=&virtual_table::Square@Square])
-dynamic_1_value6 == 
-   (dynamic_1_value5 WITH 
-   [width:=10])
-sqre1 == &dynamic_1_value
-this1 == &dynamic_1_value
-return_value1 == 
-   dynamic_1_value6.width * dynamic_1_value6.width
-(assert)!__ESBMC_alloc1[POINTER_OBJECT(&dynamic_1_value)] => 
-   return_value@1 == 100\end{lstlisting}
-\end{minipage}
-\caption{Intermediate Representation of \textit{Square} class}
-\label{figure:IR_uml_square}
-\end{figure}
 
 In OO programming, the use of \textit{shared inheritance} is very common.
 In contrast to other approaches (e.g.,~\cite{Blanc07}), ESBMC++ is able to
@@ -1144,14 +1165,16 @@ map or will return an error, otherwise.
 \section{Experimental Results}
 %-----------------------------------
 
-The experimental results is split into two parts.
+The experimental results are split into two parts.
 The setup is described in Section~\ref{experimental-setup}
 while Section~\ref{comparison-to-LLBMC} describes a comparison
 between ESBMC++\footnote{Available at http://esbmc.org/} and 
 LLBMC (Low-Level Bounded Model Checker)\footnote{Available at http://llbmc.org/}
-using a set of standard C++ benchmarks. In our experiments, we also tried to 
-use the CBMC model checker~\cite{Clarke04}, but it has failed in most of our
-benchmarks (as reported previously by Merz et~al.~\cite{Florian12}). 
+using a set of standard C++ benchmarks. Some details about LLBMC
+are also given in Section~\ref{comparison-to-LLBMC}.
+In our experiments, we also tried to use the CBMC model checker~\cite{Clarke04}, 
+but since it has failed in most of our benchmarks (as reported previously 
+by Merz et~al.~\cite{Florian12}), we do not report any results. 
 
 %-----------------------------------
 \subsection{Experimental Setup}
@@ -1159,21 +1182,21 @@ benchmarks (as reported previously by Merz et~al.~\cite{Florian12}).
 %-----------------------------------
 
 The benchmark that are used in our comparison consist of 1113 C++ programs.
-Around 290 programs are extracted from Deitel~\cite{Deitel},
-16 programs are extracted from NEC~\cite{NeclabsBenchmarkExceptions},
-16 programs are extracted from LLBMC~\cite{PrabhuMBIG11},
-and the others were developed to test all the features that the C++ language
+Around 290 programs are extracted from Deitel's textbook~\cite{Deitel},
+16 programs are taken from the NEC benchmark suite~\cite{NeclabsBenchmarkExceptions},
+16 programs are taken from the LLBMC benchmark suite~\cite{PrabhuMBIG11},
+and the others were developed by us to test all the features that the C++ language
 provides. The benchmarks are split into nine modules, as follows:
 \textit{algorithm} contains test cases for methods that involve the
 algorithm library; \textit{cpp} contains general test cases of the C++
-language that involve the general libraries, multi-thread, and templates.
-Additionally, it also contains the LLBMC's benchmarks and most of Deitel's
-benchmarks are located in this suite. The benchmarks \textit{deque}, \textit{list},
+language that involve the general libraries, multi-threading, and templates.
+Additionally, it also contains the LLBMC benchmarks and most of the Deitel
+benchmarks. The categories \textit{deque}, \textit{list},
 \textit{stream}, \textit{string}, and \textit{vector} contain test cases
-related to deques, lists, stream, strings, and vectors manipulations, respectively.
+for the respective STL container structures.
 Finally, \textit{inheritance} contains test cases related to inheritance and
 polymorphism while \textit{try\_catch} contains test cases related to exception handling
-(NEC Labs' test cases are located in this suite).
+(The NEC test cases are located in this suite).
 
 All the experiments were conducted on an otherwise idle Intel Core i7-2600,
 3.40 GHz with 24 GB of RAM running Ubuntu 64-bits. For all the modules,
@@ -1187,13 +1210,14 @@ The times given were measured using the \textit{unix} time command.
 %-----------------------------------
 
 This subsection describes the evaluation of ESBMC++ 
-against another BMC tool developed by Merz et al.~\cite{Florian12}. 
+against LLBMC, another C++ BMC tool developed by Merz et al.~\cite{Florian12}. 
 Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC} 
 summarizes the results. Here, \textit{N} is the number of C++ programs, 
 \textit{L} is the total lines of code of each suite, \textit{Time} is the 
 total time of the verification of each module, \textit{P} is the 
 number of positive results, \textit{FP} is the number of false positive 
-results, \textit{FN} is the number of false negative results, \textit{Fail} 
+results (i.e., the tool reports SAFE incorrectly), \textit{FN} is the number 
+of false negative results (i.e., the tool reports UNSAFE incorrectly), \textit{Fail} 
 is the number of internal errors during the verification of each module, 
 \textit{TO} represents the number of time-outs (i.e., $>900$ seconds), 
 and \textit{MO} represents the number of memory-outs (i.e., $>24$ GB).
@@ -1206,29 +1230,33 @@ and \textit{MO} represents the number of memory-outs (i.e., $>24$ GB).
 \hline
   & & & & \multicolumn{7}{c|}{ESBMC} & \multicolumn{7}{c|}{LLBMC} \\  \cline{5-18}
   & Testsuite & $N$ & $L$ & Time & P   & FP  & FN  & Fail & TO  & MO & Time & P   & FP  & FN  & Fail & TO  & MO \\\hline
-1 & Algorithm & 127 & 3374 & 1697 & 96 & 21 & 10 & 0 & 0 & 0 & 23566 & 98 & 1 & 2 & 0 & 25 & 1\\ % OK
+1 & Algorithm & 127 & 3376 & 449 & 98 & 15 & 14 & 0 & 0 & 0 & 23454 & 98 & 1 & 2 & 0 & 25 & 1\\ % OK
 \hline
-2 & Deque & 43 & 1239 & 1041 & 20 & 10 & 13 & 0 & 0 & 0 & 8580 & 33 & 0 & 0 & 1 & 9 & 0\\ % OK
+2 & Deque & 43 & 1239 & 221 & 39 & 0 & 4 & 0 & 0 & 0 & 8582 & 33 & 0 & 0 & 1 & 9 & 0\\ % OK
 \hline
-3 & Vector & 146 & 6927 & 3263 & 137 & 3 & 6 & 0 & 0 & 0 & 7440 & 129 & 1 & 3 & 4 & 6 & 3\\ % OK
+3 & Vector & 146 & 6853 & 1160 & 136 & 3 & 7 & 0 & 0 & 0 & 7372 & 129 & 1 & 3 & 4 & 6 & 3\\ % OK
 \hline
-4 & List & 54 & 1731 & 316 & 18 & 23 & 13 & 0 & 0 & 0 & 1961 & 26 & 4 & 22 & 0 & 0 & 2\\ % OK
+4 & List & 68 & 2292 & 2401 & 46 & 6 & 14 & 0 & 2 & 0 & 2859 & 31 & 5 & 28 & 0 & 0 & 4\\ % OK
 \hline
-5 & Stream & 66 & 1828 & 2201 & 64 & 0 & 2 & 0 & 0 & 0 & 11 & 29 & 0 & 36 & 1 & 0 & 0\\ % OK
+5 & Queue & 14 & 328 & 65 & 14 & 0 & 0 & 0 & 0 & 0 & 44 & 13 & 0 & 1 & 0 & 0 & 0\\ % OK
 \hline
-6 & String & 231 & 5022 & 19491 & 224& 5 & 2 & 0 & 0 & 0 & 28 & 122 & 4 & 105 & 0 & 0 & 0\\ % OK
+6 & Stack & 12 & 286 & 34 & 12 & 0 & 0 & 0 & 0 & 0 & 45 & 12 & 0 & 0 & 0 & 0 & 0\\ % OK
 \hline
-7 & Inheritance & 40 & 3052 & 670 & 36 & 3 & 1 & 0 & 0 & 0 & 106 & 35 & 1 & 2 & 2 & 0 & 0\\ % OK
+7 & Inheritance & 51 & 3460 & 236 & 46 & 1 & 2 & 2 & 0 & 0 & 122 & 44 & 1 & 3 & 1 & 2 & 0\\ % OK
 \hline
-8 & Try\_catch & 67 & 4743 & 877 & 64 & 1 & 2 & 0 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\ % OK
+8 & Try\_catch & 67 & 4743 & 251 & 60 & 3 & 3 & 1 & 0 & 0 & 3 & 1 & 0 & 0 & 66 & 0 & 0 \\ % OK
 \hline
-9 & Cpp & 339 & 26720 & 3771 & 320 & 4 & 15 & 0 & 0 & 0 & 3992 & 261 & 7 & 52 & 15 & 3 & 1\\ % OK
+9 & Stream & 66 & 1831 & 1002 & 65 & 0 & 1 & 0 & 0 & 0 & 12 & 30 & 0 & 35 & 1 & 0 & 0\\ % OK
+\hline
+10 & String & 231 & 4921 & 20555 & 225 & 6 & 8 & 0 & 0 & 0 & 37 & 128 & 4 & 101 & 0 & 0 & 0\\ % OK
+\hline
+11 & Cpp & 338 & 26624 & 1032 & 303 & 11 & 19 & 5 & 0 & 0 & 3445 & 260 & 9 & 51 & 15 & 2 & 1\\ % OK
 \hline\hline
-  &     &  1113 & 54636 & 33327 & 979 & 70 & 64 & 0 & 0 & 0 & 45687 & 734 & 18 & 222 & 89 & 43 & 7\\
+  &     &  1165 & 55953 & 27513 & 1044 & 45 & 66 & 8 & 2 & 0 & 45975 & 779 & 21 & 224 & 88 & 44 & 9\\ % OK
 \hline
 \end{tabular} }
 \end{center}
-\caption{Results of the comparison between ESBMC v1.20 and LLBMC v2012.2.}
+\caption{Results of the comparison between ESBMC v1.20 and LLBMC v2012.2a.}
 \label{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 \end{table*}
 
@@ -1246,8 +1274,8 @@ exception support (flag -fno-exceptions) while verifying with LLBMC.
 Enabling exceptions resulted in LLBMC aborting in most of the cases.
 
 As we can see in Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC}, 
-LLBMC time-outs in 25 programs in the \textit{Algorithm} module and 
-runs out of memory in 1 program. If we carefully analyze those test cases, 
+LLBMC times out in 25 programs in the \textit{Algorithm} module and 
+runs out of memory in one program. If we carefully analyze those test cases, 
 most of them use iterators, which might be causing the slow down 
 in the verification process, which a situation that also happens in others modules. 
 In the \textit{Deque}, \textit{Vector}, and \textit{List} modules, 
@@ -1257,6 +1285,10 @@ errors were related to the container size (e.g., assertions if the container
 is empty or if it has a particular size). In ESBMC++, most of the errors on 
 those modules are due to a missing operational model 
 of the libraries, which are currently under development.
+
+In the \textit{Queue} module, LLBMC on fails in a program that uses the size of a list
+as constructor parameter and in the \textit{Stack} all the programs are verified correctly.
+In ESBMC++, all the programs in both modules are successfully verified.
 
 In the \textit{Stream} module, most of the errors where related to assertions on the size 
 of the stream (using the method $gcount\left(\right)$) and to internal flags (such as 
@@ -1274,10 +1306,12 @@ using classes constructors. And lastly, in the \textit{cpp} module, which has te
 the others modules (but are not redundant), most of the errors presented were already seen during 
 the verification of others modules.
 
-By the end, ESBMC++ verified all modules in 33327 seconds (approximately 9.25 hours) and successfully 
-verified 979 out of 1113 (~87.96\%) while LLBMC verified all modules in 45687 seconds (approximately 12.69 hours) 
-and successfully verified 734 out of 1113 (65.94\%). We can see that LLBMC is slower than ESBMC++ on the containers 
-and algorithm modules, while it is faster on stream and string modules but looses on successfully verified test cases. 
+By the end, ESBMC++ verified all modules in 27513 seconds (approximately 7 hours) 
+and successfully verified 1044 out of 1165 (89\%) while LLBMC verified all modules 
+in 45975 seconds (approximately 12 hours) and successfully verified 779 out of 1165 
+(66\%). We can see that LLBMC is slower than ESBMC++ on the containers 
+and \textit{algorithm} modules, while it is faster on \textit{stream} and 
+\textit{string} modules but looses on successfully verified test cases. 
 In the \textit{Inheritance} module, the results of both tools are essentially the same.
 
 In the \textit{try\_catch} module, ESBMC++ is able to verify almost all programs, 
@@ -1289,8 +1323,19 @@ Also note that ESBMC++ does not crash, memory out or timeout in any module.
 \section{Related Work}
 %-----------------------------------
 
-Prabhu et al. presents an interprocedural exception
-analysis and transformation framework for C++ that
+The application of SMT-based BMC to software is gaining 
+popularity in the software engineering community mainly due 
+to the advent of sophisticated SMT solvers built over efficient 
+SAT solvers~\cite{CVC07,Boolector09,Z08}. Previous work related to 
+SMT-based BMC for software address the problem of verifying C programs
+that use bit operations, floating-point arithmetic, and 
+pointers~\cite{Clarke04,Armando09,Ganai06,Cordeiro12}. 
+However, there are only a few work that address the problem 
+of model checking C++ programs that make use of templates, containers,
+and exception handling.
+
+Prabhu et al.~\cite{PrabhuMBIG11} present an interprocedural 
+exception analysis and transformation framework for C++ that
 records the control-flow created by the exceptions
 and creates an exception-free program. The exception-free
 program creation starts by generating a modular interprocedural
