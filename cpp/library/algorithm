@@ -231,12 +231,11 @@ FwdIt adjacent_find(FwdIt first, FwdIt last, Pr pred) {
 }
 
 template<class InIt, class Ty, class Dist>
-typename iterator_traits<InIt>::difference_type
-count(InIt first, InIt last, const Ty& val);
+int count(InIt first, InIt last, const Ty& val);
 
 template<class InputIterator, class T>
-ptrdiff_t count(InputIterator first, InputIterator last, const T& value) {
-	ptrdiff_t ret = 0;
+int count(InputIterator first, InputIterator last, const T& value) {
+	int ret = 0;
 	while (first != last)
 		if (*first++ == value)
 			++ret;
@@ -244,8 +243,8 @@ ptrdiff_t count(InputIterator first, InputIterator last, const T& value) {
 }
 
 template<class InputIterator, class T>
-ptrdiff_t count(InputIterator *first, InputIterator *last, const T& value) {
-	ptrdiff_t ret = 0;
+int count(InputIterator *first, InputIterator *last, const T& value) {
+	int ret = 0;
 	while (first != last)
 		if (*first++ == value)
 			++ret;
@@ -253,8 +252,8 @@ ptrdiff_t count(InputIterator *first, InputIterator *last, const T& value) {
 }
 
 template<class InputIterator, class T>
-ptrdiff_t count_if(InputIterator first, InputIterator last, const T& pred) {
-	ptrdiff_t ret = 0;
+int count_if(InputIterator first, InputIterator last, const T& pred) {
+	int ret = 0;
 	while (first != last)
 		if (pred(*first++))
 			++ret;
