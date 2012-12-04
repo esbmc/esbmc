@@ -837,18 +837,6 @@ software and not that of hardware).}
 \label{inheritance-and-polymorphism}
 %------------------------------------------------
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\comment{
-Inheritance is one of the main benefits of object-oriented paradigm,
-which allows a class (derived class) absorbs data and behavior
-from existing classes (base class) and thus enhances it with new features.
-This is the vital concept behind the creation of reusable software components
-and has received much attention because it is one of the promising ways to
-improve software quality.}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
 Modeling C++ features like inheritance and polymorphism
 makes static analysis difficult to implement.
 In contrast to Java, which only allows single inheritance, where derived classes 
@@ -892,38 +880,12 @@ does not search for attributes or methods from base classes on each access.
 On the other hand, we replicate information to any new class, thus wasting
 memory resources.
 
-%as shown in Figure~\ref{figure:multiple-inheritance-IR}.
-
 \begin{figure}[ht]
 \centering
 \includegraphics[scale=3.5]{figures/inheritance_uml}
 \caption{\textit{Shape} class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
-
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\comment{
-\begin{figure}[h]
-\centering
-\begin{minipage}{0.9\textwidth}
-\begin{lstlisting}[style=nonumbers]
-cpp::struct.Rectangle
-    type:  struct
-      * name: cpp::struct.Rectangle
-components:
-        0: name: cpp::struct.Shape::@vtable_pointer
-        1: name: cpp::struct.Display::@vtable_pointer
-        2: name: cpp::struct.Rectangle::@vtable_pointer
-\end{lstlisting}
-\end{minipage}
-\caption{Multiple Inheritance: Intermediate Representation}
-\label{figure:multiple-inheritance-IR}
-\end{figure}
-}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 Another important feature from object-oriented programming that our tool
 supports is the concept of polymorphism, which allows the creation of 
@@ -952,21 +914,31 @@ C := \left [ \begin{array}{ll}
         \wedge j_{2} = store\left(j_{1}, width, 10\right) \\
         \wedge j_{3} = store\left(j_{2}, height, 10\right) \\
         \wedge j_{4} = store\left(j_{3}, vtable, Square\right) \\
-        \wedge j_{5} = \left(j_{4}, width, 10\right) \\
-        \wedge return\_value = \left(select\left(j_{5}, width\right) \times select\left(j_{5}, width\right)\right) \\
+        \wedge j_{5} = store\left(j_{4}, width, 10\right) \\
+        \wedge return\_value_{1} = \left(select\left(j_{5}, width\right) \times select\left(j_{5}, width\right)\right) \\
               \end{array} \right ],  \\
 \end{equation}
 %
 \begin{equation}
 \label{area-class-p}
 P := \left [ \begin{array}{ll}
-                j_{5}.\nu  \Rightarrow return\_value = 100 \\
+              return\_value_{1} = 100 \\
               \end{array} \right ]  \\
 \end{equation}
 %
-Our tool also supports the indirect inheritance, which is a class that
-inherits features from a derived class with one or more classes
-not directly connected. In Figure~\ref{figure:uml_diagram}, we have
+
+The classes \textit{Rectangle} (which is the base class) 
+and \textit{Square} (which is the derived class) have a virtual method 
+called $area\left(\right)$, which has the same signature. As our running example 
+calls this method on a base class pointer, then this called function 
+cannot be determined at compile-time. To overcome this problem, 
+we thus create a \textit{vtable} to contain the address of the object's bound 
+methods so that the call to this method is fetched with the address from 
+the \textit{vtable} at verification-time.
+
+In addition to that, our tool also supports the indirect inheritance, 
+which is a class that inherits features from a derived class with one 
+or more classes not directly connected. In Figure~\ref{figure:uml_diagram}, we have
 $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$.
 Thus, \textit{Square} class can access features from \textit{Shape} class,
 but they are not directly connected. We tackle this problem by
