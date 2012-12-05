@@ -2052,7 +2052,7 @@ bool cpp_typecheckt::dynamic_typecast(
   {
     exprt typeid_function = new_expr;
     exprt function = typeid_function;
-    irep_idt badcast_identifier="cpp::std::struct.bad_cast";
+    irep_idt badcast_identifier="cpp::std::tag.bad_cast";
     // We must check if the user included typeinfo
     const symbolt *bad_cast_symbol;
     bool is_included = lookup(badcast_identifier, bad_cast_symbol);
