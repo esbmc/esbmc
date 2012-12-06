@@ -20,7 +20,7 @@ Date: February 2012
 #define MAP_SIZE 1000
 
 namespace std {
-/*
+
   template < class Key, class T, class Compare = less<Key>,
              class Allocator = allocator<pair<const Key,T> > >
   class multimap{
@@ -52,7 +52,6 @@ namespace std {
 	       bool operator != (const iterator& it) const;
 	     };
 
-
 	     class const_iterator{
 	       public:
 	       const_iterator(const const_iterator&);
@@ -73,7 +72,7 @@ namespace std {
 	       bool operator == ( const const_iterator&)const;
 	       bool operator != ( const const_iterator&)const;
 	     };
-
+/*
 	     class reverse_iterator{
 	       public:
 	       reverse_iterator(reverse_iterator);
@@ -125,15 +124,6 @@ namespace std {
 	  explicit multimap ( const Compare& comp = Compare(),
 	                 const Allocator& = Allocator() );
 	  multimap ( const multimap<Key,T,Compare,Allocator>& x );
-	  size_type count ( const key_type& x ) const;
-	  iterator insert ( const value_type& x );
-	  iterator insert ( iterator position, const value_type& x );
-	  template <class InputIterator>
-	     void insert ( InputIterator first, InputIterator last );
-      iterator begin ();
-      const_iterator begin () const;
-      iterator end ();
-      const_iterator end () const;
       template <class Key, class T, class Compare, class Allocator>
         bool operator== ( const multimap<Key,T,Compare,Allocator>& x,
                           const multimap<Key,T,Compare,Allocator>& y );
@@ -152,9 +142,18 @@ namespace std {
       template <class Key, class T, class Compare, class Allocator>
         bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
                           const multimap<Key,T,Compare,Allocator>& y );
-
-  };
 */
+	  size_type count ( const key_type& x ) const;
+	  iterator insert ( const value_type& x );
+	  iterator insert ( iterator position, const value_type& x );
+	  template <class InputIterator>
+	     void insert ( InputIterator first, InputIterator last );
+      iterator begin ();
+      const_iterator begin () const;
+      iterator end ();
+      const_iterator end () const;
+  };
+
   template <class Key, class T, class Compare=less<Key> >
   class map {
 
