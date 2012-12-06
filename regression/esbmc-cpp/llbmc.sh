@@ -5,6 +5,7 @@ SOURCES=$1/*/
 TIMEOUT=900 #15m=900s
 
 POS_CONT=0
+FAL_CONT=0
 FAL_POS_CONT=0
 FAL_NEG_CONT=0
 CRASH_CONT=0
@@ -129,8 +130,8 @@ do
 
       if [ "$TARGET" != "" ];
       then
-        echo "POS_CONT++ FAILED"
-        POS_CONT=$((POS_CONT+1))
+        echo "FAL_CONT++ FAILED"
+        FAL_CONT=$((FAL_CONT+1))
       else
         echo "FAL_NEG_CONT++ FAILED"
         FAL_NEG_CONT=$((FAL_NEG_CONT+1))
@@ -185,10 +186,10 @@ echo "====================="
 echo "TOTAL: \t\t" $TOTAL
 echo
 echo "POS: \t\t" $POS_CONT
+echo "FAL: \t\t" $FAL_CONT
 echo "FAL_POS: \t" $FAL_POS_CONT
 echo "FAL_NEG: \t" $FAL_NEG_CONT
-echo "CRASH: \t\t" $CRASH_CONT
-echo "EXCEPTION: \t" $CANT_CONVERT_EXCEPTION_CONT
+echo "CRASH: \t\t" $((CRASH_CONT+CANT_CONVERT_EXCEPTION_CONT))
 echo "KILLED: \t" $KILLED_CONT
 echo "MEMORY OUT: \t" $MEMORY_OUT_CONT
 echo "====================="
