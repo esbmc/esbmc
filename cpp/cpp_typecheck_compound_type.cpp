@@ -637,7 +637,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(context.move(static_symbol, new_symbol))
     {
       err_location(cpp_name.location());
-	str << "redeclaration of symbol `"
+      str << "redeclaration of symbol `"
 	    << static_symbol.base_name.as_string()
 	    << "'";
       throw 0;
@@ -1062,7 +1062,13 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
           value.operands().insert(
               value.operands().begin(),
               throw_decl);
-          throw_decl.clear();
+
+          // Insert flag to end of constructor
+          // so we know when to remove throw_decl
+          value.operands().push_back(codet("throw_decl_end"));
+
+          // Clear throw_decl
+          value.remove("throw_decl");
         }
       }
     }

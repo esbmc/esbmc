@@ -88,10 +88,6 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_asm(code);
   else if(statement=="start_thread")
     typecheck_start_thread(code);
-  else if(statement=="cpp-try")
-  {
-    typecheck_cpptry(code);
-  }
   else if(statement=="msc_try_finally")
   {
     assert(code.operands().size()==2);
@@ -132,25 +128,6 @@ Function: c_typecheck_baset::typecheck_asm
 
 void c_typecheck_baset::typecheck_asm(codet &code __attribute__((unused)))
 {
-}
-
-/*******************************************************************\
-
-Function: c_typecheck_baset::typecheck_cpptry
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void c_typecheck_baset::typecheck_cpptry(codet &code)
-{
-    Forall_operands(it, code) {
-      typecheck_code(to_code(*it));
-    }
 }
 
 /*******************************************************************\

@@ -14,6 +14,7 @@
 #include "cstring"
 #include "cassert"
 #include "iostream"
+#include "stdexcept"
 
 size_t npos;
 
@@ -427,7 +428,7 @@ public:
 		__ESBMC_assert(s != NULL,
 				"The parameter must to be different than NULL");
 		if ((pos > sLen) || (n > (sLen - pos)))
-			throw("out_of_range");
+			throw out_of_range();
 
 		int rhsLen = n;
 		int totalLen = this->_size + rhsLen;
@@ -1138,7 +1139,7 @@ char string::at(size_t pos) const {
 			"Error! Invalid access memory area");
 	int i;
 	if (pos > this->length()) {
-		throw("out_of_range");
+		throw out_of_range();
 	} else {
 		return this->str[pos];
 	}
@@ -1418,7 +1419,7 @@ size_t string::copy(char* s, size_t n, size_t pos = 0) const {
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
 	size_t aux = n + pos;
 	if (pos > this->size()) {
-		throw("out_of_range");
+		throw out_of_range();
 	}
 	if (s == NULL) {
 		s = new char[n];
@@ -1442,7 +1443,7 @@ string& string::append(const char* s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n >= 0, "string overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
 	if (n > strlen(s))
-		throw("out_of_range");
+		throw out_of_range();
 	int rhsLen = n;
 	int totalLen = this->_size + rhsLen;
 	string temp(totalLen);
@@ -1463,7 +1464,7 @@ string& string::append(string& s, size_t pos, size_t n) {
 	__ESBMC_assert(s.str != NULL,
 			"The parameter must to be different than NULL");
 	if ((pos > s._size) || (n > (s._size - pos)))
-		throw("out_of_range");
+		throw out_of_range();
 
 	int rhsLen = n;
 	int totalLen = this->_size + rhsLen;

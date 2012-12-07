@@ -985,7 +985,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
       return false;
 
   #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 3\n";
+  std::cout << "Parser::rDeclaration 2\n";
   #endif
 
   typet cv_q, integral;
@@ -1002,7 +1002,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     return false;
 
   #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 4\n";
+  std::cout << "Parser::rDeclaration 3\n";
   #endif
 
   if(!optIntegralTypeOrClassSpec(integral))
@@ -1016,7 +1016,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
   if(integral.is_not_nil())
   {
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 5\n";
+    std::cout << "Parser::rDeclaration 4\n";
     #endif
     return rIntegralDeclaration(declaration, storage_spec, member_spec, integral, cv_q);
   }
@@ -1025,11 +1025,11 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     int t=lex->LookAhead(0);
 
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 6 " << t << "\n";
+    std::cout << "Parser::rDeclaration 5 " << t << "\n";
     #endif
 
-    if(cv_q.is_not_nil() &&
-       ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
+    if(cv_q.is_not_nil()
+      && ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
       return rConstDeclaration(declaration, storage_spec, member_spec, cv_q);
     else
       return rOtherDeclaration(declaration, storage_spec, member_spec, cv_q);
@@ -1382,6 +1382,17 @@ bool Parser::rOtherDeclaration(
 
     if(!rFunctionBody((codet &)declaration.declarators().front().value()))
       return false;
+
+    // If there was member initializers on function try blocks
+    // We should move it up from the try statement
+    irept mi=
+      declaration.declarators().front().value().find("member_initializers");
+
+    if(mi.is_not_nil())
+    {
+      declaration.declarators().front().value().remove("member_initializers");
+      declaration.declarators().front().member_initializers().swap(mi);
+    }
   }
 
   return true;
@@ -5447,6 +5458,10 @@ bool Parser::rCompoundStatement(codet &statement)
   std::cout << "Parser::rCompoundStatement 1\n";
   #endif
 
+  // Function try block
+  if(lex->LookAhead(0)==TOK_TRY)
+    return rTryStatement(statement);
+
   if(lex->GetToken(ob)!='{')
     return false;
 
@@ -5903,7 +5918,7 @@ bool Parser::rForStatement(codet &statement)
     if(!rCommaExpression(tmp))
       return false;
 
-	// TODO: Remove?
+    // TODO: Remove?
     exp3=exprt("code");
     exp3.statement("expression");
     exp3.location()=tmp.location();
@@ -5938,6 +5953,10 @@ bool Parser::rTryStatement(codet &statement)
 {
   Token tk;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 1\n";
+  #endif
+
   if(lex->GetToken(tk)!=TOK_TRY)
     return false;
 
@@ -5945,6 +5964,16 @@ bool Parser::rTryStatement(codet &statement)
   set_location(statement, tk);
 
   {
+    // Function try block inside constructor
+    if(lex->LookAhead(0)==':')
+    {
+      irept mi;
+      if(!rMemberInitializers(mi))
+        return false;
+
+      statement.set("member_initializers",mi);
+    }
+
     codet body;
 
     if(!rCompoundStatement(body))
@@ -5952,6 +5981,10 @@ bool Parser::rTryStatement(codet &statement)
 
     statement.move_to_operands(body);
   }
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 2\n";
+  #endif
 
   bool has_catch_ellipsis = false;
 

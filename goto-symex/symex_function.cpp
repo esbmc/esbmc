@@ -398,7 +398,6 @@ goto_symext::run_next_function_ptr_target(bool first)
 
   symex_function_call_code(call);
 
-
   return true;
 }
 

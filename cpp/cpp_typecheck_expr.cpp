@@ -86,7 +86,7 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
     typecheck_expr_explicit_typecast(expr);
   else if(expr.id()=="explicit-constructor-call")
     typecheck_expr_explicit_constructor_call(expr);
-  else if(expr.id()=="string_constant")
+  else if(expr.id()=="string-constant")
   {
     c_typecheck_baset::typecheck_expr_main(expr);
 
@@ -1092,7 +1092,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   else
     assert(false);
 
-  typet pointer_type=expr.op0().type();
+  typet pointer_type=follow(expr.op0().type());
 
   if(pointer_type.id()!="pointer")
   {
@@ -1102,8 +1102,31 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
     throw 0;
   }
 
-  // these are always void
+  // remove any const-ness of the argument
+  // (which would impair the call to the destructor)
+  pointer_type.subtype().remove("#constant");
+
+  // delete expressions are always void
   expr.type()=typet("empty");
+
+  // we provide the right destructor, for the convenience
+  // of later stages
+  exprt new_object("new_object", pointer_type.subtype());
+  new_object.location()=expr.location();
+  new_object.set("#lvalue", true);
+
+  already_typechecked(new_object);
+
+  codet destructor_code=cpp_destructor(
+    expr.location(),
+    pointer_type.subtype(),
+    new_object);
+
+  // this isn't typechecked yet
+  if(destructor_code.is_not_nil())
+    typecheck_code(destructor_code);
+
+  expr.set("destructor", destructor_code);
 }
 
 /*******************************************************************\
@@ -1152,6 +1175,21 @@ void cpp_typecheckt::typecheck_expr_member(
 
   exprt &op0=expr.op0();
   add_implicit_dereference(op0);
+
+  // The notation for explicit calls to destructors can be used regardless
+  // of whether the type defines a destructor.  This allows you to make such
+  // explicit calls without knowing if a destructor is defined for the type.
+  // An explicit call to a destructor where none is defined has no effect.
+
+  if(expr.find("component_cpp_name").is_not_nil() &&
+     to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
+     follow(op0.type()).id()!="struct")
+  {
+    exprt tmp("cpp_dummy_destructor");
+    tmp.location()=expr.location();
+    expr.swap(tmp);
+    return;
+  }
 
   #ifdef CPP_SYSTEMC_EXTENSION
   if(expr.op0().type().id() == "signedbv" ||
@@ -1677,9 +1715,9 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // It's NULL :( Let's add a throw bad_typeid
 
       // Let's create the bad_typeid exception
-     irep_idt bad_typeid_identifier="cpp::std::tag.bad_typeid";
+      irep_idt bad_typeid_identifier="cpp::std::tag.bad_typeid";
 
-     // We must check if the user included typeinfo
+      // We must check if the user included typeinfo
       const symbolt *bad_typeid_symbol;
       bool is_included = lookup(bad_typeid_identifier, bad_typeid_symbol);
 
@@ -1850,6 +1888,13 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     // but usually just type adjustments.
     typecheck_cast_expr(expr);
     add_implicit_dereference(expr);
+    return;
+  }
+  else if(expr.function().id()=="cpp_dummy_destructor")
+  {
+    // these don't do anything, e.g., (char*)->~char()
+    expr.statement("skip");
+    expr.type()=empty_typet();
     return;
   }
 
