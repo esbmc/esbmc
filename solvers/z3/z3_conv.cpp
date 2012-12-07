@@ -2481,6 +2481,11 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
     ifexpr.op1() = addrof1;
     ifexpr.op2() = addrof2;
     convert_bv(ifexpr, bv);
+  } else if (expr.op0().id() == "typecast" &&
+             expr.op0().op0().id() == "symbol") {
+    exprt tmp("address_of", expr.type());
+    tmp.copy_to_operands(expr.op0().op0());
+    convert_bv(tmp, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand", expr);
   }
@@ -2865,7 +2870,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
         cond = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
       else
       {
-        std::cout << "we do not support `" << struct_type.components()[j].type().id() 
+        std::cout << "we do not support `" << struct_type.components()[j].type().id()
                   << "' in the state vector" << std::endl;
         assert(0);
       }
