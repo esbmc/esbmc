@@ -28,11 +28,11 @@ public:
     return static_cast<const locationt &>(find("#location"));
   }
 
-  bool is_static()   const { return get("storage")=="static"; }
-  bool is_extern()   const { return get("storage")=="extern"; }
-  bool is_auto()     const { return get("storage")=="auto"; }
-  bool is_register() const { return get("storage")=="register"; }
-  bool is_mutable()  const { return get("storage")=="mutable"; }
+  bool is_static()   const { return get_bool("static"); }
+  bool is_extern()   const { return get_bool("extern"); }
+  bool is_auto()     const { return get_bool("auto"); }
+  bool is_register() const { return get_bool("register"); }
+  bool is_mutable()  const { return get_bool("mutable"); }
 
   void set_static  () { set("storage", "static"); }
   void set_extern  () { set("storage", "extern"); }

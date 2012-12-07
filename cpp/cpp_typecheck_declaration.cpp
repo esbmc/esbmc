@@ -181,7 +181,7 @@ void cpp_typecheckt::convert_non_template_declaration(
 
   typecheck_type(type);
 
-  // special treatment for anonymous unions
+  // Special treatment for anonymous unions
   if(declaration.declarators().empty() &&
      follow(declaration.type()).get_bool("#is_anonymous"))
   {

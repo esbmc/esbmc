@@ -103,7 +103,8 @@ void cpp_typecheckt::typecheck_compound_bases(struct_typet &type)
     // add a flag to determine
     // if this is the most-derived-object
     struct_typet::componentt most_derived;
-    most_derived.set("type", "bool");
+
+    most_derived.type()=bool_typet();
     most_derived.set("access", "public");
     most_derived.base_name("@most_derived");
     most_derived.set_name(cpp_identifier_prefix(current_mode)+"::"+

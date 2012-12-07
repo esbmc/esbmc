@@ -707,6 +707,7 @@ void cpp_typecheckt::check_member_initializers(
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol" );
+
           // check for a direct parent
           if(member_type.identifier()
              == parent_it->type().identifier())
@@ -1304,7 +1305,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
     }
   }
 
-  // call the data member destructor in the reverse order
+  // call the data member destructors in the reverse order
   for(struct_typet::componentst::const_reverse_iterator
       cit=components.rbegin();
       cit!=components.rend();

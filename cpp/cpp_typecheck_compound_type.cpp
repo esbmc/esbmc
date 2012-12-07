@@ -99,7 +99,8 @@ void cpp_typecheckt::typecheck_compound_type(
 
   // get the tag name
   bool anonymous=type.find("tag").is_nil();
-
+  bool has_body=type.body().is_not_nil();
+  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
   std::string identifier, base_name;
 
   if(anonymous)
@@ -121,9 +122,6 @@ void cpp_typecheckt::typecheck_compound_type(
       throw "no namespaces allowed in compound names";
     }
   }
-
-  bool has_body=type.body().is_not_nil();
-  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
 
   cpp_scopet &dest_scope=
     tag_scope(identifier, base_name, has_body, tag_only_declaration);
@@ -186,7 +184,7 @@ void cpp_typecheckt::typecheck_compound_type(
     if(context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_compound_type: context.move() failed";
 
-    // put into scope
+    // put into dest_scope
     cpp_idt &id=cpp_scopes.put_into_scope(*new_symbol);
 
     id.id_class=cpp_idt::CLASS;
@@ -254,10 +252,10 @@ void cpp_typecheckt::typecheck_compound_declarator(
   typet final_type=
     declarator.merge_type(declaration.type());
 
+  typecheck_type(final_type);
+
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
-
-  typecheck_type(final_type);
 
   std::string full_name, base_name;
   cpp_name.convert(full_name, base_name);
@@ -674,6 +672,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     }
   }
 
+  // array members must have fixed size
   check_array_types(component.type());
 
   put_compound_into_scope(component);
@@ -689,9 +688,10 @@ Inputs:
 
 Outputs:
 
-Purpose:
+Purpose: check that an array has fixed size
 
 \*******************************************************************/
+
 void cpp_typecheckt::check_array_types(typet &type)
 {
   if(type.id()=="array")
@@ -1057,7 +1057,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         exprt &throw_decl = (exprt&) declaration.op0().add("throw_decl");
 
         // We always insert throw_decl to the begin of the function
-        if(throw_decl.statement() == "throw_decl")
+        if(throw_decl.statement()=="throw_decl")
         {
           value.operands().insert(
               value.operands().begin(),
@@ -1792,14 +1792,13 @@ bool cpp_typecheckt::subtype_typecast(
   const struct_typet &from,
   const struct_typet &to) const
 {
-  //std::cout << "from.name(): " << from.name() << std::endl;
-  //std::cout << "to.name(): " << to.name() << std::endl;
   if(from.name()==to.name())
     return true;
 
   std::set<irep_idt> bases;
 
   get_bases(from, bases);
+
   return bases.find(to.name()) != bases.end();
 }
 

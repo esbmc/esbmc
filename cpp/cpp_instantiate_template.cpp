@@ -460,7 +460,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   cpp_saved_template_mapt saved_map(template_map);
 
   symbolt &old_symbol=context.symbols.find(identifier)->second;
-  bool is_specialization = specialization.is_not_nil();
+  bool is_specialization=specialization.is_not_nil();
 
   // do we have args?
   if(template_args.is_nil())
@@ -548,8 +548,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
       const symbolt &symb=lookup(cpp_id.identifier);
 
       // continue if the type is incomplete only
-      if(cpp_id.id_class == cpp_idt::CLASS &&
-         symb.type.id() == "struct")
+      if(cpp_id.id_class==cpp_idt::CLASS &&
+         symb.type.id()=="struct")
         return symb;
       else if(symb.value.is_not_nil())
         return symb;
@@ -572,6 +572,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // store the information that the template has
   // been instantiated using these arguments
   {
+    // need non-const handle on template symbol
     irept &instantiated_with=old_symbol.value.add("instantiated_with");
     irept tc_template_args_tmp = tc_template_args;
     instantiated_with.move_to_sub(tc_template_args_tmp);
@@ -682,8 +683,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
     }
 
     bool is_static=new_decl.storage_spec().is_static();
-    irep_idt access = new_decl.get("#access");
-    assert(access != "");
+    irep_idt access=new_decl.get("#access");
+
+    assert(access!="");
 
     typecheck_compound_declarator(
       symb,

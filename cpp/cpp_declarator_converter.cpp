@@ -507,8 +507,8 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
-                        is_number(symbol.type) &&
-                        symbol.value.id() == "constant");
+                      is_number(symbol.type) &&
+                      symbol.value.id() == "constant");
 
       if(cpp_typecheck.cpp_scopes.current_scope().is_global_scope())
       {
@@ -568,12 +568,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       }
     }
   }
-//  if(!is_code && cpp_typecheck.cpp_scopes.current_scope().contains(base_name))
-//  {
-//    std::string error(base_name.c_str());
-//    error = "`" + error + "' already in scope";
-//    throw error.c_str();
-//  }
 
   // put into scope
   cpp_idt &identifier=

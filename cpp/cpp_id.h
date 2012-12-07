@@ -36,24 +36,25 @@ public:
 
   bool is_member, is_method, is_static_member,
        is_scope, is_constructor;
+
   id_classt id_class;
 
-  bool is_class() const
+  inline bool is_class() const
   {
     return id_class==CLASS;
   }
 
-  bool is_enum() const
+  inline bool is_enum() const
   {
     return id_class==ENUM;
   }
 
-  bool is_namespace() const
+  inline bool is_namespace() const
   {
     return id_class==NAMESPACE;
   }
 
-  bool is_typedef() const
+  inline bool is_typedef() const
   {
     return id_class==TYPEDEF;
   }
@@ -100,17 +101,17 @@ public:
     return *parents[i];
   }
 
-  void add_parent(cpp_idt &cpp_id)
+  inline void add_parent(cpp_idt &cpp_id)
   {
     parents.push_back(&cpp_id);
   }
 
-  unsigned parents_size() const
+  inline unsigned parents_size() const
   {
     return parents.size();
   }
 
-  void clear()
+  inline void clear()
   {
     *this=cpp_idt();
   }
@@ -121,7 +122,6 @@ public:
   friend class cpp_scopet;
 
 public:
-
   std::set<cpp_idt*> using_set;
 
 protected:
