@@ -577,9 +577,32 @@ public:
 
 	template <class Predicate>
 		void unique ( Predicate pred );
-	void merge(list<T>& x);
+
+	void merge(list<T>& x){
+		int i;
+		node* tmp = this->head;
+		node* tmpX = x.head;
+		node* aux;
+		for( i = 0; i < x._size; i++){
+			if (tmpX->data <= tmp->data){
+				aux = new node (tmpX->data, tmp->prev, tmp);
+				if (tmp->prev != NULL){
+					tmp->prev->next = aux;
+				}else{
+					this->head = aux;
+				}
+				tmp->prev = aux;
+				this->_size++;
+			}
+			tmp = tmp->next;
+			tmpX = tmpX->next;
+		}
+		x.clear();
+	}
 	void merge(list<T>& x, pred_double* y);
+
 	void sort();
+
 	void reverse(){
 		list<T> tmpList;
 		node* tmpNode = this->tail;
@@ -607,7 +630,19 @@ public:
   }
 
   bool operator== ( const list<int>& x, const list<int>& y ){
-	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
+		if(x._size != y._size)
+			return false;
+		list<int>::node* tmpX = x.head;
+		list<int>::node* tmpY = y.head;
+		for (int i = 0; (i < x._size) && (i < y._size); i++){
+			if (tmpX->data != tmpY->data){
+				cout << tmpX->data << " != " << tmpY->data << ": " << (tmpX->data != tmpY->data) << endl;
+				return false;
+			}
+			tmpX = tmpX->next;
+			tmpY = tmpY->next;
+		}
+		return true;
   }
   bool operator!= ( const list<int>& x, const list<int>& y ){
 	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
