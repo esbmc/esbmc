@@ -638,7 +638,6 @@ public:
 		list<int>::node* tmpY = y.head;
 		for (int i = 0; (i < x._size) && (i < y._size); i++){
 			if (tmpX->data != tmpY->data){
-				cout << tmpX->data << " != " << tmpY->data << ": " << (tmpX->data != tmpY->data) << endl;
 				return false;
 			}
 			tmpX = tmpX->next;
