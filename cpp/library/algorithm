@@ -818,7 +818,7 @@ void sort(RanIt first, RanIt last, Pr pred);
 template<class BidIt>
 void stable_sort(BidIt begin, BidIt end){
 	if (begin != end) {
-		RanIt middle = partition (begin, end);
+		BidIt middle = partition (begin, end);
 		sort (begin, middle);
 		sort (middle+1, end);
 	}
@@ -1240,7 +1240,7 @@ template<class RanIt, class Pr>
 void make_heap(RanIt first, RanIt last, Pr pred);
 
 template<class RanIt>
-void sort_heap(RanIt first, RanIt last){
+void sort_heap(RanIt begin, RanIt end){
 	if (begin != end) {
 		RanIt middle = partition (begin, end);
 		sort (begin, middle);
