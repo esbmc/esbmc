@@ -16,10 +16,9 @@ int main () {
 
   // using default comparison (operator <):
   nth_element (myvector.begin(), myvector.begin()+5, myvector.end());
-
+  
   // using function as comp
   nth_element (myvector.begin(), myvector.begin()+5, myvector.end(),myfunction);
-  assert(myvector[0] != 5);
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)
