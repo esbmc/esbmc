@@ -774,7 +774,7 @@ BidIt stable_partition(BidIt first, BidIt last, Pr pred){
 		}
 		return first;
 }
-
+#if 0
 template<class InputIterator>
 InputIterator partition(InputIterator first, InputIterator last)
 {
@@ -799,7 +799,9 @@ InputIterator partition(InputIterator first, InputIterator last)
   }
   return pivot;
 }
+#endif
 
+#if 0
 template<class RanIt>
 void sort(RanIt begin, RanIt end){
 	if (begin != end) {
@@ -808,24 +810,82 @@ void sort(RanIt begin, RanIt end){
 	        sort (middle+1, end);
 	    }
 }
+#endif
 
 template<class RanIt>
-void sort(RanIt first[], RanIt last[]);
+void sort(RanIt begin, RanIt end){
+	RanIt i,j;
+	RanIt iMin;
+	for (j = begin; j < end-1; j++) {
+	    iMin = j;
+	    for ( i = j+1; i < end; i++) {
+	        if (*i < *iMin) {
+	            iMin = i;
+	        }
+	    }
+	    if ( iMin != j ) {
+	        swap(*j, *iMin);
+	    }
+	}
+}
+
+template<class RanIt>
+void sort(RanIt begin[], RanIt end[]){
+	RanIt i[],j[];
+	RanIt iMin[];
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (*i < *iMin) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
 
 template<class RanIt, class Pr>
-void sort(RanIt first, RanIt last, Pr pred);
+void sort(RanIt first, RanIt last, Pr pred){
+	RanIt i,j;
+	RanIt iMin;
+	for (j = begin; j < end-1; j++) {
+	    iMin = j;
+	    for ( i = j+1; i < end; i++) {
+	        if (pred(*i, *iMin)) {
+	            iMin = i;
+	        }
+	    }
+	    if ( iMin != j ) {
+	        swap(*j, *iMin);
+	    }
+	}
+}
 
 template<class BidIt>
 void stable_sort(BidIt begin, BidIt end){
-	if (begin != end) {
-		BidIt middle = partition (begin, end);
-		sort (begin, middle);
-		sort (middle+1, end);
+	BidIt i,j;
+	for(i = begin ; i != end ; i++){
+		j = i;
+		while(*j < *(j-1) && j != begin){
+			swap(*j, *(j-1));
+			j--;
+		}
 	}
 }
 
 template<class BidIt, class Pr>
-void stable_sort(BidIt first, BidIt last, Pr pred);
+void stable_sort(BidIt begin, BidIt end, Pr pred){
+	BidIt i,j;
+	for(i = begin ; i != end ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != begin)){
+			swap(*j, *(j-1));
+			j--;
+		}
+	}
+}
 
 template<class RanIt>
 void partial_sort(RanIt first, RanIt mid, RanIt last);
@@ -1241,15 +1301,13 @@ void make_heap(RanIt first, RanIt last, Pr pred);
 
 template<class RanIt>
 void sort_heap(RanIt begin, RanIt end){
-	if (begin != end) {
-		RanIt middle = partition (begin, end);
-		sort (begin, middle);
-		sort (middle+1, end);
-	}
+	sort(begin,end);
 }
 
 template<class RanIt, class Pr>
-void sort_heap(RanIt first, RanIt last, Pr pred);
+void sort_heap(RanIt first, RanIt last, Pr pred){
+	sort(first, last, pred);
+}
 
 template<class T>
 const T& max(const T& left, const T& right) {
