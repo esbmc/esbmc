@@ -78,12 +78,34 @@ public:
 			return *this;
 		}
 
-		bool operator ==(const iterator& x) const{
-			return (x.it == this->it && x.it_size == this->it_size);
-		}
-		bool operator !=(const iterator& x) const{
-			return (x.it != this->it && x.it_size != this->it_size);
-		}
+		bool operator ==(const iterator& x) const{/*
+			if(this->it_size != x.it_size)
+				return false;
+			node* tmpX = this->it;
+			node* tmpY = x.it;
+			for (int i = 0; (i < this->it_size) && (i < x.it_size); i++){
+				if (tmpX->data != tmpY->data){
+					return false;
+				}
+				tmpX = tmpX->next;
+				tmpY = tmpY->next;
+			}
+			return true;
+	  */}
+		bool operator !=(const iterator& x) const{/*
+			if(this->it_size == x.it_size)
+				return false;
+			node* tmpX = this->it;
+			node* tmpY = x.it;
+			for (int i = 0; (i < this->it_size) && (i < x.it_size); i++){
+				if (tmpX->data == tmpY->data){
+					return false;
+				}
+				tmpX = tmpX->next;
+				tmpY = tmpY->next;
+			}
+			return true;
+	  */}
 
 		bool operator <(const iterator&) const;
 		bool operator >(const iterator&) const;
@@ -215,7 +237,7 @@ public:
 	size_type max_size () const{
 		return this->_size;
 	}
-	void resize ( size_type sz, T c = 0 ){
+	void resize ( size_type sz, T c = 0 ){/*
 		int i;
 		int tmp_int;
 		if(this->_size > sz){
@@ -232,7 +254,7 @@ public:
 			}
 			this->_size = sz;
 		}
-	}
+	*/}
     T back ( ){
     	__ESBMC_assert(!empty(), "list is empty");
     	return this->tail->data;
@@ -550,9 +572,12 @@ public:
 		node* tmp = this->head;
 		node* sec_temp = this->head;
 		int b = 0;
+		double foo,bar;
 		while (tmp != NULL) {
 			while (sec_temp != NULL) {
-				if (x(sec_temp->data,tmp->data)) {
+				foo = sec_temp->data;
+				bar = tmp->data;
+				if (x(foo,bar)) {
 					b++;
 				}
 				if (b == 2) {
@@ -577,27 +602,39 @@ public:
 	template <class Predicate>
 		void unique ( Predicate pred );
 
-	void merge(list<T>& x){
-		int i;
+	void merge(list<T>& x){/*
+
+		int i,j;
 		node* tmp = this->head;
 		node* tmpX = x.head;
 		node* aux;
+
 		for( i = 0; i < x._size; i++){
-			if (tmpX->data <= tmp->data){
-				aux = new node (tmpX->data, tmp->prev, tmp);
-				if (tmp->prev != NULL){
-					tmp->prev->next = aux;
-				}else{
-					this->head = aux;
+			for(j = 0; j < this->_size; j++) {
+				if (tmpX->data <= tmp->data){
+					aux = new node (tmpX->data, tmp->prev, tmp);
+					if (tmp->prev != NULL){
+						tmp->prev->next = aux;
+					}else{
+						this->head = aux;
+					}
+					tmp->prev = aux;
+					this->_size++;
+					break;
 				}
-				tmp->prev = aux;
-				this->_size++;
+				if (tmp->next != NULL){
+					tmp = tmp->next;
+				}else{
+					aux = new node (tmpX->data, tmp, NULL);
+					tmp->next = aux;
+					this->_size++;
+					break;
+				}
 			}
-			tmp = tmp->next;
 			tmpX = tmpX->next;
 		}
 		x.clear();
-	}
+	*/}
 
 	void merge(list<T>& x, pred_double* y);
 
@@ -646,13 +683,46 @@ public:
 		return true;
   }
   bool operator!= ( const list<int>& x, const list<int>& y ){
-	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
+		if(x._size == y._size)
+			return false;
+		list<int>::node* tmpX = x.head;
+		list<int>::node* tmpY = y.head;
+		for (int i = 0; (i < x._size) && (i < y._size); i++){
+			if (tmpX->data == tmpY->data){
+				return false;
+			}
+			tmpX = tmpX->next;
+			tmpY = tmpY->next;
+		}
+		return true;
   }
   bool operator== ( const list<double>& x, const list<double>& y ){
-	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
+		if(x._size != y._size)
+			return false;
+		list<double>::node* tmpX = x.head;
+		list<double>::node* tmpY = y.head;
+		for (int i = 0; (i < x._size) && (i < y._size); i++){
+			if (tmpX->data != tmpY->data){
+				return false;
+			}
+			tmpX = tmpX->next;
+			tmpY = tmpY->next;
+		}
+		return true;
   }
   bool operator!= ( const list<double>& x, const list<double>& y ){
-	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
+		if(x._size == y._size)
+			return false;
+		list<double>::node* tmpX = x.head;
+		list<double>::node* tmpY = y.head;
+		for (int i = 0; (i < x._size) && (i < y._size); i++){
+			if (tmpX->data == tmpY->data){
+				return false;
+			}
+			tmpX = tmpX->next;
+			tmpY = tmpY->next;
+		}
+		return true;
   }
 
 }
