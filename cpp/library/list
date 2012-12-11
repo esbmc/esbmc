@@ -92,7 +92,7 @@ public:
 			}
 			return true;
 	  */}
-		bool operator !=(const iterator& x) const{/*
+		bool operator !=(const iterator& x) const{
 			if(this->it_size == x.it_size)
 				return false;
 			node* tmpX = this->it;
@@ -105,7 +105,7 @@ public:
 				tmpY = tmpY->next;
 			}
 			return true;
-	  */}
+		}
 
 		bool operator <(const iterator&) const;
 		bool operator >(const iterator&) const;
@@ -313,7 +313,8 @@ public:
 	iterator insert(iterator position, const T& x){
 		node* tmp;
 		tmp = new node(x, position.it->prev, position.it);
-		position.it->prev->next = tmp;
+		if (position.it->prev != NULL)
+			position.it->prev->next = tmp;
 		position.it->prev = tmp;
 		position.it_size++;
 		this->_size++;
@@ -464,7 +465,22 @@ public:
 		this->_size++;
 		x.erase(i);
 	}
-	void splice(iterator position, list<T>& x, iterator first, iterator last){/*
+	void splice(iterator position, list<T>& x, iterator first, iterator last){
+		node* tmp;
+		if (last.it == NULL){
+			last--;
+		}
+		for (; first.it != last.it; last--) {
+			if (position.it->prev != NULL)
+				tmp = new node(last.it->data, position.it->prev, position.it);
+			if (position.it->prev != NULL)
+				position.it->prev->next = tmp;
+			position.it->prev = tmp;
+			position.it_size++;
+			this->_size++;
+			x.erase(last);
+		}
+		/*
 		list<T>::iterator tmp_next = first;
 		while(first.it != last.it){
 			tmp_next++;
@@ -510,8 +526,10 @@ public:
 
 	void remove_if ( pred* x ){
 		node* tmp = this->head;
+		T value;
 		while(tmp != NULL){
-			if (x(tmp->data)){
+			value = tmp->data;
+			if (x(value)){
 				this->_size--;
 				if(tmp->prev != NULL){
 					tmp->prev->next = tmp->next;
@@ -603,7 +621,6 @@ public:
 		void unique ( Predicate pred );
 
 	void merge(list<T>& x){/*
-
 		int i,j;
 		node* tmp = this->head;
 		node* tmpX = x.head;
