@@ -7,7 +7,7 @@ using namespace std;
 
 bool compare_as_ints (double i,double j)
 {
-  return (int(i)<int(j));
+  return ((int) i< (int) j);
 }
 
 int main () {
@@ -17,18 +17,17 @@ int main () {
   vector<double>::iterator it;
 
   myvector.assign(mydoubles,mydoubles+5);
-
+/*
   cout << "using default comparison:";
   stable_sort (myvector.begin(), myvector.end());
   for (it=myvector.begin(); it!=myvector.end(); ++it)
     cout << " " << *it;
   assert(myvector[0] == 1.32);
   myvector.assign(mydoubles,mydoubles+5);
-
+*/
   cout << "\nusing 'compare_as_ints' :";
   stable_sort (myvector.begin(), myvector.end(), compare_as_ints);
-  assert(myvector[0] == 1.41);
-//  assert(myvector[2] != 1.32);
+  assert(myvector[0] != 1.41);
   for (it=myvector.begin(); it!=myvector.end(); ++it)
     cout << " " << *it;
 
