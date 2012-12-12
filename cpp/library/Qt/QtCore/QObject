@@ -7,7 +7,7 @@ Author: Felipe Rodrigues
 \*******************************************************************/
 
 #include <../QtGui/QPushButton>
-
+/*
 #define Q_OBJECT
 #define signals public
 #define slots
@@ -18,7 +18,7 @@ Author: Felipe Rodrigues
 #define WRITE
 #define setOpacity
 //#define setPosition
-
+*/
 //qreal position;
 
 class QObject
