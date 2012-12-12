@@ -284,8 +284,6 @@ void goto_convertt::convert(
 {
   const irep_idt &statement=code.get_statement();
 
-  dest.instructions.clear();
-
   link_up_type_names((codet&)code, ns);
 
   //std::cout << "### code.pretty(): " << code.pretty() << std::endl;
@@ -343,6 +341,8 @@ void goto_convertt::convert(
     convert_cpp_delete(code, dest);
   else if(statement=="cpp-catch")
     convert_catch(code, dest);
+  else if(statement=="throw_decl")
+    convert_throw_decl(code, dest);
   else
   {
     copy(code, OTHER, dest);
@@ -358,7 +358,42 @@ void goto_convertt::convert(
 
 /*******************************************************************\
 
-Function: goto_convertt::convert_block
+Function: goto_convertt::convert_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
+{
+  // add the THROW_DECL instruction to 'dest'
+  goto_programt::targett throw_decl_instruction=dest.add_instruction();
+  throw_decl_instruction->make_throw_decl();
+  throw_decl_instruction->code.set_statement("throw-decl");
+  throw_decl_instruction->location=expr.location();
+
+  // the THROW_DECL instruction is annotated with a list of IDs,
+  // one per target
+  irept::subt &throw_list=
+    throw_decl_instruction->code.add("throw_list").get_sub();
+
+  for(unsigned i=0; i<expr.operands().size(); i++)
+  {
+    const exprt &block=expr.operands()[i];
+    irept type = irept(block.get("throw_decl_id"));
+
+    // grab the ID and add to THROW_DECL instruction
+    throw_list.push_back(irept(type));
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_catch
 
   Inputs:
 
@@ -505,37 +540,6 @@ void goto_convertt::convert_block(
 
     locals.pop_back();
   }
-
-  // see if we need to check for forgotten memory
-#if 1
-  if (!for_block)
-  {
-  if (options.get_bool_option("memory-leak-check"))
-  {
-    while(!allocated_objects.empty())
-    {
-      //tse paper
-      exprt deallocated_expr("deallocated_object", typet("bool"));
-      //exprt deallocated_expr("valid_object", typet("bool"));
-
-      exprt lhs_pointer = allocated_objects.front();
-      allocated_objects.pop();
-	  deallocated_expr.copy_to_operands(lhs_pointer);
-
-      goto_programt::targett t_d_a=dest.add_instruction(ASSERT);
-      //tse paper
-	  exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
-      //exprt deallocated_assert  = equality_exprt(deallocated_expr, true_exprt());
-
-	  t_d_a->guard.swap(deallocated_assert);
-	  t_d_a->location = lhs_pointer.location();
-	  t_d_a->location.comment("dereference failure: forgotten memory");
-    }
-  }
-  }
-  //else
-    //for_block=false;
-#endif
 }
 
 /*******************************************************************\
@@ -1030,6 +1034,12 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
+    if (rhs.type().is_code())
+    {
+      convert(to_code(rhs), dest);
+      return ;
+    }
+
     if(lhs.id()=="typecast")
     {
       assert(lhs.operands().size()==1);
@@ -1043,6 +1053,7 @@ void goto_convertt::convert_assign(
       exprt tmp(lhs.op0());
       lhs.swap(tmp);
     }
+
 
     int atomic = 0;
 

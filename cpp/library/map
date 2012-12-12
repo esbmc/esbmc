@@ -2,16 +2,16 @@
 
 Module: 
 
-Author: 
+Author: Felipe Rodrigues
 
-Date: Feb 2012
+Date: February 2012
 
 \*******************************************************************/
 
 #ifndef __STL_MAP
 #define __STL_MAP
 
-#include <pair>
+#include "utility"
 #include "iterator"
 #include "iostream"
 
@@ -303,7 +303,7 @@ namespace std {
 
   // specialized algorithms:
   template <class Key, class T, class Compare>
-  void swap(map<Key,T,compare>&, vector<Key,T,compare>&);
+  	  void swap(map<Key,T,Compare>&, vector<Key,T,Compare>&);
 
 }
 

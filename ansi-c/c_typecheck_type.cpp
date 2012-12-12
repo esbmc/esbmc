@@ -246,6 +246,12 @@ void c_typecheck_baset::typecheck_type(typet &type)
 
     const typet &base_type=follow(type.subtype());
 
+    if (base_type.id() == "bool") {
+      // TACAS benchmarks all insist on putting these in bitfields. Rewrite
+      // to be an unsigned integer.
+      type.subtype() = unsignedbv_typet(32);
+    }
+
     if(base_type.id()!="signedbv" &&
        base_type.id()!="unsignedbv" &&
        base_type.id()!="c_enum")

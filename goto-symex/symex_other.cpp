@@ -37,7 +37,7 @@ void goto_symext::symex_other(void)
   }
   else if(statement=="free")
   {
-    // ignore
+    symex_free(code);
   }
   else if(statement=="printf")
   {
@@ -105,8 +105,13 @@ void goto_symext::symex_other(void)
   {
     // we ignore this for now
   }
-  else if (statement=="assign"){
+  else if (statement=="assign")
+  {
 	  assert(0);
+  }
+  else if(statement=="typeid")
+  {
+    // Ignore typeid
   }
   else
     throw "goto_symext: unexpected statement: "+id2string(statement);

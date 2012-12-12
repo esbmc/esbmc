@@ -207,7 +207,10 @@ exprt c_typecheck_baset::do_initializer_rec(
   
   if(value.id()=="designated_list")
   {
-    if(full_type.id()!="struct")
+    // Can't designated-initialize anything but a struct; however an array
+    // initializer with no elements can be interpreted as an empty designated
+    // list, so permit that.
+    if(full_type.id()!="struct" && value.operands().size() != 0)
     {
       err_location(value);
       str << "designated initializers cannot initialize `"
@@ -215,7 +218,8 @@ exprt c_typecheck_baset::do_initializer_rec(
       throw 0;
     }
     
-    return do_designated_initializer(value, to_struct_type(full_type), force_constant);
+    if (full_type.id() == "struct")
+      return do_designated_initializer(value, to_struct_type(full_type), force_constant);
   }
   
   if(full_type.id()=="incomplete_array" ||
@@ -250,6 +254,13 @@ exprt c_typecheck_baset::do_initializer_rec(
     else if(follow(value.type())==full_type)
     {
       return value;
+    }
+    else if (value.id() == "designated_list" && value.operands().size() == 0)
+    {
+      // Zero size array initializer
+      exprt tmp;
+      init_statet state(tmp);
+      return do_initializer_incomplete_array(state, full_type, force_constant);
     }
     else
     {

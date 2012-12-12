@@ -112,7 +112,7 @@ void cpp_convert_typet::read_rec(const typet &type)
     float_cnt++;
   else if(type.id()=="__complex__" || type.id()=="_Complex")
     complex_cnt++;
-else if(type.id()=="bool")
+  else if(type.id()=="bool")
     bool_cnt++;
   else if(type.id()=="wchar_t")
     wchar_t_cnt++;

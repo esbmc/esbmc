@@ -61,7 +61,6 @@ void goto_convertt::do_function_call(
   goto_programt &dest)
 {
   // make it all side effect free
-
   exprt new_lhs=lhs,
         new_function=function;
 
@@ -98,6 +97,41 @@ void goto_convertt::do_function_call(
   }
   else if(new_function.id()=="NULL-object")
   {
+  }
+  else if(new_function.id()=="member"
+          && new_function.has_operands()
+          && new_function.op0().statement()=="typeid")
+  {
+    // Let's create an instruction for typeid
+
+    // First, construct a code with all the necessary typeid infos
+    exprt typeid_code("sideeffect");
+    typeid_code.set("type", function.op0().op1().op0().find("#cpp_type"));
+
+    typeid_code.statement("typeid");
+
+    typeid_code.operands().push_back(function.op0().op1().op0());
+    typeid_code.location() = function.location();
+
+    typeid_code.id("code");
+    typeid_code.type()=typet("code");
+
+    // Second, copy to the goto-program
+    copy(to_code(typeid_code), OTHER, dest);
+
+    // We must check if the is a exception list
+    // If there is, we must throw the exception
+    const exprt& exception_list=
+      static_cast<const exprt&>(function.op0().find("exception_list"));
+
+    if(exception_list.is_not_nil())
+    {
+      // Add new instruction throw
+      goto_programt::targett t=dest.add_instruction(THROW);
+      t->code=codet("cpp-throw");
+      t->location=function.location();
+      t->code.set("exception_list", exception_list);
+    }
   }
   else
   {

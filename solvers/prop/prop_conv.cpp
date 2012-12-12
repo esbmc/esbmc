@@ -522,9 +522,10 @@ void prop_convt::ignoring(const exprt &expr)
 {
   // fall through
 
-  std::string msg="warning: ignoring "+expr.pretty();
+  std::string msg="error: ignoring "+expr.pretty();
 
   print(2, msg);
+  abort();
 }
 
 /*******************************************************************\

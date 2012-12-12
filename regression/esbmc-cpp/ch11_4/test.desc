@@ -1,3 +1,0 @@
-main.cpp 
---unwind 60 -I ~/libraries/ --no-pointer-check
-^VERIFICATION FAILED$

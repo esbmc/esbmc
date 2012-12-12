@@ -793,10 +793,19 @@ void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
     // nothing really to do; one can throw _almost_ anything
     const typet &exception_type=expr.op0().type();
 
-    if(follow(exception_type).id()=="empty")
+    irep_idt id = follow(exception_type).id();
+
+    if(id=="empty")
     {
       err_location(expr.op0());
       throw "cannot throw void";
+    }
+    else if(id=="incomplete_array")
+    {
+      err_location(expr.op0());
+      str << "storage size of ‘" << lookup(expr.op0().identifier()).base_name;
+      str << "’ isn’t known\n";
+      throw 0;
     }
 
     // annotate the relevant exception IDs
@@ -822,6 +831,10 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
   expr.set("mode", "C++");
 
   // next, find out if we do an array
+
+//  const contextt &ctxt = namespacet::get_context();
+//  ctxt.show(std::cout);
+
 
   if(expr.type().id()=="array")
   {
@@ -891,6 +904,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 
   expr.add("initializer").swap(code);
   expr.remove("operands");
+
 }
 
 /*******************************************************************\
@@ -1613,6 +1627,130 @@ void cpp_typecheckt::add_implicit_dereference(exprt &expr)
 
 /*******************************************************************\
 
+Function: cpp_typecheckt::typecheck_expr_typeid
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
+{
+  // expr.op0() contains the typeid function
+  exprt typeid_function = expr.op0();
+
+  // First, let's check if we're getting the function name
+  irept component_cpp_name = typeid_function.find("component_cpp_name");
+
+  if(component_cpp_name.get_sub().size()!=1)
+  {
+    err_location(typeid_function.location());
+    str << "only typeid(*).name() is supported\n";
+    throw 0;
+  }
+
+  irep_idt identifier = component_cpp_name.get_sub()[0].identifier();
+  if(identifier!="name")
+  {
+    err_location(typeid_function.location());
+    str << "only typeid(*).name() is supported\n";
+    throw 0;
+  }
+
+  // Second, let's check the typeid parameter
+  exprt function = typeid_function.op0();
+  exprt arguments = function.op1().op0();
+
+  if(arguments.get_sub().size()) // It's an object
+  {
+    typecheck_expr_cpp_name(arguments, cpp_typecheck_fargst());
+
+    // If the object on typeid is a null pointer we must
+    // throw a bad_typeid exception
+    symbolt pointer_symbol = lookup(arguments.identifier());
+
+    if(pointer_symbol.value.value()=="NULL")
+    {
+      // It's NULL :( Let's add a throw bad_typeid
+
+      // Let's create the bad_typeid exception
+      // We must check if the user included typeinfo
+      std::cout << "**** WARNING: throwing a null pointer: ";
+      std::cout << "ensure that the typeinfo lib is included" << std::endl;
+
+      irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
+
+      // If the user haven't included typeinfo, this will fail
+      symbolt bad_typeid_symbol=lookup(bad_typeid_identifier);
+
+      // Ok! Let's create the temp object bad_typeid
+      exprt bad_typeid;
+      bad_typeid.identifier(bad_typeid_identifier);
+      bad_typeid.operands().push_back(exprt("sideeffect"));
+      bad_typeid.op0().type()=typet("symbol");
+      bad_typeid.op0().type().identifier(bad_typeid_identifier);
+
+      // Check throw
+      typecheck_expr_throw(bad_typeid);
+
+      // Save on the expression for handling on goto-program
+      function.set("exception_list", bad_typeid.find("exception_list"));
+    }
+
+    if(arguments.type().id()=="incomplete_array")
+    {
+      err_location(arguments.location());
+      str << "storage size of ‘" << lookup(arguments.identifier()).base_name;
+      str << "’ isn’t known\n";
+      throw 0;
+    }
+  }
+  else // Type or index
+  {
+    if(arguments.id()=="index")
+    {
+      Forall_operands(it, arguments)
+        typecheck_expr_cpp_name(*it, cpp_typecheck_fargst());
+    }
+    else
+    {
+      // Typecheck the type
+      typet type(arguments.id());
+      typecheck_type(type);
+
+      // Create exprt like the ones for not types
+      exprt type_symbol("symbol");
+      type_symbol.identifier(arguments.id());
+      type_symbol.type() = type;
+      type_symbol.location() = arguments.location();
+
+      // Swap to the arguments
+      arguments.swap(type_symbol);
+    }
+  }
+
+  // Finally, replace the expr with the correct values
+  // and set its return type to const char*
+
+  // Swap back to function
+  function.op1().op0().swap(arguments);
+
+  // Swap back to expr
+  expr.op0().op0().swap(function);
+
+  // Set return type
+  typet char_type(irep_idt("char"));
+  typecheck_type(char_type);
+
+  pointer_typet char_pointer_type(char_type);
+  expr.type() = char_pointer_type;
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheckt::typecheck_side_effect_function_call
 
 Inputs:
@@ -1649,6 +1787,16 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
   // Backup of the original operand
   exprt op0=expr.function();
+
+  // Check typeid and return, we'll only check its parameters
+  if(op0.has_operands())
+  {
+    if(op0.op0().statement()=="typeid")
+    {
+      typecheck_expr_typeid(expr);
+      return;
+    }
+  }
 
   // now do the function -- this has been postponed
   typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));

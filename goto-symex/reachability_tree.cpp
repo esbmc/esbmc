@@ -695,6 +695,8 @@ reachability_treet::get_next_formula()
     switch_to_next_execution_state();
   }
 
+  (*cur_state_it)->finish_formula();
+
   has_complete_formula = false;
 
   return get_cur_state().get_symex_result();
@@ -724,6 +726,8 @@ reachability_treet::generate_schedule_formula()
 
     go_next_state();
   }
+
+  (*cur_state_it)->finish_formula();
 
   return new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
                                         schedule_remaining_claims);
