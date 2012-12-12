@@ -519,6 +519,15 @@ class execution_statet : public goto_symext
   std::map<std::string, exprt> property_monitor_strings;
   /** Message handler object */
   message_handlert &message_handler;
+  /** Minimum number of threads to exist to consider a context switch.
+   *  In certain special cases, such as LTL checking, various pieces of
+   *  code and information are bunged into seperate threads which aren't
+   *  necessarily scheduled. In these cases we don't want to consider
+   *  cswitches, because even though they're not taken, they'll heavily
+   *  inflate memory size.
+   *  So, instead of considering context switches where more than one thread
+   *  exists, compare the number of threads against this threshold. */
+  unsigned int thread_cswitch_threshold;
 
   protected:
   /** Number of context switches performed by this ex_state */

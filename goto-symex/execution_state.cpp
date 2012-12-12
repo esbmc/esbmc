@@ -95,6 +95,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   check_ltl = false;
   mon_thread_warning = false;
 
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
+
 //  str_state = string_container.take_state_snapshot();
 }
 
@@ -152,6 +154,7 @@ execution_statet::operator=(const execution_statet &ex)
   tid_is_set = ex.tid_is_set;
   monitor_from_tid = ex.monitor_from_tid;
   mon_from_tid = ex.mon_from_tid;
+  thread_cswitch_threshold = ex.thread_cswitch_threshold;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
