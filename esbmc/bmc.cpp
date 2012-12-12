@@ -589,6 +589,8 @@ bool bmct::run_thread()
         delete solver;
         if (ret)
           return ret;
+      } else {
+        std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
       }
 
       // Didn't find it; turn skip steps back into assertions.
@@ -621,6 +623,8 @@ bool bmct::run_thread()
         delete solver;
         if (ret)
           return ret;
+      } else {
+        std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
       }
 
       // Didn't find it; turn skip steps back into assertions.
@@ -653,6 +657,9 @@ bool bmct::run_thread()
         delete solver;
         if (ret)
           return ret;
+      } else {
+        std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
+                  << std::endl;
       }
 
       // Otherwise, we just got a good prefix.
