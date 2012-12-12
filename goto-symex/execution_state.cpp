@@ -273,7 +273,7 @@ execution_statet::symex_assign(const codet &code)
 
   goto_symext::symex_assign(code);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() >= thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_assign(code);
 
   return;
@@ -285,7 +285,7 @@ execution_statet::claim(const exprt &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() > thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_read(expr);
 
   return;
@@ -298,7 +298,7 @@ execution_statet::symex_goto(const exprt &old_guard)
   goto_symext::symex_goto(old_guard);
 
   if (!old_guard.is_nil())
-    if (threads_state.size() > 1)
+    if (threads_state.size() > thread_cswitch_threshold)
       owning_rt->analyse_for_cswitch_after_read(old_guard);
 
   return;
@@ -310,7 +310,7 @@ execution_statet::assume(const exprt &assumption)
 
   goto_symext::assume(assumption);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() > thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_read(assumption);
 
   return;
