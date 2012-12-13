@@ -466,6 +466,26 @@ bool bmct::run(const goto_functionst &goto_functions)
     std::cout << "*** number of failed interleavings: " << interleaving_failed << " ***" << std::endl;
   }
 
+  if (options.get_bool_option("ltl")) {
+    // So, what was the lowest value ltl outcome that we saw?
+    if (ltl_results_seen[ltl_res_bad]) {
+      std::cout << "Final lowest outcome: LTL_BAD" << std::endl;
+      return false;
+    } else if (ltl_results_seen[ltl_res_failing]) {
+      std::cout << "Final lowest outcome: LTL_FAILING" << std::endl;
+      return false;
+    } else if (ltl_results_seen[ltl_res_succeeding]) {
+      std::cout << "Final lowest outcome: LTL_SUCCEEDING" << std::endl;
+      return false;
+    } else if (ltl_results_seen[ltl_res_good]) {
+      std::cout << "Final lowest outcome: LTL_GOOD" << std::endl;
+      return false;
+    } else {
+      std::cout << "No traces seen, apparently" << std::endl;
+      return false;
+    }
+  }
+
   return false;
 }
 
