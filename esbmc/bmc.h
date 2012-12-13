@@ -55,6 +55,12 @@ public:
   uint _unsat_core;
   uint _number_of_assumptions;
   optionst &options;
+  enum {
+    ltl_res_good,
+    ltl_res_succeeding,
+    ltl_res_failing,
+    ltl_res_bad
+  };
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
@@ -146,7 +152,7 @@ protected:
   virtual void error_trace(
     const prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
-    bool ltl_run_thread(symex_target_equationt *equation);
+    int ltl_run_thread(symex_target_equationt *equation);
 };
 
 #endif

@@ -560,7 +560,9 @@ bool bmct::run_thread()
     }
 
     if (options.get_bool_option("ltl")) {
-      return ltl_run_thread(equation);
+      int res = ltl_run_thread(equation);
+      // -EUNIMPLEMENTED
+      return false;
     }
 
     if (options.get_bool_option("smt"))
@@ -613,7 +615,7 @@ bool bmct::run_thread()
   }
 }
 
-bool
+int
 bmct::ltl_run_thread(symex_target_equationt *equation)
 {
   solver_base *solver;
@@ -649,7 +651,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
-      return ret;
+      return ltl_res_bad;
     }
   } else {
     std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
@@ -686,7 +688,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
-      return ret;
+      return ltl_res_failing;
     }
   } else {
     std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
@@ -723,7 +725,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
-      return ret;
+      return ltl_res_succeeding;
     }
   } else {
     std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
@@ -739,7 +741,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
       it->type = goto_trace_stept::ASSERT;
   }
 
-  return ret;
+  return ltl_res_good;
 #endif
 }
 
