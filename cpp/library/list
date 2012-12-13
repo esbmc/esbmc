@@ -11,6 +11,7 @@
 #define __STL_LIST
 
 #include <vector>
+#include "algorithm"
 
 namespace std {
 
@@ -560,6 +561,24 @@ public:
 
 	void unique() {
 		node* tmp = this->head;
+		if (this->_size != 0){
+			while(tmp->next != NULL){
+				if (tmp->data == tmp->next->data){
+					tmp = tmp->next;
+					if (tmp->prev->prev != NULL){
+						tmp->prev->prev->next = tmp;
+						tmp->prev = tmp->prev->prev;
+					}else{
+						tmp->prev = NULL;
+					}
+					this->_size--;
+				}else{
+					tmp = tmp->next;
+				}
+			}
+		}
+#if 0
+		node* tmp = this->head;
 		node* sec_temp = this->head;
 		int b = 0;
 		while (tmp != NULL) {
@@ -585,8 +604,30 @@ public:
 			sec_temp = this->head;
 			tmp = tmp->next;
 		}
+#endif
 	}
+
 	void unique(pred_double* x) {
+		node* tmp = this->head;
+		int foo, bar;
+		if (this->_size != 0){
+			while(tmp->next != NULL){
+				foo = tmp->data;
+				bar = tmp->next->data;
+				if (x(foo,bar)){
+					if (tmp->next->next != NULL){
+						tmp->next = tmp->next->next;
+						tmp->next->next->prev = tmp;
+					}else{
+						tmp->next = NULL;
+					}
+					this->_size--;
+				}else{
+					tmp = tmp->next;
+				}
+			}
+		}
+#if 0
 		node* tmp = this->head;
 		node* sec_temp = this->head;
 		int b = 0;
@@ -616,9 +657,31 @@ public:
 			sec_temp = this->head;
 			tmp = tmp->next;
 		}
+#endif
 	}
+
 	template <class Predicate>
-		void unique ( Predicate pred );
+		void unique ( Predicate pred ){
+		node* tmp = this->head;
+		int foo, bar;
+		if (this->_size != 0){
+			while(tmp->next != NULL){
+				foo = tmp->data;
+				bar = tmp->next->data;
+				if (pred(foo,bar)){
+					if (tmp->next->next != NULL){
+						tmp->next = tmp->next->next;
+						tmp->next->next->prev = tmp;
+					}else{
+						tmp->next = NULL;
+					}
+					this->_size--;
+				}else{
+					tmp = tmp->next;
+				}
+			}
+		}
+	}
 
 	void merge(list<T>& x){/*
 		int i,j;
@@ -655,7 +718,9 @@ public:
 
 	void merge(list<T>& x, pred_double* y);
 
-	void sort();
+	void sort(){
+		//sort_ESBMC(this->begin(), this->end());
+	}
 
 	void reverse(){
 		list<T> tmpList;
