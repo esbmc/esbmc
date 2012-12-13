@@ -146,6 +146,7 @@ protected:
   virtual void error_trace(
     const prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
+    bool ltl_run_thread(symex_target_equationt *equation);
 };
 
 #endif

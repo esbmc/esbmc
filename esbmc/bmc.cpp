@@ -560,119 +560,7 @@ bool bmct::run_thread()
     }
 
     if (options.get_bool_option("ltl")) {
-      unsigned int num_asserts = 0;
-#ifndef Z3
-      std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
-      exit(1);
-#else
-      // LTL checking - first check for whether we have an indeterminate prefix,
-      // and then check for all others.
-
-      // Start by turning all assertions that aren't the negative prefix
-      // assertion into skips.
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->is_assert()) {
-          if (it->comment != "LTL_BAD") {
-            it->type = goto_trace_stept::SKIP;
-          } else {
-            num_asserts++;
-          }
-        }
-      }
-
-      if (num_asserts != 0) {
-        solver = new z3_solver(*this);
-        ret = solver->run_solver(*equation);
-        delete solver;
-        if (ret)
-          return ret;
-      } else {
-        std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
-      }
-
-      // Didn't find it; turn skip steps back into assertions.
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->type == goto_trace_stept::SKIP)
-          it->type = goto_trace_stept::ASSERT;
-      }
-
-      // Try again, with LTL_FAILING
-      num_asserts = 0;
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->is_assert()) {
-          if (it->comment != "LTL_FAILING") {
-            it->type = goto_trace_stept::SKIP;
-          } else {
-            num_asserts++;
-          }
-        }
-      }
-
-      if (num_asserts != 0) {
-        solver = new z3_solver(*this);
-        ret = solver->run_solver(*equation);
-        delete solver;
-        if (ret)
-          return ret;
-      } else {
-        std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
-      }
-
-      // Didn't find it; turn skip steps back into assertions.
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->type == goto_trace_stept::SKIP)
-          it->type = goto_trace_stept::ASSERT;
-      }
-
-      // Try again, with LTL_SUCCEEDING
-      num_asserts = 0;
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->is_assert()) {
-          if (it->comment != "LTL_SUCCEEDING") {
-            it->type = goto_trace_stept::SKIP;
-          } else {
-            num_asserts++;
-          }
-        }
-      }
-
-      if (num_asserts != 0) {
-        solver = new z3_solver(*this);
-        ret = solver->run_solver(*equation);
-        delete solver;
-        if (ret)
-          return ret;
-      } else {
-        std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
-                  << std::endl;
-      }
-
-      // Otherwise, we just got a good prefix.
-      for(symex_target_equationt::SSA_stepst::iterator
-          it=equation->SSA_steps.begin();
-          it!=equation->SSA_steps.end(); it++)
-      {
-        if (it->type == goto_trace_stept::SKIP)
-          it->type = goto_trace_stept::ASSERT;
-      }
-
-      return ret;
-#endif
+      return ltl_run_thread(equation);
     }
 
     if (options.get_bool_option("smt"))
@@ -723,6 +611,127 @@ bool bmct::run_thread()
     error(error_str);
     return true;
   }
+}
+
+bool
+bmct::ltl_run_thread(symex_target_equationt *equation)
+{
+  solver_base *solver;
+  bool ret;
+  unsigned int num_asserts = 0;
+#ifndef Z3
+  std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
+  exit(1);
+#else
+  // LTL checking - first check for whether we have an indeterminate prefix,
+  // and then check for all others.
+
+  // Start by turning all assertions that aren't the negative prefix
+  // assertion into skips.
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->is_assert()) {
+      std::cout << it->comment << std::endl;
+      if (it->comment != "LTL_BAD") {
+        it->type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  if (num_asserts != 0) {
+    solver = new z3_solver(*this);
+    ret = solver->run_solver(*equation);
+    delete solver;
+    if (ret)
+      return ret;
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
+  }
+
+  // Didn't find it; turn skip steps back into assertions.
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->type == goto_trace_stept::SKIP)
+      it->type = goto_trace_stept::ASSERT;
+  }
+
+  // Try again, with LTL_FAILING
+  num_asserts = 0;
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->is_assert()) {
+      if (it->comment != "LTL_FAILING") {
+        it->type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  if (num_asserts != 0) {
+    solver = new z3_solver(*this);
+    ret = solver->run_solver(*equation);
+    delete solver;
+    if (ret)
+      return ret;
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
+  }
+
+  // Didn't find it; turn skip steps back into assertions.
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->type == goto_trace_stept::SKIP)
+      it->type = goto_trace_stept::ASSERT;
+  }
+
+  // Try again, with LTL_SUCCEEDING
+  num_asserts = 0;
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->is_assert()) {
+      if (it->comment != "LTL_SUCCEEDING") {
+        it->type = goto_trace_stept::SKIP;
+      } else {
+        num_asserts++;
+      }
+    }
+  }
+
+  if (num_asserts != 0) {
+    solver = new z3_solver(*this);
+    ret = solver->run_solver(*equation);
+    delete solver;
+    if (ret)
+      return ret;
+  } else {
+    std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
+              << std::endl;
+  }
+
+  // Otherwise, we just got a good prefix.
+  for(symex_target_equationt::SSA_stepst::iterator
+      it=equation->SSA_steps.begin();
+      it!=equation->SSA_steps.end(); it++)
+  {
+    if (it->type == goto_trace_stept::SKIP)
+      it->type = goto_trace_stept::ASSERT;
+  }
+
+  return ret;
+#endif
 }
 
 bool bmct::solver_base::run_solver(symex_target_equationt &equation)
