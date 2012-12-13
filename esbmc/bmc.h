@@ -50,6 +50,10 @@ public:
     interleaving_number = 0;
     interleaving_failed = 0;
     uw_loop = 0;
+    ltl_results_seen[ltl_res_bad] = 0;
+    ltl_results_seen[ltl_res_failing] = 0;
+    ltl_results_seen[ltl_res_succeeding] = 0;
+    ltl_results_seen[ltl_res_good] = 0;
   }
 
   uint _unsat_core;
