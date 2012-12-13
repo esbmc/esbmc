@@ -124,6 +124,12 @@ void value_sett::output(
   }
 }
 
+void
+value_sett::dump(void) const
+{
+  output(namespacet(contextt()), std::cout);
+}
+
 /*******************************************************************\
 
 Function: value_sett::to_expr
@@ -168,7 +174,7 @@ Function: value_sett::make_union
 
 \*******************************************************************/
 
-bool value_sett::make_union(const value_sett::valuest &new_values)
+bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
   bool result=false;
 
@@ -184,7 +190,8 @@ bool value_sett::make_union(const value_sett::valuest &new_values)
       // we always track these
       if(has_prefix(id2string(it->second.identifier),
            "value_set::dynamic_object") ||
-         it->second.identifier=="value_set::return_value")
+         it->second.identifier=="value_set::return_value" ||
+         keepnew)
       {
         values.insert(*it);
         result=true;
