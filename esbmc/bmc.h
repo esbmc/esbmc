@@ -61,6 +61,7 @@ public:
     ltl_res_failing,
     ltl_res_bad
   };
+  int ltl_results_seen[4];
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;

@@ -561,7 +561,9 @@ bool bmct::run_thread()
 
     if (options.get_bool_option("ltl")) {
       int res = ltl_run_thread(equation);
-      // -EUNIMPLEMENTED
+      // Record that we've seen this outcome; later decide what the least
+      // outcome was.
+      ltl_results_seen[res]++;
       return false;
     }
 
