@@ -642,12 +642,15 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     }
   }
 
+  std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
     solver = new z3_solver(*this);
     ret = solver->run_solver(*equation);
     delete solver;
-    if (ret)
+    if (ret) {
+      std::cout << "Found trace satisfying LTL_BAD" << std::endl;
       return ret;
+    }
   } else {
     std::cerr << "Warning: Couldn't find LTL_BAD assertion" << std::endl;
   }
@@ -676,12 +679,15 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     }
   }
 
+  std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
     solver = new z3_solver(*this);
     ret = solver->run_solver(*equation);
     delete solver;
-    if (ret)
+    if (ret) {
+      std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
       return ret;
+    }
   } else {
     std::cerr << "Warning: Couldn't find LTL_FAILING assertion" <<std::endl;
   }
@@ -710,12 +716,15 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
     }
   }
 
+  std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
     solver = new z3_solver(*this);
     ret = solver->run_solver(*equation);
     delete solver;
-    if (ret)
+    if (ret) {
+      std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
       return ret;
+    }
   } else {
     std::cerr << "Warning: Couldn't find LTL_SUCCEEDING assertion"
               << std::endl;
