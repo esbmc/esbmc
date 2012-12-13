@@ -124,6 +124,12 @@ void value_sett::output(
   }
 }
 
+void
+value_sett::dump(void) const
+{
+  output(namespacet(contextt()), std::cout);
+}
+
 /*******************************************************************\
 
 Function: value_sett::to_expr
