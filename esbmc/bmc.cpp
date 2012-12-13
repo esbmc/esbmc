@@ -657,7 +657,6 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
       it!=equation->SSA_steps.end(); it++)
   {
     if (it->is_assert()) {
-      std::cout << it->comment << std::endl;
       if (it->comment != "LTL_BAD") {
         it->type = goto_trace_stept::SKIP;
       } else {
