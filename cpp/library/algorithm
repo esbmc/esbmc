@@ -830,9 +830,9 @@ void sort(RanIt begin, RanIt end){
 }
 
 template<class RanIt>
-void sort(RanIt begin[], RanIt end[]){
-	RanIt i[],j[];
-	RanIt iMin[];
+void sort(RanIt *begin, RanIt *end){
+	RanIt *i,*j;
+	RanIt *iMin;
 	for (j = begin; j < end-1; j++) {
 		iMin = j;
 		for ( i = j+1; i < end; i++) {
@@ -847,7 +847,7 @@ void sort(RanIt begin[], RanIt end[]){
 }
 
 template<class RanIt, class Pr>
-void sort(RanIt first, RanIt last, Pr pred){
+void sort(RanIt begin, RanIt end, Pr pred){
 	RanIt i,j;
 	RanIt iMin;
 	for (j = begin; j < end-1; j++) {
