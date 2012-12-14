@@ -11,7 +11,6 @@
 #define __STL_LIST
 
 #include <vector>
-#include "algorithm"
 
 namespace std {
 
@@ -719,7 +718,41 @@ public:
 	void merge(list<T>& x, pred_double* y);
 
 	void sort(){
-		//sort_ESBMC(this->begin(), this->end());
+		list<T> mylist;
+		T menor;
+		node* y;
+		node* z;
+		for(int i = 0; i < this->_size; i++){
+			y = this->head;
+			menor = y->data;
+			y = y->next;
+			while(y != NULL){
+				if(y->data < menor){
+						menor = y->data;
+					}
+				y = y->next;
+			}
+			z = this->head;
+			while(z != NULL){
+				if(z->data == menor){
+					if (z->prev != NULL){
+						z->prev->next = z->next;
+					}else{
+						this->head = z->next;
+					}
+					if (z->next != NULL){
+						z->next->prev = z->prev;
+					}else{
+						this->tail = z->prev;
+					}
+					break;
+				}
+				z = z->next;
+			}
+			mylist.push_back(menor);
+		}
+		this->head = mylist.head;
+		this->tail = mylist.tail;
 	}
 
 	void reverse(){
