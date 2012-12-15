@@ -933,17 +933,17 @@ and makes use of the set of thrown types and the set of handles types.
 
 \[\begin{array}{ll}
 match(T_{t1}, T_{t2}, \ldots, T_{tN}, T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow & rule_1(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
-  & \wedge \: rule_2(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_2(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
   & \ldots \\
-  & \wedge \: rule_9(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_9(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
   & \ldots \\
-  & \wedge \: rule_1(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_1(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
   & \ldots \\
-  & \wedge \: rule_9(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_9(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
   & \ldots \\
-  & \wedge \: rule_1(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_1(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
   & \ldots \\
-  & \wedge \: rule_9(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \vee \: rule_9(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
 \end{array}\]
 
 The function $match$ itself is composed by several functions called $rule$,
