@@ -894,14 +894,23 @@ The syntax for $\mathit{T}$ values is the following:
 %
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
 \\[-5ex]
-\mathit{T}   & ::= & \: \mathit{t_T} \: | \: \mathit{*P} \: \\
+\mathit{T}   & ::= & \: \mathit{t_T} \: | \: cvr \: \mathit{t_T} \: | \: \mathit{*P} \: \\
 \end{array}
 \]
 %
-Where $\mathit{t_T}$ is a variable of type $\mathit{T}$ and
-$\mathit{*P}$ is the value stored in the $\mathit{P}$ position
-of the memory.
-
+Where $\mathit{t_T}$ is a variable of type $\mathit{T}$, $cvr$ is a $const$,
+$volatile$ or $restrict$ variable of type $\mathit{T}$ and $\mathit{*P}$
+is the value stored in the $\mathit{P}$ position of the memory.
+For $\mathit{P}$ (memory address values), the syntax is as follows:
+%
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{pointer-semantics}
+\\[-5ex]
+\mathit{P}  & ::= & \: \mathit{p} \: | \: \mathit{P_{array}} \: \\
+\end{array}
+\]
+%
+where $\mathit{P_{array}}$ is a memory address that stores the beginning
+of an array.
 
 %------------------------------------------------------
 \subsection{Throwing and Catching an Exception}
@@ -919,27 +928,41 @@ several rules are defined of how an exception
 thrown is connected to a catch (called handlers).
 
 To model the behavior of exception handling in ESBMC++, we define a function
-MATCH($T_{t}$, $T_{C1}$, $T_{C2}$, ... , $T_{CN}$), where $T_{t}$ is
-the type of the thrown exception and $T_{CN}$ is the n-th catch type.
-The function is composed by several rules, and when one of the them is
-true, then there is a match between the exception thrown and the catch
-block. The function checks all the rules for each catch, in the order
-that they are defined.
+$match \rightarrow T_t$ that returns the handle that matched the thrown type
+and makes use of the set of thrown types and the set of handles types.
 
-The first rules define a match if $T_{t}$ is equal to $T_{C}$ (ignoring
-const-volatile qualifiers).
+\[\begin{array}{ll}
+match(T_{t1}, T_{t2}, \ldots, T_{tN}, T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow & rule_1(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \wedge \: rule_2(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \ldots \\
+  & \wedge \: rule_9(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \ldots \\
+  & \wedge \: rule_1(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \ldots \\
+  & \wedge \: rule_9(T_{t2},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \ldots \\
+  & \wedge \: rule_1(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+  & \ldots \\
+  & \wedge \: rule_9(T_{tN},T_{c1}, T_{c2}, \ldots, T_{cN}) \\
+\end{array}\]
 
-\[
-\begin{array}{l}
+The function $match$ itself is composed by several functions called $rule$,
+each function $rule$ returns either the handle, if the rule is true, or nil
+if the rule is false and makes use of the throw type and the set of handles.
+When one of the rules is true, the following rules are ignored.
+
+The functions $rule_1$ and $rule_2$ define a match if $T_{t}$ is equal to $T_{C}$ (ignoring
+const-volatile-restrict qualifiers).
+
+\[\begin{array}{ll}
+rule_1(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
   (T_{t} = T_{C})\rightarrow select(T_{C}) \\
-\end{array}
-\]
+\end{array}\]
 
-\[
-\begin{array}{l}
-  (T_{t} = (const $ $ | $ $ volatile $ $ | $ $ restrict) $ $ T $ $ \& $ $ T_{C} = T)\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_2(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = cvr \: T \: \wedge \: T_{C} = T)\rightarrow select(T_{C})
+\end{array}\]
 
 To implement this rule ESBMC++ simply looks for the type of the exception
 in the catch map and update the GOTO instruction if it finds a match or
@@ -949,17 +972,15 @@ The third and fourth rules define that throwing ''arrays of type T'' and
 ''functions returning type T'' with be catched by handlers with
 ''pointer to type T'' and ''pointer to function returning type T'' types.
 
-\[
-\begin{array}{l}
-  (T_{t} = T_{f()} $ \& $ T_{C} = T_{f()})\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_3(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T_{f()} \: \wedge \: T_{C} = T_{f()})\rightarrow select(T_{C}) \\
+\end{array}\]
 
-\[
-\begin{array}{l}
-  (T_{t} = T[] $ \& $ T_{C} = T*)\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_4(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T[] \: \wedge \: T_{C} = T*)\rightarrow select(T_{C}) \\
+\end{array}\]
 
 In ESBMC++ the conversion is made on the type-checking phase and the throw
 expression throws two exceptions: ''array of type T'' and ''pointer of type
@@ -968,14 +989,13 @@ type T'', respectively.
 
 The fifth rule defines that the handler will catch an exception of type T
 if the handler type is an unambiguous public base class of T.
-For that we define the binary function $BASE(T_{2}, T_{1})$, that returns
+For that we define the binary function $base(T_{2}, T_{1})$, that returns
 true if $T_{2}$ is base of $T_{1}$ and returns false, otherwise.
 
-\[
-\begin{array}{l}
-  (T_{t} = T_{1} $ \& $ T_{C} = T_{2} $ \& $ BASE(T_{2}, T_{1}))\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_5(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T_{1} \: \wedge \: T_{C} = T_{2} \: \wedge \: base(T_{2}, T_{1}))\rightarrow select(T_{C}) \\
+\end{array}\]
 
 In ESBMC++ the conversion is similar to the conversion of the last rule
 but in this case several exception may be thrown: the type of the object
@@ -984,15 +1004,14 @@ and the type of it's bases.
 The sixth rule defines that a handler will catch an exception of type
 pointer T if T's type can be converted to the type of the handler, either by
 qualification conversion or standard pointer conversion.
-For that we define the binary function $IMPLICIT\_CONV(T_{1}, T_{2})$, that
+For that we define the binary function $implicit\_conv(T_{1}, T_{2})$, that
 returns true if $T_{1}$ can be implicit converted to $T_{2}$ and returns false,
 otherwise.
 
-\[
-\begin{array}{l}
-  (T_{t} = T_{1}* $ \& $ T_{C} = T_{2}* $ \& $ IMPLICIT\_CONV(T_{1}, T_{2}))\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_6(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T_{1}* \: \wedge \: T_{C} = T_{2}* \: \wedge \: implicit\_conv(T_{1}, T_{2}))\rightarrow select(T_{C}) \\
+\end{array}\]
 
 Again, during the type-checking phase in ESBMC++, the possible conversions based
 on the handlers types will be thrown with the original pointer type.
@@ -1000,11 +1019,10 @@ on the handlers types will be thrown with the original pointer type.
 The seventh rule defines that if the exception throw is a pointer then
 a handler with type \textit{void*} can also catch it.
 
-\[
-\begin{array}{l}
-  (T_{t} = T* $ \& $ T_{C} = VOID*)\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_7(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T* \: \wedge \: T_{C} = VOID*)\rightarrow select(T_{C})
+\end{array}\]
 
 In ESBMC++, during the symbolic execution phase, if no match is found on the map
 and the exception thrown is a pointer, we look for a \textit{void*} catch and update
@@ -1013,11 +1031,10 @@ the GOTO instruction. If the pointer had a match this rules is ignored.
 The eighth rule defines that A handler of type ellipsis (...) will catch
 any thrown exception, and shall be the last handler on the catch block.
 
-\[
-\begin{array}{l}
-  (T_{t} = T $ \& $ T_{C} = T_{ellipsis})\rightarrow select(T_{C})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_8(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = T \: \wedge \: T_{C} = T_{ellipsis})\rightarrow select(T_{C})
+\end{array}\]
 
 In ESBMC++, is similar last rule but works for every type,
 if no match is found, ESBMC++ looks for a handler of type ellipsis and
@@ -1026,11 +1043,10 @@ update the GOTO instruction if one exists.
 The last rule defines that If the throw has no arguments then it should
 re-throw the last thrown exception.
 
-\[
-\begin{array}{l}
-  (T_{t} = NULL $ \& $ T_{t-1} = T)\rightarrow MATCH(T,T_{C1}, T_{C2}... , T_{CN})
-\end{array}
-\]
+\[\begin{array}{ll}
+rule_9(T_{t1},T_{c1}, T_{c2}, \ldots, T_{cN}) \Longrightarrow
+  (T_{t} = NULL \: \wedge \: T_{t-1} = T)\rightarrow MATCH(T,T_{C1}, T_{C2}... , T_{CN})
+\end{array}\]
 
 ESBMC++ always keeps a reference of the last thrown exception and
 updates a rethrow if this reference is not \verb|NULL|.
