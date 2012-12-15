@@ -81,7 +81,7 @@ There have been attempts to apply BMC to the verification of C++
 programs~\cite{Florian12,Yang12} but with limited success. The main challenge
 here is to handle large programs and to support the complex features that the
 languages offers, such as templates, containers and exception handling.
-At the same time, 
+At the same time,
 in order to be attractive for mainstream software development,
 C++ model checkers have to maintain
 high speed and accuracy.
@@ -337,7 +337,7 @@ structure~\cite{CppReference12}.
 The COM consists of four groups of libraries,
 as shown in Figure~\ref{figure:cpp-diagram}: \emph{C libraries},
 %\emph{input/output stream}, \emph{standard template libraries}, and
-%\emph{general libraries}. 
+%\emph{general libraries}.
 In the verification process, the COM libraries
 replace the corresponding actual C++ libraries.
 
@@ -356,16 +356,16 @@ supported by ESBMC.  Since ESBMC++ uses a different frontend, we have to build
 a representation of the ANSI-C libraries into the COM; otherwise, ESBMC++ would
 not recognize the the library methods and fail to parse the C++ programs.
 %
-However, the 
-biggest part of the COM models 
+However, the
+biggest part of the COM models
 the Standard Template Libraries (STL).
 This part is split into
 four categories: \textit{algorithms}, \textit{numeric},
 \textit{containers}, and \textit{iterators}.
 In this paper, we focus on the operational model of the
-STL sequential containers, 
+STL sequential containers,
 %its preconditions and simulation features
-%(e.g., how we store the elements values of the containers), 
+%(e.g., how we store the elements values of the containers),
 and how it is used to
 verify real-world C++ programs.
 
@@ -376,7 +376,7 @@ verify real-world C++ programs.
 In order to formalize the verification of the STL containers,
 we define a core container language, and extend the translation
 functions $\cal C$ and  $\cal P$ of constraints and properties to this.
-We then use this core language to implement the operational model 
+We then use this core language to implement the operational model
 of the containers.
 
 The container language comprises several syntactic domains, starting with
@@ -780,153 +780,6 @@ supports dynamic cast between primitive types, same classes and from a derived
 class to a base. ESBMC++ also handles with cast to a reference type, verifying the
 correct use of \textit{bad\_cast} thrown by dynamic cast.
 
-
-%--------------------------------------------
-\section{Exception Handling}
-\label{exception-handling}
-%--------------------------------------------
-
-One of the features that C++ provides is the exception handling. 
-The exceptions are unexpected situations about the program; situations
-that the program was not designed to handle. Basically, the exception handling 
-is divided into three elements: a try block, where an
-exception may occur, a catch block, where an exception can be handled and a throw 
-expression to connect two blocks.
-Figure~\ref{figure:try-catch-example} shows an example 
-of a C++ code with exception handling.
-%
-\begin{figure}[ht]
-\centering
-\begin{minipage}{1.0\textwidth}
-\begin{lstlisting}
-int main() {
-  try { // try block
-    throw 20; // throw expression
-  }
-  // catch block
-  catch (int i) { /* error handling for integer exceptions */ }
-  catch (float f) { /* error handling for float exceptions */ }
-  return 0;
-}
-\end{lstlisting}
-\end{minipage}
-\caption{Try-catch example: Throwing an integer exception.}
-\label{figure:try-catch-example}
-\end{figure}
-
-In ESBMC++, the exception handling happens in two steps:
-during the typechecking phase and the symbolic execution phase.
-On the typechecking phase, an AST is built based on the code
-inside the try block, with a few adaptations: before the code
-inside the try block starts, a CATCH instruction with an empty map
-(which will be filled later on the typechecking) is inserted, followed by
-the code inside the try block, another CATCH instruction
-(to represent the end of the try block and the beginning of the
-catch block) and a GOTO instruction pointing to the code after
-the catch block. This GOTO will only change if an exception is thrown,
-otherwise it will remain the same. After typechecking the try block,
-ESBMC++ typechecks the catch block that will contain one or more catchs.
-Again, the AST will be created based on the code inside the catchs
-with only one adaptation: a GOTO instruction is inserted by the end of
-each catch code pointing to the code after the catchs. Each catch code
-will be assigned a label so that ESBMC++ can decide which catch should be called
-during the symbolic execution phase if an exception is thrown. By the end
-of the catch block, the map of the first CATCH instruction is
-inserted before the try block code is filled with the label created
-for each catch mapped on the type of the exception. Figure~\ref{figure:try-catch-goto}
-shows the internal flow on ESBMC++ for exception handling of the code from
-Figure~\ref{figure:try-catch-example}.
-
-\begin{figure}[ht]
-\centering
-\begin{minipage}{1.0\textwidth}
-\begin{lstlisting}
-main() (c::main):
-   CATCH signed_int->1, float->2
-   THROW 20
-   $TARGET = 3;
-   if(THROW_TYPE == signed_int)
-     $TARGET = 1
-   else if(THROW_TYPE == float)
-     $TARGET = 2
-   CATCH
-   GOTO $TARGET
-1: int i;
-   /* error handling for integer exceptions */
-   GOTO 3
-2: float f;
-   /* error handling for float exceptions */
-3: return 0;
-END_FUNCTION
-\end{lstlisting}
-\end{minipage}
-\caption{Try-catch conversion to goto functions.}
-\label{figure:try-catch-goto}
-\end{figure}
-
-During the symbolic execution phase, when the first
-CATCH instruction is found, the catch map is stacked
-for later usage. The idea behind the use of a stack is
-that we may have try-catch blocks inside other
-try-catchs block and ESBMC++ should always handle
-the most internal first. Following the symbolic execution
-for the code that was inside the try block, ESBMC++ will continue
-until it finds a throw expression. When this happens, ESBMC++ will
-look at the map for a valid catch for the exception thrown; if it finds
-a valid catch, then the label will be saved for now and handled later;
-if it was unable to find an exception, then an error will be thrown.
-ESBMC++ will also ignore any other throw or goto instruction after
-the first throw is found but will continue to verify all the try
-block code. When the second CATCH is found, which means that the try
-block ended, the catch map is unstacked for memory efficiency
-and the GOTO instruction is updated (if needed).
-
-%------------------------------------------------------
-\subsection{Throwing and Catching an Exception}
-%------------------------------------------------------
-
-A C++ code can throw an exception in several situations other
-than explicit throw exception: (a) the new operator can throw 
-a \textit{bad\_alloc} exception, (b) the operator 
-\textit{dynamic$\_$cast} can throw a \textit{bad\_catch}
-exception, and (c) the \textit{typeid} funtion can throw a 
-\textit{bad\_typeid} exception.
-Those exceptions are built-in on C++ and are supposed to be 
-handled by the program. In the C++ draft standard~\cite{CppDraft} 
-several rules are defined of how an exception
-thrown is connected to a catch (called handlers), 
-every time an exception is thrown and
-one of the following rules is true, 
-the code will jump from the throw expression to the catch code:
-
-\begin{itemize}
- \item The handler that will catch the exception will be the first catch with a matching type: ESBMC++ maintains a list with the order of
-       the catchs and always gets the catch with the lower value.
- \item A handler will catch an exception thrown if the type thrown and the type of the handler are the same (ignoring const-volatile
-       qualifiers: ESBMC++ simply looks for the type of the exception in the catch map and update the GOTO instruction if it finds a
-       match or returns an error otherwise).
- \item Throwing ''arrays of type T'' and ''functions returning type T'' with be catched by handlers with ''pointer to type T'' and
-       ''pointer to function returning type T'' types: the conversion is made on the type-checking phase and the throw expression throws
-       two exceptions: ''array of type T'' and ''pointer of type T'', and ''function returning type T'' and ''pointer to function returning
-       type T'', respectively. The handler that will catch the exception thrown will be defined by the first rule in cases of multiple
-       matches.
- \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T: The conversion is similar
-       to the conversion of the last rule but in this case several exception may be thrown: the type of the object and the type of it's
-       bases. Again, the handler will be defined by the first rule in cases of multiple matches.
- \item The handler will catch an exception of type pointer T if T's type can be converted to the type of the handler, either by
-       qualification conversion or standard pointer conversion: Similar to the last rules, on the type-checking phase the possible
-       conversions based on the catchs types will be thrown with the original pointer type, with the handler being defined by the first rule
-       in cases of multiple matches.
- \item If the exception throw is a pointer then a handler with type \textit{void*} or \textit{nullptr\_t} can also catch it: during the symbolic execution phase, if no match is found on the map and the exception thrown is a pointer, we look for a \textit{void*} or \textit{nullptr\_t} catch and update the GOTO instruction. If the pointer had a match this rules is ignored.
- \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block: Similar to the
-       last rule but works for every type, if no match is found, ESBMC++ looks for a handler of type ellipsis and update the GOTO
-       instruction if one exists.
- \item If the throw has no arguments then it should rethrow the last thrown exception: ESBMC++ always keeps a reference of the last thrown exception and updates a rethrow if this reference is not \verb|NULL|.
-\end{itemize}
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-\comment{
 %--------------------------------------------
 \section{Exception Handling}
 \label{exception-handling}
@@ -1026,6 +879,29 @@ the first throw is found but will continue to verify all the try
 block code. When the second CATCH is found, which means that the try
 block ended, the catch map is unstacked for memory efficiency
 and the GOTO instruction is updated (if needed).
+
+%------------------------------------------------------
+\subsection{Exception Handling Language}
+%------------------------------------------------------
+
+In order to formalize the verification of exception handling, we
+define a exception handling language, which we use to implement
+the exception handling verification in C++ programs.
+
+The exception handling language comprises several syntactic domains,
+starting with the base elements $\mathit{T}$ and pointers $\mathit{P}$.
+The syntax for $\mathit{T}$ values is the following:
+%
+\[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
+\\[-5ex]
+\mathit{T}   & ::= & \: \mathit{t_T} \: | \: \mathit{*P} \: \\
+\end{array}
+\]
+%
+Where $\mathit{t_T}$ is a variable of type $\mathit{T}$ and
+$\mathit{*P}$ is the value stored in the $\mathit{P}$ position
+of the memory.
+
 
 %------------------------------------------------------
 \subsection{Throwing and Catching an Exception}
@@ -1158,9 +1034,6 @@ re-throw the last thrown exception.
 
 ESBMC++ always keeps a reference of the last thrown exception and
 updates a rethrow if this reference is not \verb|NULL|.
-}
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
 %------------------------------------------------------
