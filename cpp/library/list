@@ -237,7 +237,7 @@ public:
 	size_type max_size () const{
 		return this->_size;
 	}
-	void resize ( size_type sz, T c = 0 ){/*
+	void resize ( size_type sz, T c = 0 ){
 		int i;
 		int tmp_int;
 		if(this->_size > sz){
@@ -254,7 +254,7 @@ public:
 			}
 			this->_size = sz;
 		}
-	*/}
+	}
     T back ( ){
     	__ESBMC_assert(!empty(), "list is empty");
     	return this->tail->data;
