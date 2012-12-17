@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -12,5 +13,7 @@ int main () {
 
   it=set_intersection (first, first+5, second, second+5, v.begin());
                                                // 10 20 0  0  0  0  0  0  0  0
+  assert(v[0] == 10);
+  assert(v[1] == 20);
   return 0;
 }

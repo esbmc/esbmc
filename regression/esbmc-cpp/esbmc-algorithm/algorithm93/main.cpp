@@ -13,7 +13,7 @@ int main () {
   myvector.resize(4);
 
   reverse_copy (myints, myints+4, myvector.begin());
-  assert(myvector[0] == 1);
+  assert(myvector[0] != 4);
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

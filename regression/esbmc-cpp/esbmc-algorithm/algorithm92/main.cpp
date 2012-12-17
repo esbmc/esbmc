@@ -13,7 +13,7 @@ int main () {
   for (int i=1; i<10; ++i) myvector.push_back(i); // 1 2 3 4 5
 
   reverse(myvector.begin(),myvector.end());       // 5 4 3 2 1
-  assert(myvector[3] == 2);
+  assert(myvector[3] != 6);
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

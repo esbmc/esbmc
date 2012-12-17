@@ -17,7 +17,7 @@ int main () {
   second.resize(first.size());   // allocate space
   replace_copy_if (first.begin(), first.end(), second.begin(), IsOdd, 0);
                                                         // 0 2 0 4
-  assert(second[2] == 3);
+  assert(second[2] != 0);
   cout << "second contains:";
   for (it=second.begin(); it!=second.end(); ++it)
     cout << " " << *it;

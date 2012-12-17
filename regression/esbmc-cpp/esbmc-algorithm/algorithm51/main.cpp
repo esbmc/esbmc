@@ -1,6 +1,7 @@
 // includes algorithm example
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 using namespace std;
 
 bool myfunction (int i, int j) { return i<j; }
@@ -12,7 +13,8 @@ int main () {
   // using default comparison:
   if ( includes(container,container+10,continent,continent+4) )
     cout << "container includes continent!" << endl;
-
+  assert(includes(container,container+10,continent,continent+4));
+  assert(includes(container,container+10,continent,continent+4, myfunction));
   // using myfunction as comp:
   if ( includes(container,container+10,continent,continent+4, myfunction) )
     cout << "container includes continent!" << endl;

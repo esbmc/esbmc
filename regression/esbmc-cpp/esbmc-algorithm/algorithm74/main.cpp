@@ -19,7 +19,7 @@ int main () {
 
   // using default comparison:
   int match1[] = {20,30};
-  it = search (myvector.begin(), myvector.end(), match1, match1+4);
+  it = search (myvector.begin(), myvector.end(), match1, match1+2);
 
   assert(*it != 20);
 

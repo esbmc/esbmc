@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool myfunction (int i,int j) { return (i<j); }
@@ -19,10 +20,12 @@ int main () {
   if (binary_search (v.begin(), v.end(), 3))
     cout << "found!\n"; else cout << "not found.\n";
 
+  assert(binary_search (v.begin(), v.end(), 3));
   // using myfunction as comp:
   cout << "looking for a 6... ";
   if (binary_search (v.begin(), v.end(), 6, myfunction))
     cout << "found!\n"; else cout << "not found.\n";
 
+  assert(!binary_search (v.begin(), v.end(), 6, myfunction));
   return 0;
 }

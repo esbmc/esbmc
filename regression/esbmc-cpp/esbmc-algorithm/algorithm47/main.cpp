@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool mygreater (int i,int j) { return (i>j); }
@@ -20,6 +21,8 @@ int main () {
   // using "mygreater" as comp:
   v.assign(myints2,myints2+8);                   // 30 30 20 20 20 10 10 10
   bounds=equal_range (v.begin(), v.end(), 20, mygreater); //       ^        ^
+  assert(bounds.first == v.begin()+2);
+  assert(bounds.second == v.begin()+5);
 
 //  cout << "bounds at positions " << int(bounds.first - v.begin());
 //  cout << " and " << int(bounds.second - v.begin()) << endl;

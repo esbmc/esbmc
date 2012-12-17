@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool myfunction (int i, int j) {
@@ -18,6 +19,12 @@ int main () {
                                                   //                ^
 
   myvector.resize( it - myvector.begin() );       // 10 20 30 20 10
+  
+  assert(myvector[0] == 10);
+  assert(myvector[1] == 20);
+  assert(myvector[2] == 30);
+  assert(myvector[3] == 20);
+  assert(myvector[4] == 10);
 
   // using predicate comparison:
   unique (myvector.begin(), myvector.end(), myfunction);   // (no changes)

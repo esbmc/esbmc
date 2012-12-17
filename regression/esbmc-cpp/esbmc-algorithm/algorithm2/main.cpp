@@ -12,6 +12,7 @@ int main () {
   p = find(myints,myints+4,30);
   ++p;
   cout << "The element following 30 is " << *p << endl;
+  assert(*p == 40);
 
   vector<int> myvector (myints,myints+4);
   vector<int>::iterator it;
@@ -20,6 +21,7 @@ int main () {
   it = find (myvector.begin(), myvector.end(), 30);
   ++it;
   cout << "The element following 30 is " << *it << endl;
+  assert(*it == 40);
 
   return 0;
 }

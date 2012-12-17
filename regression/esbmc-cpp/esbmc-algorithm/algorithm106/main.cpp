@@ -15,13 +15,13 @@ int main () {
   pair<vector<int>::iterator,vector<int>::iterator> bounds;
 
   // using default comparison:
-  vector<int> v(myints1,myints1+8);                       // 10 10 10 20 20 20 30 30
+  v.assign(myints1,myints1+8);                       // 10 10 10 20 20 20 30 30
   bounds=equal_range (v.begin(), v.end(), 20);            //          ^        ^
 
   // using "mygreater" as comp:
-  vector<int> v(myints2,myints2+8);                         // 30 30 20 20 20 10 10 10
+  v.assign(myints2,myints2+8);                         // 30 30 20 20 20 10 10 10
   bounds=equal_range (v.begin(), v.end(), 20, mygreater); //       ^        ^
-  assert(*bounds.first != 20);
+  assert((*bounds.first != 20) ||(*bounds.second != 10));
 //  cout << "bounds at positions " << int(bounds.first - v.begin());
 //  cout << " and " << int(bounds.second - v.begin()) << endl;
 
