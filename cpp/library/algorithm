@@ -908,10 +908,49 @@ RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2,
 		Pr pred);
 
 template<class RanIt>
-void nth_element(RanIt first, RanIt nth, RanIt last);
+void nth_element(RanIt first, RanIt nth, RanIt last)
+{
+  RanIt pilgrim, pos;
+  swap(*first, *nth);
+  nth = first;
+  for(pilgrim = first+1;pilgrim < last;pilgrim++)
+  {
+    if(*pilgrim < *nth)
+      {
+        swap(*pilgrim, *nth);
+        nth = pilgrim;
+        pos = nth - 1;
+        while(*nth < *pos )
+        {
+         swap(*nth, *pos);
+         nth = pos;
+         pos--;
+        }
+    }
+  }
+}
 
 template<class RanIt, class Pr>
-void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred);
+void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred){
+	RanIt pilgrim, pos;
+	  swap(*first, *nth);
+	  nth = first;
+	  for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	  {
+	    if(pred(*pilgrim, *nth))
+	      {
+	        swap(*pilgrim, *nth);
+	        nth = pilgrim;
+	        pos = nth - 1;
+	        while(pred(*nth, *pos) )
+	        {
+	         swap(*nth, *pos);
+	         nth = pos;
+	         pos--;
+	        }
+	    }
+	  }
+}
 
 template<class FwdIt, class Ty>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val) {
