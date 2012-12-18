@@ -78,32 +78,20 @@ public:
 			return *this;
 		}
 
-		bool operator ==(const iterator& x) const{/*
-			if(this->it_size != x.it_size)
-				return false;
-			node* tmpX = this->it;
-			node* tmpY = x.it;
-			for (int i = 0; (i < this->it_size) && (i < x.it_size); i++){
-				if (tmpX->data != tmpY->data){
-					return false;
-				}
-				tmpX = tmpX->next;
-				tmpY = tmpY->next;
+		bool operator ==(const iterator& x) const{
+			if(x.it->next == NULL){
+				x.it = x.it->prev;
 			}
+			if(this->it->data != x.it->data)
+				return false;
 			return true;
-	  */}
-		bool operator !=(const iterator& x) const{
-			if(this->it_size == x.it_size)
-				return false;
-			node* tmpX = this->it;
-			node* tmpY = x.it;
-			for (int i = 0; (i < this->it_size) && (i < x.it_size); i++){
-				if (tmpX->data == tmpY->data){
-					return false;
-				}
-				tmpX = tmpX->next;
-				tmpY = tmpY->next;
+		}
+		bool operator !=( const iterator& x ) const{
+			if(x.it->next == NULL){
+				x.it = x.it->prev;
 			}
+			if(this->it->data == x.it->data)
+				return false;
 			return true;
 		}
 
