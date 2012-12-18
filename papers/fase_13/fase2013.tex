@@ -335,7 +335,8 @@ libraries called the C++ Operational Model (COM), which represents the
 classes, methods, and other features similar to the actual
 structure~\cite{CppReference12}.
 The COM consists of four groups of libraries,
-as shown in Figure~\ref{figure:cpp-diagram}: \emph{C libraries},
+as shown in Figure~\ref{figure:cpp-diagram}. 
+%\emph{C libraries},
 %\emph{input/output stream}, \emph{standard template libraries}, and
 %\emph{general libraries}. 
 In the verification process, the COM libraries
@@ -352,7 +353,7 @@ replace the corresponding actual C++ libraries.
 %------------------------------
 
 Note that the COM also includes the ANSI-C libraries already
-supported by ESBMC.  Since ESBMC++ uses a different frontend, we have to build
+supported by ESBMC.  Since ESBMC++ uses a different front-end, we have to build
 a representation of the ANSI-C libraries into the COM; otherwise, ESBMC++ would
 not recognize the the library methods and fail to parse the C++ programs.
 %
@@ -446,9 +447,11 @@ operations between integer values.
 
 The structure of the STL containers is based on the
 C++ structure itself, which includes classes, operators,
-methods, functions, and intern variables. We thus split it into:
-iterations, capacity, element access, modifiers, and unique
-members. As the containers structure differs slightly
+methods, functions, and intern variables. 
+%We thus split it into:
+%iterations, capacity, element access, modifiers, and unique
+%members. 
+As the containers structure differs slightly
 between each other, some of their methods will vary too,
 changing its intern model as well (e.g., a \textit{list}
 container does not have a reference operator and its elements
@@ -471,7 +474,7 @@ an overview of our operational model for the STL sequantial container.
 %
 \begin{figure*}[ht] \centering
 \includegraphics[scale=0.3]{figures/stl-iterator}
-\caption{Operational model of the STL sequantial container.}
+\caption{Operational model of the STL sequential container.}
 \label{figure:stl-iterator}
 \end{figure*}
 
@@ -680,7 +683,7 @@ we call this as \textit{shared inheritance}.
 A formal description to represent
 the relationship between classes can be described by the class hierarchy graph
 (CHG). This graph $\zeta$ is composed of a tuple $\textless \mathit{C}, \prec_{s}, \prec_{r}>$,
-$\mathit{C}$ is the set of classes, $\prec_s $ refers to \textit{shared inheritance} edges,
+where $\mathit{C}$ is the set of classes, $\prec_s $ refers to \textit{shared inheritance} edges,
 and $\prec_r$ are \textit{replicated inheritance} edges. The symbols $\prec_{s}$ and $\prec_{r}$
 are the set of edges that represent the inheritance relationship between
 classes and both sets are in $\mathit{C_{sr}}$ (where $\mathit{C_{sr}} \subseteq \mathit{C} \times \mathit{C}$.
@@ -710,13 +713,13 @@ memory resources.
 \label{figure:uml_diagram}
 \end{figure}
 
-Another important feature from object-oriented programming that our tool
-supports is the concept of polymorphism, which allows the creation of
-reusable code by programmers by changing only specific features from the base class.
+Another important feature from object-oriented programming that we
+support is the concept of polymorphism, which allows the creation of
+reusable code by changing only specific features from the base class.
 In this sense, polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
-In the implementation of ESBMC++, we thus consider that two or more derived classes
+We thus consider that two or more derived classes
 from the same base class can invoke methods with the same signature but with distinct behaviors,
 specialized for each derived class, using for this one reference to each object of
 this base class type. The decision of which method must be used, according to the type
@@ -728,7 +731,7 @@ to handle polymorphism so that we can simplify the class hierarchy,
 thus easing the access to methods with the same name without ambiguity between
 base and derived classes. As an example, our tool can easily handle the polymorphic
 area method using this representation, as shown in Formulas (\ref{area-class-c}) and
-(\ref{area-class-p}), using the background theories of SMT solvers.
+(\ref{area-class-p}), using the background theories.
 %
 \begin{equation}
 \label{area-class-c}
@@ -752,14 +755,14 @@ P := \left [ \begin{array}{ll}
 
 The classes \textit{Rectangle} (which is the base class)
 and \textit{Square} (which is the derived class) have a virtual method
-called $area\left(\right)$, which has the same signature. As our running example
+called $area\left(\right)$, which have the same signature. As our running example
 calls this method on a base class pointer, then this called function
 cannot be determined at compile-time. To overcome this problem,
 we thus create a \textit{vtable} to contain the address of the object's bound
 methods so that the call to this method is fetched with the address from
 the \textit{vtable} at verification-time.
 
-In addition to that, our tool also supports the indirect inheritance,
+In addition to that, we also support the indirect inheritance,
 which is a class that inherits features from a derived class with one
 or more classes not directly connected. In Figure~\ref{figure:uml_diagram}, we have
 $\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$.
