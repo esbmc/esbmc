@@ -304,6 +304,8 @@ of tuple $t$ while the expression $\mathit{store}(t, f, v)$ denotes a tuple $t$
 that at field $f$ has the value $v$ and all other fields remain the
 same.
 
+\vspace*{-2ex}
+
 %------------------------------
 \section{C++ Operational Model}
 %\section{Standard Template Libraries}
@@ -372,11 +374,13 @@ STL sequential containers,
 and how it is used to
 verify real-world C++ programs.
 
+\vspace*{-2ex}
+
 %-------------------------------------------
 \subsection{Core Container Language}
 %-------------------------------------------
 
-In order to formalize the verification of the STL containers,
+To formalize the verification of the STL containers,
 we define a core container language, and extend the translation
 functions $\cal C$ and  $\cal P$ of constraints and properties to this.
 We then use this core language to implement the operational model 
@@ -442,6 +446,8 @@ Where variables included in the containers
 like $\mathit{C.size}$ and $\mathit{C.capacity}$ return
 an integer value as well as the arithmetics
 operations between integer values.
+
+\vspace*{-2ex}
 
 %-------------------------------------------
 \subsection{Operational Container Model}
@@ -661,6 +667,7 @@ software and not that of hardware).}
 %\label{figure:cpp-inputoutputdiagram}
 %\end{figure*}
 
+\vspace*{-2ex}
 
 %------------------------------------------------
 \section{Inheritance and Polymorphism}
@@ -726,10 +733,16 @@ In this sense, polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
 We thus consider that two or more derived classes
-from the same base class can invoke methods with the same signature but with distinct behaviors,
-specialized for each derived class, using for this one reference to each object of
-this base class type. The decision of which method must be used, according to the type
-of the derived class, is chosen in run-time using the late binding of ESBMC++.
+from the same base class can invoke methods with the same signature but 
+with distinct behaviors, specialized for each derived class, using for 
+this one reference to each object of this base class type. The decision 
+of which method must be used cannot be made at compile-time. 
+One solution is the usage of virtual tables (described below) that contains 
+the object's method address. In this case, the method call will fetch the correct method 
+address from this object's dispatch table at verification-time.
+
+%The decision of which method must be used, according to the type
+%of the derived class, is chosen in run-time using the late binding of ESBMC++.
 
 
 The intermediate representation of C++ programs in ESBMC++ provides a model
@@ -789,6 +802,7 @@ supports dynamic cast between primitive types, same classes and from a derived
 class to a base. ESBMC++ also handles with cast to a reference type, verifying the
 correct use of \textit{bad\_cast} thrown by dynamic cast.
 
+\vspace*{-2ex}
 
 %--------------------------------------------
 \section{Exception Handling}
@@ -1211,6 +1225,7 @@ updates a rethrow if this reference is not \verb|NULL|.}
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+\vspace*{-2ex}
 
 %------------------------------------------------------
 \subsection{Exception Specification}
@@ -1243,6 +1258,7 @@ is allowed to be thrown outside the function. If it is allowed, the
 exception handling follows and try to look for an match on the catch
 map or will return an error, otherwise.
 
+\vspace*{-2ex}
 
 %-----------------------------------
 \section{Experimental Results}
@@ -1258,6 +1274,8 @@ are also given in Section~\ref{comparison-to-LLBMC}.
 In our experiments, we also tried to use the CBMC model checker~\cite{Clarke04},
 but since it has failed in most of our benchmarks (as reported previously
 by Merz et~al.~\cite{Florian12}), we do not report any results.
+
+\vspace*{-2ex}
 
 %-----------------------------------
 \subsection{Experimental Setup}
@@ -1658,6 +1676,12 @@ NEC, http://www.nec-labs.com/research/system/, 2012.
 
 \bibitem{CLANG}
 LLVM Tools, http://llvm.org/releases/, 2012.
+
+%\bibitem{Rossie}
+%J. G.~Rossie Jr. and D. P.~Friedman.
+%\newblock {An Algebraic Semantics of Subobjects}
+%\newblock In {\em 10th conf. on Object-Oriented Programming, Systems, Languages,
+%and Applications (OOPSLA 1995)} pp.~187--199, 1995.
 
 \end{thebibliography}}
 
