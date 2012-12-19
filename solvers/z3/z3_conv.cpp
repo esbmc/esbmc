@@ -1765,7 +1765,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   z3::sort sa;
   convert_type(data.type, sa);
-  output = ctx.fresh_const(NULL, sa);
+  output = ctx.fresh_const("deferred_deref_", sa);
+  deferred_derefs[output] = &data;
   return;
 
   if (!is_constant_int2t(data.source_offset)) {
