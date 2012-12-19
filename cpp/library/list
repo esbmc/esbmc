@@ -455,42 +455,36 @@ public:
 	}
 	void splice(iterator position, list<T>& x, iterator first, iterator last){
 		node* tmp;
-		if (last.it == NULL){
+		T value;
+		int way;
+		if (position.it == this->head)
+			way = 1;
+		else
+			if (position.it == this->tail)
+					way = 2;
+			else
+				way = 0;
+		if (last.it->next == NULL){
 			last--;
 		}
-		for (; first.it != last.it; last--) {
-			if (position.it->prev != NULL)
-				tmp = new node(last.it->data, position.it->prev, position.it);
-			if (position.it->prev != NULL)
-				position.it->prev->next = tmp;
-			position.it->prev = tmp;
-			position.it_size++;
-			this->_size++;
-			x.erase(last);
+		while(first.it->prev != last.it){
+			value = last.it->data;
+			if (way == 1){
+				this->push_front(value);
+			}else{
+				if (way == 2){
+					this->push_back(value);
+				}else{
+					this->insert(position, value);
+				}
+			}
+			tmp = last.it->prev;
+			last.it->prev->next = last.it->next;
+			last.it->next->prev = last.it->prev;
+			last.it = tmp;
+			this->_size--;
 		}
-		/*
-		list<T>::iterator tmp_next = first;
-		while(first.it != last.it){
-			tmp_next++;
-			if(first.it->prev != NULL)
-				first.it->prev->next = first.it->next;
-			if(first.it->next != NULL)
-				first.it->next->prev = first.it->prev;
-			first.it->next = this->head;
-			//if (first.it->next == NULL)
-				//this->tail = first.it;
-			first.it->prev = position.it->prev;
-			//if (first.it->prev == NULL)
-				//this->head = first.it;
-			position.it->prev =first.it;
-			x._size--;
-			this->_size++;
-			position.it_size++;
-			first.it = tmp_next.it;
-			if (first.it == NULL)
-				break;
-		}
-	*/}
+	}
 	void remove(const T& value){
 		if(value == this->head->data){
 			this->pop_front();
@@ -670,7 +664,7 @@ public:
 		}
 	}
 
-	void merge(list<T>& x){/*
+	void merge(list<T>& x){
 		int i,j;
 		node* tmp = this->head;
 		node* tmpX = x.head;
@@ -678,7 +672,7 @@ public:
 
 		for( i = 0; i < x._size; i++){
 			for(j = 0; j < this->_size; j++) {
-				if (tmpX->data <= tmp->data){
+				if (tmpX->data < tmp->data){
 					aux = new node (tmpX->data, tmp->prev, tmp);
 					if (tmp->prev != NULL){
 						tmp->prev->next = aux;
@@ -701,9 +695,44 @@ public:
 			tmpX = tmpX->next;
 		}
 		x.clear();
-	*/}
+	}
 
-	void merge(list<T>& x, pred_double* y);
+	void merge(list<T>& x, pred_double* pred){
+		int i,j;
+		node* tmp = this->head;
+		node* tmpX = x.head;
+		node* aux;
+		T foo;
+		T bar;
+
+		for( i = 0; i < x._size; i++){
+			for(j = 0; j < this->_size; j++) {
+				foo = tmpX->data;
+				bar = tmp->data;
+				if (pred(foo,bar)){
+					aux = new node (tmpX->data, tmp->prev, tmp);
+					if (tmp->prev != NULL){
+						tmp->prev->next = aux;
+					}else{
+						this->head = aux;
+					}
+					tmp->prev = aux;
+					this->_size++;
+					break;
+				}
+				if (tmp->next != NULL){
+					tmp = tmp->next;
+				}else{
+					aux = new node (tmpX->data, tmp, NULL);
+					tmp->next = aux;
+					this->_size++;
+					break;
+				}
+			}
+			tmpX = tmpX->next;
+		}
+		x.clear();
+	}
 
 	void sort(){
 		list<T> mylist;
