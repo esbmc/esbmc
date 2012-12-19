@@ -1763,6 +1763,11 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   // This function contains gotos. You have been warned.
 
+  z3::sort sa;
+  convert_type(data.type, sa);
+  output = ctx.fresh_const(NULL, sa);
+  return;
+
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);
     return;
