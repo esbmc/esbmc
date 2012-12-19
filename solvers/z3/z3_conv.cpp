@@ -136,6 +136,7 @@ void
 z3_convt::push_ctx(void)
 {
 
+assert(0 && "Multi-level Z3 contexts will explode with lazy pointer dereferencing");
   prop_convt::push_ctx();
   intr_push_ctx();
   solver.push();
