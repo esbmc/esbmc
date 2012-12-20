@@ -165,6 +165,6 @@ void goto_symext::dereference(expr2tc &expr, const bool write)
   assert(!cur_state->call_stack.empty());
   cur_state->top().level1.rename(expr);
 
-  guardt guard;
+  guardt guard = cur_state->guard;
   dereference_rec(expr, guard, dereference, write);
 }
