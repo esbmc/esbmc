@@ -185,11 +185,13 @@ private:
   z3::expr extract_from_struct_field(const type2tc &t, bool be,
                                      unsigned int field_idx,
                                      const expr2tc &field_offset,
-                                     const expr2tc &expr);
+                                     const expr2tc &expr,
+                                     const expr2tc &extract_guard);
 
   void build_part_array_from_elem(const expr2tc &data, bool be,
                                   unsigned int width, z3::expr &array,
-                                  unsigned int array_offs);
+                                  unsigned int array_offs,
+                                  const expr2tc &extract_guard);
   void dynamic_offs_byte_extract(const byte_extract2t &data, z3::expr &output);
 
   void byte_swap_expr(const expr2tc &data, z3::expr &output);

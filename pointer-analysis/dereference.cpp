@@ -655,7 +655,8 @@ bool dereferencet::memory_model_bytes(
 
     expr2tc base_object = get_base_object(value);
     value = expr2tc(new byte_extract2t(to_type, is_big_endian,
-                                       base_object, new_offset));
+                                       base_object, new_offset,
+                                       guard.as_expr()));
 
     if (!is_constant_int2t(new_offset) ||
         !to_constant_int2t(new_offset).constant_value.is_zero())

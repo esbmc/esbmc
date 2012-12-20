@@ -841,31 +841,33 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
              expr.id() == "byte_extract_big_endian") {
     migrate_type(expr.type(), type);
 
-    assert(expr.operands().size() == 2);
+    assert(expr.operands().size() == 3);
 
-    expr2tc side1, side2;
+    expr2tc side1, side2, g;
     convert_operand_pair(expr, side1, side2);
+    migrate_expr(expr.op2(), g);
 
     bool big_endian = (expr.id() == "byte_extract_big_endian") ? true : false;
 
-    byte_extract2t *b = new byte_extract2t(type, big_endian, side1, side2);
+    byte_extract2t *b = new byte_extract2t(type, big_endian, side1, side2, g);
     new_expr_ref = expr2tc(b);
   } else if (expr.id() == "byte_update_little_endian" ||
              expr.id() == "byte_update_big_endian") {
     migrate_type(expr.type(), type);
 
-    assert(expr.operands().size() == 3);
+    assert(expr.operands().size() == 4);
 
     expr2tc sourceval, offs;
     convert_operand_pair(expr, sourceval, offs);
 
-    expr2tc update;
+    expr2tc update, guard;
     migrate_expr(expr.op2(), update);
+    migrate_expr(expr.op3(), guard);
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
     byte_update2t *u = new byte_update2t(type, big_endian,
-                                         sourceval, offs, update);
+                                         sourceval, offs, update, guard);
     new_expr_ref = expr2tc(u);
   } else if (expr.id() == "with") {
     migrate_type(expr.type(), type);

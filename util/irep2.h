@@ -1994,16 +1994,18 @@ class byte_extract_data : public byte_ops
 {
 public:
   byte_extract_data(const type2tc &t, expr2t::expr_ids id, bool be,
-                    const expr2tc &s, const expr2tc &o)
-    : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o) { }
+                    const expr2tc &s, const expr2tc &o, const expr2tc &g)
+    : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o),
+      extract_guard(g) { }
   byte_extract_data(const byte_extract_data &ref)
     : byte_ops(ref), big_endian(ref.big_endian), source_value(ref.source_value),
-      source_offset(ref.source_offset) { }
+      source_offset(ref.source_offset), extract_guard(ref.extract_guard) { }
 
   bool big_endian;
   expr2tc source_value;
   expr2tc source_offset;
   type2tc extract_type;
+  expr2tc extract_guard;
 };
 
 /** Update field in expr in byte representation.
@@ -2016,17 +2018,20 @@ class byte_update_data : public byte_ops
 {
 public:
   byte_update_data(const type2tc &t, expr2t::expr_ids id, bool be,
-                    const expr2tc &s, const expr2tc &o, const expr2tc &v)
+                    const expr2tc &s, const expr2tc &o, const expr2tc &v,
+                    const expr2tc &g)
     : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o),
-      update_value(v) { }
+      update_value(v), update_guard(g) { }
   byte_update_data(const byte_update_data &ref)
     : byte_ops(ref), big_endian(ref.big_endian), source_value(ref.source_value),
-      source_offset(ref.source_offset), update_value(ref.update_value) { }
+      source_offset(ref.source_offset), update_value(ref.update_value),
+      update_guard(ref.update_guard) { }
 
   bool big_endian;
   expr2tc source_value;
   expr2tc source_offset;
   expr2tc update_value;
+  expr2tc update_guard;
 };
 
 class datatype_ops : public expr2t
@@ -2517,13 +2522,15 @@ typedef esbmct::expr_methods<address_of2t, pointer_ops,
 typedef esbmct::expr_methods<byte_extract2t, byte_extract_data,
         bool, byte_extract_data, &byte_extract_data::big_endian,
         expr2tc, byte_extract_data, &byte_extract_data::source_value,
-        expr2tc, byte_extract_data, &byte_extract_data::source_offset>
+        expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+        expr2tc, byte_extract_data, &byte_extract_data::extract_guard>
         byte_extract_expr_methods;
 typedef esbmct::expr_methods<byte_update2t, byte_update_data,
         bool, byte_update_data, &byte_update_data::big_endian,
         expr2tc, byte_update_data, &byte_update_data::source_value,
         expr2tc, byte_update_data, &byte_update_data::source_offset,
-        expr2tc, byte_update_data, &byte_update_data::update_value>
+        expr2tc, byte_update_data, &byte_update_data::update_value,
+        expr2tc, byte_update_data, &byte_update_data::update_guard>
         byte_update_expr_methods;
 typedef esbmct::expr_methods<with2t, with_data,
         expr2tc, with_data, &with_data::source_value,
@@ -3483,11 +3490,12 @@ public:
    *  @param is_big_endian Whether or not to use big endian byte representation
    *         of source object.
    *  @param source Object to extract data from. Any type.
-   *  @param offset Offset into source data object to extract from. */
+   *  @param offset Offset into source data object to extract from.
+   *  @param guard Execution guard for this extract. For lazy instanciation. */
   byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
-                 const expr2tc &offset)
+                 const expr2tc &offset, const expr2tc &guard)
     : byte_extract_expr_methods(type, byte_extract_id, is_big_endian,
-                               source, offset) {}
+                               source, offset, guard) {}
   byte_extract2t(const byte_extract2t &ref)
     : byte_extract_expr_methods(ref) {}
 
@@ -3506,11 +3514,13 @@ public:
    *  @param type Type of resulting, updated, data object.
    *  @param is_big_endian Whether to use big endian byte representation.
    *  @param source Source object in which to update a byte.
-   *  @param updateval Value of byte to  update source with. */
+   *  @param updateval Value of byte to  update source with.
+   *  @param update_guard Guard for use of this update. */
   byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
-                 const expr2tc &offset, const expr2tc &updateval)
+                 const expr2tc &offset, const expr2tc &updateval,
+                 const expr2tc &update_guard)
     : byte_update_expr_methods(type, byte_update_id, is_big_endian,
-                               source, offset, updateval) {}
+                               source, offset, updateval, update_guard) {}
   byte_update2t(const byte_update2t &ref)
     : byte_update_expr_methods(ref) {}
 

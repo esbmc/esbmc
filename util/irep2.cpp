@@ -2130,9 +2130,10 @@ std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 std::string address_of2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
 std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "", ""};
+{ "big_endian", "source_value", "source_offset", "extract_guard", ""};
 std::string byte_update2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "update_value", ""};
+{ "big_endian", "source_value", "source_offset", "update_value",
+  "update_guard"};
 std::string with2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names [esbmct::num_type_fields]  =
@@ -2374,12 +2375,14 @@ template class esbmct::expr_methods<address_of2t, pointer_ops,
 template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
     bool, byte_extract_data, &byte_extract_data::big_endian,
     expr2tc, byte_extract_data, &byte_extract_data::source_value,
-    expr2tc, byte_extract_data, &byte_extract_data::source_offset>;
+    expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+    expr2tc, byte_extract_data, &byte_extract_data::extract_guard>;
 template class esbmct::expr_methods<byte_update2t, byte_update_data,
     bool, byte_update_data, &byte_update_data::big_endian,
     expr2tc, byte_update_data, &byte_update_data::source_value,
     expr2tc, byte_update_data, &byte_update_data::source_offset,
-    expr2tc, byte_update_data, &byte_update_data::update_value>;
+    expr2tc, byte_update_data, &byte_update_data::update_value,
+    expr2tc, byte_update_data, &byte_update_data::update_guard>;
 template class esbmct::expr_methods<with2t, with_data,
     expr2tc, with_data, &with_data::source_value,
     expr2tc, with_data, &with_data::update_field,

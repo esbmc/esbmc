@@ -1585,7 +1585,8 @@ z3::expr
 z3_convt::extract_from_struct_field(const type2tc &type, bool be,
                                     unsigned int field_idx,
                                     const expr2tc &field_offset,
-                                    const expr2tc &expr)
+                                    const expr2tc &expr,
+                                    const expr2tc &extract_guard)
 {
   z3::expr output;
   const struct_type2t &struct_type = to_struct_type(expr->type);
@@ -1596,7 +1597,8 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
                             struct_type.member_names[field_idx]));
 
   // And select an appropriately sized chunk from that.
-  expr2tc new_extract(new byte_extract2t(type, be, item, field_offset));
+  expr2tc new_extract(new byte_extract2t(type, be, item, field_offset,
+                                         extract_guard));
 
   convert_bv(new_extract, output);
   return output;
@@ -1605,14 +1607,15 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
 void
 z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
                                      unsigned int width,
-                                     z3::expr &array, unsigned int array_offs)
+                                     z3::expr &array, unsigned int array_offs,
+                                     const expr2tc &extract_guard)
 {
   unsigned int i;
 
   for (i = 0; i < width; i++) {
     expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
     expr2tc extract_byte(new byte_extract2t(
-          type_pool.get_uint8(), be, data, offs));
+          type_pool.get_uint8(), be, data, offs, extract_guard));
     z3::expr byte;
 
     // Call directly to avoid caching. Could put the byte_extract on the
@@ -1664,7 +1667,7 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
     build_part_array_from_elem(data.source_value, data.big_endian, width,
-                               part_array, 0);
+                               part_array, 0, data.extract_guard);
 
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.
@@ -1717,7 +1720,8 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
 
       for (j = 0; j < elem_size; j++) {
         build_part_array_from_elem(selection, data.big_endian, elem_size,
-                                   part_array, i * elem_size);
+                                   part_array, i * elem_size,
+                                   data.extract_guard);
       }
     }
 
@@ -1810,7 +1814,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       unsigned long item_offs = offs -= total_sz;
       expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(item_offs)));
       output = extract_from_struct_field(data.type, data.big_endian, idx,
-                                         new_offs, data.source_value);
+                                         new_offs, data.source_value,
+                                         data.extract_guard);
     } else {
       // No; potentially many fields if there're a series of bytes. So iterate
       // over fields from here, selecting out the necessary number of bytes.
@@ -1828,7 +1833,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           type2tc getsz = type_pool.get_uint(immediate_sz * 8);
           expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
           output = extract_from_struct_field(getsz, data.big_endian, idx,
-                                             new_offs, data.source_value);
+                                             new_offs, data.source_value,
+                                             data.extract_guard);
 
           // No need to clip preceeding bits if there are any; they're already
           // removed by the extraction we just performed.
@@ -1846,7 +1852,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           type2tc getsz = type_pool.get_uint(immediate_sz * 8);
           expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
           z3::expr tmp = extract_from_struct_field(getsz, data.big_endian, idx,
-                                                   new_offs, data.source_value);
+                                                   new_offs, data.source_value,
+                                                   data.extract_guard);
 
           // And combine.
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
@@ -1876,7 +1883,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // And the remaining offset...
       expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
       expr2tc subfetch(new byte_extract2t(data.type, data.big_endian,
-                                          the_elem, remainder));
+                                          the_elem, remainder,
+                                          data.extract_guard));
       convert_bv(subfetch, output);
     } else {
       // No; repeat algorithm for structs, iterating over the next element each
@@ -1895,7 +1903,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           unsigned int getszi = elem_size - sub_offs;
           type2tc getsz = type_pool.get_uint(getszi * 8);
           expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
-                                              the_elem, remainder));
+                                              the_elem, remainder,
+                                              data.extract_guard));
           convert_bv(subfetch, output);
 
           szleft -= getszi;
@@ -1907,7 +1916,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
           unsigned int getszi = std::min<unsigned int>(szleft, elem_size);
           type2tc getsz = type_pool.get_uint(getszi * 8);
           expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
-                                              the_elem, zero));
+                                              the_elem, zero,
+                                              data.extract_guard));
           z3::expr tmp;
           convert_bv(subfetch, tmp);
           output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
@@ -1957,7 +1967,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                                   data.source_value));
       type2tc extract_size = type_pool.get_uint(sel_sz * 8);
       expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
-                                         cast_to_intrep, data.source_offset));
+                                         cast_to_intrep, data.source_offset,
+                                         data.extract_guard));
       convert_bv(extract, output);
     }
   } else if (is_bool_type(data.source_value->type)) {
@@ -2008,7 +2019,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
     expr2tc member(new member2t(source_type, data.source_value, fieldname));
     expr2tc new_extract(new byte_extract2t(data.type, data.big_endian,
-                                           member, data.source_offset));
+                                           member, data.source_offset,
+                                           data.extract_guard));
 
     convert_bv(new_extract, output);
   } else {
@@ -2071,7 +2083,7 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
     build_part_array_from_elem(data.source_value, data.big_endian, width / 8,
-                               part_array, 0);
+                               part_array, 0, data.update_value);
 
     // Now, update the appropriate fields.
     z3::expr offs_into_array;
@@ -2079,7 +2091,8 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     for (i = 0; i < update_width / 8; i++) {
       expr2tc offs_into_update(new constant_int2t(uint_type2(), BigInt(i)));
       expr2tc ext(new byte_extract2t(char_type2(), data.big_endian,
-                                     data.update_value, offs_into_update));
+                                     data.update_value, offs_into_update,
+                                     data.update_guard));
       z3::expr byte;
       convert_bv(ext, byte);
       part_array = store(part_array, offs_into_array, byte);
@@ -2107,7 +2120,7 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       expr2tc offs(new constant_int2t(uint_type2(), i));
       expr2tc sel(new index2t(char_type2(), sym, offs));
       expr2tc updated(new byte_update2t(top_type, data.big_endian,
-                                         label, offs, sel));
+                                         label, offs, sel, data.update_value));
       convert_bv(updated, accuml);
     }
 
@@ -2144,7 +2157,7 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
 
       build_part_array_from_elem(select, data.big_endian, elem_width / 8,
-                                 part_array, 0);
+                                 part_array, 0, data.update_guard);
 
       cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
 
@@ -2154,7 +2167,8 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     // Turn the udpate value into a byte array
     z3::expr update_array = ctx.fresh_const(NULL, array_sort);
     build_part_array_from_elem(data.update_value, data.big_endian,
-                               update_width / 8, update_array, 0);
+                               update_width / 8, update_array, 0,
+                               data.update_guard);
 
     expr2tc offs_into_first_elem(new modulus2t(uint_type2(), data.source_offset,
                                                elem_sz_expr));
@@ -2185,7 +2199,8 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
         expr2tc offs(new constant_int2t(uint_type2(), (i * (elem_width/8)) +j));
         expr2tc sel(new index2t(char_type2(), sym, offs));
         select = expr2tc(new byte_update2t(select->type, data.big_endian,
-                                           select, elem_offs, sel));
+                                           select, elem_offs, sel,
+                                           data.update_value));
         elem_offs = expr2tc(new add2t(uint_type2(), elem_offs, one));
       }
 
@@ -2247,7 +2262,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
         expr2tc ext_offs(new constant_int2t(uint_type2(),
                                             BigInt(offs_into_update / 8)));
         expr2tc ext(new byte_extract2t(update_sz, data.big_endian,
-                                       data.update_value, ext_offs));
+                                       data.update_value, ext_offs,
+                                       data.update_guard));
 
         // Now, insert into this field,
         expr2tc memb(new member2t(*it, data.source_value,
@@ -2255,7 +2271,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
         expr2tc memb_offs(new constant_int2t(uint_type2(),
                                              BigInt(offs_into_field / 8)));
         expr2tc update(new byte_update2t(*it, data.big_endian,
-                                         memb, memb_offs, ext));
+                                         memb, memb_offs, ext,
+                                         data.update_guard));
 
         z3::expr new_field;
         convert_bv(update, new_field);
@@ -2298,12 +2315,13 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       expr2tc update_offs(new constant_int2t(uint_type2(),
                                              BigInt(offs_into_update / 8)));
       expr2tc ext(new byte_extract2t(sel_sz, data.big_endian,
-                                     data.update_value, update_offs));
+                                     data.update_value, update_offs,
+                                     data.update_guard));
 
       // And update it into the array element.
       expr2tc into_elem(new constant_int2t(uint_type2(), offs_into_elem / 8));
       expr2tc update(new byte_update2t(arr.subtype, data.big_endian,
-                                       elem, into_elem, ext));
+                                       elem, into_elem, ext, data.update_guard));
 
       z3::expr new_elem;
       convert_bv(update, new_elem);
@@ -2343,7 +2361,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     expr2tc member(new member2t(source_type, data.source_value, fieldname));
     expr2tc new_update(new byte_update2t(data.type, data.big_endian,
                                            member, data.source_offset,
-                                           data.update_value));
+                                           data.update_value,
+                                           data.update_guard));
 
     z3::expr tmp;
     convert_bv(new_update, tmp);

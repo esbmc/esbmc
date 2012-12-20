@@ -345,7 +345,7 @@ void goto_symext::symex_assign_byte_extract(
                                               extract.big_endian,
                                               extract.source_value,
                                               extract.source_offset,
-                                              rhs));
+                                              rhs, guard.as_expr()));
 
   symex_assign_rec(extract.source_value, new_rhs, guard);
 }
