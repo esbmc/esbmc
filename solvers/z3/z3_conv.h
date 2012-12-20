@@ -304,6 +304,12 @@ public:
     >
   > union_varst;
 
+  struct deferred_deref_data {
+    z3::expr free;
+    const byte_extract2t *extract;
+    z3::expr guard;
+  };
+
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
   z3::solver solver;
@@ -341,7 +347,7 @@ public:
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
-  std::map<z3::ast, const byte_extract2t *> deferred_derefs;
+  std::list<struct deferred_deref_data> deferred_derefs;
 
   const namespacet &ns;
 

@@ -545,8 +545,16 @@ z3_convt::check2_z3_properties(void)
     result = solver.check();
   }
 
-  if (result == z3::sat)
+  if (result == z3::sat) {
     model = solver.get_model();
+
+    for (std::list<struct deferred_deref_data>::const_iterator
+         it = deferred_derefs.begin(); it != deferred_derefs.end(); it++) {
+      z3::expr bees = model.eval(static_cast<const z3::expr&>(it->free), false);
+      z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
+      std::cerr << bees << " -> " << guard << std::endl;
+    }
+  }
 
   if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
     std::cout << Z3_model_to_string(z3_ctx, model);
@@ -1769,9 +1777,19 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   // This function contains gotos. You have been warned.
 
   z3::sort sa;
+  z3::expr guard;
+  convert_bv(data.extract_guard, guard);
   convert_type(data.type, sa);
   output = ctx.fresh_const("deferred_deref_", sa);
-  deferred_derefs[output] = &data;
+
+  std::cerr << data.extract_guard << std::endl;
+
+  struct deferred_deref_data d;
+  d.free = guard;
+  d.extract = &data;
+  d.guard = guard;
+  deferred_derefs.push_back(d);
+
   return;
 
   if (!is_constant_int2t(data.source_offset)) {
