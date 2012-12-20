@@ -1791,6 +1791,12 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   deferred_derefs.push_back(d);
 
   return;
+}
+
+void
+z3_convt::convert_real_byte_extract(const byte_extract2t &data,
+                                    z3::expr &output)
+{
 
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);
