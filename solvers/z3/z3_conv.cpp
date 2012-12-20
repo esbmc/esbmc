@@ -1785,7 +1785,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   std::cerr << data.extract_guard << std::endl;
 
   struct deferred_deref_data d;
-  d.free = guard;
+  d.free = output;
   d.extract = &data;
   d.guard = guard;
   deferred_derefs.push_back(d);
