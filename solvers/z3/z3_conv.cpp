@@ -511,10 +511,15 @@ z3::check_result
 z3_convt::check2_z3_properties(void)
 {
   z3::check_result result;
+  bool replaced_things;
   unsigned i;
   std::string literal;
   z3::expr_vector assumptions(ctx);
 
+redo: // That's right, we'll be using gotos.
+
+  replaced_things = false;
+  assumptions.resize(0);
   assumptions_status = assumpt.size();
 
   if (uw) {
@@ -567,11 +572,13 @@ z3_convt::check2_z3_properties(void)
         tmp++;
         deferred_derefs.erase(it);
         it = tmp;
+        replaced_things = true;
       }
-
-      z3::expr bees = model.eval(static_cast<const z3::expr&>(it->free), false);
     }
   }
+
+  if (replaced_things)
+    goto redo;
 
   if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
     std::cout << Z3_model_to_string(z3_ctx, model);
