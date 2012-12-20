@@ -1806,8 +1806,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   convert_type(data.type, sa);
   output = ctx.fresh_const("deferred_deref_", sa);
 
-  std::cerr << data.extract_guard << std::endl;
-
   struct deferred_deref_data d;
   d.free = output;
   d.extract = &data;
