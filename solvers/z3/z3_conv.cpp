@@ -548,11 +548,28 @@ z3_convt::check2_z3_properties(void)
   if (result == z3::sat) {
     model = solver.get_model();
 
-    for (std::list<struct deferred_deref_data>::const_iterator
+    for (std::list<struct deferred_deref_data>::iterator
          it = deferred_derefs.begin(); it != deferred_derefs.end(); it++) {
-      z3::expr bees = model.eval(static_cast<const z3::expr&>(it->free), false);
       z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
-      std::cerr << bees << " -> " << guard << std::endl;
+      if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
+        z3::expr exp;
+        convert_real_byte_extract(*it->extract, exp);
+        Z3_ast from[1], to[1];
+        from[0] = it->free;
+        to[0] = exp;
+        std::cerr << it->free.get_sort() << std::endl;
+        std::cerr << exp.get_sort() << std::endl;
+        for (unsigned int i = 0; i < vec.size(); i++) {
+          Z3_substitute(ctx, vec[i], 1, from, to);
+        }
+
+        std::list<struct deferred_deref_data>::iterator tmp = it;
+        tmp++;
+        deferred_derefs.erase(it);
+        it = tmp;
+      }
+
+      z3::expr bees = model.eval(static_cast<const z3::expr&>(it->free), false);
     }
   }
 
