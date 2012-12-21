@@ -351,6 +351,7 @@ public:
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
   std::list<struct deferred_deref_data> deferred_derefs;
+  bool defer_extracts;
 
   const namespacet &ns;
 

@@ -56,6 +56,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
+  defer_extracts = true;
 
   z3::config conf;
   conf.set("MODEL", true);
@@ -550,6 +551,9 @@ redo: // That's right, we'll be using gotos.
     result = solver.check();
   }
 
+  // Turn off byte operation deferral when we're un-deferring things.
+  defer_extracts = false;
+
   if (result == z3::sat) {
     model = solver.get_model();
 
@@ -581,6 +585,7 @@ redo: // That's right, we'll be using gotos.
     }
   }
 
+  defer_extracts = true;
   if (replaced_things)
     goto redo;
 
@@ -1801,6 +1806,11 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   assert(!int_encoding && "Can't byte extract in integer mode");
+
+  if (!defer_extracts) {
+    convert_real_byte_extract(data, output);
+    return;
+  }
 
   // This function contains gotos. You have been warned.
 
