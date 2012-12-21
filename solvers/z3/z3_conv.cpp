@@ -1812,8 +1812,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     return;
   }
 
-  // This function contains gotos. You have been warned.
-
   z3::sort sa;
   z3::expr guard;
   convert_bv(data.extract_guard, guard);
