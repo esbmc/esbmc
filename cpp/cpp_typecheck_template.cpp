@@ -19,6 +19,37 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_template_args.h"
 
 /*******************************************************************\
+Function: cpp_typecheckt::salvage_default_parameters
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::salvage_default_parameters(
+  const template_typet &old_type,
+  template_typet &new_type)
+{
+  const template_typet::parameterst &old_parameters=old_type.parameters();
+  template_typet::parameterst &new_parameters=new_type.parameters();
+
+  for(unsigned i=0; i<new_parameters.size(); i++)
+  {
+    if(i<old_parameters.size() &&
+       old_parameters[i].has_default_parameter() &&
+       !new_parameters[i].has_default_parameter())
+    {
+      // TODO! The default may depend on previous parameters!!
+      new_parameters[i].default_parameter()=old_parameters[i].default_parameter();
+    }
+  }
+}
+
+
+/*******************************************************************\
 
 Function: cpp_typecheckt::check_template_restrictions
 
@@ -133,6 +164,8 @@ void cpp_typecheckt::typecheck_template_class(
   if(previous_symbol!=context.symbols.end())
   {
     // there already
+    const cpp_declarationt &previous_declaration=
+        to_cpp_declaration(previous_symbol->second.type);
 
     bool previous_has_body=
       previous_symbol->second.type.type().body().is_not_nil();
@@ -151,6 +184,9 @@ void cpp_typecheckt::typecheck_template_class(
     if(has_body)
     {
       // We replace the template!
+      salvage_default_parameters(
+          previous_declaration.template_type(),
+          declaration.template_type());
       previous_symbol->second.type.swap(declaration);
 
       // We also replace the template scope (the old one could be deleted).
