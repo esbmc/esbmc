@@ -563,18 +563,8 @@ redo: // That's right, we'll be using gotos.
       if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
         z3::expr exp;
         convert_real_byte_extract(*it->extract, exp);
-        Z3_ast from[1], to[1];
-        from[0] = it->free;
-        to[0] = exp;
-        for (unsigned int i = 0; i < vec.size(); i++) {
-          Z3_ast new_ast = Z3_substitute(ctx, vec[i], 1, from, to);
-          if (new_ast != vec[i]) {
-            // Essentially, we're just adding an additional constraint. So
-            // no need for editing the AST in place, which appears to be
-            // unpossible with Z3.
-            solver.add(z3::to_expr(ctx, new_ast));
-          }
-        }
+        z3::expr eq = it->free == exp;
+        solver.add(eq);
 
         std::list<struct deferred_deref_data>::iterator tmp = it;
         tmp++;
