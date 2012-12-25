@@ -57,7 +57,7 @@ protected:
     const wantt want,
     const cpp_typecheck_fargst &fargs);
 
-  void disambiguate(
+  void disambiguate_functions(
     resolve_identifierst &identifiers,
     const cpp_typecheck_fargst &fargs);
 
@@ -105,7 +105,7 @@ protected:
     const exprt &template_parameter,
     const exprt &desired_expr);
 
-  bool disambiguate(
+  bool disambiguate_functions(
     const exprt &expr,
     unsigned &args_distance,
     const cpp_typecheck_fargst &fargs);

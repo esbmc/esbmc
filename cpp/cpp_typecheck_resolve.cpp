@@ -146,7 +146,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     }
   }
 
-  disambiguate(identifiers, fargs);
+  disambiguate_functions(identifiers, fargs);
 
   // there should only be one left, or we have failed to disambiguate
   if(identifiers.size()==1)
@@ -476,7 +476,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::filter
 
 Inputs:
 
@@ -526,7 +526,7 @@ void cpp_typecheck_resolvet::filter(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::disambiguate_functions
 
 Inputs:
 
@@ -536,7 +536,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::disambiguate(
+void cpp_typecheck_resolvet::disambiguate_functions(
   resolve_identifierst &identifiers,
   const cpp_typecheck_fargst &fargs)
 {
@@ -553,7 +553,7 @@ void cpp_typecheck_resolvet::disambiguate(
   {
     unsigned args_distance;
 
-    if(disambiguate(*it, args_distance, fargs))
+    if(disambiguate_functions(*it, args_distance, fargs))
     {
       unsigned template_distance=0;
 
@@ -590,8 +590,8 @@ void cpp_typecheck_resolvet::disambiguate(
     // try to further disambiguate functions
 
     for(resolve_identifierst::iterator
-        it1 = identifiers.begin();
-        it1 != identifiers.end();
+        it1=identifiers.begin();
+        it1!=identifiers.end();
         it1++)
     {
       if(it1->type().id()!="code") continue;
@@ -1675,7 +1675,7 @@ exprt cpp_typecheck_resolvet::resolve(
   resolve_identifierst new_identifiers=identifiers;
   remove_templates(new_identifiers);
 
-  disambiguate(new_identifiers, fargs);
+  disambiguate_functions(new_identifiers, fargs);
 
   // no matches? Try again with function template guessing.
   if(new_identifiers.empty() && template_args.is_nil())
@@ -2242,17 +2242,17 @@ void cpp_typecheck_resolvet::apply_template_args(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::disambiguate_functions
 
 Inputs:
 
 Outputs:
-/
+
 Purpose:
 
 \*******************************************************************/
 
-bool cpp_typecheck_resolvet::disambiguate(
+bool cpp_typecheck_resolvet::disambiguate_functions(
   const exprt &expr,
   unsigned &args_distance,
   const cpp_typecheck_fargst &fargs)
