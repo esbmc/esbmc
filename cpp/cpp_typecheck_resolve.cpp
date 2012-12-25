@@ -526,6 +526,42 @@ void cpp_typecheck_resolvet::filter(
 
 /*******************************************************************\
 
+Function: cpp_typecheck_resolvet::exact_match_functions
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::exact_match_functions(
+  resolve_identifierst &identifiers,
+  const cpp_typecheck_fargst &fargs)
+{
+  if(!fargs.in_use) return;
+
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  identifiers.clear();
+
+  // put in the ones that match precisely
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    unsigned distance;
+    if(disambiguate_functions(*it, distance, fargs))
+      if(distance<=0)
+        identifiers.push_back(*it);
+  }
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheck_resolvet::disambiguate_functions
 
 Inputs:
@@ -1670,18 +1706,28 @@ exprt cpp_typecheck_resolvet::resolve(
 
   exprt result;
 
-  // We may need to disambiguate functions,
-  // but don't want templates yet
+  // We disambiguate functions
   resolve_identifierst new_identifiers=identifiers;
+
   remove_templates(new_identifiers);
 
-  disambiguate_functions(new_identifiers, fargs);
+  // we only want _exact_ matches, without templates!
+  exact_match_functions(new_identifiers, fargs);
 
-  // no matches? Try again with function template guessing.
-  if(new_identifiers.empty() && template_args.is_nil())
+  // no exact matches? Try again with function template guessing.
+  if(new_identifiers.empty())
   {
     new_identifiers=identifiers;
-    guess_function_template_args(new_identifiers, fargs);
+
+    if(template_args.is_nil())
+    {
+      guess_function_template_args(new_identifiers, fargs);
+
+      if(new_identifiers.empty())
+        new_identifiers=identifiers;
+    }
+
+    disambiguate_functions(new_identifiers, fargs);
   }
 
   remove_duplicates(new_identifiers);
