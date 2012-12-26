@@ -562,7 +562,7 @@ redo: // That's right, we'll be using gotos.
       z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
       if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
         z3::expr exp;
-        convert_real_byte_extract(*it->extract, exp);
+        convert_smt_expr(*it->extract, (static_cast<void*>(&exp)));
         z3::expr eq = it->free == exp;
         solver.add(eq);
 
@@ -1797,30 +1797,20 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   assert(!int_encoding && "Can't byte extract in integer mode");
 
-  if (!defer_extracts) {
-    convert_real_byte_extract(data, output);
+  if (defer_extracts) {
+    z3::sort sa;
+    z3::expr guard;
+    convert_bv(data.extract_guard, guard);
+    convert_type(data.type, sa);
+    output = ctx.fresh_const("deferred_deref_", sa);
+
+    struct deferred_deref_data d;
+    d.free = output;
+    d.extract = &data;
+    d.guard = guard;
+    deferred_derefs.push_back(d);
     return;
   }
-
-  z3::sort sa;
-  z3::expr guard;
-  convert_bv(data.extract_guard, guard);
-  convert_type(data.type, sa);
-  output = ctx.fresh_const("deferred_deref_", sa);
-
-  struct deferred_deref_data d;
-  d.free = output;
-  d.extract = &data;
-  d.guard = guard;
-  deferred_derefs.push_back(d);
-
-  return;
-}
-
-void
-z3_convt::convert_real_byte_extract(const byte_extract2t &data,
-                                    z3::expr &output)
-{
 
   if (!is_constant_int2t(data.source_offset)) {
     dynamic_offs_byte_extract(data, output);

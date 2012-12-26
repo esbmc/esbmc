@@ -165,9 +165,6 @@ private:
   virtual void convert_smt_expr(const overflow_cast2t &ocast, void *arg);
   virtual void convert_smt_expr(const overflow_neg2t &neg, void *arg);
 
-  virtual void convert_real_byte_extract(const byte_extract2t &data,
-                                         z3::expr &bv);
-
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
   virtual void convert_smt_type(const signedbv_type2t &type, void *bv);
