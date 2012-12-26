@@ -304,9 +304,9 @@ public:
     >
   > union_varst;
 
-  struct deferred_deref_data {
+  struct deferred_byte_op_data {
     z3::expr free;
-    const byte_extract2t *extract;
+    const expr2t *extract;
     z3::expr guard;
   };
 
@@ -347,7 +347,7 @@ public:
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
-  std::list<struct deferred_deref_data> deferred_derefs;
+  std::list<struct deferred_byte_op_data> deferred_derefs;
   bool defer_byte_ops;
 
   const namespacet &ns;
