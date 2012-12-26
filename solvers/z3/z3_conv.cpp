@@ -562,8 +562,17 @@ redo: // That's right, we'll be using gotos.
       z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
       if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
         z3::expr exp;
-        convert_smt_expr(static_cast<const byte_extract2t&>(*it->extract),
-                         (static_cast<void*>(&exp)));
+
+        const expr2t &e = *it->extract;
+        if (is_byte_extract2t(e)) {
+          convert_smt_expr(static_cast<const byte_extract2t&>(e),
+                           (static_cast<void*>(&exp)));
+        } else {
+          assert(is_byte_update2t(e));
+          convert_smt_expr(static_cast<const byte_update2t&>(e),
+                           (static_cast<void*>(&exp)));
+        }
+
         z3::expr eq = it->free == exp;
         solver.add(eq);
 
@@ -2263,6 +2272,21 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   z3::expr &output = cast_to_z3(_bv);
 
   assert(!int_encoding && "Can't byte update in integer mode");
+
+  if (defer_byte_ops) {
+    z3::sort sa;
+    z3::expr guard;
+    convert_bv(data.update_guard, guard);
+    convert_type(data.type, sa);
+    output = ctx.fresh_const("deferred_update_", sa);
+
+    struct deferred_byte_op_data d;
+    d.free = output;
+    d.extract = &data;
+    d.guard = guard;
+    deferred_derefs.push_back(d);
+    return;
+  }
 
   if (!is_constant_int2t(data.source_offset)) {
     byte_update_via_part_array(data, output);
