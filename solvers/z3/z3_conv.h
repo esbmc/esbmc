@@ -21,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/prop/pointer_logic.h>
 #include <vector>
 #include <string.h>
+#include <goto-symex/renaming.h>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
@@ -63,6 +64,7 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
+  void extract_global_vars(void);
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -351,6 +353,7 @@ public:
   bool defer_byte_ops;
 
   const namespacet &ns;
+  std::set<renaming::level2t::name_record> inited_global_names;
 
   Z3_context z3_ctx;
   static bool s_is_uw;

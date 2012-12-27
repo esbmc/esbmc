@@ -49,6 +49,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
 {
   this->int_encoding = int_encoding;
 
+  extract_global_vars();
+
   smtlib = smt;
   store_assumptions = (smt || uw);
   s_is_uw = uw;
@@ -439,6 +441,20 @@ z3_convt::fixed_point(std::string v, unsigned width)
     result = itos(i_int);
 
   return result;
+}
+
+void
+z3_convt::extract_global_vars(void)
+{
+  forall_symbols(it, ns.get_context().symbols) {
+    if (it->second.static_lifetime) {
+      type2tc t;
+      migrate_type(it->second.type, t);
+      symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2,
+                   0, 1, 0, 0);
+      inited_global_names.insert(renaming::level2t::name_record(rec));
+    }
+  }
 }
 
 void
