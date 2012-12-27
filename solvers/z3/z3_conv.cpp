@@ -3437,7 +3437,9 @@ z3_convt::convert_expr(const expr2tc &expr)
       if (inited_global_names.find(to_symbol2t(eq.side_1))
           != inited_global_names.end())
         return l;
-    } else if (is_symbol2t(eq.side_2)) {
+    }
+
+    if (is_symbol2t(eq.side_2)) {
       if (inited_global_names.find(to_symbol2t(eq.side_2))
           != inited_global_names.end())
         return l;
