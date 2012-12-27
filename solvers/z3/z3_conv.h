@@ -353,7 +353,7 @@ public:
   bool defer_byte_ops;
 
   const namespacet &ns;
-  std::set<renaming::level2t::name_record> inited_global_names;
+  std::set<symbol2t> inited_global_names;
 
   Z3_context z3_ctx;
   static bool s_is_uw;

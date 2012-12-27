@@ -452,7 +452,7 @@ z3_convt::extract_global_vars(void)
       migrate_type(it->second.type, t);
       symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2,
                    0, 1, 0, 0);
-      inited_global_names.insert(renaming::level2t::name_record(rec));
+      inited_global_names.insert(rec);
     }
   }
 }
