@@ -447,7 +447,7 @@ void
 z3_convt::extract_global_vars(void)
 {
   forall_symbols(it, ns.get_context().symbols) {
-    if (it->second.static_lifetime) {
+    if (it->second.static_lifetime && !it->second.is_extern) {
       type2tc t;
       migrate_type(it->second.type, t);
       symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2,
