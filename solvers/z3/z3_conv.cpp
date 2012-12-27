@@ -454,7 +454,7 @@ z3_convt::extract_global_vars(void)
       if (!is_array_type(t) || to_array_type(t).size_is_infinite)
         continue;
 
-      symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2,
+      symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2_global,
                    0, 1, 0, 0);
       inited_global_names.insert(rec);
     }
