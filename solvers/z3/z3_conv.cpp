@@ -450,6 +450,10 @@ z3_convt::extract_global_vars(void)
     if (it->second.static_lifetime && !it->second.is_extern) {
       type2tc t;
       migrate_type(it->second.type, t);
+
+      if (!is_array_type(t) || to_array_type(t).size_is_infinite)
+        continue;
+
       symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2,
                    0, 1, 0, 0);
       inited_global_names.insert(rec);
