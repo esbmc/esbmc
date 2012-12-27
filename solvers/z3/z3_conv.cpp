@@ -572,6 +572,7 @@ redo: // That's right, we'll be using gotos.
   }
 
   // Turn off byte operation deferral when we're un-deferring things.
+  bool old_defer_val = defer_byte_ops;
   defer_byte_ops = false;
 
   if (result == z3::sat) {
@@ -605,7 +606,7 @@ redo: // That's right, we'll be using gotos.
     }
   }
 
-  defer_byte_ops = true;
+  defer_byte_ops = old_defer_val;
   if (replaced_things)
     goto redo;
 
