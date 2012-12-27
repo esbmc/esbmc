@@ -3425,6 +3425,21 @@ z3_convt::convert_expr(const expr2tc &expr)
 
   expr2tc new_expr;
 
+  // Strip out initial constraints on global variables, we'll rewrite those
+  // ourselves.
+  if (is_equality2t(expr)) {
+    const equality2t &eq = to_equality2t(expr);
+    if (is_symbol2t(eq.side_1)) {
+      if (inited_global_names.find(to_symbol2t(eq.side_1))
+          != inited_global_names.end())
+        return l;
+    } else if (is_symbol2t(eq.side_2)) {
+      if (inited_global_names.find(to_symbol2t(eq.side_2))
+          != inited_global_names.end())
+        return l;
+    }
+  }
+
   try {
     convert_bv(expr, constraint);
   } catch (std::string *e) {
