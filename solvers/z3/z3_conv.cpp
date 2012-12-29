@@ -1850,6 +1850,17 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
   unsigned long sel_sz = data.type->get_width() / 8;
+  try {
+    unsigned long all_data_sz = data.source_value->type->get_width() / 8;
+    if (intref.constant_value + sel_sz > all_data_sz) {
+      z3::sort s;
+      convert_type(data.type, s);
+      output = ctx.fresh_const(NULL, s);
+      return;
+    }
+  } catch (array_type2t::dyn_sized_array_excp* e) {
+  } catch (array_type2t::inf_sized_array_excp* e) {
+  }
 
   z3::expr source;
 
@@ -1871,10 +1882,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       total_sz += cur_item_sz;
     }
 
-    if (it == struct_type.members.end()) {
-      // Offset does in fact pass the end of this struct.
-      goto freeret;
-    }
+    assert(it != struct_type.members.end() &&
+           "Unexpected struct extract past end of struct");
 
     // Is the selection entirely in the bounds of one field of this struct?
     if (total_sz + cur_item_sz >= offs + sel_sz) {
@@ -2000,11 +2009,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     uint64_t upper, lower;
     uint64_t offset = intref.constant_value.to_ulong();
 
-    if (offset * 8 >= width) {
-      // Entirely out of bounds. Return free variable.
-      goto freeret;
-    }
-
     if (!data.big_endian) {
       upper = ((offset + sel_sz) * 8) - 1; //((i+1)*w)-1;
       lower = offset * 8; //i*w;
@@ -2012,14 +2016,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       uint64_t max = width - 1;
       upper = max - (offset * 8); //max-(i*w);
       lower = max - ((offset + sel_sz) * 8 - 1); //max-((i+1)*w-1);
-    }
-
-    // is the size within the size of this type?
-    uint64_t typesize = data.source_value->type->get_width();
-    if (offset * 8 >= typesize) {
-      // Error at dereference; should (TM) be caught by an assertion failure
-      // elsewhere.
-      goto freeret;
     }
 
     // We can just extract out of the converted source.
@@ -2106,12 +2102,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     convert_bv(cast, output);
   }
 
-  return;
-
-freeret:
-  z3::sort s;
-  convert_type(data.type, s);
-  output = ctx.fresh_const(NULL, s);
   return;
 }
 
