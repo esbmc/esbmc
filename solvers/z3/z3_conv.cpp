@@ -1850,9 +1850,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
   unsigned long sel_sz = data.type->get_width() / 8;
+  uint64_t offset = intref.constant_value.to_ulong();
   try {
     unsigned long all_data_sz = data.source_value->type->get_width() / 8;
-    if (intref.constant_value + sel_sz > all_data_sz) {
+    if (offset + sel_sz > all_data_sz) {
       z3::sort s;
       convert_type(data.type, s);
       output = ctx.fresh_const(NULL, s);
@@ -1868,7 +1869,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = to_struct_type(data.source_value->type);
-    uint64_t offs = intref.constant_value.to_ulong();
     uint64_t total_sz = 0, cur_item_sz = 0;
     unsigned int idx = 0;
     // The following can't throw as extracting variable size data would be wrong
@@ -1877,7 +1877,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     for (it = struct_type.members.begin(); it != struct_type.members.end();
          it++, idx++) {
       cur_item_sz = (*it)->get_width() / 8;
-      if (total_sz + cur_item_sz > offs)
+      if (total_sz + cur_item_sz > offset)
         break;
       total_sz += cur_item_sz;
     }
@@ -1886,10 +1886,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
            "Unexpected struct extract past end of struct");
 
     // Is the selection entirely in the bounds of one field of this struct?
-    if (total_sz + cur_item_sz >= offs + sel_sz) {
+    if (total_sz + cur_item_sz >= offset + sel_sz) {
       // Yes, so just select from one of them.
       // Make offs the offset into this item.
-      unsigned long item_offs = offs -= total_sz;
+      unsigned long item_offs = offset -= total_sz;
       expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(item_offs)));
       output = extract_from_struct_field(data.type, data.big_endian, idx,
                                          new_offs, data.source_value,
@@ -1898,8 +1898,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // No; potentially many fields if there're a series of bytes. So iterate
       // over fields from here, selecting out the necessary number of bytes.
       bool first = true;
-      unsigned int orig_offs = offs;
-      unsigned int accuml_offs = offs;
+      unsigned int orig_offs = offset;
+      unsigned int accuml_offs = offset;
       for (; it != struct_type.members.end(); it++, idx++) {
         if (total_sz >= orig_offs + sel_sz)
           break;
@@ -1949,7 +1949,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     uint64_t elem_size = subtype->get_width() / 8;
 
     // We have an array; pick an element.
-    uint64_t offset = intref.constant_value.to_ulong();
     uint64_t elem = offset / elem_size;
     uint64_t sub_offs = offset % elem_size;
 
@@ -2007,7 +2006,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   } else if (is_number_type(data.source_value->type)) {
     unsigned width = data.source_value->type->get_width();
     uint64_t upper, lower;
-    uint64_t offset = intref.constant_value.to_ulong();
 
     if (!data.big_endian) {
       upper = ((offset + sel_sz) * 8) - 1; //((i+1)*w)-1;
@@ -2023,7 +2021,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   } else if (is_pointer_type(data.source_value->type)) {
     // If this extract perfectly extracts a pointer from a pointer, just return
     // this field. Otherwise, cast to bits.
-    unsigned long offset = intref.constant_value.to_ulong();
     if (is_pointer_type(data.type) && offset == 0) {
       convert_bv(data.source_value, output);
     } else {
