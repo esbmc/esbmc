@@ -1899,10 +1899,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // over fields from here, selecting out the necessary number of bytes.
       std::list<z3::expr> extracted_data;
 
-      unsigned int orig_offs = offset;
       unsigned int accuml_offs = offset;
       for (; it != struct_type.members.end(); it++, idx++) {
-        if (total_sz >= orig_offs + sel_sz)
+        if (total_sz >= offset + sel_sz)
           break;
 
         unsigned int cur_offs = accuml_offs - total_sz;
