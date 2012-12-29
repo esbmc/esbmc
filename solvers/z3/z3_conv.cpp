@@ -578,54 +578,33 @@ redo: // That's right, we'll be using gotos.
   if (result == z3::sat) {
     model = solver.get_model();
 
-    bool do_dyn_offsets = false;
-and_again:
+    bool changed = false;
+    std::list<struct deferred_byte_op_data>::iterator tmp;
     for (std::list<struct deferred_byte_op_data>::iterator
-         it = deferred_derefs.begin(); it != deferred_derefs.end(); it++) {
-      z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
-      if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
-        z3::expr exp;
-
-        const expr2t &e = *it->extract;
-
-        // If it's a dynamic offset extract, don't do it. Unless we've already
-        // been through and there were not fixed offsets converted.
-        if (is_byte_extract2t(e)) {
-          const byte_extract2t &ext = static_cast<const byte_extract2t&>(e);
-          try {
-            ext.source_value->type->get_width();
-          } catch (array_type2t::dyn_sized_array_excp *e) {
-            if (!do_dyn_offsets)
-              continue;
-          } catch (array_type2t::inf_sized_array_excp *e) {
-            if (!do_dyn_offsets)
-              continue;
-          }
-        }
-
-        if (is_byte_extract2t(e)) {
-          convert_smt_expr(static_cast<const byte_extract2t&>(e),
-                           (static_cast<void*>(&exp)));
-        } else {
-          assert(is_byte_update2t(e));
-          convert_smt_expr(static_cast<const byte_update2t&>(e),
-                           (static_cast<void*>(&exp)));
-        }
-
-        z3::expr eq = it->free == exp;
-        solver.add(eq);
-
-        std::list<struct deferred_byte_op_data>::iterator tmp = it;
+         it = deferred_derefs_constoffs.begin();
+         it != deferred_derefs_constoffs.end(); it++) {
+      if (maybe_undefer_byte_op(&*it)) {
+        changed = true;
+        tmp = it;
         tmp++;
-        deferred_derefs.erase(it);
+        deferred_derefs_constoffs.erase(it);
         it = tmp;
-        replaced_things = true;
       }
     }
 
-    if (!replaced_things && !do_dyn_offsets) {
-      do_dyn_offsets = true;
-      goto and_again;
+    // If we didn't change anything with constant offsets, try the dynamic
+    // ones.
+    if (!changed) {
+      for (std::list<struct deferred_byte_op_data>::iterator
+           it = deferred_derefs_dynoffs.begin();
+           it != deferred_derefs_dynoffs.end(); it++) {
+        if (maybe_undefer_byte_op(&*it)) {
+          tmp = it;
+          tmp++;
+          deferred_derefs_dynoffs.erase(it);
+          it = tmp;
+        }
+      }
     }
   }
 
@@ -637,6 +616,32 @@ and_again:
     std::cout << Z3_model_to_string(z3_ctx, model);
 
   return result;
+}
+
+bool
+z3_convt::maybe_undefer_byte_op(const deferred_byte_op_data *d)
+{
+
+  z3::expr guard = model.eval(static_cast<const z3::expr&>(d->guard), false);
+  if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
+    z3::expr exp;
+
+    const expr2t &e = *d->extract;
+    if (is_byte_extract2t(e)) {
+      convert_smt_expr(static_cast<const byte_extract2t&>(e),
+                       (static_cast<void*>(&exp)));
+    } else {
+      assert(is_byte_update2t(e));
+      convert_smt_expr(static_cast<const byte_update2t&>(e),
+                       (static_cast<void*>(&exp)));
+    }
+
+    z3::expr eq = d->free == exp;
+    solver.add(eq);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void
@@ -1851,6 +1856,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   assert(!int_encoding && "Can't byte extract in integer mode");
 
+  bool is_const_offs = is_constant_int2t(data.source_offset);
+
   if (defer_byte_ops) {
     z3::sort sa;
     z3::expr guard;
@@ -1862,11 +1869,16 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     d.free = output;
     d.extract = &data;
     d.guard = guard;
-    deferred_derefs.push_back(d);
+
+    if (is_const_offs)
+      deferred_derefs_constoffs.push_back(d);
+    else
+      deferred_derefs_dynoffs.push_back(d);
+
     return;
   }
 
-  if (!is_constant_int2t(data.source_offset)) {
+  if (!is_const_offs) {
     dynamic_offs_byte_extract(data, output);
     return;
   }
@@ -2296,6 +2308,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
   assert(!int_encoding && "Can't byte update in integer mode");
 
+  bool is_const_offs = is_constant_int2t(data.source_offset);
+
   if (defer_byte_ops) {
     z3::sort sa;
     z3::expr guard;
@@ -2307,11 +2321,16 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     d.free = output;
     d.extract = &data;
     d.guard = guard;
-    deferred_derefs.push_back(d);
+
+    if (is_const_offs)
+      deferred_derefs_constoffs.push_back(d);
+    else
+      deferred_derefs_dynoffs.push_back(d);
+
     return;
   }
 
-  if (!is_constant_int2t(data.source_offset)) {
+  if (!is_const_offs) {
     byte_update_via_part_array(data, output);
     return;
   }

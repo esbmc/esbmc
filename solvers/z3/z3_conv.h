@@ -37,6 +37,8 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
+  struct deferred_byte_op_data; // forward dec
+
   z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
            const namespacet &ns);
   virtual ~z3_convt();
@@ -50,6 +52,7 @@ public:
   virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
+  bool maybe_undefer_byte_op(const deferred_byte_op_data *d);
   void set_filename(std::string file);
   uint get_z3_core_size(void);
   uint get_z3_number_of_assumptions(void);
@@ -349,7 +352,8 @@ public:
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
-  std::list<struct deferred_byte_op_data> deferred_derefs;
+  std::list<struct deferred_byte_op_data> deferred_derefs_constoffs;
+  std::list<struct deferred_byte_op_data> deferred_derefs_dynoffs;
   bool defer_byte_ops;
 
   const namespacet &ns;
