@@ -1934,7 +1934,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     }
   } else if (is_array_type(data.source_value->type) ||
              is_string_type(data.source_value->type)) {
-    // We have an array; pick an element.
     const type2tc &subtype = (is_string_type(data.source_value->type))
                 ? char_type2() : to_array_type(data.source_value->type).subtype;
     uint64_t elem_size = subtype->get_width() / 8;
