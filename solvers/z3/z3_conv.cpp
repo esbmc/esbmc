@@ -1954,42 +1954,44 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                                           data.extract_guard));
       convert_bv(subfetch, output);
     } else {
-      // No; repeat algorithm for structs, iterating over the next element each
-      // time and moving more data into the thing we're fetching. No check for
-      // end-of-array problems, that'll lead to free elements being used. And
-      // that bounds problem should be caught by an assertion somewhere else.
-      // (TM).
-      bool first = true;
-      unsigned int szleft = sel_sz;
-      for (; szleft != 0; elem++) {
-        if (first) {
-          expr2tc the_elem(new index2t(subtype, data.source_value,
-                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
-          // And the remaining offset...
-          expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
-          unsigned int getszi = elem_size - sub_offs;
-          type2tc getsz = type_pool.get_uint(getszi * 8);
-          expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
-                                              the_elem, remainder,
-                                              data.extract_guard));
-          convert_bv(subfetch, output);
+      // No: produce a series of extracts for each element of the array we're
+      // going to have to access, convert, concat.
+      std::list<expr2tc> extract_list;
 
-          szleft -= getszi;
+      unsigned int remaining = sel_sz;
+      unsigned int cur_offs = sub_offs;
+      while (remaining > 0) {
+        unsigned int to_extract = elem_size - cur_offs;
+        to_extract = std::min(to_extract, remaining);
+        std::cout << "Extracting " << to_extract << " bytes" << std::endl;
+        expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem)));
+        expr2tc index(new index2t(subtype, data.source_value, idx));
+        expr2tc offs(new constant_int2t(uint_type2(), cur_offs));
+        expr2tc ext(new byte_extract2t(type_pool.get_uint(to_extract * 8),
+                                       data.big_endian, index, offs,
+                                       data.extract_guard));
+        extract_list.push_back(ext);
+        cur_offs = 0;
+        ++elem;
+        remaining -= to_extract;
+      }
+
+      std::list<z3::expr> expr_list;
+      for (std::list<expr2tc>::const_iterator it = extract_list.begin();
+           it != extract_list.end(); it++) {
+        // Don't convert_bv, no point caching this.
+        (*it)->convert_smt(*this, reinterpret_cast<void*>(&output));
+        expr_list.push_back(output);
+      }
+
+      bool first = true;
+      for (std::list<z3::expr>::const_iterator it = expr_list.begin();
+           it != expr_list.end(); it++) {
+        if (first) {
+          output = *it;
           first = false;
         } else {
-          expr2tc the_elem(new index2t(subtype, data.source_value,
-                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
-          expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
-          unsigned int getszi = std::min<unsigned int>(szleft, elem_size);
-          type2tc getsz = type_pool.get_uint(getszi * 8);
-          expr2tc subfetch(new byte_extract2t(getsz, data.big_endian,
-                                              the_elem, zero,
-                                              data.extract_guard));
-          z3::expr tmp;
-          convert_bv(subfetch, tmp);
-          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
-
-          szleft -= getszi;
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, *it, output));
         }
       }
     }
