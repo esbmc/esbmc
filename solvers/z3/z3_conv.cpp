@@ -578,6 +578,8 @@ redo: // That's right, we'll be using gotos.
   if (result == z3::sat) {
     model = solver.get_model();
 
+    bool do_dyn_offsets = false;
+and_again:
     for (std::list<struct deferred_byte_op_data>::iterator
          it = deferred_derefs.begin(); it != deferred_derefs.end(); it++) {
       z3::expr guard = model.eval(static_cast<const z3::expr&>(it->guard), false);
@@ -585,6 +587,22 @@ redo: // That's right, we'll be using gotos.
         z3::expr exp;
 
         const expr2t &e = *it->extract;
+
+        // If it's a dynamic offset extract, don't do it. Unless we've already
+        // been through and there were not fixed offsets converted.
+        if (is_byte_extract2t(e)) {
+          const byte_extract2t &ext = static_cast<const byte_extract2t&>(e);
+          try {
+            ext.source_value->type->get_width();
+          } catch (array_type2t::dyn_sized_array_excp *e) {
+            if (!do_dyn_offsets)
+              continue;
+          } catch (array_type2t::inf_sized_array_excp *e) {
+            if (!do_dyn_offsets)
+              continue;
+          }
+        }
+
         if (is_byte_extract2t(e)) {
           convert_smt_expr(static_cast<const byte_extract2t&>(e),
                            (static_cast<void*>(&exp)));
@@ -603,6 +621,11 @@ redo: // That's right, we'll be using gotos.
         it = tmp;
         replaced_things = true;
       }
+    }
+
+    if (!replaced_things && !do_dyn_offsets) {
+      do_dyn_offsets = true;
+      goto and_again;
     }
   }
 
