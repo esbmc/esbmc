@@ -1756,8 +1756,15 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
-    build_part_array_from_elem(data.source_value, data.big_endian, width,
-                               part_array, 0, data.extract_guard);
+    // If this is already an array of single bytes (for example, malloc'd data)
+    // then don't bother building the part array, because we already have it.
+    if (is_array_type(data.source_value->type) &&
+        to_array_type(data.source_value->type).subtype->get_width() == 8){
+      convert_bv(data.source_value, part_array);
+    } else {
+      build_part_array_from_elem(data.source_value, data.big_endian, width,
+                                 part_array, 0, data.extract_guard);
+    }
 
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.
