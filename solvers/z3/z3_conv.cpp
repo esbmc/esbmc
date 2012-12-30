@@ -2172,8 +2172,16 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     // First, fetch an array of all the data we have.
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
-    build_part_array_from_elem(data.source_value, data.big_endian, width / 8,
-                               part_array, 0, data.update_value);
+
+    // However, if we're already dealing with a byte array, no point
+    // constructing a part array from it.
+    if (is_array_type(data.source_value->type) &&
+        to_array_type(data.source_value->type).subtype->get_width() == 8) {
+      convert_bv(data.source_value, part_array);
+    } else {
+      build_part_array_from_elem(data.source_value, data.big_endian, width / 8,
+                                 part_array, 0, data.update_value);
+    }
 
     // Now, update the appropriate fields.
     z3::expr offs_into_array;
