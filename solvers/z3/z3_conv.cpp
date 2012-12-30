@@ -2210,19 +2210,38 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     // I forgot the Z3 backend is O(n^2/2); which doesn't work well with 4096
     // byte arrays. So instead, do it piece by piece, linked with labels. Not
     // the most memory efficient, but a worthy tradeoff.
-    z3::expr accuml;
-    type2tc top_type = data.source_value->type;
-    convert_bv(data.source_value, accuml);
-    for (i = 0; i < width / 8; i++) {
-      expr2tc label = label_formula("byte_update_depth_shim", top_type, accuml);
-      expr2tc offs(new constant_int2t(uint_type2(), i));
-      expr2tc sel(new index2t(char_type2(), sym, offs));
-      expr2tc updated(new byte_update2t(top_type, data.big_endian,
-                                         label, offs, sel, data.update_value));
-      convert_bv(updated, accuml);
+    //
+    // Unless the output is a byte array, in which case we just store into it.
+    if (is_array_type(data.source_value->type) &&
+        is_bv_type(to_array_type(data.source_value->type).subtype)) {
+      // Just produce a series of stores
+      expr2tc accuml = data.source_value;
+      unsigned int update_width = data.update_value->type->get_width() / 8;
+      for (i = 0; i < update_width / 8; i++) {
+        expr2tc offs(new constant_int2t(uint_type2(), i));
+        expr2tc byte(new byte_extract2t(char_type2(), data.big_endian,
+                                        data.update_value, offs,
+                                        data.update_guard));
+        accuml = expr2tc(new with2t(accuml->type, accuml, offs, byte));
+      }
+      convert_bv(accuml, out);
+    } else {
+      z3::expr accuml;
+      type2tc top_type = data.source_value->type;
+      convert_bv(data.source_value, accuml);
+      for (i = 0; i < width / 8; i++) {
+        expr2tc label = label_formula("byte_update_depth_shim",
+                                      top_type, accuml);
+        expr2tc offs(new constant_int2t(uint_type2(), i));
+        expr2tc sel(new index2t(char_type2(), sym, offs));
+        expr2tc updated(new byte_update2t(top_type, data.big_endian,
+                                           label, offs, sel,
+                                           data.update_value));
+        convert_bv(updated, accuml);
+      }
+      out = accuml;
     }
 
-    out = accuml;
   } catch (array_type2t::dyn_sized_array_excp *e) {
     const array_type2t &arr = to_array_type(data.source_value->type);
     unsigned int elem_width = arr.subtype->get_width();
