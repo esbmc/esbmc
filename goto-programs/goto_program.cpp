@@ -159,11 +159,11 @@ std::ostream& goto_programt::output_instruction(
       const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(it->code);
       forall_names(it, throw_ref.exception_list) {
       	if(it != throw_ref.exception_list.begin()) out << ",";
-        out << " " << t_it->id();
+        out << " " << *it;
       }
-    }
 
-      out << ": " << from_expr(ns, identifier, throw_ref.operand);
+      if (!is_nil_expr(throw_ref.operand))
+        out << ": " << from_expr(ns, identifier, throw_ref.operand);
     }
 
     out << std::endl;
@@ -204,13 +204,12 @@ std::ostream& goto_programt::output_instruction(
     out << "THROW_DECL (";
 
     {
-      const irept::subt &throw_list=
-        it->code.find("throw_list").get_sub();
+      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(it->code);
 
-      for(unsigned int i=0; i<throw_list.size(); ++i)
+      for(unsigned int i=0; i < ref.exception_list.size(); ++i)
       {
         if(i) out << ", ";
-        out << throw_list[i].id();
+        out << ref.exception_list[i];
       }
       out << ")";
     }
