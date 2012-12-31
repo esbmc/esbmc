@@ -578,13 +578,12 @@ redo: // That's right, we'll be using gotos.
   if (result == z3::sat) {
     model = solver.get_model();
 
-    bool changed = false;
     std::list<struct deferred_byte_op_data>::iterator tmp;
     for (std::list<struct deferred_byte_op_data>::iterator
          it = deferred_derefs_constoffs.begin();
          it != deferred_derefs_constoffs.end(); it++) {
       if (maybe_undefer_byte_op(&*it)) {
-        changed = true;
+        replaced_things = true;
         tmp = it;
         tmp++;
         deferred_derefs_constoffs.erase(it);
@@ -594,11 +593,12 @@ redo: // That's right, we'll be using gotos.
 
     // If we didn't change anything with constant offsets, try the dynamic
     // ones.
-    if (!changed) {
+    if (!replaced_things) {
       for (std::list<struct deferred_byte_op_data>::iterator
            it = deferred_derefs_dynoffs.begin();
            it != deferred_derefs_dynoffs.end(); it++) {
         if (maybe_undefer_byte_op(&*it)) {
+          replaced_things = true;
           tmp = it;
           tmp++;
           deferred_derefs_dynoffs.erase(it);
