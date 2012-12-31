@@ -287,6 +287,8 @@ void goto_convertt::convert(
     convert_cpp_delete(code, dest);
   else if(statement=="cpp-catch")
     convert_catch(code, dest);
+  else if(statement=="throw_decl")
+    convert_throw_decl(code, dest);
   else
   {
     copy(code, OTHER, dest);
@@ -302,7 +304,42 @@ void goto_convertt::convert(
 
 /*******************************************************************\
 
-Function: goto_convertt::convert_block
+Function: goto_convertt::convert_throw_decl
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
+{
+  // add the THROW_DECL instruction to 'dest'
+  goto_programt::targett throw_decl_instruction=dest.add_instruction();
+  throw_decl_instruction->make_throw_decl();
+  throw_decl_instruction->code.set_statement("throw-decl");
+  throw_decl_instruction->location=expr.location();
+
+  // the THROW_DECL instruction is annotated with a list of IDs,
+  // one per target
+  irept::subt &throw_list=
+    throw_decl_instruction->code.add("throw_list").get_sub();
+
+  for(unsigned i=0; i<expr.operands().size(); i++)
+  {
+    const exprt &block=expr.operands()[i];
+    irept type = irept(block.get("throw_decl_id"));
+
+    // grab the ID and add to THROW_DECL instruction
+    throw_list.push_back(irept(type));
+  }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_catch
 
   Inputs:
 
@@ -979,6 +1016,12 @@ void goto_convertt::convert_assign(
   {
     remove_sideeffects(rhs, dest);
 
+    if (rhs.type().is_code())
+    {
+      convert(to_code(rhs), dest);
+      return ;
+    }
+
     if(lhs.id()=="typecast")
     {
       assert(lhs.operands().size()==1);
@@ -992,6 +1035,7 @@ void goto_convertt::convert_assign(
       exprt tmp(lhs.op0());
       lhs.swap(tmp);
     }
+
 
     int atomic = 0;
 

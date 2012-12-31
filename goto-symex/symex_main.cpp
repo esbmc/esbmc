@@ -95,6 +95,22 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
+
+    // We must check if we can access right frame
+    if(cur_state->call_stack.size()>2)
+    {
+      // Get the correct frame
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
+      ++s_it;
+
+      // Clear the allowed exceptions, we're not on the function anymore
+      (*s_it).throw_list_set.clear();
+
+      // We don't have throw_decl anymore too
+      (*s_it).has_throw_decl = false;
+    }
+
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
@@ -105,15 +121,16 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
+    if(cur_state->call_stack.size())
+    {
+      goto_symex_statet::call_stackt::reverse_iterator
+        s_it=cur_state->call_stack.rbegin();
 
-    if (has_throw_target && has_catch) {
-      goto_programt::instructiont &insn =
-        const_cast<goto_programt::instructiont &>(instruction);
-
-      insn.targets.pop_back();
-      insn.targets.push_back(throw_target);
-      has_throw_target = false;
-      has_catch = false;
+      if((*s_it).has_throw_target)
+      {
+        cur_state->source.pc++;
+        break;
+      }
     }
 
     expr2tc tmp = instruction.guard;
@@ -209,9 +226,8 @@ goto_symext::symex_step(reachability_treet & art)
 
       code_function_call2t &call = to_code_function_call2t(deref_code);
 
-      if (!is_nil_expr(call.ret)) {
+      if (!is_nil_expr(call.ret))
 	dereference(call.ret, true);
-      }
 
       for (std::vector<expr2tc>::iterator it = call.operands.begin();
            it != call.operands.end(); it++)
@@ -242,11 +258,15 @@ goto_symext::symex_step(reachability_treet & art)
 
   case CATCH:
     symex_catch();
-    cur_state->source.pc++;
     break;
 
   case THROW:
     symex_throw();
+    cur_state->source.pc++;
+    break;
+
+  case THROW_DECL:
+    symex_throw_decl();
     cur_state->source.pc++;
     break;
 
@@ -288,4 +308,28 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
   }
 
   return;
+}
+
+void
+goto_symext::finish_formula(void)
+{
+
+  if (!options.get_bool_option("memory-leak-check"))
+    return;
+
+  std::list<allocated_obj>::const_iterator it;
+  for (it = dynamic_memory.begin(); it != dynamic_memory.end(); it++) {
+    // Assert that the allocated object was freed.
+    exprt deallocd("deallocated_object", bool_typet());
+    deallocd.copy_to_operands(it->obj);
+    equality_exprt eq(deallocd, true_exprt());
+    replace_dynamic_allocation(eq);
+    it->alloc_guard.guard_expr(eq);
+    cur_state->rename(eq);
+    target->assertion(it->alloc_guard, eq,
+                      "dereference failure: forgotten memory",
+                      std::vector<dstring>(), cur_state->source);
+    total_claims++;
+    remaining_claims++;
+  }
 }

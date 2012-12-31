@@ -106,6 +106,7 @@ void goto_symext::symex_malloc(
   // Pas this point, rhs_ref may be an invalid reference.
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -116,12 +117,20 @@ void goto_symext::symex_malloc(
   expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
 
   expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-
   expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
-
   expr2tc truth = true_expr;
-
   symex_assign_rec(idx, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+}
+
+void goto_symext::symex_free(const code_free2t &code)
+{
+
+  expr2tc ptr_obj(new pointer_offset2t(uint_type2(), code.operand));
+  expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
+  expr2tc eq(new equality2t(ptr_obj, zero));
+  claim(eq, "Operand of free must have zero pointer offset");
 }
 
 void goto_symext::symex_printf(
@@ -214,6 +223,7 @@ void goto_symext::symex_cpp_new(
     addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
 
   cur_state->rename(rhs);
+  exprt rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -224,12 +234,13 @@ void goto_symext::symex_cpp_new(
   expr2tc sym = expr2tc(new symbol2t(sym_type, "cpp::__ESBMC_is_dynamic"));
 
   expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-
   expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
-
   expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);
+  symex_assign_rec(index, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 // XXX - implement as a call to free?
@@ -350,6 +361,12 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
+
+  if (options.get_bool_option("k-induction")) {
+    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+    std::cerr  << std::endl;
+    abort();
+  }
 
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];

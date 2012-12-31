@@ -36,7 +36,7 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_free2t(code2))
   {
-    // ignore
+    symex_free(code);
   }
   else if (is_code_printf2t(code2))
   {
@@ -89,6 +89,10 @@ void goto_symext::symex_other(void)
   {
     // Assembly statement -> do nothing.
     return;
+  }
+  else if(statement=="typeid")
+  {
+    // Ignore typeid
   }
   else
     throw "goto_symext: unexpected statement: " + get_expr_id(code2);

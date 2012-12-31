@@ -61,7 +61,6 @@ protected:
   namespacet ns;
   unsigned temporary_counter;
   std::string tmp_symbol_prefix;
-  std::queue<exprt> allocated_objects;
 
   void goto_convert_rec(const codet &code, goto_programt &dest);
 
@@ -166,7 +165,6 @@ protected:
   void convert_expression(const codet &code, goto_programt &dest);
   void convert_assign(const code_assignt &code, goto_programt &dest);
   void convert_cpp_delete(const codet &code, goto_programt &dest);
-  void convert_catch(const codet &code,goto_programt &dest);
   void convert_for(const codet &code, goto_programt &dest);
   void convert_while(const codet &code, goto_programt &dest);
   void convert_dowhile(const codet &code, goto_programt &dest);
@@ -187,6 +185,12 @@ protected:
   void convert_atomic_end(const codet &code, goto_programt &dest);
   void convert(const codet &code, goto_programt &dest);
   void copy(const codet &code, goto_program_instruction_typet type, goto_programt &dest);
+
+  //
+  // Try-catch conversion
+  //
+  void convert_catch(const codet &code,goto_programt &dest);
+  void convert_throw_decl(const exprt &expr, goto_programt &dest);
 
   //
   // k-induction conversion
@@ -374,7 +378,7 @@ protected:
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
   private:
-    bool is_thread, for_block, break_stmt, 
+    bool is_thread, for_block, break_stmt,
 	 goto_stmt, while_block;
     unsigned int state_counter;
     struct_typet state;

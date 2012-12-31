@@ -587,8 +587,15 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
         bmc.status("No bug has been found in the base case");
       return false;
 
-    case prop_convt::P_SATISFIABLE:
-      if(!bmc.options.get_bool_option("inductive-step")
+    case prop_convt::D_SATISFIABLE:
+      if (bmc.options.get_bool_option("inductive-step") &&
+    		  bmc.options.get_bool_option("show-counter-example"))
+      {
+        bmc.error_trace(*conv, equation);
+   	    bmc.report_failure();
+   	    return false;
+      }
+      else if(!bmc.options.get_bool_option("inductive-step")
     		  && !bmc.options.get_bool_option("forward-condition"))
       {
         bmc.error_trace(*conv, equation);

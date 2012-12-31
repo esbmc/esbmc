@@ -1,299 +1,347 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: October 2012
+
+ \*******************************************************************/
+
 #ifndef __STL_LIST
 #define __STL_LIST
 
-#include "iterator"
+//#include "iterator"
 
 namespace std {
 
-  template <class T>
-  struct list {
+template<class T>
+class list {
+public:
+	typedef T& reference;
+	typedef const T& const_reference;
+	typedef int size_type;
+	typedef int difference_type;
+	typedef T value_type;
+	typedef T* pointer;
+	typedef const T* const_pointer;
 
-		struct node
-		{
-			T data;
-		  	node* prev;
-		  	node* next;
-		  	node(T t, node* p, node* n) : data(t), prev(p), next(n) {}
-		};
-		node* head;
-		node* tail;
-		int _size;
+	struct node {
+		T data;
+		node* prev;
+		node* next;
+		node(T t, node* p, node* n) :
+				data(t), prev(p), next(n) {
+		}
+	};
 
-    public:
+	node* head;
+	node* tail;
+	int _size;
 
-	    class iterator{
-	      public:
-	      iterator(const iterator&);
-	      iterator();
-	      iterator& operator=(const iterator&);
+	class iterator {
+	public:
+		node* it;
+		int it_size;
 
-	      T* operator -> ();
+		iterator(const iterator& x): it(x.it), it_size(x.it_size){}
+		iterator(): it(NULL), it_size(0){}
+		iterator& operator=(const iterator& x){
+			this->it = x.it;
+			this->it_size = x.it_size;
+			return *this;
+		}
 
-	      T& operator * ();
+		T* operator ->();
 
-	      iterator& operator ++ ();
-	      iterator& operator ++ (int);
+		T operator *(){
+			return this->it->data;
+		}
 
-	      iterator& operator -- ();
-	      iterator& operator -- (int);
+		iterator operator ++(){ //error
+			this->it = this->it->next;
+			return *this;
+		}
+		iterator operator ++(int){ //error
+			this->it = this->it->next;
+			return *this;
+		}
 
-	      bool operator == ( const iterator&)const;
-	      bool operator != ( const iterator&)const;
+		iterator operator --(){
+			this->it = this->it->prev;
+			return *this;
+		}
+		iterator& operator --(int){
+			//this->it = this->it->prev;
+			return *this;
+		}
 
-	      bool operator < ( const iterator&)const;
-	      bool operator > ( const iterator&)const;
+		bool operator ==(const iterator& x) const{
+			return (x.it == this->it && x.it_size == this->it_size);
+		}
+		bool operator !=(const iterator& x) const{
+			return (x.it != this->it && x.it_size != this->it_size);
+		}
 
-	      bool operator <= ( const iterator&)const;
-	      bool operator >= ( const iterator&)const;
+		bool operator <(const iterator&) const;
+		bool operator >(const iterator&) const;
 
-	      iterator operator + (int) const;
-	      iterator operator - (int) const;
+		bool operator <=(const iterator&) const;
+		bool operator >=(const iterator&) const;
 
-	      iterator& operator += (int);
-	      iterator& operator -= (int);
-	    };
+		iterator operator +(int) const;
+		iterator operator -(int) const;
 
-	    class const_iterator
-	    {
-	      public:
-	      const_iterator(const const_iterator&);
-	      const_iterator();
-	      const_iterator& operator=(const const_iterator&);
+		iterator& operator +=(int);
+		iterator& operator -=(int);
+	};
 
-	      const T* operator -> ();
+	class reverse_iterator {
+	public:
+		node* it;
+		int it_size;
 
-	      const T& operator * ();
+		reverse_iterator(const reverse_iterator& x): it(x.it), it_size(x.it_size){}
 
-	      const_iterator& operator ++ ();
-	      const_iterator& operator ++ (int);
+		reverse_iterator(): it(NULL), it_size(0){}
+		reverse_iterator& operator=(const reverse_iterator& x){
+			this->it = x.it;
+			this->it_size = x.it_size;
+			return *this;
+		}
 
-	      const_iterator& operator -- ();
-	      const_iterator& operator -- (int);
+		T* operator ->();
 
-	      bool operator == ( const const_iterator&)const;
-	      bool operator != ( const const_iterator&)const;
+		T operator *(){
+			return this->it->data;
+		}
 
-	      bool operator < ( const const_iterator&)const;
-	      bool operator > ( const const_iterator&)const;
+		reverse_iterator operator ++(){ //error
+			this->it = this->it->next;
+			return *this;
+		}
+		reverse_iterator operator ++(int){ //error
+			this->it = this->it->next;
+			return *this;
+		}
 
-	      bool operator <= ( const const_iterator&)const;
-	      bool operator >= ( const const_iterator&)const;
+		reverse_iterator operator --(){
+			//this->it = this->it->prev;
+			return *this;
+		}
+		reverse_iterator& operator --(int){
+			//this->it = this->it->prev;
+			return *this;
+		}
 
-	      const_iterator operator + (int) const;
-	      const_iterator operator - (int) const;
+		bool operator ==(const reverse_iterator& x) const{
+			return (x.it == this->it && x.it_size == this->it_size);
+		}
+		bool operator !=(const reverse_iterator& x) const{
+			return (x.it != this->it && x.it_size != this->it_size);
+		}
 
-	      const_iterator& operator += (int);
-	      const_iterator& operator -= (int);
-	    };
+		bool operator <(const reverse_iterator&) const;
+		bool operator >(const reverse_iterator&) const;
 
-	    class reverse_iterator{
-	      public:
-	      reverse_iterator(const reverse_iterator&);
-	      reverse_iterator();
-	      reverse_iterator& operator=(const reverse_iterator&);
+		bool operator <=(const reverse_iterator&) const;
+		bool operator >=(const reverse_iterator&) const;
 
-	      T* operator -> ();
+		reverse_iterator operator +(int) const;
+		reverse_iterator operator -(int) const;
 
-	      T& operator * ();
+		reverse_iterator& operator +=(int);
+		reverse_iterator& operator -=(int);
+	};
 
-	      reverse_iterator& operator ++ ();
-	      reverse_iterator& operator ++ (int);
+	explicit list() : head(NULL), tail(NULL), _size(0) {}
+	explicit list ( size_type n, const T& value = T() ){
+		int i;
+		this->_size = 0;
+		for(i=0; i<n; i++)
+			this->push_back(value);
+	}
+	explicit list (T* t1, T* t2){
+		this->_size = 0;
+		for(; t1!=t2; t1++)
+			this->push_back(*t1);
+	}
+	list ( iterator first, iterator last) : head(first.it), tail(last.it), _size(first.it_size) {}
+	list(const list<T>& x) : head(x.head), tail(x.tail), _size(x._size) {}
 
-	      reverse_iterator& operator -- ();
-	      reverse_iterator& operator -- (int);
-
-	      bool operator == ( const reverse_iterator&)const;
-	      bool operator != ( const reverse_iterator&)const;
-
-	      bool operator < ( const reverse_iterator&)const;
-	      bool operator > ( const reverse_iterator&)const;
-
-	      bool operator <= ( const reverse_iterator&)const;
-	      bool operator >= ( const reverse_iterator&)const;
-
-	      reverse_iterator operator + (int) const;
-	      reverse_iterator operator - (int) const;
-
-	      reverse_iterator& operator += (int);
-	      reverse_iterator& operator -= (int);
-	    };
-
-	    class  const_reverse_iterator {
-	      public:
-	      const_reverse_iterator(const const_reverse_iterator&);
-	      const_reverse_iterator();
-	      const_reverse_iterator& operator=(const const_reverse_iterator&);
-
-	      const T* operator -> ();
-
-	      const T& operator * ();
-
-	      const_reverse_iterator& operator ++ ();
-	      const_reverse_iterator& operator ++ (int);
-
-	      const_reverse_iterator& operator -- ();
-	      const_reverse_iterator& operator -- (int);
-
-	      bool operator == ( const const_reverse_iterator&)const;
-	      bool operator != ( const const_reverse_iterator&)const;
-
-	      bool operator < ( const const_reverse_iterator&)const;
-	      bool operator > ( const const_reverse_iterator&)const;
-
-	      bool operator <= ( const const_reverse_iterator&)const;
-	      bool operator >= ( const const_reverse_iterator&)const;
-
-	      const_reverse_iterator operator + (int) const;
-	      const_reverse_iterator operator - (int) const;
-
-	      const_reverse_iterator& operator += (int);
-	      const_reverse_iterator& operator -= (int);
-	    };
-
-
-    // types:
-    typedef T& reference;
-    typedef const T& const_reference;
-    typedef int size_type;
-    typedef int difference_type;
-    typedef T value_type;
-    typedef T* pointer;
-    typedef const T* const_pointer;
-    
-    // construct/copy/destroy:
-    explicit list() : head( NULL ), tail ( NULL ), _size(0) { };
-    explicit list(T t1, T t2) : head( NULL ), tail ( NULL ), _size(0)
-    {
-	push_back(t1);
-	push_back(t2);
-    }
-    explicit list(size_type t) : head( NULL ), tail ( NULL ), _size(0)
-    {
-	push_back(t);
-    }
-
-    list(const list<T>& x);
-    ~list()
-	{
-		while(head)
-		{
+	~list() {
+		while (head) {
 			node* temp(head);
-			head=head->next;
+			head = head->next;
 			delete temp;
 		}
 	}
 
-    list<T>& operator=(const list<T>& x);
-
-    void assign(size_type n, const T& t);
-
-    // iterators:
-    iterator begin();
-    const_iterator begin() const;
-    iterator end();
-    const_iterator end() const;
-    reverse_iterator rbegin();
-    const_reverse_iterator rbegin() const;
-    reverse_iterator rend();
-    const_reverse_iterator rend() const;
-
-    // capacity:
-    bool empty() const
-	{
-		return ( !head || !tail );
+	iterator begin (){
+		iterator it;
+		it.it = new node(this->head->data, this->head->prev, this->head->next);
+		it.it_size = this->_size;
+		return it;
 	}
-    size_type size() const
-	{
-		return _size;
+	iterator end (){
+		iterator it;
+		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+		it.it_size = this->_size;
+		return it;
 	}
-    size_type max_size() const;
-    void resize(size_type sz);
-    void resize(size_type sz, T t);
-
-    // element access:
-    T front()
-	{
-		__ESBMC_assert ( !empty() , "list is empty");
-		return head->data;
+	reverse_iterator rbegin(){
+		reverse_iterator it;
+		it.it = new node(this->tail->data, this->tail->prev, this->tail->next);
+		it.it_size = this->_size;
+		return it;
 	}
-    const_reference front() const
-	{
-		__ESBMC_assert ( !empty() , "list is empty");
-		return head->data;
+	reverse_iterator rend(){
+		reverse_iterator it;
+		it.it = new node(this->head->data, this->head->prev, this->head->next);
+		it.it_size = this->_size;
+		return it;
 	}
 
-    reference back()
-	{
-		return tail->data;
+	size_type size() const{
+		return this->_size;
 	}
-    const_reference back() const
-	{
-		return tail->data;
+	bool empty ( ) const{
+		if (this->_size == 0)
+			return true;
+		return false;
 	}
-
-    // modifiers:
-    void push_front ( const T& t )
-	{
-		head = new node(t, NULL, head);
-		_size++;
-		if( head->next )
-			head->next->prev = head;
-		if( empty() )
-			tail = head;
+	size_type max_size () const{
+		return this->_size;
 	}
-
-    void pop_front()
-    {
-	__ESBMC_assert ( !empty() , "list is empty");
-		head = head->next ;
-		if( head )
-			head->prev = NULL;
-		else
-			tail = NULL ;
-    }
-
-    void push_back(const T& t)
-	{
-		tail = new node(t, tail, NULL);	
-		_size++;
-		if( tail->prev )
-			tail->prev->next = tail;
-		if( empty() ) {
-			head = tail;
+	void resize ( size_type sz, T c = 0 ){
+		int i;
+		int tmp_int;
+		if(this->_size > sz){
+			tmp_int = this->_size - sz;
+			for(i=0;i<tmp_int;i++){
+				this->tail = this->tail->prev;
+			}
+			this->tail->next = NULL;
+			this->_size = sz;
+		}else{
+			tmp_int = sz - this->_size;
+			for(i=0;i<tmp_int;i++){
+				this->push_back(c);
+			}
+			this->_size = sz;
 		}
 	}
-    void pop_back ( )
-	{
-		__ESBMC_assert ( !empty() , "list is empty");
-		node* temp(tail);
-		T data( tail->data );
-		tail = tail->prev ;
-		if( tail )
-			tail->next = NULL;
-		else
-			head = NULL ;
-		delete temp;
+    T back ( ){
+    	__ESBMC_assert(!empty(), "list is empty");
+    	return this->tail->data;
+    }
+    T front ( ){
+    	__ESBMC_assert(!empty(), "list is empty");
+    	return this->head->data;
+    }
+	void pop_front(){
+		__ESBMC_assert(!empty(), "list is empty");
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->head->data = this->head->next->data;
+			this->head->prev = NULL;
+			this->head->next = this->head->next->next;
+		}
+		this->_size--;
+	}
+	void pop_back ( ){
+		__ESBMC_assert(!empty(), "list is empty");
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->tail->data = this->tail->prev->data;
+			this->tail->prev = this->tail->prev->prev;
+			this->tail->next = NULL;
+		}
+		this->_size--;
+	}
+	void push_back ( const T& x ){
+		if(this->empty()){
+			this->tail = new node(x, NULL, NULL);
+			this->head = this->tail;
+		}else{
+			this->tail->next = new node(x, this->tail, NULL);
+			this->tail = this->tail->next;
+		}
+		this->_size++;
+	}
+	void push_front ( const T& x ){
+		if(this->empty()){
+			this->head = new node(x, NULL, NULL);
+			this->tail = this->head;
+		}else{
+			this->head->prev = new node(x, NULL, this->head);
+			this->head = this->head->prev;
+		}
+		this->_size++;
 	}
 
-    iterator insert(iterator position, const T& x);
-    void insert(iterator position, size_type n, const T& x);
+	iterator insert(iterator position, const T& x);
+	void insert(iterator position, size_type n, const T& x);
 
-    iterator erase(iterator position);
-    iterator erase(iterator position, iterator last);
-    void swap(list<T>&);
-    void clear();
+	void assign ( iterator first, iterator last ){
+		this->head = first.it;
+		this->_size = first.it_size;
+		this->tail = last.it;
+	}
+	void assign ( T* first, T* last ){
+		list <T> list (first, last);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
+	void assign ( size_type n, const T& u ){
+		list <T> list (n, u);
+		this->head = list.head;
+		this->_size = list._size;
+		this->tail = list.tail;
+	}
 
-    // list operations:
-    void splice(iterator position, list<T>& x);
-    void splice(iterator position, list<T>& x, iterator i);
-    void splice(iterator position, list<T>& x, iterator first, iterator last);
-    void remove(const T& value);
+	iterator erase(iterator position);
+	iterator erase(iterator position, iterator last);
+	void swap(list<T>& x){
+		list<T> y;
+		y = x;
+		x = *this;
+		*this = y;
+	}
+	void clear(){
+		this->_size = 0;
+		this->head = NULL;
+		this->tail = NULL;
+	}
 
-    void unique();
-    void merge(list<T>& x);
-    void sort();
-    void reverse();
-  };
+	// list operations:
+	void splice(iterator position, list<T>& x);
+	void splice(iterator position, list<T>& x, iterator i);
+	void splice(iterator position, list<T>& x, iterator first, iterator last);
+	void remove(const T& value);
+	template <class Predicate>
+	  void remove_if ( Predicate pred );
+
+	void unique();
+	void merge(list<T>& x);
+	void sort();
+	void reverse();
+};
+
+  void advance (list<unsigned int>::iterator it, int n){
+	  int i;
+	  for(i = 0; i < n; i++)
+		  it.it = it.it->next;
+  }
+
+  bool operator== ( const list<int>& x, const list<int>& y ){
+	  return (x._size == y._size && x.head == y.head && x.tail == y.tail);
+  }
+  bool operator!= ( const list<int>& x, const list<int>& y ){
+	  return (x._size != y._size && x.head != y.head && x.tail != y.tail);
+  }
 
 }
 

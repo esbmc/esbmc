@@ -279,6 +279,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("unwind", i2string(k_step));
   }
 
+  if(cmdline.isset("show-counter-example"))
+  {
+	options.set_option("show-counter-example", true);
+  }
+
   // jmorse
   if(cmdline.isset("timeout")) {
 #ifdef _WIN32

@@ -46,7 +46,9 @@
 #endif
 
 /* jmorse - parsing workaround */
+#ifndef ___clockid_t
 typedef int32_t __clockid_t;
+#endif
 
 /* Thread identifiers.  The structure of the attribute type is not
    exposed on purpose.  */

@@ -1,8 +1,8 @@
 #ifndef __STL_PAIR
 #define __STL_PAIR
-
+#include <utility>
 namespace std {
-
+/*
 template<class T1, class T2>
 struct pair {
   typedef T1 first_type;
@@ -13,7 +13,7 @@ struct pair {
   pair(const T1& f, const T2& s):first(f), second(s){}
   ~pair();
 };
-
+*/
 }
 
 #endif
