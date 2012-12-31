@@ -532,6 +532,7 @@ public:
     code_cpp_delete_id,
     code_cpp_catch_id,
     code_cpp_throw_id,
+    code_cpp_throw_decl_id,
     end_expr_id
   };
 
@@ -1705,6 +1706,7 @@ class code_cpp_del_array2t;
 class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
+class code_cpp_throw_decl2t;
 
 // Data definitions.
 
@@ -2343,6 +2345,19 @@ public:
   std::vector<irep_idt> exception_list;
 };
 
+class code_cpp_throw_decl_data : public code_base
+{
+public:
+  code_cpp_throw_decl_data(const type2tc &t, expr2t::expr_ids id,
+                           const std::vector<irep_idt> &l)
+    : code_base(t, id), exception_list(l) { }
+  code_cpp_throw_decl_data(const code_cpp_throw_decl_data &ref)
+    : code_base(ref), exception_list(ref.exception_list)
+      { }
+
+  std::vector<irep_idt> exception_list;
+};
+
 // Give everything a typedef name
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
@@ -2656,6 +2671,10 @@ typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
         std::vector<irep_idt>, code_cpp_throw_data,
         &code_cpp_throw_data::exception_list>
         code_cpp_throw_expr_methods;
+typedef esbmct::expr_methods<code_cpp_throw_decl2t, code_cpp_throw_decl_data,
+        std::vector<irep_idt>, code_cpp_throw_decl_data,
+        &code_cpp_throw_decl_data::exception_list>
+        code_cpp_throw_decl_expr_methods;
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4124,6 +4143,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_throw_decl2t : public code_cpp_throw_decl_expr_methods
+{
+public:
+  code_cpp_throw_decl2t(const std::vector<irep_idt> &l)
+    : code_cpp_throw_decl_expr_methods(type_pool.get_empty(),
+                                       code_cpp_throw_decl_id, l){}
+  code_cpp_throw_decl2t(const code_cpp_throw_decl2t &ref)
+    : code_cpp_throw_decl_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4277,6 +4308,7 @@ expr_macros(code_cpp_del_array);
 expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
+expr_macros(code_cpp_throw_decl);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
@@ -4418,6 +4450,8 @@ typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
                        code_cpp_catch2tc;
 typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
                        code_cpp_throw2tc;
+typedef irep_container<code_cpp_throw_decl2t, expr2t::code_cpp_throw_decl_id>
+                       code_cpp_throw_decl2tc;
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,
