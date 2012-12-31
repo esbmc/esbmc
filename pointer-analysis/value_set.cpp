@@ -138,7 +138,7 @@ value_sett::to_expr(object_map_dt::const_iterator it) const
   return obj;
 }
 
-bool value_sett::make_union(const value_sett::valuest &new_values)
+bool value_sett::make_union(const value_sett::valuest &new_values, bool keepnew)
 {
   bool result=false;
   
@@ -154,7 +154,8 @@ bool value_sett::make_union(const value_sett::valuest &new_values)
       // we always track these
       if(has_prefix(id2string(it->second.identifier),
            "value_set::dynamic_object") ||
-         it->second.identifier=="value_set::return_value")
+         it->second.identifier=="value_set::return_value" ||
+         keepnew)
       {
         values.insert(*it);
         result=true;

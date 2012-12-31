@@ -198,12 +198,12 @@ public:
   bool make_union(object_mapt &dest, const object_mapt &src) const;
 
   // true = added s.th. new
-  bool make_union(const valuest &new_values);
+  bool make_union(const valuest &new_values, bool keepnew=false);
 
   // true = added s.th. new
-  bool make_union(const value_sett &new_values)
+  bool make_union(const value_sett &new_values, bool keepnew=false)
   {
-    return make_union(new_values.values);
+    return make_union(new_values.values, keepnew);
   }
 
   void apply_code(
