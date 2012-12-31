@@ -2202,6 +2202,8 @@ std::string code_cpp_delete2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
+std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
+{ "operand", "exception_list", "", "", ""};
 std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
 
