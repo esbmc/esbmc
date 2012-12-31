@@ -223,7 +223,7 @@ void goto_symext::symex_cpp_new(
     addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
 
   cur_state->rename(rhs);
-  exprt rhs_copy(rhs);
+  expr2tc rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
