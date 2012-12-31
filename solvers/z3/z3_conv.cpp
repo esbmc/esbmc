@@ -2215,13 +2215,16 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
         is_bv_type(to_array_type(data.source_value->type).subtype)) {
       // Just produce a series of stores
       expr2tc accuml = data.source_value;
+      expr2tc idx = data.source_offset;
+      expr2tc one = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
       unsigned int update_width = data.update_value->type->get_width() / 8;
       for (i = 0; i < update_width / 8; i++) {
         expr2tc offs(new constant_int2t(uint_type2(), i));
         expr2tc byte(new byte_extract2t(char_type2(), data.big_endian,
                                         data.update_value, offs,
                                         data.update_guard));
-        accuml = expr2tc(new with2t(accuml->type, accuml, offs, byte));
+        accuml = expr2tc(new with2t(accuml->type, accuml, idx, byte));
+        idx = expr2tc(new add2t(uint_type2(), idx, one));
       }
       convert_bv(accuml, out);
     } else {
