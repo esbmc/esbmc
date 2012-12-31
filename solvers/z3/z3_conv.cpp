@@ -65,7 +65,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
-  defer_byte_ops = true;
+  defer_byte_ops = config.options.get_bool_option("defer-byte-op-smt");
 
   z3::config conf;
   conf.set("MODEL", true);
