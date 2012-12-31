@@ -51,7 +51,9 @@ void goto_symext::symex_catch()
     if(frame.has_throw_target)
     {
       // the next instruction is always a goto
-      const goto_programt::instructiont &goto_instruction=*cur_state->source.pc;
+      const goto_programt::instructiont &tmp=*cur_state->source.pc;
+      goto_programt::instructiont &goto_instruction =
+        const_cast<goto_programt::instructiont &>(tmp);
 
       // Update target
       goto_instruction.targets.pop_back();
@@ -76,8 +78,8 @@ void goto_symext::symex_catch()
         it!=instruction.targets.end();
         it++, i++)
     {
-      frame.catch_map[exception_list[i].id()]=*it;
-      frame.catch_order[exception_list[i].id()]=i;
+      frame.catch_map[catch_ref.exception_list[i]]=*it;
+      frame.catch_order[catch_ref.exception_list[i]]=i;
     }
 
     // Increase program counter
@@ -115,7 +117,7 @@ void goto_symext::symex_throw()
     if(frame->catch_map.empty()) continue;
 
     // Handle rethrows
-    if(!handle_rethrow(exceptions_thrown, instruction))
+    if(!handle_rethrow(throw_ref.exception_list, instruction))
       return;
 
     // It'll be used for catch ordering when throwing
@@ -125,11 +127,11 @@ void goto_symext::symex_throw()
     forall_names(e_it, throw_ref.exception_list)
     {
       // Handle throw declarations
-      handle_throw_decl(frame, e_it->id());
+      handle_throw_decl(frame, *e_it);
 
       // We can throw! look on the map if we have a catch for the type thrown
       goto_symex_statet::framet::catch_mapt::const_iterator
-        c_it=frame->catch_map.find(e_it->id());
+        c_it=frame->catch_map.find(*e_it);
 
       // Do we have a catch for it?
       if(c_it!=frame->catch_map.end() && !frame->has_throw_target)
@@ -137,7 +139,7 @@ void goto_symext::symex_throw()
         // We do!
 
         // Get current catch number and update if needed
-        new_id_number = (*frame->catch_order.find(e_it->id())).second;
+        new_id_number = (*frame->catch_order.find(*e_it)).second;
 
         if(new_id_number < old_id_number)
           update_throw_target(frame, c_it);
@@ -148,7 +150,7 @@ void goto_symext::symex_throw()
       else // We don't have a catch for it
       {
         // If it's a pointer, we must look for a catch(void*)
-        if(e_it->id().as_string().find("_ptr") != std::string::npos)
+        if(e_it->as_string().find("_ptr") != std::string::npos)
         {
           // It's a pointer!
 
@@ -173,12 +175,13 @@ void goto_symext::symex_throw()
     {
       // An un-caught exception. Error
       const std::string &msg="Throwing an exception of type " +
-          e_it->id().as_string() + " but there is not catch for it.";
-      claim(false_exprt(), msg);
+          from_type(ns, "", throw_ref.operand->type) +
+          " but there is not catch for it.";
+      claim(false_expr, msg);
     }
 
     // save last throw for rethrow handling
-    last_throw = &instruction;
+    last_throw = const_cast<goto_programt::instructiont*>(&instruction);
     return;
   }
 }
@@ -236,7 +239,7 @@ void goto_symext::handle_throw_decl(goto_symex_statet::framet* frame,
           ++s_it1)
         msg+= "\n   - " + std::string((*s_it1).c_str());
 
-      claim(false_exprt(), msg);
+      claim(false_expr, msg);
       return;
     }
   }
@@ -254,26 +257,29 @@ Function: goto_symext::handle_rethrow
 
 \*******************************************************************/
 
-bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
+bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
   const goto_programt::instructiont instruction)
 {
   // throw without argument, we must rethrow last exception
   if(!exceptions_thrown.size())
   {
-    if(last_throw != NULL && last_throw->code.find("exception_list").get_sub().size())
+    if(last_throw != NULL && to_code_cpp_throw2t(last_throw->code).exception_list.size())
     {
       // get exception from last throw
-      irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
+      std::vector<irep_idt>::const_iterator e_it =
+        to_code_cpp_throw2t(last_throw->code).exception_list.begin();
 
       // update current state exception list
-      instruction.code.find("exception_list").get_sub().push_back((*e_it));
+      goto_programt::instructiont &mutable_ref =
+        const_cast<goto_programt::instructiont &>(instruction);
+      to_code_cpp_throw2t(mutable_ref.code).exception_list.push_back((*e_it));
 
       return true;
     }
     else
     {
       const std::string &msg="Trying to re-throw without last exception.";
-      claim(false_exprt(), msg);
+      claim(false_expr, msg);
       return false;
     }
   }
@@ -297,8 +303,8 @@ void goto_symext::symex_throw_decl()
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // Get throw list
-  const irept::subt &throw_decl_list=
-    instruction.code.find("throw_list").get_sub();
+  const std::vector<irep_idt> &throw_decl_list =
+    to_code_cpp_throw_decl2t(instruction.code).exception_list;
 
   // Get to the correct try (always the most external)
   goto_symex_statet::call_stackt::reverse_iterator
@@ -315,5 +321,5 @@ void goto_symext::symex_throw_decl()
 
   // Copy throw list to the set
   for(unsigned i=0; i<throw_decl_list.size(); ++i)
-    (*s_it).throw_list_set.insert(throw_decl_list[i].id());
+    (*s_it).throw_list_set.insert(throw_decl_list[i]);
 }

@@ -407,7 +407,7 @@ protected:
    *  if we can then update the target.
    *  if we can't then gives a error.
    */
-  bool handle_rethrow(irept::subt exceptions_thrown,
+  bool handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
     const goto_programt::instructiont instruction);
 
   /** Check if we can throw an exception:
