@@ -106,7 +106,7 @@ void goto_symext::symex_malloc(
   // Pas this point, rhs_ref may be an invalid reference.
 
   cur_state->rename(rhs);
-  exprt rhs_copy(rhs);
+  expr2tc rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
