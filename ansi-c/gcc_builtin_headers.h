@@ -8,7 +8,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #define GCC_BUILTIN_HEADERS \
   "typedef void* __builtin_va_list;\n" \
-  "void __builtin_va_start(void *ap, void *x);\n" \
+  "void __builtin_va_start(void *ap, ...);\n" \
   "void __builtin_va_end(void *ap);\n" \
   "void __builtin_va_copy(__builtin_va_list dest, __builtin_va_list src);\n" \
   "int __builtin_constant_p(int);\n" \

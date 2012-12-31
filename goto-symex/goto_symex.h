@@ -55,6 +55,17 @@ public:
   // Types
 
 public:
+  /** Records for dynamically allocated blobs of memory. */
+  class allocated_obj {
+  public:
+    allocated_obj(const expr2tc &s, const guardt &g)
+      : obj(s), alloc_guard(g) { }
+    /** Symbol identifying the pointer that was allocated. Must have ptr type */
+    expr2tc obj;
+    /** Guard when allocation occured. */
+    guardt alloc_guard;
+  };
+
   friend class symex_dereference_statet;
   friend class bmct;
 
@@ -111,6 +122,13 @@ public:
    *  @param art Reachability tree we're working with.
    */
   virtual void symex_step(reachability_treet & art);
+
+  /**
+   *  Perform accounting checks / assertions at end of a program run.
+   *  This should contain anything that must happen at the end of a program run,
+   *  for example assertions about dynamic memory being freed.
+   */
+  void finish_formula(void);
 
 protected:
   /**
@@ -217,7 +235,7 @@ protected:
    *  Join together a previous jump state into thread state.
    *  This combines together two thread states by using if-then-elses to decide
    *  the new value of a variable, according to the truth of the guards of the
-   *  states being joined. 
+   *  states being joined.
    *  @param goto_state The previous jumps state to be merged into the current
    */
   void phi_function(const statet::goto_statet &goto_state);
@@ -262,7 +280,7 @@ protected:
    */
   bool make_return_assignment(expr2tc &assign, const expr2tc &code_return);
 
-  /** 
+  /**
    *  Perform function call.
    *  Handles all kinds of function call instructions, symbols or function
    *  pointers.
@@ -373,10 +391,30 @@ protected:
   void intrinsic_terminate_thread(reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw(statet &state);
+  void symex_throw();
 
   /** Register exception handler on stack. */
-  void symex_catch(statet &state);
+  void symex_catch();
+
+  /** Register throw handler on stack. */
+  void symex_throw_decl();
+
+  /** Update throw target. */
+  void update_throw_target(goto_symex_statet::framet* frame,
+    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+
+  /** Check if we can rethrow an exception:
+   *  if we can then update the target.
+   *  if we can't then gives a error.
+   */
+  bool handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
+    const goto_programt::instructiont instruction);
+
+  /** Check if we can throw an exception:
+   *  if we can't then gives a error.
+   */
+  void handle_throw_decl(goto_symex_statet::framet* frame,
+    const irep_idt &id);
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
@@ -477,6 +515,8 @@ protected:
 
   /** Symbolic implementation of malloc. */
   void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Symbolic implementation of free */
+  void symex_free(const code_free2t &code);
   /** Symbolic implementation of c++'s delete. */
   void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
@@ -544,6 +584,13 @@ protected:
    *  modelling what pointers are active, which are freed, and so forth. As for
    *  why, well, that's a trainwreck. */
   irep_idt valid_ptr_arr_name, alloc_size_arr_name, deallocd_arr_name, dyn_info_arr_name;
+  /** List of all allocated objects.
+   *  Used to track what we should level memory-leak-assertions against when the
+   *  program execution has finished */
+  std::list<allocated_obj> dynamic_memory;
+
+  // exception
+  goto_programt::instructiont *last_throw;
 };
 
 #endif

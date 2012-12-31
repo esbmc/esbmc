@@ -74,6 +74,7 @@ public:
   
   const std::string &get_string(unsigned no) const
   {
+	if (!(no < string_vector.size())) std::cout << "failed" << std::endl;
     assert(no < string_vector.size());
     return *string_vector[no];
   }

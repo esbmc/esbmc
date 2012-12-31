@@ -1,6 +1,8 @@
+#include <assert.h>
+
 int INFINITY = 899;
 unsigned int nondet_uint();
-void main(){
+int main(){
   int nodecount = 5;
   int edgecount = 20;
   int source = 0;
@@ -38,7 +40,7 @@ void main(){
       y = Source[i];
       if(distance[x] > distance[y] + Weight[i])
 	{
-	  return;
+	  return 0;
 	}
     }
 
@@ -46,5 +48,7 @@ void main(){
     {
       assert(distance[i]>=0);
     }
+
+  return 0;
 }
 

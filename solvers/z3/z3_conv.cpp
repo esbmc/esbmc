@@ -31,6 +31,13 @@
 #define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *&>((arg))))
 #define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
 
+#ifdef DEBUG
+#define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
+                          "[" << __LINE__ << "]" << std::endl;
+#else
+#define DEBUGLOC
+#endif
+
 static u_int unsat_core_size = 0;
 static u_int assumptions_status = 0;
 
@@ -1029,12 +1036,18 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
   convert_bv(side1, args[0]);
   convert_bv(side2, args[1]);
 
-  // XXXjmorse -- pointer comparisons are still broken.
-  if (is_pointer_type(side1->type))
-    args[0] = mk_tuple_select(args[0], 1);
+  // 6.3.8 defines relation operators on pointers to be comparisons on their
+  // bit representation, with pointers to array/struct/union fields comparing
+  // as you might expect.
+  if (is_pointer_type(side1->type)) {
+    expr2tc cast(new typecast2t(uint_type2(), side1));
+    convert_bv(cast, args[0]);
+  }
 
-  if (is_pointer_type(side2->type))
-    args[1] = mk_tuple_select(args[1], 1);
+  if (is_pointer_type(side2->type)) {
+    expr2tc cast(new typecast2t(uint_type2(), side2));
+    convert_bv(cast, args[1]);
+  }
 
   output = convert(args[0], args[1], !is_signedbv_type(side1->type));
 }
@@ -2649,6 +2662,39 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
   }
 
   output = mk_tuple_select(struct_var, j);
+
+#if 0
+  // XXX jmorse - this turned up during merging some latest kinduction goo into
+  // irep2, pre master merge. Not certain why it exists, appears to insert an
+  // inverted cast from int to bool into certain members, when k-induction is
+  // enabled.
+  // Left here in case it turns out some tests are failing in the future.
+  if (config.options.get_bool_option("k-induction"))
+  {
+    if (expr.type().is_bool() &&
+        expr.op0().type().is_struct())
+    {
+      Z3_ast cond;
+      unsigned width;
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+
+      get_type_width(struct_type.components()[j].type(), width);
+
+      if (struct_type.components()[j].type().id() == "signedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, true));
+      else if (struct_type.components()[j].type().id() == "unsignedbv")
+        cond = Z3_mk_eq(z3_ctx, bv, convert_number(0, width, false));
+      else if (struct_type.components()[j].type().id() == "bool")
+        cond = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
+      else
+      {
+        std::cout << "we do not support `" << struct_type.components()[j].type().id() 
+                  << "' in the state vector" << std::endl;
+        assert(0);
+      }
+
+      bv = Z3_mk_ite(z3_ctx, cond, Z3_mk_false(z3_ctx), Z3_mk_true(z3_ctx));
+#endif
 }
 
 void
@@ -2834,41 +2880,21 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   new_members.reserve(struct_type_to.members.size());
   new_names.reserve(struct_type_to.members.size());
 
-  forall_types(it2, struct_type_to.members) {
-    i = 0;
-    forall_types(it, struct_type_from.members) {
-      if (struct_type_from.member_names[i] == struct_type_to.member_names[i2]) {
-	unsigned width = (*it)->get_width();
+  i = 0;
+  forall_types(it, struct_type_to.members) {
+    if (!base_type_eq(struct_type_from.members[i], *it, ns))
+      throw new conv_error("Incompatible struct in cast-to-struct");
 
-	if (is_signedbv_type(*it)) {
-          new_members.push_back(type2tc(new signedbv_type2t(width)));
-	} else if (is_unsignedbv_type(*it)) {
-          new_members.push_back(type2tc(new unsignedbv_type2t(width)));
-	} else if (is_bool_type(*it))     {
-          new_members.push_back(type2tc(new bool_type2t()));
-        } else if (is_pointer_type(*it)) {
-          new_members.push_back(*it);
-	} else {
-          throw new conv_error("Unexpected type when casting struct");
-	}
-        new_names.push_back(struct_type_from.member_names[i]);
-      }
-
-      i++;
-    }
-
-    i2++;
+    i++;
   }
 
-  struct_type2t newstruct(new_members, new_names, struct_type_to.name);
   z3::sort sort;
-  // Can't cache this type as it's constructed on the fly.
-  newstruct.convert_smt_type(*this, reinterpret_cast<void*>(&sort));
+  convert_type(cast.type, sort);
 
   freshval = ctx.fresh_const(NULL, sort);
 
   i2 = 0;
-  forall_types(it, newstruct.members) {
+  forall_types(it, struct_type_to.members) {
     z3::expr formula;
     formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i2);
     assert_formula(formula);
@@ -3593,6 +3619,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr isfalse = ctx.bool_val(false) == select;
     assert_formula(isfalse);
   }
+
+  DEBUGLOC;
 }
 
 void
@@ -3710,7 +3738,6 @@ z3_convt::land(literalt a, literalt b)
   assert_formula(formula);
 
   return l;
-
 }
 
 literalt
@@ -3733,7 +3760,6 @@ z3_convt::lor(literalt a, literalt b)
   assert_formula(formula);
 
   return l;
-
 }
 
 literalt

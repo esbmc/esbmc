@@ -36,7 +36,7 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_free2t(code2))
   {
-    // ignore
+    symex_free(to_code_free2t(code2));
   }
   else if (is_code_printf2t(code2))
   {

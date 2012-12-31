@@ -30,17 +30,15 @@ std::ostream& goto_programt::output_instruction(
   bool show_location,
   bool show_variables) const
 {
-  target_numberst::const_iterator t_it=target_numbers.find(it);
-
   if (show_location) {
-    out << "        // " << it->location_number << " ";
+  out << "        // " << it->location_number << " ";
 
-    if(!it->location.is_nil())
-      out << it->location.as_string();
-    else
-      out << "no location";
+  if(!it->location.is_nil())
+    out << it->location.as_string();
+  else
+    out << "no location";
 
-    out << "\n";
+  out << "\n";
   }
 
   if(show_variables && !it->local_variables.empty())
@@ -51,7 +49,7 @@ std::ostream& goto_programt::output_instruction(
         l_it!=it->local_variables.end();
         l_it++)
       out << " " << *l_it;
-    
+
     out << std::endl;
   }
 
@@ -65,21 +63,21 @@ std::ostream& goto_programt::output_instruction(
     {
       out << " " << *l_it;
     }
-    
+
     out << std::endl;
   }
 
-  if(t_it==target_numbers.end())
-    out << "        ";
+  if(it->is_target())
+    out << std::setw(6) << it->target_number << ": ";
   else
-    out << std::setw(6) << t_it->second << ": ";
+    out << "        ";
 
   switch(it->type)
   {
   case NO_INSTRUCTION_TYPE:
     out << "NO INSTRUCTION TYPE SET" << std::endl;
     break;
-  
+
   case GOTO:
     if (!is_constant_bool2t(it->guard) ||
         !to_constant_bool2t(it->guard).constant_value)
@@ -90,75 +88,140 @@ std::ostream& goto_programt::output_instruction(
     }
 
     out << "GOTO ";
-    
+
     for(instructiont::targetst::const_iterator
         gt_it=it->targets.begin();
         gt_it!=it->targets.end();
         gt_it++)
     {
       if(gt_it!=it->targets.begin()) out << ", ";
-    
-      target_numberst::const_iterator t_it2=
-        target_numbers.find(*gt_it);
-
-      if(t_it2==target_numbers.end())
-        out << "unknown";
-      else
-        out << t_it2->second;
+      out << (*gt_it)->target_number;
     }
-      
+
     out << std::endl;
     break;
-    
+
   case RETURN:
   case OTHER:
   case FUNCTION_CALL:
   case ASSIGN:
-    out << from_expr(ns, identifier, it->code) << std::endl;
+
+#if 0
+    if(it->code.statement()!="typeid")
+    {
+#endif
+      out << from_expr(ns, identifier, it->code) << std::endl;
+#if 0
+    }
+    else
+    {
+      // Get the identifier
+      out << "  return_value = ";
+      out << "typeid(" << it->code.op0().identifier() << ").name() ";
+      out << std::endl << std::endl;
+    }
+#endif
     break;
-    
+
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
       out << "ASSUME ";
     else
       out << "ASSERT ";
-      
+
     {
       out << from_expr(ns, identifier, it->guard);
-    
+
       const irep_idt &comment=it->location.comment();
       if(comment!="") out << " // " << comment;
     }
-      
+
     out << std::endl;
     break;
-    
+
   case SKIP:
     out << "SKIP" << std::endl;
     break;
-    
+
   case END_FUNCTION:
     out << "END_FUNCTION" << std::endl;
     break;
-    
+
   case LOCATION:
     out << "LOCATION" << std::endl;
     break;
-    
+
+  case THROW:
+    out << "THROW";
+
+    {
+      const code_cpp_throw2t &throw_ref = to_code_cpp_throw2t(it->code);
+      forall_names(it, throw_ref.exception_list) {
+      	if(it != throw_ref.exception_list.begin()) out << ",";
+        out << " " << *it;
+      }
+
+      if (!is_nil_expr(throw_ref.operand))
+        out << ": " << from_expr(ns, identifier, throw_ref.operand);
+    }
+
+    out << std::endl;
+    break;
+
+  case CATCH:
+    out << "CATCH ";
+
+    {
+      unsigned i=0;
+      const code_cpp_catch2t &catch_ref = to_code_cpp_catch2t(it->code);
+      assert(it->targets.size() == catch_ref.exception_list.size());
+
+      for(instructiont::targetst::const_iterator
+          gt_it=it->targets.begin();
+          gt_it!=it->targets.end();
+          gt_it++,
+          i++)
+      {
+        if(gt_it!=it->targets.begin()) out << ", ";
+        out << catch_ref.exception_list[i] << "->"
+            << (*gt_it)->target_number;
+      }
+    }
+
+    out << std::endl;
+    break;
+
   case ATOMIC_BEGIN:
     out << "ATOMIC_BEGIN" << std::endl;
     break;
-    
+
   case ATOMIC_END:
     out << "ATOMIC_END" << std::endl;
     break;
-    
+
+  case THROW_DECL:
+    out << "THROW_DECL (";
+
+    {
+      const code_cpp_throw_decl2t &ref = to_code_cpp_throw_decl2t(it->code);
+
+      for(unsigned int i=0; i < ref.exception_list.size(); ++i)
+      {
+        if(i) out << ", ";
+        out << ref.exception_list[i];
+      }
+      out << ")";
+    }
+
+    out << std::endl;
+    break;
+
   default:
     throw "unknown statement";
   }
 
-  return out;  
+  return out;
 }
 
 /*******************************************************************\

@@ -422,6 +422,7 @@ protected:
   // code conversion
   virtual void typecheck_code(codet &code);
   virtual void typecheck_catch(codet &code);
+  virtual void typecheck_throw_decl(codet &code);
   virtual void typecheck_member_initializer(codet &code);
   virtual void typecheck_decl(codet &code);
   virtual void typecheck_block(codet &code);
@@ -437,6 +438,7 @@ protected:
   void typecheck_expr_main(exprt &expr);
   void typecheck_expr_member(exprt &expr);
   void typecheck_expr_ptrmember(exprt &expr);
+  void typecheck_expr_throw(exprt &expr);
   void typecheck_function_expr(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
   void typecheck_expr_cpp_name(exprt &expr,
@@ -452,6 +454,7 @@ protected:
   void typecheck_expr_explicit_constructor_call(exprt &expr);
   void typecheck_expr_address_of(exprt &expr);
   void typecheck_expr_dereference(exprt &expr);
+  void typecheck_expr_typeid(exprt &expr);
   void typecheck_expr_function_identifier(exprt &expr);
   void typecheck_expr_reference_to(exprt &expr);
   void typecheck_expr_this(exprt &expr);

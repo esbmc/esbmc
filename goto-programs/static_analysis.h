@@ -196,7 +196,7 @@ protected:
     return l;
   }
   
-  virtual bool merge(statet &a, const statet &b)=0;
+  virtual bool merge(statet &a, const statet &b, bool keepnew=false)=0;
   
   typedef std::set<irep_idt> functions_donet;
   functions_donet functions_done;
@@ -298,9 +298,9 @@ protected:
     return it->second;
   }
 
-  virtual bool merge(statet &a, const statet &b)
+  virtual bool merge(statet &a, const statet &b, bool keepnew=false)
   {
-    return static_cast<T &>(a).merge(static_cast<const T &>(b));
+    return static_cast<T &>(a).merge(static_cast<const T &>(b), keepnew);
   }
   
   virtual statet* make_temporary_state(statet &s)

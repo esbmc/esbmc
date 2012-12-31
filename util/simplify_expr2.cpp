@@ -611,6 +611,9 @@ member2t::do_simplify(bool second __attribute__((unused))) const
     expr2tc s;
     if (is_constant_struct2t(source_value)) {
       s = to_constant_struct2t(source_value).datatype_members[no];
+
+      assert(is_pointer_type(type) ||
+             base_type_eq(type, s->type, namespacet(contextt())));
     } else {
       // XXX jmorse HHHNNGGGGGG, it would appear that the constant arrays spat
       // out by the parser are somewhat undefined; to the extent that there are
@@ -621,10 +624,16 @@ member2t::do_simplify(bool second __attribute__((unused))) const
         return expr2tc();
 
       s = uni.datatype_members[no];
+
+      // If the type we just selected isn't compatible, it means that whatever
+      // field is in the constant union /isn't/ the field we're selecting from
+      // it. So don't simplify it, because we can't.
+      if (!is_pointer_type(type) &&
+          !base_type_eq(type, s->type, namespacet(contextt())))
+        return expr2tc();
     }
 
-    assert(is_pointer_type(type) ||
-           base_type_eq(type, s->type, namespacet(contextt())));
+
     return s;
   } else {
     return expr2tc();

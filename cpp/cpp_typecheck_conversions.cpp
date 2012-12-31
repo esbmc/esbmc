@@ -2145,10 +2145,8 @@ bool cpp_typecheckt::reinterpret_typecast(
   if(e.type().id() == "pointer" &&
      (type.id() == "unsignedbv" || type.id() == "signedbv"))
   {
-    unsigned expr_width = bv_width(e.type());
 
-    if(config.ansi_c.pointer_width > expr_width)
-      return false;
+   // pointer to integer, always ok
 
     new_expr=e;
     new_expr.make_typecast(type);

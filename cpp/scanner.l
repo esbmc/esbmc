@@ -70,7 +70,7 @@ hex_escape "x"[0-9a-fA-F]+
 
 escape_sequence [\\]({simple_escape}|{octal_escape}|{hex_escape})
 c_char [^'\\\n]|{escape_sequence}
-s_char [^"\\\n]|{escape_sequence}
+s_char [^"]|{escape_sequence}
 
 h_tab [\011]
 form_feed [\014]
@@ -190,7 +190,7 @@ __interface         { loc(); return MSC_Keyword(TOK_INTERFACE); }
 __forceinline       { loc(); return MSC_Keyword(TOK_INLINE); }
 __noreturn__        { /* ignore */ }
 restrict            { /* ignore */ }
-__restrict__        { /* ignroe */ }
+__restrict__        { /* ignore */ }
 __restrict          { /* ignore */ }
 __stdcall           { loc(); return MSC_Keyword(TOK_STDCALL); }
 __fastcall          { loc(); return MSC_Keyword(TOK_FASTCALL); }
@@ -218,7 +218,9 @@ __try               { loc(); return MSC_Keyword(TOK_MSC_TRY); }
 __except            { loc(); return MSC_Keyword(TOK_MSC_EXCEPT); }
 __leave             { loc(); return MSC_Keyword(TOK_MSC_LEAVE); }
 __finally           { loc(); return MSC_Keyword(TOK_MSC_FINALLY); }
-__uuidof 	    { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
+__uuidof 	        { loc(); return MSC_Keyword(TOK_MSC_UUIDOF); }
+and                 { loc(); return TOK_ANDAND; }
+and_eq              { loc(); return TOK_ANDASSIGN; }
 auto                { loc(); return TOK_AUTO; }
 bool                { loc(); return TOK_BOOL; }
 break               { loc(); return TOK_BREAK; }
@@ -248,8 +250,12 @@ long                { loc(); return TOK_LONG; }
 mutable             { loc(); return TOK_MUTABLE; }
 namespace           { loc(); return TOK_NAMESPACE; }
 new                 { loc(); return TOK_NEW; }
+not_eq              { loc(); return TOK_NE; }
 noreturn            { /* ignore */ }
+nullptr             { loc(); return TOK_NULLPTR; } // C++11
 operator            { loc(); return TOK_OPERATOR; }
+or                  { loc(); return TOK_OROR; }
+or_eq               { loc(); return TOK_ORASSIGN; }
 private             { loc(); return TOK_PRIVATE; }
 protected           { loc(); return TOK_PROTECTED; }
 public              { loc(); return TOK_PUBLIC; }
@@ -259,11 +265,12 @@ short               { loc(); return TOK_SHORT; }
 signed              { loc(); return TOK_SIGNED; }
 sizeof              { loc(); return TOK_SIZEOF; }
 static              { loc(); return TOK_STATIC; }
-static_assert       { loc(); return TOK_STATIC_ASSERT; }
+static_assert       { loc(); return TOK_STATIC_ASSERT; } // C++11
 struct              { loc(); return TOK_STRUCT; }
 switch              { loc(); return TOK_SWITCH; }
 template            { loc(); return TOK_TEMPLATE; }
 this                { loc(); return TOK_THIS; }
+thread_local        { loc(); return TOK_THREAD_LOCAL; } // C++11
 throw               { loc(); return TOK_THROW; }
 try                 { loc(); return TOK_TRY; }
 typedef             { loc(); return TOK_TYPEDEF; }
@@ -278,6 +285,11 @@ volatile            { loc(); return TOK_VOLATILE; }
 wchar_t	            { loc(); return TOK_WCHAR_T; }
 while               { loc(); return TOK_WHILE; }
 __CPROVER_thread_local { loc(); return TOK_THREAD_LOCAL; }
+bitand              { loc(); return '&'; }
+bitor               { loc(); return '|'; }
+compl               { loc(); return '~'; }
+xor	                { loc(); return '^'; }
+xor_eq              { loc(); return TOK_XORASSIGN; }
 
 %{
 /* a huge batch of MS extensions

@@ -1,23 +1,59 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
 #ifndef STL_TYPEINFO
 #define STL_TYPEINFO
 
 #include "definitions.h"
+#include "exception"
 
-
-struct typeinfo {
-  virtual ~typeinfo();
-  bool operator== (const typeinfo& rhs) const;
-  bool operator!= (const typeinfo& rhs) const;
-  bool before (const typeinfo& rhs) const;
-  const char* name() const;
+namespace std {
+class type_info {
+public:
+	virtual ~type_info() {
+	}
+	bool operator==(const type_info& rhs) const;
+	bool operator!=(const type_info& rhs) const;
+	bool before(const type_info& rhs) const;
+	const char* name() const;
 private:
-  typeinfo (const typeinfo& rhs);
-  typeinfo& operator= (const typeinfo& rhs);
-  const typeinfo& type_id;
-  //typeinfo (const typeinfo& rhs){
-	//type_id = rhs;
-  //}
-  //typeinfo& operator= (const typeinfo& rhs);
+	type_info(const type_info& rhs);
+	type_info& operator=(const type_info& rhs);
 };
 
+/**
+ *  @brief  Thrown during incorrect typecasting.
+ *  @ingroup exceptions
+ *
+ *  If you attempt an invalid @c dynamic_cast expression, an instance of
+ *  this class (or something derived from this class) is thrown.
+ *  */
+
+class bad_cast: public exception {
+public:
+	bad_cast() {
+	}
+	virtual ~bad_cast() {
+	}
+	virtual const char* what() const {
+	}
+};
+
+class bad_typeid: public exception {
+public:
+	bad_typeid() {
+	}
+	virtual ~bad_typeid() {
+	}
+	virtual const char* what() const {
+	}
+};
+
+}
 #endif

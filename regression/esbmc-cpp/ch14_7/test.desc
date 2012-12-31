@@ -1,3 +1,0 @@
-main.cpp 
-clientData.cpp --unwind 5 --no-unwinding-assertions -I ~/libraries/ --no-pointer-check
-^VERIFICATION SUCCESSFUL$

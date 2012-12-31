@@ -301,8 +301,7 @@ void string_instrumentationt::do_function_call(
     else if (identifier=="c::fscanf")
       do_fscanf(dest, target, call);
 
-    dest.compute_targets();
-    dest.number_targets();
+    dest.update();
   }
 }
 

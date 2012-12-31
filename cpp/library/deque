@@ -2,9 +2,9 @@
 
 Module: 
 
-Author: 
+Author: Felipe Rodrigues and Lucas Cordeiro
 
-Date: Feb 2012
+Date: February 2012
 
 \*******************************************************************/
 
@@ -13,8 +13,6 @@ Date: Feb 2012
 #define __STL_DEQUE
 
 #include <vector>
-
-#include "iterator"
 
 namespace std {
   template <class T>
@@ -25,36 +23,82 @@ namespace std {
     typedef T& reference;
     typedef const T& const_reference;
 
+
     class iterator{
       public:
-      iterator(const iterator&);
-      iterator();
-      iterator& operator=(const iterator&);
+	  vector<T>::iterator it;
+
+	  iterator(vector<T>::iterator in){
+		  it = in;
+	  }
+
+      iterator(const iterator& i){
+    	  it = i.it;
+      }
+      iterator() : it(){
+
+      }
+      iterator& operator=(const iterator& i){
+    	  it = i.it;
+      }
 
       T* operator -> ();
 
-      T& operator * ();
+      T& operator * (){
+    	  return *it;
+      }
 
-      iterator& operator ++ ();
-      iterator& operator ++ (int);
+      iterator& operator ++ (int b){
+    	  it++;
+    	  vector<T>::iterator it1 = it - 1;
+    	  return iterator(it1);
+      }
 
-      iterator& operator -- ();
-      iterator& operator -- (int);
+      iterator& operator ++ (){
+          	  return iterator(++it);
+            }
 
-      bool operator == ( const iterator&)const;
-      bool operator != ( const iterator&)const;
+      iterator& operator -- (){
+    	  return iterator(++it);
+      }
+      iterator& operator -- (int){
+    	  return iterator(it++);
+      }
 
-      bool operator < ( const iterator&)const;
-      bool operator > ( const iterator&)const;
+      bool operator == ( const iterator& i)const{
+    	  return (it == i.it);
+      }
+      bool operator != ( const iterator& i)const{
+    	  return (it != i.it);
+      }
 
-      bool operator <= ( const iterator&)const;
-      bool operator >= ( const iterator&)const;
+      bool operator < ( const iterator& i)const{
+    	  return (it < i.it);
+      }
+      bool operator > ( const iterator& i)const{
+    	  return (it > i.it);
+      }
 
-      iterator operator + (int) const;
-      iterator operator - (int) const;
+      bool operator <= ( const iterator& i)const{
+    	  return (it <= i.it);
+      }
+      bool operator >= ( const iterator& i)const{
+    	  return (it >= i.it);
+      }
 
-      iterator& operator += (int);
-      iterator& operator -= (int);
+      iterator operator + (int n) const{
+    	  return iterator(it+n);
+      }
+      iterator operator - (int n) const{
+    	  return iterator(it-n);
+      }
+
+      iterator& operator += (int n){
+    	  return iterator(it+=n);
+      }
+      iterator& operator -= (int n){
+    	  return iterator(it-=n);
+      }
     };
 
     class const_iterator
@@ -159,125 +203,170 @@ namespace std {
     typedef T value_type;
 
     // construct/copy/destroy:
-    explicit deque(): vecOne(), vecTwo() { }
-    explicit deque(size_type n);
-    explicit deque(size_type n, const T& value);
-    explicit deque(T t[], T* addr): vecOne(), vecTwo() 
-    {         
-        int i=0;
-				while((t+i)<addr)
-          vecOne.push_back(t[i++]);
-				i--;
-				while((t+i)>=t)
-          vecTwo.push_back(t[i--]);
+    explicit deque(): buf() { }
+    explicit deque(size_type n){
+    	buf = vector<T>(n);
     }
-    deque(const deque<T>& x);
+    explicit deque(size_type n, const T& value){
+    	buf = vector<T>(n, value);
+    }
+    explicit deque(T t[], T* addr): buf()
+    {         
+        buf = vector<T>(t, addr);
+    }
+    deque(const deque<T>& x){
+    	buf = x.buf;
+    }
     ~deque();
 
-    deque<T>& operator=(const deque<T>& x);
+    deque<T>& operator=(const deque<T>& x){
+    	buf = x.buf;
+    	return *this;
+    }
 
-    void assign(size_type n, const T& t);
+    void assign(size_type n, const T& t){
+    	buf.assign(n, t);
+    }
+
+    void assign(iterator first, iterator last){
+    	buf.assign(first.it, last.it);
+    }
+
+    void assign(T n[], T* addr){
+    	buf.assign(n, addr);
+    }
 
     // iterators:
-    iterator begin();
-    const_iterator begin() const;
-    iterator end();
-    const_iterator end() const;
-    reverse_iterator rbegin();
+    iterator begin(){
+    	return iterator(buf.begin());
+    }
+//    const_iterator begin() const;
+    iterator end(){
+    	return iterator(buf.end());
+    }
+/*    const_iterator end() const;
+    reverse_iterator rbegin(){
+    	return iterator(buf.rbegin());
+    }
     const_reverse_iterator rbegin() const;
-    reverse_iterator rend();
+    reverse_iterator rend(){
+    	return iterator(buf.rend());
+    }
     const_reverse_iterator rend() const;
-
+*/
     // capacity:
     size_type size() const
     {
-	return vecOne.size() + vecTwo.size();
+    	return buf.size();
     }
     size_type max_size() const;
-    void resize(size_type sz);
-    void resize(size_type sz, T c);
+    void resize(size_type sz){
+    	buf.resize(sz);
+    }
+    void resize(size_type sz, T c){
+    	buf.resize(sz, c);
+    }
 
     bool empty() const
     {
-	return vecOne.empty() && vecTwo.empty(); 
+    	return buf.empty();
     }
 
     // element access:
     reference operator[](size_type i)
     {
-        int n = vecOne.size();
-        if (i < n)
-            return vecOne [ (n-1) - i ];
-        else
-            return vecTwo [ i - n ];
+    	return buf[i];
     }
     const_reference operator[](size_type i) const
     {
-        int n = vecOne.size();
-        if (i < n)
-            return vecOne [ (n-1) - i ];
-        else
-            return vecTwo [ i - n ];
+    	return buf[i];
     }
-
-    reference at(size_type n);
-    const_reference at(size_type n) const;
-    reference front()
-    {
-        if (vecOne.empty())
-            return vecTwo.front();
-        else
-            return vecOne.back();
+    void push_front(const T& x) {
+    	buf.insert(buf.begin(), x);
     }
-    const_reference front() const
-    {
-        if (vecOne.empty())
-            return vecTwo.front();
-        else
-            return vecOne.back();
+    void push_back(const T& x)  {
+    	buf.push_back(x);
     }
-
     reference back()
     {
-        if (vecOne.empty())
-            return vecTwo.back();
-        else
-            return vecOne.front();
+        return buf[buf.size()-1];
+    }
+    void pop_front(){
+    	buf.erase(buf.begin());
+    }
+    void pop_back(){
+    	buf.pop_back();
+    }
+    reference front()
+    {
+        return buf[0];
+    }
+
+    reference at(size_type n){
+    	return buf.at(n);
+    }
+    const_reference at(size_type n) const{
+    	return buf.at(n);
+    }
+
+    const_reference front() const
+    {
+        return buf[0];
     }
 
     const_reference back() const
     {
-        if (vecOne.empty())
-            return vecTwo.back();
-        else
-            return vecOne.front();
+        return buf[buf.size()-1];
     }
 
     // modifiers:
-    void push_front(const T& x) { vecOne.push_back(x); }
-    void push_back(const T& x)  { vecTwo.push_back(x); }
-    iterator insert(iterator position, const T& x);
-    void insert(iterator position, size_type n, const T& x);
+    iterator insert(iterator position, const T& x){
+    	return iterator(buf.insert(position.it, x));
+    }
+    void insert(iterator position, size_type n, const T& x){
+    	buf.insert(position.it, n, x);
+    }
 
-    void pop_front();
-    void pop_back();
-    iterator erase(iterator position); 
-    iterator erase(iterator first, iterator last);
+    iterator erase(iterator position){
+    	return iterator(buf.erase(position.it));
+    }
+    iterator erase(iterator first, iterator last){
+    	return iterator(buf.erase(first.it, last.it));
+    }
 
-    void swap(deque<T>&);
-    void clear();
+    void swap(deque<T>& d){
+    	buf.swap(d.buf);
+    }
+    void clear(){
+    	buf.clear();
+    }
 
     // comparators:
-    bool operator == (const deque<T>&) const;
-    bool operator != (const deque<T>&) const;
-    bool operator >= (const deque<T>&) const;
-    bool operator <= (const deque<T>&) const;
-
-    protected:
-    	vector<T> vecOne;
-    	vector<T> vecTwo;
-
+    /*
+    bool operator == (const deque<T> d) const{
+    	return (buf == d.buf);
+    }
+    bool operator != (const deque<T> d) const;
+    bool operator >= (const deque<T> d) const;
+    bool operator <= (const deque<T> d) const;
+*/
+    public:
+    	vector<T> buf;
   };
+
+//template<class T>
+//  bool deque<T>::operator!= (const deque<T> d) const{
+//	  return (this->buf != d.buf);
+//  }
+//template<class T>
+//  bool deque<T>::operator>= (const deque<T> d) const{
+//	  return (this->buf >= d.buf);
+//  }
+//template<class T>
+//  bool deque<T>::operator<= (const deque<T> d) const{
+//	  return (this->buf <= d.buf);
+//  }
+
 }
 #endif
 

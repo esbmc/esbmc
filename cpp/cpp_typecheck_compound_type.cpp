@@ -1022,6 +1022,21 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
           declaration, declarator, components,
           access, is_static, is_typedef, is_mutable);
       }
+
+      if(declaration.operands().size())
+      {
+        exprt &value = (exprt&) declaration.op0().add("value");
+        exprt &throw_decl = (exprt&) declaration.op0().add("throw_decl");
+
+        // We always insert throw_decl to the begin of the function
+        if(throw_decl.statement() == "throw_decl")
+        {
+          value.operands().insert(
+              value.operands().begin(),
+              throw_decl);
+          throw_decl.clear();
+        }
+      }
     }
     else if(it->id()=="cpp-public")
       access="public";

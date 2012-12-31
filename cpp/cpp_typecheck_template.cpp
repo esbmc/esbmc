@@ -345,10 +345,10 @@ void cpp_typecheckt::typecheck_template_member_function(
   }
   else if(declaration.is_destructor())
   {
-    return; // TODO
   }
   else
   {
+    return; // TODO
     err_location(cpp_name);
     str << "bad template name";
     throw 0;
@@ -392,10 +392,9 @@ void cpp_typecheckt::typecheck_template_member_function(
   symbolt &template_symbol=
     context.symbols.find(cpp_id.identifier)->second;
 
-  exprt &template_methods=static_cast<exprt &>(
-    template_symbol.value.add("template_methods"));
-
-  template_methods.copy_to_operands(declaration);
+  exprt *template_methods = &static_cast<exprt &>(
+      template_symbol.value.add("template_methods"));
+  template_methods->copy_to_operands(declaration);
 
   // save current scope
   cpp_save_scopet cpp_saved_scope(cpp_scopes);
