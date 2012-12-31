@@ -7,14 +7,7 @@ Author: Felipe Rodrigues
 \*******************************************************************/
 
 #include "QGraphicsItem"
-
-class QPixmap
-{
-public:
-	QPixmap (){}
-	QPixmap ( int width, int height ){}
-	QPixmap ( const char * xpm ){}
-};
+#include "QPixmap"
 
 class QGraphicsPixmapItem : public QGraphicsItem
 {

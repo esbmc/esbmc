@@ -1,0 +1,28 @@
+/*******************************************************************
+ Module:
+
+ Author: Lucas Cordeiro
+
+ Date: August 2012
+
+ \*******************************************************************/
+
+#ifndef CSTDDEF
+#define CSTDDEF
+
+#undef NULL
+#if defined(__cplusplus)
+#define NULL 0
+#else
+#define NULL ((void *)0)
+#endif
+
+#ifndef _SIZE_T_DEFINED
+typedef unsigned int size_t;
+#endif
+
+#ifndef _PTRDIFF_T_DEFINED
+typedef int ptrdiff_t;
+#endif
+
+#endif

@@ -171,6 +171,9 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type2tc(new cpp_name_type2t(name, template_args));
   } else if (type.id().as_string().size() == 0 || type.id() == "nil") {
     new_type_ref = type2tc(type_pool.get_empty());
+  } else if (type.id() == "ellipsis") {
+    // Eh? Ellipsis isn't a type. It's a special case.
+    new_type_ref = type_pool.get_empty();
   } else {
     type.dump();
     assert(0);
@@ -219,6 +222,8 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == "cpp-name") {
     real_migrate_type(type, new_type_ref);
     // No caching; no reason, just not doing it right now.
+  } else if (type.id() == "ellipsis") {
+    real_migrate_type(type, new_type_ref);
   } else {
     type.dump();
     assert(0);
@@ -1159,11 +1164,39 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.type(), type);
     const irep_idt &str = expr.op0().value();
     new_expr_ref = expr2tc(new code_asm2t(type, str));
-  } else if (expr.id() == "cpp-throw") {
+  } else if (expr.id() == "code" && expr.statement() == "cpp-throw") {
     // No type,
-    expr2tc op;
-    migrate_expr(expr.op0(), op);
-    new_expr_ref = expr2tc(new code_cpp_throw2t(op));
+    const irept::subt &exceptions_thrown =expr.find("exception_list").get_sub();
+
+    std::vector<irep_idt> expr_list;
+    for(irept::subt::const_iterator
+        e_it=exceptions_thrown.begin();
+        e_it!=exceptions_thrown.end();
+        e_it++)
+    {
+      expr_list.push_back(e_it->id());
+    }
+
+    expr2tc operand;
+    if (expr.operands().size() == 1) {
+      migrate_expr(expr.op0(), operand);
+    } else {
+      operand = expr2tc();
+    }
+
+    new_expr_ref = expr2tc(new code_cpp_throw2t(operand, expr_list));
+  } else if (expr.id() == "code" && expr.statement() == "throw-decl") {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &exceptions_thrown =expr.find("throw_list").get_sub();
+    for(irept::subt::const_iterator
+        e_it=exceptions_thrown.begin();
+        e_it!=exceptions_thrown.end();
+        e_it++)
+    {
+      expr_list.push_back(e_it->id());
+    }
+
+    new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2130,6 +2163,12 @@ migrate_expr_back(const expr2tc &ref)
   {
     const code_cpp_throw2t &ref2 = to_code_cpp_throw2t(ref);
     exprt codeexpr("cpp-throw");
+    irept::subt &exceptions_thrown = codeexpr.add("exception_list").get_sub();
+
+    forall_names(it, ref2.exception_list) {
+      exceptions_thrown.push_back(irept(*it));
+    }
+
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }

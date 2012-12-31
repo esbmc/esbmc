@@ -45,7 +45,7 @@ void c_typecheck_baset::typecheck_code(codet &code)
   if(!code.is_code())
     throw "expected code, got "+code.pretty();
 
-  code.type()=typet("code");
+  code.type()=code_typet();
 
   const irep_idt &statement=code.statement();
 
@@ -88,8 +88,9 @@ void c_typecheck_baset::typecheck_code(codet &code)
     typecheck_asm(code);
   else if(statement=="start_thread")
     typecheck_start_thread(code);
-  else if(statement=="cpp-try") {
-	typecheck_cpptry(code);
+  else if(statement=="cpp-try")
+  {
+    typecheck_cpptry(code);
   }
   else if(statement=="msc_try_finally")
   {
@@ -148,7 +149,6 @@ Function: c_typecheck_baset::typecheck_cpptry
 void c_typecheck_baset::typecheck_cpptry(codet &code)
 {
     Forall_operands(it, code) {
-    	//std::cout << "!!!!!!!!!!!!!typecheck_code::to_code(*it).pretty(): " << to_code(*it).pretty() << std::endl;
       typecheck_code(to_code(*it));
     }
 }

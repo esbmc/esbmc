@@ -39,6 +39,13 @@ esbmc: $(OBJDIR)/.depends infrastructure languages
 doxygen:
 	doxygen .doxygen
 
+ctags:
+	ctags -o .ctags -R --exclude=regression --extra=fq --fields=afikKlmnsSzt
+
+# Some regexing required to not cscope-up the regression directory.
+cscope:
+	find . | egrep '(\.cpp|\.h)$$' | egrep -v regression | cscope -f.cscope -b -I. -Iutil -R  -i -
+
 ###############################################################################
 
 include $(ESBMCDIR)/common

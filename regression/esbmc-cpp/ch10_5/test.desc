@@ -1,3 +1,0 @@
-main.cpp 
-point.cpp circle.cpp cylinder.cpp shape.cpp --unwind 1 --no-unwinding-assertions -I ~/libraries/ --no-pointer-check --depth 500
-^VERIFICATION SUCCESSFUL$

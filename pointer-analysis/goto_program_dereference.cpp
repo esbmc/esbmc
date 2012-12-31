@@ -276,6 +276,7 @@ void goto_program_dereferencet::dereference_instruction(
   current_target=target;
   valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
+  dereference_location = i.location;
 
   dereference_expr(i.guard, checks_only, dereferencet::READ);
 
@@ -304,8 +305,16 @@ void goto_program_dereferencet::dereference_instruction(
       expr2tc invalid_ptr = expr2tc(new invalid_pointer2t(deref.value));
       guardt guard;
       guard.move(invalid_ptr);
+#if 1
+      if(!options.get_bool_option("no-pointer-check"))
+      {
+        dereference_failure("function pointer dereference",
+                            "invalid pointer", guard);
+      }
+#else
       dereference_failure("function pointer dereference",
                           "invalid pointer", guard);
+#endif
     }
   }
   else if (i.is_return())

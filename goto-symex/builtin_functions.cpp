@@ -28,7 +28,7 @@ void goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-    
+
   if (is_nil_expr(lhs))
     return; // ignore
 
@@ -46,7 +46,7 @@ void goto_symext::symex_malloc(
     if (is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
       size_is_one = true;
   }
-  
+
   if (is_nil_type(type))
     type = char_type2();
 
@@ -61,7 +61,7 @@ void goto_symext::symex_malloc(
 
   symbol.name = "symex_dynamic::" + id2string(symbol.base_name);
   symbol.lvalue = true;
-  
+
   typet renamedtype = ns.follow(migrate_type_back(type));
   if(size_is_one)
     symbol.type=renamedtype;
@@ -80,7 +80,7 @@ void goto_symext::symex_malloc(
 
   type2tc new_type;
   migrate_type(symbol.type, new_type);
-  
+
   expr2tc rhs = expr2tc(new address_of2t(type_pool.get_empty(), expr2tc()));
   address_of2t &rhs_ref = to_address_of2t(rhs);
 
@@ -99,13 +99,14 @@ void goto_symext::symex_malloc(
     rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type.subtype()));
     rhs_ref.ptr_obj = idx;
   }
-  
+
   if (rhs_ref.type != lhs->type)
     rhs = expr2tc(new typecast2t(lhs->type, rhs));
 
   // Pas this point, rhs_ref may be an invalid reference.
 
   cur_state->rename(rhs);
+  expr2tc rhs_copy = rhs;
 
   // Finally, guard the return with the fact that it should return NULL if the
   // size allocated was (potentially nondeterministically) zero.
@@ -124,12 +125,20 @@ void goto_symext::symex_malloc(
   expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
 
   expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-
   expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
-
   expr2tc truth = true_expr;
-
   symex_assign_rec(idx, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+}
+
+void goto_symext::symex_free(const code_free2t &code)
+{
+
+  expr2tc ptr_obj(new pointer_offset2t(uint_type2(), code.operand));
+  expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
+  expr2tc eq(new equality2t(ptr_obj, zero));
+  claim(eq, "Operand of free must have zero pointer offset");
 }
 
 void goto_symext::symex_printf(
@@ -145,7 +154,7 @@ void goto_symext::symex_printf(
   new_rhs->list_operands(operands);
 
   const expr2tc &format = **operands.begin();
-  
+
   if (is_address_of2t(format)) {
     const address_of2t &addrof = to_address_of2t(format);
     if (is_index2t(addrof.ptr_obj)) {
@@ -173,7 +182,7 @@ void goto_symext::symex_cpp_new(
   bool do_array;
 
   do_array = (code.kind == sideeffect2t::cpp_new_arr);
-      
+
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
 
@@ -187,7 +196,7 @@ void goto_symext::symex_cpp_new(
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
   symbol.mode="C++";
-  
+
   const pointer_type2t &ptr_ref = to_pointer_type(code.type);
   typet renamedtype = ns.follow(migrate_type_back(ptr_ref.subtype));
   type2tc newtype, renamedtype2;
@@ -203,7 +212,7 @@ void goto_symext::symex_cpp_new(
   symbol.type = migrate_type_back(newtype);
 
   symbol.type.dynamic(true);
-  
+
   new_context.add(symbol);
 
   // make symbol expression
@@ -220,11 +229,25 @@ void goto_symext::symex_cpp_new(
   }
   else
     addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
-  
+
   cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
+
+  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
+  type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
+                                              expr2tc(), true));
+  expr2tc sym = expr2tc(new symbol2t(sym_type, "cpp::__ESBMC_is_dynamic"));
+
+  expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
+  expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
+  expr2tc truth = true_expr;
+
+  symex_assign_rec(idx, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 // XXX - implement as a call to free?
@@ -345,6 +368,12 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
+
+  if (options.get_bool_option("k-induction")) {
+    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+    std::cerr  << std::endl;
+    abort();
+  }
 
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];

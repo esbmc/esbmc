@@ -37,9 +37,7 @@ void master(void)
   }
   M_ENTRY: ;
   {
-  unsigned int loop1=0, n1=nondet_uint();
-  while (loop1<n1/*1*/) {
-    loop1++;
+  while (1) {
     while_0_continue: /* CIL Label */ ;
     {
     E_1 = 1;
@@ -47,9 +45,7 @@ void master(void)
     E_1 = 2;
     }
     {
-  unsigned int loop2=0, n2=nondet_uint();
-  while (loop2<n2/*1*/) {
-    loop2++;
+    while (1) {
       while_1_continue: /* CIL Label */ ;
       m_pc = 1;
       m_st = 2;
@@ -82,10 +78,7 @@ void transmit1(void)
   }
   T1_ENTRY: ;
   {
-  unsigned int loop3=0, n3=nondet_uint();
-  while (loop3<n3/*1*/) {
-    loop3++;
-
+  while (1) {
     while_2_continue: /* CIL Label */ ;
     t1_pc = 1;
     t1_st = 2;
@@ -193,9 +186,7 @@ void eval(void)
 
   {
   {
-  unsigned int loop4=0, n4=nondet_uint();
-  while (loop4<n4/*1*/) {
-    loop4++;
+  while (1) {
     while_3_continue: /* CIL Label */ ;
     {
     tmp = exists_runnable_thread();
@@ -398,9 +389,7 @@ void start_simulation(void)
   reset_delta_events();
   }
   {
-  unsigned int loop5=0, n5=nondet_uint();
-  while (loop5<n5/*1*/) {
-    loop5++;
+  while (1) {
     while_4_continue: /* CIL Label */ ;
     {
     kernel_st = 1;

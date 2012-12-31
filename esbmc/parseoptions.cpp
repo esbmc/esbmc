@@ -27,6 +27,7 @@ extern "C" {
 #include <irep.h>
 #include <config.h>
 #include <expr_util.h>
+#include <time_stopping.h>
 
 #include <goto-programs/goto_convert_functions.h>
 #include <goto-programs/goto_check.h>
@@ -276,6 +277,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-unwinding-assertions", true);
     options.set_option("partial-loops", true);
     options.set_option("unwind", i2string(k_step));
+  }
+
+  if(cmdline.isset("show-counter-example"))
+  {
+	options.set_option("show-counter-example", true);
   }
 
   // jmorse
@@ -725,6 +731,7 @@ bool cbmc_parseoptionst::get_goto_program(
   optionst &options,
   goto_functionst &goto_functions)
 {
+  fine_timet parse_start = current_time();
   try
   {
     if(cmdline.isset("binary"))
@@ -769,8 +776,22 @@ bool cbmc_parseoptionst::get_goto_program(
         ui_message_handler);
     }
 
+    fine_timet parse_stop = current_time();
+    std::ostringstream str;
+    str << "GOTO program creation time: ";
+    output_time(parse_stop - parse_start, str);
+    str << "s";
+    status(str.str());
+
+    fine_timet process_start = current_time();
     if(process_goto_program(options, goto_functions))
       return true;
+    fine_timet process_stop = current_time();
+    std::ostringstream str2;
+    str2 << "GOTO program processing time: ";
+    output_time(process_stop - process_start, str2);
+    str2 << "s";
+    status(str2.str());
   }
 
   catch(const char *e)

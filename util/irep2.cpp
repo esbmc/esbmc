@@ -629,7 +629,8 @@ static const char *expr_names[] = {
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
-  "cpp_throw"
+  "cpp_throw",
+  "cpp_throw_decl"
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -910,7 +911,7 @@ type_poolt::get_int(unsigned int size)
   }
 }
 
-type_poolt type_pool __attribute__((init_priority(101)));
+type_poolt type_pool __attribute__((init_priority(102)));
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
@@ -1460,6 +1461,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const Bi
 static inline __attribute__((always_inline)) void do_type_list_operands(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const dstring &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(const std::vector<irep_idt> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 
 static inline __attribute__((always_inline)) void do_type_list_operands(symbol_data::renaming_level &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1472,6 +1474,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(BigInt &
 static inline __attribute__((always_inline)) void do_type_list_operands(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(dstring &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const expr2t::expr_ids &theval __attribute__((unused)), std::list< expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(std::vector<irep_idt> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 
 static inline __attribute__((always_inline)) void
 do_type_list_operands(expr2tc &theval, std::list<expr2tc*> &inp)
@@ -2010,9 +2013,9 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   return;
 }
 
-const expr2tc true_expr __attribute__((init_priority(102)))
+const expr2tc true_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(true));
-const expr2tc false_expr __attribute__((init_priority(102)))
+const expr2tc false_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(false));
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
@@ -2207,9 +2210,11 @@ std::string code_cpp_del_array2t::field_names [esbmct::num_type_fields]  =
 std::string code_cpp_delete2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string code_cpp_catch2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "exception_list", "", "", ""};
+{ "exception_list", "", "", "", ""};
 std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "", "", "", ""};
+{ "operand", "exception_list", "", "", ""};
+std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
+{ "exception_list", "", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2469,8 +2474,13 @@ template class esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
 template class esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
     expr2tc, code_expression_data, &code_expression_data::operand>;
 template class esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
-    expr2tc, code_cpp_catch_data, &code_cpp_catch_data::operand,
-    std::vector<unsigned int>, code_cpp_catch_data,
-    &code_cpp_catch_data::excp_list>;
+    std::vector<irep_idt>, code_cpp_catch_data,
+    &code_cpp_catch_data::exception_list>;
 template class esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
-    expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand>;
+    expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
+    std::vector<irep_idt>, code_cpp_throw_data,
+    &code_cpp_throw_data::exception_list>;
+template class esbmct::expr_methods<code_cpp_throw_decl2t,
+         code_cpp_throw_decl_data,
+    std::vector<irep_idt>, code_cpp_throw_decl_data,
+    &code_cpp_throw_decl_data::exception_list>;

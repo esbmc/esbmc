@@ -16,8 +16,8 @@ Function: operator<<
 
  Outputs:
 
- Purpose: 
- 
+ Purpose:
+
 \*******************************************************************/
 
 std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
@@ -37,9 +37,12 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   case RETURN: out << "RETURN"; break;
   case ASSIGN: out << "ASSIGN"; break;
   case FUNCTION_CALL: out << "FUNCTION_CALL"; break;
+  case THROW: out << "THROW"; break;
+  case CATCH: out << "CATCH"; break;
+  case THROW_DECL: out << "THROW_DECL"; break;
   default:
-    out << "?";
+    out << "? (number: " << t << ")";
   }
-  
+
   return out;
 }

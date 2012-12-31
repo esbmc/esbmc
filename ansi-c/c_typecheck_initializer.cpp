@@ -81,7 +81,9 @@ bool c_typecheck_baset::zero_initializer(
       if(to_integer(size_expr, size))
         return true;
 
-      if(size<=0) return true;
+      // Permit GCC zero sized arrays; disallow negative sized arrays.
+      // Cringe slightly when doing it though.
+      if (size < 0) return true;
     }
 
     value=exprt("array_of", type);
@@ -205,7 +207,10 @@ exprt c_typecheck_baset::do_initializer_rec(
   
   if(value.id()=="designated_list")
   {
-    if(full_type.id()!="struct")
+    // Can't designated-initialize anything but a struct; however an array
+    // initializer with no elements can be interpreted as an empty designated
+    // list, so permit that.
+    if(full_type.id()!="struct" && value.operands().size() != 0)
     {
       err_location(value);
       str << "designated initializers cannot initialize `"
@@ -213,7 +218,8 @@ exprt c_typecheck_baset::do_initializer_rec(
       throw 0;
     }
     
-    return do_designated_initializer(value, to_struct_type(full_type), force_constant);
+    if (full_type.id() == "struct")
+      return do_designated_initializer(value, to_struct_type(full_type), force_constant);
   }
   
   if(full_type.id()=="incomplete_array" ||
@@ -248,6 +254,13 @@ exprt c_typecheck_baset::do_initializer_rec(
     else if(follow(value.type())==full_type)
     {
       return value;
+    }
+    else if (value.id() == "designated_list" && value.operands().size() == 0)
+    {
+      // Zero size array initializer
+      exprt tmp;
+      init_statet state(tmp);
+      return do_initializer_incomplete_array(state, full_type, force_constant);
     }
     else
     {
@@ -521,6 +534,14 @@ exprt c_typecheck_baset::do_initializer_union(
   const union_typet &type,
   bool force_constant)
 {
+
+  if(state->id() == "designated_list")
+  {
+    exprt e=do_designated_union_initializer(*state, type, force_constant);
+    state++;
+    return e;
+  }
+
   if(!state.has_next())
   {
     exprt zero;
@@ -573,7 +594,8 @@ void c_typecheck_baset::do_initializer(symbolt &symbol)
       const typet &final_type=follow(symbol.type);
       
       if(final_type.id()!="incomplete_struct" &&
-         final_type.id()!="incomplete_array")
+         final_type.id()!="incomplete_array" &&
+         !symbol.is_extern) // Don't zero-init externs
       {
         // zero initializer
         if(zero_initializer(symbol.value, symbol.type))
@@ -676,6 +698,47 @@ exprt c_typecheck_baset::do_designated_initializer(
     if(initializer.is_nil())
       zero_initializer(initializer, components[i].type());
   }
+
+  return result;
+}
+
+exprt c_typecheck_baset::do_designated_union_initializer(
+  const exprt &value,
+  const union_typet &union_type,
+  bool force_constant)
+{
+  assert(value.id()=="designated_list");
+  assert(value.operands().size() == 1);
+
+  exprt result("union", union_type);
+  
+  // We don't in fact have to lay out a series of fields. Because this is a
+  // union, all we do to represent a constant set operand 0 to something of the
+  // type of one of the union fields.
+
+  // start with NIL
+  result.operands().resize(1);
+  const exprt &initializer=value.op0();
+  assert(initializer.operands().size()==1);
+  const irep_idt &component_name = initializer.component_name();
+
+  // Work out what field we're initializing to. This is required, because we
+  // can't work out just from the initialization expression what type the
+  // operand is.
+
+  if (!union_type.has_component(component_name))
+  {
+    err_location(initializer);
+    str << "failed to find component `" << component_name << "'";
+    throw 0;
+  }
+
+  unsigned number = union_type.component_number(component_name);
+  assert(number < union_type.components().size());
+  const typet &operand_type = union_type.components()[number].type();
+
+  result.op0() = do_initializer_rec(initializer.op0(), operand_type,
+                                    force_constant);
 
   return result;
 }

@@ -51,8 +51,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("main");
-  if (it == goto_functions.function_map.end())
-    throw "main symbol not found; please set an entry point";
+  if (it == goto_functions.function_map.end()) {
+    std::cerr << "main symbol not found; please set an entry point" <<std::endl;
+    abort();
+  }
 
   const goto_programt *goto_program = &(it->second.body);
 
@@ -221,7 +223,6 @@ execution_statet::symex_step(reachability_treet &art)
 
       break;
     case RETURN:
-      state.source.pc++;
       if(!state.guard.is_false()) {
         expr2tc thecode = instruction.code, assign;
         if (make_return_assignment(assign, thecode)) {
@@ -233,6 +234,7 @@ execution_statet::symex_step(reachability_treet &art)
         if (!is_nil_expr(assign))
           owning_rt->analyse_for_cswitch_after_assign(assign);
       }
+      state.source.pc++;
       break;
     default:
       goto_symext::symex_step(art);

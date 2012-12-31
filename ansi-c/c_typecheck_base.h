@@ -151,6 +151,11 @@ protected:
     const struct_typet &type,
     bool force_constant);
 
+  virtual exprt do_designated_union_initializer(
+    const exprt &value,
+    const union_typet &type,
+    bool force_constant);
+
   // typecasts
 
   virtual void implicit_typecast(exprt &expr, const typet &type);

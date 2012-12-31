@@ -34,7 +34,8 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   new_context(_new_context),
   goto_functions(_goto_functions),
   target(_target),
-  cur_state(NULL)
+  cur_state(NULL),
+  last_throw(NULL)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -73,7 +74,8 @@ goto_symext::goto_symext(const goto_symext &sym) :
   ns(sym.ns),
   options(sym.options),
   new_context(sym.new_context),
-  goto_functions(sym.goto_functions)
+  goto_functions(sym.goto_functions),
+  last_throw(NULL)
 {
   *this = sym;
 }
@@ -92,6 +94,8 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   alloc_size_arr_name = sym.alloc_size_arr_name;
   deallocd_arr_name = sym.deallocd_arr_name;
   dyn_info_arr_name = sym.dyn_info_arr_name;
+
+  dynamic_memory = sym.dynamic_memory;
 
   // Art ptr is shared
   art1 = sym.art1;

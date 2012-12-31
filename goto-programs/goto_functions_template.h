@@ -52,7 +52,7 @@ class goto_functions_templatet
 {
 public:
   typedef goto_function_templatet<bodyT> goto_functiont;
-  typedef std::map<irep_idt,  goto_functiont> function_mapt;
+  typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 
   ~goto_functions_templatet() { }
@@ -67,13 +67,13 @@ public:
 
   void compute_location_numbers();
   void compute_loop_numbers();
-  void number_targets();
-  void compute_targets();
+  void compute_target_numbers();
+  void compute_incoming_edges();
 
   void update()
   {
-    compute_targets();
-    number_targets();
+    compute_incoming_edges();
+    compute_target_numbers();
     compute_location_numbers();
   }
 
@@ -116,7 +116,7 @@ void goto_functions_templatet<bodyT>::output(
       out << std::endl;
 
       const symbolt &symbol=ns.lookup(it->first);
-      out << symbol.display_name() << ":" << std::endl;
+      out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
       it->second.body.output(ns, symbol.name, out);
     }
   }
@@ -148,7 +148,7 @@ void goto_functions_templatet<bodyT>::compute_location_numbers()
 
 /*******************************************************************\
 
-Function: goto_functions_templatet::number_targets
+Function: goto_functions_templatet::compute_incoming_edges
 
   Inputs:
 
@@ -159,18 +159,18 @@ Function: goto_functions_templatet::number_targets
 \*******************************************************************/
 
 template <class bodyT>
-void goto_functions_templatet<bodyT>::number_targets()
+void goto_functions_templatet<bodyT>::compute_incoming_edges()
 {
   for(typename function_mapt::iterator
       it=function_map.begin();
       it!=function_map.end();
       it++)
-    it->second.body.number_targets();
+    it->second.body.compute_incoming_edges();
 }
 
 /*******************************************************************\
 
-Function: goto_functions_templatet::compute_targets
+Function: goto_functions_templatet::compute_target_numbers
 
   Inputs:
 
@@ -181,13 +181,13 @@ Function: goto_functions_templatet::compute_targets
 \*******************************************************************/
 
 template <class bodyT>
-void goto_functions_templatet<bodyT>::compute_targets()
+void goto_functions_templatet<bodyT>::compute_target_numbers()
 {
   for(typename function_mapt::iterator
       it=function_map.begin();
       it!=function_map.end();
       it++)
-    it->second.body.compute_targets();
+    it->second.body.compute_target_numbers();
 }
 
 /*******************************************************************\
@@ -205,13 +205,12 @@ Function: goto_functions_templatet::compute_loop_numbers
 template <class bodyT>
 void goto_functions_templatet<bodyT>::compute_loop_numbers()
 {
-  unsigned nr=0;
-
+  unsigned int num = 0;
   for(typename function_mapt::iterator
       it=function_map.begin();
       it!=function_map.end();
       it++)
-    it->second.body.compute_loop_numbers(nr);
+    it->second.body.compute_loop_numbers(num);
 }
 
 #endif

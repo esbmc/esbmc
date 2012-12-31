@@ -1,0 +1,15 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+class QPixmap
+{
+public:
+	QPixmap (){}
+	QPixmap ( int width, int height ){}
+	QPixmap ( const char * xpm ){}
+};

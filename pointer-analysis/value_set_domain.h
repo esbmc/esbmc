@@ -23,9 +23,9 @@ public:
 
   // overloading  
 
-  virtual bool merge(const value_set_domaint &other)
+  virtual bool merge(const value_set_domaint &other, bool keepnew)
   {
-    return value_set.make_union(other.value_set);
+    return value_set.make_union(other.value_set, keepnew);
   }
 
   virtual void output(

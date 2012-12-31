@@ -141,11 +141,26 @@ void cpp_typecheckt::add_base_components(
   if(is_virtual && vbases.find(from_name)!=vbases.end())
     return;
 
+  //source: http://msdn.microsoft.com/en-us/library/wcz57btd.aspx
   if(bases.find(from_name)!=bases.end())
   {
     err_location(to);
+
+    static bool flag=false;
+    std::string derived_classes;
+
+    forall_irep(it, to.find("bases").get_sub()) {
+      if (flag) derived_classes+=", ";
+      else flag=true;
+      derived_classes+=it->type().get_string("identifier");
+    }
+
     str << "error: non-virtual base class " << from_name
-        << " inherited multiple times";
+        << " inherited multiple times" << std::endl
+        << "virtual base class ensures that only one copy of the base class "
+        << from_name << " is included" << std::endl
+        << "make sure that the virtual keyword appears in the base lists of the derived classes:" <<std::endl
+        << derived_classes;
     throw 0;
   }
 
