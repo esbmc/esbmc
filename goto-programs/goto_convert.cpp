@@ -318,15 +318,12 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
 {
   // add the THROW_DECL instruction to 'dest'
   goto_programt::targett throw_decl_instruction=dest.add_instruction();
-  throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->code.set_statement("throw-decl");
-  throw_decl_instruction->location=expr.location();
+  codet c("code");
+  c.set_statement("throw-decl");
 
   // the THROW_DECL instruction is annotated with a list of IDs,
   // one per target
-  irept::subt &throw_list=
-    throw_decl_instruction->code.add("throw_list").get_sub();
-
+  irept::subt &throw_list = c.add("throw_list").get_sub();
   for(unsigned i=0; i<expr.operands().size(); i++)
   {
     const exprt &block=expr.operands()[i];
@@ -335,6 +332,10 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
     // grab the ID and add to THROW_DECL instruction
     throw_list.push_back(irept(type));
   }
+
+  throw_decl_instruction->make_throw_decl();
+  throw_decl_instruction->location=expr.location();
+  migrate_expr(c, throw_decl_instruction->code);
 }
 
 /*******************************************************************\
