@@ -190,9 +190,6 @@ private:
   void build_part_array_from_elem(const expr2tc &data, bool be,
                                   unsigned int width, z3::expr &array,
                                   unsigned int array_offs);
-  void build_scatter_array(const expr2tc &data, const expr2tc &offset,
-                           const expr2tc &sub_offs, bool be,
-                           unsigned int width, z3::expr &array);
   void dynamic_offs_byte_extract(const byte_extract2t &data, z3::expr &output);
 
   void byte_swap_expr(const expr2tc &data, z3::expr &output);

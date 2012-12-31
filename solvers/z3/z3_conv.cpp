@@ -1641,95 +1641,6 @@ z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
 }
 
 void
-z3_convt::build_scatter_array(const expr2tc &data, const expr2tc &offset,
-                              const expr2tc &sub_offs, bool be,
-                              unsigned int width, z3::expr &array)
-{
-  // Like build_part_array_from_elem, but biases the offset written so that
-  // indexes 0 to num_bytes-1 are the desired pieces of data. That means
-  // the data can be reconstructed just be selecting those indexes.
-  //
-  // Also descends through the struct/array layout, finding and optimising
-  // arrays to only select the fewest number of elements possible for this
-  // operation.
-  if (is_struct_type(data->type)) {
-    const struct_type2t &st = to_struct_type(data->type);
-    unsigned int idx = 0;
-    forall_types(it, st.members) {
-      mp_integer offs = member_offset(st, st.member_names[idx]);
-      expr2tc additional_offs(new constant_int2t(uint_type2(), offs));
-      expr2tc add(new add2t(uint_type2(), offset, additional_offs));
-
-      build_scatter_array(data, add, sub_offs, be, width, array);
-
-      idx++;
-    }
-  } else if (is_array_type(data->type)) {
-    const array_type2t &arr = to_array_type(data->type);
-
-    // So: we only actually ever need to extract a few elements of an array,
-    // because the max we'll ever be extracting is a 64 bit integer, and we can
-    // nondeterministically calculate what indexes it wants.
-    unsigned int subtype_sz = arr.subtype->get_width();
-    unsigned int num_elems = (width / subtype_sz);
-    if (num_elems == 0)
-      num_elems = 1; // Avoid truncation.
-    if (width > 8 && subtype_sz > 8)
-      num_elems++; // Anything larger than a byte can overlap elements
-    if (width >= subtype_sz + 16)
-      num_elems++; // And anything large than a short can overlap in two
-                   // directions.
-
-std::cout << "ohai I picked " << num_elems << " elems" << std::endl;
-std::cout << "with width " << width << " and subytpe sz " << subtype_sz << std::endl;
-
-    // Now, calculate the positions of these elements and extract them in.
-    // No need to worry about out of bounds; if they are, they won't be used.
-    unsigned int i;
-    expr2tc one(new constant_int2t(uint_type2(), BigInt(1)));
-    expr2tc elem_w(new constant_int2t(uint_type2(), BigInt(subtype_sz)));
-    expr2tc lowest_idx(new div2t(uint_type2(), offset, elem_w));
-    expr2tc cur_idx = lowest_idx;
-    for (i = 0; i < num_elems; i++) {
-      expr2tc idx(new index2t(arr.subtype, data, cur_idx));
-      expr2tc subtype_sz_expr(new constant_int2t(uint_type2(),
-                                                 BigInt(subtype_sz/8)));
-      expr2tc additional_offs(new mul2t(uint_type2(), subtype_sz_expr,
-                                        cur_idx));
-      expr2tc add(new add2t(uint_type2(), offset, additional_offs));
-z3::expr faces;
-convert_bv(add, faces);
-label_formula("calcumalatedoffs", type_pool.get_bool(), faces);
-      build_scatter_array(idx, add, sub_offs, be, width, array);
-
-      cur_idx = expr2tc(new add2t(uint_type2(), cur_idx, one));
-    }
-
-    // Woo.
-  } else if (is_union_type(data->type)) {
-    // Meh, implement later
-    std::cerr << "Scatter array from union EUNIMPLMENETED" << std::endl;
-    abort();
-  } else {
-    unsigned int bytes = data->type->get_width() / 8;
-    unsigned int i;
-    z3::expr cur_idx;
-    expr2tc array_offs(new sub2t(uint_type2(), offset, sub_offs));
-    convert_bv(array_offs, cur_idx);
-    for (i = 0; i < bytes; i++) {
-      expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
-      expr2tc extract(new byte_extract2t(char_type2(), be, data, offs));
-      z3::expr byte;
-      convert_bv(extract, byte);
-      array = store(array, cur_idx, byte);
-label_formula("lolbytes", type_pool.get_bool(), byte);
-label_formula("lolidx", type_pool.get_bool(), cur_idx);
-      cur_idx = cur_idx + ctx.esbmc_int_val(1);
-    }
-  }
-}
-
-void
 z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
 {
 
@@ -1758,34 +1669,20 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
   try {
     unsigned long width, i;
     width = data.source_value->type->get_width() / 8;
-    i = width;
 
     // We're a fixed sized piece of data. Fetch bytes from it and store them
     // into a fresh array.
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
 
-#if 0
     build_part_array_from_elem(data.source_value, data.big_endian, width,
                                part_array, 0);
-#endif
-z3::expr tmp;
-convert_bv(data.source_offset, tmp);
-label_formula("myeyes", type_pool.get_bool(), tmp);
-    expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
-    build_scatter_array(data.source_value, zero, data.source_offset,
-                        data.big_endian, data.type->get_width(), part_array);
-label_formula("lolarray", type_pool.get_bool(), part_array);
 
     // Extracted; now rebuild from that array. If we go out of bounds, we'll
     // just get a free value, and some assertion elsewhere should pick this up.
     unsigned long output_width = data.type->get_width() / 8;
     z3::expr idx, byte, offs;
-#if 0
     convert_bv(data.source_offset, offs);
-#else
-    offs = ctx.esbmc_int_val(0);
-#endif
     for (i = 0; i < output_width; i++) {
       if (i == 0) {
         output = select(part_array, offs);
