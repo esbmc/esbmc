@@ -98,6 +98,7 @@ void goto_convertt::do_function_call(
   else if(new_function.id()=="NULL-object")
   {
   }
+#if 0
   else if(new_function.id()=="member"
           && new_function.has_operands()
           && new_function.op0().statement()=="typeid")
@@ -128,11 +129,13 @@ void goto_convertt::do_function_call(
     {
       // Add new instruction throw
       goto_programt::targett t=dest.add_instruction(THROW);
-      t->code=codet("cpp-throw");
+      codet c("cpp-throw");
+      c.set("exception_list", exception_list);
+      migrate_expr(c, t->code);
       t->location=function.location();
-      t->code.set("exception_list", exception_list);
     }
   }
+#endif
   else
   {
     err_location(function);

@@ -106,9 +106,12 @@ std::ostream& goto_programt::output_instruction(
   case FUNCTION_CALL:
   case ASSIGN:
 
+#if 0
     if(it->code.statement()!="typeid")
     {
+#endif
       out << from_expr(ns, identifier, it->code) << std::endl;
+#if 0
     }
     else
     {
@@ -117,6 +120,7 @@ std::ostream& goto_programt::output_instruction(
       out << "typeid(" << it->code.op0().identifier() << ").name() ";
       out << std::endl << std::endl;
     }
+#endif
     break;
 
   case ASSUME:
