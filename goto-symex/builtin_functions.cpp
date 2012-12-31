@@ -238,7 +238,6 @@ void goto_symext::symex_cpp_new(
   expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);
-  symex_assign_rec(index, truth, guard);
 
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
