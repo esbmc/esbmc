@@ -1893,16 +1893,12 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
   unsigned long sel_sz = data.type->get_width() / 8;
   uint64_t offset = intref.constant_value.to_ulong();
-  try {
-    unsigned long all_data_sz = data.source_value->type->get_width() / 8;
-    if (offset + sel_sz > all_data_sz) {
-      z3::sort s;
-      convert_type(data.type, s);
-      output = ctx.fresh_const(NULL, s);
-      return;
-    }
-  } catch (array_type2t::dyn_sized_array_excp* e) {
-  } catch (array_type2t::inf_sized_array_excp* e) {
+  unsigned long all_data_sz = data.source_value->type->get_width() / 8;
+  if (offset + sel_sz > all_data_sz) {
+    z3::sort s;
+    convert_type(data.type, s);
+    output = ctx.fresh_const(NULL, s);
+    return;
   }
 
   z3::expr source;
