@@ -1183,6 +1183,18 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw2t(operand, expr_list));
+  } else if (expr.id() == "code" && expr.statement() == "throw-decl") {
+    std::vector<irep_idt> expr_list;
+    const irept::subt &exceptions_thrown =expr.find("throw_list").get_sub();
+    for(irept::subt::const_iterator
+        e_it=exceptions_thrown.begin();
+        e_it!=exceptions_thrown.end();
+        e_it++)
+    {
+      expr_list.push_back(e_it->id());
+    }
+
+    new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
