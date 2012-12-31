@@ -2005,7 +2005,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       while (remaining > 0) {
         unsigned int to_extract = elem_size - cur_offs;
         to_extract = std::min(to_extract, remaining);
-        std::cout << "Extracting " << to_extract << " bytes" << std::endl;
         expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem)));
         expr2tc index(new index2t(subtype, data.source_value, idx));
         expr2tc offs(new constant_int2t(uint_type2(), cur_offs));
