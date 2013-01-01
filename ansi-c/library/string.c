@@ -155,7 +155,7 @@ char *strdup(const char *str)
   bufsz=(strlen(str)+1)*sizeof(char);
   char *cpy=malloc(bufsz);
   if(cpy==((void *)0)) return 0;
-  __ESBMC_assume(__ESBMC_buffer_size(cpy)==bufsz);
+//  __ESBMC_assume(__ESBMC_buffer_size(cpy)==bufsz);
   cpy=strcpy(cpy, str);
   return cpy;
 }

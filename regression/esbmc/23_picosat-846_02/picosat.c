@@ -6690,8 +6690,13 @@ picosat_seconds (void)
 }
 
 void
-picosat_print (FILE * file)
+picosat_print (/*FILE * file*/)
 {
+  // XXX jmorse - inserted to prevent ESBMC guessing some rubbish about the
+  // arguments to this function.
+  FILE f;
+  FILE *file = &f;
+
 #ifdef NO_BINARY_CLAUSES
   Lit * lit, *other, * last;
   Ltk * stack;

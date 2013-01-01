@@ -207,7 +207,12 @@ type2t::do_crc(hacky_hash &hash) const
 unsigned int
 bool_type2t::get_width(void) const
 {
-  return 1;
+  // A bool is modelled in the solver as an actual boolean... but whenever
+  // we're dealing with bitwidths, what we care about is the byte representation
+  // model we're dealing with, which a bool has to be addressable in. Right now
+  // what that looks like is bools being single bytes with zero or one as a
+  // value. We can revisit this in the future if necessary.
+  return 8;
 }
 
 unsigned int
@@ -224,8 +229,15 @@ array_type2t::get_width(void) const
   if (size_is_infinite)
     throw new inf_sized_array_excp();
 
-  if (array_size->expr_id != expr2t::constant_int_id)
-    throw new dyn_sized_array_excp(array_size);
+  if (array_size->expr_id != expr2t::constant_int_id) {
+    // The following can't throw, subtype can't be dynamically sized, because
+    // we are.
+    expr2tc subtype_sz(new constant_int2t(array_size->type,
+                        BigInt(subtype->get_width())));
+
+    expr2tc sz(new mul2t(array_size->type, array_size, subtype_sz));
+    throw new dyn_sized_array_excp(sz);
+  }
 
   // Otherwise, we can multiply the size of the subtype by the number of elements.
   unsigned int sub_width = subtype->get_width();
@@ -254,13 +266,13 @@ empty_type2t::get_width(void) const
 unsigned int
 symbol_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of symbol type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 unsigned int
 cpp_name_type2t::get_width(void) const
 {
-  assert(0 && "Fetching width of cpp_name type - invalid operation");
+  throw new symbolic_type_excp();
 }
 
 unsigned int
@@ -614,8 +626,6 @@ static const char *expr_names[] = {
   "invalid_pointer",
   "buffer_size",
   "code_asm",
-  "from_bv_typecast",
-  "to_bv_typecast",
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
@@ -746,6 +756,8 @@ object_descriptor2t::get_root_object(void) const
       tmp = &to_member2t(*tmp).source_value;
     else if (is_index2t(*tmp))
       tmp = &to_index2t(*tmp).source_value;
+    else if (is_typecast2t(*tmp))
+      tmp = &to_typecast2t(*tmp).from;
     else
       return *tmp;
   } while (1);
@@ -2054,10 +2066,6 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", "", ""};
-std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
-std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", "", ""};
 std::string equality2t::field_names [esbmct::num_type_fields]  =
@@ -2125,9 +2133,10 @@ std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 std::string address_of2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
 std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "", ""};
+{ "big_endian", "source_value", "source_offset", "extract_guard", ""};
 std::string byte_update2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "update_value", ""};
+{ "big_endian", "source_value", "source_offset", "update_value",
+  "update_guard"};
 std::string with2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names [esbmct::num_type_fields]  =
@@ -2275,10 +2284,6 @@ template class esbmct::expr_methods<symbol2t, symbol_data,
     unsigned int, symbol_data, &symbol_data::node_num>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<if2t, if_data,
     expr2tc, if_data, &if_data::cond,
     expr2tc, if_data, &if_data::true_value,
@@ -2375,12 +2380,14 @@ template class esbmct::expr_methods<address_of2t, pointer_ops,
 template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
     bool, byte_extract_data, &byte_extract_data::big_endian,
     expr2tc, byte_extract_data, &byte_extract_data::source_value,
-    expr2tc, byte_extract_data, &byte_extract_data::source_offset>;
+    expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+    expr2tc, byte_extract_data, &byte_extract_data::extract_guard>;
 template class esbmct::expr_methods<byte_update2t, byte_update_data,
     bool, byte_update_data, &byte_update_data::big_endian,
     expr2tc, byte_update_data, &byte_update_data::source_value,
     expr2tc, byte_update_data, &byte_update_data::source_offset,
-    expr2tc, byte_update_data, &byte_update_data::update_value>;
+    expr2tc, byte_update_data, &byte_update_data::update_value,
+    expr2tc, byte_update_data, &byte_update_data::update_guard>;
 template class esbmct::expr_methods<with2t, with_data,
     expr2tc, with_data, &with_data::source_value,
     expr2tc, with_data, &with_data::update_field,

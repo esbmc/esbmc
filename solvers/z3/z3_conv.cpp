@@ -56,6 +56,8 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
 {
   this->int_encoding = int_encoding;
 
+  extract_global_vars();
+
   smtlib = smt;
   store_assumptions = (smt || uw);
   s_is_uw = uw;
@@ -63,6 +65,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
+  defer_byte_ops = config.options.get_bool_option("defer-byte-op-smt");
 
   z3::config conf;
   conf.set("MODEL", true);
@@ -76,15 +79,15 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   ctx.init(conf, int_encoding);
 
   z3_ctx = ctx;
-  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB_COMPLIANT);
+  Z3_set_ast_print_mode(z3_ctx, Z3_PRINT_SMTLIB2_COMPLIANT);
 
   solver = z3::solver(ctx);
 
   setup_pointer_sort();
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
-  addr_space_data.push_back(std::map<unsigned, unsigned>());
-  total_mem_space.push_back(0);
+  addr_space_data.push_back(std::map<unsigned, z3::expr>());
+  label_map.push_back(std::map<std::string, unsigned>());
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -143,6 +146,7 @@ void
 z3_convt::push_ctx(void)
 {
 
+assert(0 && "Multi-level Z3 contexts will explode with lazy pointer dereferencing");
   prop_convt::push_ctx();
   intr_push_ctx();
   solver.push();
@@ -192,7 +196,7 @@ z3_convt::intr_push_ctx(void)
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   addr_space_data.push_back(addr_space_data.back());
-  total_mem_space.push_back(total_mem_space.back());
+  label_map.push_back(label_map.back());
 
   // Store where we are in the list of assumpts.
   std::list<z3::expr>::iterator it = assumpt.end();
@@ -219,7 +223,7 @@ z3_convt::intr_pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
-  total_mem_space.pop_back();
+  label_map.pop_back();
 
   level_ctx--;
 }
@@ -341,8 +345,8 @@ z3_convt::init_addr_space_array(void)
   assert_formula(constraint);
 
   // Record the fact that we've registered these objects
-  addr_space_data.back()[0] = 0;
-  addr_space_data.back()[1] = 0;
+  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(0, ctx.esbmc_int_val(0)));
+  addr_space_data.back().insert(std::pair<unsigned,z3::expr>(1, ctx.esbmc_int_val(0)));
 
   return;
 }
@@ -447,6 +451,24 @@ z3_convt::fixed_point(std::string v, unsigned width)
 }
 
 void
+z3_convt::extract_global_vars(void)
+{
+  forall_symbols(it, ns.get_context().symbols) {
+    if (it->second.static_lifetime && !it->second.is_extern) {
+      type2tc t;
+      migrate_type(it->second.type, t);
+
+      if (!is_array_type(t) || to_array_type(t).size_is_infinite)
+        continue;
+
+      symbol2t rec(t, it->second.name, symbol2t::renaming_level::level2_global,
+                   0, 1, 0, 0);
+      inited_global_names.insert(rec);
+    }
+  }
+}
+
+void
 z3_convt::finalize_pointer_chain(unsigned int objnum)
 {
   unsigned int num_ptrs = addr_space_data.back().size();
@@ -517,10 +539,15 @@ z3::check_result
 z3_convt::check2_z3_properties(void)
 {
   z3::check_result result;
+  bool replaced_things;
   unsigned i;
   std::string literal;
   z3::expr_vector assumptions(ctx);
 
+redo: // That's right, we'll be using gotos.
+
+  replaced_things = false;
+  assumptions.resize(0);
   assumptions_status = assumpt.size();
 
   if (uw) {
@@ -551,13 +578,77 @@ z3_convt::check2_z3_properties(void)
     result = solver.check();
   }
 
-  if (result == z3::sat)
+  // Turn off byte operation deferral when we're un-deferring things.
+  bool old_defer_val = defer_byte_ops;
+  defer_byte_ops = false;
+
+  if (result == z3::sat) {
     model = solver.get_model();
+
+    std::list<struct deferred_byte_op_data>::iterator tmp;
+    for (std::list<struct deferred_byte_op_data>::iterator
+         it = deferred_derefs_constoffs.begin();
+         it != deferred_derefs_constoffs.end(); it++) {
+      if (maybe_undefer_byte_op(&*it)) {
+        replaced_things = true;
+        tmp = it;
+        tmp++;
+        deferred_derefs_constoffs.erase(it);
+        it = tmp;
+      }
+    }
+
+    // If we didn't change anything with constant offsets, try the dynamic
+    // ones.
+    if (!replaced_things) {
+      for (std::list<struct deferred_byte_op_data>::iterator
+           it = deferred_derefs_dynoffs.begin();
+           it != deferred_derefs_dynoffs.end(); it++) {
+        if (maybe_undefer_byte_op(&*it)) {
+          replaced_things = true;
+          tmp = it;
+          tmp++;
+          deferred_derefs_dynoffs.erase(it);
+          it = tmp;
+        }
+      }
+    }
+  }
+
+  defer_byte_ops = old_defer_val;
+  if (replaced_things)
+    goto redo;
 
   if (config.options.get_bool_option("dump-z3-assigns") && result == z3::sat)
     std::cout << Z3_model_to_string(z3_ctx, model);
 
   return result;
+}
+
+bool
+z3_convt::maybe_undefer_byte_op(const deferred_byte_op_data *d)
+{
+
+  z3::expr guard = model.eval(static_cast<const z3::expr&>(d->guard), false);
+  if (Z3_get_bool_value(ctx, guard) == Z3_L_TRUE) {
+    z3::expr exp;
+
+    const expr2t &e = *d->extract;
+    if (is_byte_extract2t(e)) {
+      convert_smt_expr(static_cast<const byte_extract2t&>(e),
+                       (static_cast<void*>(&exp)));
+    } else {
+      assert(is_byte_update2t(e));
+      convert_smt_expr(static_cast<const byte_update2t&>(e),
+                       (static_cast<void*>(&exp)));
+    }
+
+    z3::expr eq = d->free == exp;
+    solver.add(eq);
+    return true;
+  } else {
+    return false;
+  }
 }
 
 void
@@ -1557,6 +1648,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
     convert_identifier_pointer(obj.ptr_obj, identifier, output);
+  } else if (is_constant_array2t(obj.ptr_obj)) {
+    // XXXjmorse - this whole thing should be avoided anyway.
+    const constant_array2t &arr = to_constant_array2t(obj.ptr_obj);
+    std::string identifier =
+      "address_of_array_const(" + arr.pretty(0) + ")";
+    convert_identifier_pointer(obj.ptr_obj, identifier, output);
+
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
@@ -1574,8 +1672,200 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
                                        to_typecast2t(obj.ptr_obj).from));
     tmp.get()->type = obj.type;
     convert_bv(tmp, output);
+  } else if (is_byte_extract2t(obj.ptr_obj)) {
+    // Address of an extract is the address of whatever we're extracting from,
+    // plus the offset of the extract.
+    const byte_extract2t &extract = to_byte_extract2t(obj.ptr_obj);
+    expr2tc new_addrof(new address_of2t(char_type2(), extract.source_value));
+    expr2tc add(new add2t(new_addrof->type, new_addrof, extract.source_offset));
+    convert_bv(add, output);
   } else {
     throw new conv_error("Unrecognized address_of operand");
+  }
+}
+
+z3::expr
+z3_convt::extract_from_struct_field(const type2tc &type, bool be,
+                                    unsigned int field_idx,
+                                    const expr2tc &field_offset,
+                                    const expr2tc &expr,
+                                    const expr2tc &extract_guard)
+{
+  z3::expr output;
+  const struct_type2t &struct_type = to_struct_type(expr->type);
+  assert(field_idx < struct_type.members.size());
+
+  // Select field from source
+  expr2tc item(new member2t(struct_type.members[field_idx], expr,
+                            struct_type.member_names[field_idx]));
+
+  // And select an appropriately sized chunk from that.
+  expr2tc new_extract(new byte_extract2t(type, be, item, field_offset,
+                                         extract_guard));
+
+  convert_bv(new_extract, output);
+  return output;
+}
+
+void
+z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
+                                     unsigned int width,
+                                     z3::expr &array, unsigned int array_offs,
+                                     const expr2tc &extract_guard)
+{
+  unsigned int i;
+
+  for (i = 0; i < width; i++) {
+    expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
+    expr2tc extract_byte(new byte_extract2t(
+          type_pool.get_uint8(), be, data, offs, extract_guard));
+    z3::expr byte;
+
+    // Call directly to avoid caching. Could put the byte_extract on the
+    // stack, but it's extremely iffy.
+    convert_smt_expr(static_cast<const byte_extract2t &>(*extract_byte.get()),
+                reinterpret_cast<void*>(&byte));
+
+    // And put that byte into the array.
+    z3::expr idx = ctx.esbmc_int_val(array_offs + i);
+    array = store(array, idx, byte);
+  }
+
+  return;
+}
+
+void
+z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
+{
+
+  // So; this routine is called when we're extracting data out of some object,
+  // but don't have a fixed offset to extract from. In this case, potentially
+  // any byte of data could be extracted. So, we have to potentially extract
+  // from any position in our source value.
+  //
+  // In the past I implemented this to just pump all data in an object into a
+  // bit-vector, then shift the desired offset to the right position, and
+  // extract the desired amount of data. However, some tests have structs with
+  // thousands of bytes of data, and it turns out Z3 doesn't react well to
+  // having such huge bitvectors, running out of memory extremely switftly.
+  //
+  // So instead, extract a series of bytes from the object, into an array. Then
+  // select out and reconstruct into whatever sort we want. This has the benefit
+  // that we can just use the existing byte_extract routine to get each byte.
+  //
+  // That leaves leaves one final problematic situation: extracting from
+  // dynamically sized arrays. Here we don't know what element to extract from.
+  // Or whether we cross an element bound. So the only option is to
+  // nondeterministically select the first element it can /possibly/ be, then
+  // extract all data up to the last element it can /possibly/ be. Then
+  // reconstruct from that selected data.
+
+  try {
+    unsigned long width, i;
+    width = data.source_value->type->get_width() / 8;
+
+    // We're a fixed sized piece of data. Fetch bytes from it and store them
+    // into a fresh array.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+
+    // If this is already an array of single bytes (for example, malloc'd data)
+    // then don't bother building the part array, because we already have it.
+    if (is_array_type(data.source_value->type) &&
+        to_array_type(data.source_value->type).subtype->get_width() == 8){
+      convert_bv(data.source_value, part_array);
+    } else {
+      build_part_array_from_elem(data.source_value, data.big_endian, width,
+                                 part_array, 0, data.extract_guard);
+    }
+
+    // Extracted; now rebuild from that array. If we go out of bounds, we'll
+    // just get a free value, and some assertion elsewhere should pick this up.
+    unsigned long output_width = data.type->get_width() / 8;
+    z3::expr offs;
+    convert_bv(data.source_offset, offs);
+    for (i = 0; i < output_width; i++) {
+      if (i == 0) {
+        output = select(part_array, offs);
+      } else {
+        z3::expr byte = select(part_array, offs);
+
+        // How we stitch bytes together also depends on endianness.
+        if (data.big_endian)
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+        else
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
+      }
+
+      offs = offs + ctx.esbmc_int_val(1);
+    }
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    // K, a dynamic array. We need to select enough elements and then munge it.
+    const array_type2t &arr = static_cast<const array_type2t&>
+                                         (*data.source_value->type.get());
+    unsigned long elem_size = arr.subtype->get_width() / 8;
+    unsigned long output_width = data.type->get_width() / 8;
+
+    // And the number of elements is...
+    unsigned long max_num_elems = output_width / elem_size;
+    // If extract size is more than one, and elements are larger than one, we
+    // might go over an element boundry at the start/end too.
+    if (elem_size != 1 && output_width != 1)
+      max_num_elems++;
+
+    // Generate an array to store goo in,
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+
+    // Right; iterate through some arrays.
+    z3::expr the_array, source_offset;
+    convert_bv(data.source_value, the_array);
+    convert_bv(data.source_offset, source_offset);
+    z3::expr idx = mk_div(source_offset, ctx.esbmc_int_val(elem_size), true);
+    unsigned long i, j;
+    for (i = 0; i < max_num_elems; i++) {
+      expr2tc iter(new constant_int2t(uint_type2(), BigInt(i)));
+      expr2tc idx(new add2t(uint_type2(), data.source_offset, iter));
+      expr2tc selection(new index2t(arr.subtype, data.source_value, idx));
+
+      for (j = 0; j < elem_size; j++) {
+        build_part_array_from_elem(selection, data.big_endian, elem_size,
+                                   part_array, i * elem_size,
+                                   data.extract_guard);
+      }
+    }
+
+    // We now have a part array containing our desired lumps of data.
+    z3::expr byte, offs;
+    // Number of bytes up to the first element in the part array,
+    offs = mk_div(source_offset, ctx.esbmc_int_val(elem_size), true);
+    // Turn source offset into an offset into the part array.
+    offs = source_offset - offs;
+
+    for (i = 0; i < output_width; i++) {
+      if (i == 0) {
+        output = select(part_array, offs);
+      } else {
+        byte = select(part_array, offs);
+
+        // How we stitch bytes together also depends on endianness.
+        if (data.big_endian)
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+        else
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, byte, output));
+      }
+
+      offs = offs + ctx.esbmc_int_val(1);
+    }
+  }
+
+  // Just like byte extract, optionally cast up to being a pointer.
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
+    type2tc sz = type_pool.get_uint(data.type->get_width());
+    expr2tc sym = label_formula("byte_extract", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
   }
 }
 
@@ -1584,96 +1874,474 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  assert(!int_encoding && "Can't byte extract in integer mode");
+
+  bool is_const_offs = is_constant_int2t(data.source_offset);
+
+  if (defer_byte_ops) {
+    z3::sort sa;
+    z3::expr guard;
+    convert_bv(data.extract_guard, guard);
+    convert_type(data.type, sa);
+    output = ctx.fresh_const("deferred_deref_", sa);
+
+    struct deferred_byte_op_data d;
+    d.free = output;
+    d.extract = &data;
+    d.guard = guard;
+
+    if (is_const_offs)
+      deferred_derefs_constoffs.push_back(d);
+    else
+      deferred_derefs_dynoffs.push_back(d);
+
+    return;
+  }
+
+  if (!is_const_offs) {
+    dynamic_offs_byte_extract(data, output);
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
-
-  unsigned width;
-  width = data.source_value->type->get_width();
-  // XXXjmorse - looks like this only ever reads a single byte, not the desired
-  // number of bytes to fill the type.
-
-  uint64_t upper, lower;
-  if (!data.big_endian) {
-    upper = ((intref.constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
-    lower = intref.constant_value.to_long() * 8; //i*w;
-  } else {
-    uint64_t max = width - 1;
-    upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
-    lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+  unsigned long sel_sz = data.type->get_width() / 8;
+  uint64_t offset = intref.constant_value.to_ulong();
+  unsigned long all_data_sz = data.source_value->type->get_width() / 8;
+  if (offset + sel_sz > all_data_sz) {
+    z3::sort s;
+    convert_type(data.type, s);
+    output = ctx.fresh_const(NULL, s);
+    return;
   }
 
   z3::expr source;
 
   convert_bv(data.source_value, source);
 
-  if (int_encoding) {
-    if (is_fixedbv_type(data.source_value->type)) {
-      if (is_bv_type(data.type)) {
-        z3::expr tmp;
-	source = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, source));
-	tmp = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, source));
-	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
-	if (is_signedbv_type(data.type))
-	  output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 1));
-	else
-	  output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 0));
-      } else {
-	throw new conv_error("unsupported type for byte_extract");
-      }
-    } else if (is_bv_type(data.source_value->type)) {
-      z3::expr tmp;
-      tmp = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, source));
+  if (is_struct_type(data.source_value->type)) {
+    const struct_type2t &struct_type = to_struct_type(data.source_value->type);
+    uint64_t total_sz = 0, cur_item_sz = 0;
+    unsigned int idx = 0;
+    // The following can't throw as extracting variable size data would be wrong
 
-      if (width >= upper)
-	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, tmp));
-      else
-	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper - lower, 0, tmp));
+    std::vector<type2tc>::const_iterator it;
+    for (it = struct_type.members.begin(); it != struct_type.members.end();
+         it++, idx++) {
+      cur_item_sz = (*it)->get_width() / 8;
+      if (total_sz + cur_item_sz > offset)
+        break;
+      total_sz += cur_item_sz;
+    }
 
-      if (is_signedbv_type(data.source_value->type))
-	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 1));
-      else
-	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 0));
+    assert(it != struct_type.members.end() &&
+           "Unexpected struct extract past end of struct");
+
+    // Is the selection entirely in the bounds of one field of this struct?
+    if (total_sz + cur_item_sz >= offset + sel_sz) {
+      // Yes, so just select from one of them.
+      // Make offs the offset into this item.
+      unsigned long item_offs = offset -= total_sz;
+      expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(item_offs)));
+      output = extract_from_struct_field(data.type, data.big_endian, idx,
+                                         new_offs, data.source_value,
+                                         data.extract_guard);
     } else {
-      throw new conv_error("unsupported type for byte_extract");
-    }
-  } else {
-    if (is_struct_type(data.source_value->type)) {
-      const struct_type2t &struct_type =to_struct_type(data.source_value->type);
-      unsigned i = 0, num_elems = struct_type.members.size();
-      z3::expr struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+      // No; potentially many fields if there're a series of bytes. So iterate
+      // over fields from here, selecting out the necessary number of bytes.
+      std::list<z3::expr> extracted_data;
 
-      forall_types(it, struct_type.members) {
-        struct_elem[i] = mk_tuple_select(source, i);
-        i++;
+      unsigned int accuml_offs = offset;
+      for (; it != struct_type.members.end(); it++, idx++) {
+        if (total_sz >= offset + sel_sz)
+          break;
+
+        unsigned int cur_offs = accuml_offs - total_sz;
+        unsigned int immediate_sz = cur_item_sz - cur_offs;
+        type2tc getsz = type_pool.get_uint(immediate_sz * 8);
+        expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
+        output = extract_from_struct_field(getsz, data.big_endian, idx,
+                                           new_offs, data.source_value,
+                                           data.extract_guard);
+        extracted_data.push_back(output);
+
+        total_sz += cur_item_sz;
+        accuml_offs += immediate_sz;
       }
 
-      for (unsigned k = 0; k < num_elems; k++)
-        struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
-
-      for (unsigned k = 0; k < num_elems; k++)
-      {
-        if (k == 1)
-          struct_elem_inv[num_elems] = z3::to_expr(ctx, Z3_mk_concat(
-            z3_ctx, struct_elem_inv[k - 1], struct_elem_inv[k]));
-        else if (k > 1)
-          struct_elem_inv[num_elems] = z3::to_expr(ctx, Z3_mk_concat(
-            z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]));
+      bool first = true;
+      for (std::list<z3::expr>::const_iterator it = extracted_data.begin();
+           it != extracted_data.end(); it++) {
+        if (first) {
+          output = *it;
+          first = false;
+        } else {
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, *it, output));
+        }
       }
 
-      source = struct_elem_inv[num_elems];
+      // Is there additional data hanging off the end?
+      if (total_sz > sel_sz)
+        output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (sel_sz * 8) - 1, 0, output));
+    }
+  } else if (is_array_type(data.source_value->type) ||
+             is_string_type(data.source_value->type)) {
+    const type2tc &subtype = (is_string_type(data.source_value->type))
+                ? char_type2() : to_array_type(data.source_value->type).subtype;
+    uint64_t elem_size = subtype->get_width() / 8;
+
+    // We have an array; pick an element.
+    uint64_t elem = offset / elem_size;
+    uint64_t sub_offs = offset % elem_size;
+
+    // Is the selection entirely in the bounds of one element?
+    if (elem_size - sub_offs >= sel_sz) {
+      // Yes, so just select from one of them.
+      expr2tc the_elem(new index2t(subtype, data.source_value,
+                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+      // And the remaining offset...
+      expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
+      expr2tc subfetch(new byte_extract2t(data.type, data.big_endian,
+                                          the_elem, remainder,
+                                          data.extract_guard));
+      convert_bv(subfetch, output);
+    } else {
+      // No: produce a series of extracts for each element of the array we're
+      // going to have to access, convert, concat.
+      std::list<expr2tc> extract_list;
+
+      unsigned int remaining = sel_sz;
+      unsigned int cur_offs = sub_offs;
+      while (remaining > 0) {
+        unsigned int to_extract = elem_size - cur_offs;
+        to_extract = std::min(to_extract, remaining);
+        expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem)));
+        expr2tc index(new index2t(subtype, data.source_value, idx));
+        expr2tc offs(new constant_int2t(uint_type2(), cur_offs));
+        expr2tc ext(new byte_extract2t(type_pool.get_uint(to_extract * 8),
+                                       data.big_endian, index, offs,
+                                       data.extract_guard));
+        extract_list.push_back(ext);
+        cur_offs = 0;
+        ++elem;
+        remaining -= to_extract;
+      }
+
+      std::list<z3::expr> expr_list;
+      for (std::list<expr2tc>::const_iterator it = extract_list.begin();
+           it != extract_list.end(); it++) {
+        // Don't convert_bv, no point caching this.
+        (*it)->convert_smt(*this, reinterpret_cast<void*>(&output));
+        expr_list.push_back(output);
+      }
+
+      bool first = true;
+      for (std::list<z3::expr>::const_iterator it = expr_list.begin();
+           it != expr_list.end(); it++) {
+        if (first) {
+          output = *it;
+          first = false;
+        } else {
+          output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, *it, output));
+        }
+      }
+    }
+  } else if (is_number_type(data.source_value->type)) {
+    unsigned width = data.source_value->type->get_width();
+    uint64_t upper, lower;
+
+    if (!data.big_endian) {
+      upper = ((offset + sel_sz) * 8) - 1; //((i+1)*w)-1;
+      lower = offset * 8; //i*w;
+    } else {
+      uint64_t max = width - 1;
+      upper = max - (offset * 8); //max-(i*w);
+      lower = max - ((offset + sel_sz) * 8 - 1); //max-((i+1)*w-1);
     }
 
-    unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, source));
-    if (sort_sz < upper) {
-      // Extends past the end of this data item. Should be fixed in some other
-      // dedicated feature branch, in the meantime stop Z3 from crashing
-      z3::sort s = ctx.bv_sort(8);
+    // We can just extract out of the converted source.
+    output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
+  } else if (is_pointer_type(data.source_value->type)) {
+    // If this extract perfectly extracts a pointer from a pointer, just return
+    // this field. Otherwise, cast to bits.
+    if (is_pointer_type(data.type) && offset == 0) {
+      convert_bv(data.source_value, output);
+    } else {
+      expr2tc cast_to_intrep(new
+                     typecast2t(type_pool.get_uint(config.ansi_c.pointer_width),
+                                  data.source_value));
+      type2tc extract_size = type_pool.get_uint(sel_sz * 8);
+      expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
+                                         cast_to_intrep, data.source_offset,
+                                         data.extract_guard));
+      convert_bv(extract, output);
+    }
+  } else if (is_bool_type(data.source_value->type)) {
+    // If offset isn't zero, completely free value, and something elsewhere
+    // should catch this as a bounds violation.
+    if (!intref.constant_value.is_zero()) {
+      z3::sort s;
+      convert_type(data.type, s);
       output = ctx.fresh_const(NULL, s);
-    } else {
-      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
     }
+
+    // Treat a boolean as a zero or one byte. This is potentially an incomplete
+    // model.
+    z3::expr t_val = ctx.bv_val(1, 8);
+    z3::expr f_val = ctx.bv_val(0, 8);
+    z3::expr res = ite(source, t_val, f_val);
+
+    // If a size greater than 1 byte has been requested, tack some more free
+    // bits on the end.
+    unsigned long desired_size = data.type->get_width();
+    if (desired_size > 8) {
+      z3::expr free_bits = ctx.fresh_const(NULL, ctx.bv_sort(desired_size));
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, res, free_bits));
+    } else {
+      output = res;
+    }
+  } else if (is_union_type(data.source_value->type)) {
+    // Work out what union field we should be working on, and extract again
+    // on the extraction of that from the union.
+    union_varst::const_iterator cache_result;
+
+    if (is_symbol2t(data.source_value)) {
+      const symbol2t &sym = to_symbol2t(data.source_value);
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
+    } else {
+      cache_result = union_vars.end();
+    }
+
+    if (cache_result == union_vars.end())
+      throw new
+        conv_error("byte_extract from union can't determine correct field");
+
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*data.source_value->type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const type2tc source_type = members[cache_result->idx];
+    const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
+
+    expr2tc member(new member2t(source_type, data.source_value, fieldname));
+    expr2tc new_extract(new byte_extract2t(data.type, data.big_endian,
+                                           member, data.source_offset,
+                                           data.extract_guard));
+
+    convert_bv(new_extract, output);
+  } else {
+    // Everything /should/ be covered, but...
+    throw new conv_error("Unexpected irep type in byte_extract");
+  }
+
+  // If a pointer is desired, // produce it via the medium of a typecast.
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
+    type2tc sz = type_pool.get_uint(sel_sz * 8);
+    expr2tc sym = label_formula("byte_extract", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
+  }
+
+  return;
+}
+
+void
+z3_convt::byte_swap_expr(const expr2tc &data, z3::expr &output)
+{
+  unsigned int w = data->type->get_width() / 8, i;
+  assert(w <= 8 && "Non-native sized integer in byte_swap_expr");
+  z3::expr byte, tmp;
+  convert_bv(data, tmp);
+
+  for (i = 0; i < w; i++) {
+    byte = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (i*8)+7, i*8, tmp));
+    if (i == 0)
+      output = byte;
+    else
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, byte));
+  }
+}
+
+void
+z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
+{
+  // Follow similar approach to extracting with a dynamic offset; convert
+  // everything into a part array, representing the object in a byte array.
+  // Then update some fields. Then reconstruct the original object from the
+  // part array, which will be expensive.
+  //
+  // For dynamically sized arrays, the usual rotating occurs.
+
+  unsigned int update_width = data.update_value->type->get_width();
+
+  try {
+    unsigned long width, i;
+    width = data.source_value->type->get_width();
+
+    // First, fetch an array of all the data we have.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(), ctx.bv_sort(8));
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+
+    // However, if we're already dealing with a byte array, no point
+    // constructing a part array from it.
+    if (is_array_type(data.source_value->type) &&
+        to_array_type(data.source_value->type).subtype->get_width() == 8) {
+      convert_bv(data.source_value, part_array);
+    } else {
+      build_part_array_from_elem(data.source_value, data.big_endian, width / 8,
+                                 part_array, 0, data.update_value);
+    }
+
+    // Now, update the appropriate fields.
+    z3::expr offs_into_array;
+    convert_bv(data.source_offset, offs_into_array);
+    for (i = 0; i < update_width / 8; i++) {
+      expr2tc offs_into_update(new constant_int2t(uint_type2(), BigInt(i)));
+      expr2tc ext(new byte_extract2t(char_type2(), data.big_endian,
+                                     data.update_value, offs_into_update,
+                                     data.update_guard));
+      z3::expr byte;
+      convert_bv(ext, byte);
+      part_array = store(part_array, offs_into_array, byte);
+      offs_into_array = offs_into_array + ctx.esbmc_int_val(1);
+    }
+
+    // That's now the array updated; we now need to rebuild the data object into
+    // the shape that it should be.
+    type2tc arr_type(new array_type2t(char_type2(), expr2tc(), i));
+    expr2tc sym = label_formula("byte_update_recombine", arr_type, part_array);
+
+    // Loop over part array, selecting bytes, and updating into our current
+    // value. This may, in the end, be vastly inefficient, but it'll work. A
+    // potential optimisation for the future is pre-combining bytes into the
+    // sizes that we're going to be inserting, rather than doing it byte by byte
+    //
+    // I forgot the Z3 backend is O(n^2/2); which doesn't work well with 4096
+    // byte arrays. So instead, do it piece by piece, linked with labels. Not
+    // the most memory efficient, but a worthy tradeoff.
+    //
+    // Unless the output is a byte array, in which case we just store into it.
+    if (is_array_type(data.source_value->type) &&
+        is_bv_type(to_array_type(data.source_value->type).subtype)) {
+      // Just produce a series of stores
+      expr2tc accuml = data.source_value;
+      expr2tc idx = data.source_offset;
+      expr2tc one = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
+      for (i = 0; i < update_width / 8; i++) {
+        expr2tc offs(new constant_int2t(uint_type2(), i));
+        expr2tc byte(new byte_extract2t(char_type2(), data.big_endian,
+                                        data.update_value, offs,
+                                        data.update_guard));
+        accuml = expr2tc(new with2t(accuml->type, accuml, idx, byte));
+        idx = expr2tc(new add2t(uint_type2(), idx, one));
+      }
+      convert_bv(accuml, out);
+    } else {
+      z3::expr accuml;
+      type2tc top_type = data.source_value->type;
+      convert_bv(data.source_value, accuml);
+      for (i = 0; i < width / 8; i++) {
+        expr2tc label = label_formula("byte_update_depth_shim",
+                                      top_type, accuml);
+        expr2tc offs(new constant_int2t(uint_type2(), i));
+        expr2tc sel(new index2t(char_type2(), sym, offs));
+        expr2tc updated(new byte_update2t(top_type, data.big_endian,
+                                           label, offs, sel,
+                                           data.update_value));
+        convert_bv(updated, accuml);
+      }
+      out = accuml;
+    }
+
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    const array_type2t &arr = to_array_type(data.source_value->type);
+    unsigned int elem_width = arr.subtype->get_width();
+
+
+    // Calcluate the number of elements we're going to be working on.
+    unsigned int num_elems;
+    if (update_width == 8) {
+      num_elems = 1;
+    } else {
+      // Starting point
+      num_elems = 1;
+      // Every additional element's size can overlap another element.
+      num_elems += update_width / elem_width;
+      // If there's a nonzero tail, that too can overlap another element.
+      if (update_width % elem_width != 0)
+        num_elems++;
+    }
+
+    // Offset into first element we'll be working on.
+    expr2tc one(new constant_int2t(uint_type2(), BigInt(1)));
+    expr2tc elem_sz_expr(new constant_int2t(uint_type2(),BigInt(elem_width/8)));
+    expr2tc cur_elem(new div2t(uint_type2(), data.source_offset, elem_sz_expr));
+
+    // And, start selecting elements then dumping data into them.
+    z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(),ctx.bv_sort(8));
+    unsigned int i, part_array_offs = 0;
+    z3::expr part_array = ctx.fresh_const(NULL, array_sort);
+    for (i = 0; i < num_elems; i++) {
+      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+
+      build_part_array_from_elem(select, data.big_endian, elem_width / 8,
+                                 part_array, 0, data.update_guard);
+
+      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+
+      part_array_offs += elem_width / 8;
+    }
+
+    // Turn the udpate value into a byte array
+    z3::expr update_array = ctx.fresh_const(NULL, array_sort);
+    build_part_array_from_elem(data.update_value, data.big_endian,
+                               update_width / 8, update_array, 0,
+                               data.update_guard);
+
+    expr2tc offs_into_first_elem(new modulus2t(uint_type2(), data.source_offset,
+                                               elem_sz_expr));
+    z3::expr update_offs;
+    convert_bv(offs_into_first_elem, update_offs);
+
+    // The part array now contains N elements worth of data. Update them.
+    z3::expr byte;
+    for (i = 0; i < update_width / 8; i++) {
+      byte = select(update_array, i);
+      part_array = store(part_array, update_offs, byte);
+      update_offs = update_offs + ctx.esbmc_int_val(1);
+    }
+
+    // And now, rebuild from that part array.
+    cur_elem = expr2tc(new div2t(uint_type2(), data.source_offset,
+                                 elem_sz_expr));
+    type2tc arr_type(new array_type2t(char_type2(), expr2tc(), i));
+    expr2tc sym = label_formula("byte_update_dyn", arr_type, part_array);
+    expr2tc accuml = data.source_value;
+
+    for (i = 0; i < num_elems; i++) {
+      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+
+      unsigned int j;
+      expr2tc elem_offs(new constant_int2t(uint_type2(), BigInt(0)));
+      for (j = 0; j < elem_width / 8; j++) {
+        expr2tc offs(new constant_int2t(uint_type2(), (i * (elem_width/8)) +j));
+        expr2tc sel(new index2t(char_type2(), sym, offs));
+        select = expr2tc(new byte_update2t(select->type, data.big_endian,
+                                           select, elem_offs, sel,
+                                           data.update_value));
+        elem_offs = expr2tc(new add2t(uint_type2(), elem_offs, one));
+      }
+
+      accuml = expr2tc(new with2t(accuml->type, accuml, cur_elem, select));
+      z3::expr newelem, pos;
+      convert_bv(select, newelem);
+      convert_bv(cur_elem, pos);
+
+      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+      update_offs = ctx.esbmc_int_val(0);
+    }
+
+    // Good grief, that whole thing is massive.
+    convert_bv(accuml, out);
   }
 }
 
@@ -1682,60 +2350,276 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  // op0 is the object to update
-  // op1 is the byte number
-  // op2 is the value to update with
+  assert(!int_encoding && "Can't byte update in integer mode");
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  bool is_const_offs = is_constant_int2t(data.source_offset);
+
+  if (defer_byte_ops) {
+    z3::sort sa;
+    z3::expr guard;
+    convert_bv(data.update_guard, guard);
+    convert_type(data.type, sa);
+    output = ctx.fresh_const("deferred_update_", sa);
+
+    struct deferred_byte_op_data d;
+    d.free = output;
+    d.extract = &data;
+    d.guard = guard;
+
+    if (is_const_offs)
+      deferred_derefs_constoffs.push_back(d);
+    else
+      deferred_derefs_dynoffs.push_back(d);
+
+    return;
+  }
+
+  if (!is_const_offs) {
+    byte_update_via_part_array(data, output);
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
+  unsigned long offset = intref.constant_value.to_ulong() * 8;
 
-  z3::expr tuple, value;
-  uint width_op0, width_op2;
+  z3::expr source_value, update_value;
+  unsigned int insert_width;
 
-  convert_bv(data.source_value, tuple);
-  convert_bv(data.update_value, value);
+  convert_bv(data.source_value, source_value);
+  convert_bv(data.update_value, update_value);
 
-  width_op2 = data.update_value->type->get_width();
+  insert_width = data.update_value->type->get_width();
 
   if (is_struct_type(data.source_value->type)) {
     const struct_type2t &struct_type = to_struct_type(data.source_value->type);
-    bool has_field = false;
+    unsigned int offs_into_struct = 0;
+    unsigned int offs_into_update = 0;
+    unsigned int idx = 0;
 
-    // XXXjmorse, this isn't going to be the case if it's a with.
-
+    // First, iterate until we find the first element we want to deal with.
     forall_types(it, struct_type.members) {
-      width_op0 = (*it)->get_width();
+      unsigned int field_width = (*it)->get_width();
+      if (offs_into_struct + field_width > offset) {
+        // We have something to update. A potential future optimisation is to
+        // not juggle all this if the entire field is going to be replaced.
+        unsigned int offs_into_field = offset - offs_into_struct;
+        unsigned int bits_to_update = std::min<unsigned int>(insert_width,
+                                      offs_into_struct + field_width - offset);
+        type2tc update_sz = type_pool.get_uint(bits_to_update);
 
-      if (((*it)->type_id == data.update_value->type->type_id) &&
-          (width_op0 == width_op2))
-	has_field = true;
+        // Extract an appropriate amount of data from source.
+        expr2tc ext_offs(new constant_int2t(uint_type2(),
+                                            BigInt(offs_into_update / 8)));
+        expr2tc ext(new byte_extract2t(update_sz, data.big_endian,
+                                       data.update_value, ext_offs,
+                                       data.update_guard));
+
+        // Now, insert into this field,
+        expr2tc memb(new member2t(*it, data.source_value,
+                                  struct_type.member_names[idx]));
+        expr2tc memb_offs(new constant_int2t(uint_type2(),
+                                             BigInt(offs_into_field / 8)));
+        expr2tc update(new byte_update2t(*it, data.big_endian,
+                                         memb, memb_offs, ext,
+                                         data.update_guard));
+
+        z3::expr new_field;
+        convert_bv(update, new_field);
+        source_value = mk_tuple_update(source_value, idx, new_field);
+
+        offs_into_update += bits_to_update;
+        insert_width -= bits_to_update;
+      }
+
+      offs_into_struct += field_width;
+      idx++;
+
+      if (insert_width == 0)
+        break;
     }
 
-    if (has_field)
-      output = mk_tuple_update(tuple, intref.constant_value.to_long(), value);
-    else
-      output = z3::to_expr(ctx, tuple);
-  } else if (is_signedbv_type(data.source_value->type)) {
-    if (int_encoding) {
-      output = z3::to_expr(ctx, value);
+    // Don't allow lower check for conversion to pointers; it'll be confused
+    // because this struct is a z3 "datatype" too.
+    output = source_value;
+    return;
+  } else if (is_array_type(data.source_value->type)) {
+    // Pick an index to start at; progress through select and updating.
+    const array_type2t &arr = to_array_type(data.source_value->type);
+    unsigned int elem_size = arr.subtype->get_width();
+    unsigned int elem_idx = offset / elem_size;
+    unsigned int offs_into_elem = 0;
+    unsigned int offs_into_update = 0;
+
+    offs_into_elem = offset - (elem_idx * elem_size);
+    for (; ; elem_idx++) {
+      expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem_idx)));
+      expr2tc elem(new index2t(arr.subtype, data.source_value, idx));
+
+      // How many bits are we going to be writing today.
+      unsigned int write_bits = std::min<unsigned int>(insert_width,
+                                         elem_size - offs_into_elem);
+      type2tc sel_sz = type_pool.get_uint(write_bits);
+
+      // Fetch that many bits out of the update value.
+      expr2tc update_offs(new constant_int2t(uint_type2(),
+                                             BigInt(offs_into_update / 8)));
+      expr2tc ext(new byte_extract2t(sel_sz, data.big_endian,
+                                     data.update_value, update_offs,
+                                     data.update_guard));
+
+      // And update it into the array element.
+      expr2tc into_elem(new constant_int2t(uint_type2(), offs_into_elem / 8));
+      expr2tc update(new byte_update2t(arr.subtype, data.big_endian,
+                                       elem, into_elem, ext, data.update_guard));
+
+      z3::expr new_elem;
+      convert_bv(update, new_elem);
+      source_value = store(source_value, elem_idx, new_elem);
+
+      offs_into_update += write_bits;
+      insert_width -= write_bits;
+      offs_into_elem = 0;
+
+      if (insert_width == 0)
+        break;
+    }
+
+    output = source_value;
+    return;
+  } else if (is_union_type(data.source_value->type)) {
+    // Work out the most recent field used; extract from there.
+    union_varst::const_iterator cache_result;
+
+    if (is_symbol2t(data.source_value)) {
+      const symbol2t &sym = to_symbol2t(data.source_value);
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
+    } else {
+      cache_result = union_vars.end();
+    }
+
+    if (cache_result == union_vars.end())
+      throw new
+        conv_error("byte_update from union can't determine correct field");
+
+    const struct_union_data &data_ref =
+      dynamic_cast<const struct_union_data &>(*data.source_value->type);
+    const std::vector<type2tc> &members = data_ref.get_structure_members();
+    const type2tc source_type = members[cache_result->idx];
+    const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
+
+    expr2tc member(new member2t(source_type, data.source_value, fieldname));
+    expr2tc new_update(new byte_update2t(data.type, data.big_endian,
+                                           member, data.source_offset,
+                                           data.update_value,
+                                           data.update_guard));
+
+    z3::expr tmp;
+    convert_bv(new_update, tmp);
+    output = mk_tuple_update(source_value, cache_result->idx, tmp);
+  } else if (is_pointer_type(data.source_value->type)) {
+    // Make this a byte update with some casts; unless it's a pointer updating
+    // a pointer, in which case just return the new one.
+    if (offset >= data.source_value->type->get_width())
+      goto outofbounds;
+
+    if (offset == 0 && insert_width == data.source_value->type->get_width()) {
+      // We can just replace this.
+      output = update_value;
       return;
     }
 
-    width_op0 = data.source_value->type->get_width();
+    // Nope; typecasts and writes.
+    type2tc pointer_size =
+      type_pool.get_uint(data.source_value->type->get_width());
+    expr2tc cast(new typecast2t(pointer_size, data.source_value));
+    expr2tc new_update(data.clone());
+    to_byte_update2t(new_update).source_value = cast;
+    convert_bv(new_update, output);
+  } else if (is_number_type(data.source_value->type)) {
+    z3::expr top, bottom;
+    bool top_b = false, bottom_b = false;
+    unsigned int source_width = data.source_value->type->get_width();
 
-    if (width_op0 == 0)
-      // XXXjmorse - can this ever happen now?
-      throw new conv_error("failed to get width of byte_update operand");
+    if (offset >= source_width)
+      goto outofbounds;
 
-    if (width_op0 > width_op2)
-      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
-    else
-      throw new conv_error("unsupported irep for conver_byte_update");
+    // Work out where we're going to be inserting.
+    unsigned int upper, lower;
+    if (!data.big_endian) {
+      upper = (offset + insert_width) - 1; //((i+1)*w)-1;
+      lower = offset; //i*w;
+    } else {
+      uint64_t max = source_width - 1;
+      upper = max - offset; //max-(i*w);
+      lower = max - ((offset + insert_width) - 1); //max-((i+1)*w-1);
+
+      // Also, swap all the incoming byte around.
+      byte_swap_expr(data.update_value, update_value);
+    }
+
+    // If there's a chunk to keep at the top of the current data, extract
+    if (upper < source_width -1) {
+      // there's a top segment to extract.
+      top = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, source_width-1, upper+1,
+                                           source_value));
+      top_b = true;
+    }
+
+    // If there's a chunk at the bottom of current data, extract
+    if (lower > 0) {
+      bottom = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, lower - 1, 0,
+                           source_value));
+      bottom_b = true;
+    }
+
+    // Then join all these together, with the update value in the middle.
+    if (top_b) {
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, top, update_value));
+    } else {
+      output = update_value;
+    }
+
+    if (bottom_b) {
+      output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, bottom));
+    }
+
+    // Done
+  } else if (is_bool_type(data.source_value->type)) {
+    // Out of bounds?
+    if (offset != 0)
+      goto outofbounds;
+
+    // Is update value zero or not, -> the bool value.
+    z3::sort update_sort;
+    convert_type(data.update_value->type, update_sort);
+    z3::expr zero = ctx.num_val(0, update_sort);
+
+    z3::expr cond = zero == update_value;
+    output = ite(cond, ctx.bool_val(false), ctx.bool_val(true));
   } else {
-    throw new conv_error("unsupported irep for conver_byte_update");
+    throw new conv_error("unsupported irep for convert_byte_update");
   }
+
+  // Optionally cast to a pointer if requested.
+  if (is_pointer_type(data.type) && !output.is_datatype()) {
+    type2tc sz = type_pool.get_uint(output.get_sort().bv_size());
+    expr2tc sym = label_formula("byte_update", sz, output);
+
+    expr2tc cast(new typecast2t(data.type, sym));
+    convert_bv(cast, output);
+  }
+
+  return;
+
+outofbounds:
+  if (data.type == data.source_value->type) {
+    convert_bv(data.source_value, output);
+  } else {
+    expr2tc cast(new typecast2t(data.type, data.source_value));
+    convert_bv(cast, output);
+  }
+
+  return;
 
 }
 
@@ -2107,7 +2991,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   z3::expr obj_ids[addr_space_data.back().size()];
   z3::expr obj_starts[addr_space_data.back().size()];
 
-  std::map<unsigned,unsigned>::const_iterator it;
+  std::map<unsigned,z3::expr>::const_iterator it;
   unsigned int i;
   for (it = addr_space_data.back().begin(), i = 0;
        it != addr_space_data.back().end(); it++, i++)
@@ -2466,13 +3350,13 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
   //      N        N          N         Will never be fed here
   //      N        P          N         Expected arith option, then cast to int
   //      N        N          P            "
-  //      N        P          P         Not permitted by C spec
+  //      N        P          P         Element difference
   //      P        N          N         Return arith action with cast to pointer
   //      P        P          N         Calculate expected ptr arith operation
   //      P        N          P            "
-  //      P        P          P         Not permitted by C spec
+  //      P        P          P         Element difference
   //      NPP is the most dangerous - there's the possibility that an integer
-  //      arithmatic is going to lead to an invalid pointer, that falls out of
+  //      arithmetic is going to lead to an invalid pointer, that falls out of
   //      all dereference switch cases. So, we need to verify that all derefs
   //      have a finally case that asserts the val was a valid ptr XXXjmorse.
   int ret_is_ptr, op1_is_ptr, op2_is_ptr;
@@ -2486,8 +3370,34 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands");
+    {
+      // We're supposed to calculate the index difference between two pointers
+      // that have the same sub-object. First, check they're the same type.
+      const type2tc &type1 = ns.follow(side1->type);
+      const type2tc &type2 = ns.follow(side2->type);
+      assert(type1 == type2 &&
+             "Pointer subtraction must have same pointer type");
+
+      // Calculate the subtraction,
+      expr2tc cast1(new typecast2t(uint_type2(), side1));
+      expr2tc cast2(new typecast2t(uint_type2(), side2));
+      expr2tc sub(new sub2t(uint_type2(), cast1, cast2));
+
+      // And calculate what it is in pointer elements.
+      const pointer_type2t &ptr_type = to_pointer_type(type1);
+      const type2tc &subtype = ns.follow(ptr_type.subtype);
+      expr2tc elem_size;
+      if (is_empty_type(subtype)) {
+        // GCC extension, arith on void pointers has a multiplier of one.
+        elem_size = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
+      } else {
+        elem_size = expr2tc(new constant_int2t(uint_type2(),
+                                               subtype->get_width() / 8));
+      }
+      expr2tc result(new div2t(uint_type2(), sub, elem_size));
+      convert_bv(result, output);
       break;
+    }
     case 4:
       // Artithmatic operation that has the result type of ptr.
       // Should have been handled at a higher level
@@ -2501,7 +3411,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
       expr2tc add(new add2t(ptr_op->type, ptr_op, non_ptr_op));
-      // That'll generate the correct pointer arithmatic; now typecast
+      // That'll generate the correct pointer arithmetic; now typecast
       expr2tc cast(new typecast2t(type, add));
       convert_bv(cast, output);
       break;
@@ -2514,10 +3424,15 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
 
       // Actually perform some pointer arith
       const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-      typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-      type2tc followed_type;
-      migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+      type2tc followed_type = ns.follow(ptr_type.subtype);
+      mp_integer type_size;
+      if (!is_empty_type(followed_type)) {
+        type_size = pointer_offset_size(*followed_type);
+      } else {
+        // Empty type -> multiply by one. Unfortunate, but code out there
+        // does use it.
+        type_size = 1;
+      }
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
@@ -2537,7 +3452,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
         newexpr = expr2tc(new sub2t(inttype, tmp_op1, tmp_op2));
       }
 
-      // Voila, we have our pointer arithmatic
+      // Voila, we have our pointer arithmetic
       convert_bv(newexpr, output);
 
       // That calculated the offset; update field in pointer.
@@ -2592,6 +3507,23 @@ z3_convt::convert_expr(const expr2tc &expr)
   z3::expr formula, constraint;
 
   expr2tc new_expr;
+
+  // Strip out initial constraints on global variables, we'll rewrite those
+  // ourselves.
+  if (is_equality2t(expr)) {
+    const equality2t &eq = to_equality2t(expr);
+    if (is_symbol2t(eq.side_1)) {
+      if (inited_global_names.find(to_symbol2t(eq.side_1))
+          != inited_global_names.end())
+        return l;
+    }
+
+    if (is_symbol2t(eq.side_2)) {
+      if (inited_global_names.find(to_symbol2t(eq.side_2))
+          != inited_global_names.end())
+        return l;
+    }
+  }
 
   try {
     convert_bv(expr, constraint);
@@ -2662,13 +3594,17 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     expr2tc endisequal;
     try {
       uint64_t type_size = expr->type->get_width() / 8;
+
       expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     } catch (array_type2t::dyn_sized_array_excp *e) {
       // Dynamically (nondet) sized array; take that size and use it for the
       // offset-to-end expression.
-      const expr2tc size_expr = e->size;
+      // First divide it by eight, because it's in bits.
+      expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
+      expr2tc size_expr = expr2tc(new div2t(uint_type2(), e->size,eight));
+
       expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     } catch (type2t::symbolic_type_excp *e) {
@@ -2681,10 +3617,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
     }
 
-    // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() +=
-      pointer_offset_size(*expr->type.get()).to_long() + 1;
-
     // Assert that start + offs == end
     z3::expr offs_eq;
     convert_bv(endisequal, offs_eq);
@@ -2692,17 +3624,45 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
-    // of the address space (ie, wrap around). So, also assert that end > start
+    // of the address space (ie, wrap around). So, also assert that end > start.
+    // However, don't do that if the alloc size is 0, as that would be unsat.
+    expr2tc zero_size_alloc(new equality2t(end_sym, start_sym));
     expr2tc wraparound(new greaterthan2t(end_sym, start_sym));
-    z3::expr wraparound_eq;
+    z3::expr zero_alloc, wraparound_eq, bounds_eq;
+    convert_bv(zero_size_alloc, zero_alloc);
     convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    bounds_eq = zero_alloc || wraparound_eq;
+    assert_formula(bounds_eq);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] =
-          pointer_offset_size(*expr->type.get()).to_long() + 1;
+    try {
+      unsigned long len = pointer_offset_size(*expr->type.get()).to_long();
+      z3::expr sz = ctx.esbmc_int_val(len);
+      addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      const expr2tc size_expr = e->size;
+      z3::expr sz;
+      convert_bv(size_expr, sz);
+
+      // Divide it by eight, as it's in bits.
+      sz = mk_div(sz, ctx.esbmc_int_val(8), true);
+      addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num, sz));
+    } catch (type2t::symbolic_type_excp *e) {
+      // It's valid to take the address of code,
+      if (is_code_type(expr->type)) {
+        // In which case the size can be one byte; we don't model code, and
+        // it's an error to access it as data anyway.
+        z3::expr sz = ctx.esbmc_int_val(1);
+        addr_space_data.back().insert(std::pair<unsigned,z3::expr>(obj_num,sz));
+      } else {
+        std::cerr << "Z3 conversion can't calculate the size of type:";
+        std::cerr << std::endl;
+        std::cerr << expr->type->pretty(0) << std::endl;
+        abort();
+      }
+    }
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
@@ -2765,6 +3725,23 @@ z3_convt::set_to(const expr2tc &expr, bool value)
              "Member name of with expr not found in struct/union type");
 
       union_var_mapt mapentry = { ref, idx, 0 };
+      union_vars.insert(mapentry);
+    } else if (is_union_type(eq.side_1->type) && is_symbol2t(eq.side_1)) {
+      // Assignment to a union in some way that /isn't/ a member - in this case,
+      // keep the field number that the previous value had.
+      expr2tc sym_copy = eq.side_1; // Reallocates
+      symbol2t &sym = to_symbol2t(sym_copy);
+      sym.level2_num--;
+      const std::string &ref = sym.get_symbol_name();
+
+      union_varst::const_iterator cache_result = union_vars.find(ref.c_str());
+      if (cache_result == union_vars.end())
+        // There isn't a previous assigned field. Freak out.
+        return;
+
+      sym.level2_num++;
+      const std::string &ref2 = sym.get_symbol_name();
+      union_var_mapt mapentry = { ref2, cache_result->idx, 0 };
       union_vars.insert(mapentry);
     }
   }

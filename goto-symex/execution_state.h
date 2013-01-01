@@ -111,8 +111,8 @@ class execution_statet : public goto_symext
     ex_state_level2t(execution_statet &ref);
     virtual ~ex_state_level2t();
     virtual ex_state_level2t *clone(void) const;
-    virtual void rename(expr2tc &lhs_symbol, unsigned count);
-    virtual void rename(expr2tc &identifier);
+    virtual void rename_to(expr2tc &lhs_symbol, unsigned count);
+    virtual void rename(expr2tc &identifier, bool no_const_prop = false);
 
     execution_statet *owner;
   };

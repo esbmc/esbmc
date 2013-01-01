@@ -25,6 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
+#include <pointer_offset_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
@@ -349,6 +350,46 @@ void value_sett::get_value_set_rec(
       object_mapt pointer_expr_set;
       get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type, ns);
 
+      // Calculate the offset caused by this addition, in _bytes_. Involves
+      // pointer arithmetic. We also use the _perceived_ type of what we're
+      // adding or subtracting from/to, it might be being typecasted.
+      const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
+      mp_integer total_offs(0);
+      bool is_const = false;
+      try {
+        if (is_constant_int2t(non_ptr_op)) {
+          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+            total_offs = 0;
+          } else {
+            // Potentially rename,
+            const type2tc renamed = ns.follow(subtype);
+            mp_integer elem_size = pointer_offset_size(*renamed);
+            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            total_offs = val * elem_size;
+            if (is_sub2t(expr))
+              total_offs.negate();
+          }
+          is_const = true;
+        } else {
+          is_const = false;
+        }
+      } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+      } catch (array_type2t::inf_sized_array_excp *e) {
+      } catch (type2t::symbolic_type_excp *e) {
+        // This vastly annoying piece of code is making operations on void
+        // pointers, or worse. If a void pointer, treat the multiplier of the
+        // addition as being one. If not void pointer, throw cookies.
+        if (is_empty_type(subtype)) {
+          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          is_const = true;
+        } else {
+          std::cerr << "Pointer arithmetic on type where we can't determine ";
+          std::cerr << "size:" << std::endl;
+          std::cerr << subtype->pretty(0) << std::endl;
+          abort();
+        }
+      }
+
       for(object_map_dt::const_iterator
           it=pointer_expr_set.read().begin();
           it!=pointer_expr_set.read().end();
@@ -356,16 +397,13 @@ void value_sett::get_value_set_rec(
       {
         objectt object=it->second;
 
-        if (object.offset_is_zero()) {
-          if (is_constant_int2t(non_ptr_op)) {
-            object.offset = to_constant_int2t(non_ptr_op).constant_value;
-          } else {
-            object.offset_is_set = false;
-          }
+        if (is_const && object.offset_is_set) {
+          // Both are const; we can accumulate offsets;
+          object.offset += total_offs;
         } else {
           object.offset_is_set=false;
         }
-          
+
         insert(dest, it->first, object);
       }
 
@@ -605,6 +643,24 @@ void value_sett::get_reference_set_rec(
   {
     const typecast2t &cast = to_typecast2t(expr);
     get_reference_set_rec(cast.from, dest, ns);
+    return;
+  }
+  else if (is_byte_extract2t(expr))
+  {
+    // Address of byte extracts can refer to the object that is being extracted
+    // from.
+    const byte_extract2t &extract = to_byte_extract2t(expr);
+
+    // This may or may not have a constant offset
+    objectt o;
+    if (is_constant_int2t(extract.source_offset)) {
+      o.offset = to_constant_int2t(extract.source_offset).constant_value;
+      o.offset_is_set = true;
+    } else {
+      o.offset_is_set = false;
+    }
+
+    insert(dest, extract.source_value, o);
     return;
   }
 

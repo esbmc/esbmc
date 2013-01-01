@@ -106,8 +106,16 @@ void goto_symext::symex_malloc(
   // Pas this point, rhs_ref may be an invalid reference.
 
   cur_state->rename(rhs);
-  expr2tc rhs_copy(rhs);
+  expr2tc rhs_copy = rhs;
 
+  // Finally, guard the return with the fact that it should return NULL if the
+  // size allocated was (potentially nondeterministically) zero.
+  expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
+  expr2tc sz_is_zero(new equality2t(size, zero));
+  expr2tc null(new symbol2t(rhs->type, "NULL", symbol2t::level0,
+                            0, 0, 0, 0));
+  rhs = expr2tc(new if2t(rhs->type, sz_is_zero, null, rhs));
+  
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 

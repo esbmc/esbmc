@@ -67,7 +67,7 @@ void goto_symext::symex_other(void)
           cur_state->top().declaration_history.end())
     {
       unsigned index = cur_state->top().level1.current_number(identifier);
-      cur_state->top().level1.rename(l1_sym, index+1);
+      cur_state->top().level1.rename_to(l1_sym, index+1);
       l1_symbol.level1_num = index + 1;
     }
 

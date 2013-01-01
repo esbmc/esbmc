@@ -21,6 +21,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/prop/pointer_logic.h>
 #include <vector>
 #include <string.h>
+#include <goto-symex/renaming.h>
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/hashed_index.hpp>
@@ -36,6 +37,8 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
+  struct deferred_byte_op_data; // forward dec
+
   z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
            const namespacet &ns);
   virtual ~z3_convt();
@@ -49,6 +52,7 @@ public:
   virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
+  bool maybe_undefer_byte_op(const deferred_byte_op_data *d);
   void set_filename(std::string file);
   uint get_z3_core_size(void);
   uint get_z3_number_of_assumptions(void);
@@ -63,6 +67,7 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
+  void extract_global_vars(void);
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -182,6 +187,22 @@ private:
                            const z3::expr &new_val);
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
+  z3::expr extract_from_struct_field(const type2tc &t, bool be,
+                                     unsigned int field_idx,
+                                     const expr2tc &field_offset,
+                                     const expr2tc &expr,
+                                     const expr2tc &extract_guard);
+
+  void build_part_array_from_elem(const expr2tc &data, bool be,
+                                  unsigned int width, z3::expr &array,
+                                  unsigned int array_offs,
+                                  const expr2tc &extract_guard);
+  void dynamic_offs_byte_extract(const byte_extract2t &data, z3::expr &output);
+
+  void byte_swap_expr(const expr2tc &data, z3::expr &output);
+
+  void byte_update_via_part_array(const byte_update2t &update, z3::expr &out);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
@@ -200,7 +221,8 @@ private:
   std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
-  void debug_label_formula(std::string name, const z3::expr &formula);
+  const expr2tc label_formula(std::string name, const type2tc &t,
+                              const z3::expr &formula);
   void bump_addrspace_array(unsigned int idx, const z3::expr &val);
   std::string get_cur_addrspace_ident(void);
   void finalize_pointer_chain(unsigned int objnum);
@@ -287,6 +309,12 @@ public:
     >
   > union_varst;
 
+  struct deferred_byte_op_data {
+    z3::expr free;
+    const expr2t *extract;
+    z3::expr guard;
+  };
+
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
   z3::solver solver;
@@ -314,16 +342,22 @@ public:
   z3::sort addr_space_tuple_sort;
   z3::sort addr_space_arr_sort;
   z3::func_decl addr_space_tuple_decl;
-  std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
-  std::list<unsigned long> total_mem_space;
+  std::list<std::map<unsigned, z3::expr> > addr_space_data; // Obj id, size
 
-  // Debug map, for naming pieces of AST and auto-numbering them
-  std::map<std::string, unsigned> debug_label_map;
+  // Label map, for naming pieces of AST and auto-numbering them. Originally
+  // for debugging, now I figure it's a useful tool for connecting pieces of
+  // code where we've generated a Z3 representation of something, but then
+  // want to deal with it in terms of expr2tc's.
+  std::list<std::map<std::string, unsigned> > label_map;
 
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
+  std::list<struct deferred_byte_op_data> deferred_derefs_constoffs;
+  std::list<struct deferred_byte_op_data> deferred_derefs_dynoffs;
+  bool defer_byte_ops;
 
   const namespacet &ns;
+  std::set<symbol2t> inited_global_names;
 
   Z3_context z3_ctx;
   static bool s_is_uw;

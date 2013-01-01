@@ -216,12 +216,35 @@ is_subclass_of(const struct_type2t &from_type, const struct_type2t &to_type,
 }
 
 bool dereferencet::dereference_type_compare(
-  expr2tc &object, const type2tc &dereference_type) const
+  expr2tc &object, const type2tc &dereference_type, const expr2tc &offset) const
 {
   const type2tc object_type = object->type;
 
   if (is_empty_type(dereference_type))
     return true; // always ok
+
+  if (!is_constant_int2t(offset))
+    return false;
+  if (!to_constant_int2t(offset).constant_value.is_zero()) {
+    // We have a non-zero offset into this... thing. Now, if it's an array and
+    // has a constant offset that's a multiple of the element size, that's just
+    // fine. In any other case, we now can't know whether or not the offset
+    // can be represented as member/indexing something else. So, fall back to
+    // memory modelling it.
+    // There's scope in the future for supporting nondeterministic indexes of
+    // arrays, if we're confident that the index is a multiple of the array
+    // element size.
+    try {
+      mp_integer i = to_constant_int2t(offset).constant_value;
+      i %= pointer_offset_size(*object_type);
+      if (!i.is_zero())
+        return false;
+    } catch (array_type2t::dyn_sized_array_excp *e) { // Nondetly sized.
+      return false;
+    } catch (array_type2t::inf_sized_array_excp *e) {
+      return false;
+    }
+  }
 
   if (base_type_eq(object_type, dereference_type, ns)) {
     // Ok, they just match. However, the SMT solver that receives this formula
@@ -425,21 +448,14 @@ void dereferencet::build_reference_to(
     if (is_constant_expr(o.offset))
       offset = o.offset;
     else
-    {
-      expr2tc ptr_offs = expr2tc(new pointer_offset2t(index_type2(),
-                                                      deref_expr));
-      expr2tc base = expr2tc(new pointer_offset2t(index_type2(), obj_ptr));
-
-      // need to subtract base address
-      offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
-    }
+      offset = expr2tc(new pointer_offset2t(index_type2(), deref_expr));
 
     // See whether or not we need to munge the object into the desired type;
     // this will return false if we need to juggle the type in a significant
     // way, true if they're either the same type or extremely similar. value
     // may be replaced with a typecast.
     expr2tc orig_value = value;
-    if (!dereference_type_compare(value, type))
+    if (!dereference_type_compare(value, type, offset))
     {
       if (memory_model(value, type, tmp_guard, offset))
       {
@@ -479,15 +495,28 @@ void dereferencet::build_reference_to(
       if (is_index2t(orig_value))
       {
         // So; we're working on an index, which might be wrapped in a typecast.
-        // Update the offset; then encode a bounds check.
+        // Update the offset; then encode a bounds check. Also divide the index,
+        // as it's now a byte offset into the array. dereference_type_compare
+        // guarentees us that it's an offset corresponding to the start of
+        // an element.
+        mp_integer elem_size;
+        const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
+        if (is_string_type(indexed_type))
+          elem_size = 1;
+        else
+          elem_size = pointer_offset_size(*to_array_type(indexed_type).subtype);
+
+        expr2tc factor(new constant_int2t(uint_type2(), elem_size));
+        expr2tc new_offset(new div2t(uint_type2(), offset, factor));
+
         if (is_typecast2t(value)) {
           typecast2t &cast = to_typecast2t(value);
           index2t &idx = to_index2t(cast.from);
-          idx.index = offset;
+          idx.index = new_offset;
           bounds_check(idx, tmp_guard);
         } else {
           index2t &idx = to_index2t(value);
-          idx.index = offset;
+          idx.index = new_offset;
           bounds_check(idx, tmp_guard);
         }
       }
@@ -645,52 +674,18 @@ bool dereferencet::memory_model(
 
   // first, check if it's really just a conversion
 
-  if (is_number_type(from_type) && is_number_type(to_type) &&
-      from_type->get_width() == to_type->get_width())
-    return memory_model_conversion(value, to_type, guard, new_offset);
+  if (is_bv_type(from_type) && is_bv_type(to_type) &&
+      from_type->get_width() == to_type->get_width() &&
+      is_constant_int2t(new_offset) &&
+      to_constant_int2t(new_offset).constant_value.is_zero()) {
+    value = expr2tc(new typecast2t(to_type, value));
+    return true;
+  }
 
   // otherwise, we will stich it together from bytes
 
   bool ret = memory_model_bytes(value, to_type, guard, new_offset);
   return ret;
-}
-
-bool dereferencet::memory_model_conversion(
-  expr2tc &value,
-  const type2tc &to_type,
-  const guardt &guard,
-  expr2tc &new_offset)
-{
-  const type2tc from_type = value->type;
-
-  // avoid semantic conversion in case of
-  // cast to float
-  if (is_fixedbv_type(to_type))
-  {
-    value = expr2tc(new to_bv_typecast2t(to_type, value));
-  }
-  else
-  {
-    // only doing type conversion
-    // just do the typecast
-    value = expr2tc(new typecast2t(to_type, value));
-  }
-
-  // also assert that offset is zero
-
-  if(!options.get_bool_option("no-pointer-check"))
-  {
-    expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
-    expr2tc offs_not_zero = expr2tc(new notequal2t(new_offset, zero));
-
-    guardt tmp_guard(guard);
-    tmp_guard.move(offs_not_zero);
-    dereference_callback.dereference_failure(
-      "word bounds",
-      "offset not zero", tmp_guard);
-  }
-
-  return true;
 }
 
 bool dereferencet::memory_model_bytes(
@@ -702,59 +697,70 @@ bool dereferencet::memory_model_bytes(
   const expr2tc orig_value = value;
   const type2tc from_type = value->type;
 
-  // we won't try to convert to/from code
-  if (is_code_type(from_type) || is_code_type(to_type))
-    return false;
+  // Accessing code is incorrect; The C spec says that the code and data address
+  // spaces should be considered seperate (i.e., Harvard arch) and so accessing
+  // code via a pointer is never valid. Even though you /can/ do it on X86.
+  if (is_code_type(from_type) || is_code_type(to_type)) {
+    guardt tmp_guard(guard);
+    dereference_callback.dereference_failure(
+      "Code seperation", "Dereference accesses code / program text", tmp_guard);
+    return true;
+  }
 
-  // won't do this without a committment to an endianess
-  if(config.ansi_c.endianess==configt::ansi_ct::NO_ENDIANESS)
-    return false;
-
-  // But anything else we will try!
+  assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
 
   // We allow reading more or less anything as bit-vector.
-  if (is_bv_type(to_type))
+  if (is_bv_type(to_type) || is_pointer_type(to_type) ||
+      is_fixedbv_type(to_type))
   {
     bool is_big_endian =
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
-    // Byte extract currently produced one byte, regardless of given type.
-    value = expr2tc(new byte_extract2t(type_pool.get_uint(8), is_big_endian,
-                                       value, new_offset));
+    // Take existing pointer offset, add to the pointer offset produced by
+    // this dereference. It'll get simplified at some point in the future.
+    new_offset = expr2tc(new add2t(new_offset->type, new_offset,
+                                   compute_pointer_offset(value)));
 
-    // XXX jmorse - upcast the extracted byte to whatever type we're supposed to
-    // have. In a correct world, we'd be stitching together the type from a
-    // series of extracted bytes.
-    if (to_type->get_width() != 8)
-      value = expr2tc(new typecast2t(to_type, value));
+    expr2tc base_object = get_base_object(value);
+    value = expr2tc(new byte_extract2t(to_type, is_big_endian,
+                                       base_object, new_offset,
+                                       guard.as_expr()));
 
     if (!is_constant_int2t(new_offset) ||
         !to_constant_int2t(new_offset).constant_value.is_zero())
     {
       if(!options.get_bool_option("no-pointer-check"))
       {
-        unsigned long width = orig_value->type->get_width();
+        // Get total size of the data object we're working on.
+        expr2tc total_size;
+        try {
+          total_size = expr2tc(new constant_int2t(uint_type2(),
+                                          base_object->type->get_width() / 8));
+        } catch (array_type2t::dyn_sized_array_excp *e) {
+          expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
+          total_size = expr2tc(new div2t(uint_type2(), e->size, eight));
+        }
+
+        unsigned long width = to_type->get_width() / 8;
         expr2tc const_val =
           expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
-        expr2tc offs_upper_bound =
-          expr2tc(new greaterthanequal2t(new_offset, const_val));
+        expr2tc upper_bound(new add2t(uint_type2(), new_offset, const_val));
+        expr2tc upper_bound_eq =
+          expr2tc(new greaterthan2t(upper_bound, total_size));
 
         guardt tmp_guard(guard);
-        tmp_guard.move(offs_upper_bound);
+        tmp_guard.move(upper_bound_eq);
         dereference_callback.dereference_failure(
-          "word bounds",
-          "word offset upper bound", tmp_guard);
-      }
+          "byte model object boundries",
+          "byte access upper bound", tmp_guard);
 
-      if(!options.get_bool_option("no-pointer-check"))
-      {
         expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
         expr2tc offs_lower_bound = expr2tc(new lessthan2t(new_offset, zero));
 
-        guardt tmp_guard(guard);
-        tmp_guard.move(offs_lower_bound);
+        guardt tmp_guard2(guard);
+        tmp_guard2.move(offs_lower_bound);
         dereference_callback.dereference_failure(
-          "word bounds",
+          "byte model object boundries",
           "word offset lower bound", tmp_guard);
       }
     }

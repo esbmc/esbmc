@@ -202,7 +202,7 @@ void picosat_add (int lit);
 
 /* Print the CNF to the given file in DIMACS format.
  */
-void picosat_print (FILE *);
+void picosat_print (/*FILE **/); /* XXX jmorse */
 
 /* You can add arbitrary many assertions before the next 'picosat_sat'.
  * An assumption is only valid for the next 'picosat_sat' and will be taken

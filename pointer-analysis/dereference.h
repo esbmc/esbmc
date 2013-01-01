@@ -80,7 +80,8 @@ private:
 
   bool dereference_type_compare(
     expr2tc &object,
-    const type2tc &dereference_type) const;
+    const type2tc &dereference_type,
+    const expr2tc &offset) const;
 
   void offset_sum(
     exprt &dest,
@@ -111,12 +112,6 @@ private:
     const guardt &guard,
     expr2tc &new_offset);
 
-  bool memory_model_conversion(
-    expr2tc &value,
-    const type2tc &type,
-    const guardt &guard,
-    expr2tc &new_offset);
-    
   bool memory_model_bytes(
     expr2tc &value,
     const type2tc &type,
