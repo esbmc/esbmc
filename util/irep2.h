@@ -15,6 +15,7 @@
 #include <boost/utility/enable_if.hpp>
 #include <boost/fusion/include/equal_to.hpp>
 
+#include <config.h>
 #include <irep.h>
 #include <fixedbv.h>
 #include <big-int/bigint.hh>
@@ -4388,5 +4389,12 @@ is_false(const expr2tc &expr)
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
+
+inline expr2tc
+gen_uint(unsigned long val)
+{
+  constant_int2tc v(type_pool.get_uint(config.ansi_c.int_width), BigInt(val));
+  return v;
+}
 
 #endif /* _UTIL_IREP2_H_ */
