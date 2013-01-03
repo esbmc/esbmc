@@ -125,7 +125,7 @@ void goto_symext::dereference_rec(
     expr = deref.value;
   }
   else if (is_index2t(expr) &&
-           is_pointer_type(to_index2t(expr).source_value->type))
+           is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
     expr2tc tmp = expr2tc(new add2t(index.source_value->type,
@@ -146,7 +146,7 @@ void goto_symext::dereference_rec(
     // Workaround: we may have just rewritten an index operand. Redereference
     // if that's the case.
     if (is_index2t(expr) &&
-        is_pointer_type(to_index2t(expr).source_value->type))
+        is_pointer_type(to_index2t(expr).source_value))
       dereference_rec(expr, guard, dereference, write);
   }
 }

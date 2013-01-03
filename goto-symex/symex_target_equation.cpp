@@ -363,7 +363,7 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   push_ctx();
 
   // Convert the question (must be a bool).
-  assert(is_bool_type(question->type));
+  assert(is_bool_type(question));
   literalt q = conv.convert(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
