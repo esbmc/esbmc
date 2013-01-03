@@ -1459,7 +1459,7 @@ void string_abstractiont::abstract_function_call(
       new_args.push_back(null);
     } else {
       //XXX jmorse migration guessing; void ptr?
-      type2tc ret_type = type2tc(new pointer_type2t(type_pool.get_empty()));
+      type2tc ret_type = type2tc(new pointer_type2t(get_empty_type()));
       new_args.push_back(expr2tc(
                          new address_of2t(ret_type, build(call.ret, false))));
     }
