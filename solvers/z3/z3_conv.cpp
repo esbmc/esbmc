@@ -106,7 +106,7 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
 
   // Pre-seed type cache with a few values that might not go in due to
   // specialised code paths.
-  sort_cache.insert(std::pair<const type2tc, z3::sort>(type_pool.get_bool(),
+  sort_cache.insert(std::pair<const type2tc, z3::sort>(get_bool_type(),
                     ctx.bool_sort()));
 }
 
@@ -3970,7 +3970,7 @@ z3_convt::l_get(literalt a)
     return tvt(false);
   }
 
-  expr2tc sym(new symbol2t(type_pool.get_bool(),
+  expr2tc sym(new symbol2t(get_bool_type(),
                            irep_idt("l" + i2string(a.var_no()))));
   expr2tc res = get(sym);
 
