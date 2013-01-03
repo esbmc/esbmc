@@ -2493,16 +2493,25 @@ public:
   std::vector<irep_idt> exception_list;
 };
 
-// Give everything a typedef name
+// Give everything a typedef name. Use this to construct both the templated
+// expression methods, but also the container class which needs the template
+// parameters too.
+// Given how otherwise this means typing a large amount of template arguments
+// again and again, this gets macro'd. I have no problem with this given how
+// it's essentially the same lexical goo being repeated. It's, as far as I know,
+// exactly the kind of thing that macros are for.
 
+#define irep_typedefs(basename, ...) \
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, \
+                               __VA_ARGS__ \
+                               > basename##2tc; \
+  typedef esbmct::expr_methods<basename##2t, basename##_data, \
+                               __VA_ARGS__ \
+                               > basename##_expr_methods;
 
-typedef esbmct::something2tc<constant_int2t, expr2t::constant_int_id,
-        BigInt, constant_int_data, &constant_int_data::constant_value>
-        constant_int2tc;
+irep_typedefs(constant_int,
+              BigInt, constant_int_data, &constant_int_data::constant_value);
 
-typedef esbmct::expr_methods<constant_int2t, constant_int_data,
-        BigInt, constant_int_data, &constant_int_data::constant_value>
-        constant_int_expr_methods;
 typedef esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
         fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
         constant_fixedbv_expr_methods;
