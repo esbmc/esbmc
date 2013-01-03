@@ -1049,7 +1049,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained,
+  template <class contained, unsigned int expid,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
      typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
@@ -1069,7 +1069,15 @@ namespace esbmct {
       typedef int type;
     };
 
+    // Blank initialization of a container class -> store NULL
     something2tc() : expr2tc(NULL) { }
+
+    // Initialize container from a non-type-committed container. Encode an
+    // assertion that the type is what we expect.
+    something2tc(const expr2tc &init) : expr2tc(init)
+    {
+      assert(init->expr_id == expid);
+    }
 
     template <class arbitary = dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1127,7 +1135,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
 
-    something2tc(const something2tc<contained,
+    something2tc(const something2tc<contained, expid,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
@@ -2455,7 +2463,7 @@ public:
 // Give everything a typedef name
 
 
-typedef esbmct::something2tc<constant_int2t,
+typedef esbmct::something2tc<constant_int2t, expr2t::constant_int_id,
         BigInt, constant_int_data, &constant_int_data::constant_value>
         constant_int2tc;
 
