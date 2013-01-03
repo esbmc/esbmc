@@ -360,15 +360,14 @@ void dereferencet::build_reference_to(
     {
       // constraint that it actually is a dynamic object
 
-      type2tc arr_type = type2tc(new array_type2t(type_pool.get_bool(),
+      type2tc arr_type = type2tc(new array_type2t(get_bool_type(),
                                                   expr2tc(), true));
       const symbolt *sp;
       irep_idt dyn_name = (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
         ? "c::__ESBMC_is_dynamic" : "cpp::__ESBMC_is_dynamic";
       expr2tc sym = expr2tc(new symbol2t(arr_type, dyn_name));
       expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), deref_expr));
-      expr2tc is_dyn_obj = expr2tc(new index2t(type_pool.get_bool(), sym,
-                                               ptr_obj));
+      expr2tc is_dyn_obj = expr2tc(new index2t(get_bool_type(), sym, ptr_obj));
 
       if (dyn_obj.invalid || dyn_obj.unknown)
       {

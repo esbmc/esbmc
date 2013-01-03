@@ -420,7 +420,7 @@ void value_sett::get_value_set_rec(
       const type2tc &dynamic_type = side.alloctype;
 
 
-      expr2tc locnum = expr2tc(new constant_int2t(type_pool.get_uint(config.ansi_c.int_width), BigInt(location_number)));
+      expr2tc locnum = expr2tc(new constant_int2t(get_uint_type(config.ansi_c.int_width), BigInt(location_number)));
 
       expr2tc dynobj = expr2tc(new dynamic_object2t(dynamic_type,
                                                     locnum, false, false));
@@ -435,7 +435,7 @@ void value_sett::get_value_set_rec(
       assert(suffix=="");
       assert(is_pointer_type(side.type));
 
-      expr2tc locnum = expr2tc(new constant_int2t(type_pool.get_uint(config.ansi_c.int_width), BigInt(location_number)));
+      expr2tc locnum = expr2tc(new constant_int2t(get_uint_type(config.ansi_c.int_width), BigInt(location_number)));
 
       const pointer_type2t &ptr = to_pointer_type(side.type);
 
@@ -566,7 +566,7 @@ void value_sett::get_reference_set_rec(
         expr2tc unknown = expr2tc(new unknown2t(expr->type));
         insert(dest, unknown);
       } else if (is_array_type(object->type) || is_string_type(object->type)) {
-        type2tc zero_type = type_pool.get_uint(config.ansi_c.int_width);
+        type2tc zero_type = get_uint_type(config.ansi_c.int_width);
         expr2tc const_zero = expr2tc(new constant_int2t(zero_type, BigInt(0)));
         expr2tc new_index = expr2tc(new index2t(index.type, object,const_zero));
         
