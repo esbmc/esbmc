@@ -1079,6 +1079,27 @@ namespace esbmct {
       assert(init->expr_id == expid);
     }
 
+    const contained &operator*() const
+    {
+      return *expr2tc::get();
+    }
+
+    const contained * operator-> () const // never throws
+    {
+      return expr2tc::operator->();
+    }
+
+    const contained * get() const // never throws
+    {
+      return expr2tc::get();
+    }
+
+    contained * get() // never throws
+    {
+      detach();
+      return expr2tc::get();
+    }
+
     template <class arbitary = dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
