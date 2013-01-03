@@ -152,7 +152,7 @@ expr2tc pointer_logict::object_rec(
     
     return object_rec(rest, pointer_type, newindex);
   }
-  else if (is_structure_type(src->type))
+  else if (is_structure_type(src))
   {
     const struct_union_data &data_ref =
       dynamic_cast<const struct_union_data &>(*src->type);

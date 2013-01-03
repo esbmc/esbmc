@@ -4370,6 +4370,11 @@ inline bool is_structure_type(const type2tc &t)
   return t->type_id == type2t::struct_id || t->type_id == type2t::union_id;
 }
 
+inline bool is_structure_type(const expr2tc &e)
+{
+  return is_structure_type(e->type);
+}
+
 inline bool is_nil_expr(const expr2tc &exp)
 {
   if (exp.get() == NULL)
