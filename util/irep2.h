@@ -1079,23 +1079,23 @@ namespace esbmct {
 
     const contained &operator*() const
     {
-      return *expr2tc::get();
+      return static_cast<const contained&>(*expr2tc::get());
     }
 
     const contained * operator-> () const // never throws
     {
-      return expr2tc::operator->();
+      return static_cast<const contained*>(expr2tc::operator->());
     }
 
     const contained * get() const // never throws
     {
-      return expr2tc::get();
+      return static_cast<const contained*>(expr2tc::get());
     }
 
     contained * get() // never throws
     {
       detach();
-      return expr2tc::get();
+      return static_cast<contained*>(expr2tc::get());
     }
 
     template <class arbitary = dummy_type_tag>
