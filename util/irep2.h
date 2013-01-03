@@ -4461,7 +4461,7 @@ get_int_type(unsigned int sz)
   return type_pool.get_int(sz);
 }
 
-inline const type2tc
+inline const type2tc &
 get_bool_type(void)
 {
   return type_pool.get_bool();
