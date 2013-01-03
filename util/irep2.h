@@ -4488,4 +4488,10 @@ get_bool_type(void)
   return type_pool.get_bool();
 }
 
+inline const type2tc &
+get_empty_type(void)
+{
+  return type_pool.get_empty();
+}
+
 #endif /* _UTIL_IREP2_H_ */
