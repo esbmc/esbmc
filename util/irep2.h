@@ -1633,6 +1633,8 @@ public:
 #define dynamic_cast static_cast
 #endif
 #define type_macros(name) \
+  inline bool is_##name##_type(const expr2tc &e) \
+    { return e->type->type_id == type2t::name##_id; } \
   inline bool is_##name##_type(const type2tc &t) \
     { return t->type_id == type2t::name##_id; } \
   inline const name##_type2t & to_##name##_type(const type2tc &t) \
@@ -1662,12 +1664,16 @@ type_macros(cpp_name);
 inline bool is_bv_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id); }
+inline bool is_bv_type(const expr2tc &e)
+{ return is_bv_type(e->type); }
 
 /** Test whether type is a number type - bv or fixedbv. */
 inline bool is_number_type(const type2tc &t) \
 { return (t->type_id == type2t::unsignedbv_id ||
           t->type_id == type2t::signedbv_id ||
           t->type_id == type2t::fixedbv_id); }
+inline bool is_number_type(const expr2tc &e)
+{ return is_number_type(e->type); }
 
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
@@ -4471,6 +4477,12 @@ inline const type2tc &
 get_empty_type(void)
 {
   return type_pool.get_empty();
+}
+
+inline const type2tc &
+get_pointer_type(const typet &val)
+{
+  return type_pool.get_pointer(val);
 }
 
 #endif /* _UTIL_IREP2_H_ */
