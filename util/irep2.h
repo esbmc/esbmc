@@ -2493,6 +2493,14 @@ public:
                                __VA_ARGS__ \
                                > basename##_expr_methods;
 
+// Special case for some empty ireps,
+
+#define irep_typedefs_empty(basename, superclass) \
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id \
+                               > basename##2tc; \
+  typedef esbmct::expr_methods<basename##2t, superclass \
+                               > basename##_expr_methods;
+
 irep_typedefs(constant_int, constant_int_data,
               BigInt, constant_int_data, &constant_int_data::constant_value);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data,
@@ -2647,12 +2655,9 @@ irep_typedefs(overflow_cast, overflow_cast_data,
               unsigned int, overflow_cast_data, &overflow_cast_data::bits);
 irep_typedefs(overflow_neg, overflow_ops,
               expr2tc, overflow_ops, &overflow_ops::operand);
-typedef esbmct::expr_methods<unknown2t, expr2t>
-        unknown_expr_methods;
-typedef esbmct::expr_methods<invalid2t, expr2t>
-        invalid_expr_methods;
-typedef esbmct::expr_methods<null_object2t, expr2t>
-        null_object_expr_methods;
+irep_typedefs_empty(unknown, expr2t);
+irep_typedefs_empty(invalid, expr2t);
+irep_typedefs_empty(null_object, expr2t);
 irep_typedefs(dynamic_object, dynamic_object_data,
               expr2tc, dynamic_object_data, &dynamic_object_data::instance,
               bool, dynamic_object_data, &dynamic_object_data::invalid,
@@ -2690,9 +2695,7 @@ irep_typedefs(code_expression, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_return, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
-typedef esbmct::expr_methods<code_skip2t, expr2t>
-        code_skip_expr_methods;
-typedef code_expression_data code_free_data;
+irep_typedefs_empty(code_skip, expr2t);
 irep_typedefs(code_free, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_goto, code_goto_data,
