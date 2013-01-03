@@ -614,8 +614,6 @@ static const char *expr_names[] = {
   "invalid_pointer",
   "buffer_size",
   "code_asm",
-  "from_bv_typecast",
-  "to_bv_typecast",
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
@@ -2054,10 +2052,6 @@ std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", "", ""};
-std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
-std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", "", ""};
 std::string equality2t::field_names [esbmct::num_type_fields]  =
@@ -2274,10 +2268,6 @@ template class esbmct::expr_methods<symbol2t, symbol_data,
     unsigned int, symbol_data, &symbol_data::thread_num,
     unsigned int, symbol_data, &symbol_data::node_num>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<if2t, if_data,
     expr2tc, if_data, &if_data::cond,

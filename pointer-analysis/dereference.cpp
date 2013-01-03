@@ -667,7 +667,7 @@ bool dereferencet::memory_model_conversion(
   // cast to float
   if (is_fixedbv_type(to_type))
   {
-    value = expr2tc(new to_bv_typecast2t(to_type, value));
+    value = expr2tc(new typecast2t(to_type, value));
   }
   else
   {
