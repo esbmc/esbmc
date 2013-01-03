@@ -1,61 +1,84 @@
-/*******************************************************************\
+#include <string>
+#include "../../fstream"
 
-
-Author: Felipe Rodrigues
-
-
-\*******************************************************************/
-
-#include "../QtCore/QString"
-#include "QApplication"
-//#include "../QtCore/QObject"
-//#include "QLayout"
-//#include "QWidget"
-//#include "QTextEdit"
-//#include "QVBoxLayout"
+typedef float qreal;
+typedef const char * qApp;
 
 # define SIGNAL(a)   qFlagLocation("2"#a)
 # define SLOT(a)     qFlagLocation("1"#a)
+#define emit
+#define animatedtiles
+#define signals public
+#define Q_OBJECT
+//#define QString std::string
 
-typedef const char * qApp;
+#if 0
+#define Q_PROPERTY
+#define pos
+#define READ
+#define WRITE
+#define setPos
+#endif
 
-enum	ConnectionType { AutoConnection, DirectConnection, QueuedConnection, BlockingQueuedConnection, UniqueConnection, AutoCompatConnection };
+enum CacheMode{ NoCache, ItemCoordinateCache, DeviceCoordinateCache };
 
 const char *qFlagLocation(const char *method){}
-void	clicked ( bool checked = false ){}
 
+namespace Qt{
+	enum GlobalColor{ white, lightGray, darkGray };
+	enum PenStyle{ NoPen };
+	enum KeepAspectRatio{};
+	enum AspectRatioMode{ IgnoreAspectRatio };
+};
+
+void update();
+void setAcceptHoverEvents ( bool enabled );
+void Q_INIT_RESOURCE ();
+qreal cos( double x );
+qreal sin( double x );
+int qrand();
+template <class T>
+	QT_TRANSLATE_NOOP ( T context, const char* sourceText );
+
+class QString
+{
+	std::string str;
+public:
+	QString (){}
+	QString ( const char * unicode ){
+		__ESBMC_assert(unicode != NULL, "Invalid string");
+	}
+	std::string	toStdString () const{}
+	~QString (){}
+};
+
+class QColor
+{
+public:
+	QColor();
+};
+
+class QSize{
+public:
+    QSize();
+};
 
 class QLayout{
+public:
 	QLayout (){}
 };
 
 class QWidget{
 public:
-void	setLayout ( QLayout * layout ){}
+ void	setLayout ( QLayout * layout ){}
 void	setLayout ( void * layout ){}
 void	show (){}
-};
-
-class QTextEdit{
-public:
-	QTextEdit ( QWidget * parent = 0 ){}
-	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
-	~QTextEdit (){}
 };
 
 class QPushButton{
 public:
 	QPushButton ( QWidget * parent = 0 ){}
 	QPushButton ( const QString & text, QWidget * parent = 0 ){}
-};
-
-class QVBoxLayout{
-public:
-	QVBoxLayout (){}
-	QVBoxLayout ( QWidget * parent ){}
-	~QVBoxLayout (){}
-	QVBoxLayout	addWidget ( QTextEdit * w ){}
-	QVBoxLayout	addWidget ( QPushButton * w ){}
 };
 
 class QObject
@@ -67,17 +90,297 @@ public:
 
 #if 0	
 	static bool connect(const QObject *sender, const char *signal,
-                       const QObject *receiver, const char *member, ConnectionType =
+                        const QObject *receiver, const char *member, ConnectionType =
 #ifdef qdoc
-	AutoConnection
+                        AutoConnection
 #else
 #ifdef QT3_SUPPORT
-	AutoCompatConnection
+                        AutoCompatConnection
 #else
-	AutoConnection
+                        AutoConnection
 #endif
 #endif
         ){}
 #endif
 
+};
+
+class QPointF
+{
+public:
+	QPointF();
+	QPointF( qreal x, qreal y );
+};
+
+bool fexists(const char* filename){
+	std::ifstream file(filename);
+	return file.is_open();
+}
+
+class QPixmap
+{
+public:
+	QPixmap (){}
+	QPixmap ( int width, int height ){}
+	QPixmap ( const char * xpm ){
+		__ESBMC_assert(fexists(xpm),"invalid file");
+	}
+	int width () const;
+	int height () const;
+};
+
+class QGraphicsItem
+{
+public:
+	QGraphicsItem ( QGraphicsItem * parent = 0 );
+	void setCacheMode ( CacheMode mode, const QSize & logicalCacheSize = QSize() );
+	void setZValue ( qreal z );
+	void setPos ( qreal x, qreal y );
+	void scale ( double x, double y ) const;
+	~QGraphicsItem ();
+};
+
+void setCacheMode ( QGraphicsItem::CacheMode mode, const QSize & logicalCacheSize = QSize() );
+
+class QGraphicsPixmapItem : public QGraphicsItem
+{
+public:
+	QGraphicsPixmapItem ( const QPixmap pixmap ){}
+	~QGraphicsPixmapItem ();
+	void	setPixmap ( const QPixmap & pixmap ){}
+	void setOffset (int x, int y){}
+};
+
+class QGraphicsWidget : public QWidget, public QGraphicsItem
+{
+public:
+	QGraphicsWidget();
+	QGraphicsWidget( QGraphicsItem* );
+};
+
+class QRectF
+{
+public:
+	QRectF();
+	QRectF(int a, int b, int c, int d);
+	QPointF topLeft();
+	QPointF bottomRight();
+	QRectF adjusted ( qreal dx1, qreal dy1, qreal dx2, qreal dy2 ) const;
+	~QRectF();
+};
+
+class QPainterPath
+{
+public:
+	QPainterPath();
+	void addEllipse ( const QRectF & boundingRectangle );
+};
+
+class QBrush
+{
+public:
+	QBrush();
+};
+
+class QStyle
+{
+public:
+	enum StateFlag{ State_Sunken, State_MouseOver };
+	QStyle();
+	int state;
+};
+
+class QStyleOptionGraphicsItem : public QStyle
+{
+public:
+	QStyleOptionGraphicsItem();
+};
+
+class QGraphicsSceneMouseEvent
+{
+public:
+	QGraphicsSceneMouseEvent();
+};
+
+class QGradient : public QColor
+{
+public:
+	QGradient();
+};
+class QLinearGradient : public QGradient
+{
+public:
+	QLinearGradient();
+	QLinearGradient ( const QPointF & start, const QPointF & finalStop );
+	void  setColorAt ( int y, Qt::GlobalColor color);
+};
+
+class QPainter
+{
+public:
+	enum RenderHint{ Antialiasing, SmoothPixmapTransform };
+	QPainter();
+	void setPen ( Qt::GlobalColor color );
+	void setPen ( Qt::PenStyle pen );
+	void setBrush ( const QLinearGradient & brush );
+	void drawEllipse ( const QRectF & rectangle );
+	void translate ( qreal dx, qreal dy );
+	void drawPixmap ( const QRectF & target, const QPixmap & pixmap, const QRectF & source );
+	void drawPixmap ( int target, int x, const QPixmap & pixmap );
+};
+
+class QResizeEvent
+{
+public:
+	QResizeEvent();
+};
+
+class QGraphicsScene : public QGraphicsItem
+{
+public:
+	QGraphicsScene();
+	QGraphicsScene( int a, int b, int c, int d );
+	void addItem ( QGraphicsItem * item );
+};
+
+class QGraphicsView
+{
+public:
+	enum ViewportUpdateMode{ BoundingRectViewportUpdate };
+	enum CacheModeFlag{ CacheBackground, CacheNone };
+	QGraphicsView();
+	QGraphicsView( QGraphicsScene* );
+	void resizeEvent ( QResizeEvent * event );
+	void fitInView ( const QRectF & rect, Qt::KeepAspectRatio keepAspectRatio );
+	void setWindowTitle ( const QString & title );
+	void setViewportUpdateMode ( ViewportUpdateMode mode );
+	void setBackgroundBrush ( const QPixmap & pixmap );
+	void setCacheMode ( CacheModeFlag mode );
+	void setRenderHints ( int hints );
+	void show();
+};
+
+QRectF	sceneRect () const;
+void	setSceneRect ( const QRectF & rect );
+void	setSceneRect ( qreal x, qreal y, qreal w, qreal h );
+
+class QApplication{
+public:
+	QApplication( int & argc, char ** argv ){
+		__ESBMC_assert(argc > 0, "invalid parameter");
+	}
+	int exec(){}
+};
+
+template<class T> class QList
+{
+public:
+	QList (){}
+	void operator<< ( T );
+	int count () const;
+	const T & at ( int i ) const;
+	T &	operator[] ( int i );
+	~QList (){}
+};
+
+class QGraphicsRectItem : public QGraphicsItem
+{
+public:
+	QGraphicsRectItem();
+};
+
+class QAbstractState
+{
+public:
+	QAbstractState(){}
+};
+
+class QEasingCurve
+{
+public:
+	enum Type{ InOutBack };
+	QEasingCurve(){}
+};
+
+class QPropertyAnimation
+{
+public:
+	QPropertyAnimation(){}
+	QPropertyAnimation( QObject* target, char* propertyName ){}
+	void setDuration( int i ){}
+	void setEasingCurve ( QEasingCurve::Type easing );
+};
+
+class QParallelAnimationGroup
+{
+public:
+	QParallelAnimationGroup(){}
+	void addAnimation ( QPropertyAnimation * animation );
+};
+
+class QAbstractTransition
+{
+public:
+	QAbstractTransition(){}
+	void addAnimation ( QParallelAnimationGroup * animation );
+};
+
+class QTimer
+{
+public:
+	QTimer(){}
+	void start ( int i ){
+		__ESBMC_assert(i >= 0, "Time specified invalid.");
+	}
+	void setSingleShot ( bool b );
+};
+
+class QState
+{
+public:
+	QState();
+	QState( QState* );
+	void assignProperty ( QObject * object, char * name, QPointF value );
+	void setInitialState ( QState * state );
+	QAbstractTransition * addTransition ( QGraphicsWidget * target, const char* signal, QState* state );
+	QAbstractTransition * addTransition ( QTimer * target, const char* signal, QState* state );
+};
+
+class QStateMachine
+{
+public:
+	QStateMachine(){}
+	void addState ( QState * state );
+	void setInitialState ( QState * state );
+	void start();
+};
+
+int pressed();
+int timeout();
+//void SIGNAL ( int signal );
+
+class QTextEdit{
+public:
+	QTextEdit ( QWidget * parent = 0 ){}
+	QTextEdit ( const QString & text, QWidget * parent = 0 ){}
+	~QTextEdit (){}
+};
+
+int clicked ( bool checked = false ){}
+
+class QVBoxLayout{
+public:
+	QVBoxLayout (){}
+	QVBoxLayout ( QWidget * parent ){}
+	~QVBoxLayout (){}
+	QVBoxLayout	addWidget ( QTextEdit * w ){}
+	QVBoxLayout	addWidget ( QPushButton * w ){}
+};
+
+class QLabel{
+public:
+	QLabel( char* label ){
+		__ESBMC_assert(label != NULL, "Invalid string");
+	}
+	void show(){}
 };
