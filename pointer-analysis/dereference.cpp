@@ -43,7 +43,7 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
       return true;
 
   if (is_dereference2t(expr) ||
-     (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type)))
+     (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value)))
     return true;
 
   return false;
@@ -64,7 +64,7 @@ void dereferencet::dereference(
   const guardt &guard,
   const modet mode)
 {
-  assert(is_pointer_type(dest->type));
+  assert(is_pointer_type(dest));
 
   // Pointers type won't have been resolved; do that now.
   pointer_type2t &dest_type = to_pointer_type(dest.get()->type);
@@ -255,7 +255,7 @@ bool dereferencet::dereference_type_compare(
   }
 
   // Check for C++ subclasses; we can cast derived up to base safely.
-  if (is_struct_type(object->type) && is_struct_type(dereference_type)) {
+  if (is_struct_type(object) && is_struct_type(dereference_type)) {
     const struct_type2t &from_type = to_struct_type(object->type);
     const struct_type2t &to_type = to_struct_type(dereference_type);
     if (is_subclass_of(from_type, to_type, ns))
@@ -468,7 +468,7 @@ void dereferencet::build_reference_to(
           if (    (is_pointer_type(type) &&
                    is_empty_type(to_pointer_type(type).subtype))
               ||
-                  (is_pointer_type(value->type) &&
+                  (is_pointer_type(value) &&
                    is_empty_type(to_pointer_type(value->type).subtype)))
             return;
 
@@ -594,8 +594,8 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr.source_value->type) ||
-         is_string_type(expr.source_value->type));
+  assert(is_array_type(expr.source_value) ||
+         is_string_type(expr.source_value));
 
   std::string name = array_name(ns, expr.source_value);
 
@@ -619,7 +619,7 @@ void dereferencet::bounds_check(
   }
 
   expr2tc arr_size;
-  if (is_array_type(expr.source_value->type)) {
+  if (is_array_type(expr.source_value)) {
     if (to_array_type(expr.source_value->type).size_is_infinite)
       // Can't overflow an infinitely sized array
       return;

@@ -258,7 +258,7 @@ void value_sett::get_value_set_rec(
   {
     const symbol2t &sym = to_symbol2t(expr);
 
-    if (sym.thename == "NULL" && is_pointer_type(expr->type))
+    if (sym.thename == "NULL" && is_pointer_type(expr))
     {
       // XXXjmorse - looks like there's no easy way to avoid this ns.follow
       // for getting the null objects type, without an internal pointer
@@ -330,7 +330,7 @@ void value_sett::get_value_set_rec(
   }
   else if (is_add2t(expr) || is_sub2t(expr))
   {
-    if (is_pointer_type(expr->type))
+    if (is_pointer_type(expr))
     {
       // find the pointer operand
       // XXXjmorse - polymorphism.
@@ -341,11 +341,11 @@ void value_sett::get_value_set_rec(
                            ? to_add2t(expr).side_2
                            : to_sub2t(expr).side_2;
 
-      assert(!(is_pointer_type(op0->type) && is_pointer_type(op1->type)) &&
+      assert(!(is_pointer_type(op0) && is_pointer_type(op1)) &&
               "Cannot have pointer arithmatic with two pointers as operands");
 
-      const expr2tc &ptr_op= (is_pointer_type(op0->type)) ? op0 : op1;
-      const expr2tc &non_ptr_op= (is_pointer_type(op0->type)) ? op1 : op0;
+      const expr2tc &ptr_op= (is_pointer_type(op0)) ? op0 : op1;
+      const expr2tc &non_ptr_op= (is_pointer_type(op0)) ? op1 : op0;
 
       object_mapt pointer_expr_set;
       get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type, ns);
@@ -529,7 +529,7 @@ void value_sett::get_reference_set_rec(
   if (is_symbol2t(expr) || is_dynamic_object2t(expr) ||
       is_constant_string2t(expr))
   {
-    if (is_array_type(expr->type) &&
+    if (is_array_type(expr) &&
         is_array_type(to_array_type(expr->type).subtype))
       insert(dest, expr);
     else    
@@ -547,8 +547,8 @@ void value_sett::get_reference_set_rec(
   {
     const index2t &index = to_index2t(expr);
     
-    assert(is_array_type(index.source_value->type) ||
-           is_string_type(index.source_value->type));
+    assert(is_array_type(index.source_value) ||
+           is_string_type(index.source_value));
     
     object_mapt array_references;
     get_reference_set(index.source_value, array_references, ns);
@@ -565,7 +565,7 @@ void value_sett::get_reference_set_rec(
       if (is_unknown2t(object)) {
         expr2tc unknown = expr2tc(new unknown2t(expr->type));
         insert(dest, unknown);
-      } else if (is_array_type(object->type) || is_string_type(object->type)) {
+      } else if (is_array_type(object) || is_string_type(object)) {
         type2tc zero_type = get_uint_type(config.ansi_c.int_width);
         expr2tc const_zero = expr2tc(new constant_int2t(zero_type, BigInt(0)));
         expr2tc new_index = expr2tc(new index2t(index.type, object,const_zero));
@@ -683,7 +683,7 @@ void value_sett::assign(
     return;
   }
 
-  assert(!is_symbol_type(lhs->type));
+  assert(!is_symbol_type(lhs));
   const type2tc &lhs_type = lhs->type;
   
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
@@ -802,7 +802,7 @@ void value_sett::do_free(
   const namespacet &ns)
 {
   // op must be a pointer
-  assert(is_pointer_type(op->type));
+  assert(is_pointer_type(op));
 
   // find out what it points to    
   object_mapt value_set;
@@ -929,8 +929,8 @@ void value_sett::assign_rec(
   }
   else if (is_index2t(lhs))
   {
-    assert(is_array_type(to_index2t(lhs).source_value->type) ||
-           is_string_type(to_index2t(lhs).source_value->type) ||
+    assert(is_array_type(to_index2t(lhs).source_value) ||
+           is_string_type(to_index2t(lhs).source_value) ||
            is_dynamic_object2t(to_index2t(lhs).source_value));
 
     assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
