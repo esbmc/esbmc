@@ -2018,6 +2018,15 @@ const expr2tc true_expr __attribute__((init_priority(103)))
 const expr2tc false_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(false));
 
+const constant_int2tc zero_uint __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_uint(32), BigInt(0));
+const constant_int2tc one_uint __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_uint(32), BigInt(1));
+const constant_int2tc zero_int __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_int(32), BigInt(0));
+const constant_int2tc one_int __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_int(32), BigInt(1));
+
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
 std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", "", ""};
