@@ -1871,11 +1871,6 @@ public:
   std::vector<expr2tc> datatype_members;
 };
 
-// These go by other names too:
-typedef constant_datatype_data constant_struct_data;
-typedef constant_datatype_data constant_union_data;
-typedef constant_datatype_data constant_array_data;
-
 class constant_bool_data : public constant2t
 {
 public:
@@ -1983,12 +1978,6 @@ class relation_data : public expr2t
   expr2tc side_1;
   expr2tc side_2;
 };
-typedef relation_data equality_data;
-typedef relation_data notequal_data;
-typedef relation_data lessthan_data;
-typedef relation_data lessthanequal_data;
-typedef relation_data greaterthan_data;
-typedef relation_data greaterthanequal_data;
 
 class logical_ops : public expr2t
 {
@@ -2022,10 +2011,6 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
-typedef logic_2ops and_data;
-typedef logic_2ops or_data;
-typedef logic_2ops xor_data;
-typedef logic_2ops implies_data;
 
 class bitops : public expr2t
 {
@@ -2059,13 +2044,6 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
-typedef bit_2ops bitand_data;
-typedef bit_2ops bitor_data;
-typedef bit_2ops bitxor_data;
-typedef bit_2ops bitnand_data;
-typedef bit_2ops bitnor_data;
-typedef bit_2ops bitnxor_data;
-typedef bit_2ops lshr_data;
 
 class arith_ops : public expr2t
 {
@@ -2086,8 +2064,6 @@ public:
 
   expr2tc value;
 };
-typedef arith_1op neg_data;
-typedef arith_1op abs_data;
 
 class arith_2ops : public arith_ops
 {
@@ -2101,13 +2077,6 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
-typedef arith_2ops add_data;
-typedef arith_2ops sub_data;
-typedef arith_2ops mul_data;
-typedef arith_2ops div_data;
-typedef arith_2ops modulus_data;
-typedef arith_2ops shl_data;
-typedef arith_2ops ashr_data;
 
 class same_object_data : public expr2t
 {
@@ -2640,9 +2609,6 @@ irep_typedefs(ashr, arith_2ops,
 irep_typedefs(same_object, same_object_data,
               expr2tc, same_object_data, &same_object_data::side_1,
               expr2tc, same_object_data, &same_object_data::side_2);
-typedef pointer_ops pointer_offset_data;
-typedef pointer_ops pointer_object_data;
-typedef pointer_ops address_of_data;
 irep_typedefs(pointer_offset, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(pointer_object, pointer_ops,
@@ -2668,16 +2634,12 @@ irep_typedefs(member, member_data,
 irep_typedefs(index, index_data,
               expr2tc, index_data, &index_data::source_value,
               expr2tc, index_data, &index_data::index);
-typedef string_ops zero_string_data;
-typedef string_ops zero_length_string_data;
 irep_typedefs(zero_string, string_ops,
               expr2tc, string_ops, &string_ops::string);
 irep_typedefs(zero_length_string, string_ops,
               expr2tc, string_ops, &string_ops::string);
 irep_typedefs(isnan, isnan_data,
               expr2tc, isnan_data, &isnan_data::value);
-typedef overflow_ops overflow_data;
-typedef overflow_ops overflow_neg_data;
 irep_typedefs(overflow, overflow_ops,
               expr2tc, overflow_ops, &overflow_ops::operand);
 irep_typedefs(overflow_cast, overflow_cast_data,
@@ -2697,9 +2659,6 @@ irep_typedefs(dynamic_object, dynamic_object_data,
               bool, dynamic_object_data, &dynamic_object_data::unknown);
 irep_typedefs(dereference, dereference_data,
               expr2tc, dereference_data, &dereference_data::value);
-typedef object_ops valid_object_data;
-typedef object_ops deallocated_obj_data;
-typedef object_ops dynamic_size_data;
 irep_typedefs(valid_object, object_ops,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(deallocated_obj, object_ops,
@@ -2719,7 +2678,6 @@ irep_typedefs(code_block, code_block_data,
 irep_typedefs(code_assign, code_assign_data,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
-typedef code_assign_data code_init_data;
 irep_typedefs(code_init, code_assign_data,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
@@ -2730,7 +2688,6 @@ irep_typedefs(code_printf, code_printf_data,
               &code_printf_data::operands);
 irep_typedefs(code_expression, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
-typedef code_expression_data code_return_data;
 irep_typedefs(code_return, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 typedef esbmct::expr_methods<code_skip2t, expr2t>
@@ -2740,11 +2697,9 @@ irep_typedefs(code_free, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_goto, code_goto_data,
               irep_idt, code_goto_data, &code_goto_data::target);
-typedef object_desc_data object_descriptor_data;
 irep_typedefs(object_descriptor, object_desc_data,
               expr2tc, object_desc_data, &object_desc_data::object,
               expr2tc, object_desc_data, &object_desc_data::offset);
-typedef code_funccall_data code_function_call_data;
 irep_typedefs(code_function_call, code_funccall_data,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2753,17 +2708,14 @@ irep_typedefs(code_function_call, code_funccall_data,
 irep_typedefs(code_comma, code_comma_data,
               expr2tc, code_comma_data, &code_comma_data::side_1,
               expr2tc, code_comma_data, &code_comma_data::side_2);
-typedef pointer_ops invalid_pointer_data;
 irep_typedefs(invalid_pointer, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data,
               expr2tc, buffer_size_data, &buffer_size_data::value);
 irep_typedefs(code_asm, code_asm_data,
               irep_idt, code_asm_data, &code_asm_data::value);
-typedef code_expression_data code_cpp_del_array_data;
 irep_typedefs(code_cpp_del_array, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
-typedef code_expression_data code_cpp_delete_data;
 irep_typedefs(code_cpp_delete, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_cpp_catch, code_cpp_catch_data,
