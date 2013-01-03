@@ -60,10 +60,10 @@ compute_pointer_offset(const expr2tc &expr)
   {
     const index2t &index = to_index2t(expr);
     mp_integer sub_size;
-    if (is_array_type(index.source_value->type)) {
+    if (is_array_type(index.source_value)) {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
       sub_size = pointer_offset_size(*arr_type.subtype.get());
-    } else if (is_string_type(index.source_value->type)) {
+    } else if (is_string_type(index.source_value)) {
       sub_size = 8;
     } else {
       std::cerr << "Unexpected index type in computer_pointer_offset";
@@ -89,7 +89,7 @@ compute_pointer_offset(const expr2tc &expr)
     const member2t &memb = to_member2t(expr);
 
     mp_integer result;
-    if (is_struct_type(expr->type)) {
+    if (is_struct_type(expr)) {
       const struct_type2t &type = to_struct_type(expr->type);
       result = member_offset(type, memb.member);
     } else {
