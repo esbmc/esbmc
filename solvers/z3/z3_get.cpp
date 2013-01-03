@@ -254,9 +254,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     assert(num_fields == 2);
 
     tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-    object = bv_get_rec(tmp, type_pool.get_uint(config.ansi_c.int_width));
+    object = bv_get_rec(tmp, get_uint_type(config.ansi_c.int_width));
     tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-    offset = bv_get_rec(tmp, type_pool.get_uint(config.ansi_c.int_width));
+    offset = bv_get_rec(tmp, get_uint_type(config.ansi_c.int_width));
 
     assert(is_unsignedbv_type(object->type));
 // XXXjmorse - some thought should go in here.
