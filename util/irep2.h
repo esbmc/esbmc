@@ -4389,6 +4389,10 @@ is_false(const expr2tc &expr)
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
+extern const constant_int2tc zero_uint;
+extern const constant_int2tc one_uint;
+extern const constant_int2tc zero_int;
+extern const constant_int2tc one_int;
 
 inline expr2tc
 gen_uint(unsigned long val)

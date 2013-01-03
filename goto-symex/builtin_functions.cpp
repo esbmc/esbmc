@@ -94,7 +94,7 @@ void goto_symext::symex_malloc(
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
     expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
-    expr2tc idx_val = gen_uint(0);
+    expr2tc idx_val = zero_uint;
     expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
     rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type.subtype()));
     rhs_ref.ptr_obj = idx;
