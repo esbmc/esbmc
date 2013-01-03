@@ -170,7 +170,7 @@ class constant_array2t;
  *  So yeah, that's what this class attempts to implement, via the medium of
  *  boosts shared_ptr.
  */
-template <class T, int expid>
+template <class T>
 class irep_container : public boost::shared_ptr<T>
 {
 public:
@@ -178,24 +178,22 @@ public:
 
   template<class Y>
   explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
-    { assert(expid == -1 || p->expr_id == expid); }
+    { }
 
   template<class Y>
   explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
-    { assert(expid == -1 || p->expr_id == expid); }
+    { }
 
   irep_container(const irep_container &ref)
     : boost::shared_ptr<T>(ref) {}
 
-  template <class Y, int I>
-  irep_container(const irep_container<Y, I> &ref)
+  template <class Y>
+  irep_container(const irep_container<Y> &ref)
     : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref), boost::detail::polymorphic_cast_tag()) {}
 
   irep_container &operator=(irep_container const &ref)
   {
     boost::shared_ptr<T>::operator=(ref);
-    T *p = boost::shared_ptr<T>::get();
-    assert(expid == -1 || p == NULL || p->expr_id == expid);
     return *this;
   }
 
@@ -204,12 +202,11 @@ public:
   {
     boost::shared_ptr<T>::operator=(r);
     T *p = boost::shared_ptr<T>::operator->();
-    assert(expid == -1 || p == NULL || p->expr_id == expid);
     return *this;
   }
 
-  template <class Y, int I>
-  irep_container &operator=(const irep_container<Y, I> &ref)
+  template <class Y>
+  irep_container &operator=(const irep_container<Y> &ref)
   {
     *this = boost::shared_polymorphic_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
@@ -252,7 +249,7 @@ public:
 };
 
 typedef boost::shared_ptr<type2t> type2tc;
-typedef irep_container<expr2t, -1> expr2tc;
+typedef irep_container<expr2t> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
 typedef std::list<member_entryt> list_of_memberst;
