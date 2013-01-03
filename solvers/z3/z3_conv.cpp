@@ -1668,8 +1668,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
   } else if (is_typecast2t(obj.ptr_obj)) {
     // Take the address of whatevers being casted. Either way, they all end up
     // being of a pointer_tuple type, so this should be fine.
-    address_of2tc tmp(new address_of2t(type2tc(),
-                                       to_typecast2t(obj.ptr_obj).from));
+    address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
     tmp.get()->type = obj.type;
     convert_bv(tmp, output);
   } else if (is_byte_extract2t(obj.ptr_obj)) {
