@@ -1716,7 +1716,7 @@ z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
   unsigned int i;
 
   for (i = 0; i < width; i++) {
-    expr2tc offs(new constant_int2t(uint_type2(), BigInt(i)));
+    constant_int2tc offs(uint_type2(), BigInt(i));
     expr2tc extract_byte(new byte_extract2t(
           type_pool.get_uint8(), be, data, offs, extract_guard));
     z3::expr byte;

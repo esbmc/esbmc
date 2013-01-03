@@ -1040,6 +1040,100 @@ namespace esbmct {
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
   };
+
+  // So that we can write such things as:
+  //
+  //   constant_int2tc bees(type, val);
+  //
+  // We need a class derived from expr2tc that takes the correct set of
+  // constructor arguments, which means yet more template goo.
+  template <class contained,
+     typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
+     field1_type field1_class::*field1_ptr = &field1_class::expr_id,
+     typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
+     field2_type field2_class::*field2_ptr = &field2_class::expr_id,
+     typename field3_type = const expr2t::expr_ids, class field3_class = expr2t,
+     field3_type field3_class::*field3_ptr = &field3_class::expr_id,
+     typename field4_type = const expr2t::expr_ids, class field4_class = expr2t,
+     field4_type field4_class::*field4_ptr = &field4_class::expr_id,
+     typename field5_type = const expr2t::expr_ids, class field5_class = expr2t,
+     field5_type field5_class::*field5_ptr = &field5_class::expr_id,
+     typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
+     field6_type field6_class::*field6_ptr = &field6_class::expr_id>
+  class something2tc : public expr2tc {
+  public:
+    class dummy_type_tag {
+    public:
+      typedef int type;
+    };
+
+    something2tc() : expr2tc(NULL) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1)) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1, arg2)) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1, arg2, arg3)) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4)) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL,
+                 typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5)) { }
+
+    template <class arbitary = dummy_type_tag>
+    something2tc(const type2tc &t,
+                 const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 const field6_type &arg6,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL)
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
+
+    something2tc(const something2tc<contained,
+                                    field1_type, field1_class, field1_ptr,
+                                    field2_type, field2_class, field2_ptr,
+                                    field3_type, field3_class, field3_ptr,
+                                    field4_type, field4_class, field4_ptr,
+                                    field5_type, field5_class, field5_ptr,
+                                    field6_type, field6_class, field6_ptr> &ref)
+      : expr2tc(ref) { }
+  };
 }; // esbmct
 
 // So - make some type definitions for the different types we're going to be
@@ -2371,6 +2465,11 @@ public:
 };
 
 // Give everything a typedef name
+
+
+typedef esbmct::something2tc<constant_int2t,
+        BigInt, constant_int_data, &constant_int_data::constant_value>
+        constant_int2tc;
 
 typedef esbmct::expr_methods<constant_int2t, constant_int_data,
         BigInt, constant_int_data, &constant_int_data::constant_value>
@@ -4314,7 +4413,6 @@ inline bool is_nil_type(const type2tc &t)
   return false;
 }
 
-typedef irep_container<constant_int2t, expr2t::constant_int_id> constant_int2tc;
 typedef irep_container<constant_fixedbv2t, expr2t::constant_fixedbv_id>
                        constant_fixedbv2tc;
 typedef irep_container<constant_bool2t, expr2t::constant_bool_id>
