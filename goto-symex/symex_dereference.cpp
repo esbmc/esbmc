@@ -112,7 +112,7 @@ void goto_symext::dereference_rec(
     expr = deref.value;
   }
   else if (is_index2t(expr) &&
-           is_pointer_type(to_index2t(expr).source_value->type))
+           is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
     expr2tc tmp = expr2tc(new add2t(index.source_value->type,

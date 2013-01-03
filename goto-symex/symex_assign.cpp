@@ -246,8 +246,8 @@ void goto_symext::symex_assign_array(
 
   const index2t &index = to_index2t(lhs);
 
-  assert(is_array_type(index.source_value->type) ||
-         is_string_type(index.source_value->type));
+  assert(is_array_type(index.source_value) ||
+         is_string_type(index.source_value));
 
   // turn
   //   a[i]=e
@@ -274,8 +274,8 @@ void goto_symext::symex_assign_member(
 
   const member2t &member = to_member2t(lhs);
 
-  assert(is_struct_type(member.source_value->type) ||
-         is_union_type(member.source_value->type));
+  assert(is_struct_type(member.source_value) ||
+         is_union_type(member.source_value));
 
   const irep_idt &component_name = member.member;
   expr2tc real_lhs = member.source_value;
@@ -292,7 +292,7 @@ void goto_symext::symex_assign_member(
     {
       // remove the type cast, we assume that the member is there
       real_lhs = cast.from;
-      assert(is_struct_type(real_lhs->type) || is_union_type(real_lhs->type));
+      assert(is_struct_type(real_lhs) || is_union_type(real_lhs));
     }
   }
 

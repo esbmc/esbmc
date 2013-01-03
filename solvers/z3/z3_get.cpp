@@ -75,7 +75,7 @@ z3_convt::get(const expr2tc &expr)
     sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
     if (cache_res != sort_cache.end()) {
       sort = cache_res->second;
-    } else if (int_encoding && is_bv_type(expr->type)) {
+    } else if (int_encoding && is_bv_type(expr)) {
       // Special case: in integer mode, all int types become Z3 int's, which
       // doesn't necessarily get put in the type cache.
       sort = ctx.int_sort();
@@ -258,9 +258,9 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
     offset = bv_get_rec(tmp, get_uint_type(config.ansi_c.int_width));
 
-    assert(is_unsignedbv_type(object->type));
+    assert(is_unsignedbv_type(object));
 // XXXjmorse - some thought should go in here.
-//    assert(is_signedbv_type(offset->type));
+//    assert(is_signedbv_type(offset));
     const constant_int2t &objref = to_constant_int2t(object);
     const constant_int2t &offsref = to_constant_int2t(offset);
 
