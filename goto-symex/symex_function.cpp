@@ -431,7 +431,7 @@ goto_symext::pop_frame(void)
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
-    expr2tc tmp_expr(new symbol2t(type_pool.get_empty(), it->base_name,
+    expr2tc tmp_expr(new symbol2t(get_empty_type(), it->base_name,
                                   it->lev, it->l1_num, 0, it->t_num, 0));
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
@@ -471,7 +471,7 @@ goto_symext::locality(unsigned frame_nr,
        it++)
   {
     // Temporary, for symbol migration,
-    expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
+    expr2tc tmp_sym = expr2tc(new symbol2t(get_empty_type(), *it));
     frame.level1.rename_to(tmp_sym, frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));

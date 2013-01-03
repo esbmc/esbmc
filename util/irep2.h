@@ -4494,4 +4494,10 @@ get_empty_type(void)
   return type_pool.get_empty();
 }
 
+inline const type2tc &
+get_pointer_type(const typet &val)
+{
+  return type_pool.get_pointer(val);
+}
+
 #endif /* _UTIL_IREP2_H_ */

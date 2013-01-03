@@ -86,7 +86,7 @@ void goto_symext::symex_malloc(
 
   if(size_is_one)
   {
-    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type));
+    rhs_ref.type = get_pointer_type(pointer_typet(symbol.type));
     rhs_ref.ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
   }
   else
@@ -96,7 +96,7 @@ void goto_symext::symex_malloc(
     expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
     expr2tc idx_val = zero_uint;
     expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
-    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type.subtype()));
+    rhs_ref.type = get_pointer_type(pointer_typet(symbol.type.subtype()));
     rhs_ref.ptr_obj = idx;
   }
 
@@ -120,12 +120,12 @@ void goto_symext::symex_malloc(
   symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
   expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
 
   expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-  expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
+  expr2tc idx = expr2tc(new index2t(get_bool_type(), sym, ptr_obj));
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
 
@@ -237,12 +237,12 @@ void goto_symext::symex_cpp_new(
   symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
   expr2tc sym = expr2tc(new symbol2t(sym_type, "cpp::__ESBMC_is_dynamic"));
 
   expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-  expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
+  expr2tc idx = expr2tc(new index2t(get_bool_type(), sym, ptr_obj));
   expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);

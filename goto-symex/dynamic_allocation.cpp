@@ -35,7 +35,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc alloc_arr_2;
     migrate_expr(alloc_array, alloc_arr_2);
 
-    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+    expr2tc index_expr = expr2tc(new index2t(get_bool_type(),
                                               alloc_arr_2, obj_expr));
     expr = index_expr;
   }
@@ -49,7 +49,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc alloc_arr_2;
     migrate_expr(alloc_array, alloc_arr_2);
 
-    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+    expr2tc index_expr = expr2tc(new index2t(get_bool_type(),
                                              alloc_arr_2, obj_expr));
     expr2tc notindex = expr2tc(new not2t(index_expr));
 
@@ -65,7 +65,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     migrate_expr(sym, sym_2);
 
     expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), ptr.ptr_obj));
-    expr2tc is_dyn = expr2tc(new index2t(type_pool.get_bool(), sym_2, ptr_obj));
+    expr2tc is_dyn = expr2tc(new index2t(get_bool_type(), sym_2, ptr_obj));
 
     // Catch free pointers: don't allow anything to be pointer object 1, the
     // invalid pointer.
@@ -90,7 +90,7 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
     expr2tc alloc_arr_2;
     migrate_expr(alloc_array, alloc_arr_2);
 
-    expr2tc index_expr = expr2tc(new index2t(type_pool.get_bool(),
+    expr2tc index_expr = expr2tc(new index2t(get_bool_type(),
                                              alloc_arr_2, obj_expr));
     expr = index_expr;
   }
