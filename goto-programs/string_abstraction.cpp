@@ -484,7 +484,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   while (is_typecast2t(ret_val))
     ret_val = to_typecast2t(ret_val).from;
 
-  if (!is_pointer_type(ret_val->type) ||
+  if (!is_pointer_type(ret_val) ||
       !is_char_type(to_pointer_type(ret_val->type).subtype))
     return;
 
@@ -718,7 +718,7 @@ expr2tc string_abstractiont::build(
   if (is_typecast2t(pointer))
   {
     // cast from another pointer type?
-    if (!is_pointer_type(to_typecast2t(pointer).from->type))
+    if (!is_pointer_type(to_typecast2t(pointer).from))
       return build_unknown(what, write);
 
     // recursive call
@@ -818,7 +818,7 @@ expr2tc string_abstractiont::build(const expr2tc &pointer, bool write)
   if (is_typecast2t(pointer))
   {
     // cast from another pointer type?
-    if (!is_pointer_type(to_typecast2t(pointer).from->type))
+    if (!is_pointer_type(to_typecast2t(pointer).from))
       return build_unknown(write);
 
     // recursive call
@@ -1248,9 +1248,9 @@ void string_abstractiont::abstract_assign(
   if (has_string_macros(assign.source))
     replace_string_macros(assign.source, false, target->location);
 
-  if (is_pointer_type(assign.target->type))
+  if (is_pointer_type(assign.target))
     abstract_pointer_assign(dest, target);
-  else if (is_char_type(assign.target->type))
+  else if (is_char_type(assign.target))
     abstract_char_assign(dest, target);
 }
 
@@ -1425,7 +1425,7 @@ void string_abstractiont::abstract_function_call(
     if (is_pointer_type(tcfree) &&
         is_char_type(to_pointer_type(tcfree).subtype))
     {
-      if (is_pointer_type(actual->type))
+      if (is_pointer_type(actual))
         new_args.push_back(build(actual, false));
       else
         new_args.push_back(expr2tc(new address_of2t(
