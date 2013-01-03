@@ -4422,4 +4422,64 @@ gen_uint(unsigned long val)
   return v;
 }
 
+inline const type2tc &
+get_uint8_type(void)
+{
+  return type_pool.get_uint8();
+}
+
+inline const type2tc &
+get_uint16_type(void)
+{
+  return type_pool.get_uint16();
+}
+
+inline const type2tc &
+get_uint32_type(void)
+{
+  return type_pool.get_uint32();
+}
+
+inline const type2tc &
+get_uint64_type(void)
+{
+  return type_pool.get_uint64();
+}
+
+inline const type2tc &
+get_int8_type(void)
+{
+  return type_pool.get_int8();
+}
+
+inline const type2tc &
+get_int16_type(void)
+{
+  return type_pool.get_int16();
+}
+
+inline const type2tc &
+get_int32_type(void)
+{
+  return type_pool.get_int32();
+}
+
+inline const type2tc &
+get_int64_type(void)
+{
+  return type_pool.get_int64();
+}
+
+inline const type2tc &
+get_uint_type(unsigned int sz)
+{
+  return type_pool.get_uint(sz);
+}
+
+inline const type2tc &
+get_int_type(unsigned int sz)
+{
+  return type_pool.get_int(sz);
+}
+
 #endif /* _UTIL_IREP2_H_ */

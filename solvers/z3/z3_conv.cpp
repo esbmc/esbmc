@@ -1717,7 +1717,7 @@ z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
   for (i = 0; i < width; i++) {
     constant_int2tc offs(uint_type2(), BigInt(i));
     expr2tc extract_byte(new byte_extract2t(
-          type_pool.get_uint8(), be, data, offs, extract_guard));
+          get_uint8_type(), be, data, offs, extract_guard));
     z3::expr byte;
 
     // Call directly to avoid caching. Could put the byte_extract on the
@@ -1860,7 +1860,7 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
 
   // Just like byte extract, optionally cast up to being a pointer.
   if (is_pointer_type(data.type) && !output.is_datatype()) {
-    type2tc sz = type_pool.get_uint(data.type->get_width());
+    type2tc sz = get_uint_type(data.type->get_width());
     expr2tc sym = label_formula("byte_extract", sz, output);
 
     expr2tc cast(new typecast2t(data.type, sym));
@@ -1960,7 +1960,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
         unsigned int cur_offs = accuml_offs - total_sz;
         unsigned int immediate_sz = cur_item_sz - cur_offs;
-        type2tc getsz = type_pool.get_uint(immediate_sz * 8);
+        type2tc getsz = get_uint_type(immediate_sz * 8);
         expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
         output = extract_from_struct_field(getsz, data.big_endian, idx,
                                            new_offs, data.source_value,
@@ -2020,7 +2020,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
         expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem)));
         expr2tc index(new index2t(subtype, data.source_value, idx));
         expr2tc offs(new constant_int2t(uint_type2(), cur_offs));
-        expr2tc ext(new byte_extract2t(type_pool.get_uint(to_extract * 8),
+        expr2tc ext(new byte_extract2t(get_uint_type(to_extract * 8),
                                        data.big_endian, index, offs,
                                        data.extract_guard));
         extract_list.push_back(ext);
@@ -2070,9 +2070,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       convert_bv(data.source_value, output);
     } else {
       expr2tc cast_to_intrep(new
-                     typecast2t(type_pool.get_uint(config.ansi_c.pointer_width),
+                     typecast2t(get_uint_type(config.ansi_c.pointer_width),
                                   data.source_value));
-      type2tc extract_size = type_pool.get_uint(sel_sz * 8);
+      type2tc extract_size = get_uint_type(sel_sz * 8);
       expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
                                          cast_to_intrep, data.source_offset,
                                          data.extract_guard));
@@ -2137,7 +2137,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   // If a pointer is desired, // produce it via the medium of a typecast.
   if (is_pointer_type(data.type) && !output.is_datatype()) {
-    type2tc sz = type_pool.get_uint(sel_sz * 8);
+    type2tc sz = get_uint_type(sel_sz * 8);
     expr2tc sym = label_formula("byte_extract", sz, output);
 
     expr2tc cast(new typecast2t(data.type, sym));
@@ -2408,7 +2408,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
         unsigned int offs_into_field = offset - offs_into_struct;
         unsigned int bits_to_update = std::min<unsigned int>(insert_width,
                                       offs_into_struct + field_width - offset);
-        type2tc update_sz = type_pool.get_uint(bits_to_update);
+        type2tc update_sz = get_uint_type(bits_to_update);
 
         // Extract an appropriate amount of data from source.
         expr2tc ext_offs(new constant_int2t(uint_type2(),
@@ -2461,7 +2461,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       // How many bits are we going to be writing today.
       unsigned int write_bits = std::min<unsigned int>(insert_width,
                                          elem_size - offs_into_elem);
-      type2tc sel_sz = type_pool.get_uint(write_bits);
+      type2tc sel_sz = get_uint_type(write_bits);
 
       // Fetch that many bits out of the update value.
       expr2tc update_offs(new constant_int2t(uint_type2(),
@@ -2532,8 +2532,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     }
 
     // Nope; typecasts and writes.
-    type2tc pointer_size =
-      type_pool.get_uint(data.source_value->type->get_width());
+    type2tc pointer_size = get_uint_type(data.source_value->type->get_width());
     expr2tc cast(new typecast2t(pointer_size, data.source_value));
     expr2tc new_update(data.clone());
     to_byte_update2t(new_update).source_value = cast;
@@ -2605,7 +2604,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
   // Optionally cast to a pointer if requested.
   if (is_pointer_type(data.type) && !output.is_datatype()) {
-    type2tc sz = type_pool.get_uint(output.get_sort().bv_size());
+    type2tc sz = get_uint_type(output.get_sort().bv_size());
     expr2tc sym = label_formula("byte_update", sz, output);
 
     expr2tc cast(new typecast2t(data.type, sym));
