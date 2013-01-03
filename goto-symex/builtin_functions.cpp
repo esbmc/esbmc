@@ -81,7 +81,7 @@ void goto_symext::symex_malloc(
   type2tc new_type;
   migrate_type(symbol.type, new_type);
 
-  expr2tc rhs = expr2tc(new address_of2t(type_pool.get_empty(), expr2tc()));
+  expr2tc rhs = expr2tc(new address_of2t(get_empty_type(), expr2tc()));
   address_of2t &rhs_ref = to_address_of2t(rhs);
 
   if(size_is_one)
