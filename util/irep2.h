@@ -1871,6 +1871,11 @@ public:
   std::vector<expr2tc> datatype_members;
 };
 
+// These go by other names too:
+typedef constant_datatype_data constant_struct_data;
+typedef constant_datatype_data constant_union_data;
+typedef constant_datatype_data constant_array_data;
+
 class constant_bool_data : public constant2t
 {
 public:
@@ -1978,6 +1983,12 @@ class relation_data : public expr2t
   expr2tc side_1;
   expr2tc side_2;
 };
+typedef relation_data equality_data;
+typedef relation_data notequal_data;
+typedef relation_data lessthan_data;
+typedef relation_data lessthanequal_data;
+typedef relation_data greaterthan_data;
+typedef relation_data greaterthanequal_data;
 
 class logical_ops : public expr2t
 {
@@ -2011,6 +2022,10 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
+typedef logic_2ops and_data;
+typedef logic_2ops or_data;
+typedef logic_2ops xor_data;
+typedef logic_2ops implies_data;
 
 class bitops : public expr2t
 {
@@ -2044,6 +2059,13 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
+typedef bit_2ops bitand_data;
+typedef bit_2ops bitor_data;
+typedef bit_2ops bitxor_data;
+typedef bit_2ops bitnand_data;
+typedef bit_2ops bitnor_data;
+typedef bit_2ops bitnxor_data;
+typedef bit_2ops lshr_data;
 
 class arith_ops : public expr2t
 {
@@ -2064,6 +2086,8 @@ public:
 
   expr2tc value;
 };
+typedef arith_1op neg_data;
+typedef arith_1op abs_data;
 
 class arith_2ops : public arith_ops
 {
@@ -2077,6 +2101,13 @@ public:
   expr2tc side_1;
   expr2tc side_2;
 };
+typedef arith_2ops add_data;
+typedef arith_2ops sub_data;
+typedef arith_2ops mul_data;
+typedef arith_2ops div_data;
+typedef arith_2ops modulus_data;
+typedef arith_2ops shl_data;
+typedef arith_2ops ashr_data;
 
 class same_object_data : public expr2t
 {
@@ -2511,315 +2542,258 @@ public:
 
 irep_typedefs(constant_int,
               BigInt, constant_int_data, &constant_int_data::constant_value);
-
-typedef esbmct::expr_methods<constant_fixedbv2t, constant_fixedbv_data,
-        fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value>
-        constant_fixedbv_expr_methods;
-typedef esbmct::expr_methods<constant_struct2t, constant_datatype_data,
-        std::vector<expr2tc>, constant_datatype_data,
-        &constant_datatype_data::datatype_members>
-        constant_struct_expr_methods;
-typedef esbmct::expr_methods<constant_union2t, constant_datatype_data,
-        std::vector<expr2tc>, constant_datatype_data,
-        &constant_datatype_data::datatype_members>
-        constant_union_expr_methods;
-typedef esbmct::expr_methods<constant_array2t, constant_datatype_data,
-        std::vector<expr2tc>, constant_datatype_data,
-        &constant_datatype_data::datatype_members>
-        constant_array_expr_methods;
-typedef esbmct::expr_methods<constant_bool2t, constant_bool_data,
-        bool, constant_bool_data, &constant_bool_data::constant_value>
-        constant_bool_expr_methods;
-typedef esbmct::expr_methods<constant_array_of2t, constant_array_of_data,
-        expr2tc, constant_array_of_data, &constant_array_of_data::initializer>
-        constant_array_of_expr_methods;
-typedef esbmct::expr_methods<constant_string2t, constant_string_data,
-        irep_idt, constant_string_data, &constant_string_data::value>
-        constant_string_expr_methods;
-typedef esbmct::expr_methods<symbol2t, symbol_data,
-        irep_idt, symbol_data, &symbol_data::thename,
-        symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
-        unsigned int, symbol_data, &symbol_data::level1_num,
-        unsigned int, symbol_data, &symbol_data::level2_num,
-        unsigned int, symbol_data, &symbol_data::thread_num,
-        unsigned int, symbol_data, &symbol_data::node_num>
-        symbol_expr_methods;
-typedef esbmct::expr_methods<typecast2t, typecast_data,
-        expr2tc, typecast_data, &typecast_data::from>
-        typecast_expr_methods;
-typedef esbmct::expr_methods<if2t, if_data,
-        expr2tc, if_data, &if_data::cond,
-        expr2tc, if_data, &if_data::true_value,
-        expr2tc, if_data, &if_data::false_value>
-        if_expr_methods;
-typedef esbmct::expr_methods<equality2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        equality_expr_methods;
-typedef esbmct::expr_methods<notequal2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        notequal_expr_methods;
-typedef esbmct::expr_methods<lessthan2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        lessthan_expr_methods;
-typedef esbmct::expr_methods<greaterthan2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        greaterthan_expr_methods;
-typedef esbmct::expr_methods<lessthanequal2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        lessthanequal_expr_methods;
-typedef esbmct::expr_methods<greaterthanequal2t, relation_data,
-        expr2tc, relation_data, &relation_data::side_1,
-        expr2tc, relation_data, &relation_data::side_2>
-        greaterthanequal_expr_methods;
-typedef esbmct::expr_methods<not2t, not_data,
-        expr2tc, not_data, &not_data::value>
-        not_expr_methods;
-typedef esbmct::expr_methods<and2t, logic_2ops,
-        expr2tc, logic_2ops, &logic_2ops::side_1,
-        expr2tc, logic_2ops, &logic_2ops::side_2>
-        and_expr_methods;
-typedef esbmct::expr_methods<or2t, logic_2ops,
-        expr2tc, logic_2ops, &logic_2ops::side_1,
-        expr2tc, logic_2ops, &logic_2ops::side_2>
-        or_expr_methods;
-typedef esbmct::expr_methods<xor2t, logic_2ops,
-        expr2tc, logic_2ops, &logic_2ops::side_1,
-        expr2tc, logic_2ops, &logic_2ops::side_2>
-        xor_expr_methods;
-typedef esbmct::expr_methods<implies2t, logic_2ops,
-        expr2tc, logic_2ops, &logic_2ops::side_1,
-        expr2tc, logic_2ops, &logic_2ops::side_2>
-        implies_expr_methods;
-typedef esbmct::expr_methods<bitand2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitand_expr_methods;
-typedef esbmct::expr_methods<bitor2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitor_expr_methods;
-typedef esbmct::expr_methods<bitxor2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitxor_expr_methods;
-typedef esbmct::expr_methods<bitnand2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitnand_expr_methods;
-typedef esbmct::expr_methods<bitnor2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitnor_expr_methods;
-typedef esbmct::expr_methods<bitnxor2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        bitnxor_expr_methods;
-typedef esbmct::expr_methods<lshr2t, bit_2ops,
-        expr2tc, bit_2ops, &bit_2ops::side_1,
-        expr2tc, bit_2ops, &bit_2ops::side_2>
-        lshr_expr_methods;
-typedef esbmct::expr_methods<bitnot2t, bitnot_data,
-        expr2tc, bitnot_data, &bitnot_data::value>
-        bitnot_expr_methods;
-typedef esbmct::expr_methods<neg2t, arith_1op,
-        expr2tc, arith_1op, &arith_1op::value>
-        neg_expr_methods;
-typedef esbmct::expr_methods<abs2t, arith_1op,
-        expr2tc, arith_1op, &arith_1op::value>
-        abs_expr_methods;
-typedef esbmct::expr_methods<add2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        add_expr_methods;
-typedef esbmct::expr_methods<sub2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        sub_expr_methods;
-typedef esbmct::expr_methods<mul2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        mul_expr_methods;
-typedef esbmct::expr_methods<div2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        div_expr_methods;
-typedef esbmct::expr_methods<modulus2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        modulus_expr_methods;
-typedef esbmct::expr_methods<shl2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        shl_expr_methods;
-typedef esbmct::expr_methods<ashr2t, arith_2ops,
-        expr2tc, arith_2ops, &arith_2ops::side_1,
-        expr2tc, arith_2ops, &arith_2ops::side_2>
-        ashr_expr_methods;
-typedef esbmct::expr_methods<same_object2t, same_object_data,
-        expr2tc, same_object_data, &same_object_data::side_1,
-        expr2tc, same_object_data, &same_object_data::side_2>
-        same_object_expr_methods;
-typedef esbmct::expr_methods<pointer_offset2t, pointer_ops,
-        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
-        pointer_offset_expr_methods;
-typedef esbmct::expr_methods<pointer_object2t, pointer_ops,
-        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
-        pointer_object_expr_methods;
-typedef esbmct::expr_methods<address_of2t, pointer_ops,
-        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
-        address_of_expr_methods;
-typedef esbmct::expr_methods<byte_extract2t, byte_extract_data,
-        bool, byte_extract_data, &byte_extract_data::big_endian,
-        expr2tc, byte_extract_data, &byte_extract_data::source_value,
-        expr2tc, byte_extract_data, &byte_extract_data::source_offset,
-        expr2tc, byte_extract_data, &byte_extract_data::extract_guard>
-        byte_extract_expr_methods;
-typedef esbmct::expr_methods<byte_update2t, byte_update_data,
-        bool, byte_update_data, &byte_update_data::big_endian,
-        expr2tc, byte_update_data, &byte_update_data::source_value,
-        expr2tc, byte_update_data, &byte_update_data::source_offset,
-        expr2tc, byte_update_data, &byte_update_data::update_value,
-        expr2tc, byte_update_data, &byte_update_data::update_guard>
-        byte_update_expr_methods;
-typedef esbmct::expr_methods<with2t, with_data,
-        expr2tc, with_data, &with_data::source_value,
-        expr2tc, with_data, &with_data::update_field,
-        expr2tc, with_data, &with_data::update_value>
-        with_expr_methods;
-typedef esbmct::expr_methods<member2t, member_data,
-        expr2tc, member_data, &member_data::source_value,
-        irep_idt, member_data, &member_data::member>
-        member_expr_methods;
-typedef esbmct::expr_methods<index2t, index_data,
-        expr2tc, index_data, &index_data::source_value,
-        expr2tc, index_data, &index_data::index>
-        index_expr_methods;
-typedef esbmct::expr_methods<zero_string2t, string_ops,
-        expr2tc, string_ops, &string_ops::string>
-        zero_string_expr_methods;
-typedef esbmct::expr_methods<zero_length_string2t, string_ops,
-        expr2tc, string_ops, &string_ops::string>
-        zero_length_string_expr_methods;
-typedef esbmct::expr_methods<isnan2t, isnan_data,
-        expr2tc, isnan_data, &isnan_data::value>
-        isnan_expr_methods;
-typedef esbmct::expr_methods<overflow2t, overflow_ops,
-        expr2tc, overflow_ops, &overflow_ops::operand>
-        overflow_expr_methods;
-typedef esbmct::expr_methods<overflow_cast2t, overflow_cast_data,
-        expr2tc, overflow_ops, &overflow_ops::operand,
-        unsigned int, overflow_cast_data, &overflow_cast_data::bits>
-        overflow_cast_expr_methods;
-typedef esbmct::expr_methods<overflow_neg2t, overflow_ops,
-        expr2tc, overflow_ops, &overflow_ops::operand>
-        overflow_neg_expr_methods;
+irep_typedefs(constant_fixedbv,
+              fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value);
+irep_typedefs(constant_struct,
+              std::vector<expr2tc>, constant_datatype_data,
+              &constant_datatype_data::datatype_members);
+irep_typedefs(constant_union,
+              std::vector<expr2tc>, constant_datatype_data,
+              &constant_datatype_data::datatype_members);
+irep_typedefs(constant_array,
+              std::vector<expr2tc>, constant_datatype_data,
+              &constant_datatype_data::datatype_members);
+irep_typedefs(constant_bool,
+              bool, constant_bool_data, &constant_bool_data::constant_value);
+irep_typedefs(constant_array_of,
+              expr2tc, constant_array_of_data,
+              &constant_array_of_data::initializer);
+irep_typedefs(constant_string,
+              irep_idt, constant_string_data, &constant_string_data::value);
+irep_typedefs(symbol,
+              irep_idt, symbol_data, &symbol_data::thename,
+              symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
+              unsigned int, symbol_data, &symbol_data::level1_num,
+              unsigned int, symbol_data, &symbol_data::level2_num,
+              unsigned int, symbol_data, &symbol_data::thread_num,
+              unsigned int, symbol_data, &symbol_data::node_num);
+irep_typedefs(typecast,
+              expr2tc, typecast_data, &typecast_data::from);
+irep_typedefs(if,
+              expr2tc, if_data, &if_data::cond,
+              expr2tc, if_data, &if_data::true_value,
+              expr2tc, if_data, &if_data::false_value);
+irep_typedefs(equality,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(notequal,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(lessthan,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(greaterthan,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(lessthanequal,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(greaterthanequal,
+              expr2tc, relation_data, &relation_data::side_1,
+              expr2tc, relation_data, &relation_data::side_2);
+irep_typedefs(not,
+              expr2tc, not_data, &not_data::value);
+irep_typedefs(and,
+              expr2tc, logic_2ops, &logic_2ops::side_1,
+              expr2tc, logic_2ops, &logic_2ops::side_2);
+irep_typedefs(or,
+              expr2tc, logic_2ops, &logic_2ops::side_1,
+              expr2tc, logic_2ops, &logic_2ops::side_2);
+irep_typedefs(xor,
+              expr2tc, logic_2ops, &logic_2ops::side_1,
+              expr2tc, logic_2ops, &logic_2ops::side_2);
+irep_typedefs(implies,
+              expr2tc, logic_2ops, &logic_2ops::side_1,
+              expr2tc, logic_2ops, &logic_2ops::side_2);
+irep_typedefs(bitand,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitor,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitxor,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitnand,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitnor,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitnxor,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(lshr,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
+irep_typedefs(bitnot,
+              expr2tc, bitnot_data, &bitnot_data::value);
+irep_typedefs(neg,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(abs,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(add,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(sub,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(mul,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(div,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(modulus,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(shl,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(ashr,
+              expr2tc, arith_2ops, &arith_2ops::side_1,
+              expr2tc, arith_2ops, &arith_2ops::side_2);
+irep_typedefs(same_object,
+              expr2tc, same_object_data, &same_object_data::side_1,
+              expr2tc, same_object_data, &same_object_data::side_2);
+typedef pointer_ops pointer_offset_data;
+typedef pointer_ops pointer_object_data;
+typedef pointer_ops address_of_data;
+irep_typedefs(pointer_offset,
+              expr2tc, pointer_ops, &pointer_ops::ptr_obj);
+irep_typedefs(pointer_object,
+              expr2tc, pointer_ops, &pointer_ops::ptr_obj);
+irep_typedefs(address_of,
+              expr2tc, pointer_ops, &pointer_ops::ptr_obj);
+irep_typedefs(byte_extract,
+              bool, byte_extract_data, &byte_extract_data::big_endian,
+              expr2tc, byte_extract_data, &byte_extract_data::source_value,
+              expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+              expr2tc, byte_extract_data, &byte_extract_data::extract_guard);
+irep_typedefs(byte_update,
+              bool, byte_update_data, &byte_update_data::big_endian,
+              expr2tc, byte_update_data, &byte_update_data::source_value,
+              expr2tc, byte_update_data, &byte_update_data::source_offset,
+              expr2tc, byte_update_data, &byte_update_data::update_value,
+              expr2tc, byte_update_data, &byte_update_data::update_guard);
+irep_typedefs(with,
+              expr2tc, with_data, &with_data::source_value,
+              expr2tc, with_data, &with_data::update_field,
+              expr2tc, with_data, &with_data::update_value);
+irep_typedefs(member,
+              expr2tc, member_data, &member_data::source_value,
+              irep_idt, member_data, &member_data::member);
+irep_typedefs(index,
+              expr2tc, index_data, &index_data::source_value,
+              expr2tc, index_data, &index_data::index);
+typedef string_ops zero_string_data;
+typedef string_ops zero_length_string_data;
+irep_typedefs(zero_string,
+              expr2tc, string_ops, &string_ops::string);
+irep_typedefs(zero_length_string,
+              expr2tc, string_ops, &string_ops::string);
+irep_typedefs(isnan,
+              expr2tc, isnan_data, &isnan_data::value);
+typedef overflow_ops overflow_data;
+typedef overflow_ops overflow_neg_data;
+irep_typedefs(overflow,
+              expr2tc, overflow_ops, &overflow_ops::operand);
+irep_typedefs(overflow_cast,
+              expr2tc, overflow_ops, &overflow_ops::operand,
+              unsigned int, overflow_cast_data, &overflow_cast_data::bits);
+irep_typedefs(overflow_neg,
+              expr2tc, overflow_ops, &overflow_ops::operand);
 typedef esbmct::expr_methods<unknown2t, expr2t>
         unknown_expr_methods;
 typedef esbmct::expr_methods<invalid2t, expr2t>
         invalid_expr_methods;
 typedef esbmct::expr_methods<null_object2t, expr2t>
         null_object_expr_methods;
-typedef esbmct::expr_methods<dynamic_object2t, dynamic_object_data,
-        expr2tc, dynamic_object_data, &dynamic_object_data::instance,
-        bool, dynamic_object_data, &dynamic_object_data::invalid,
-        bool, dynamic_object_data, &dynamic_object_data::unknown>
-        dynamic_object_expr_methods;
-typedef esbmct::expr_methods<dereference2t, dereference_data,
-        expr2tc, dereference_data, &dereference_data::value>
-        dereference_expr_methods;
-typedef esbmct::expr_methods<valid_object2t, object_ops,
-        expr2tc, object_ops, &object_ops::value>
-        valid_object_expr_methods;
-typedef esbmct::expr_methods<deallocated_obj2t, object_ops,
-        expr2tc, object_ops, &object_ops::value>
-        deallocated_obj_expr_methods;
-typedef esbmct::expr_methods<dynamic_size2t, object_ops,
-        expr2tc, object_ops, &object_ops::value>
-        dynamic_size_expr_methods;
-typedef esbmct::expr_methods<sideeffect2t, sideeffect_data,
-        expr2tc, sideeffect_data, &sideeffect_data::operand,
-        expr2tc, sideeffect_data, &sideeffect_data::size,
-        type2tc, sideeffect_data, &sideeffect_data::alloctype,
-        unsigned int, sideeffect_data, &sideeffect_data::kind,
-        std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>
-        sideeffect_expr_methods;
-typedef esbmct::expr_methods<code_block2t, code_block_data,
-        std::vector<expr2tc>, code_block_data, &code_block_data::operands>
-        code_block_expr_methods;
-typedef esbmct::expr_methods<code_assign2t, code_assign_data,
-        expr2tc, code_assign_data, &code_assign_data::target,
-        expr2tc, code_assign_data, &code_assign_data::source>
-        code_assign_expr_methods;
-typedef esbmct::expr_methods<code_init2t, code_assign_data,
-        expr2tc, code_assign_data, &code_assign_data::target,
-        expr2tc, code_assign_data, &code_assign_data::source>
-        code_init_expr_methods;
-typedef esbmct::expr_methods<code_decl2t, code_decl_data,
-        irep_idt, code_decl_data, &code_decl_data::value>
-        code_decl_expr_methods;
-typedef esbmct::expr_methods<code_printf2t, code_printf_data,
-        std::vector<expr2tc>, code_printf_data, &code_printf_data::operands>
-        code_printf_expr_methods;
-typedef esbmct::expr_methods<code_expression2t, code_expression_data,
-        expr2tc, code_expression_data, &code_expression_data::operand>
-        code_expression_expr_methods;
-typedef esbmct::expr_methods<code_return2t, code_expression_data,
-        expr2tc, code_expression_data, &code_expression_data::operand>
-        code_return_expr_methods;
+irep_typedefs(dynamic_object,
+              expr2tc, dynamic_object_data, &dynamic_object_data::instance,
+              bool, dynamic_object_data, &dynamic_object_data::invalid,
+              bool, dynamic_object_data, &dynamic_object_data::unknown);
+irep_typedefs(dereference,
+              expr2tc, dereference_data, &dereference_data::value);
+typedef object_ops valid_object_data;
+typedef object_ops deallocated_obj_data;
+typedef object_ops dynamic_size_data;
+irep_typedefs(valid_object,
+              expr2tc, object_ops, &object_ops::value);
+irep_typedefs(deallocated_obj,
+              expr2tc, object_ops, &object_ops::value);
+irep_typedefs(dynamic_size,
+              expr2tc, object_ops, &object_ops::value);
+irep_typedefs(sideeffect,
+              expr2tc, sideeffect_data, &sideeffect_data::operand,
+              expr2tc, sideeffect_data, &sideeffect_data::size,
+              type2tc, sideeffect_data, &sideeffect_data::alloctype,
+              unsigned int, sideeffect_data, &sideeffect_data::kind,
+              std::vector<expr2tc>, sideeffect_data,
+              &sideeffect_data::arguments);
+irep_typedefs(code_block,
+              std::vector<expr2tc>, code_block_data,
+              &code_block_data::operands);
+irep_typedefs(code_assign,
+              expr2tc, code_assign_data, &code_assign_data::target,
+              expr2tc, code_assign_data, &code_assign_data::source);
+typedef code_assign_data code_init_data;
+irep_typedefs(code_init,
+              expr2tc, code_assign_data, &code_assign_data::target,
+              expr2tc, code_assign_data, &code_assign_data::source);
+irep_typedefs(code_decl,
+              irep_idt, code_decl_data, &code_decl_data::value);
+irep_typedefs(code_printf,
+              std::vector<expr2tc>, code_printf_data,
+              &code_printf_data::operands);
+irep_typedefs(code_expression,
+              expr2tc, code_expression_data, &code_expression_data::operand);
+typedef code_expression_data code_return_data;
+irep_typedefs(code_return,
+              expr2tc, code_expression_data, &code_expression_data::operand);
 typedef esbmct::expr_methods<code_skip2t, expr2t>
         code_skip_expr_methods;
-typedef esbmct::expr_methods<code_free2t, code_expression_data,
-        expr2tc, code_expression_data, &code_expression_data::operand>
-        code_free_expr_methods;
-typedef esbmct::expr_methods<code_goto2t, code_goto_data,
-        irep_idt, code_goto_data, &code_goto_data::target>
-        code_goto_expr_methods;
-typedef esbmct::expr_methods<object_descriptor2t, object_desc_data,
-        expr2tc, object_desc_data, &object_desc_data::object,
-        expr2tc, object_desc_data, &object_desc_data::offset>
-        object_desc_expr_methods;
-typedef esbmct::expr_methods<code_function_call2t, code_funccall_data,
-        expr2tc, code_funccall_data, &code_funccall_data::ret,
-        expr2tc, code_funccall_data, &code_funccall_data::function,
-        std::vector<expr2tc>, code_funccall_data, &code_funccall_data::operands>
-        code_function_call_expr_methods;
-typedef esbmct::expr_methods<code_comma2t, code_comma_data,
-        expr2tc, code_comma_data, &code_comma_data::side_1,
-        expr2tc, code_comma_data, &code_comma_data::side_2>
-        code_comma_expr_methods;
-typedef esbmct::expr_methods<invalid_pointer2t, pointer_ops,
-        expr2tc, pointer_ops, &pointer_ops::ptr_obj>
-        invalid_pointer_expr_methods;
-typedef esbmct::expr_methods<buffer_size2t, buffer_size_data,
-        expr2tc, buffer_size_data, &buffer_size_data::value>
-        buffer_size_expr_methods;
-typedef esbmct::expr_methods<code_asm2t, code_asm_data,
-        irep_idt, code_asm_data, &code_asm_data::value>
-        code_asm_expr_methods;
-typedef esbmct::expr_methods<code_cpp_del_array2t, code_expression_data,
-        expr2tc, code_expression_data, &code_expression_data::operand>
-        code_cpp_del_array_expr_methods;
-typedef esbmct::expr_methods<code_cpp_delete2t, code_expression_data,
-        expr2tc, code_expression_data, &code_expression_data::operand>
-        code_cpp_delete_expr_methods;
-typedef esbmct::expr_methods<code_cpp_catch2t, code_cpp_catch_data,
-        std::vector<irep_idt>, code_cpp_catch_data,
-        &code_cpp_catch_data::exception_list>
-        code_cpp_catch_expr_methods;
-typedef esbmct::expr_methods<code_cpp_throw2t, code_cpp_throw_data,
-        expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
-        std::vector<irep_idt>, code_cpp_throw_data,
-        &code_cpp_throw_data::exception_list>
-        code_cpp_throw_expr_methods;
-typedef esbmct::expr_methods<code_cpp_throw_decl2t, code_cpp_throw_decl_data,
-        std::vector<irep_idt>, code_cpp_throw_decl_data,
-        &code_cpp_throw_decl_data::exception_list>
-        code_cpp_throw_decl_expr_methods;
+typedef code_expression_data code_free_data;
+irep_typedefs(code_free,
+              expr2tc, code_expression_data, &code_expression_data::operand);
+irep_typedefs(code_goto,
+              irep_idt, code_goto_data, &code_goto_data::target);
+typedef object_desc_data object_descriptor_data;
+irep_typedefs(object_descriptor,
+              expr2tc, object_desc_data, &object_desc_data::object,
+              expr2tc, object_desc_data, &object_desc_data::offset);
+typedef code_funccall_data code_function_call_data;
+irep_typedefs(code_function_call,
+              expr2tc, code_funccall_data, &code_funccall_data::ret,
+              expr2tc, code_funccall_data, &code_funccall_data::function,
+              std::vector<expr2tc>, code_funccall_data,
+              &code_funccall_data::operands);
+irep_typedefs(code_comma,
+              expr2tc, code_comma_data, &code_comma_data::side_1,
+              expr2tc, code_comma_data, &code_comma_data::side_2);
+typedef pointer_ops invalid_pointer_data;
+irep_typedefs(invalid_pointer,
+              expr2tc, pointer_ops, &pointer_ops::ptr_obj);
+irep_typedefs(buffer_size,
+              expr2tc, buffer_size_data, &buffer_size_data::value);
+irep_typedefs(code_asm,
+              irep_idt, code_asm_data, &code_asm_data::value);
+typedef code_expression_data code_cpp_del_array_data;
+irep_typedefs(code_cpp_del_array,
+              expr2tc, code_expression_data, &code_expression_data::operand);
+typedef code_expression_data code_cpp_delete_data;
+irep_typedefs(code_cpp_delete,
+              expr2tc, code_expression_data, &code_expression_data::operand);
+irep_typedefs(code_cpp_catch,
+              std::vector<irep_idt>, code_cpp_catch_data,
+              &code_cpp_catch_data::exception_list);
+irep_typedefs(code_cpp_throw,
+              expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
+              std::vector<irep_idt>, code_cpp_throw_data,
+              &code_cpp_throw_data::exception_list);
+irep_typedefs(code_cpp_throw_decl,
+              std::vector<irep_idt>, code_cpp_throw_decl_data,
+              &code_cpp_throw_decl_data::exception_list);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4130,13 +4104,13 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-class object_descriptor2t : public object_desc_expr_methods
+class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
   object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : object_desc_expr_methods(t, object_descriptor_id, root, offs) {}
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
   object_descriptor2t(const object_descriptor2t &ref)
-    : object_desc_expr_methods(ref) {}
+    : object_descriptor_expr_methods(ref) {}
 
   const expr2tc &get_root_object(void) const;
 
@@ -4450,113 +4424,6 @@ inline bool is_nil_type(const type2tc &t)
     return true;
   return false;
 }
-
-typedef irep_container<constant_fixedbv2t, expr2t::constant_fixedbv_id>
-                       constant_fixedbv2tc;
-typedef irep_container<constant_bool2t, expr2t::constant_bool_id>
-                       constant_bool2tc;
-typedef irep_container<constant_string2t, expr2t::constant_string_id>
-                       constant_string2tc;
-typedef irep_container<constant_struct2t, expr2t::constant_struct_id>
-                       constant_struct2tc;
-typedef irep_container<constant_union2t, expr2t::constant_union_id>
-                       constant_union2tc;
-typedef irep_container<constant_array2t, expr2t::constant_array_id>
-                       constant_array2tc;
-typedef irep_container<constant_array_of2t, expr2t::constant_array_of_id>
-                       constant_array_of2tc;
-typedef irep_container<symbol2t, expr2t::symbol_id> symbol2tc;
-typedef irep_container<typecast2t, expr2t::typecast_id> typecast2tc;
-typedef irep_container<if2t, expr2t::if_id> if2tc;
-typedef irep_container<equality2t, expr2t::equality_id> equality2tc;
-typedef irep_container<notequal2t, expr2t::notequal_id> notequal2tc;
-typedef irep_container<lessthan2t, expr2t::lessthan_id> lessthan2tc;
-typedef irep_container<greaterthan2t, expr2t::greaterthan_id> greaterthan2tc;
-typedef irep_container<lessthanequal2t, expr2t::lessthanequal_id>
-                       lessthanequal2tc;
-typedef irep_container<greaterthanequal2t, expr2t::greaterthanequal_id>
-                       greaterthanequal2tc;
-typedef irep_container<not2t, expr2t::not_id> not2tc;
-typedef irep_container<and2t, expr2t::and_id> and2tc;
-typedef irep_container<or2t, expr2t::or_id> or2tc;
-typedef irep_container<xor2t, expr2t::xor_id> xor2tc;
-typedef irep_container<implies2t, expr2t::implies_id> implies2tc;
-typedef irep_container<bitand2t, expr2t::bitand_id> bitand2tc;
-typedef irep_container<bitor2t, expr2t::bitor_id> bitor2tc;
-typedef irep_container<bitxor2t, expr2t::bitxor_id> bitxor2tc;
-typedef irep_container<bitnand2t, expr2t::bitnand_id> bitnand2tc;
-typedef irep_container<bitnor2t, expr2t::bitnor_id> bitnor2tc;
-typedef irep_container<bitnxor2t, expr2t::bitnxor_id> bitnxor2tc;
-typedef irep_container<bitnot2t, expr2t::bitnot_id> bitnot2tc;
-typedef irep_container<lshr2t, expr2t::lshr_id> lshr2tc;
-typedef irep_container<neg2t, expr2t::neg_id> neg2tc;
-typedef irep_container<abs2t, expr2t::abs_id> abs2tc;
-typedef irep_container<add2t, expr2t::add_id> add2tc;
-typedef irep_container<sub2t, expr2t::sub_id> sub2tc;
-typedef irep_container<mul2t, expr2t::mul_id> mul2tc;
-typedef irep_container<div2t, expr2t::div_id> div2tc;
-typedef irep_container<modulus2t, expr2t::modulus_id> modulus2tc;
-typedef irep_container<shl2t, expr2t::shl_id> shl2tc;
-typedef irep_container<ashr2t, expr2t::ashr_id> ashr2tc;
-typedef irep_container<same_object2t, expr2t::same_object_id> same_object2tc;
-typedef irep_container<pointer_offset2t, expr2t::pointer_offset_id>
-                       pointer_offset2tc;
-typedef irep_container<pointer_object2t, expr2t::pointer_object_id>
-                       pointer_object2tc;
-typedef irep_container<address_of2t, expr2t::address_of_id> address_of2tc;
-typedef irep_container<byte_extract2t, expr2t::byte_extract_id> byte_extract2tc;
-typedef irep_container<byte_update2t, expr2t::byte_update_id> byte_update2tc;
-typedef irep_container<with2t, expr2t::with_id> with2tc;
-typedef irep_container<member2t, expr2t::member_id> member2tc;
-typedef irep_container<index2t, expr2t::index_id> index2tc;
-typedef irep_container<zero_string2t, expr2t::zero_string_id> zero_string2tc;
-typedef irep_container<zero_length_string2t, expr2t::zero_length_string_id>
-                       zero_length_string2tc;
-typedef irep_container<isnan2t, expr2t::isnan_id> isnan2tc;
-typedef irep_container<overflow2t, expr2t::overflow_id> overflow2tc;
-typedef irep_container<overflow_cast2t, expr2t::overflow_cast_id>
-                       overflow_cast2tc;
-typedef irep_container<overflow_neg2t, expr2t::overflow_neg_id>overflow_neg2tc;
-typedef irep_container<unknown2t, expr2t::unknown_id> unknown2tc;
-typedef irep_container<invalid2t, expr2t::invalid_id> invalid2tc;
-typedef irep_container<dynamic_object2t, expr2t::dynamic_object_id>
-                       dynamic_object2tc;
-typedef irep_container<dereference2t, expr2t::dereference_id> dereference2tc;
-typedef irep_container<valid_object2t, expr2t::valid_object_id> vaild_object2tc;
-typedef irep_container<deallocated_obj2t, expr2t::deallocated_obj_id>
-                       deallocated_obj2tc;
-typedef irep_container<dynamic_size2t, expr2t::dynamic_size_id> dynamic_size2tc;
-typedef irep_container<sideeffect2t, expr2t::sideeffect_id> sideeffect2tc;
-typedef irep_container<code_block2t, expr2t::code_block_id> code_block2tc;
-typedef irep_container<code_assign2t, expr2t::code_assign_id> code_assign2tc;
-typedef irep_container<code_init2t, expr2t::code_init_id> code_init2tc;
-typedef irep_container<code_decl2t, expr2t::code_decl_id> code_decl2tc;
-typedef irep_container<code_printf2t, expr2t::code_printf_id> code_printf2tc;
-typedef irep_container<code_expression2t, expr2t::code_expression_id>
-                       code_expression2tc;
-typedef irep_container<code_return2t, expr2t::code_return_id> code_return2tc;
-typedef irep_container<code_skip2t, expr2t::code_skip_id> code_skip2tc;
-typedef irep_container<code_free2t, expr2t::code_free_id> code_free2tc;
-typedef irep_container<code_goto2t, expr2t::code_goto_id> code_goto2tc;
-typedef irep_container<object_descriptor2t, expr2t::object_descriptor_id>
-                       object_descriptor2tc;
-typedef irep_container<code_function_call2t, expr2t::code_function_call_id>
-                       code_function_call2tc;
-typedef irep_container<code_comma2t, expr2t::code_comma_id> code_comma2tc;
-typedef irep_container<invalid_pointer2t, expr2t::invalid_pointer_id>
-                       code_invalid_pointer2tc;
-typedef irep_container<buffer_size2t, expr2t::buffer_size_id> buffer_size2tc;
-typedef irep_container<code_asm2t, expr2t::code_asm_id> code_asm2tc;
-typedef irep_container<code_cpp_del_array2t, expr2t::code_cpp_del_array_id>
-                       code_cpp_del_array2tc;
-typedef irep_container<code_cpp_delete2t, expr2t::code_cpp_delete_id>
-                       code_cpp_delete2tc;
-typedef irep_container<code_cpp_catch2t, expr2t::code_cpp_catch_id>
-                       code_cpp_catch2tc;
-typedef irep_container<code_cpp_throw2t, expr2t::code_cpp_throw_id>
-                       code_cpp_throw2tc;
-typedef irep_container<code_cpp_throw_decl2t, expr2t::code_cpp_throw_decl_id>
-                       code_cpp_throw_decl2tc;
 
 /** Test if expr is true. First checks whether the expr is a constant bool, and
  *  then whether it's true-valued. If these are both true, return true,
