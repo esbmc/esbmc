@@ -1011,7 +1011,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    expr2tc sym = expr2tc(new symbol2t(type_pool.get_bool(), prop_name));
+    expr2tc sym = expr2tc(new symbol2t(get_bool_type(), prop_name));
     new_insn.code = expr2tc(new code_assign2t(sym, trig_it->second));
     new_insn.function = insn->function;
 
@@ -1019,7 +1019,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
     insn_list.insert(insn, new_insn);
   }
 
-  type2tc uint32 = type_pool.get_uint(32);
+  type2tc uint32 = get_uint_type(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
   expr2tc c_expr = expr2tc(new constant_int2t(uint32, BigInt(1)));
