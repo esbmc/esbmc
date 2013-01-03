@@ -2532,176 +2532,176 @@ public:
 // it's essentially the same lexical goo being repeated. It's, as far as I know,
 // exactly the kind of thing that macros are for.
 
-#define irep_typedefs(basename, ...) \
+#define irep_typedefs(basename, superclass, ...) \
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, \
                                __VA_ARGS__ \
                                > basename##2tc; \
-  typedef esbmct::expr_methods<basename##2t, basename##_data, \
+  typedef esbmct::expr_methods<basename##2t, superclass, \
                                __VA_ARGS__ \
                                > basename##_expr_methods;
 
-irep_typedefs(constant_int,
+irep_typedefs(constant_int, constant_int_data,
               BigInt, constant_int_data, &constant_int_data::constant_value);
-irep_typedefs(constant_fixedbv,
+irep_typedefs(constant_fixedbv, constant_fixedbv_data,
               fixedbvt, constant_fixedbv_data, &constant_fixedbv_data::value);
-irep_typedefs(constant_struct,
+irep_typedefs(constant_struct, constant_datatype_data,
               std::vector<expr2tc>, constant_datatype_data,
               &constant_datatype_data::datatype_members);
-irep_typedefs(constant_union,
+irep_typedefs(constant_union, constant_datatype_data,
               std::vector<expr2tc>, constant_datatype_data,
               &constant_datatype_data::datatype_members);
-irep_typedefs(constant_array,
+irep_typedefs(constant_array, constant_datatype_data,
               std::vector<expr2tc>, constant_datatype_data,
               &constant_datatype_data::datatype_members);
-irep_typedefs(constant_bool,
+irep_typedefs(constant_bool, constant_bool_data,
               bool, constant_bool_data, &constant_bool_data::constant_value);
-irep_typedefs(constant_array_of,
+irep_typedefs(constant_array_of, constant_array_of_data,
               expr2tc, constant_array_of_data,
               &constant_array_of_data::initializer);
-irep_typedefs(constant_string,
+irep_typedefs(constant_string, constant_string_data,
               irep_idt, constant_string_data, &constant_string_data::value);
-irep_typedefs(symbol,
+irep_typedefs(symbol, symbol_data,
               irep_idt, symbol_data, &symbol_data::thename,
               symbol_data::renaming_level, symbol_data, &symbol_data::rlevel,
               unsigned int, symbol_data, &symbol_data::level1_num,
               unsigned int, symbol_data, &symbol_data::level2_num,
               unsigned int, symbol_data, &symbol_data::thread_num,
               unsigned int, symbol_data, &symbol_data::node_num);
-irep_typedefs(typecast,
+irep_typedefs(typecast,typecast_data,
               expr2tc, typecast_data, &typecast_data::from);
-irep_typedefs(if,
+irep_typedefs(if, if_data,
               expr2tc, if_data, &if_data::cond,
               expr2tc, if_data, &if_data::true_value,
               expr2tc, if_data, &if_data::false_value);
-irep_typedefs(equality,
+irep_typedefs(equality, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(notequal,
+irep_typedefs(notequal, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(lessthan,
+irep_typedefs(lessthan, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(greaterthan,
+irep_typedefs(greaterthan, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(lessthanequal,
+irep_typedefs(lessthanequal, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(greaterthanequal,
+irep_typedefs(greaterthanequal, relation_data,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(not,
+irep_typedefs(not, not_data,
               expr2tc, not_data, &not_data::value);
-irep_typedefs(and,
+irep_typedefs(and, logic_2ops,
               expr2tc, logic_2ops, &logic_2ops::side_1,
               expr2tc, logic_2ops, &logic_2ops::side_2);
-irep_typedefs(or,
+irep_typedefs(or, logic_2ops,
               expr2tc, logic_2ops, &logic_2ops::side_1,
               expr2tc, logic_2ops, &logic_2ops::side_2);
-irep_typedefs(xor,
+irep_typedefs(xor, logic_2ops,
               expr2tc, logic_2ops, &logic_2ops::side_1,
               expr2tc, logic_2ops, &logic_2ops::side_2);
-irep_typedefs(implies,
+irep_typedefs(implies, logic_2ops,
               expr2tc, logic_2ops, &logic_2ops::side_1,
               expr2tc, logic_2ops, &logic_2ops::side_2);
-irep_typedefs(bitand,
+irep_typedefs(bitand, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitor,
+irep_typedefs(bitor, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitxor,
+irep_typedefs(bitxor, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitnand,
+irep_typedefs(bitnand, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitnor,
+irep_typedefs(bitnor, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitnxor,
+irep_typedefs(bitnxor, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(lshr,
+irep_typedefs(lshr, bit_2ops,
               expr2tc, bit_2ops, &bit_2ops::side_1,
               expr2tc, bit_2ops, &bit_2ops::side_2);
-irep_typedefs(bitnot,
+irep_typedefs(bitnot, bitnot_data,
               expr2tc, bitnot_data, &bitnot_data::value);
-irep_typedefs(neg,
+irep_typedefs(neg, arith_1op,
               expr2tc, arith_1op, &arith_1op::value);
-irep_typedefs(abs,
+irep_typedefs(abs, arith_1op,
               expr2tc, arith_1op, &arith_1op::value);
-irep_typedefs(add,
+irep_typedefs(add, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(sub,
+irep_typedefs(sub, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(mul,
+irep_typedefs(mul, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(div,
+irep_typedefs(div, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(modulus,
+irep_typedefs(modulus, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(shl,
+irep_typedefs(shl, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(ashr,
+irep_typedefs(ashr, arith_2ops,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(same_object,
+irep_typedefs(same_object, same_object_data,
               expr2tc, same_object_data, &same_object_data::side_1,
               expr2tc, same_object_data, &same_object_data::side_2);
 typedef pointer_ops pointer_offset_data;
 typedef pointer_ops pointer_object_data;
 typedef pointer_ops address_of_data;
-irep_typedefs(pointer_offset,
+irep_typedefs(pointer_offset, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
-irep_typedefs(pointer_object,
+irep_typedefs(pointer_object, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
-irep_typedefs(address_of,
+irep_typedefs(address_of, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
-irep_typedefs(byte_extract,
+irep_typedefs(byte_extract, byte_extract_data,
               bool, byte_extract_data, &byte_extract_data::big_endian,
               expr2tc, byte_extract_data, &byte_extract_data::source_value,
               expr2tc, byte_extract_data, &byte_extract_data::source_offset,
               expr2tc, byte_extract_data, &byte_extract_data::extract_guard);
-irep_typedefs(byte_update,
+irep_typedefs(byte_update, byte_update_data,
               bool, byte_update_data, &byte_update_data::big_endian,
               expr2tc, byte_update_data, &byte_update_data::source_value,
               expr2tc, byte_update_data, &byte_update_data::source_offset,
               expr2tc, byte_update_data, &byte_update_data::update_value,
               expr2tc, byte_update_data, &byte_update_data::update_guard);
-irep_typedefs(with,
+irep_typedefs(with, with_data,
               expr2tc, with_data, &with_data::source_value,
               expr2tc, with_data, &with_data::update_field,
               expr2tc, with_data, &with_data::update_value);
-irep_typedefs(member,
+irep_typedefs(member, member_data,
               expr2tc, member_data, &member_data::source_value,
               irep_idt, member_data, &member_data::member);
-irep_typedefs(index,
+irep_typedefs(index, index_data,
               expr2tc, index_data, &index_data::source_value,
               expr2tc, index_data, &index_data::index);
 typedef string_ops zero_string_data;
 typedef string_ops zero_length_string_data;
-irep_typedefs(zero_string,
+irep_typedefs(zero_string, string_ops,
               expr2tc, string_ops, &string_ops::string);
-irep_typedefs(zero_length_string,
+irep_typedefs(zero_length_string, string_ops,
               expr2tc, string_ops, &string_ops::string);
-irep_typedefs(isnan,
+irep_typedefs(isnan, isnan_data,
               expr2tc, isnan_data, &isnan_data::value);
 typedef overflow_ops overflow_data;
 typedef overflow_ops overflow_neg_data;
-irep_typedefs(overflow,
+irep_typedefs(overflow, overflow_ops,
               expr2tc, overflow_ops, &overflow_ops::operand);
-irep_typedefs(overflow_cast,
+irep_typedefs(overflow_cast, overflow_cast_data,
               expr2tc, overflow_ops, &overflow_ops::operand,
               unsigned int, overflow_cast_data, &overflow_cast_data::bits);
-irep_typedefs(overflow_neg,
+irep_typedefs(overflow_neg, overflow_ops,
               expr2tc, overflow_ops, &overflow_ops::operand);
 typedef esbmct::expr_methods<unknown2t, expr2t>
         unknown_expr_methods;
@@ -2709,89 +2709,89 @@ typedef esbmct::expr_methods<invalid2t, expr2t>
         invalid_expr_methods;
 typedef esbmct::expr_methods<null_object2t, expr2t>
         null_object_expr_methods;
-irep_typedefs(dynamic_object,
+irep_typedefs(dynamic_object, dynamic_object_data,
               expr2tc, dynamic_object_data, &dynamic_object_data::instance,
               bool, dynamic_object_data, &dynamic_object_data::invalid,
               bool, dynamic_object_data, &dynamic_object_data::unknown);
-irep_typedefs(dereference,
+irep_typedefs(dereference, dereference_data,
               expr2tc, dereference_data, &dereference_data::value);
 typedef object_ops valid_object_data;
 typedef object_ops deallocated_obj_data;
 typedef object_ops dynamic_size_data;
-irep_typedefs(valid_object,
+irep_typedefs(valid_object, object_ops,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(deallocated_obj,
+irep_typedefs(deallocated_obj, object_ops,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(dynamic_size,
+irep_typedefs(dynamic_size, object_ops,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(sideeffect,
+irep_typedefs(sideeffect, sideeffect_data,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
               expr2tc, sideeffect_data, &sideeffect_data::size,
               type2tc, sideeffect_data, &sideeffect_data::alloctype,
               unsigned int, sideeffect_data, &sideeffect_data::kind,
               std::vector<expr2tc>, sideeffect_data,
               &sideeffect_data::arguments);
-irep_typedefs(code_block,
+irep_typedefs(code_block, code_block_data,
               std::vector<expr2tc>, code_block_data,
               &code_block_data::operands);
-irep_typedefs(code_assign,
+irep_typedefs(code_assign, code_assign_data,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
 typedef code_assign_data code_init_data;
-irep_typedefs(code_init,
+irep_typedefs(code_init, code_assign_data,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
-irep_typedefs(code_decl,
+irep_typedefs(code_decl, code_decl_data,
               irep_idt, code_decl_data, &code_decl_data::value);
-irep_typedefs(code_printf,
+irep_typedefs(code_printf, code_printf_data,
               std::vector<expr2tc>, code_printf_data,
               &code_printf_data::operands);
-irep_typedefs(code_expression,
+irep_typedefs(code_expression, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 typedef code_expression_data code_return_data;
-irep_typedefs(code_return,
+irep_typedefs(code_return, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 typedef esbmct::expr_methods<code_skip2t, expr2t>
         code_skip_expr_methods;
 typedef code_expression_data code_free_data;
-irep_typedefs(code_free,
+irep_typedefs(code_free, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_goto,
+irep_typedefs(code_goto, code_goto_data,
               irep_idt, code_goto_data, &code_goto_data::target);
 typedef object_desc_data object_descriptor_data;
-irep_typedefs(object_descriptor,
+irep_typedefs(object_descriptor, object_desc_data,
               expr2tc, object_desc_data, &object_desc_data::object,
               expr2tc, object_desc_data, &object_desc_data::offset);
 typedef code_funccall_data code_function_call_data;
-irep_typedefs(code_function_call,
+irep_typedefs(code_function_call, code_funccall_data,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
               std::vector<expr2tc>, code_funccall_data,
               &code_funccall_data::operands);
-irep_typedefs(code_comma,
+irep_typedefs(code_comma, code_comma_data,
               expr2tc, code_comma_data, &code_comma_data::side_1,
               expr2tc, code_comma_data, &code_comma_data::side_2);
 typedef pointer_ops invalid_pointer_data;
-irep_typedefs(invalid_pointer,
+irep_typedefs(invalid_pointer, pointer_ops,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
-irep_typedefs(buffer_size,
+irep_typedefs(buffer_size, buffer_size_data,
               expr2tc, buffer_size_data, &buffer_size_data::value);
-irep_typedefs(code_asm,
+irep_typedefs(code_asm, code_asm_data,
               irep_idt, code_asm_data, &code_asm_data::value);
 typedef code_expression_data code_cpp_del_array_data;
-irep_typedefs(code_cpp_del_array,
+irep_typedefs(code_cpp_del_array, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
 typedef code_expression_data code_cpp_delete_data;
-irep_typedefs(code_cpp_delete,
+irep_typedefs(code_cpp_delete, code_expression_data,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_cpp_catch,
+irep_typedefs(code_cpp_catch, code_cpp_catch_data,
               std::vector<irep_idt>, code_cpp_catch_data,
               &code_cpp_catch_data::exception_list);
-irep_typedefs(code_cpp_throw,
+irep_typedefs(code_cpp_throw, code_cpp_throw_data,
               expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
               std::vector<irep_idt>, code_cpp_throw_data,
               &code_cpp_throw_data::exception_list);
-irep_typedefs(code_cpp_throw_decl,
+irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
 
