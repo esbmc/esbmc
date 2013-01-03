@@ -106,12 +106,12 @@ void goto_program_dereferencet::dereference_rec(
   {
     unsigned old_guards=guard.size();
 
-    assert(is_bool_type(expr->type));
+    assert(is_bool_type(expr));
 
     Forall_operands2(it, oper_list, expr) {
       expr2tc &op = **it;
 
-      assert(is_bool_type(op->type));
+      assert(is_bool_type(op));
 
       if (dereference.has_dereference(op))
         dereference_rec(op, guard, dereferencet::READ);
@@ -131,7 +131,7 @@ void goto_program_dereferencet::dereference_rec(
   else if (is_if2t(expr))
   {
     if2t &ifref = to_if2t(expr);
-    assert(is_bool_type(ifref.cond->type));
+    assert(is_bool_type(ifref.cond));
     dereference_rec(ifref.cond, guard, dereferencet::READ);
 
     bool o1 = dereference.has_dereference(ifref.true_value);
@@ -185,7 +185,7 @@ void goto_program_dereferencet::dereference_rec(
   } else if (is_index2t(expr)) {
     index2t &idx = to_index2t(expr);
 
-    if (is_pointer_type(idx.source_value->type)) {
+    if (is_pointer_type(idx.source_value)) {
       expr2tc tmp = expr2tc(new add2t(idx.source_value->type, idx.source_value,
                                       idx.index));
       dereference.dereference(tmp, guard, mode);
