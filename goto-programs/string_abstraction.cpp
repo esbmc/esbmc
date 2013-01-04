@@ -99,6 +99,11 @@ protected:
     return type->get_width()==config.ansi_c.char_width;
   }
 
+  bool is_char_type(const expr2tc &e) const
+  {
+    return is_char_type(e->type);
+  }
+
   void make_type(expr2tc &dest, const type2tc &type)
   {
     if (!is_nil_expr(dest) && dest->type != type)
