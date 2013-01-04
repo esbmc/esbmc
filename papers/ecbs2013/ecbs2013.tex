@@ -485,17 +485,16 @@ verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.
 There have been attempts to apply BMC to the verification of C++
 programs~\cite{Florian12,Yang12} but with limited success. The main challenge
 here is to handle large programs and to support the complex features that the
-languages offers, such as templates, containers and exception handling.
-At the same time, 
-in order to be attractive for mainstream software development,
-C++ model checkers have to maintain
-high speed and accuracy.
+languages offers, such as templates, containers, and exception handling 
+(which is an important approach to contain and handle error situations 
+in fault tolerant software). At the same time, in order to be attractive for 
+mainstream software development, C++ model checkers have to maintain high speed and accuracy.
 
-We propose to apply BMC to C++ programs using an operational model, which
+Here, we propose to apply SMT-based BMC to C++ programs using an operational model, which
 is an abstract representation of the standard C++ libraries that
 conservatively approximates their semantics. We integrate this operational model
 into our ESBMC model checker~\cite{Cordeiro12} that in turn builds on top
-of the CBMC's front-end~\cite{Clarke04} to support C++ features such
+of the CBMC's front-end~\cite{Clarke04} to support the main C++ features such
 as inheritance, polymorphism, templates, and exception handling.
 
 We present the implementation of our operational model of the sequential STL
@@ -738,7 +737,7 @@ replace the corresponding actual C++ libraries.
 
 \begin{figure}[ht] 
 \centering
-\includegraphics[scale=0.26]{figures/diagramascpp}
+\includegraphics[scale=0.25]{figures/diagramascpp}
 \caption{Overview of the operational model.}
 \label{figure:cpp-diagram}
 \end{figure}
@@ -1669,7 +1668,7 @@ map or will return an error, otherwise.
 \section{Experimental Results}
 %-----------------------------------
 
-This section is split into two parts.
+This section is split into three parts.
 The setup is described in Section~\ref{experimental-setup}
 while Section~\ref{comparison-to-LLBMC} describes a comparison
 between ESBMC++~\cite{esbmc12} and
@@ -1679,7 +1678,8 @@ are also given in Section~\ref{comparison-to-LLBMC}.
 In our experiments, we also tried to use the CBMC model checker~\cite{Clarke04},
 but since it has failed in most of our benchmarks (as reported previously
 by Merz et~al.~\cite{Florian12}), we do not report any results.
-
+In Section~\ref{verifying-the-sniffer-code}, we describe the results of 
+verifying a commercial application from the telecommunications domain using ESBMC++.
 
 %-----------------------------------
 \subsection{Experimental Setup}
@@ -1829,6 +1829,43 @@ In the \textit{try\_catch} module, ESBMC++ is able to verify almost all programs
 something that LLBMC cannot due to its lack of support of exception handling.
 In the \textit{cpp} module, ESBMC++ is able to successfully verify more programs than LLBMC.
 Note that ESBMC++ does not crash or runs out of memory or time in any module.
+
+%-----------------------------------
+\subsection{Verifying the Sniffer Code}
+\label{verifying-the-sniffer-code}
+%-----------------------------------
+
+This section describes the results of the verification process using the 
+ESBMC++ against the sniffer code provided by Nokia Institute of Technology 
+(INdT). The sniffer code contains 20 classes, 85 methods, and approximately 
+2839 lines of C++ code. The following properties were verified using the customer version 
+of the sniffer code: array bounds, pointer safety, division by zero, 
+and arithmetic under-and over-flow. Due to confidential issues, we were able to model check 
+50 out of 85 methods (since we did not have access to some external classes that the sniffer 
+code requires). In this sense, ESBMC++ identified five bugs that are mostly related to arithmetic under- 
+and over-flow. Note that all bugs were reported to the developers and confirmed by them.
+
+As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows 
+a code fragment of the method \textit{getPayloadSize} from the class \textit{PacketM3UA}.
+Here, an arithmetic over-flow might occur on the typecast operation since the method 
+\textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} returns 
+an integer data-type. To fix this bug, one possible solution is to change the return type 
+of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast over-flow.
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.45\textwidth}
+\begin{lstlisting}
+int PacketM3UA::getPayloadSize() {
+  return ntohs(m3uaParamHeader->paramSize)
+          - (M3UA_PROTOCOL_DATA_HEADER_SIZE 
+          + M3UA_PARAMETER_HEADER_SIZE);
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.} 
+\label{figure:PacketM3UA}
+\end{figure}
 
 %-----------------------------------
 \section{Related Work}
@@ -1989,13 +2026,16 @@ Java and C++ it is difficult to compare this to ESBMC++.
 In this work, we have investigated SMT-based verification of C++ programs
 by focusing on the major features that the language offers. We have described
 an implementation of an operational model of the sequential STL containers
-as well as novel approaches to handle inheritance, polymorphism and exception handling
+as well as novel approaches to handle inheritance, polymorphism, and exception handling
 (in particular, exception specification, which is a feature that is not supported by others
 BMC tools). Our experiments contain C++ programs with most of the features that C++ language 
-has to offer. The results show that ESBMC++ outperforms LLBMC if we consider the verification of C++ programs.
-In particular, ESBMC++ is able to verify most of the C++ programs with an advantage: we are able to verify programs
+has to offer. Additionally, we have verified a commercial application (called sniffer code) of medium-size 
+used in the telecommunications domain. The results show that ESBMC++ outperforms LLBMC if we 
+consider the verification of C++ programs. In particular, ESBMC++ is able to verify most of the 
+C++ programs with an advantage: we are able to verify programs
 with exceptions enabled (a missing feature of LLBMC that decreases the verification accuracy of
-C++ programs). For future work, we intend to extend the operational model of STL containers
+C++ programs). In addition, ESBMC++ was able to find undiscovered bugs in the sniffer code that
+were later confirmed by developers. For future work, we intend to extend the operational model of STL containers
 to support not only sequential containers, but also mapped ones (e.g., map and multimap).
 
 
