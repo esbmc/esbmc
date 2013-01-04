@@ -7,7 +7,7 @@ Author: Felipe Rodrigues
 \*******************************************************************/
 
 #include "string"
-
+#include "../../cstddef"
 class QString
 {
 	std::string str;
