@@ -4,12 +4,14 @@
 typedef float qreal;
 typedef const char * qApp;
 
-# define SIGNAL(a)   qFlagLocation("2"#a)
-# define SLOT(a)     qFlagLocation("1"#a)
+#define SIGNAL(a)   qFlagLocation("2"#a)
+#define SLOT(a)     qFlagLocation("1"#a)
 #define emit
 #define animatedtiles
 #define signals public
 #define Q_OBJECT
+#define slots
+
 //#define QString std::string
 
 #if 0
@@ -29,6 +31,8 @@ namespace Qt{
 	enum PenStyle{ NoPen };
 	enum KeepAspectRatio{};
 	enum AspectRatioMode{ IgnoreAspectRatio };
+	enum Orientation{ Horizontal, Vertical };
+	enum AlignmentFlag{};
 };
 
 void update();
@@ -70,9 +74,12 @@ public:
 
 class QWidget{
 public:
- void	setLayout ( QLayout * layout ){}
-void	setLayout ( void * layout ){}
-void	show (){}
+	QWidget(){}
+	QWidget( QWidget* ){}
+	void	setLayout ( QLayout * layout ){}
+	void	setLayout ( void * layout ){}
+	void	show (){}
+	void	setWindowTitle ( const char* str ){}
 };
 
 class QPushButton{
@@ -368,6 +375,51 @@ public:
 
 int clicked ( bool checked = false ){}
 
+class QLabel{
+public:
+	QLabel( char* label ){
+		__ESBMC_assert(label != NULL, "Invalid string");
+	}
+	void show(){}
+};
+
+class QDialog{
+public:
+	QDialog();
+	~QDialog();
+};
+
+class QSpinBox{
+public:
+	QSpinBox(){}
+	void setRange ( int minimum, int maximum ){}
+};
+
+class QSlider : public QSpinBox{
+public:
+	QSlider(){}
+	QSlider ( Qt::Orientation orientation, QWidget * parent = 0 ){}
+	void setValue ( int val ){}
+};
+
+void connect( QSpinBox* spin, const char* str_f, QSlider* slider, const char* str_l );
+void connect( QSlider* spin, const char* str_f, QSpinBox* slider, const char* str_l );
+void connect( QPushButton* spin, const char* str_f, QWidget* slider, const char* str_l );
+
+class QGridLayout{
+public:
+	QGridLayout(){}
+	void addWidget ( QLabel* widget, int fromRow, int fromColumn, int rowSpan, int columnSpan ){}
+	void addWidget ( QSpinBox* widget, int fromRow, int fromColumn, int rowSpan, int columnSpan ){}
+};
+
+class QHBoxLayout{
+public:
+	QHBoxLayout(){}
+	QHBoxLayout	addWidget ( QTextEdit * w ){}
+	QHBoxLayout	addWidget ( QPushButton * w ){}
+};
+
 class QVBoxLayout{
 public:
 	QVBoxLayout (){}
@@ -375,12 +427,7 @@ public:
 	~QVBoxLayout (){}
 	QVBoxLayout	addWidget ( QTextEdit * w ){}
 	QVBoxLayout	addWidget ( QPushButton * w ){}
-};
-
-class QLabel{
-public:
-	QLabel( char* label ){
-		__ESBMC_assert(label != NULL, "Invalid string");
-	}
-	void show(){}
+	void addLayout ( QLayout * layout, int stretch = 0 ){}
+	void addLayout ( QGridLayout * layout, int stretch = 0 ){}
+	void addLayout ( QHBoxLayout * layout, int stretch = 0 ){}
 };
