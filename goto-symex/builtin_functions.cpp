@@ -86,7 +86,7 @@ void goto_symext::symex_malloc(
   if(size_is_one)
   {
     rhs_addrof.get()->type = get_pointer_type(pointer_typet(symbol.type));
-    rhs_addrof.get()->ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
+    rhs_addrof.get()->ptr_obj = symbol2tc(new_type, symbol.name);
   }
   else
   {
