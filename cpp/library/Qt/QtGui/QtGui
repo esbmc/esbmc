@@ -56,6 +56,8 @@ public:
 	~QString (){}
 };
 
+QString fromUtf8 ( const char * str, int size = -1 ){}
+
 class QColor
 {
 public:
@@ -76,10 +78,16 @@ class QWidget{
 public:
 	QWidget(){}
 	QWidget( QWidget* ){}
-	void	setLayout ( QLayout * layout ){}
-	void	setLayout ( void * layout ){}
-	void	show (){}
-	void	setWindowTitle ( const char* str ){}
+	void setLayout ( QLayout * layout ){}
+	void setLayout ( void * layout ){}
+	void show (){}
+	void setWindowTitle ( const char* str ){}
+	void setParent ( QWidget * parent ){}
+	void setWindowTitle ( const QString & ){}
+	void resize ( int w, int h ){
+		__ESBMC_assert(w >= 0, "First parameter must be greater or equal than zero.");
+		__ESBMC_assert(h >= 0, "Second parameter must be greater or equal than zero.");
+	}
 };
 
 class QPushButton{
@@ -88,12 +96,30 @@ public:
 	QPushButton ( const QString & text, QWidget * parent = 0 ){}
 };
 
+class QTimer
+{
+public:
+	QTimer(){}
+	void start ( int i ){
+		__ESBMC_assert(i >= 0, "Time specified invalid.");
+	}
+	void setSingleShot ( bool b );
+};
+
+class QLCDNumber : public QWidget{
+public:
+	QLCDNumber(){}
+	void display ( QString s ){}
+	void setFixedSize ( int x, int y ){}
+};
+
 class QObject
 {
 public:
 	QObject ( QObject * parent = 0 ){}
 	~QObject (){}
 	static bool connect(QPushButton *, const char *, const char *, const char *){}
+	static bool connect( QTimer* spin, const char* str_f, QLCDNumber* slider, const char* str_l ){}
 
 #if 0	
 	static bool connect(const QObject *sender, const char *signal,
@@ -332,16 +358,6 @@ public:
 	void addAnimation ( QParallelAnimationGroup * animation );
 };
 
-class QTimer
-{
-public:
-	QTimer(){}
-	void start ( int i ){
-		__ESBMC_assert(i >= 0, "Time specified invalid.");
-	}
-	void setSingleShot ( bool b );
-};
-
 class QState
 {
 public:
@@ -402,10 +418,6 @@ public:
 	void setValue ( int val ){}
 };
 
-void connect( QSpinBox* spin, const char* str_f, QSlider* slider, const char* str_l );
-void connect( QSlider* spin, const char* str_f, QSpinBox* slider, const char* str_l );
-void connect( QPushButton* spin, const char* str_f, QWidget* slider, const char* str_l );
-
 class QGridLayout{
 public:
 	QGridLayout(){}
@@ -430,4 +442,25 @@ public:
 	void addLayout ( QLayout * layout, int stretch = 0 ){}
 	void addLayout ( QGridLayout * layout, int stretch = 0 ){}
 	void addLayout ( QHBoxLayout * layout, int stretch = 0 ){}
+};
+
+class QTime{
+public:
+	QTime(){}
+	QTime ( int h, int m, int s = 0, int ms = 0 ){}
+	QTime addSecs ( int s ) const{}
+	int minute () const{}
+	int second () const{}
+	bool setHMS ( int h, int m, int s, int ms = 0 ){}
+	QString toString () const{}
+};
+
+void connect( QSpinBox* spin, const char* str_f, QSlider* slider, const char* str_l );
+void connect( QSlider* spin, const char* str_f, QSpinBox* slider, const char* str_l );
+void connect( QPushButton* spin, const char* str_f, QWidget* slider, const char* str_l );
+
+class QMainWindow : public QWidget{
+public:
+	QMainWindow(){}
+	void setCentralWidget ( QWidget * widget ){}
 };
