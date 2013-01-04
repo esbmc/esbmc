@@ -79,16 +79,23 @@ public:
 		}
 
 		bool operator ==(const iterator& x) const{
+			iterator tmp;
 			if(x.it->next == NULL){
-				x.it = x.it->prev;
+				tmp.it = x.it->prev;
+			}else{
+				tmp.it = x.it;
 			}
-			if(this->it->data != x.it->data)
+			if(this->it->data != tmp.it->data)
 				return false;
 			return true;
 		}
 		bool operator !=( const iterator& x ) const{
 			if(x.it->next == NULL){
-				x.it = x.it->prev;
+				if(this->it->next == NULL){
+					return false;
+				}else{
+					return true;
+				}
 			}
 			if(this->it->data == x.it->data)
 				return false;
@@ -167,10 +174,6 @@ public:
 
 	explicit list ( size_type n, const T& value = T() ){
 		__ESBMC_assert(n > 0, "\n  The following constructor was called, generating an error in container size specification:\n\n  >>>  explicit list (size_type n, const value_type& val = value_type());  <<<\n\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
-#if 0
-		__ESBMC_assert(value != NULL,
-				"\n  The following constructor was called, generating an error in value to fill the container:\n\n  >>>  explicit list (size_type n, const value_type& val = value_type());  <<<  \n\n  In the second parameter (val) is specified the value to fill the container,\n  therefore, this parameter must be different than NULL.\n");
-#endif
 		int i;
 		this->_size = 0;
 		for(i=0; i<n; i++)
@@ -228,12 +231,7 @@ public:
 	}
 	reverse_iterator rbegin(){
 		reverse_iterator it;
-		if (this->_size != 0){
-			this->tail->next = new node(NULL, this->tail, NULL);
-			it.it = this->tail->next;
-		}else{
-			it.it = this->tail;
-		}
+		it.it = this->tail;
 		it.it_size = this->_size;
 		return it;
 	}
@@ -350,14 +348,14 @@ public:
 		return position;
 	}
 	void insert(iterator position, size_type n, const T& x){
-		__ESBMC_assert(n >= 0,"");
+		__ESBMC_assert(n >= 0,"The second parameter must be greater or equal than zero.");
 		int i;
 		for(i=0;i<n;i++){
 			this->insert(position,x);
 		}
 	}
 	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x){
-		__ESBMC_assert(n != NULL,"");
+		__ESBMC_assert(n != NULL,"The second parameter must be different than NULL.");
 		int tmp;
 		while(n!=x){
 			tmp = *n;
@@ -367,7 +365,7 @@ public:
 	}
 
 	void assign ( iterator first, iterator last ){
-		__ESBMC_assert(first.it != NULL, "");
+		__ESBMC_assert(first.it != NULL, "The first parameter must be different than NULL.");
 		this->head = first.it;
 		this->_size = first.it_size;
 		this->tail = last.it->prev;
@@ -386,7 +384,7 @@ public:
 	}
 
 	iterator erase(iterator& position){
-		__ESBMC_assert(position.it->next != NULL, "");
+		__ESBMC_assert(position.it->next != NULL, "The parameter must be different than NULL.");
 		if(position.it == this->head){
 			this->pop_front();
 			position.it = new node(this->head->data, this->head->prev, this->head->next);
@@ -551,7 +549,7 @@ public:
 	}
 
 	void remove_if ( pred* x ){
-		__ESBMC_assert(x != NULL, "");
+		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
 		node* tmp = this->head;
 		T value;
 		while(tmp != NULL){
@@ -570,7 +568,7 @@ public:
 	}
 	template <class Predicate>
 		void remove_if ( Predicate* pred ){
-		__ESBMC_assert(pred != NULL, "");
+		__ESBMC_assert(pred != NULL, "The parameter must be different than NULL.");
 		node* tmp = this->head;
 		while(tmp != NULL){
 			if (pred(tmp->data)){
@@ -635,7 +633,7 @@ public:
 	}
 
 	void unique(pred_double* x) {
-		__ESBMC_assert(x != NULL, "");
+		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
 		node* tmp = this->head;
 		int foo, bar;
 		if (this->_size != 0){
@@ -690,7 +688,7 @@ public:
 
 	template <class Predicate>
 		void unique ( Predicate pred ){
-		__ESBMC_assert(pred != NULL, "");
+		__ESBMC_assert(pred != NULL, "The parameter must be different than NULL.");
 		node* tmp = this->head;
 		int foo, bar;
 		if (this->_size != 0){
@@ -746,7 +744,7 @@ public:
 	}
 
 	void merge(list<T>& x, pred_double* pred){
-		__ESBMC_assert(pred != NULL, "");
+		__ESBMC_assert(pred != NULL, "The second parameter must be different than NULL.");
 		int i,j;
 		node* tmp = this->head;
 		node* tmpX = x.head;
@@ -838,16 +836,16 @@ public:
 };
 
   void advance (list<unsigned int>::iterator& it, int n){
-	  __ESBMC_assert(it.it != NULL, "");
-	  __ESBMC_assert(n > 0, "");
+	  __ESBMC_assert(it.it != NULL, "The first parameter must be different than NULL.");
+	  __ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
 	  int i;
 	  for(i = 0; i < n; i++)
 		  it.it = it.it->next;
   }
 
   void advance (list<int>::iterator& it, int n){
-	  __ESBMC_assert(it.it != NULL, "");
-	  __ESBMC_assert(n > 0, "");
+	  __ESBMC_assert(it.it != NULL, "The first parameter must be different than NULL.");
+	  __ESBMC_assert(n > 0, "The second parameter must be greater than zero.");
 	  int i;
 	  for(i = 0; i < n; i++)
 		  it.it = it.it->next;
