@@ -758,6 +758,7 @@ static inline std::string get_expr_id(const expr2tc &expr)
 
 // Forward dec for some subsequent constructor hacks.
 class symbol2t;
+class relation_data;
 
 /** A namespace for "ESBMC templates".
  *  This means anything designed to mess with expressions or types declared in
@@ -1048,7 +1049,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid,
+  template <class contained, unsigned int expid, class superclass,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
      typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
@@ -1124,6 +1125,14 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2)) { }
 
+    // Relational operators take two arguments and don't take a type, because
+    // they alway evaluate to a bool. Encode this constructor if the superclass
+    // of whatever we're containing is relation_data.
+    template <class arbitary = dummy_type_tag>
+    something2tc(const field1_type &arg1, const field2_type &arg2,
+                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<superclass,relation_data>, arbitary >::type* = NULL)
+      : expr2tc(new contained(arg1, arg2)) { }
+
     template <class arbitary = dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
@@ -1165,7 +1174,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
 
-    something2tc(const something2tc<contained, expid,
+    something2tc(const something2tc<contained, expid, superclass,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
@@ -2503,7 +2512,7 @@ public:
 // exactly the kind of thing that macros are for.
 
 #define irep_typedefs(basename, superclass, ...) \
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, \
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
                                __VA_ARGS__ \
                                > basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
@@ -2513,7 +2522,7 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass) \
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id \
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass\
                                > basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods;
