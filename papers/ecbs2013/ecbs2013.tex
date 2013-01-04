@@ -487,7 +487,7 @@ programs~\cite{Florian12,Yang12} but with limited success. The main challenge
 here is to handle large programs and to support the complex features that the
 languages offers, such as templates, containers, and exception handling 
 (which is an important approach to contain and handle error situations 
-in fault tolerant software). At the same time, in order to be attractive for 
+in computer-based systems). At the same time, in order to be attractive for 
 mainstream software development, C++ model checkers have to maintain high speed and accuracy.
 
 Here, we propose to apply SMT-based BMC to C++ programs using an operational model, which
@@ -503,10 +503,14 @@ elements values of the containers are stored), and how these are used in order t
 C++ applications.  Additionally, we develop and describe novel approaches to handle
 exceptions in C++ programs (e.g., exception specification for
 functions and methods) that previous approaches are not able to deal
-with~\cite{PrabhuMBIG11,Blanc07,Florian12}. In particular, we implement the
+with~\cite{Blanc07,Florian12,PrabhuMBIG11}. In particular, we implement the
 inheritance mechanism during the construction of the intermediate
 representation of the program, which thus avoids converting the C++ program
 to a C program and consequently produces smaller models to be verified.
+Experimental results show that our approach consistently outperforms
+LLBMC~\cite{Florian12}, a bounded model checker for C/C++ programs that is based 
+on SMT solvers.
+
 
 %------------------------------
 \section{Background}
