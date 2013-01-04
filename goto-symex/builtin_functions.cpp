@@ -81,13 +81,12 @@ void goto_symext::symex_malloc(
   type2tc new_type;
   migrate_type(symbol.type, new_type);
 
-  expr2tc rhs = expr2tc(new address_of2t(get_empty_type(), expr2tc()));
-  address_of2t &rhs_ref = to_address_of2t(rhs);
+  address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
   if(size_is_one)
   {
-    rhs_ref.type = get_pointer_type(pointer_typet(symbol.type));
-    rhs_ref.ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
+    rhs_addrof.get()->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof.get()->ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
   }
   else
   {
@@ -96,14 +95,16 @@ void goto_symext::symex_malloc(
     expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
     expr2tc idx_val = zero_uint;
     expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
-    rhs_ref.type = get_pointer_type(pointer_typet(symbol.type.subtype()));
-    rhs_ref.ptr_obj = idx;
+    rhs_addrof.get()->type =
+      get_pointer_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof.get()->ptr_obj = idx;
   }
 
-  if (rhs_ref.type != lhs->type)
+  expr2tc rhs;
+  if (rhs->type != lhs->type)
     rhs = expr2tc(new typecast2t(lhs->type, rhs));
-
-  // Pas this point, rhs_ref may be an invalid reference.
+  else
+    rhs = rhs_addrof;
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
