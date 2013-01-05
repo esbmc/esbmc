@@ -128,8 +128,7 @@ void goto_symext::dereference_rec(
            is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
-    expr2tc tmp = expr2tc(new add2t(index.source_value->type,
-                                    index.source_value, index.index));
+    add2tc tmp(index.source_value->type, index.source_value, index.index);
 
     // first make sure there are no dereferences in there
     dereference_rec(tmp, guard, dereference, false);
