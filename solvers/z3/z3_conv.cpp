@@ -2264,7 +2264,7 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
 
     // Offset into first element we'll be working on.
     expr2tc elem_sz_expr = gen_uint(elem_width/8);
-    div2tc cur_elem(uint_type2(), data.source_offset, elem_sz_expr);
+    expr2tc cur_elem = div2tc(uint_type2(), data.source_offset, elem_sz_expr);
 
     // And, start selecting elements then dumping data into them.
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(),ctx.bv_sort(8));
@@ -2307,7 +2307,7 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     expr2tc accuml = data.source_value;
 
     for (i = 0; i < num_elems; i++) {
-      index2tc select(arr.subtype, data.source_value, cur_elem);
+      expr2tc select = index2tc(arr.subtype, data.source_value, cur_elem);
 
       unsigned int j;
       expr2tc elem_offs = zero_uint;
