@@ -92,9 +92,9 @@ void goto_symext::symex_malloc(
   {
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
-    expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
+    expr2tc sym = symbol2tc(new_type, symbol.name);
     expr2tc idx_val = zero_uint;
-    expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
+    expr2tc idx = index2tc(subtype, sym, idx_val);
     rhs_addrof.get()->type =
       get_pointer_type(pointer_typet(symbol.type.subtype()));
     rhs_addrof.get()->ptr_obj = idx;
@@ -102,7 +102,7 @@ void goto_symext::symex_malloc(
 
   expr2tc rhs;
   if (rhs->type != lhs->type)
-    rhs = expr2tc(new typecast2t(lhs->type, rhs));
+    rhs = typecast2tc(lhs->type, rhs);
   else
     rhs = rhs_addrof;
 
@@ -111,11 +111,9 @@ void goto_symext::symex_malloc(
 
   // Finally, guard the return with the fact that it should return NULL if the
   // size allocated was (potentially nondeterministically) zero.
-  expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
-  expr2tc sz_is_zero(new equality2t(size, zero));
-  expr2tc null(new symbol2t(rhs->type, "NULL", symbol2t::level0,
-                            0, 0, 0, 0));
-  rhs = expr2tc(new if2t(rhs->type, sz_is_zero, null, rhs));
+  equality2tc sz_is_zero(size, zero_uint);
+  symbol2tc null(rhs->type, "NULL", symbol2t::level0, 0, 0, 0, 0);
+  rhs = if2tc(rhs->type, sz_is_zero, null, rhs);
   
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
@@ -123,10 +121,10 @@ void goto_symext::symex_malloc(
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
+  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
 
-  expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-  expr2tc idx = expr2tc(new index2t(get_bool_type(), sym, ptr_obj));
+  pointer_object2tc ptr_obj(int_type2(), lhs);
+  index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
 
@@ -136,9 +134,8 @@ void goto_symext::symex_malloc(
 void goto_symext::symex_free(const code_free2t &code)
 {
 
-  expr2tc ptr_obj(new pointer_offset2t(uint_type2(), code.operand));
-  expr2tc zero(new constant_int2t(uint_type2(), BigInt(0)));
-  expr2tc eq(new equality2t(ptr_obj, zero));
+  pointer_offset2tc ptr_obj(uint_type2(), code.operand);
+  equality2tc eq(ptr_obj, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
 }
 
@@ -218,18 +215,16 @@ void goto_symext::symex_cpp_new(
 
   // make symbol expression
 
-  expr2tc rhs = expr2tc(new address_of2t(type2tc(renamedtype2), expr2tc()));
-  address_of2t &addrof = to_address_of2t(rhs);
+  address_of2tc rhs(renamedtype2, expr2tc());
 
   if(do_array)
   {
-    expr2tc sym = expr2tc(new symbol2t(newtype, symbol.name));
-    expr2tc zero = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
-    expr2tc idx = expr2tc(new index2t(renamedtype2, sym, zero));
-    addrof.ptr_obj = idx;
+    symbol2tc sym(newtype, symbol.name);
+    index2tc idx(renamedtype2, sym, zero_uint);
+    rhs.get()->ptr_obj = idx;
   }
   else
-    addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
+    rhs.get()->ptr_obj = symbol2tc(newtype, symbol.name);
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
@@ -240,10 +235,10 @@ void goto_symext::symex_cpp_new(
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  expr2tc sym = expr2tc(new symbol2t(sym_type, "cpp::__ESBMC_is_dynamic"));
+  symbol2tc sym(sym_type, "cpp::__ESBMC_is_dynamic");
 
-  expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-  expr2tc idx = expr2tc(new index2t(get_bool_type(), sym, ptr_obj));
+  pointer_object2tc ptr_obj(int_type2(), lhs);
+  index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
 
   symex_assign_rec(idx, truth, guard);
@@ -308,11 +303,11 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
   unsigned int thread_id;
 
   thread_id = art.get_cur_state().get_active_state_number();
-  expr2tc tid = expr2tc(new constant_int2t(uint_type2(), BigInt(thread_id)));
+  constant_int2tc tid(uint_type2(), BigInt(thread_id));
 
   state.value_set.assign(call.ret, tid, ns);
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, tid));
+  code_assign2tc assign(call.ret, tid);
   assert(call.ret->type == tid->type);
   symex_assign(assign);
   return;
@@ -357,7 +352,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, startdata));
+  code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata, ns);
@@ -402,10 +397,9 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
 
   statet &state = art.get_cur_state().get_active_state();
 
-  expr2tc thread_id_exp = expr2tc(new constant_int2t(int_type2(),
-                                                     BigInt(thread_id)));
+  constant_int2tc thread_id_exp(int_type2(), BigInt(thread_id));
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, thread_id_exp));
+  code_assign2tc assign(call.ret, thread_id_exp);
   state.value_set.assign(call.ret, thread_id_exp, ns);
 
   symex_assign(assign);
