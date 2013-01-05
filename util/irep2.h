@@ -758,7 +758,6 @@ static inline std::string get_expr_id(const expr2tc &expr)
 
 // Forward dec for some subsequent constructor hacks.
 class symbol2t;
-class relation_data;
 
 /** A namespace for "ESBMC templates".
  *  This means anything designed to mess with expressions or types declared in
@@ -1128,14 +1127,6 @@ namespace esbmct {
                  disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
       : expr2tc(new contained(t, arg1, arg2)) { }
 
-    // Relational operators take two arguments and don't take a type, because
-    // they alway evaluate to a bool. Encode this constructor if the superclass
-    // of whatever we're containing is relation_data.
-    template <class arbitary = ::esbmct::dummy_type_tag>
-    something2tc(const field1_type &arg1, const field2_type &arg2,
-                 typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<superclass,relation_data>, arbitary >::type* = NULL)
-      : expr2tc(new contained(arg1, arg2)) { }
-
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
@@ -1180,6 +1171,64 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
+
+    // Duplicate set of constructors, but without the type argument.
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
+                 disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const field1_type &arg1,
+                 const field2_type &arg2,
+                 const field3_type &arg3,
+                 const field4_type &arg4,
+                 const field5_type &arg5,
+                 const field6_type &arg6,
+                 enable_if_eq(arbitary,hastype,notype),
+                 disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6)) { }
 
     something2tc(const something2tc<contained, expid, superclass, hastype,
                                     field1_type, field1_class, field1_ptr,
@@ -2566,22 +2615,22 @@ irep_typedefs(if, if_data, esbmct::takestype,
               expr2tc, if_data, &if_data::cond,
               expr2tc, if_data, &if_data::true_value,
               expr2tc, if_data, &if_data::false_value);
-irep_typedefs(equality, relation_data, esbmct::takestype,
+irep_typedefs(equality, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(notequal, relation_data, esbmct::takestype,
+irep_typedefs(notequal, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(lessthan, relation_data, esbmct::takestype,
+irep_typedefs(lessthan, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(greaterthan, relation_data, esbmct::takestype,
+irep_typedefs(greaterthan, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(lessthanequal, relation_data, esbmct::takestype,
+irep_typedefs(lessthanequal, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
-irep_typedefs(greaterthanequal, relation_data, esbmct::takestype,
+irep_typedefs(greaterthanequal, relation_data, esbmct::notype,
               expr2tc, relation_data, &relation_data::side_1,
               expr2tc, relation_data, &relation_data::side_2);
 irep_typedefs(not, not_data, esbmct::takestype,
@@ -2702,40 +2751,40 @@ irep_typedefs(deallocated_obj, object_ops, esbmct::takestype,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(dynamic_size, object_ops, esbmct::takestype,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(sideeffect, sideeffect_data, esbmct::takestype,
+irep_typedefs(sideeffect, sideeffect_data, esbmct::notype,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
               expr2tc, sideeffect_data, &sideeffect_data::size,
               type2tc, sideeffect_data, &sideeffect_data::alloctype,
               unsigned int, sideeffect_data, &sideeffect_data::kind,
               std::vector<expr2tc>, sideeffect_data,
               &sideeffect_data::arguments);
-irep_typedefs(code_block, code_block_data, esbmct::takestype,
+irep_typedefs(code_block, code_block_data, esbmct::notype,
               std::vector<expr2tc>, code_block_data,
               &code_block_data::operands);
-irep_typedefs(code_assign, code_assign_data, esbmct::takestype,
+irep_typedefs(code_assign, code_assign_data, esbmct::notype,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
-irep_typedefs(code_init, code_assign_data, esbmct::takestype,
+irep_typedefs(code_init, code_assign_data, esbmct::notype,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
-irep_typedefs(code_decl, code_decl_data, esbmct::takestype,
+irep_typedefs(code_decl, code_decl_data, esbmct::notype,
               irep_idt, code_decl_data, &code_decl_data::value);
-irep_typedefs(code_printf, code_printf_data, esbmct::takestype,
+irep_typedefs(code_printf, code_printf_data, esbmct::notype,
               std::vector<expr2tc>, code_printf_data,
               &code_printf_data::operands);
-irep_typedefs(code_expression, code_expression_data, esbmct::takestype,
+irep_typedefs(code_expression, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_return, code_expression_data, esbmct::takestype,
+irep_typedefs(code_return, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs_empty(code_skip, expr2t);
-irep_typedefs(code_free, code_expression_data, esbmct::takestype,
+irep_typedefs(code_free, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_goto, code_goto_data, esbmct::takestype,
+irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
               expr2tc, object_desc_data, &object_desc_data::offset);
-irep_typedefs(code_function_call, code_funccall_data, esbmct::takestype,
+irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
               std::vector<expr2tc>, code_funccall_data,
@@ -2747,20 +2796,20 @@ irep_typedefs(invalid_pointer, pointer_ops, esbmct::takestype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
               expr2tc, buffer_size_data, &buffer_size_data::value);
-irep_typedefs(code_asm, code_asm_data, esbmct::takestype,
+irep_typedefs(code_asm, code_asm_data, esbmct::notype,
               irep_idt, code_asm_data, &code_asm_data::value);
-irep_typedefs(code_cpp_del_array, code_expression_data, esbmct::takestype,
+irep_typedefs(code_cpp_del_array, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_cpp_delete, code_expression_data, esbmct::takestype,
+irep_typedefs(code_cpp_delete, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs(code_cpp_catch, code_cpp_catch_data, esbmct::takestype,
+irep_typedefs(code_cpp_catch, code_cpp_catch_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_catch_data,
               &code_cpp_catch_data::exception_list);
-irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::takestype,
+irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::notype,
               expr2tc, code_cpp_throw_data, &code_cpp_throw_data::operand,
               std::vector<irep_idt>, code_cpp_throw_data,
               &code_cpp_throw_data::exception_list);
-irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::takestype,
+irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
 
