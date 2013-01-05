@@ -2765,7 +2765,7 @@ irep_typedefs(deallocated_obj, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(dynamic_size, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(sideeffect, sideeffect_data, esbmct::notype,
+irep_typedefs(sideeffect, sideeffect_data, esbmct::takestype,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
               expr2tc, sideeffect_data, &sideeffect_data::size,
               type2tc, sideeffect_data, &sideeffect_data::alloctype,
@@ -2781,7 +2781,7 @@ irep_typedefs(code_assign, code_assign_data, esbmct::notype,
 irep_typedefs(code_init, code_assign_data, esbmct::notype,
               expr2tc, code_assign_data, &code_assign_data::target,
               expr2tc, code_assign_data, &code_assign_data::source);
-irep_typedefs(code_decl, code_decl_data, esbmct::notype,
+irep_typedefs(code_decl, code_decl_data, esbmct::takestype,
               irep_idt, code_decl_data, &code_decl_data::value);
 irep_typedefs(code_printf, code_printf_data, esbmct::notype,
               std::vector<expr2tc>, code_printf_data,
