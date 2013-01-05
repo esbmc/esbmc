@@ -70,7 +70,7 @@ void goto_program_dereferencet::dereference_failure(
 
   if (assertions.insert(guard_expr).second)
   {
-    guard_expr = expr2tc(new not2t(guard_expr));
+    guard_expr = not2tc(guard_expr);
 
     // first try simplifier on it
     if (!options.get_bool_option("no-simplify"))
@@ -117,7 +117,7 @@ void goto_program_dereferencet::dereference_rec(
         dereference_rec(op, guard, dereferencet::READ);
 
       if (is_or2t(expr)) {
-        expr2tc tmp = expr2tc(new not2t(op));
+        not2tc tmp(op);
         guard.move(tmp);
       } else {
         guard.add(op);
@@ -146,7 +146,7 @@ void goto_program_dereferencet::dereference_rec(
 
     if (o2) {
       unsigned old_guard=guard.size();
-      expr2tc tmp = expr2tc(new not2t(ifref.cond));
+      not2tc tmp(ifref.cond);
       guard.move(tmp);
       dereference_rec(ifref.false_value, guard, mode);
       guard.resize(old_guard);
@@ -167,7 +167,7 @@ void goto_program_dereferencet::dereference_rec(
       expr2tc result = deref.value;
 
       if (result->type != expr->type)
-        result = expr2tc(new typecast2t(expr->type, result));
+        result = typecast2tc(expr->type, result);
 
       expr = result;
     }
@@ -199,8 +199,7 @@ void goto_program_dereferencet::dereference_rec(
     index2t &idx = to_index2t(expr);
 
     if (is_pointer_type(idx.source_value)) {
-      expr2tc tmp = expr2tc(new add2t(idx.source_value->type, idx.source_value,
-                                      idx.index));
+      add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
       dereference.dereference(tmp, guard, mode);
     }
   }
@@ -302,7 +301,7 @@ void goto_program_dereferencet::dereference_instruction(
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
-      expr2tc invalid_ptr = expr2tc(new invalid_pointer2t(deref.value));
+      invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
       guard.move(invalid_ptr);
 #if 1
