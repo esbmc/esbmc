@@ -774,6 +774,16 @@ namespace esbmct {
    *  vardic templates are C++11. */
   const unsigned int num_type_fields = 6;
 
+  // Dummy type tag - exists to be an arbitary, local class, for use in some
+  // templates. See below.
+  class dummy_type_tag {
+  public:
+    typedef int type;
+  };
+
+  // Syntactic sugar for some type munging, see below.
+  #define disable_if_eq(c1, c2) typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<c1,c2>, ::esbmct::dummy_type_tag >::type* = NULL
+
   /** Template for providing templated methods to expr2t classes.
    *
    *  What this does: we give expr_methods a set of template parameters that
@@ -856,13 +866,7 @@ namespace esbmct {
      field6_type field6_class::*field6_ptr = &field6_class::expr_id>
   class expr_methods : public subclass
   {
-    // Dummy type tag - exists to be an arbitary, local class, for use in some
-    // templates. See below.
   public:
-    class dummy_type_tag {
-    public:
-      typedef int type;
-    };
 
     // So to make constructor disabling work, we have to turn it into a
     // template. Do this by adding a template parameter that has a default and
@@ -877,33 +881,33 @@ namespace esbmct {
     // The condition given to the boost template just checks something against
     // the types in the overall template parameters. In this case, we only want
     // this constructor if we're subclassing the expr2t class directly.
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,expr2t>, arbitary >::type* = NULL)
       : subclass(t, id) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
                  const field1_type &arg1,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1, arg2) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1, arg2, arg3) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4,
@@ -911,7 +915,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1, arg2, arg3, arg4) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
@@ -919,8 +923,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : subclass(t, id, arg1, arg2, arg3, arg4, arg5) { }
 
-
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
@@ -971,38 +974,34 @@ namespace esbmct {
   class type_methods : public subclass
   {
   public:
-    class dummy_type_tag {
-    public:
-      typedef int type;
-    };
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<subclass,type2t>, arbitary >::type* = NULL)
       : subclass(id) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id,
                  const field1_type &arg1,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,type2t::type_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,type2t::type_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,type2t::type_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4,
@@ -1010,7 +1009,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3, arg4) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
@@ -1018,7 +1017,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,type2t::type_ids> >, arbitary >::type* = NULL)
       : subclass(id, arg1, arg2, arg3, arg4, arg5) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     type_methods(type2t::type_ids id, const field1_type &arg1,
                  const field2_type &arg2, const field3_type &arg3,
                  const field4_type &arg4, const field5_type &arg5,
@@ -1067,12 +1066,7 @@ namespace esbmct {
      typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
      field6_type field6_class::*field6_ptr = &field6_class::expr_id>
   class something2tc : public expr2tc {
-  public:
-    class dummy_type_tag {
     public:
-      typedef int type;
-    };
-
     // Blank initialization of a container class -> store NULL
     something2tc() : expr2tc(NULL) { }
 
@@ -1087,7 +1081,7 @@ namespace esbmct {
     // the type and the (name-munged) symbol name, and extracts the correct
     // pieces of info from the name. However that requries the container
     // constructor to support this.
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const irep_idt &arg1,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<contained,symbol2t>, arbitary >::type* = NULL)
@@ -1114,7 +1108,7 @@ namespace esbmct {
       return static_cast<contained*>(expr2tc::get());
     }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
@@ -1122,7 +1116,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1)) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
@@ -1134,12 +1128,12 @@ namespace esbmct {
     // Relational operators take two arguments and don't take a type, because
     // they alway evaluate to a bool. Encode this constructor if the superclass
     // of whatever we're containing is relation_data.
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1, const field2_type &arg2,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<superclass,relation_data>, arbitary >::type* = NULL)
       : expr2tc(new contained(arg1, arg2)) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
@@ -1149,7 +1143,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3)) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
@@ -1160,7 +1154,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4)) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
@@ -1172,7 +1166,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5)) { }
 
-    template <class arbitary = dummy_type_tag>
+    template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
