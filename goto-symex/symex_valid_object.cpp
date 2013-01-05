@@ -63,7 +63,7 @@ void goto_symext::replace_dynamic_allocation(expr2tc &expr)
         }
         else
         {
-          expr = expr2tc(new constant_bool2t(is_valid_object(symbol)));
+          expr = constant_bool2tc(is_valid_object(symbol));
           return; // done
         }
       }
