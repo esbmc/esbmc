@@ -1049,7 +1049,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid, class superclass,
+  template <class contained, unsigned int expid, class superclass,class hastype,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
      typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
@@ -1174,7 +1174,7 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
 
-    something2tc(const something2tc<contained, expid, superclass,
+    something2tc(const something2tc<contained, expid, superclass, hastype,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
@@ -2513,6 +2513,7 @@ public:
 
 #define irep_typedefs(basename, superclass, ...) \
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
+                               expr2t,\
                                __VA_ARGS__ \
                                > basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
@@ -2522,8 +2523,8 @@ public:
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass) \
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass\
-                               > basename##2tc; \
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
+                               expr2t> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods;
 
