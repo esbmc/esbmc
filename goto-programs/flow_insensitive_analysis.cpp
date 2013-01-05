@@ -339,7 +339,7 @@ bool flow_insensitive_analysis_baset::do_function_call(
 
     expr2tc new_rhs;
     migrate_expr(rhs, new_rhs);
-    r->code = expr2tc(new code_return2t(new_rhs));
+    r->code = code_return2tc(new_rhs);
     
     goto_programt::targett t=temp.add_instruction(END_FUNCTION);    
     //t->code.set("identifier", code.function());

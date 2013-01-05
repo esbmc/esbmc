@@ -40,7 +40,7 @@ expr2tc abstract_domain_baset::get_guard(
 
   if(next==to)
   {
-    expr2tc tmp = expr2tc(new not2t(from->guard));
+    expr2tc tmp = not2tc(from->guard);
     return tmp;
   }
   
