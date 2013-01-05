@@ -97,12 +97,12 @@ public:
    *  encode these execution guard in them.
    *  @return Symbol of the guard
    */
-  expr2tc
+  symbol2tc
   guard_identifier(void)
   {
-    return expr2tc(new symbol2t(type_pool.get_bool(),
-                                id2string(guard_identifier_s), symbol2t::level1,
-                                0, 0, cur_state->top().level1.thread_id, 0));
+    return symbol2tc(type_pool.get_bool(), id2string(guard_identifier_s),
+                     symbol2t::level1, 0, 0,
+                     cur_state->top().level1.thread_id, 0);
   };
 
   // Methods
