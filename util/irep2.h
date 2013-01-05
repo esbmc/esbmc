@@ -4032,7 +4032,8 @@ public:
    *  @param alloct Type of piece of data to allocate.
    *  @param a Vector of arguments to function call. */
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
-               const type2tc &alloct, allockind k, std::vector<expr2tc> &a)
+               const type2tc &alloct, allockind k,
+               const std::vector<expr2tc> &a)
     : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k, a) {}
   sideeffect2t(const sideeffect2t &ref)
     : sideeffect_expr_methods(ref) {}
