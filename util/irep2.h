@@ -782,7 +782,10 @@ namespace esbmct {
   };
 
   // Syntactic sugar for some type munging, see below.
-  #define disable_if_eq(arbitary, c1, c2) typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<c1,c2>, arbitary>::type* = NULL
+  #define enable_if_eq(arbitary, c1, c2) typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<c1,c2>, arbitary>::type* = NULL
+  #define enable_if_not_eq(arbitary, c1, c2) typename boost::lazy_enable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<c1,c2> >, arbitary>::type* = NULL
+  #define disable_if_eq(arbitary, c1, c2) typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<c1,c2>, arbitary>::type* = NULL
+  #define disable_if_not_eq(arbitary, c1, c2) typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<c1,c2> >, arbitary>::type* = NULL
 
   /** Template for providing templated methods to expr2t classes.
    *
@@ -883,7 +886,7 @@ namespace esbmct {
     // this constructor if we're subclassing the expr2t class directly.
     template <class arbitary = ::esbmct::dummy_type_tag>
     expr_methods(const type2tc &t, expr2t::expr_ids id,
-                 disable_if_eq(arbitary,subclass,expr2t))
+                 enable_if_eq(arbitary,subclass,expr2t))
       : subclass(t, id) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
