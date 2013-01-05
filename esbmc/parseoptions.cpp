@@ -1011,8 +1011,8 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    expr2tc sym = expr2tc(new symbol2t(get_bool_type(), prop_name));
-    new_insn.code = expr2tc(new code_assign2t(sym, trig_it->second));
+    symbol2tc sym(get_bool_type(), prop_name);
+    new_insn.code = code_assign2tc(sym, trig_it->second);
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
@@ -1022,11 +1022,10 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   type2tc uint32 = get_uint_type(32);
   new_insn.type = ASSIGN;
   new_insn.function = insn->function;
-  expr2tc c_expr = expr2tc(new constant_int2t(uint32, BigInt(1)));
-  expr2tc ltlsym = expr2tc(new symbol2t(uint32, "c::_ltl2ba_transition_count"));
-  expr2tc e = expr2tc(new add2t(uint32, ltlsym, c_expr));
+  symbol2tc ltlsym(uint32, "c::_ltl2ba_transition_count");
+  add2tc e(uint32, ltlsym, one_uint);
 
-  new_insn.code = expr2tc(new code_assign2t(ltlsym, e));
+  new_insn.code = code_assign2tc(ltlsym, e);
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
@@ -1037,10 +1036,9 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   new_insn.function = insn->function;
   type2tc blank_code_type = type2tc(new code_type2t(std::vector<type2tc>(),
                                     type2tc(), std::vector<irep_idt>(), false));
-  new_insn.code =
-    expr2tc(new code_function_call2t(expr2tc(),
-                     expr2tc(new symbol2t(blank_code_type,"c::__ESBMC_yield")),
-                     std::vector<expr2tc>()));
+  new_insn.code = code_function_call2tc(expr2tc(),
+                                 symbol2tc(blank_code_type, "c::__ESBMC_yield"),
+                                 std::vector<expr2tc>());
   insn_list.insert(insn, new_insn);
 
   return;
@@ -1167,7 +1165,7 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 
    if (is_symbol2t(irep)) {
     if (to_symbol2t(irep).get_symbol_name() == from_name.as_string())
-      irep = expr2tc(new symbol2t(irep->type, to_name));
+      irep = symbol2tc(irep->type, to_name);
 
     return;
   } else {
