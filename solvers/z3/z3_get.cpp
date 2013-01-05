@@ -181,7 +181,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     // XXXjmorse - this isn't going to be printed right if the array data is
     // sparse. See trac #73
 
-    return expr2tc(new constant_array2t(type, elem_list));
+    return constant_array2tc(type, elem_list);
   } else if (is_struct_type(type)) {
     const struct_type2t &type_ref = to_struct_type(type);
     std::vector<expr2tc> unknown;
@@ -201,7 +201,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
       opers.push_back(bv_get_rec(tmp, *it));
     }
 
-    return expr2tc(new constant_struct2t(type, opers));
+    return constant_struct2tc(type, opers);
   } else if (is_union_type(type)) {
     const union_type2t &type_ref = to_union_type(type);
     unsigned component_nr = 0;
@@ -240,7 +240,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
       ++i;
     }
 
-    return expr2tc(new constant_union2t(type, operands));
+    return constant_union2tc(type, operands);
   } else if (is_pointer_type(type)) {
     expr2tc object, offset;
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
@@ -268,7 +268,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     pointer.object = objref.constant_value.to_ulong();
     pointer.offset = offsref.constant_value;
     if (pointer.object == 0) {
-      return expr2tc(new symbol2t(type, "NULL"));
+      return symbol2tc(type, "NULL");
     }
 
     return pointer_logic.back().pointer_expr(pointer, type);
@@ -276,7 +276,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return expr2tc();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    return expr2tc(new constant_int2t(type, BigInt(value.c_str())));
+    return constant_int2tc(type, BigInt(value.c_str()));
   } else if (is_fixedbv_type(type) && int_encoding) {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return expr2tc();
@@ -285,7 +285,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     value_expr.set_value(get_fixed_point(width, value));
     fixedbvt fbv;
     fbv.from_expr(value_expr);
-    return expr2tc(new constant_fixedbv2t(type, fbv));
+    return constant_fixedbv2tc(type, fbv);
   } else if (is_fixedbv_type(type) && !int_encoding) {
     // bv integer representation of fixedbv can be stuffed right back into a
     // constant irep, afaik
@@ -296,7 +296,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     value_expr.set_value(integer2binary(string2integer(value), width));
     fixedbvt fbv;
     fbv.from_expr(value_expr);
-    return expr2tc(new constant_fixedbv2t(type, fbv));
+    return constant_fixedbv2tc(type, fbv);
   } else {
     std::cerr << "Unrecognized type  generating counterexample" << std::endl;
     type->dump();
