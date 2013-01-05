@@ -2519,10 +2519,10 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
       constant_int2tc constant(get_uint_type(32), type_size);
-      mul2tc mul(inttype, non_ptr_op, constant);
+      expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
 
       // Add or sub that value
-      pointer_offset2tc ptr_offset(inttype, ptr_op);
+      expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
 
       expr2tc newexpr;
       if (id == expr2t::add_id) {
