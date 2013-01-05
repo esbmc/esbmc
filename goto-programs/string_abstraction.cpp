@@ -107,7 +107,7 @@ protected:
   void make_type(expr2tc &dest, const type2tc &type)
   {
     if (!is_nil_expr(dest) && dest->type != type)
-      dest = expr2tc(new typecast2t(type, dest));
+      dest = typecast2tc(type, dest);
   }
 
   void abstract(irep_idt name, goto_programt &dest, goto_programt::targett it);
@@ -142,7 +142,7 @@ protected:
 
     expr2tc b2 = b;
     make_type(b2, a->type);
-    expr2tc res = expr2tc(new sub2t(a->type, a, b2));
+    sub2tc res(a->type, a, b2);
     return res;
   }
 
@@ -163,7 +163,7 @@ protected:
     type2tc type;
     typet tmp_type = build_type(what);
     migrate_type(tmp_type, type);
-    expr2tc result = expr2tc(new member2t(type, a, name));
+    member2tc result(type, a, name);
 
     return result;
   }
@@ -376,7 +376,7 @@ void string_abstractiont::abstract(irep_idt name,
             decl1->make_other();
             type2tc new_type;
             migrate_type(symbol.type, new_type);
-            decl1->code = expr2tc(new code_decl2t(new_type, symbol.name));
+            decl1->code = code_decl2tc(new_type, symbol.name);
             decl1->location=it->location;
             decl1->local_variables=it->local_variables;
 
@@ -386,7 +386,7 @@ void string_abstractiont::abstract(irep_idt name,
             migrate_expr(sym, new_sym);
             expr2tc val;
             migrate_expr(symbol.value, val);
-            assignment1->code = expr2tc(new code_assign2t(new_sym, val));
+            assignment1->code = code_assign2tc(new_sym, val);
             assignment1->location=it->location;
             assignment1->local_variables=it->local_variables;
 
@@ -400,13 +400,13 @@ void string_abstractiont::abstract(irep_idt name,
 
             type2tc sym_type;
             migrate_type(symbol.type, sym_type);
-            expr2tc null = expr2tc(new symbol2t(sym_type, "NULL"));
+            expr2tc null = symbol2tc(sym_type, "NULL");
 
             goto_programt::targett decl1=tmp.add_instruction();
             decl1->make_other();
             type2tc new_type;
             migrate_type(symbol.type, new_type);
-            decl1->code = expr2tc(new code_decl2t(new_type, symbol.name));
+            decl1->code = code_decl2tc(new_type, symbol.name);
             decl1->location=it->location;
             decl1->local_variables=it->local_variables;
 
@@ -414,7 +414,7 @@ void string_abstractiont::abstract(irep_idt name,
             exprt sym = symbol_expr(symbol);
             expr2tc new_sym;
             migrate_expr(sym, new_sym);
-            assignment1->code = expr2tc(new code_assign2t(new_sym, null));
+            assignment1->code = code_assign2tc(new_sym, null);
             assignment1->location=it->location;
             assignment1->local_variables=it->local_variables;
 
@@ -515,9 +515,9 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   // For the purposes of comparing the pointer against NULL, we need to typecast
   // it: other goto convert functions rewrite the returned_str\\str pointer to
   // be a particular pointer (value set foo). Upon which it becomes another type
-  expr2tc cast = expr2tc(new typecast2t(rtype, ret_sym));
-  expr2tc null = expr2tc(new symbol2t(rtype2, "NULL"));
-  expr2tc guard = expr2tc(new equality2t(cast, null));
+  typecast2tc cast(rtype, ret_sym);
+  symbol2tc null(rtype2, "NULL");
+  equality2tc guard(cast, null);
 
   branch = tmp.add_instruction(GOTO);
   branch->make_goto();
@@ -528,10 +528,10 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   dest.destructive_insert(it, tmp);
 
   type2tc deref_type = type2tc(new pointer_type2t(string_struct));
-  expr2tc lhs = expr2tc(new dereference2t(deref_type, ret_sym));
+  dereference2tc lhs(deref_type, ret_sym);
   expr2tc rhs = build(ret_val, false);
   assignment = tmp.add_instruction(ASSIGN);
-  assignment->code = expr2tc(new code_assign2t(lhs, rhs));
+  assignment->code = code_assign2tc(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
   assignment->guard = true_expr;
@@ -653,7 +653,7 @@ expr2tc string_abstractiont::build_unknown(whatt what, bool write)
   migrate_type(type, tmp_type);
 
   if (write)
-    return expr2tc(new null_object2t(tmp_type));
+    return null_object2tc(tmp_type);
 
   expr2tc result;
 
@@ -667,8 +667,8 @@ expr2tc string_abstractiont::build_unknown(whatt what, bool write)
   case SIZE:
     {
     std::vector<expr2tc> args;
-    result = expr2tc(new sideeffect2t(tmp_type, expr2tc(), expr2tc(), type2tc(),
-                                      sideeffect2t::nondet, args));
+    result = sideeffect2tc(tmp_type, expr2tc(), expr2tc(), type2tc(),
+                           sideeffect2t::nondet, args);
     break;
     }
 
@@ -695,9 +695,9 @@ expr2tc string_abstractiont::build_unknown(bool write)
   type2tc type = type2tc(new pointer_type2t(string_struct));
 
   if (write)
-    return expr2tc(new null_object2t(type));
+    return null_object2tc(type);
 
-  expr2tc result = expr2tc(new symbol2t(type, "NULL"));
+  symbol2tc result(type, "NULL");
   return result;
 }
 
@@ -732,13 +732,13 @@ expr2tc string_abstractiont::build(
 
   expr2tc str_ptr = build(pointer, write);
 
-  expr2tc deref = expr2tc(new dereference2t(string_struct, str_ptr));
+  dereference2tc deref(string_struct, str_ptr);
   expr2tc result = member(deref, what);
 
   if (what==LENGTH || what==SIZE)
   {
     // adjust for offset
-    expr2tc ptr_offs = expr2tc(new pointer_offset2t(uint_type2(), pointer));
+    pointer_offset2tc ptr_offs(uint_type2(), pointer);
     result = sub(result, ptr_offs);
   }
 
@@ -838,8 +838,7 @@ expr2tc string_abstractiont::build(const expr2tc &pointer, bool write)
     expr2tc false_exp = build(ifval.false_value, write);
 
     // recursive call
-    expr2tc result = expr2tc(new if2t(true_exp->type, ifval.cond,
-                                      true_exp, false_exp));
+    if2tc result(true_exp->type, ifval.cond, true_exp, false_exp);
     return result;
   }
 
@@ -976,10 +975,9 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
         migrate_type(blah, an_op_type);
         make_type(operands.back(), an_op_type);
         operands.push_back(operands.back());
-        expr2tc struct_expr =
-          expr2tc(new constant_struct2t(string_struct, operands));
+        constant_struct2tc struct_expr(string_struct, operands);
 
-        expr2tc value = expr2tc(new constant_array_of2t(new_type, struct_expr));
+        constant_array_of2tc value(new_type, struct_expr);
         
         new_symbol.value = migrate_expr_back(value);
       }
@@ -993,7 +991,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
         expr2tc sym, val;
         migrate_expr(sym_exp, sym);
         migrate_expr(new_symbol.value, val);
-        assignment1->code = expr2tc(new code_assign2t(sym, val));
+        assignment1->code = code_assign2tc(sym, val);
       }
 
       context.move(new_symbol);
@@ -1007,7 +1005,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
     exprt sym = symbol_expr(str_array_symbol);
     expr2tc sym_exp;
     migrate_expr(sym, sym_exp);
-    return expr2tc(new index2t(string_struct, sym_exp, idx.index));
+    return index2tc(string_struct, sym_exp, idx.index);
   }
 
   // possibly walk over some members
@@ -1052,7 +1050,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
       migrate_type(tmptype, eventmpertype);
       make_type(operands.back(), eventmpertype);
       operands.push_back(operands.back());
-      expr2tc value = expr2tc(new constant_struct2t(string_struct, operands));
+      constant_struct2tc value(string_struct, operands);
       
       new_symbol.value = migrate_expr_back(value);
     }
@@ -1065,7 +1063,7 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
       expr2tc new_sym2, new_sym_value;
       migrate_expr(new_sym, new_sym2);
       migrate_expr(new_symbol.value, new_sym_value);
-      assignment1->code = expr2tc(new code_assign2t(new_sym2, new_sym_value));
+      assignment1->code = code_assign2tc(new_sym2, new_sym_value);
     }
 
     context.move(new_symbol);
@@ -1124,22 +1122,22 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
 
       std::vector<expr2tc> operands;
       operands.push_back(true_expr);
-      operands.push_back(expr2tc(new constant_int2t(lentype, l)));
-      operands.push_back(expr2tc(new constant_int2t(sizetype, l+1)));
-      expr2tc value = expr2tc(new constant_struct2t(string_struct, operands));
+      operands.push_back(constant_int2tc(lentype, l));
+      operands.push_back(constant_int2tc(sizetype, l+1));
+      constant_struct2tc value(string_struct, operands);
 
       // initialization
       goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
       exprt new_sym = symbol_expr(new_symbol);
       expr2tc new_sym2;
       migrate_expr(new_sym, new_sym2);
-      assignment1->code = expr2tc(new code_assign2t(new_sym2, value));
+      assignment1->code = code_assign2tc(new_sym2, value);
     }
 
     context.move(new_symbol);
   }
 
-  return expr2tc(new symbol2t(string_struct, identifier));
+  return symbol2tc(string_struct, identifier);
 }
 
 /*******************************************************************\
@@ -1219,7 +1217,7 @@ void string_abstractiont::move_lhs_arithmetic(expr2tc &lhs, expr2tc &rhs)
   {
     // move op1 to rhs
     expr2tc rest = to_sub2t(lhs).side_1;
-    expr2tc sum = expr2tc(new add2t(lhs->type, rhs, to_sub2t(lhs).side_2));
+    add2tc sum(lhs->type, rhs, to_sub2t(lhs).side_2);
     // overwrite
     rhs = sum;
     lhs = rest;
@@ -1294,8 +1292,7 @@ void string_abstractiont::abstract_pointer_assign(
   goto_programt tmp;
 
   goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
-  assignment->code =
-    expr2tc(new code_assign2t(build(lhs, true), build(rhs, false)));
+  assignment->code = code_assign2tc(build(lhs, true), build(rhs, false));
   assignment->location=target->location;
   assignment->local_variables=target->local_variables;
 
@@ -1340,8 +1337,7 @@ void string_abstractiont::abstract_char_assign(
     if (!is_nil_expr(i1))
     {
       goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
-      assignment1->code =
-        expr2tc(new code_assign2t(i1, true_expr));
+      assignment1->code = code_assign2tc(i1, true_expr);
       assignment1->location=target->location;
       assignment1->local_variables=target->local_variables;
     }
@@ -1352,11 +1348,11 @@ void string_abstractiont::abstract_char_assign(
       expr2tc new_length = idx.index;
       make_type(new_length, i2->type);
 
-      expr2tc cond = expr2tc(new lessthan2t(new_length, i2));
-      expr2tc min_expr(new if2t(i2->type, cond, new_length, i2));
+      lessthan2tc cond(new_length, i2);
+      if2tc min_expr(i2->type, cond, new_length, i2);
 
       goto_programt::targett assignment2=tmp.add_instruction(ASSIGN);
-      assignment2->code = expr2tc(new code_assign2t(i2, min_expr));
+      assignment2->code = code_assign2tc(i2, min_expr);
       assignment2->location=target->location;
       assignment2->local_variables=target->local_variables;
 
@@ -1433,9 +1429,8 @@ void string_abstractiont::abstract_function_call(
       if (is_pointer_type(actual))
         new_args.push_back(build(actual, false));
       else
-        new_args.push_back(expr2tc(new address_of2t(
-                                   to_pointer_type(tcfree).subtype,
-                                   (build(actual, false)))));
+        new_args.push_back(address_of2tc(to_pointer_type(tcfree).subtype,
+                                         (build(actual, false))));
     }
 
     arg++;
@@ -1460,13 +1455,12 @@ void string_abstractiont::abstract_function_call(
       is_char_type(to_pointer_type(fnc_ret_type).subtype)) {
     if (is_nil_expr(call.ret)) {
       type2tc null_type = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
-      expr2tc null = expr2tc(new symbol2t(null_type, "NULL"));
+      symbol2tc null(null_type, "NULL");
       new_args.push_back(null);
     } else {
       //XXX jmorse migration guessing; void ptr?
       type2tc ret_type = type2tc(new pointer_type2t(get_empty_type()));
-      new_args.push_back(expr2tc(
-                         new address_of2t(ret_type, build(call.ret, false))));
+      new_args.push_back(address_of2tc(ret_type, build(call.ret, false)));
     }
   }
 
