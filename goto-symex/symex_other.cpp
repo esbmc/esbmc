@@ -57,7 +57,7 @@ void goto_symext::symex_other(void)
     const irep_idt &identifier = decl_code.value;
 
     // Generate dummy symbol as a vehicle for renaming.
-    expr2tc l1_sym = expr2tc(new symbol2t(get_empty_type(), identifier));
+    symbol2tc l1_sym(get_empty_type(), identifier);
 
     cur_state->top().level1.get_ident_name(l1_sym);
     symbol2t &l1_symbol = to_symbol2t(l1_sym);

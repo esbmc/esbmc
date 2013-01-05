@@ -320,8 +320,8 @@ goto_symext::finish_formula(void)
   std::list<allocated_obj>::const_iterator it;
   for (it = dynamic_memory.begin(); it != dynamic_memory.end(); it++) {
     // Assert that the allocated object was freed.
-    expr2tc deallocd(new deallocated_obj2t(it->obj));
-    expr2tc eq(new equality2t(deallocd, true_expr));
+    deallocated_obj2tc deallocd(it->obj);
+    equality2tc eq(deallocd, true_expr);
     replace_dynamic_allocation(eq);
     it->alloc_guard.guard_expr(eq);
     cur_state->rename(eq);

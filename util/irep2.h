@@ -2603,7 +2603,7 @@ irep_typedefs(constant_union, constant_datatype_data, esbmct::takestype,
 irep_typedefs(constant_array, constant_datatype_data, esbmct::takestype,
               std::vector<expr2tc>, constant_datatype_data,
               &constant_datatype_data::datatype_members);
-irep_typedefs(constant_bool, constant_bool_data, esbmct::takestype,
+irep_typedefs(constant_bool, constant_bool_data, esbmct::notype,
               bool, constant_bool_data, &constant_bool_data::constant_value);
 irep_typedefs(constant_array_of, constant_array_of_data, esbmct::takestype,
               expr2tc, constant_array_of_data,
@@ -2755,7 +2755,7 @@ irep_typedefs(dereference, dereference_data, esbmct::takestype,
               expr2tc, dereference_data, &dereference_data::value);
 irep_typedefs(valid_object, object_ops, esbmct::takestype,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(deallocated_obj, object_ops, esbmct::takestype,
+irep_typedefs(deallocated_obj, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(dynamic_size, object_ops, esbmct::takestype,
               expr2tc, object_ops, &object_ops::value);
