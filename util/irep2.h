@@ -1070,7 +1070,7 @@ namespace esbmct {
   class something2tc : public expr2tc {
     public:
     // Blank initialization of a container class -> store NULL
-    something2tc() : expr2tc(NULL) { }
+    something2tc() : expr2tc() { }
 
     // Initialize container from a non-type-committed container. Encode an
     // assertion that the type is what we expect.
