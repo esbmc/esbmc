@@ -204,7 +204,7 @@ void goto_convertt::do_function_call_if(
   // v: if(!c) goto y;
   v->make_goto(y);
   migrate_expr(function.op0(), v->guard);
-  v->guard = expr2tc(new not2t(v->guard));
+  v->guard = not2tc(v->guard);
   v->location=function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);

@@ -430,7 +430,7 @@ void goto_convertt::do_cpp_new(
   migrate_expr(neg_valid_expr, t_a->guard);
 
   migrate_expr(valid_expr, t_a->guard);
-  t_a->guard = expr2tc(new not2t(t_a->guard));
+  t_a->guard = not2tc(t_a->guard);
 
   // set size
   //nec: ex37.c
