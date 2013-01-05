@@ -2719,7 +2719,7 @@ irep_typedefs(shl, arith_2ops, esbmct::takestype,
 irep_typedefs(ashr, arith_2ops, esbmct::takestype,
               expr2tc, arith_2ops, &arith_2ops::side_1,
               expr2tc, arith_2ops, &arith_2ops::side_2);
-irep_typedefs(same_object, same_object_data, esbmct::takestype,
+irep_typedefs(same_object, same_object_data, esbmct::notype,
               expr2tc, same_object_data, &same_object_data::side_1,
               expr2tc, same_object_data, &same_object_data::side_2);
 irep_typedefs(pointer_offset, pointer_ops, esbmct::takestype,
@@ -2771,11 +2771,11 @@ irep_typedefs(dynamic_object, dynamic_object_data, esbmct::takestype,
               bool, dynamic_object_data, &dynamic_object_data::unknown);
 irep_typedefs(dereference, dereference_data, esbmct::takestype,
               expr2tc, dereference_data, &dereference_data::value);
-irep_typedefs(valid_object, object_ops, esbmct::takestype,
+irep_typedefs(valid_object, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(deallocated_obj, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
-irep_typedefs(dynamic_size, object_ops, esbmct::takestype,
+irep_typedefs(dynamic_size, object_ops, esbmct::notype,
               expr2tc, object_ops, &object_ops::value);
 irep_typedefs(sideeffect, sideeffect_data, esbmct::notype,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
@@ -2818,7 +2818,7 @@ irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
 irep_typedefs(code_comma, code_comma_data, esbmct::takestype,
               expr2tc, code_comma_data, &code_comma_data::side_1,
               expr2tc, code_comma_data, &code_comma_data::side_2);
-irep_typedefs(invalid_pointer, pointer_ops, esbmct::takestype,
+irep_typedefs(invalid_pointer, pointer_ops, esbmct::notype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
               expr2tc, buffer_size_data, &buffer_size_data::value);
