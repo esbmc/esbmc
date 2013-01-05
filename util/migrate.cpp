@@ -854,7 +854,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_extract_big_endian") ? true : false;
 
-    byte_extract2t *b = new byte_extract2t(type, big_endian, side1, side2, g);
+    byte_extract2t *b = new byte_extract2t(type, side1, side2, g, big_endian);
     new_expr_ref = expr2tc(b);
   } else if (expr.id() == "byte_update_little_endian" ||
              expr.id() == "byte_update_big_endian") {
@@ -871,8 +871,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
 
     bool big_endian = (expr.id() == "byte_update_big_endian") ? true : false;
 
-    byte_update2t *u = new byte_update2t(type, big_endian,
-                                         sourceval, offs, update, guard);
+    byte_update2t *u = new byte_update2t(type, sourceval, offs, update,
+                                         guard, big_endian);
     new_expr_ref = expr2tc(u);
   } else if (expr.id() == "with") {
     migrate_type(expr.type(), type);
@@ -1074,8 +1074,8 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
       }
     }
 
-    new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize,
-                                            cmt_type, t, args));
+    new_expr_ref = expr2tc(new sideeffect2t(plaintype, operand, thesize, args,
+                                            cmt_type, t));
   } else if (expr.id() == irept::id_code && expr.statement() == "assign") {
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);

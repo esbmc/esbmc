@@ -2184,10 +2184,10 @@ std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 std::string address_of2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
 std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "extract_guard", ""};
+{ "source_value", "source_offset", "extract_guard", "big_endian", ""};
 std::string byte_update2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "update_value",
-  "update_guard"};
+{ "source_value", "source_offset", "update_value", "update_guard",
+  "big_endian"};
 std::string with2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names [esbmct::num_type_fields]  =
@@ -2223,7 +2223,7 @@ std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
 std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string sideeffect2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "size", "alloctype", "kind", "arguments"};
+{ "operand", "size", "arguments", "alloctype", "kind"};
 std::string code_block2t::field_names [esbmct::num_type_fields]  =
 { "operands", "", "", "", ""};
 std::string code_assign2t::field_names [esbmct::num_type_fields]  =
@@ -2429,16 +2429,16 @@ template class esbmct::expr_methods<pointer_object2t, pointer_ops,
 template class esbmct::expr_methods<address_of2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
 template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
-    bool, byte_extract_data, &byte_extract_data::big_endian,
     expr2tc, byte_extract_data, &byte_extract_data::source_value,
     expr2tc, byte_extract_data, &byte_extract_data::source_offset,
-    expr2tc, byte_extract_data, &byte_extract_data::extract_guard>;
+    expr2tc, byte_extract_data, &byte_extract_data::extract_guard,
+    bool, byte_extract_data, &byte_extract_data::big_endian>;
 template class esbmct::expr_methods<byte_update2t, byte_update_data,
-    bool, byte_update_data, &byte_update_data::big_endian,
     expr2tc, byte_update_data, &byte_update_data::source_value,
     expr2tc, byte_update_data, &byte_update_data::source_offset,
     expr2tc, byte_update_data, &byte_update_data::update_value,
-    expr2tc, byte_update_data, &byte_update_data::update_guard>;
+    expr2tc, byte_update_data, &byte_update_data::update_guard,
+    bool, byte_update_data, &byte_update_data::big_endian>;
 template class esbmct::expr_methods<with2t, with_data,
     expr2tc, with_data, &with_data::source_value,
     expr2tc, with_data, &with_data::update_field,
@@ -2480,9 +2480,9 @@ template class esbmct::expr_methods<dynamic_size2t, object_ops,
 template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
     expr2tc, sideeffect_data, &sideeffect_data::operand,
     expr2tc, sideeffect_data, &sideeffect_data::size,
+    std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments,
     type2tc, sideeffect_data, &sideeffect_data::alloctype,
-    sideeffect_data::allockind, sideeffect_data, &sideeffect_data::kind,
-    std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>;
+    sideeffect_data::allockind, sideeffect_data, &sideeffect_data::kind>;
 template class esbmct::expr_methods<code_block2t, code_block_data,
     std::vector<expr2tc>, code_block_data, &code_block_data::operands>;
 template class esbmct::expr_methods<code_assign2t, code_assign_data,

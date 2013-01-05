@@ -343,9 +343,9 @@ void goto_symext::symex_assign_byte_extract(
   // turn into l=byte_update_X(l, b, r)
 
   const byte_extract2t &extract = to_byte_extract2t(lhs);
-  byte_update2tc new_rhs(extract.source_value->type, extract.big_endian,
-                         extract.source_value, extract.source_offset,
-                         rhs, guard.as_expr());
+  byte_update2tc new_rhs(extract.source_value->type, extract.source_value,
+                         extract.source_offset, rhs, guard.as_expr(),
+                         extract.big_endian);
 
   symex_assign_rec(extract.source_value, new_rhs, guard);
 }
