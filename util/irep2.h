@@ -1117,6 +1117,7 @@ namespace esbmct {
     template <class arbitary = dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field1_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1)) { }
@@ -1125,6 +1126,7 @@ namespace esbmct {
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2)) { }
@@ -1142,6 +1144,7 @@ namespace esbmct {
                  const field1_type &arg1,
                  const field2_type &arg2,
                  const field3_type &arg3,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field3_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3)) { }
@@ -1152,6 +1155,7 @@ namespace esbmct {
                  const field2_type &arg2,
                  const field3_type &arg3,
                  const field4_type &arg4,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field4_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4)) { }
@@ -1163,6 +1167,7 @@ namespace esbmct {
                  const field3_type &arg3,
                  const field4_type &arg4,
                  const field5_type &arg5,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::mpl::not_<boost::fusion::result_of::equal_to<field6_type,expr2t::expr_ids> >, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5)) { }
@@ -1175,6 +1180,7 @@ namespace esbmct {
                  const field4_type &arg4,
                  const field5_type &arg5,
                  const field6_type &arg6,
+                 typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<hastype,notype>, arbitary >::type* = NULL,
                  typename boost::lazy_disable_if<boost::fusion::result_of::equal_to<field5_type,expr2t::expr_ids>, arbitary >::type* = NULL)
       : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
 
