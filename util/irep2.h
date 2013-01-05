@@ -1074,7 +1074,15 @@ namespace esbmct {
 
     // Initialize container from a non-type-committed container. Encode an
     // assertion that the type is what we expect.
-    something2tc(const expr2tc &init) : expr2tc(init)
+    //
+    // Don't do this though if this'll conflict with a later consructor though.
+    // For example if we have not2tc, not2tc(expr) could be copying it or
+    // constructing a new not2t irep. In the face of this ambiguity, pick the
+    // latter, and the end user can worry about how to cast up to a not2tc.
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const expr2tc &init,
+                 typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,expr2tc>,boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary>::type* = NULL
+                 ) : expr2tc(init)
     {
       assert(init->expr_id == expid);
     }
