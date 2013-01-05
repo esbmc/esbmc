@@ -69,32 +69,6 @@ public:
     return gen_not(get_guard_symbol_expr(entry.object));
   }
 
-  const bool not_valid_assign(goto_programt::instructiont &instruction)
-  {
-    const code_assign2t &assign = to_code_assign2t(instruction.code);
-    if (!is_symbol2t(assign.target))
-      return false;
-
-    const symbol2t &sym = to_symbol2t(assign.target);
-    std::string identifier = sym.get_symbol_name();
-
-	//these assignments come from the buil-in-libraries
-    if (identifier.find("built-in-library")!= std::string::npos
-    	|| identifier.find("count_lock") != std::string::npos
-    	|| identifier.find("count_wait") != std::string::npos
-    	|| identifier.find("trds_in_run") != std::string::npos
-    	|| identifier.find("trds_in_join") != std::string::npos
-    	|| identifier.find("tzname") != std::string::npos
-    	|| identifier.find("daylight") != std::string::npos
-    	|| identifier.find("timezone") != std::string::npos
-    	|| identifier.find("tzname") != std::string::npos
-    	|| identifier.find("ESBMC_rounding_mode") != std::string::npos)
-
-      return true;
-    else
-	  return false;
-  }
-
   void add_initialization(goto_programt &goto_program) const;
 
 
