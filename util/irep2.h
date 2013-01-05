@@ -1120,6 +1120,12 @@ namespace esbmct {
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
+                 disable_if_eq(arbitary,hastype,notype),
+                 disable_if_not_eq(arbitary,field1_type,expr2t::expr_ids))
+      : expr2tc(new contained(t)) { }
+
+    template <class arbitary = ::esbmct::dummy_type_tag>
+    something2tc(const type2tc &t,
                  const field1_type &arg1,
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
@@ -2584,9 +2590,9 @@ public:
 
 // Special case for some empty ireps,
 
-#define irep_typedefs_empty(basename, superclass) \
+#define irep_typedefs_empty(basename, superclass, type) \
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
-                               esbmct::notype> basename##2tc; \
+                               type> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods;
 
@@ -2744,9 +2750,9 @@ irep_typedefs(overflow_cast, overflow_cast_data, esbmct::takestype,
               unsigned int, overflow_cast_data, &overflow_cast_data::bits);
 irep_typedefs(overflow_neg, overflow_ops, esbmct::takestype,
               expr2tc, overflow_ops, &overflow_ops::operand);
-irep_typedefs_empty(unknown, expr2t);
-irep_typedefs_empty(invalid, expr2t);
-irep_typedefs_empty(null_object, expr2t);
+irep_typedefs_empty(unknown, expr2t, esbmct::takestype);
+irep_typedefs_empty(invalid, expr2t, esbmct::takestype);
+irep_typedefs_empty(null_object, expr2t, esbmct::takestype);
 irep_typedefs(dynamic_object, dynamic_object_data, esbmct::takestype,
               expr2tc, dynamic_object_data, &dynamic_object_data::instance,
               bool, dynamic_object_data, &dynamic_object_data::invalid,
@@ -2784,7 +2790,7 @@ irep_typedefs(code_expression, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_return, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
-irep_typedefs_empty(code_skip, expr2t);
+irep_typedefs_empty(code_skip, expr2t, esbmct::notype);
 irep_typedefs(code_free, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
 irep_typedefs(code_goto, code_goto_data, esbmct::notype,
