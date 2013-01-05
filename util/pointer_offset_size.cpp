@@ -55,7 +55,7 @@ expr2tc
 compute_pointer_offset(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
-    return expr2tc(new constant_int2t(uint_type2(), BigInt(0)));
+    return zero_uint;
   else if (is_index2t(expr))
   {
     const index2t &index = to_index2t(expr);
@@ -74,12 +74,12 @@ compute_pointer_offset(const expr2tc &expr)
     expr2tc result;
     if (is_constant_int2t(index.index)) {
       const constant_int2t &index_val = to_constant_int2t(index.index);
-      result = expr2tc(new constant_int2t(uint_type2(),
-                                        sub_size * index_val.constant_value));
+      result = constant_int2tc(get_uint_type(32),
+                               sub_size * index_val.constant_value);
     } else {
       // Non constant, create multiply.
-      expr2tc tmp_size(new constant_int2t(uint_type2(), sub_size));
-      result = expr2tc(new mul2t(uint_type2(), tmp_size, index.index));
+      constant_int2tc tmp_size(uint_type2(), sub_size);
+      result = mul2tc(uint_type2(), tmp_size, index.index);
     }
 
     return result;
@@ -96,13 +96,13 @@ compute_pointer_offset(const expr2tc &expr)
       result = 0; // Union offsets are always 0.
     }
 
-    return expr2tc(new constant_int2t(uint_type2(), result));
+    return constant_int2tc(uint_type2(), result);
   }
   else if (is_constant_array2t(expr))
   {
     // Some code, somewhere, is renaming a constant array into a dereference
     // target. The offset into the base object is nothing.
-    return expr2tc(new constant_int2t(uint_type2(), BigInt(0)));
+    return zero_uint;
   }
   else
   {

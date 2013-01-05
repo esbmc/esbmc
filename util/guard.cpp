@@ -21,9 +21,9 @@ expr2tc guardt::as_expr(guard_listt::const_iterator it) const
   expr2tc arg1, arg2;
   arg1 = *it++;
   arg2 = *it++;
-  expr2tc res = expr2tc(new and2t(arg1, arg2));
+  and2tc res(arg1, arg2);
   while (it != guard_list.end())
-    res = expr2tc(new and2t(res, *it++));
+    res = and2tc(res, *it++);
 
   return res;
 }
@@ -118,7 +118,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
   
   g1.guard_list.erase(it1, g1.guard_list.end());
   
-  expr2tc tmp(new not2t(and_expr2));
+  not2tc tmp(and_expr2);
   
   if (tmp != and_expr1)
   {
@@ -130,7 +130,7 @@ guardt &operator |= (guardt &g1, const guardt &g2)
     }
     else
     {
-      expr2tc or_expr(new or2t(and_expr1, and_expr2));
+      or2tc or_expr(and_expr1, and_expr2);
       g1.move(or_expr);
     }
   }
