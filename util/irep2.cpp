@@ -912,6 +912,18 @@ type_to_string(const bool &thebool, int indent __attribute__((unused)))
 }
 
 static inline __attribute__((always_inline)) std::string
+type_to_string(const sideeffect_data::allockind &data,
+               int indent __attribute__((unused)))
+{
+  return (data == sideeffect_data::allockind::malloc) ? "malloc" :
+         (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
+         (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
+         (data == sideeffect_data::allockind::nondet) ? "nondet" :
+         (data == sideeffect_data::allockind::function_call) ? "function_call" :
+         "unknown";
+}
+
+static inline __attribute__((always_inline)) std::string
 type_to_string(const unsigned int &theval, int indent __attribute__((unused)))
 {
   char buffer[64];
@@ -1075,6 +1087,14 @@ do_type_cmp(const unsigned int &side1, const unsigned int &side2)
 {
   return (side1 == side2) ? true : false;
 }
+
+static inline __attribute__((always_inline)) bool
+do_type_cmp(const sideeffect_data::allockind &side1,
+            const sideeffect_data::allockind &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
 static inline __attribute__((always_inline)) bool
 do_type_cmp(const symbol_data::renaming_level &side1,
             const symbol_data::renaming_level &side2)
@@ -1175,6 +1195,18 @@ do_type_lt(const bool &side1, const bool &side2)
 
 static inline __attribute__((always_inline)) int
 do_type_lt(const unsigned int &side1, const unsigned int &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+static inline __attribute__((always_inline)) int
+do_type_lt(const sideeffect_data::allockind &side1,
+           const sideeffect_data::allockind &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1334,6 +1366,14 @@ do_type_crc(const unsigned int &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_crc(const sideeffect_data::allockind &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const symbol_data::renaming_level &theval, hacky_hash &hash)
 {
 
@@ -1442,6 +1482,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const st
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(const sideeffect_data::allockind  &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const unsigned int &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const BigInt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1455,6 +1496,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(std::vec
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(sideeffect_data::allockind &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(unsigned int &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(BigInt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -2422,7 +2464,7 @@ template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
     expr2tc, sideeffect_data, &sideeffect_data::operand,
     expr2tc, sideeffect_data, &sideeffect_data::size,
     type2tc, sideeffect_data, &sideeffect_data::alloctype,
-    unsigned int, sideeffect_data, &sideeffect_data::kind,
+    sideeffect_data::allockind, sideeffect_data, &sideeffect_data::kind,
     std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>;
 template class esbmct::expr_methods<code_block2t, code_block_data,
     std::vector<expr2tc>, code_block_data, &code_block_data::operands>;

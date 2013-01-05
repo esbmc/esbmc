@@ -2376,8 +2376,18 @@ public:
 class sideeffect_data : public expr2t
 {
 public:
+  /** Enumeration identifying each particular kind of side effect. The values
+   *  themselves are entirely self explanatory. */
+  enum allockind {
+    malloc,
+    cpp_new,
+    cpp_new_arr,
+    nondet,
+    function_call
+  };
+
   sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
-                  const expr2tc &sz, const type2tc &tp, unsigned int k,
+                  const expr2tc &sz, const type2tc &tp, allockind k,
                   const std::vector<expr2tc> &args)
     : expr2t(t, id), operand(op), size(sz), alloctype(tp), kind(k),
       arguments(args) { }
@@ -2388,7 +2398,7 @@ public:
   expr2tc operand;
   expr2tc size;
   type2tc alloctype;
-  unsigned int kind;
+  allockind kind;
   std::vector<expr2tc> arguments;
 };
 
@@ -2769,7 +2779,8 @@ irep_typedefs(sideeffect, sideeffect_data, esbmct::takestype,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
               expr2tc, sideeffect_data, &sideeffect_data::size,
               type2tc, sideeffect_data, &sideeffect_data::alloctype,
-              unsigned int, sideeffect_data, &sideeffect_data::kind,
+              sideeffect_data::allockind, sideeffect_data,
+              &sideeffect_data::kind,
               std::vector<expr2tc>, sideeffect_data,
               &sideeffect_data::arguments);
 irep_typedefs(code_block, code_block_data, esbmct::notype,
@@ -3994,16 +4005,6 @@ public:
 class sideeffect2t : public sideeffect_expr_methods
 {
 public:
-  /** Enumeration identifying each particular kind of side effect. The values
-   *  themselves are entirely self explanatory. */
-  enum allockind {
-    malloc,
-    cpp_new,
-    cpp_new_arr,
-    nondet,
-    function_call
-  };
-
   /** Primary constructor.
    *  @param t Type this side-effect evaluates to.
    *  @param operand Not really certain. Sometimes turns up in string-irep.
