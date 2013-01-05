@@ -3988,8 +3988,8 @@ class dynamic_size2t : public dynamic_size_expr_methods
 public:
   /** Primary constructor. @param operand Pointer object to fetch size for. */
   dynamic_size2t(const expr2tc &operand)
-    : dynamic_size_expr_methods(type_pool.get_bool(), dynamic_size_id, operand)
-      {}
+    : dynamic_size_expr_methods(type_pool.get_uint32(), dynamic_size_id,
+        operand) {}
   dynamic_size2t(const dynamic_size2t &ref)
     : dynamic_size_expr_methods(ref) {}
 
