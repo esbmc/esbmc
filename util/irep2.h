@@ -2765,9 +2765,9 @@ irep_typedefs(member, member_data, esbmct::takestype,
 irep_typedefs(index, index_data, esbmct::takestype,
               expr2tc, index_data, &index_data::source_value,
               expr2tc, index_data, &index_data::index);
-irep_typedefs(zero_string, string_ops, esbmct::takestype,
+irep_typedefs(zero_string, string_ops, esbmct::notype,
               expr2tc, string_ops, &string_ops::string);
-irep_typedefs(zero_length_string, string_ops, esbmct::takestype,
+irep_typedefs(zero_length_string, string_ops, esbmct::notype,
               expr2tc, string_ops, &string_ops::string);
 irep_typedefs(isnan, isnan_data, esbmct::takestype,
               expr2tc, isnan_data, &isnan_data::value);
