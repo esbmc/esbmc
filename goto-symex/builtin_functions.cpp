@@ -100,11 +100,9 @@ void goto_symext::symex_malloc(
     rhs_addrof.get()->ptr_obj = idx;
   }
 
-  expr2tc rhs;
+  expr2tc rhs = rhs_addrof;
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
-  else
-    rhs = rhs_addrof;
 
   cur_state->rename(rhs);
   expr2tc rhs_copy(rhs);
