@@ -95,17 +95,16 @@ expr2tc pointer_logict::pointer_expr(
 
   if(pointer.object==null_object) // NULL?
   {
-    return expr2tc(new symbol2t(type, irep_idt("NULL")));
+    return symbol2tc(type, irep_idt("NULL"));
   }
   else if(pointer.object==invalid_object) // INVALID?
   {
-    return expr2tc(new symbol2t(type, irep_idt("INVALID")));
+    return symbol2tc(type, irep_idt("INVALID"));
   }
   
   if(pointer.object>=objects.size())
   {
-    return expr2tc(new symbol2t(type,
-                                irep_idt("INVALID" + i2string(pointer.object))));
+    return symbol2tc(type, irep_idt("INVALID" + i2string(pointer.object)));
   }
 
   const expr2tc &object_expr = lookup[pointer.object];
@@ -113,7 +112,7 @@ expr2tc pointer_logict::pointer_expr(
   expr2tc deep_object = object_rec(pointer.offset, type, object_expr);
   
   assert(type->type_id == type2t::pointer_id);
-  return expr2tc(new address_of2t(type, deep_object));
+  return address_of2tc(type, deep_object);
 }
 
 /*******************************************************************\
@@ -147,8 +146,7 @@ expr2tc pointer_logict::object_rec(
     mp_integer rest=offset%size;
 
     type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
-    expr2tc newindex(new index2t(arrtype.subtype, src,
-                                 expr2tc(new constant_int2t(inttype, index))));
+    index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
     
     return object_rec(rest, pointer_type, newindex);
   }
@@ -183,7 +181,7 @@ expr2tc pointer_logict::object_rec(
       if(new_offset>offset)
       {
         // found it
-        expr2tc tmp(new member2t(*it, src, member_names[idx]));
+        member2tc tmp(*it, src, member_names[idx]);
         
         return object_rec(offset-current_offset, pointer_type, tmp);
       }
@@ -214,13 +212,13 @@ pointer_logict::pointer_logict()
 {
 
   type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
-  expr2tc sym(new symbol2t(type, "NULL"));
+  symbol2tc sym(type, "NULL");
 
   // add NULL
   null_object = add_object(sym);
 
   // add INVALID
-  expr2tc invalid(new symbol2t(type, "INVALID"));
+  symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
 }
 

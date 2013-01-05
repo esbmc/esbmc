@@ -1131,12 +1131,12 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
   // bit representation, with pointers to array/struct/union fields comparing
   // as you might expect.
   if (is_pointer_type(side1)) {
-    expr2tc cast(new typecast2t(uint_type2(), side1));
+    typecast2tc cast(uint_type2(), side1);
     convert_bv(cast, args[0]);
   }
 
   if (is_pointer_type(side2)) {
-    expr2tc cast(new typecast2t(uint_type2(), side2));
+    typecast2tc cast(uint_type2(), side2);
     convert_bv(cast, args[1]);
   }
 
@@ -1322,16 +1322,16 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *_bv)
     fixedbvt bv; // Defaults to zero.
     bv.spec = fixedbv_spect(64, 32);
     exprt face = bv.to_expr();
-    zero = expr2tc(new constant_fixedbv2t(sign, bv));
+    zero = constant_fixedbv2tc(sign, bv);
   } else {
     assert(is_bv_type(abs.type));
     sign = type2tc(new signedbv_type2t(config.ansi_c.int_width));
-    zero = expr2tc(new constant_int2t(sign, BigInt(0)));
+    zero = constant_int2tc(sign, BigInt(0));
   }
 
-  expr2tc neg(new neg2t(sign, abs.value));
-  expr2tc is_negative(new lessthan2t(abs.value, zero));
-  expr2tc result(new if2t(sign, is_negative, neg, abs.value));
+  neg2tc neg(sign, abs.value);
+  lessthan2tc is_negative(abs.value, zero);
+  if2tc result(sign, is_negative, neg, abs.value);
   convert_bv(result, output);
 }
 
@@ -1605,14 +1605,14 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
       const array_type2t &arr = to_array_type(idx.source_value->type);
 
       // Pick pointer-to array subtype; need to make pointer arith work.
-      expr2tc addrof(new address_of2t(arr.subtype, idx.source_value));
-      expr2tc plus(new add2t(addrof->type, addrof, idx.index));
+      address_of2tc addrof(arr.subtype, idx.source_value);
+      add2tc plus(addrof->type, addrof, idx.index);
       convert_bv(plus, output);
     } else {
       // Strings; convert with slightly different types.
       type2tc stringtype(new unsignedbv_type2t(8));
-      expr2tc addrof(new address_of2t(stringtype, idx.source_value));
-      expr2tc plus(new add2t(addrof->type, addrof, idx.index));
+      address_of2tc addrof(stringtype, idx.source_value);
+      add2tc plus(addrof->type, addrof, idx.index);
       convert_bv(plus, output);
     }
   } else if (is_member2t(obj.ptr_obj)) {
@@ -1626,9 +1626,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
       offs = 0; // Offset is always zero for unions.
     }
 
-    expr2tc addr(new address_of2t(type2tc(
-                                   new pointer_type2t(memb.source_value->type)),
-                       memb.source_value));
+    address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
+                       memb.source_value);
 
     convert_bv(addr, output);
 
@@ -1660,9 +1659,9 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
 
     const if2t &ifval = to_if2t(obj.ptr_obj);
 
-    expr2tc addrof1(new address_of2t(obj.type, ifval.true_value));
-    expr2tc addrof2(new address_of2t(obj.type, ifval.false_value));
-    expr2tc newif(new if2t (obj.type, ifval.cond, addrof1, addrof2));
+    address_of2tc addrof1(obj.type, ifval.true_value);
+    address_of2tc addrof2(obj.type, ifval.false_value);
+    if2tc newif(obj.type, ifval.cond, addrof1, addrof2);
     convert_bv(newif, output);
   } else if (is_typecast2t(obj.ptr_obj)) {
     // Take the address of whatevers being casted. Either way, they all end up
@@ -1674,8 +1673,8 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     // Address of an extract is the address of whatever we're extracting from,
     // plus the offset of the extract.
     const byte_extract2t &extract = to_byte_extract2t(obj.ptr_obj);
-    expr2tc new_addrof(new address_of2t(char_type2(), extract.source_value));
-    expr2tc add(new add2t(new_addrof->type, new_addrof, extract.source_offset));
+    address_of2tc new_addrof(char_type2(), extract.source_value);
+    add2tc add(new_addrof->type, new_addrof, extract.source_offset);
     convert_bv(add, output);
   } else {
     throw new conv_error("Unrecognized address_of operand");
@@ -1694,12 +1693,11 @@ z3_convt::extract_from_struct_field(const type2tc &type, bool be,
   assert(field_idx < struct_type.members.size());
 
   // Select field from source
-  expr2tc item(new member2t(struct_type.members[field_idx], expr,
-                            struct_type.member_names[field_idx]));
+  member2tc item(struct_type.members[field_idx], expr,
+                 struct_type.member_names[field_idx]);
 
   // And select an appropriately sized chunk from that.
-  expr2tc new_extract(new byte_extract2t(type, be, item, field_offset,
-                                         extract_guard));
+  byte_extract2tc new_extract(type, be, item, field_offset, extract_guard);
 
   convert_bv(new_extract, output);
   return output;
@@ -1715,8 +1713,8 @@ z3_convt::build_part_array_from_elem(const expr2tc &data, bool be,
 
   for (i = 0; i < width; i++) {
     constant_int2tc offs(uint_type2(), BigInt(i));
-    expr2tc extract_byte(new byte_extract2t(
-          get_uint8_type(), be, data, offs, extract_guard));
+    byte_extract2tc extract_byte(get_uint8_type(), be, data,
+                                 offs, extract_guard);
     z3::expr byte;
 
     // Call directly to avoid caching. Could put the byte_extract on the
@@ -1822,9 +1820,9 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     z3::expr idx = mk_div(source_offset, ctx.esbmc_int_val(elem_size), true);
     unsigned long i, j;
     for (i = 0; i < max_num_elems; i++) {
-      expr2tc iter(new constant_int2t(uint_type2(), BigInt(i)));
-      expr2tc idx(new add2t(uint_type2(), data.source_offset, iter));
-      expr2tc selection(new index2t(arr.subtype, data.source_value, idx));
+      expr2tc iter = gen_uint(i);
+      add2tc idx(uint_type2(), data.source_offset, iter);
+      index2tc selection(arr.subtype, data.source_value, idx);
 
       for (j = 0; j < elem_size; j++) {
         build_part_array_from_elem(selection, data.big_endian, elem_size,
@@ -1862,7 +1860,7 @@ z3_convt::dynamic_offs_byte_extract(const byte_extract2t &data,z3::expr &output)
     type2tc sz = get_uint_type(data.type->get_width());
     expr2tc sym = label_formula("byte_extract", sz, output);
 
-    expr2tc cast(new typecast2t(data.type, sym));
+    typecast2tc cast(data.type, sym);
     convert_bv(cast, output);
   }
 }
@@ -1943,7 +1941,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       // Yes, so just select from one of them.
       // Make offs the offset into this item.
       unsigned long item_offs = offset -= total_sz;
-      expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(item_offs)));
+      expr2tc new_offs = gen_uint(item_offs);
       output = extract_from_struct_field(data.type, data.big_endian, idx,
                                          new_offs, data.source_value,
                                          data.extract_guard);
@@ -1960,7 +1958,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
         unsigned int cur_offs = accuml_offs - total_sz;
         unsigned int immediate_sz = cur_item_sz - cur_offs;
         type2tc getsz = get_uint_type(immediate_sz * 8);
-        expr2tc new_offs(new constant_int2t(uint_type2(), BigInt(cur_offs)));
+        expr2tc new_offs = gen_uint(cur_offs);
         output = extract_from_struct_field(getsz, data.big_endian, idx,
                                            new_offs, data.source_value,
                                            data.extract_guard);
@@ -1998,13 +1996,11 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     // Is the selection entirely in the bounds of one element?
     if (elem_size - sub_offs >= sel_sz) {
       // Yes, so just select from one of them.
-      expr2tc the_elem(new index2t(subtype, data.source_value,
-                      expr2tc(new constant_int2t(uint_type2(), BigInt(elem)))));
+      index2tc the_elem(subtype, data.source_value, gen_uint(elem));
       // And the remaining offset...
-      expr2tc remainder(new constant_int2t(uint_type2(), BigInt(sub_offs)));
-      expr2tc subfetch(new byte_extract2t(data.type, data.big_endian,
-                                          the_elem, remainder,
-                                          data.extract_guard));
+      expr2tc remainder = gen_uint(sub_offs);
+      byte_extract2tc subfetch(data.type, data.big_endian, the_elem, remainder,
+                               data.extract_guard);
       convert_bv(subfetch, output);
     } else {
       // No: produce a series of extracts for each element of the array we're
@@ -2016,12 +2012,11 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       while (remaining > 0) {
         unsigned int to_extract = elem_size - cur_offs;
         to_extract = std::min(to_extract, remaining);
-        expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem)));
-        expr2tc index(new index2t(subtype, data.source_value, idx));
-        expr2tc offs(new constant_int2t(uint_type2(), cur_offs));
-        expr2tc ext(new byte_extract2t(get_uint_type(to_extract * 8),
-                                       data.big_endian, index, offs,
-                                       data.extract_guard));
+        expr2tc idx = gen_uint(elem);
+        index2tc index(subtype, data.source_value, idx);
+        expr2tc offs = gen_uint(cur_offs);
+        byte_extract2tc ext(get_uint_type(to_extract * 8), data.big_endian,
+                            index, offs, data.extract_guard);
         extract_list.push_back(ext);
         cur_offs = 0;
         ++elem;
@@ -2072,9 +2067,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
                      typecast2t(get_uint_type(config.ansi_c.pointer_width),
                                   data.source_value));
       type2tc extract_size = get_uint_type(sel_sz * 8);
-      expr2tc extract(new byte_extract2t(extract_size, data.big_endian,
-                                         cast_to_intrep, data.source_offset,
-                                         data.extract_guard));
+      byte_extract2tc extract(extract_size, data.big_endian, cast_to_intrep,
+                              data.source_offset, data.extract_guard);
       convert_bv(extract, output);
     }
   } else if (is_bool_type(data.source_value)) {
@@ -2123,10 +2117,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     const type2tc source_type = members[cache_result->idx];
     const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
 
-    expr2tc member(new member2t(source_type, data.source_value, fieldname));
-    expr2tc new_extract(new byte_extract2t(data.type, data.big_endian,
-                                           member, data.source_offset,
-                                           data.extract_guard));
+    member2tc member(source_type, data.source_value, fieldname);
+    byte_extract2tc new_extract(data.type, data.big_endian, member,
+                                data.source_offset, data.extract_guard);
 
     convert_bv(new_extract, output);
   } else {
@@ -2139,7 +2132,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     type2tc sz = get_uint_type(sel_sz * 8);
     expr2tc sym = label_formula("byte_extract", sz, output);
 
-    expr2tc cast(new typecast2t(data.type, sym));
+    typecast2tc cast(data.type, sym);
     convert_bv(cast, output);
   }
 
@@ -2197,10 +2190,9 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     z3::expr offs_into_array;
     convert_bv(data.source_offset, offs_into_array);
     for (i = 0; i < update_width / 8; i++) {
-      expr2tc offs_into_update(new constant_int2t(uint_type2(), BigInt(i)));
-      expr2tc ext(new byte_extract2t(char_type2(), data.big_endian,
-                                     data.update_value, offs_into_update,
-                                     data.update_guard));
+      expr2tc offs_into_update = gen_uint(i);
+      byte_extract2tc ext(char_type2(), data.big_endian, data.update_value,
+                          offs_into_update, data.update_guard);
       z3::expr byte;
       convert_bv(ext, byte);
       part_array = store(part_array, offs_into_array, byte);
@@ -2227,14 +2219,12 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       // Just produce a series of stores
       expr2tc accuml = data.source_value;
       expr2tc idx = data.source_offset;
-      expr2tc one = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
       for (i = 0; i < update_width / 8; i++) {
-        expr2tc offs(new constant_int2t(uint_type2(), i));
-        expr2tc byte(new byte_extract2t(char_type2(), data.big_endian,
-                                        data.update_value, offs,
-                                        data.update_guard));
-        accuml = expr2tc(new with2t(accuml->type, accuml, idx, byte));
-        idx = expr2tc(new add2t(uint_type2(), idx, one));
+        expr2tc offs = gen_uint(i);
+        byte_extract2tc byte(char_type2(), data.big_endian, data.update_value,
+                             offs, data.update_guard);
+        accuml = with2tc(accuml->type, accuml, idx, byte);
+        idx = add2tc(uint_type2(), idx, one_uint);
       }
       convert_bv(accuml, out);
     } else {
@@ -2244,11 +2234,10 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
       for (i = 0; i < width / 8; i++) {
         expr2tc label = label_formula("byte_update_depth_shim",
                                       top_type, accuml);
-        expr2tc offs(new constant_int2t(uint_type2(), i));
-        expr2tc sel(new index2t(char_type2(), sym, offs));
-        expr2tc updated(new byte_update2t(top_type, data.big_endian,
-                                           label, offs, sel,
-                                           data.update_value));
+        expr2tc offs = gen_uint(i);
+        index2tc sel(char_type2(), sym, offs);
+        byte_update2tc updated(top_type, data.big_endian, label, offs, sel,
+                               data.update_value);
         convert_bv(updated, accuml);
       }
       out = accuml;
@@ -2274,21 +2263,20 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     }
 
     // Offset into first element we'll be working on.
-    expr2tc one(new constant_int2t(uint_type2(), BigInt(1)));
-    expr2tc elem_sz_expr(new constant_int2t(uint_type2(),BigInt(elem_width/8)));
-    expr2tc cur_elem(new div2t(uint_type2(), data.source_offset, elem_sz_expr));
+    expr2tc elem_sz_expr = gen_uint(elem_width/8);
+    div2tc cur_elem(uint_type2(), data.source_offset, elem_sz_expr);
 
     // And, start selecting elements then dumping data into them.
     z3::sort array_sort = ctx.array_sort(ctx.esbmc_int_sort(),ctx.bv_sort(8));
     unsigned int i, part_array_offs = 0;
     z3::expr part_array = ctx.fresh_const(NULL, array_sort);
     for (i = 0; i < num_elems; i++) {
-      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+      index2tc select(arr.subtype, data.source_value, cur_elem);
 
       build_part_array_from_elem(select, data.big_endian, elem_width / 8,
                                  part_array, 0, data.update_guard);
 
-      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+      cur_elem = add2tc(uint_type2(), cur_elem, one_uint);
 
       part_array_offs += elem_width / 8;
     }
@@ -2299,8 +2287,8 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
                                update_width / 8, update_array, 0,
                                data.update_guard);
 
-    expr2tc offs_into_first_elem(new modulus2t(uint_type2(), data.source_offset,
-                                               elem_sz_expr));
+    modulus2tc offs_into_first_elem(uint_type2(), data.source_offset,
+                                    elem_sz_expr);
     z3::expr update_offs;
     convert_bv(offs_into_first_elem, update_offs);
 
@@ -2313,32 +2301,30 @@ z3_convt::byte_update_via_part_array(const byte_update2t &data, z3::expr &out)
     }
 
     // And now, rebuild from that part array.
-    cur_elem = expr2tc(new div2t(uint_type2(), data.source_offset,
-                                 elem_sz_expr));
+    cur_elem = div2tc(uint_type2(), data.source_offset, elem_sz_expr);
     type2tc arr_type(new array_type2t(char_type2(), expr2tc(), i));
     expr2tc sym = label_formula("byte_update_dyn", arr_type, part_array);
     expr2tc accuml = data.source_value;
 
     for (i = 0; i < num_elems; i++) {
-      expr2tc select(new index2t(arr.subtype, data.source_value, cur_elem));
+      index2tc select(arr.subtype, data.source_value, cur_elem);
 
       unsigned int j;
-      expr2tc elem_offs(new constant_int2t(uint_type2(), BigInt(0)));
+      expr2tc elem_offs = zero_uint;
       for (j = 0; j < elem_width / 8; j++) {
-        expr2tc offs(new constant_int2t(uint_type2(), (i * (elem_width/8)) +j));
-        expr2tc sel(new index2t(char_type2(), sym, offs));
-        select = expr2tc(new byte_update2t(select->type, data.big_endian,
-                                           select, elem_offs, sel,
-                                           data.update_value));
-        elem_offs = expr2tc(new add2t(uint_type2(), elem_offs, one));
+        expr2tc offs = gen_uint((i * (elem_width/8)) +j);
+        index2tc sel(char_type2(), sym, offs);
+        select = byte_update2tc(select->type, data.big_endian, select,
+                                elem_offs, sel, data.update_value);
+        elem_offs = add2tc(uint_type2(), elem_offs, one_uint);
       }
 
-      accuml = expr2tc(new with2t(accuml->type, accuml, cur_elem, select));
+      accuml = with2tc(accuml->type, accuml, cur_elem, select);
       z3::expr newelem, pos;
       convert_bv(select, newelem);
       convert_bv(cur_elem, pos);
 
-      cur_elem = expr2tc(new add2t(uint_type2(), cur_elem, one));
+      cur_elem = add2tc(uint_type2(), cur_elem, one_uint);
       update_offs = ctx.esbmc_int_val(0);
     }
 
@@ -2410,20 +2396,15 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
         type2tc update_sz = get_uint_type(bits_to_update);
 
         // Extract an appropriate amount of data from source.
-        expr2tc ext_offs(new constant_int2t(uint_type2(),
-                                            BigInt(offs_into_update / 8)));
-        expr2tc ext(new byte_extract2t(update_sz, data.big_endian,
-                                       data.update_value, ext_offs,
-                                       data.update_guard));
+        expr2tc ext_offs = gen_uint(offs_into_update / 8);
+        byte_extract2tc ext(update_sz, data.big_endian, data.update_value,
+                            ext_offs, data.update_guard);
 
         // Now, insert into this field,
-        expr2tc memb(new member2t(*it, data.source_value,
-                                  struct_type.member_names[idx]));
-        expr2tc memb_offs(new constant_int2t(uint_type2(),
-                                             BigInt(offs_into_field / 8)));
-        expr2tc update(new byte_update2t(*it, data.big_endian,
-                                         memb, memb_offs, ext,
-                                         data.update_guard));
+        member2tc memb(*it, data.source_value, struct_type.member_names[idx]);
+        expr2tc memb_offs = gen_uint(offs_into_field);
+        byte_update2tc update(*it, data.big_endian, memb, memb_offs, ext,
+                              data.update_guard);
 
         z3::expr new_field;
         convert_bv(update, new_field);
@@ -2454,8 +2435,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
     offs_into_elem = offset - (elem_idx * elem_size);
     for (; ; elem_idx++) {
-      expr2tc idx(new constant_int2t(uint_type2(), BigInt(elem_idx)));
-      expr2tc elem(new index2t(arr.subtype, data.source_value, idx));
+      expr2tc idx = gen_uint(elem_idx);
+      index2tc elem(arr.subtype, data.source_value, idx);
 
       // How many bits are we going to be writing today.
       unsigned int write_bits = std::min<unsigned int>(insert_width,
@@ -2463,16 +2444,14 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       type2tc sel_sz = get_uint_type(write_bits);
 
       // Fetch that many bits out of the update value.
-      expr2tc update_offs(new constant_int2t(uint_type2(),
-                                             BigInt(offs_into_update / 8)));
-      expr2tc ext(new byte_extract2t(sel_sz, data.big_endian,
-                                     data.update_value, update_offs,
-                                     data.update_guard));
+      expr2tc update_offs = gen_uint(offs_into_update / 8);
+      byte_extract2tc ext(sel_sz, data.big_endian, data.update_value,
+                          update_offs, data.update_guard);
 
       // And update it into the array element.
-      expr2tc into_elem(new constant_int2t(uint_type2(), offs_into_elem / 8));
-      expr2tc update(new byte_update2t(arr.subtype, data.big_endian,
-                                       elem, into_elem, ext, data.update_guard));
+      expr2tc into_elem = gen_uint(offs_into_elem / 8);
+      byte_update2tc update(arr.subtype, data.big_endian, elem, into_elem, ext,
+                            data.update_guard);
 
       z3::expr new_elem;
       convert_bv(update, new_elem);
@@ -2509,11 +2488,10 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     const type2tc source_type = members[cache_result->idx];
     const irep_idt &fieldname =  data_ref.member_names[cache_result->idx];
 
-    expr2tc member(new member2t(source_type, data.source_value, fieldname));
-    expr2tc new_update(new byte_update2t(data.type, data.big_endian,
-                                           member, data.source_offset,
-                                           data.update_value,
-                                           data.update_guard));
+    member2tc member(source_type, data.source_value, fieldname);
+    byte_update2tc new_update(data.type, data.big_endian, member,
+                              data.source_offset, data.update_value,
+                              data.update_guard);
 
     z3::expr tmp;
     convert_bv(new_update, tmp);
@@ -2532,7 +2510,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
 
     // Nope; typecasts and writes.
     type2tc pointer_size = get_uint_type(data.source_value->type->get_width());
-    expr2tc cast(new typecast2t(pointer_size, data.source_value));
+    typecast2tc cast(pointer_size, data.source_value);
     expr2tc new_update(data.clone());
     to_byte_update2t(new_update).source_value = cast;
     convert_bv(new_update, output);
@@ -2606,7 +2584,7 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     type2tc sz = get_uint_type(output.get_sort().bv_size());
     expr2tc sym = label_formula("byte_update", sz, output);
 
-    expr2tc cast(new typecast2t(data.type, sym));
+    typecast2tc cast(data.type, sym);
     convert_bv(cast, output);
   }
 
@@ -2616,7 +2594,7 @@ outofbounds:
   if (data.type == data.source_value->type) {
     convert_bv(data.source_value, output);
   } else {
-    expr2tc cast(new typecast2t(data.type, data.source_value));
+    typecast2tc cast(data.type, data.source_value);
     convert_bv(cast, output);
   }
 
@@ -2714,8 +2692,8 @@ z3_convt::convert_smt_expr(const member2t &member, void *_bv)
 
       // Union field and expected type mismatch. Need to insert a cast.
       // Duplicate expr as we're changing it
-      expr2tc memb2(new member2t(source_type, member.source_value, member.member));
-      expr2tc cast(new typecast2t(member.type, memb2));
+      member2tc memb2(source_type, member.source_value, member.member);
+      typecast2tc cast(member.type, memb2);
       convert_bv(cast, output);
       return;
     }
@@ -2983,7 +2961,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   // First cast it to an unsignedbv
   z3::expr target;
   type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
-  expr2tc cast_to_unsigned(new typecast2t(int_type, cast.from));
+  typecast2tc cast_to_unsigned(int_type, cast.from);
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
@@ -3064,19 +3042,19 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, z3::expr &output)
                 irep_idt("addr_space_tuple")));
   type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
 
-  expr2tc obj_num(new pointer_object2t(inttype, cast.from));
+  pointer_object2tc obj_num(inttype, cast.from);
 
-  expr2tc addrspacesym(new symbol2t(addrspace_type, get_cur_addrspace_ident()));
-  expr2tc idx(new index2t(strct, addrspacesym, obj_num));
+  symbol2tc addrspacesym(addrspace_type, get_cur_addrspace_ident());
+  index2tc idx(strct, addrspacesym, obj_num);
 
   // We've now grabbed the pointer struct, now get first element
-  expr2tc memb(new member2t(int_type, idx, irep_idt("start")));
+  member2tc memb(int_type, idx, irep_idt("start"));
 
-  expr2tc ptr_offs(new pointer_offset2t(int_type, cast.from));
-  expr2tc add(new add2t(int_type, memb, ptr_offs));
+  pointer_offset2tc ptr_offs(int_type, cast.from);
+  add2tc add(int_type, memb, ptr_offs);
 
   // Finally, replace typecast
-  expr2tc new_cast(new typecast2t(cast.type, add));
+  typecast2tc new_cast(cast.type, add);
   convert_bv(new_cast, output);
 }
 
@@ -3273,7 +3251,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
   if (is_fixedbv_type(ocast.operand)) {
     const fixedbv_type2t &fbvt = to_fixedbv_type(ocast.operand->type);
     type2tc signedbv(new signedbv_type2t(fbvt.integer_bits));
-    oper = expr2tc(new typecast2t(signedbv, oper));
+    oper = typecast2tc(signedbv, oper);
   }
 
   expr2tc lessthan, greaterthan;
@@ -3283,28 +3261,29 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
     unsigned int nums_width = (is_signedbv_type(ocast.operand))
                                ? width : width / 2;
     type2tc signedbv(new signedbv_type2t(nums_width));
-    expr2tc result_val(new constant_int2t(signedbv, BigInt(result / 2)));
-    expr2tc two(new constant_int2t(signedbv, BigInt(2)));
-    expr2tc minus_one(new constant_int2t(signedbv, BigInt(-1)));
+
+    constant_int2tc result_val(signedbv, BigInt(result / 2));
+    constant_int2tc two(signedbv, BigInt(2));
+    constant_int2tc minus_one(signedbv, BigInt(-1));
 
     // Now produce numbers that bracket the selected bitwidth. So for 16 bis
     // we would generate 2^15-1 and -2^15
-    expr2tc upper(new sub2t(signedbv, result_val, minus_one));
-    expr2tc lower(new mul2t(signedbv, result_val, minus_one));
+    sub2tc upper(signedbv, result_val, minus_one);
+    mul2tc lower(signedbv, result_val, minus_one);
 
     // Ensure operand lies between these braces
-    lessthan = expr2tc(new lessthan2t(oper, upper));
-    greaterthan = expr2tc(new greaterthan2t(oper, lower));
+    lessthan = lessthan2tc(oper, upper);
+    greaterthan = greaterthan2tc(oper, lower);
   } else if (is_unsignedbv_type(ocast.operand)) {
     // Create zero and 2^bitwidth,
     type2tc unsignedbv(new unsignedbv_type2t(width));
 
-    expr2tc zero(new constant_int2t(unsignedbv, BigInt(0)));
-    expr2tc the_width(new constant_int2t(unsignedbv, BigInt(result)));
+    constant_int2tc zero(unsignedbv, BigInt(0));
+    constant_int2tc the_width(unsignedbv, BigInt(result));
 
     // Ensure operand lies between those numbers.
-    lessthan = expr2tc(new lessthan2t(oper, the_width));
-    greaterthan = expr2tc(new greaterthanequal2t(oper, zero));
+    lessthan = lessthan2tc(oper, the_width);
+    greaterthan = greaterthanequal2tc(oper, zero);
   }
 
   z3::expr ops[2];
@@ -3379,9 +3358,9 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
              "Pointer subtraction must have same pointer type");
 
       // Calculate the subtraction,
-      expr2tc cast1(new typecast2t(uint_type2(), side1));
-      expr2tc cast2(new typecast2t(uint_type2(), side2));
-      expr2tc sub(new sub2t(uint_type2(), cast1, cast2));
+      typecast2tc cast1(uint_type2(), side1);
+      typecast2tc cast2(uint_type2(), side2);
+      sub2tc sub(uint_type2(), cast1, cast2);
 
       // And calculate what it is in pointer elements.
       const pointer_type2t &ptr_type = to_pointer_type(type1);
@@ -3389,12 +3368,11 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       expr2tc elem_size;
       if (is_empty_type(subtype)) {
         // GCC extension, arith on void pointers has a multiplier of one.
-        elem_size = expr2tc(new constant_int2t(uint_type2(), BigInt(1)));
+        elem_size = one_uint;
       } else {
-        elem_size = expr2tc(new constant_int2t(uint_type2(),
-                                               subtype->get_width() / 8));
+        elem_size = gen_uint(subtype->get_width() / 8);
       }
-      expr2tc result(new div2t(uint_type2(), sub, elem_size));
+      div2tc result(uint_type2(), sub, elem_size);
       convert_bv(result, output);
       break;
     }
@@ -3410,9 +3388,9 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
       expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
-      expr2tc add(new add2t(ptr_op->type, ptr_op, non_ptr_op));
+      add2tc add(ptr_op->type, ptr_op, non_ptr_op);
       // That'll generate the correct pointer arithmetic; now typecast
-      expr2tc cast(new typecast2t(type, add));
+      typecast2tc cast(type, add);
       convert_bv(cast, output);
       break;
       }
@@ -3436,20 +3414,20 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
-      expr2tc constant(new constant_int2t(inttype, type_size));
-      expr2tc mul(new mul2t(inttype, non_ptr_op, constant));
+      constant_int2tc constant(get_uint_type(32), type_size);
+      mul2tc mul(inttype, non_ptr_op, constant);
 
       // Add or sub that value
-      expr2tc ptr_offset(new pointer_offset2t(inttype, ptr_op));
+      pointer_offset2tc ptr_offset(inttype, ptr_op);
 
       expr2tc newexpr;
       if (id == expr2t::add_id) {
-        newexpr = expr2tc(new add2t(inttype, mul, ptr_offset));
+        newexpr = add2tc(inttype, mul, ptr_offset);
       } else {
         // Preserve order for subtraction.
         expr2tc tmp_op1 = (op1_is_ptr) ? ptr_offset : mul;
         expr2tc tmp_op2 = (op1_is_ptr) ? mul : ptr_offset;
-        newexpr = expr2tc(new sub2t(inttype, tmp_op1, tmp_op2));
+        newexpr = sub2tc(inttype, tmp_op1, tmp_op2);
       }
 
       // Voila, we have our pointer arithmetic
@@ -3586,8 +3564,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
     std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
 
-    expr2tc start_sym(new symbol2t(ptr_loc_type, start_name));
-    expr2tc end_sym(new symbol2t(ptr_loc_type, end_name));
+    symbol2tc start_sym(ptr_loc_type, start_name);
+    symbol2tc end_sym(ptr_loc_type, end_name);
 
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
@@ -3595,26 +3573,26 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     try {
       uint64_t type_size = expr->type->get_width() / 8;
 
-      expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(type_size)));
-      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
-      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+      constant_int2tc const_offs(ptr_loc_type, BigInt(type_size));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (array_type2t::dyn_sized_array_excp *e) {
       // Dynamically (nondet) sized array; take that size and use it for the
       // offset-to-end expression.
       // First divide it by eight, because it's in bits.
-      expr2tc eight(new constant_int2t(uint_type2(), BigInt(8)));
-      expr2tc size_expr = expr2tc(new div2t(uint_type2(), e->size,eight));
+      expr2tc eight = gen_uint(8);
+      div2tc size_expr(uint_type2(), e->size, eight);
 
-      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, size_expr));
-      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, size_expr);
+      endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (type2t::symbolic_type_excp *e) {
       // Type is empty or code -- something that we can never have a real size
       // for. In that case, create an object of size 1: this means we have a
       // valid entry in the address map, but that any modification of the
       // pointer leads to invalidness, because there's no size to think about.
-      expr2tc const_offs(new constant_int2t(ptr_loc_type, BigInt(1)));
-      expr2tc start_plus_offs(new add2t(ptr_loc_type, start_sym, const_offs));
-      endisequal = expr2tc(new equality2t(start_plus_offs, end_sym));
+      constant_int2tc const_offs(ptr_loc_type, BigInt(1));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
     }
 
     // Assert that start + offs == end
@@ -3626,8 +3604,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Z3 will try to be clever and arrange the pointer range to cross the end
     // of the address space (ie, wrap around). So, also assert that end > start.
     // However, don't do that if the alloc size is 0, as that would be unsat.
-    expr2tc zero_size_alloc(new equality2t(end_sym, start_sym));
-    expr2tc wraparound(new greaterthan2t(end_sym, start_sym));
+    equality2tc zero_size_alloc(end_sym, start_sym);
+    greaterthan2tc wraparound(end_sym, start_sym);
     z3::expr zero_alloc, wraparound_eq, bounds_eq;
     convert_bv(zero_size_alloc, zero_alloc);
     convert_bv(wraparound, wraparound_eq);
@@ -3686,7 +3664,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
-    expr2tc allocarr(new symbol2t(arrtype, dyn_info_arr_name));
+    symbol2tc allocarr(arrtype, dyn_info_arr_name);
     z3::expr allocarray;
     convert_bv(allocarr, allocarray);
 
@@ -3968,8 +3946,7 @@ z3_convt::l_get(literalt a)
     return tvt(false);
   }
 
-  expr2tc sym(new symbol2t(get_bool_type(),
-                           irep_idt("l" + i2string(a.var_no()))));
+  symbol2tc sym(get_bool_type(), irep_idt("l" + i2string(a.var_no())));
   expr2tc res = get(sym);
 
   if (!is_nil_expr(res) && is_constant_bool2t(res)) {

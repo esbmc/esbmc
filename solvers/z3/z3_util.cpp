@@ -32,6 +32,5 @@ z3_convt::label_formula(std::string name, const type2tc &t,
   z3::expr eq = sym == formula;
   assert_formula(eq);
 
-  return expr2tc(new symbol2t(t, basename, symbol2t::level2_global,
-                              0, level, 0, 0));
+  return symbol2tc(t, basename, symbol2t::level2_global, 0, level, 0, 0);
 }
