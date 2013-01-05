@@ -327,7 +327,7 @@ get_metada_from_llvm(
 	tok = strtok(NULL, "::");
 	j++;
       }
-      lhs = expr2tc(new symbol2t(lhs->type, irep_idt(newidentifier)));
+      lhs = symbol2tc(lhs->type, irep_idt(newidentifier));
     }
     //**********************************************************************/
 
