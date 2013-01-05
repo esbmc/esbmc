@@ -354,7 +354,7 @@ void dereferencet::build_reference_to(
   {
     const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
 
-    dereference2tc value(type, deref_expr);
+    value = dereference2tc(type, deref_expr);
 
     if(!options.get_bool_option("no-pointer-check"))
     {
@@ -430,7 +430,7 @@ void dereferencet::build_reference_to(
     type2tc ptr_type = type2tc(new pointer_type2t(object->type));
     address_of2tc obj_ptr(ptr_type, object);
 
-    same_object2tc pointer_guard(deref_expr, obj_ptr);
+    pointer_guard = same_object2tc(deref_expr, obj_ptr);
 
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
