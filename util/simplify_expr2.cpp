@@ -1146,8 +1146,8 @@ typecast2t::do_simplify(bool second) const
     newobj.get()->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
-    Forall_operands2(it, expr_ops, newobj) {
-      **it = *it2;
+    Forall_operands2(it3, idx2, newobj) {
+      *it3 = *it2;
       it2++;
     }
 
@@ -1343,10 +1343,10 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
   // so simplify its operands instead.
   expr2tc new_operand = operand->clone();
-  Forall_operands2(it, expr_ops, new_operand) {
-    expr2tc tmp = (***it).simplify(); // Yep, three stars. Whatchagonnado?
+  Forall_operands2(it, idx, new_operand) {
+    expr2tc tmp = (**it).simplify();
     if (!is_nil_expr(tmp)) {
-      **it= tmp;
+      *it= tmp;
       changed = true;
       if (is_constant_expr(tmp))
         num_const++;

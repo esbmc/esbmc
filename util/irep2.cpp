@@ -518,11 +518,11 @@ expr2t::simplify(void) const
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
-  Forall_operands2(it, expr_ops, new_us) {
+  Forall_operands2(it, idx, new_us) {
     if ((*it2) == NULL)
       ; // No change in operand;
     else
-      **it = *it2; // Operand changed; overwrite with new one.
+      *it = *it2; // Operand changed; overwrite with new one.
     it2++;
   }
 

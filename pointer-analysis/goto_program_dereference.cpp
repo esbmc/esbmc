@@ -108,8 +108,8 @@ void goto_program_dereferencet::dereference_rec(
 
     assert(is_bool_type(expr));
 
-    Forall_operands2(it, oper_list, expr) {
-      expr2tc &op = **it;
+    Forall_operands2(it, idx, expr) {
+      expr2tc &op = *it;
 
       assert(is_bool_type(op));
 
@@ -173,8 +173,8 @@ void goto_program_dereferencet::dereference_rec(
     }
   }
 
-  Forall_operands2(it, expr_list, expr)
-    dereference_rec(**it, guard, mode);
+  Forall_operands2(it, idx, expr)
+    dereference_rec(*it, guard, mode);
 
   if (is_dereference2t(expr)) {
     dereference2t &deref = to_dereference2t(expr);
@@ -319,8 +319,8 @@ void goto_program_dereferencet::dereference_instruction(
       code_expression2t &theexp = to_code_expression2t(i.code);
       dereference_expr(theexp.operand, checks_only, dereferencet::READ);
     } else if (is_code_printf2t(i.code)) {
-      Forall_operands2(it, oper_list, i.code)
-        dereference_expr(**it, checks_only, dereferencet::READ);
+      Forall_operands2(it, idx, i.code)
+        dereference_expr(*it, checks_only, dereferencet::READ);
     } else if (is_code_free2t(i.code)) {
       code_free2t &free = to_code_free2t(i.code);
       expr2tc operand = free.operand;

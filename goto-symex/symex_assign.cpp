@@ -361,7 +361,7 @@ void goto_symext::replace_nondet(expr2tc &expr)
   }
   else
   {
-    Forall_operands2(it, oper_list, expr)
-      replace_nondet(**it);
+    Forall_operands2(it, idx, expr)
+      replace_nondet(*it);
   }
 }

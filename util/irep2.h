@@ -110,13 +110,19 @@
  *  knowing its concrete type (i.e., in simplification) you can assign an
  *  expr2tc into the expr using one of these operand pointers.
  *
+ *  Ideally this method should stop existing in the future, and instead we
+ *  should constly iterate over sub-exprs, and then call set_sub_expr or
+ *  something. I don't think there are that many use cases where every sub expr
+ *  gets rewritten, and in these circumstances we're needlessly duplicating
+ *  exprs.
+ *
  *  @see forall_operands2
  */
-#define Forall_operands2(it, ops, theexpr) \
-  expr2t::Expr_operands ops; \
-  theexpr.get()->list_operands(ops); \
-  for (expr2t::Expr_operands::iterator it = ops.begin(); \
-       it != ops.end(); it++)
+#define Forall_operands2(ptr, idx, theexpr) \
+  expr2tc *ptr; \
+  unsigned int idx; \
+  for (idx = 0, ptr = theexpr.get()->get_sub_expr_nc(0); ptr != 0; \
+       idx++, ptr = theexpr.get()->get_sub_expr_nc(idx))
 
 /** Hash calculating class for irep2 data.
  *  This class takes lumps of data from irep2's internal types and munges them

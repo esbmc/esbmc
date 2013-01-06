@@ -938,8 +938,8 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
 
     used_syms.insert(sym);
   } else {
-    Forall_operands2(it, oper_list, e)
-      replace_symbol_names(**it, prefix, strings, used_syms);
+    Forall_operands2(it, idx, e)
+      replace_symbol_names(*it, prefix, strings, used_syms);
   }
 
   return;
@@ -1169,8 +1169,8 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 
     return;
   } else {
-    Forall_operands2(it, oper_list, irep)
-      relink_calls_from_to(**it, from_name, to_name);
+    Forall_operands2(it, idx, irep)
+      relink_calls_from_to(*it, from_name, to_name);
   }
 
   return;
