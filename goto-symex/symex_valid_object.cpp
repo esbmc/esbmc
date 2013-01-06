@@ -32,6 +32,9 @@ static const expr2tc *get_object(const expr2tc &expr)
 void goto_symext::replace_dynamic_allocation(expr2tc &expr)
 {
 
+  if (is_nil_expr(expr))
+    return;
+
   Forall_operands2(it, idx, expr)
     replace_dynamic_allocation(*it);
 

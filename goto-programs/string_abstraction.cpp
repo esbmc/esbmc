@@ -603,7 +603,8 @@ void string_abstractiont::replace_string_macros(
   else
   {
     Forall_operands2(it, idx, expr)
-      replace_string_macros(*it, lhs, location);
+      if (!is_nil_expr(*it))
+        replace_string_macros(*it, lhs, location);
   }
 }
 
