@@ -558,8 +558,8 @@ bool string_abstractiont::has_string_macros(const expr2tc &expr)
       is_buffer_size2t(expr))
     return true;
 
-  forall_operands2(it, expr_list, expr)
-    if (has_string_macros(**it))
+  forall_operands2(it, idx, expr)
+    if (has_string_macros(*it))
       return true;
 
   return false;

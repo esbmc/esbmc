@@ -38,8 +38,8 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return false;
 
-  forall_operands2(it, expr_list, expr)
-    if(has_dereference(**it))
+  forall_operands2(it, idx, expr)
+    if(has_dereference(*it))
       return true;
 
   if (is_dereference2t(expr) ||

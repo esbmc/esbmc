@@ -162,8 +162,8 @@ void goto_symext::symex_printf(
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args; 
-        forall_operands2(it, op_list, new_rhs)
-          args.push_back(**it);
+        forall_operands2(it, idx, new_rhs)
+          args.push_back(*it);
 
         target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
       }

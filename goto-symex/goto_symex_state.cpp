@@ -93,8 +93,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_add2t(expr))
   {
-    forall_operands2(it, oper_list, expr)
-      if(!constant_propagation(**it))
+    forall_operands2(it, idx, expr)
+      if(!constant_propagation(*it))
         return false;
 
     return true;
@@ -114,8 +114,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_constant_struct2t(expr))
   {
-    forall_operands2(it, oper_list, expr)
-      if(!constant_propagation(**it))
+    forall_operands2(it, idx, expr)
+      if(!constant_propagation(*it))
         return false;
 
     return true;

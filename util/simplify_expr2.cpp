@@ -169,8 +169,8 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 {
 
   if (expr->expr_id == id) {
-    forall_operands2(it, expr_ops, expr)
-      fetch_ops_from_this_type(ops, id, **it);
+    forall_operands2(it, idx, expr)
+      fetch_ops_from_this_type(ops, id, *it);
   } else {
     ops.push_back(expr);
   }
@@ -1148,13 +1148,13 @@ typecast2t::do_simplify(bool second) const
     // a good plan, but this is what CBMC was doing, so don't change
     // behaviour.
     std::list<expr2tc> set2;
-    forall_operands2(it, expr_operands, from) {
+    forall_operands2(it, idx, from) {
       // Bail immediately if any of those are pointers; we can't push these
       // casts down on top of pointer arithmetic.
-      if (is_pointer_type((***it).type))
+      if (is_pointer_type((**it).type))
         return expr2tc();
 
-      expr2tc cast = expr2tc(new typecast2t(type, **it));
+      expr2tc cast = expr2tc(new typecast2t(type, *it));
       set2.push_back(cast);
     }
 

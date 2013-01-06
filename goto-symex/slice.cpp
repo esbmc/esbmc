@@ -31,8 +31,8 @@ protected:
 void symex_slicet::get_symbols(const expr2tc &expr)
 {
 
-  forall_operands2(it, expr_list, expr)
-    get_symbols(**it);
+  forall_operands2(it, idx, expr)
+    get_symbols(*it);
 
   if (is_symbol2t(expr))
     depends.insert(renaming::level2t::name_record(to_symbol2t(expr)));

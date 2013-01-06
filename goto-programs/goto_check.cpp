@@ -731,8 +731,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       if (is_code_expression2t(i.code)) {
         check(migrate_expr_back(i.code));
       } else if (is_code_printf2t(i.code)) {
-        forall_operands2(it, expr_list, i.code)
-          check(migrate_expr_back(**it));
+        forall_operands2(it, idx, i.code)
+          check(migrate_expr_back(*it));
       }
     }
     else if (i.is_assign())
@@ -743,8 +743,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     }
     else if (i.is_function_call())
     {
-      forall_operands2(it, expr_list, i.code)
-        check(migrate_expr_back(**it));
+      forall_operands2(it, idx, i.code)
+        check(migrate_expr_back(*it));
     }
     else if (i.is_return())
     {
