@@ -114,8 +114,8 @@ void base_type(expr2tc &expr, const namespacet &ns)
 {
   base_type(expr.get()->type, ns);
 
-  Forall_operands2(it, tmpops, expr)
-    base_type(**it, ns);
+  Forall_operands2(it, idx, expr)
+    base_type(*it, ns);
 }
 
 void base_type(exprt &expr, const namespacet &ns)

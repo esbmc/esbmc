@@ -106,8 +106,8 @@ void renaming::level1t::rename(expr2tc &expr, bool no_const_prop) const
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it, no_const_prop);
+    Forall_operands2(it, idx, expr)
+      rename(*it, no_const_prop);
   }
 }
 
@@ -171,8 +171,8 @@ void renaming::level2t::rename(expr2tc &expr, bool no_const_prop) const
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it, no_const_prop);
+    Forall_operands2(it, idx, expr)
+      rename(*it, no_const_prop);
   }
 }
 
@@ -193,8 +193,8 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
                                             symbol2t::renaming_level lev) const
 {
 
-  Forall_operands2(it, oper_list, expr)
-    get_original_name(**it);
+  Forall_operands2(it, idx, expr)
+    get_original_name(*it);
 
   if (is_symbol2t(expr))
   {

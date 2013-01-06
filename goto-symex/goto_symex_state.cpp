@@ -239,8 +239,8 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it);
+    Forall_operands2(it, idx, expr)
+      rename(*it);
   }
 }
 
@@ -262,15 +262,15 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename_address(**it);
+    Forall_operands2(it, idx, expr)
+      rename_address(*it);
   }
 }
 
 void goto_symex_statet::get_original_name(expr2tc &expr) const
 {
-  Forall_operands2(it, oper_list, expr)
-    get_original_name(**it);
+  Forall_operands2(it, idx, expr)
+    get_original_name(*it);
 
   if (is_symbol2t(expr))
   {

@@ -139,8 +139,8 @@ void goto_symext::dereference_rec(
   }
   else
   {
-    Forall_operands2(it, expr_list, expr)
-      dereference_rec(**it, guard, dereference, write);
+    Forall_operands2(it, idx, expr)
+      dereference_rec(*it, guard, dereference, write);
 
     // Workaround: we may have just rewritten an index operand. Redereference
     // if that's the case.
