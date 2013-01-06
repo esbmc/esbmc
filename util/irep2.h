@@ -689,6 +689,12 @@ public:
    */
   virtual const expr2tc *get_sub_expr(unsigned int idx) const = 0 ;
 
+  /** Fetch a sub-operand. Non-const version.
+   *  These can come out of any field that is an expr2tc, or contains them.
+   *  No particular numbering order is promised.
+   */
+  virtual expr2tc *get_sub_expr_nc(unsigned int idx) = 0 ;
+
   /** Self explanatory. Like clone, but without being wrapped in an expr2tc */
   virtual expr2t * clone_raw(void) const = 0;
 
@@ -959,7 +965,7 @@ namespace esbmct {
     virtual void do_crc(hacky_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
-//    virtual void set_sub_expr(unsigned int i, const expr2tc *);
+    virtual expr2tc *get_sub_expr_nc(unsigned int i);
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;
