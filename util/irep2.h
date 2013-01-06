@@ -99,7 +99,7 @@
  *  @param theexpr expr2tc to retrieve list of operands from.
  */
 #define forall_operands2(ptr, idx, theexpr) \
-  const expr2tc *it; \
+  const expr2tc *ptr; \
   unsigned int idx; \
   for (idx = 0, ptr = theexpr->get_sub_expr(0); ptr != 0; \
        idx++, ptr = theexpr->get_sub_expr(idx))
