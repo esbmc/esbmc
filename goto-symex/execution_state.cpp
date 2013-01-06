@@ -596,7 +596,8 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
   unsigned int globals = 0;
 
   forall_operands2(it, idx, expr) {
-    globals += get_expr_write_globals(ns, *it);
+    if (!is_nil_expr(*it))
+      globals += get_expr_write_globals(ns, *it);
   }
 
   return globals;
@@ -635,7 +636,8 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
   unsigned int globals = 0;
 
   forall_operands2(it, idx, expr) {
-    globals += get_expr_read_globals(ns, *it);
+    if (!is_nil_expr(*it))
+      globals += get_expr_read_globals(ns, *it);
   }
 
   return globals;
