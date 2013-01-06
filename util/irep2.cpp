@@ -1572,6 +1572,45 @@ do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
   // Do nothing; this is a dummy member.
 }
 
+template <class T>
+bool
+do_get_sub_expr(const T &item __attribute__((unused)),
+                unsigned int idx __attribute__((unused)),
+                unsigned int &it __attribute__((unused)),
+                const expr2tc *&ptr __attribute__((unused)))
+{
+  return false;
+}
+
+template <>
+bool
+do_get_sub_expr<expr2tc>(const expr2tc &item, unsigned int idx,
+                               unsigned int &it, const expr2tc *&ptr)
+{
+  if (idx == it) {
+    ptr = &item;
+    return true;
+  } else {
+    it++;
+    return false;
+  }
+}
+
+template <>
+bool
+do_get_sub_expr<std::vector<expr2tc>>(const std::vector<expr2tc> &item,
+                                      unsigned int idx, unsigned int &it,
+                                      const expr2tc *&ptr)
+{
+  if (it + item.size() < idx) {
+    ptr = &item[idx - it];
+    return true;
+  } else {
+    it += item.size();
+    return false;
+  }
+}
+
 template <class derived, class subclass,
 typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
 typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
@@ -1818,6 +1857,43 @@ esbmct::expr_methods<derived, subclass,
   do_type_list_operands(derived_this->*field5_ptr, inp);
   do_type_list_operands(derived_this->*field6_ptr, inp);
   return;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+const expr2tc *
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::get_sub_expr
+          (unsigned int idx) const
+{
+  unsigned int it = 0;
+  const expr2tc *ptr;
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  if (do_get_sub_expr(derived_this->*field1_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field2_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field3_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field4_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field5_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field6_ptr, idx, it, ptr))
+    return ptr;
+  return NULL;
 }
 
 template <class derived, class subclass,

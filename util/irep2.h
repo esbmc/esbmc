@@ -951,6 +951,7 @@ namespace esbmct {
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
+    virtual const expr2tc *get_sub_expr(unsigned int i) const;
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;
