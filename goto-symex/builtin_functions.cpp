@@ -146,10 +146,7 @@ void goto_symext::symex_printf(
   expr2tc new_rhs = rhs;
   cur_state->rename(new_rhs);
 
-  expr2t::expr_operands operands;
-  new_rhs->list_operands(operands);
-
-  const expr2tc &format = **operands.begin();
+  const expr2tc &format = *new_rhs->get_sub_expr(0);
 
   if (is_address_of2t(format)) {
     const address_of2t &addrof = to_address_of2t(format);
