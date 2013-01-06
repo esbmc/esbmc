@@ -1666,6 +1666,27 @@ do_get_sub_expr<std::vector<expr2tc>>(std::vector<expr2tc> &item,
   }
 }
 
+template <class T>
+unsigned int
+do_count_sub_exprs(T &item __attribute__((unused)))
+{
+  return 0;
+}
+
+template <>
+unsigned int
+do_count_sub_exprs<expr2tc>(expr2tc &item __attribute__((unused)))
+{
+  return 1;
+}
+
+template <>
+unsigned int
+do_count_sub_exprs<std::vector<expr2tc>>(std::vector<expr2tc> &item)
+{
+  return item.size();
+}
+
 template <class derived, class subclass,
 typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
 typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
@@ -1986,6 +2007,35 @@ esbmct::expr_methods<derived, subclass,
   if (do_get_sub_expr(derived_this->*field6_ptr, idx, it, ptr))
     return ptr;
   return NULL;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+unsigned int
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::get_num_sub_exprs() const
+{
+  unsigned int num = 0;
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  num += do_count_sub_exprs(derived_this->*field1_ptr);
+  num += do_count_sub_exprs(derived_this->*field2_ptr);
+  num += do_count_sub_exprs(derived_this->*field3_ptr);
+  num += do_count_sub_exprs(derived_this->*field4_ptr);
+  num += do_count_sub_exprs(derived_this->*field5_ptr);
+  num += do_count_sub_exprs(derived_this->*field6_ptr);
+  return num;
 }
 
 template <class derived, class subclass,
