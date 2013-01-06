@@ -123,11 +123,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   else if (is_constant_union2t(expr))
   {
-    expr2t::expr_operands operands;
-    expr->list_operands(operands);
-    if (operands.size() != 1)
+    const expr2tc *e = expr->get_sub_expr(0);
+    if (e == NULL)
       return false;
-    return constant_propagation(**operands.begin());
+    if (is_nil_expr(*e))
+      return false;
+    if (expr->get_sub_expr(1) != NULL) // Ensure only one operand (?????)
+                                       // Preserves previous behaviour.
+      return false;
+
+    return constant_propagation(*e);
   }
 
   /* No difference
