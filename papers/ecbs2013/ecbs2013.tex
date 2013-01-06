@@ -20,7 +20,7 @@
 %% Legal Notice:
 %% This code is offered as-is without any warranty either expressed or
 %% implied; without even the implied warranty of MERCHANTABILITY or
-%% FITNESS FOR A PARTICULAR PURPOSE! 
+%% FITNESS FOR A PARTICULAR PURPOSE!
 %% User assumes all risk.
 %% In no event shall IEEE or any contributor to this code be liable for
 %% any damages or losses, including, but not limited to, incidental,
@@ -77,7 +77,7 @@
 \usepackage{graphicx,marvosym}
 \usepackage{listings}
 \usepackage{setspace}
-\usepackage{multicol} 
+\usepackage{multicol}
 \usepackage{subfigure}
 \usepackage{amssymb}
 \usepackage{url}
@@ -166,7 +166,7 @@
 % graphicx was written by David Carlisle and Sebastian Rahtz. It is
 % required if you want graphics, photos, etc. graphicx.sty is already
 % installed on most LaTeX systems. The latest version and documentation can
-% be obtained at: 
+% be obtained at:
 % http://www.ctan.org/tex-archive/macros/latex/required/graphics/
 % Another good source of documentation is "Using Imported Graphics in
 % LaTeX2e" by Keith Reckdahl which can be found as epslatex.ps or
@@ -291,7 +291,7 @@
 % IEEEtran.cls handling of captions and this will result in nonIEEE style
 % figure/table captions. To prevent this problem, be sure and preload
 % caption.sty with its "caption=false" package option. This is will preserve
-% IEEEtran.cls handing of captions. Version 1.3 (2005/06/28) and later 
+% IEEEtran.cls handing of captions. Version 1.3 (2005/06/28) and later
 % (recommended due to many improvements over 1.2) of subfig.sty supports
 % the caption=false option directly:
 %\usepackage[caption=false,font=footnotesize]{subfig}
@@ -402,10 +402,10 @@
 
 % for over three affiliations, or if they all won't fit within the width
 % of the page, use this alternative format:
-% 
+%
 %\author{\IEEEauthorblockN{Michael Shell\IEEEauthorrefmark{1},
 %Homer Simpson\IEEEauthorrefmark{2},
-%James Kirk\IEEEauthorrefmark{3}, 
+%James Kirk\IEEEauthorrefmark{3},
 %Montgomery Scott\IEEEauthorrefmark{3} and
 %Eldon Tyrell\IEEEauthorrefmark{4}}
 %\IEEEauthorblockA{\IEEEauthorrefmark{1}School of Electrical and Computer Engineering\\
@@ -485,9 +485,9 @@ verification conditions (VCs)~\cite{Armando09,Ganai06,Cordeiro12}.
 There have been attempts to apply BMC to the verification of C++
 programs~\cite{Florian12,Yang12} but with limited success. The main challenge
 here is to handle large programs and to support the complex features that the
-languages offers, such as templates, containers, and exception handling 
-(which is an important approach to contain and handle error situations 
-in computer-based systems). At the same time, in order to be attractive for 
+languages offers, such as templates, containers, and exception handling
+(which is an important approach to contain and handle error situations
+in computer-based systems). At the same time, in order to be attractive for
 mainstream software development, C++ model checkers have to maintain high speed and accuracy.
 
 Here, we propose to apply SMT-based BMC to C++ programs using an operational model, which
@@ -508,7 +508,7 @@ inheritance mechanism during the construction of the intermediate
 representation of the program, which thus avoids converting the C++ program
 to a C program and consequently produces smaller models to be verified.
 Experimental results show that our approach consistently outperforms
-LLBMC~\cite{Florian12}, a bounded model checker for C/C++ programs that is based 
+LLBMC~\cite{Florian12}, a bounded model checker for C/C++ programs that is based
 on SMT solvers.
 
 
@@ -730,16 +730,16 @@ classes, methods, and other features similar to the actual
 structure~\cite{CppReference12}.
 ESBMC++ relies on an operational model of the standard C++ libraries to
 verify properties related to the definitions in the supported data
-types.  
+types.
 The COM consists of four groups of libraries,
-as shown in Figure~\ref{figure:cpp-diagram}. 
+as shown in Figure~\ref{figure:cpp-diagram}.
 %\emph{C libraries},
 %\emph{input/output stream}, \emph{standard template libraries}, and
-%\emph{general libraries}. 
+%\emph{general libraries}.
 In the verification process, the COM libraries
 replace the corresponding actual C++ libraries.
 
-\begin{figure}[ht] 
+\begin{figure}[ht]
 \centering
 \includegraphics[scale=0.25]{figures/diagramascpp}
 \caption{Overview of the operational model.}
@@ -755,16 +755,16 @@ supported by ESBMC.  Since ESBMC++ uses a different front-end, we have to build
 a representation of the ANSI-C libraries into the COM; otherwise, ESBMC++ would
 not recognize the the library methods and fail to parse the C++ programs.
 %
-However, the 
-biggest part of the COM models 
+However, the
+biggest part of the COM models
 the Standard Template Libraries (STL).
 This part is split into
 four categories: \textit{algorithms}, \textit{numeric},
 \textit{containers}, and \textit{iterators}.
 In this paper, we focus on the operational model of the
-STL sequential containers, 
+STL sequential containers,
 %its preconditions and simulation features
-%(e.g., how we store the elements values of the containers), 
+%(e.g., how we store the elements values of the containers),
 and how it is used to
 verify real-world C++ programs.
 
@@ -776,7 +776,7 @@ verify real-world C++ programs.
 To formalize the verification of the STL containers,
 we define a core container language, and extend the translation
 functions $\cal C$ and  $\cal P$ of constraints and properties to this.
-We then use this core language to implement the operational model 
+We then use this core language to implement the operational model
 of the containers.
 
 The container language comprises several syntactic domains, starting with
@@ -787,7 +787,7 @@ values is the following:
 
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
 %\\[-5ex]
-\mathit{T}   & ::= & \: \mathit{t} \: | \: \mathit{*It} \: | \: \mathit{*P} \: | \: \mathit{C_n} \:  
+\mathit{T}   & ::= & \: \mathit{t} \: | \: \mathit{*It} \: | \: \mathit{*P} \: | \: \mathit{C_n} \:
 \end{array}
 \]
 
@@ -801,7 +801,7 @@ The syntax for iterator expressions is:
 
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{iterator-semantics}
 %\\[-5ex]
-\mathit{It}   & ::= & \: \mathit{i} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:  
+\mathit{It}   & ::= & \: \mathit{i} \: | \: \mathit{It} ( + \: | \: - ) \mathit{It} \: | \: \mathit{C.begin} \: | \: \mathit{C.end} \:
 \end{array}
 \]
 
@@ -835,13 +835,13 @@ The syntax for the integer expression is defined as follows:
 \[\begin{array}{r@{\:\:}c@{\:\:}l}
 %\\[-5ex]
 \mathit{Int}  & ::= & \: \mathit{N} \: | \: \mathit{Z} \: | \: \mathit{C.size} \: | \: \mathit{C.capacity} \: | \\
-              &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \: 
+              &     & \: \mathit{Int} \: ( + \: | \: ? \: | \: * \: | \: ...) \: \mathit{Int}  \:
 \end{array}
 \]
 
 \noindent
-Here, $\mathbb{N}$ and $\mathbb{Z}$ represent the natural 
-and integer numbers, respectively. $\mathit{C.size}$ and $\mathit{C.capacity}$ 
+Here, $\mathbb{N}$ and $\mathbb{Z}$ represent the natural
+and integer numbers, respectively. $\mathit{C.size}$ and $\mathit{C.capacity}$
 return the actual and maximal size, respectively of the containter $C$.
 %an integer value as well as the arithmetics
 %operations between integer values.
@@ -853,10 +853,10 @@ return the actual and maximal size, respectively of the containter $C$.
 
 %The structure of the STL containers is based on the
 %C++ structure itself, which includes classes, operators,
-%methods, functions, and intern variables. 
+%methods, functions, and intern variables.
 %We thus split it into:
 %iterations, capacity, element access, modifiers, and unique
-%members. 
+%members.
 As the container structures differ slightly
 between each other, some of their methods will vary too,
 changing its intern model as well (e.g., a \textit{list}
@@ -881,7 +881,7 @@ an overview of our operational model for the STL sequantial container.
 
 \begin{figure}[ht] \centering
 \includegraphics[scale=0.3]{figures/stl-iterator}
-\caption{Operational model of the STL sequential container.} 
+\caption{Operational model of the STL sequential container.}
 \label{figure:stl-iterator}
 \end{figure}
 
@@ -914,8 +914,8 @@ of elements to be inserted.
 
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
-\multicolumn{2}{l}{{\cal C}(con'=con.insert(ipos, val, qtd))=}\\ 
-%\Longrightarrow & 
+\multicolumn{2}{l}{{\cal C}(con'=con.insert(ipos, val, qtd))=}\\
+%\Longrightarrow &
   &  con'.size = con.size + qtd\\
   & \wedge \: *ipos = val \\
   & \ldots \\
@@ -934,7 +934,7 @@ Thus, we have:
 \[\begin{array}{ll}
 %\label{eqnarray:transformations}
 \multicolumn{2}{l}{{\cal C}(con.insert(ipos, it_0, it_k))=}\\
-% \Longrightarrow 
+% \Longrightarrow
   & con'.size = con.size + k\\
   & \wedge \: *ipos = *it_0 \\
   & \ldots \\
@@ -1003,8 +1003,8 @@ The following model shows an \textit{erase} method that deletes a single element
 \[\begin{array}{ll}
 %\label{erase1-model}
 \multicolumn{2}{l}{{\cal C}(con.erase(ipos)=}\\
-% \Longrightarrow 
-  & con'.size = con.size - 1 \wedge \: ipos' = ipos + 1 
+% \Longrightarrow
+  & con'.size = con.size - 1 \wedge \: ipos' = ipos + 1
 \end{array}\]
 
 It is also possible to delete a number of elements from the container by
@@ -1014,8 +1014,8 @@ marking the bounds with iterators. It works similarly to the equivalent
 \[\begin{array}{ll}
 %\label{erase2-model}
 \multicolumn{2}{l}{{\cal C}(con.erase(ipos, it_0, it_k)=}\\
-%\Longrightarrow 
-  & 	con'.size = con.size - k \wedge \: ipos' = it_k 
+%\Longrightarrow
+  & 	con'.size = con.size - k \wedge \: ipos' = it_k
 \end{array}\]
 
 Searches are made in a container by using reference operators
@@ -1124,7 +1124,7 @@ memory resources.
 \begin{figure}[ht]
 \centering
 \includegraphics[scale=0.28]{figures/inheritance_uml}
-\caption{\textit{Shape} class hierarchy UML diagram} 
+\caption{\textit{Shape} class hierarchy UML diagram}
 \label{figure:uml_diagram}
 \end{figure}
 
@@ -1135,12 +1135,12 @@ In this sense, polymorphism allows variable instances to be
 bounded to references of different types according to the structure of the
 inheritance hierarchy~\cite{Alexander02}.
 We thus consider that two or more derived classes
-from the same base class can invoke methods with the same signature but 
-with distinct behaviors, specialized for each derived class, using for 
-this one reference to each object of this base class type. The decision 
-of which method must be used cannot be made at compile-time. 
-One solution is the usage of virtual tables (described below) that contains 
-the object's method address. In this case, the method call will fetch the correct method 
+from the same base class can invoke methods with the same signature but
+with distinct behaviors, specialized for each derived class, using for
+this one reference to each object of this base class type. The decision
+of which method must be used cannot be made at compile-time.
+One solution is the usage of virtual tables (described below) that contains
+the object's method address. In this case, the method call will fetch the correct method
 address from this object's dispatch table at verification-time.
 
 %The decision of which method must be used, according to the type
@@ -1211,12 +1211,12 @@ correct use of \textit{bad\_cast} thrown by dynamic cast.
 \label{exception-handling}
 %--------------------------------------------
 
-One of the features that C++ provides is exception handling. 
-Exceptions are unexpected situations 
-that the program was not designed to handle. The exception handling 
-is split into three elements: a try block, where an exception may occur; 
-a catch block (also called handler), where an exception can be handled; and a throw 
-expression to connect both blocks. Figure~\ref{figure:try-catch-example} 
+One of the features that C++ provides is exception handling.
+Exceptions are unexpected situations
+that the program was not designed to handle. The exception handling
+is split into three elements: a try block, where an exception may occur;
+a catch block (also called handler), where an exception can be handled; and a throw
+expression to connect both blocks. Figure~\ref{figure:try-catch-example}
 shows a C++ code example with exception handling.
 %
 \begin{figure}[ht]
@@ -1225,33 +1225,33 @@ shows a C++ code example with exception handling.
 \begin{lstlisting}
 int main() {
   // try block
-  try { 
+  try {
     throw 20; // throw expression
-  } 
-  // catch block
-  catch (int i) { 
-  /*error handling for int exceptions*/ 
   }
-  catch (float f) { 
-  /*error handling for float exceptions*/ 
+  // catch block
+  catch (int i) {
+  /*error handling for int exceptions*/
+  }
+  catch (float f) {
+  /*error handling for float exceptions*/
   }
   return 0;
 }
 \end{lstlisting}
 \end{minipage}
-\caption{Try-catch example: Throwing an integer exception.} 
+\caption{Try-catch example: Throwing an integer exception.}
 \label{figure:try-catch-example}
 \end{figure}
 
 In ESBMC++, the exception handling happens in two steps:
 during the type-checking and the symbolic execution phases.
 On the type-checking phase, an AST is built based on the code
-inside the try block, but with a few adaptations: before the try block, 
-a CATCH instruction with an empty map (which will be filled later on 
-the type-checking) is inserted, followed by the respective code inside 
-the try block. Here, another CATCH instruction (to represent the end of the 
-try block and the beginning of the catch block) is inserted together with 
-a GOTO instruction, which aims to point to the code after the catch block. 
+inside the try block, but with a few adaptations: before the try block,
+a CATCH instruction with an empty map (which will be filled later on
+the type-checking) is inserted, followed by the respective code inside
+the try block. Here, another CATCH instruction (to represent the end of the
+try block and the beginning of the catch block) is inserted together with
+a GOTO instruction, which aims to point to the code after the catch block.
 This GOTO instruction will only be modified if an exception is thrown;
 otherwise it will remain the same. After type-checking the try block,
 ESBMC++ type-checks the catch block, which might contain one or more catch blocks.
@@ -1280,16 +1280,16 @@ else if(THROW_TYPE == float)
   $TARGET = 2
 CATCH
 GOTO $TARGET
-1: int i; 
+1: int i;
    /*error handling for int exceptions*/
    GOTO 3
 2: float f;
-   /*error handling for float exceptions*/ 
+   /*error handling for float exceptions*/
 3: return 0;
 \end{lstlisting}
 \end{minipage}
 \caption{Try-catch conversion to goto functions.}
-\label{figure:try-catch-goto} 
+\label{figure:try-catch-goto}
 \end{figure}
 
 During the symbolic execution phase, when the first
@@ -1298,15 +1298,15 @@ for later usage. The idea behind the use of a stack is
 that we may have try-catch blocks inside other
 try-catch blocks and ESBMC++ should always handle
 the most internal first. Following the symbolic execution
-for the code that is inside the try block, ESBMC++ will continue 
-to execute the code until it finds a throw expression. 
-When it happens, ESBMC++ looks at the map for a valid catch 
-for the exception thrown; if it finds a valid catch, then the label 
+for the code that is inside the try block, ESBMC++ will continue
+to execute the code until it finds a throw expression.
+When it happens, ESBMC++ looks at the map for a valid catch
+for the exception thrown; if it finds a valid catch, then the label
 will now be saved, but it will only be handled later;
 if it is unable to find an exception, then an error will be thrown.
-ESBMC++ will also ignore any other \textit{throw} or \textit{goto} 
-instruction after the first \textit{throw} is found, but it will continue 
-to verify all the try block code. When the second CATCH is found, 
+ESBMC++ will also ignore any other \textit{throw} or \textit{goto}
+instruction after the first \textit{throw} is found, but it will continue
+to verify all the try block code. When the second CATCH is found,
 which means that the try block ended, the catch map is unstacked for
  memory efficiency and the GOTO instruction is thus updated (if needed).
 
@@ -1315,47 +1315,47 @@ which means that the try block ended, the catch map is unstacked for
 %------------------------------------------------------
 
 A C++ code can throw an exception in several situations other
-than explicit throw exception: (a) the operator \textit{new} can throw 
-a \textit{bad\_alloc} exception; (b) the operator 
+than explicit throw exception: (a) the operator \textit{new} can throw
+a \textit{bad\_alloc} exception; (b) the operator
 \textit{dynamic$\_$cast} can throw a \textit{bad\_catch}
-exception; and (c) the function \textit{typeid} can throw a 
+exception; and (c) the function \textit{typeid} can throw a
 \textit{bad\_typeid} exception.
-%Those exceptions are built-in on C++ and are supposed to be 
-%handled by the program. 
-In the C++ standard~\cite{CppDraft}, 
+%Those exceptions are built-in on C++ and are supposed to be
+%handled by the program.
+In the C++ standard~\cite{CppDraft},
 several rules are defined of how an exception
-thrown is connected to a catch block. 
+thrown is connected to a catch block.
 In summary, every time when an exception is thrown and
-one of the following rules is {true}, the code jumps 
+one of the following rules is {true}, the code jumps
 from the throw expression to the catch block as follows:
 
 \begin{enumerate}
  \item The handler that catchs the exception is the first catch with a matching type: We maintain a list with the order of
        catchs and get the catch with the lower value.
  \item A handler will catch an exception thrown if the type thrown and the type of the handler are the same (ignoring const-volatile
-       qualifiers): Here, we simply look for the type of the exception in the catch map and then update the GOTO instruction accordingly 
+       qualifiers): Here, we simply look for the type of the exception in the catch map and then update the GOTO instruction accordingly
        if we find a match or we simply return an error, otherwise.
- \item Throwing exceptions of types 
+ \item Throwing exceptions of types
   ``arrays of type T'' and ``functions returning type T'' will be caught by handlers with ``pointer to type T'' and
-       ``pointer to function returning type T'' types: Here, the conversion is made on the type-checking and the throw expression 
-       throws two exceptions: ``array of type T'' and ``pointer of type T'', and ``function returning type T'' and ``pointer to function 
-       returning type T'', respectively. The handler that catchs the exception thrown is defined by the first rule in cases of 
+       ``pointer to function returning type T'' types: Here, the conversion is made on the type-checking and the throw expression
+       throws two exceptions: ``array of type T'' and ``pointer of type T'', and ``function returning type T'' and ``pointer to function
+       returning type T'', respectively. The handler that catchs the exception thrown is defined by the first rule in cases of
        multiple  matches.
- \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T: The conversion is 
-       similar to the previous rule, but here several exceptions may be thrown: the type of the object and the 
+ \item The handler will catch an exception of type T if the handler type is an unambiguous public base class of T: The conversion is
+       similar to the previous rule, but here several exceptions may be thrown: the type of the object and the
        type of its bases. Again, the handler will be defined by the first rule in cases of multiple matches.
  \item The handler will catch an exception of type pointer T if T's type can be converted to the type of the handler, either by
        qualification conversion or standard pointer conversion: Similar to the previous rules, on the type-checking phase the possible
-       conversions based on the catchs types will be thrown with the original pointer type, with the handler being defined by the first 
+       conversions based on the catchs types will be thrown with the original pointer type, with the handler being defined by the first
        rule in cases of multiple matches.
- \item If the exception throw is a pointer, then a handler with type \textit{void*} or \textit{nullptr\_t} can catch it: during the 
-       symbolic execution, if no match is found on the map and the exception thrown is a pointer, we simply look for a 
-       \textit{void*} or \textit{nullptr\_t} catch and then update the GOTO instruction. If the pointer had a match, then this rules is 
+ \item If the exception throw is a pointer, then a handler with type \textit{void*} or \textit{nullptr\_t} can catch it: during the
+       symbolic execution, if no match is found on the map and the exception thrown is a pointer, we simply look for a
+       \textit{void*} or \textit{nullptr\_t} catch and then update the GOTO instruction. If the pointer had a match, then this rules is
        ignored.
  \item A handler of type ellipsis (...) will catch any thrown exception, and shall be the last handler on the catch block: Similar to the
        last rule, but here it works for every type, if no match is found, ESBMC++ looks for a handler of type ellipsis and update the GOTO
        instruction accordingly if one exists.
- \item If the throw has no arguments, then it should rethrow the last thrown exception: we always keep a reference of the last 
+ \item If the throw has no arguments, then it should rethrow the last thrown exception: we always keep a reference of the last
        thrown exception and then update a rethrow if this reference is not \verb|NULL|.
 \end{enumerate}
 
@@ -1371,8 +1371,8 @@ One of the features that C++ provides is the exception handling.
 The exceptions are unexpected situations about the program; situations
 that the program was not designed to handle. Basically, the exception handling
 is divided into three elements: a try block, where an
-exception may occur; a catch block, where an exception can be handled; 
-and a throw expression to connect both blocks. Figure~\ref{figure:try-catch-example} 
+exception may occur; a catch block, where an exception can be handled;
+and a throw expression to connect both blocks. Figure~\ref{figure:try-catch-example}
 shows a C++ program with exception handling.
 %
 \begin{figure}[ht]
@@ -1667,6 +1667,132 @@ is allowed to be thrown outside the function. If it is allowed, the
 exception handling follows and try to look for an match on the catch
 map or will return an error, otherwise.
 
+%-----------------------------------
+\section{Templates}
+%-----------------------------------
+
+On C++, templates are special functions/methods and classes that are
+defined using generic types. These generic types allow the developer
+to create functions/methods or classes that can adapt to one or more
+different types without the need to rewrite the function/method or
+class to each type. Figure~\ref{figure:function-template-example} and
+Figure~\ref{figure:class-template-example} show simple examples of
+template usage. In those examples, we can see that a template can assume
+different types (integer, float and char).
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.45\textwidth}
+\begin{lstlisting}
+template <class T>
+T max (T a, T b) {
+ return (a>b?a:b);
+}
+
+int main()
+{
+  float f = max(1.0, 2.0);
+  int i = max(1, 2);
+  char c = max('a', 'b');
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Function template example: returns the bigger value for two generic types.}
+\label{figure:function-template-example}
+\end{figure}
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.45\textwidth}
+\begin{lstlisting}
+template <class T>
+class vector {
+    T values [1];
+  public:
+    vector (T element)
+    {
+      values[0]=element;
+    }
+};
+
+int main()
+{
+  vector<int> i(1);
+  vector<float> f(1.0);
+  vector<char> c('a');
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Class Template example: a vector with one element.}
+\label{figure:class-template-example}
+\end{figure}
+
+On ESBMC++, the verification of C++ codes with templates is
+divided in two steps: template creation and template instantiation,
+both during typechecking phase. On template creation, ESBMC++ finds
+the template declaration and creates an internal representation of
+the class or function/method and flag the types as generic (this is
+important for the next step). No other representation is created at
+this step as ESBMC++ doesn't know yet, which types we be instantiated
+on the templates.
+
+On the template instantiation step, ESBMC++ found a template usage
+with a specified type. Now, ESBMC++ will create a new internal
+representation of the function/method or class with the instantiated
+type. This new representation is not a template anymore. At this point,
+ESBMC++ starts to keep track of the generic template definition and
+the instantiated functions/methods or classes: when a new template is
+instantiated, ESBMC++ looks if it had been previously instantiated before,
+if it hasn't happened, the generic template definition is used to create
+a new representation to the new instantiated template.
+
+%------------------------------------------------------
+\subsection{Template Specialization}
+%------------------------------------------------------
+
+On C++ codes, templates can be created to generic types usage and can be
+specialized to specific types. The Figure~\ref{figure:function-template-specialization-example}
+shows an example of function template specialization (it can also be done
+for classes though).
+
+\begin{figure}[ht]
+\centering
+\begin{minipage}{0.45\textwidth}
+\begin{lstlisting}
+template <class T>
+T example (T a, T b) {
+  return a;
+}
+
+template< >
+T example (int a, int b) {
+  return b;
+}
+
+int main()
+{
+  // it will return the second value: 2
+  int i = example(1,2);
+
+  // it will return the first value: 1.0
+  float f = example(1.0, 2.0);
+
+  return 0;
+}
+\end{lstlisting}
+\end{minipage}
+\caption{Function template specialization example: if the type is integer, returns the second value instead of the first value.}
+\label{figure:function-template-specialization-example}
+\end{figure}
+
+For ESBMC++, templates specialization are handled on the template creation
+phase. When ESBMC++ finds a template specialization, it first search for a
+generic template (as it is required to specialize a template), if there is
+such generic template, then it creates a new internal representation of the
+template specialization as if it was instantiated. There is no change on the
+template instantiation phase.
 
 %-----------------------------------
 \section{Experimental Results}
@@ -1682,7 +1808,7 @@ are also given in Section~\ref{comparison-to-LLBMC}.
 In our experiments, we also tried to use the CBMC model checker~\cite{Clarke04},
 but since it has failed in most of our benchmarks (as reported previously
 by Merz et~al.~\cite{Florian12}), we do not report any results.
-In Section~\ref{verifying-the-sniffer-code}, we describe the results of 
+In Section~\ref{verifying-the-sniffer-code}, we describe the results of
 verifying a commercial application from the telecommunications domain using ESBMC++.
 
 %-----------------------------------
@@ -1724,8 +1850,8 @@ Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 summarizes the results. Here, \textit{N} is the number of C++ programs,
 \textit{L} is the total lines of code of each suite, \textit{Time} is the
 total verification time of each module, \textit{P} is the
-number of correct positive results (i.e., the tool reports SAFE correctly), 
-\textit{N} is the number of correct negative results (i.e., the tool reports 
+number of correct positive results (i.e., the tool reports SAFE correctly),
+\textit{N} is the number of correct negative results (i.e., the tool reports
 UNSAFE correctly), \textit{FP} is the number of false positive
 results (i.e., the tool reports SAFE incorrectly), \textit{FN} is the number
 of false negative results (i.e., the tool reports UNSAFE incorrectly), \textit{Fail}
@@ -1769,7 +1895,7 @@ and \textit{MO} represents the number of memory-outs.
 \hline
 \end{tabular} }
 \end{center}
-\caption{Results of the comparison between ESBMC v1.20 and LLBMC v2012.2a.} 
+\caption{Results of the comparison between ESBMC v1.20 and LLBMC v2012.2a.}
 \label{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 \end{adjustwidth}
 \end{table*}
@@ -1810,8 +1936,8 @@ of the stream (using the method $gcount\left(\right)$) and to internal flags (su
 to a bad operational model of the internal flags. In the \textit{String} module, the errors are related
 to assertions in the string itself, usually if the string is equal to another string.
 In the \textit{Inheritance} module, LLBMC reports incorrect errors about memory writing and
-instantiation of virtual methods (that do not contain implementation). 
-It also does not support some expressions in the SMT back-end (e.g., 
+instantiation of virtual methods (that do not contain implementation).
+It also does not support some expressions in the SMT back-end (e.g.,
 ``Op \% (nondef) found''). ESBMC++ fails to verify test cases related to the use of the
 \textit{dynamic\_cast} (as described in Section~\ref{inheritance-and-polymorphism}).
 
@@ -1839,21 +1965,21 @@ Note that ESBMC++ does not crash or runs out of memory or time in any module.
 \label{verifying-the-sniffer-code}
 %-----------------------------------
 
-This section describes the results of the verification process using the 
-ESBMC++ against the sniffer code provided by Nokia Institute of Technology 
-(INdT). The sniffer code contains 20 classes, 85 methods, and approximately 
-2839 lines of C++ code. The following properties were verified using the customer version 
-of the sniffer code: array bounds, pointer safety, division by zero, 
-and arithmetic under-and over-flow. Due to confidential issues, we were able to model check 
-50 out of 85 methods (since we did not have access to some external classes that the sniffer 
-code requires). In this sense, ESBMC++ identified five bugs that are mostly related to arithmetic under- 
+This section describes the results of the verification process using the
+ESBMC++ against the sniffer code provided by Nokia Institute of Technology
+(INdT). The sniffer code contains 20 classes, 85 methods, and approximately
+2839 lines of C++ code. The following properties were verified using the customer version
+of the sniffer code: array bounds, pointer safety, division by zero,
+and arithmetic under-and over-flow. Due to confidential issues, we were able to model check
+50 out of 85 methods (since we did not have access to some external classes that the sniffer
+code requires). In this sense, ESBMC++ identified five bugs that are mostly related to arithmetic under-
 and over-flow. Note that all bugs were reported to the developers and confirmed by them.
 
-As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows 
+As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows
 a code fragment of the method \textit{getPayloadSize} from the class \textit{PacketM3UA}.
-Here, an arithmetic over-flow might occur on the typecast operation since the method 
-\textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} returns 
-an integer data-type. To fix this bug, one possible solution is to change the return type 
+Here, an arithmetic over-flow might occur on the typecast operation since the method
+\textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} returns
+an integer data-type. To fix this bug, one possible solution is to change the return type
 of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast over-flow.
 
 \begin{figure}[ht]
@@ -1862,12 +1988,12 @@ of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast 
 \begin{lstlisting}
 int PacketM3UA::getPayloadSize() {
   return ntohs(m3uaParamHeader->paramSize)
-          - (M3UA_PROTOCOL_DATA_HEADER_SIZE 
+          - (M3UA_PROTOCOL_DATA_HEADER_SIZE
           + M3UA_PARAMETER_HEADER_SIZE);
 }
 \end{lstlisting}
 \end{minipage}
-\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.} 
+\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.}
 \label{figure:PacketM3UA}
 \end{figure}
 
@@ -1878,14 +2004,14 @@ int PacketM3UA::getPayloadSize() {
 The application of SMT-based BMC to software is gaining
 popularity in the software engineering community mainly due
 to the advent of sophisticated SMT solvers built over efficient
-SAT solvers~\cite{CVC07,Boolector09,Z08}. 
+SAT solvers~\cite{CVC07,Boolector09,Z08}.
 Previous work related to
 SMT-based BMC for software addresses the problem of verifying C programs
 that use bit operations, floating-point arithmetic, and
 pointers~\cite{Clarke04,Armando09,Ganai06,Cordeiro12}.
 However, there is only little work that addresses the problem
 of model checking C++ programs that make use of templates, containers,
-and exception handling. 
+and exception handling.
 
 Prabhu et al.~\cite{PrabhuMBIG11} present an interprocedural
 exception analysis and transformation framework for C++ that
@@ -1909,7 +2035,7 @@ from a C++ program with inheritance into a semantically equivalent program witho
 inheritance by treating the inheritance as separate memory regions
 that are linked to each other via additional base class and derived class
 pointer fields. This transformation comprises a clarifier, which makes
-implicit C++ features explicit. This approach was also implemented with 
+implicit C++ features explicit. This approach was also implemented with
 F-SOFT~\cite{Fsoft}. CHROME has a
 different memory behavior from the original program and therefore does not allow
 the use of low-level primitives (e.g, \textit{memset}). The CHROME-lowered C program is
@@ -1936,8 +2062,8 @@ they do not handle exceptions, which thus make it difficult to verify realistic 
 (e.g., programs that depend on the STL library).
 
 Java PathFinder is an explicit-state model checker for Java programs, but
-Pasareanu and Visser~\cite{Pasareanu04} also developed a symbolic execution 
-framework for it. However, due to the considerable differences between 
+Pasareanu and Visser~\cite{Pasareanu04} also developed a symbolic execution
+framework for it. However, due to the considerable differences between
 Java and C++ it is difficult to compare this to ESBMC++.
 
 
@@ -1957,7 +2083,7 @@ Java and C++ it is difficult to compare this to ESBMC++.
 %\begin{figure}[!t]
 %\centering
 %\includegraphics[width=2.5in]{myfigure}
-% where an .eps filename suffix will be assumed under latex, 
+% where an .eps filename suffix will be assumed under latex,
 % and a .pdf suffix will be assumed for pdflatex; or what has been declared
 % via \DeclareGraphicsExtensions.
 %\caption{Simulation Results}
@@ -1991,7 +2117,7 @@ Java and C++ it is difficult to compare this to ESBMC++.
 % reference/describe all of them (a), (b), etc., within the main caption.
 
 
-% An example of a floating table. Note that, for IEEE style tables, the 
+% An example of a floating table. Note that, for IEEE style tables, the
 % \caption command should come BEFORE the table. Table text will default to
 % \footnotesize as IEEE normally uses this smaller font for tables.
 % The \label must come after \caption as always.
@@ -2032,10 +2158,10 @@ by focusing on the major features that the language offers. We have described
 an implementation of an operational model of the sequential STL containers
 as well as novel approaches to handle inheritance, polymorphism, and exception handling
 (in particular, exception specification, which is a feature that is not supported by others
-BMC tools). Our experiments contain C++ programs with most of the features that C++ language 
-has to offer. Additionally, we have verified a commercial application (called sniffer code) of medium-size 
-used in the telecommunications domain. The results show that ESBMC++ outperforms LLBMC if we 
-consider the verification of C++ programs. In particular, ESBMC++ is able to verify most of the 
+BMC tools). Our experiments contain C++ programs with most of the features that C++ language
+has to offer. Additionally, we have verified a commercial application (called sniffer code) of medium-size
+used in the telecommunications domain. The results show that ESBMC++ outperforms LLBMC if we
+consider the verification of C++ programs. In particular, ESBMC++ is able to verify most of the
 C++ programs with an advantage: we are able to verify programs
 with exceptions enabled (a missing feature of LLBMC that decreases the verification accuracy of
 C++ programs). In addition, ESBMC++ was able to find undiscovered bugs in the sniffer code that
@@ -2048,7 +2174,7 @@ to support not only sequential containers, but also mapped ones (e.g., map and m
 
 % use section* for acknowledgement
 \section*{Acknowledgment}
-The development of ESBMC++ is funded by the Royal Society and by Nokia Institute of Technology (INdT). 
+The development of ESBMC++ is funded by the Royal Society and by Nokia Institute of Technology (INdT).
 
 % trigger a \newpage just before the given reference
 % number - used to balance the columns on the last page
