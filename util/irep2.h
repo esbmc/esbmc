@@ -699,7 +699,11 @@ public:
    *  These can come out of any field that is an expr2tc, or contains them.
    *  No particular numbering order is promised.
    */
-  virtual expr2tc *get_sub_expr_nc(unsigned int idx) = 0 ;
+  virtual expr2tc *get_sub_expr_nc(unsigned int idx) = 0;
+
+  /** Count the number of sub-exprs there are.
+   */
+  virtual unsigned int get_num_sub_exprs(void) const = 0 ;
 
   /** Self explanatory. Like clone, but without being wrapped in an expr2tc */
   virtual expr2t * clone_raw(void) const = 0;
@@ -972,6 +976,7 @@ namespace esbmct {
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
     virtual expr2tc *get_sub_expr_nc(unsigned int i);
+    virtual unsigned int get_num_sub_exprs(void) const;
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;
