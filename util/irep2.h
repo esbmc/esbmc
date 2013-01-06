@@ -84,24 +84,25 @@
        it != (vect).end(); it++)
 
 /** Iterate over all expr-like operands in an irep.
- *  This macro generates a list of all irep2 operands to a particular irep2,
- *  and then iterates over them. Fixed-type operands (such as the member name
- *  in a member2t) are not part of the list. This macro declares a std::list of
- *  expr2tc's in the current scope.
+ *  This macro automates iterating over sub-expressions in an irep. It takes the
+ *  name of an irep container ptr to make, and an integer to track indexes with,
+ *  and creates them in scope. A for loop then executes the next statement with
+ *  the container ptr pointing at a sub-expr. Fixed-type operands (such as the
+ *  member name in a member2t) are not part of the list.
  *
  *  NB: This iterates of expr2tc _pointers_. So, you need to dereference first
- *  the iterator, then the pointer, i.e. "(*it)->blah".
+ *  the ptr, then the container.
  *
  *  @see Forall_operands2
  *  @param it Name to give iterator to be declared
- *  @param ops Name for std::list of expr2tc's to be declared
+ *  @param idx Name for index tracking integer.
  *  @param theexpr expr2tc to retrieve list of operands from.
  */
-#define forall_operands2(it, ops, theexpr) \
-  expr2t::expr_operands ops; \
-  theexpr->list_operands(ops); \
-  for (expr2t::expr_operands::const_iterator it = ops.begin(); \
-       it != ops.end(); it++)
+#define forall_operands2(ptr, idx, theexpr) \
+  const expr2tc *it; \
+  unsigned int idx; \
+  for (idx = 0, ptr = theexpr->get_sub_expr(0); ptr != 0; \
+       idx++, ptr = theexpr->get_sub_expr(idx))
 
 /** Like forall_operands2, but for non-const exprs.
  *
@@ -682,6 +683,12 @@ public:
    */
   virtual void list_operands(std::list<expr2tc*> &inp) = 0;
 
+  /** Fetch a sub-operand.
+   *  These can come out of any field that is an expr2tc, or contains them.
+   *  No particular numbering order is promised.
+   */
+  virtual const expr2tc *get_sub_expr(unsigned int idx) const = 0 ;
+
   /** Self explanatory. Like clone, but without being wrapped in an expr2tc */
   virtual expr2t * clone_raw(void) const = 0;
 
@@ -952,6 +959,7 @@ namespace esbmct {
     virtual void do_crc(hacky_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
+//    virtual void set_sub_expr(unsigned int i, const expr2tc *);
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;

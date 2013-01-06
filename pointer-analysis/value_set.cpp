@@ -701,8 +701,8 @@ void value_sett::assign(
           add_to_sets=true;
         }
 #endif
-        forall_operands2(it, expr_list, rhs) {
-          assign(lhs_index, **it, ns, add_to_sets);
+        forall_operands2(it, idx, rhs) {
+          assign(lhs_index, *it, ns, add_to_sets);
           add_to_sets = true;
         }
       }
