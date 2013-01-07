@@ -559,7 +559,7 @@ bool string_abstractiont::has_string_macros(const expr2tc &expr)
     return true;
 
   forall_operands2(it, idx, expr)
-    if (has_string_macros(*it))
+    if (!is_nil_expr(*it) && has_string_macros(*it))
       return true;
 
   return false;
