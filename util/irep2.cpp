@@ -387,12 +387,12 @@ unsigned long
 expr2t::depth(void) const
 {
   unsigned long num_nodes = 0;
-  expr_operands ops;
 
-  list_operands(ops);
-
-  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++) {
-    unsigned long tmp = (***it).depth();
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    if (is_nil_expr(*e))
+      continue;
+    unsigned long tmp = (*e)->depth();
     num_nodes = std::max(num_nodes, tmp);
   }
 
@@ -404,12 +404,13 @@ unsigned long
 expr2t::num_nodes(void) const
 {
   unsigned long count = 0;
-  expr_operands ops;
 
-  list_operands(ops);
-
-  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++)
-    count += (***it).num_nodes();
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    if (is_nil_expr(*e))
+      continue;
+    count += (*e)->num_nodes();
+  }
 
   count++; // Count ourselves.
   return count;
@@ -496,16 +497,18 @@ expr2t::simplify(void) const
 
   // Try simplifying all the sub-operands.
   bool changed = false;
-  std::list<const expr2tc*> operands;
   std::list<expr2tc> newoperands;
 
-  list_operands(operands);
-  for (std::list<const expr2tc *>::iterator it = operands.begin();
-       it != operands.end(); it++) {
-    expr2tc tmp = (**it).get()->simplify();
-    newoperands.push_back(tmp);
-    if (!is_nil_expr(tmp))
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    expr2tc tmp;
+
+    if (!is_nil_expr(*e)) {
+      expr2tc tmp = e->get()->simplify();
       changed = true;
+    }
+
+    newoperands.push_back(tmp);
   }
 
   if (changed == false)
