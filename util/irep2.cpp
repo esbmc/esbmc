@@ -504,7 +504,7 @@ expr2t::simplify(void) const
     expr2tc tmp;
 
     if (!is_nil_expr(*e)) {
-      expr2tc tmp = e->get()->simplify();
+      tmp = e->get()->simplify();
       changed = true;
     }
 
