@@ -12,12 +12,88 @@ Date: February 2012
 #define __STL_MAP
 
 #include "utility"
-//#include "iterator"
 #include "iostream"
 #include "vector"
 #include "functional"
 
 #define MAP_SIZE 1000
+
+#if 1
+template<class T>
+class list_esbmc {
+public:
+
+	typedef bool (pred_double)(double, double);
+	typedef bool (pred)(const int &);
+
+	struct node {
+		T data;
+		node* prev;
+		node* next;
+		node(T t, node* p, node* n) :
+				data(t), prev(p), next(n) {
+		}
+	};
+
+	node* head;
+	node* tail;
+	int _size;
+
+	explicit list_esbmc() : head(NULL), tail(NULL), _size(0) {}
+
+	explicit list_esbmc ( int n, const T& value = T() ){
+		__ESBMC_assert(n > 0, "\n  The following constructor was called, generating an error in container size specification:\n\n  >>>  explicit list (size_type n, const value_type& val = value_type());  <<<\n\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+		int i;
+		this->_size = 0;
+		for(i=0; i<n; i++)
+			this->push_back(value);
+	}
+
+	explicit list_esbmc (T* t1, T* t2){
+		__ESBMC_assert(t1 != NULL,
+								"\n  The following method was called, generating an error in range containing the values to fill the container:\n\n  >>>  template <class InputIterator>\n         list (InputIterator first, InputIterator last); <<<  \n\n  In the first parameter (first) is specified the pointer to begining of the range,\n  therefore, this parameter must be different than NULL.\n");
+		__ESBMC_assert(t2 != NULL,
+								"\n  The following method was called, generating an error in range containing the values to fill the container:\n\n  >>>  template <class InputIterator>\n         list (InputIterator first, InputIterator last); <<<  \n\n  In the second parameter (last) is specified the pointer to final of the range,\n  therefore, this parameter must be different than NULL.\n");
+		this->_size = 0;
+		for(; t1!=t2; t1++)
+			this->push_back(*t1);
+	}
+
+	list_esbmc(const list_esbmc<T>& x){
+		this->head = x.head;
+		this->tail = x.tail;
+		this->_size = x._size;
+	}
+
+	~list_esbmc() {
+		while (head) {
+			node* temp(head);
+			head = head->next;
+			delete temp;
+		}
+	}
+
+	bool empty () const{
+		if (this->_size == 0)
+			return true;
+		return false;
+	}
+
+	void push_back ( const T& x ){
+		if(this->empty()){
+			this->tail = new node(x, NULL, NULL);
+			this->head = this->tail;
+		}else{
+			this->tail->next = new node(x, this->tail, NULL);
+			this->tail = this->tail->next;
+			if(this->_size == 1)
+				this->head->next == this->tail;
+		}
+		this->_size++;
+	}
+
+};
+#endif
 
 namespace std {
 
@@ -157,11 +233,7 @@ namespace std {
   template <class Key, class T, class Compare=less<Key> >
   class map {
 
-	int _size;
-	T buf[MAP_SIZE];
-
     public:
-
 
     typedef Key key_type;
     typedef T mapped_type;
@@ -169,22 +241,16 @@ namespace std {
     typedef Compare key_compare;
     typedef int size_type;
 
+	list_esbmc<value_type> map_list;
+
 	typedef bool (func)(Key, Key);
 
     class iterator{
       public:
 
-	  int it_size;
-	  T* buf;
-
-      iterator(const iterator& x) : it_size(x.it_size){
-    	  this->buf = x.buf;
-      }
-      iterator() : it_size(0), buf(NULL){}
-      iterator& operator=(const iterator& x) : it_size(x.it_size){
-    	  this->buf = x.buf;
-    	  return *this;
-      }
+      iterator(const iterator& x);
+      iterator();
+      iterator& operator=(const iterator& x);
 
       value_type * operator -> ();
 
@@ -269,32 +335,15 @@ namespace std {
       bool operator != ( const const_reverse_iterator&)const;
     */};
 
-    map() : _size(0){}
-    map( iterator first, iterator last){
-    	//for (int i = 0; i ; first.buf++ ){
-    		//this->buf = first.buf;
-    	//}
-    	//this->_size = first.it_size;
-    }
+    map(){}
+    map( iterator first, iterator last);
     map(func* x);
-    T& operator[](const Key& x){
-    	return this->buf[x];
-    }
+    T& operator[](const Key& x);
 
     // iterators:
-    iterator begin(){
-    	iterator it;
-    	it.buf = this->buf;
-    	it.it_size = this->_size;
-    	return it;
-    }
+    iterator begin();
     const_iterator begin() const;
-    iterator end(){
-    	iterator it;
-    	it.buf = this->buf+MAP_SIZE;
-    	it.it_size = this->_size;
-    	return it;
-    }
+    iterator end();
     const_iterator end() const;
     reverse_iterator rbegin();
     const_reverse_iterator rbegin() const;
@@ -313,7 +362,9 @@ namespace std {
     size_type erase(const key_type& x);
     void erase(iterator first, iterator last);
 
+    void operator= (){}
 
+#if 0
     // modifiers:
     pair<iterator,bool> insert ( const value_type& x );
                iterator insert ( iterator position, const value_type& x );
@@ -346,6 +397,7 @@ namespace std {
     bool operator >= (const map<Key,T,Compare>&) const;
     bool operator <= (const map<Key,T,Compare>&) const;
     */
+#endif
   };
   // specialized algorithms:
   template <class Key, class T, class Compare>
