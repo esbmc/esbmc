@@ -75,7 +75,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
 
-  if (is_constant_expr(expr)) {
+  if (is_nil_expr(expr)) {
+    return true; // It's fine to constant propagate something that's absent.
+  } else if (is_constant_expr(expr)) {
     return true;
   }
   else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
@@ -253,7 +255,11 @@ void goto_symex_statet::rename_address(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
-  if (is_symbol2t(expr))
+  if (is_nil_expr(expr))
+  {
+    return;
+  }
+  else if(is_symbol2t(expr))
   {
     // only do L1
     top().level1.rename(expr);
@@ -274,6 +280,10 @@ void goto_symex_statet::rename_address(expr2tc &expr)
 
 void goto_symex_statet::get_original_name(expr2tc &expr) const
 {
+
+  if (is_nil_expr(expr))
+    return;
+
   Forall_operands2(it, idx, expr)
     get_original_name(*it);
 

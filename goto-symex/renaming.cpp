@@ -172,7 +172,8 @@ void renaming::level2t::rename(expr2tc &expr, bool no_const_prop) const
   {
     // do this recursively
     Forall_operands2(it, idx, expr)
-      rename(*it, no_const_prop);
+      if (!is_nil_expr(*it))
+        rename(*it, no_const_prop);
   }
 }
 
@@ -192,6 +193,9 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
 void renaming::renaming_levelt::get_original_name(expr2tc &expr,
                                             symbol2t::renaming_level lev) const
 {
+
+  if (is_nil_expr(expr))
+    return;
 
   Forall_operands2(it, idx, expr)
     get_original_name(*it);
