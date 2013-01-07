@@ -32,7 +32,8 @@ void symex_slicet::get_symbols(const expr2tc &expr)
 {
 
   forall_operands2(it, idx, expr)
-    get_symbols(*it);
+    if (!is_nil_expr(*it))
+      get_symbols(*it);
 
   if (is_symbol2t(expr))
     depends.insert(renaming::level2t::name_record(to_symbol2t(expr)));

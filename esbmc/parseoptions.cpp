@@ -939,7 +939,8 @@ static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::s
     used_syms.insert(sym);
   } else {
     Forall_operands2(it, idx, e)
-      replace_symbol_names(*it, prefix, strings, used_syms);
+      if (!is_nil_expr(*it))
+        replace_symbol_names(*it, prefix, strings, used_syms);
   }
 
   return;
@@ -1048,6 +1049,9 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 {
+
+  if (is_nil_expr(expr))
+    return 0;
 
   if (!is_symbol2t(expr)) {
     unsigned int globals = 0;

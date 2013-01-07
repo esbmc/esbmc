@@ -1283,6 +1283,9 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
 
 unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 {
+  if (is_nil_expr(expr))
+    return 0;
+
   if (!options.get_bool_option("atomicity-check"))
 	return 0;
 

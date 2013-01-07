@@ -22,7 +22,8 @@ void goto_symext::default_replace_dynamic_allocation(expr2tc &expr)
 {
 
   Forall_operands2(it, idx, expr)
-    default_replace_dynamic_allocation(*it);
+    if (!is_nil_expr(*it))
+      default_replace_dynamic_allocation(*it);
 
   if (is_valid_object2t(expr))
   {
