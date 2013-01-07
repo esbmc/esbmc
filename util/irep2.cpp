@@ -1619,7 +1619,7 @@ do_get_sub_expr<std::vector<expr2tc>>(const std::vector<expr2tc> &item,
                                       unsigned int idx, unsigned int &it,
                                       const expr2tc *&ptr)
 {
-  if (it + item.size() < idx) {
+  if (idx < it + item.size()) {
     ptr = &item[idx - it];
     return true;
   } else {
@@ -1660,7 +1660,7 @@ do_get_sub_expr<std::vector<expr2tc>>(std::vector<expr2tc> &item,
                                       unsigned int idx, unsigned int &it,
                                       expr2tc *&ptr)
 {
-  if (it + item.size() < idx) {
+  if (idx < it + item.size()) {
     ptr = &item[idx - it];
     return true;
   } else {
