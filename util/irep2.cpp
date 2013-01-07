@@ -1678,14 +1678,14 @@ do_count_sub_exprs(T &item __attribute__((unused)))
 
 template <>
 unsigned int
-do_count_sub_exprs<expr2tc>(expr2tc &item __attribute__((unused)))
+do_count_sub_exprs<const expr2tc>(const expr2tc &item __attribute__((unused)))
 {
   return 1;
 }
 
 template <>
 unsigned int
-do_count_sub_exprs<std::vector<expr2tc>>(std::vector<expr2tc> &item)
+do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
 {
   return item.size();
 }
