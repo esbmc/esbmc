@@ -517,7 +517,8 @@ expr2t::simplify(void) const
 
     if (!is_nil_expr(*e)) {
       tmp = e->get()->simplify();
-      changed = true;
+      if (!is_nil_expr(tmp))
+        changed = true;
     }
 
     newoperands.push_back(tmp);
