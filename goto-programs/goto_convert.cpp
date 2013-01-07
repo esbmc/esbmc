@@ -1864,7 +1864,7 @@ void goto_convertt::convert_for(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2533,7 +2533,7 @@ void goto_convertt::convert_while(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -2673,7 +2673,7 @@ void goto_convertt::convert_dowhile(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -2852,7 +2852,7 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 
-  if ((base_case || inductive_step) &&
+  if ((/*base_case ||*/ inductive_step) &&
 	(is_while_block()))
     set_break(true);
 }
@@ -2977,7 +2977,7 @@ void goto_convertt::convert_goto(
   // remember it to do target later
   targets.gotos.insert(t);
 
-  if ((base_case || inductive_step) &&
+  if ((/*base_case ||*/ inductive_step) &&
 	(is_while_block()))
     set_goto(true);
 }
