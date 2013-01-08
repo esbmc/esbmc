@@ -2271,6 +2271,37 @@ void goto_convertt::replace_infinite_loop(
 
 /*******************************************************************\
 
+Function: goto_convertt::set_expr_to_nondet
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::set_expr_to_nondet(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  nondet_varst::const_iterator cache_result;
+  if (tmp.op0().is_constant())
+  {
+    cache_result = nondet_vars.find(tmp.op1());
+    if (cache_result == nondet_vars.end())
+      init_nondet_expr(tmp.op1(), dest);
+  }
+  else
+  {
+    cache_result = nondet_vars.find(tmp.op0());
+    if (cache_result == nondet_vars.end())
+      init_nondet_expr(tmp.op0(), dest);
+  }
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::replace_cond
 
   Inputs:
@@ -2286,6 +2317,7 @@ void goto_convertt::replace_cond(
   goto_programt &dest)
 {
   //std::cout << tmp.pretty() << std::endl;
+  //std::cout << tmp.id() << std::endl;
 
   irep_idt exprid = tmp.id();
 
@@ -2301,6 +2333,8 @@ void goto_convertt::replace_cond(
         return ;
     else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
 
+    //set_expr_to_nondet(tmp, dest);
+#if 1
     nondet_varst::const_iterator cache_result;
     if (tmp.op0().is_constant())
     {
@@ -2314,6 +2348,7 @@ void goto_convertt::replace_cond(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(tmp.op0(), dest);
     }
+#endif
   }
   else if ( exprid == "<" ||  exprid == "<=")
   {
@@ -2322,6 +2357,8 @@ void goto_convertt::replace_cond(
       if (check_op_const(tmp.op1(), tmp.location()))
         return ;
 
+    //set_expr_to_nondet(tmp, dest);
+#if 1
     nondet_varst::const_iterator cache_result;
     if (tmp.op1().is_constant())
     {
@@ -2335,6 +2372,8 @@ void goto_convertt::replace_cond(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(tmp.op1(), dest);
     }
+#endif
+
   }
   else if ( exprid == "and" || exprid == "or")
   {
@@ -2365,6 +2404,23 @@ void goto_convertt::replace_cond(
     //std::cout << tmp.pretty() << std::endl;
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
+
+    //set_expr_to_nondet(tmp, dest);
+#if 1
+    nondet_varst::const_iterator cache_result;
+    if (tmp.op0().is_constant())
+    {
+      cache_result = nondet_vars.find(tmp.op1());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op1(), dest);
+    }
+    else
+    {
+      cache_result = nondet_vars.find(tmp.op0());
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(tmp.op0(), dest);
+    }
+#endif
 
   }
   else
