@@ -2331,24 +2331,11 @@ void goto_convertt::replace_cond(
     if (is_for_block())
       if (check_op_const(tmp.op0(), tmp.location()))
         return ;
-    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
+    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast())
+    	return ;
 
-    //set_expr_to_nondet(tmp, dest);
-#if 1
-    nondet_varst::const_iterator cache_result;
-    if (tmp.op0().is_constant())
-    {
-      cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op1(), dest);
-    }
-    else
-    {
-      cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op0(), dest);
-    }
-#endif
+    set_expr_to_nondet(tmp, dest);
+
   }
   else if ( exprid == "<" ||  exprid == "<=")
   {
@@ -2357,8 +2344,6 @@ void goto_convertt::replace_cond(
       if (check_op_const(tmp.op1(), tmp.location()))
         return ;
 
-    //set_expr_to_nondet(tmp, dest);
-#if 1
     nondet_varst::const_iterator cache_result;
     if (tmp.op1().is_constant())
     {
@@ -2372,8 +2357,6 @@ void goto_convertt::replace_cond(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(tmp.op1(), dest);
     }
-#endif
-
   }
   else if ( exprid == "and" || exprid == "or")
   {
@@ -2405,23 +2388,7 @@ void goto_convertt::replace_cond(
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
 
-    //set_expr_to_nondet(tmp, dest);
-#if 1
-    nondet_varst::const_iterator cache_result;
-    if (tmp.op0().is_constant())
-    {
-      cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op1(), dest);
-    }
-    else
-    {
-      cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op0(), dest);
-    }
-#endif
-
+    set_expr_to_nondet(tmp, dest);
   }
   else
   {
