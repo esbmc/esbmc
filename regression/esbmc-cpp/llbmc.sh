@@ -175,6 +175,11 @@ do
         echo "POS_CONT++ CONVERSION"
         POS_CONT=$((POS_CONT+1))
 
+      else
+ 
+        echo "CLANG BUG!" "CRASH_CONT++ CRASH"
+        CRASH_CONT=$((CRASH_CONT+1))
+
       fi
 
     fi
