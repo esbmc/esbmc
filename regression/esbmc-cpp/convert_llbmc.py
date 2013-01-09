@@ -31,12 +31,18 @@ def show_info(path):
     expected = root.find("item_06_expected_result");
     unw = opt.split()
     #print unw
-    pos = unw.index("--unwind") #unwind option
-    if (pos+1) < len(unw):
-       unw_value = unw[pos+1] #value
-       print "unwind: " + unw_value
-    else:
-       sys.exit("Parameter unwind error") 
+
+    try:
+      pos = unw.index("--unwind") #unwind option
+
+      if (pos+1) < len(unw):
+         unw_value = unw[pos+1] #value
+      else:
+         sys.exit("Parameter unwind error") 
+    except:
+      unw_value=str(10)
+
+    print "unwind: " + unw_value
 
     ########### testllvm.desc ###############
     #try to open testllvm.desc
@@ -67,7 +73,6 @@ def show_info(path):
     llbmc_s[1] = "--max-loop-iterations=" + str(unw_value)
     changed = " ".join(llbmc_s)
     llbmc_opt.text = changed
-
     
     print "---> Writing testllvm.desc"
     tree.write('testllvm.desc',encoding="utf-8",xml_declaration=True)

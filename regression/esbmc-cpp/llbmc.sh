@@ -58,6 +58,10 @@ do
   then
 
     unwind=`cat $file/test.desc | grep unwind | awk -F"--unwind" '{ print $2 }' | cut -d' ' -f2`
+    if [ "$unwind" == "" ] 
+    then
+      unwind=10
+    fi
     OPTS=$OPTS$unwind
 
     echo
