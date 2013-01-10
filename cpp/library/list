@@ -10,7 +10,7 @@
 #ifndef __STL_LIST
 #define __STL_LIST
 
-#include <vector>
+#include "definitions.h"
 
 namespace std {
 
@@ -352,15 +352,6 @@ public:
 		int i;
 		for(i=0;i<n;i++){
 			this->insert(position,x);
-		}
-	}
-	void insert(iterator position, vector<int>::iterator n, vector<int>::iterator x){
-		__ESBMC_assert(n != NULL,"The second parameter must be different than NULL.");
-		int tmp;
-		while(n!=x){
-			tmp = *n;
-			this->insert(position, tmp );
-			n++;
 		}
 	}
 
