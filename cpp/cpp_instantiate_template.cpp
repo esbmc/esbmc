@@ -114,9 +114,9 @@ void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
         out << ", ";
 
       if(a_it->id()=="type")
-        out << to_string(a_it->type());
+        out << a_it->type().id();
       else
-        out << to_string(*a_it);
+        out << a_it->id();
     }
 
     out << "> at " << s_it->location << std::endl;
@@ -448,8 +448,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   instantiation_levelt i_level(instantiation_stack);
   instantiation_stack.back().location=location;
-//  instantiation_stack.back().identifier=identifier.;
-//  instantiation_stack.back().full_template_args=template_args;
+  instantiation_stack.back().identifier=identifier;
+  instantiation_stack.back().full_template_args=to_cpp_template_args_tc(template_args);
 
   #if 0
   std::cout << "L: " << location << std::endl;
