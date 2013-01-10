@@ -5,7 +5,7 @@ enum argt { ONE, TWO };
 template < argt V = TWO, class T = argt >
 class A
 {
-  public:
+public:
   A():v(V){}
   T v;
 };

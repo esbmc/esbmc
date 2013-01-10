@@ -6,19 +6,19 @@ struct A;
 template <class T>
 struct A
 {
-	A(){}
+  A(){}
 };
 
 template <>
 struct A<bool>
 {
-	int b;
-	A(){}
+  int b;
+  A(){}
 };
 
 int main()
 {
-	A<bool> a;
-	a.b = false;
-        assert(a.b==false);
+  A<bool> a;
+  a.b = false;
+  assert(a.b==false);
 }

@@ -10,15 +10,15 @@ bool func<int>(int t){return true;}
 template <class A>
 struct Test
 {
-	bool f()
-	{
-		A a;
-		return func<A>(a);
-	}
+  bool f()
+  {
+    A a;
+    return func<A>(a);
+  }
 };
 
 int main()
 {
-	Test<int> t1;
-	assert(t1.f()==true);
+  Test<int> t1;
+  assert(t1.f()==true);
 }

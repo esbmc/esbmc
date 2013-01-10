@@ -5,11 +5,11 @@ class int_array
 {
 public:
   int array[size];
-  
+
   int read(unsigned int x)
   {
-  	assert(x<size);
-  	return array[x];
+    assert(x<size);
+    return array[x];
   }
 };
 
