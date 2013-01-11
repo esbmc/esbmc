@@ -27,5 +27,6 @@ my_Z z;
 
 int main()
 {
+  assert(z.some==0);
   return 0;
 }
