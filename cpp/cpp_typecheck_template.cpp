@@ -1120,21 +1120,21 @@ void cpp_typecheckt::build_template_map(
   std::cout << "I: " << instance.pretty() << std::endl;
   #endif
 
-   if(instance.get_sub().size() < type_arguments.get_sub().size())
-   {
-     // check for default parameters
-     for(unsigned i = instance.get_sub().size();
-         i < type_arguments.get_sub().size();
-         i++)
-     {
-       const exprt& arg =
-           static_cast<const exprt&>(type_arguments.get_sub()[i]);
-       exprt value = static_cast<const exprt&>(arg.find("#default"));
-       if(value.is_not_nil())
-         instance.get_sub().push_back(value);
-       else break;
-     }
-   }
+  if(instance.get_sub().size() < type_arguments.get_sub().size())
+  {
+    // check for default parameters
+    for(unsigned i = instance.get_sub().size();
+        i < type_arguments.get_sub().size();
+        i++)
+    {
+      const exprt& arg =
+          static_cast<const exprt&>(type_arguments.get_sub()[i]);
+      exprt value = static_cast<const exprt&>(arg.find("#default"));
+      if(value.is_not_nil())
+        instance.get_sub().push_back(value);
+      else break;
+    }
+  }
 
   if(instance.get_sub().size()!=type_arguments.get_sub().size())
   {
@@ -1177,6 +1177,18 @@ void cpp_typecheckt::build_template_map(
         err_location(*i_it);
         str << "expected expression, but got type";
         throw 0;
+      }
+
+      // If is a cpp-name we need to figure it out it's real value
+      if(i.id()=="cpp-name")
+      {
+        exprt res=
+          resolve(
+            to_cpp_name(i),
+            cpp_typecheck_resolvet::BOTH,
+            cpp_typecheck_fargst());
+
+        i.swap(res);
       }
 
       exprt tmp(i);

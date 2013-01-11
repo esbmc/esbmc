@@ -21,7 +21,6 @@ public:
     assert(3==f<int>(3));
   }
 
-
   bool t;
   T1():t(false) { }
 };
