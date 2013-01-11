@@ -221,7 +221,7 @@ public:
 	iterator end (){
 		iterator it;
 		if (this->_size != 0){
-			this->tail->next = new node(NULL, this->tail, NULL);
+			this->tail->next = new node(T(), this->tail, NULL);
 			it.it = this->tail->next;
 		}else{
 			it.it = this->tail;
@@ -457,8 +457,8 @@ public:
 	}
 	void clear(){
 		this->_size = 0;
-		this->head = new node(0, NULL, NULL);
-		this->tail = new node(0, NULL, NULL);
+		this->head = new node(T(), NULL, NULL);
+		this->tail = new node(T(), NULL, NULL);
 	}
 
 	void splice(iterator position, list<T>& x){
