@@ -1190,6 +1190,12 @@ void cpp_typecheckt::build_template_map(
 
         i.swap(res);
       }
+      else if(i.id()=="sideeffect")
+      {
+        side_effect_expr_function_callt f=to_side_effect_expr_function_call(i);
+        typecheck_side_effect_function_call(f);
+        i.swap(f);
+      }
 
       exprt tmp(i);
       implicit_typecast(tmp, t.type());
