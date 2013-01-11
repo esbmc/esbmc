@@ -1636,10 +1636,10 @@ exprt cpp_typecheck_resolvet::resolve(
     if(!identifiers.size())
     {
       convert_identifiers(
-          id_set, want, fargs, identifiers);
+        id_set, want, fargs, identifiers);
 
       apply_template_args(
-          identifiers, template_args, fargs);
+        identifiers, template_args, fargs);
     }
   }
   else
