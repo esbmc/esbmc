@@ -242,6 +242,7 @@ namespace std {
     typedef int size_type;
 
 	list_esbmc<value_type> map_list;
+	int _size;
 
 	typedef bool (func)(Key, Key);
 
@@ -335,10 +336,21 @@ namespace std {
       bool operator != ( const const_reverse_iterator&)const;
     */};
 
-    map(){}
+    map() : map_list() {
+    	this->_size = 0;
+    }
     map( iterator first, iterator last);
     map(func* x);
-    T& operator[](const Key& x);
+    T& operator[](const Key& x){
+		value_type pair;
+    	if (this->map_list.empty()){
+    		pair.first = x;
+    		pair.second = T();
+    		this->map_list.push_back(pair);
+    		this->_size++;
+    	}
+    	return pair.second;
+    }
 
     // iterators:
     iterator begin();
