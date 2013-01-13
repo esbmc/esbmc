@@ -288,6 +288,14 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
+std::string stringify(double x)
+ {
+   std::ostringstream o;
+   if (!(o << x))
+     throw 0;
+   return o.str();
+ }
+
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
@@ -313,13 +321,10 @@ z3_convt::fixed_point(std::string v, unsigned width)
 
   fraction = fraction * precision;
 
-  i_int = (int)integer;
-  f_int = (int)fraction + 1;
-
-  if (fraction != 0)
-    result = itos(i_int * precision + f_int) + "/" + itos(precision);
+  if (fraction == 0)
+    result = stringify(integer);
   else
-    result = itos(i_int);
+    result = stringify(integer*precision + fraction) + "/" + stringify(precision); 
 
   return result;
 }
