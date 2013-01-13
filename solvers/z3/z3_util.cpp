@@ -7,10 +7,20 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include <sstream>
+#include <iomanip>
 
 #include "z3_conv.h"
 
-void z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
+std::string
+z3_convt::double2string(double d) const
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << d;
+  return format_message.str();
+}
+
+void 
+z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
 {
   Z3_type_ast a, b;
 
@@ -23,7 +33,8 @@ void z3_convt::print_data_types(Z3_ast operand0, Z3_ast operand1)
   std::cout << Z3_get_symbol_string(z3_ctx,Z3_get_type_name(z3_ctx, b)) << std::endl;
 }
 
-void z3_convt::show_bv_size(Z3_ast operand)
+void 
+z3_convt::show_bv_size(Z3_ast operand)
 {
   Z3_type_ast a;
 
@@ -34,7 +45,8 @@ void z3_convt::show_bv_size(Z3_ast operand)
   std::cout << Z3_get_bv_type_size(z3_ctx, a) << std::endl;
 }
 
-bool z3_convt::is_bv(const typet &type)
+bool 
+z3_convt::is_bv(const typet &type)
 {
   if (type.id()=="signedbv" || type.id()=="unsignedbv" ||
 	  type.id() == "fixedbv")
@@ -43,7 +55,8 @@ bool z3_convt::is_bv(const typet &type)
   return false;
 }
 
-bool z3_convt::is_signed(const typet &type)
+bool 
+z3_convt::is_signed(const typet &type)
 {
   if (type.id()=="signedbv" || type.id()=="fixedbv")
     return true;
@@ -51,7 +64,8 @@ bool z3_convt::is_signed(const typet &type)
   return false;
 }
 
-Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
+Z3_ast 
+z3_convt::convert_number(int64_t value, u_int width, bool type)
 {
 
   if (int_encoding)
@@ -60,7 +74,8 @@ Z3_ast z3_convt::convert_number(int64_t value, u_int width, bool type)
     return convert_number_bv(value, width, type);
 }
 
-Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
+Z3_ast 
+z3_convt::convert_number_int(int64_t value, u_int width, bool type)
 {
 
   if (type)
@@ -69,7 +84,8 @@ Z3_ast z3_convt::convert_number_int(int64_t value, u_int width, bool type)
     return z3_api.mk_unsigned_int(value);
 }
 
-Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
+Z3_ast 
+z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
 {
 
   if (type)
@@ -78,11 +94,11 @@ Z3_ast z3_convt::convert_number_bv(int64_t value, u_int width, bool type)
     return Z3_mk_unsigned_int(z3_ctx, value, Z3_mk_bv_type(z3_ctx, width));
 }
 
-std::string z3_convt::itos(int i)
+std::string 
+z3_convt::itos(int i)
 {
   std::stringstream s;
   s << i;
-
   return s.str();
 }
 
@@ -99,3 +115,4 @@ z3_convt::debug_label_formula(std::string name, Z3_ast formula)
   assert_formula(eq);
   return;
 }
+

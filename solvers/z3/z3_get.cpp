@@ -9,7 +9,6 @@
 #include <assert.h>
 
 #include <iostream>
-#include <iomanip>
 #include <math.h>
 #include <iomanip>
 #include <sstream>
@@ -20,15 +19,6 @@
 #include <std_types.h>
 
 #include "z3_conv.h"
-
-std::string
-z3_convt::double2string(double d) const
-{
-
-  std::ostringstream format_message;
-  format_message << std::setprecision(12) << d;
-  return format_message.str();
-}
 
 std::string
 z3_convt::get_fixed_point(const unsigned width, std::string value) const
@@ -53,7 +43,6 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   value = integer2binary(string2integer(double2string(magnitude), 10),width / 2)
                          +integer2binary(string2integer(double2string(fraction),
                          10), width / 2);
-
   return value;
 }
 

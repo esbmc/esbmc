@@ -24,6 +24,7 @@
 #include <fixedbv.h>
 #include <solvers/flattening/boolbv.h>
 #include <solvers/flattening/boolbv_type.h>
+#include <iomanip>
 
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
@@ -288,20 +289,21 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
+#if 0
 std::string stringify(double x)
- {
-   std::ostringstream o;
-   if (!(o << x))
-     throw 0;
-   return o.str();
- }
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << x;
+  return format_message.str();
+}
+#endif
 
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
   DEBUGLOC;
 
-  const int precision = 10000;
+  const int precision = 1000000;
   std::string i, f, b, result;
   double integer, fraction, base;
   int i_int, f_int;
@@ -322,9 +324,11 @@ z3_convt::fixed_point(std::string v, unsigned width)
   fraction = fraction * precision;
 
   if (fraction == 0)
-    result = stringify(integer);
-  else
-    result = stringify(integer*precision + fraction) + "/" + stringify(precision); 
+    result = double2string(integer);
+  else  {
+    int numerator = (integer*precision + fraction);
+    result = itos(numerator) + "/" + double2string(precision); 
+  }
 
   return result;
 }
