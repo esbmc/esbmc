@@ -1061,7 +1061,7 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
 
   if(integral.is_nil() &&
      !rName(integral))
-      return false;
+    return false;
 
   if(cv_q.is_not_nil() && integral.is_not_nil())
     merge_types(cv_q, integral);
@@ -1072,9 +1072,15 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
   if(integral.is_nil())
     return false;
 
+  merge_types(cv_q, integral);
+
+  declaration.type().swap(integral);
+
   cpp_declaratort declarator;
   if(!rDeclarator(declarator, kDeclarator, false, true, true))
     return false;
+
+  // there really _has_ to be an initializer!
 
   if(lex->LookAhead(0)!='=')
     return false;
@@ -1082,9 +1088,10 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
   Token eqs;
   lex->GetToken(eqs);
 
-  exprt e;
-  if(!rExpression(e))
+  if(!rExpression(declarator.value()))
     return false;
+
+  declaration.declarators().push_back(declarator);
 
   return true;
 }

@@ -165,6 +165,84 @@ void cpp_typecheckt::typecheck_catch(codet &code)
 
 /*******************************************************************\
 
+Function: cpp_typecheckt::typecheck_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_ifthenelse(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // if(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_ifthenelse(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_while
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_while(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // while(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_while(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_switch
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_switch(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // switch(int i=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_switch(code);
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheckt::typecheck_member_initializer
 
   Inputs:
