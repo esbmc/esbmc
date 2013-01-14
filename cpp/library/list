@@ -25,8 +25,9 @@ public:
 	typedef T* pointer;
 	typedef const T* const_pointer;
 
-	typedef bool (pred_double)(double, double);
-	typedef bool (pred)(const int &);
+	typedef bool (pred_double)(T, T);
+	typedef bool (pred)( T &);
+
 
 	struct node {
 		T data;
@@ -626,7 +627,7 @@ public:
 	void unique(pred_double* x) {
 		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
 		node* tmp = this->head;
-		int foo, bar;
+		T foo, bar;
 		if (this->_size != 0){
 			while(tmp->next != NULL){
 				foo = tmp->data;
@@ -814,7 +815,7 @@ public:
 		list<T> tmpList;
 		node* tmpNode = this->tail;
 		int length = this->_size;
-		int tmpValue;
+		T tmpValue;
 		for (int i = 0; i < length; i++){
 			tmpValue = tmpNode->data;
 			tmpList.push_back(tmpValue);
