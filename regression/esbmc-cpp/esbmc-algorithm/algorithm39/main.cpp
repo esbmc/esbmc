@@ -20,15 +20,15 @@ int main () {
 
   bound = stable_partition (myvector.begin(), myvector.end(), IsOdd);
   
-  assert(myvector[0] == 1);
-  assert(myvector[1] == 3);
-  assert(myvector[2] == 5);
-  assert(myvector[3] == 7);
-  assert(myvector[4] == 9);
-  assert(myvector[5] == 2);
-  assert(myvector[6] == 4);
-  assert(myvector[7] == 6);
-  assert(myvector[8] == 8);
+  assert(IsOdd(myvector[0]));
+  assert(IsOdd(myvector[1]));
+  assert(IsOdd(myvector[2]));
+  assert(IsOdd(myvector[3]));
+  assert(IsOdd(myvector[4]));
+  assert(!IsOdd(myvector[5]));
+  assert(!IsOdd(myvector[6]));
+  assert(!IsOdd(myvector[7]));
+  assert(!IsOdd(myvector[8]));
   
 
   // print out content:

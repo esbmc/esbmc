@@ -17,15 +17,15 @@ int main () {
   v.assign(myints1,myints1+9);
 
   cout << "looking for a 3... ";
-  if (binary_search (v.begin(), v.end(), 3))
-    cout << "found!\n"; else cout << "not found.\n";
+//  if (binary_search (v.begin(), v.end(), 3))
+//    cout << "found!\n"; else cout << "not found.\n";
 
-  assert(binary_search (v.begin(), v.end(), 3));
+  assert(binary_search (v.begin(), v.end(), 3));/*
   // using myfunction as comp:
   cout << "looking for a 6... ";
   if (binary_search (v.begin(), v.end(), 6, myfunction))
     cout << "found!\n"; else cout << "not found.\n";
 
-  assert(!binary_search (v.begin(), v.end(), 6, myfunction));
+  assert(!binary_search (v.begin(), v.end(), 6, myfunction)); */
   return 0;
 }
