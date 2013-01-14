@@ -970,9 +970,22 @@ void cpp_typecheck_resolvet::resolve_scope(
       {
         cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, !recursive);
 
+        symbolt template_symbol=
+          cpp_typecheck.context.symbols.find((*id_set.begin())->identifier)->second;
+
+        cpp_template_args_tct template_args_tc;
+        template_args_tc=
+          cpp_typecheck.typecheck_template_args(
+            location,
+            template_symbol,
+            template_args);
+
         const symbolt& symb_tmpl=
-          cpp_typecheck.instantiate_template(cpp_name.location(),
-            (*id_set.begin())->identifier, template_args);
+          cpp_typecheck.instantiate_template(
+            cpp_name.location(),
+            template_symbol,
+            template_args_tc,
+            template_args_tc);
 
         cpp_typecheck.cpp_scopes.go_to(
           cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
@@ -2176,7 +2189,10 @@ void cpp_typecheck_resolvet::apply_template_args(
   {
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.identifier(), template_args_non_tc);
+        location,
+        template_symbol,
+        template_args_tc,
+        template_args_tc);
 
     expr=exprt("type", symbol_typet(new_symbol.name));
     expr.location()=location;
@@ -2186,7 +2202,10 @@ void cpp_typecheck_resolvet::apply_template_args(
     // must be a function, maybe method
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.identifier(), template_args_non_tc);
+        location,
+        template_symbol,
+        template_args_tc,
+        template_args_tc);
 
     // check if it is a method
     const code_typet &code_type=to_code_type(new_symbol.type);
@@ -2339,7 +2358,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         const typet &type=pcomp.type();
         assert(type.id()!="struct");
         if(type.id()=="symbol")
-          identifier = type.identifier();
+          identifier=type.identifier();
         else
           continue;
       }
@@ -2381,7 +2400,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
       if(e.id()!="type")
         continue; // expressions are definitively not a scope
 
-      if(e.type().id() == "symbol")
+      if(e.type().id()=="symbol")
       {
         symbol_typet type=to_symbol_type(e.type());
 

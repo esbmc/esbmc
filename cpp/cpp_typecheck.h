@@ -167,8 +167,6 @@ protected:
     const template_typet &template_type,
     const typet &function_type);
 
-  void typecheck_template_args(irept &template_args);
-
   cpp_template_args_tct typecheck_template_args(
     const locationt &location,
     const symbolt &template_symbol,
@@ -208,12 +206,6 @@ protected:
 
   const symbolt &instantiate_template(
     const locationt &location,
-    const irep_idt &identifier,
-    const irept &template_args,
-    const typet &specialization = typet("nil"));
-
-  const symbolt &instantiate_template(
-    const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_tct &specialization_template_args,
     const cpp_template_args_tct &full_template_args,
@@ -221,10 +213,6 @@ protected:
 
   unsigned template_counter;
   unsigned anon_counter;
-
-  void build_template_map(
-    const typet &type,
-    const irept &template_args);
 
   template_mapt template_map;
 
