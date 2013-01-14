@@ -238,7 +238,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
     cpp_scopet &scope=cpp_scopes.get_scope(subscope_name);
 
     cpp_scopet::id_sett id_set;
-    cpp_scopes.get_ids(template_symbol.base_name, id_set, true);
+    scope.lookup(template_symbol.base_name, id_set);
 
     if(id_set.size()==1)
     {
@@ -251,8 +251,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
       const symbolt &symb=lookup(cpp_id.identifier);
 
       // continue if the type is incomplete only
-      if(cpp_id.id_class == cpp_idt::CLASS &&
-         symb.type.id() == "struct")
+      if(cpp_id.id_class==cpp_idt::CLASS &&
+         symb.type.id()=="struct")
         return symb;
       else if(symb.value.is_not_nil())
         return symb;
@@ -311,7 +311,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   if(new_decl.type().id()=="struct")
   {
-    convert(new_decl);
+    convert_non_template_declaration(new_decl);
 
     // also instantiate all the template methods
     const exprt &template_methods=
@@ -354,7 +354,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   if(is_template_method)
   {
-    contextt::symbolst::iterator it =
+    contextt::symbolst::iterator it=
       context.symbols.find(class_name);
 
     assert(it!=context.symbols.end());
@@ -390,7 +390,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
     bool is_static=new_decl.storage_spec().is_static();
     irep_idt access = new_decl.get("#access");
 
-    assert(access != "");
+    assert(access!=irep_idt());
     assert(symb.type.id()=="struct");
 
     typecheck_compound_declarator(
@@ -406,12 +406,12 @@ const symbolt &cpp_typecheckt::instantiate_template(
     return lookup(to_struct_type(symb.type).components().back().name());
   }
 
-  // not a template class, not a template method,
-  // it must be a template function!
+  // not a class template, not a class template method,
+  // it must be a function template!
 
   assert(new_decl.declarators().size()==1);
 
-  convert(new_decl);
+  convert_non_template_declaration(new_decl);
 
   const symbolt &symb=
     lookup(new_decl.declarators()[0].identifier());
