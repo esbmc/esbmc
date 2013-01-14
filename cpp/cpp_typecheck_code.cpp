@@ -184,6 +184,11 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
   if(code.op0().id()=="code")
   {
     typecheck_code(to_code(code.op0()));
+    typecheck_code(to_code(code.op1()));
+
+    if(code.operands().size()==3 &&
+       !code.op2().is_nil())
+      typecheck_code(to_code(code.op2()));
   }
   else
     c_typecheck_baset::typecheck_ifthenelse(code);
