@@ -288,7 +288,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
-    std::cout << "value_expr.pretty(): " << value_expr.pretty() << std::endl;
     return value_expr;
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
