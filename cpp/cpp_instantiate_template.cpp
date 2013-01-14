@@ -56,6 +56,14 @@ std::string cpp_typecheckt::template_suffix(
       else
         result+=cpp_type2name(type);
     }
+    else if(expr.id()=="sideeffect")
+    {
+      const typet &type=expr.type();
+      if(type.id()=="symbol")
+        result+=type.get_string("identifier");
+      else
+        result+=cpp_type2name(type);
+    }
     else // expression
     {
       exprt e=expr;
