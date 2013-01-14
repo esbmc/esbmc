@@ -16,17 +16,18 @@ int main () {
 
   // using default comparison:
   it = adjacent_find (myvector.begin(), myvector.end());
-
+  assert(*it != 30);
+  assert(it == myvector.end());
   if (it!=myvector.end())
     cout << "the first consecutive repeated elements are: " << *it << endl;
 
-  //using predicate comparison:
+/*  //using predicate comparison:
   it = adjacent_find (++it, myvector.end(), myfunction);
 
-  assert(*it != 10);
+  assert(it != myvector.end());
 
   if (it!=myvector.end())
     cout << "the second consecutive repeated elements are: " << *it << endl;
-  
+  */
   return 0;
 }
