@@ -123,10 +123,8 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       recurse_store = Z3_to_app(z3_ctx, Z3_get_app_arg(z3_ctx, recurse_store, 0));
 
       assert(Z3_get_ast_kind(z3_ctx, idx) == Z3_NUMERAL_AST);
-      assert(Z3_get_ast_kind(z3_ctx, value) == Z3_NUMERAL_AST);
       std::string index = Z3_get_numeral_string(z3_ctx, idx);
       mp_integer i = string2integer(index);
-      //if (type.subtype().is_fixedbv()) return nil_exprt(); //std::cout << "index is zero" << std::endl;
       exprt val = bv_get_rec(value, type.subtype());
       elems_in_z3_order.push_back(array_elem(i, val));
     }
