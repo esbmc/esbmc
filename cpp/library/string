@@ -350,6 +350,7 @@ public:
 	bool operator==(const char* lhs, string& rhs);
 	bool operator==(string& lhs, const char* rhs);
 	bool operator!=(string& a);
+	bool operator!=(const string& a);
 	bool operator!=(const char* lhs);
 	bool operator!=(const char* lhs, string& rhs);
 	bool operator!=(string& lhs, const char* rhs);
@@ -941,6 +942,18 @@ bool string::operator!=(string& a) {
 	}
 }
 
+bool string::operator!=(const string& a) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(a.c_str(), this->c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
 bool string::operator!=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
@@ -1152,8 +1165,8 @@ bool string::empty() const {
 }
 
 string& string::operator=(string& str) {
-	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
-			"The parameter must to be different than NULL");
+//	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
+	//		"The parameter must to be different than NULL");
 	int i, len;
 	this->_size = str.length();
 	this->str = new char[this->_size + 1];
