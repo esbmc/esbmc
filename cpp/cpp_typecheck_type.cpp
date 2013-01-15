@@ -164,6 +164,13 @@ void cpp_typecheckt::typecheck_type(typet &type)
         it++)
     {
       typecheck_type(it->type());
+
+      // see if there is a default value
+      if(it->has_default_value())
+      {
+        typecheck_expr(it->default_value());
+        implicit_typecast(it->default_value(), it->type());
+      }
     }
   }
   else if(type.id()=="template")
