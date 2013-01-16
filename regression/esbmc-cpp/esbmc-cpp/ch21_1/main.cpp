@@ -1,6 +1,7 @@
 // Fig. 21.5: fig21_05.cpp
 // Demonstrating input and output with iterators.
 #include <iostream>
+#include <string>
 
 using std::cout;
 using std::cin;

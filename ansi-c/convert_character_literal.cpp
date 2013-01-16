@@ -75,8 +75,8 @@ void convert_character_literal(
     throw "empty character literal";
   else if(value.size()==1)
   {
-	type = char_type();
-	type.set("#cpp_type", "char");
+    type = char_type();
+    type.set("#cpp_type", "char");
     dest=from_integer(value[0], type);
   }
   else if(value.size()>=2 && value.size()<=4)

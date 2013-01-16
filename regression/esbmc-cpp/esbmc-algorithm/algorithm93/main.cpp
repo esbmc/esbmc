@@ -6,14 +6,14 @@
 using namespace std;
 
 int main () {
-  int myints[] ={1,2,3,4,5,6,7,8,9};
+  int myints[] ={1,2,3,4};
   vector<int> myvector;
   vector<int>::iterator it;
 
-  myvector.resize(9);
+  myvector.resize(4);
 
-  reverse_copy (myints, myints+9, myvector.begin());
-  assert(myvector[0] == 1);
+  reverse_copy (myints, myints+4, myvector.begin());
+  assert(myvector[0] != 4);
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

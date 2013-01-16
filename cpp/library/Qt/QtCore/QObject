@@ -1,0 +1,46 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include <../QtGui/QPushButton>
+/*
+#define Q_OBJECT
+#define signals public
+#define slots
+#typedef qreal
+#define opacity
+#define READ
+#define opacity
+#define WRITE
+#define setOpacity
+//#define setPosition
+*/
+//qreal position;
+
+class QObject
+{
+public:
+	QObject ( QObject * parent = 0 ){}
+	~QObject (){}
+	static bool connect(QPushButton *, const char *, const char *, const char *){}
+
+#if 0	
+	static bool connect(const QObject *sender, const char *signal,
+                        const QObject *receiver, const char *member, ConnectionType =
+#ifdef qdoc
+                        AutoConnection
+#else
+#ifdef QT3_SUPPORT
+                        AutoCompatConnection
+#else
+                        AutoConnection
+#endif
+#endif
+        ){}
+#endif
+
+};

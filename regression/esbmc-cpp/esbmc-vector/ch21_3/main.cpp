@@ -1,6 +1,7 @@
 // Fig. 21.15: fig21_15.cpp
 // Testing Standard Library vector class template 
 // element-manipulation functions.
+#include <string>
 
 #include <iostream>
 using std::cout;

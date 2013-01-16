@@ -343,6 +343,8 @@ void goto_convertt::convert(
     convert_catch(code, dest);
   else if(statement=="throw_decl")
     convert_throw_decl(code, dest);
+  else if(statement=="throw_decl_end")
+    convert_throw_decl_end(code,dest);
   else
   {
     copy(code, OTHER, dest);
@@ -354,6 +356,27 @@ void goto_convertt::convert(
     dest.add_instruction(SKIP);
     dest.instructions.back().code.make_nil();
   }
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::convert_throw_decl_end
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::convert_throw_decl_end(const exprt &expr, goto_programt &dest)
+{
+  // add the THROW_DECL_END instruction to 'dest'
+  goto_programt::targett throw_decl_end_instruction=dest.add_instruction();
+  throw_decl_end_instruction->make_throw_decl_end();
+  throw_decl_end_instruction->code.set_statement("throw_decl_end");
+  throw_decl_end_instruction->location=expr.location();
 }
 
 /*******************************************************************\
@@ -373,7 +396,7 @@ void goto_convertt::convert_throw_decl(const exprt &expr, goto_programt &dest)
   // add the THROW_DECL instruction to 'dest'
   goto_programt::targett throw_decl_instruction=dest.add_instruction();
   throw_decl_instruction->make_throw_decl();
-  throw_decl_instruction->code.set_statement("throw-decl");
+  throw_decl_instruction->code.set_statement("throw_decl");
   throw_decl_instruction->location=expr.location();
 
   // the THROW_DECL instruction is annotated with a list of IDs,
@@ -953,14 +976,13 @@ void goto_convertt::convert_decl(
   else
   {
     exprt initializer;
-
     codet tmp(code);
     initializer=code.op1();
     tmp.operands().resize(1); // just resize the vector, this will get rid of op1
 
     goto_programt sideeffects;
-    remove_sideeffects(initializer, sideeffects);
-    dest.destructive_append(sideeffects);
+
+
 
     if(options.get_bool_option("atomicity-check"))
     {
@@ -969,11 +991,58 @@ void goto_convertt::convert_decl(
         break_globals2assignments(initializer, dest,code.location());
     }
 
+    if(initializer.is_typecast())
+    {
+      if(initializer.get("cast")=="dynamic")
+      {
+        exprt op0 = initializer.op0();
+        initializer.swap(op0);
+        //std::cout << "initializer: "<< initializer << std::endl;
+        if(!code.op1().is_empty())
+        {
+          exprt function = code.op1();
+          // We must check if the is a exception list
+          // If there is, we must throw the exception
+          if (function.has_operands())
+          {
+            if (function.op0().has_operands())
+            {
+              const exprt& exception_list=
+                  static_cast<const exprt&>(function.op0().op0().find("exception_list"));
+
+              if(exception_list.is_not_nil())
+              {
+                // Let's create an instruction for bad_cast
+
+                // Add new instruction throw
+                goto_programt::targett t=dest.add_instruction(THROW);
+                t->code=codet("cpp-throw");
+                t->location=function.location();
+                t->code.set("exception_list", exception_list);
+              }
+            }
+          }
+          else
+          {
+            remove_sideeffects(initializer, dest);
+            dest.output(std::cout);
+          }
+
+          // break up into decl and assignment
+          copy(tmp, OTHER, dest);
+          code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
+          assign.location()=tmp.location();
+          copy(assign, ASSIGN, dest);
+          return;
+        }
+      }
+    }
+    remove_sideeffects(initializer, sideeffects);
+    dest.destructive_append(sideeffects);
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
-
     copy(assign, ASSIGN, dest);
   }
 }
@@ -1379,10 +1448,56 @@ void goto_convertt::convert_cpp_delete(
     throw "cpp_delete statement takes one operand";
   }
 
-  codet tmp(code);
+  exprt tmp_op=code.op0();
 
-  remove_sideeffects(tmp.op0(), dest);
-  copy(tmp, OTHER, dest);
+  // we call the destructor, and then free
+  const exprt &destructor=
+    static_cast<const exprt &>(code.find("destructor"));
+
+  if(destructor.is_not_nil())
+  {
+    if(code.statement()=="cpp_delete[]")
+    {
+      // build loop
+    }
+    else if(code.statement()=="cpp_delete")
+    {
+      exprt deref_op("dereference", tmp_op.type().subtype());
+      deref_op.copy_to_operands(tmp_op);
+
+      codet tmp_code=to_code(destructor);
+      replace_new_object(deref_op, tmp_code);
+      convert(tmp_code, dest);
+    }
+    else
+      assert(0);
+  }
+
+  // preserve the call
+  codet delete_statement("cpp_delete");
+  delete_statement.location()=code.location();
+  delete_statement.copy_to_operands(tmp_op);
+
+  goto_programt::targett t_f=dest.add_instruction(OTHER);
+  t_f->code=delete_statement;
+  t_f->location=code.location();
+
+  // now do "delete"
+  exprt valid_expr("valid_object", bool_typet());
+  valid_expr.copy_to_operands(tmp_op);
+
+  // clear alloc bit
+  goto_programt::targett t_c=dest.add_instruction(ASSIGN);
+  t_c->code=code_assignt(valid_expr, false_exprt());
+  t_c->location=code.location();
+
+  exprt deallocated_expr("deallocated_object", bool_typet());
+  deallocated_expr.copy_to_operands(tmp_op);
+
+  //indicate that memory has been deallocated
+  goto_programt::targett t_d=dest.add_instruction(ASSIGN);
+  t_d->code=code_assignt(deallocated_expr, true_exprt());
+  t_d->location=code.location();
 }
 
 /*******************************************************************\
@@ -1749,7 +1864,7 @@ void goto_convertt::convert_for(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ (inductive_step)))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)
@@ -2156,6 +2271,37 @@ void goto_convertt::replace_infinite_loop(
 
 /*******************************************************************\
 
+Function: goto_convertt::set_expr_to_nondet
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::set_expr_to_nondet(
+  exprt &tmp,
+  goto_programt &dest)
+{
+  nondet_varst::const_iterator cache_result;
+  if (tmp.op0().is_constant())
+  {
+    cache_result = nondet_vars.find(tmp.op1());
+    if (cache_result == nondet_vars.end())
+      init_nondet_expr(tmp.op1(), dest);
+  }
+  else
+  {
+    cache_result = nondet_vars.find(tmp.op0());
+    if (cache_result == nondet_vars.end())
+      init_nondet_expr(tmp.op0(), dest);
+  }
+}
+
+/*******************************************************************\
+
 Function: goto_convertt::replace_cond
 
   Inputs:
@@ -2171,6 +2317,7 @@ void goto_convertt::replace_cond(
   goto_programt &dest)
 {
   //std::cout << tmp.pretty() << std::endl;
+  //std::cout << tmp.id() << std::endl;
 
   irep_idt exprid = tmp.id();
 
@@ -2184,21 +2331,11 @@ void goto_convertt::replace_cond(
     if (is_for_block())
       if (check_op_const(tmp.op0(), tmp.location()))
         return ;
-    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast()) return ;
+    else if (tmp.op0().is_typecast() || tmp.op1().is_typecast())
+    	return ;
 
-    nondet_varst::const_iterator cache_result;
-    if (tmp.op0().is_constant())
-    {
-      cache_result = nondet_vars.find(tmp.op1());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op1(), dest);
-    }
-    else
-    {
-      cache_result = nondet_vars.find(tmp.op0());
-      if (cache_result == nondet_vars.end())
-        init_nondet_expr(tmp.op0(), dest);
-    }
+    set_expr_to_nondet(tmp, dest);
+
   }
   else if ( exprid == "<" ||  exprid == "<=")
   {
@@ -2251,6 +2388,7 @@ void goto_convertt::replace_cond(
     if (!tmp.op0().is_symbol())
       print_msg(tmp);
 
+    set_expr_to_nondet(tmp, dest);
   }
   else
   {
@@ -2418,7 +2556,7 @@ void goto_convertt::convert_while(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -2558,7 +2696,7 @@ void goto_convertt::convert_dowhile(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (base_case || (inductive_step)))
+			&& (/*base_case ||*/ inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -2737,7 +2875,7 @@ void goto_convertt::convert_break(
   t->make_goto(targets.break_target);
   t->location=code.location();
 
-  if ((base_case || inductive_step) &&
+  if ((/*base_case ||*/ inductive_step) &&
 	(is_while_block()))
     set_break(true);
 }
@@ -2862,7 +3000,7 @@ void goto_convertt::convert_goto(
   // remember it to do target later
   targets.gotos.insert(t);
 
-  if ((base_case || inductive_step) &&
+  if ((/*base_case ||*/ inductive_step) &&
 	(is_while_block()))
     set_goto(true);
 }

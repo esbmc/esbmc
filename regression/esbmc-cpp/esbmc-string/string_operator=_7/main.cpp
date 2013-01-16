@@ -11,9 +11,9 @@ int main ()
   str1 = "Test string: ";   // c-string
   str2 = 'x';               // single character
   str3 = str1 + str2;       // string
-  
+
   str4 = str3 + "(n) in f(" + 'n' + ')';
-  
+
   assert(str3 == "Test string: x(n) in f(n)"); 		//added
   cout << str3  << endl;
   return 0;

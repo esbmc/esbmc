@@ -10,8 +10,8 @@ bool mypredicate (int i, int j) {
 }
 
 int main () {
-  int myints[]={10,20,30,30,20,10,10,20};
-  vector<int> myvector (myints,myints+8);
+  int myints[]={10,20,30,30,20};
+  vector<int> myvector (myints,myints+5);
 
   vector<int>::iterator it;
 

@@ -1,0 +1,22 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "vector"
+
+#define QVector std::vector
+
+#if 0
+template<class T> class QVector
+{
+public:
+	QVector (){}
+	~QVector (){}
+	int size() const{}
+	void push_back( const T& value ){}
+};
+#endif

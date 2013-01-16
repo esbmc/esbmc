@@ -18,7 +18,7 @@
 #endif
 
 #ifndef _SIZE_T_DEFINED
-typedef unsigned int size_t;
+typedef int size_t;
 #endif
 
 #ifndef _PTRDIFF_T_DEFINED

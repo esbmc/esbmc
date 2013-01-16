@@ -4,6 +4,7 @@
 #include <vector>
 #include <ctime>
 #include <cstdlib>
+#include <cassert>
 using namespace std;
 
 // function generator:
@@ -19,7 +20,7 @@ struct c_unique {
 
 int main () {
   srand ( unsigned ( time(NULL) ) );
-
+//1 2 3 4 5 6 7 8
   vector<int> myvector (8);
   vector<int>::iterator it;
 
@@ -30,6 +31,11 @@ int main () {
     cout << " " << *it;
 
   generate (myvector.begin(), myvector.end(), UniqueNumber);
+  
+  assert(myvector[0] == 1);
+  assert(myvector[1] == 2);
+  assert(myvector[2] == 3);
+  assert(myvector[3] == 4);
 
   cout << "\nmyvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

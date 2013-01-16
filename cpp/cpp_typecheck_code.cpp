@@ -43,6 +43,10 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_throw_decl(code);
   }
+  else if(statement=="throw_decl_end")
+  {
+    // Ignore
+  }
   else if(statement=="member_initializer")
   {
     code.type()=typet("code");
@@ -121,24 +125,20 @@ void cpp_typecheckt::typecheck_catch(codet &code)
   {
     code_blockt &block=to_code_block(to_code(*it));
 
-    // Hack to fix dereference bug. This is probably not the right
-    // thing to do but works
-    if(block.has_operands())
-    {
-      if(block.op0().has_operands())
-      {
-        if(block.op0().op0().has_operands())
-        {
-          typet &catch_type = block.op0().op0().op0().type();
-
-          if(catch_type.get_bool("#reference"))
+    // Delay catch instatiation to goto-symex
+    if(it!=operands.begin())
+      if(block.has_operands())
+        if(block.op0().has_operands())
+          if(block.op0().op0().has_operands())
           {
-            typet catch_type_nil("nil");
-            block.op0().op0().op0().type().swap(catch_type_nil);
+            irept name=block.op0().op0().op0().find("name");
+            if(block.op0().op0().op0().find("name").get_sub().size())
+              if(name.get_sub()[0].identifier() != irep_idt("#anon"))
+              {
+                name.set("catch_decl",true);
+                block.op0().op0().op0().set("name",name);
+              }
           }
-        }
-      }
-    }
 
     typecheck_code(block);
 
@@ -161,6 +161,89 @@ void cpp_typecheckt::typecheck_catch(codet &code)
       it->set("exception_id", cpp_exception_id(type, *this));
     }
   }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_ifthenelse(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // if(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+    typecheck_code(to_code(code.op1()));
+
+    if(code.operands().size()==3 &&
+       !code.op2().is_nil())
+      typecheck_code(to_code(code.op2()));
+  }
+  else
+    c_typecheck_baset::typecheck_ifthenelse(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_while
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_while(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // while(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_while(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_switch
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_switch(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // switch(int i=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_switch(code);
 }
 
 /*******************************************************************\
@@ -422,7 +505,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
       if(symbol.value.id()=="code")
         new_code.copy_to_operands(symbol.value);
     }
-    else
+    else if(!declarator.find("name").get_bool("catch_decl"))
     {
       exprt object_expr=cpp_symbol_expr(symbol);
 

@@ -9,7 +9,6 @@
 #include <assert.h>
 
 #include <iostream>
-#include <iomanip>
 #include <math.h>
 #include <iomanip>
 #include <sstream>
@@ -20,15 +19,6 @@
 #include <std_types.h>
 
 #include "z3_conv.h"
-
-std::string
-z3_convt::double2string(double d) const
-{
-
-  std::ostringstream format_message;
-  format_message << std::setprecision(12) << d;
-  return format_message.str();
-}
 
 std::string
 z3_convt::get_fixed_point(const unsigned width, std::string value) const
@@ -53,7 +43,6 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   value = integer2binary(string2integer(double2string(magnitude), 10),width / 2)
                          +integer2binary(string2integer(double2string(fraction),
                          10), width / 2);
-
   return value;
 }
 
@@ -137,7 +126,6 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       std::string index = Z3_get_numeral_string(z3_ctx, idx);
       mp_integer i = string2integer(index);
       exprt val = bv_get_rec(value, type.subtype());
-
       elems_in_z3_order.push_back(array_elem(i, val));
     }
 
@@ -284,6 +272,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
+    return value_expr;
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
       return nil_exprt();

@@ -24,6 +24,7 @@
 #include <fixedbv.h>
 #include <solvers/flattening/boolbv.h>
 #include <solvers/flattening/boolbv_type.h>
+#include <iomanip>
 
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
@@ -288,12 +289,21 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
+#if 0
+std::string stringify(double x)
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << x;
+  return format_message.str();
+}
+#endif
+
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
   DEBUGLOC;
 
-  const int precision = 10000;
+  const int precision = 1000000;
   std::string i, f, b, result;
   double integer, fraction, base;
   int i_int, f_int;
@@ -313,13 +323,12 @@ z3_convt::fixed_point(std::string v, unsigned width)
 
   fraction = fraction * precision;
 
-  i_int = (int)integer;
-  f_int = (int)fraction + 1;
-
-  if (fraction != 0)
-    result = itos(i_int * precision + f_int) + "/" + itos(precision);
-  else
-    result = itos(i_int);
+  if (fraction == 0)
+    result = double2string(integer);
+  else  {
+    int numerator = (integer*precision + fraction);
+    result = itos(numerator) + "/" + double2string(precision); 
+  }
 
   return result;
 }
@@ -2481,6 +2490,11 @@ z3_convt::convert_address_of(const exprt &expr, Z3_ast &bv)
     ifexpr.op1() = addrof1;
     ifexpr.op2() = addrof2;
     convert_bv(ifexpr, bv);
+  } else if (expr.op0().id() == "typecast" &&
+             expr.op0().op0().id() == "symbol") {
+    exprt tmp("address_of", expr.type());
+    tmp.copy_to_operands(expr.op0().op0());
+    convert_bv(tmp, bv);
   } else {
     throw new conv_error("Unrecognized address_of operand", expr);
   }
@@ -2865,7 +2879,7 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
         cond = Z3_mk_eq(z3_ctx, bv, Z3_mk_false(z3_ctx));
       else
       {
-        std::cout << "we do not support `" << struct_type.components()[j].type().id() 
+        std::cout << "we do not support `" << struct_type.components()[j].type().id()
                   << "' in the state vector" << std::endl;
         assert(0);
       }

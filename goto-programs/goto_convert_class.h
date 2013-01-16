@@ -192,6 +192,7 @@ protected:
   //
   void convert_catch(const codet &code,goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
+  void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
 
   //
   // k-induction conversion
@@ -226,6 +227,7 @@ protected:
   void replace_infinite_loop(exprt &tmp, goto_programt &dest);
   void disable_k_induction(void);
   void print_msg_mem_alloc(const exprt &tmp);
+  void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
 
   //
   // gotos

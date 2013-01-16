@@ -19,6 +19,37 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_template_args.h"
 
 /*******************************************************************\
+Function: cpp_typecheckt::salvage_default_parameters
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::salvage_default_parameters(
+  const template_typet &old_type,
+  template_typet &new_type)
+{
+  const template_typet::parameterst &old_parameters=old_type.parameters();
+  template_typet::parameterst &new_parameters=new_type.parameters();
+
+  for(unsigned i=0; i<new_parameters.size(); i++)
+  {
+    if(i<old_parameters.size() &&
+       old_parameters[i].has_default_parameter() &&
+       !new_parameters[i].has_default_parameter())
+    {
+      // TODO! The default may depend on previous parameters!!
+      new_parameters[i].default_parameter()=old_parameters[i].default_parameter();
+    }
+  }
+}
+
+
+/*******************************************************************\
 
 Function: cpp_typecheckt::check_template_restrictions
 
@@ -133,10 +164,13 @@ void cpp_typecheckt::typecheck_template_class(
   if(previous_symbol!=context.symbols.end())
   {
     // there already
+    const cpp_declarationt &previous_declaration=
+        to_cpp_declaration(previous_symbol->second.type);
 
     bool previous_has_body=
       previous_symbol->second.type.type().body().is_not_nil();
 
+    // check if we have 2 bodies
     if(has_body && previous_has_body)
     {
       err_location(cpp_name.location());
@@ -150,6 +184,9 @@ void cpp_typecheckt::typecheck_template_class(
     if(has_body)
     {
       // We replace the template!
+      salvage_default_parameters(
+          previous_declaration.template_type(),
+          declaration.template_type());
       previous_symbol->second.type.swap(declaration);
 
       // We also replace the template scope (the old one could be deleted).
@@ -392,7 +429,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   symbolt &template_symbol=
     context.symbols.find(cpp_id.identifier)->second;
 
-  exprt *template_methods = &static_cast<exprt &>(
+  exprt *template_methods=&static_cast<exprt &>(
       template_symbol.value.add("template_methods"));
   template_methods->copy_to_operands(declaration);
 
@@ -578,7 +615,7 @@ void cpp_typecheckt::convert_template_class_specialization(
   // get the template symbol
 
   cpp_scopest::id_sett id_set;
-  cpp_scopes.get_ids(base_name, cpp_idt::TEMPLATE, id_set ,true);
+  cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE,id_set,true);
 
   // remove any specializations
   for(cpp_scopest::id_sett::iterator
@@ -723,7 +760,7 @@ void cpp_typecheckt::convert_template_function_or_member_specialization(
 
     cpp_scopest::id_sett id_set;
 
-    cpp_scopes.get_ids(base_name, id_set, true);
+    cpp_scopes.get_ids(base_name,id_set,true);
 
     if(id_set.empty())
     {
@@ -894,7 +931,7 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
   const template_typet &template_type=
     to_cpp_declaration(template_symbol.type).template_type();
 
-  // bad re-cast
+  // bad re-cast, but better than copying the args one by one
   cpp_template_args_tct result=
     (const cpp_template_args_tct &)(template_args);
 
@@ -1000,164 +1037,6 @@ cpp_template_args_tct cpp_typecheckt::typecheck_template_args(
   assert(args.size()==parameters.size());
 
   return result;
-}
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::typecheck_template_args
-
-  Inputs: location, non-typechecked template arguments
-
- Outputs: typechecked template arguments
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_typecheckt::typecheck_template_args(
-  irept &template_args)
-{
-
-  if(template_args.id()=="already_typechecked")
-  {
-      exprt args =
-        static_cast<exprt&>(template_args);
-      assert(args.operands().size()==1);
-      template_args.swap(args.op0());
-      return;
-  }
-
-  irept& args = template_args.add("arguments");
-
-  Forall_irep(args_it, args.get_sub())
-  {
-
-    exprt &t=(exprt &)*args_it;
-
-    if(t.id()=="type")
-      typecheck_type(t.type());
-    else if(t.id() == "ambiguous")
-    {
-      // it can be either a template argument or a type
-      exprt res=
-        resolve(
-          to_cpp_name(t.type()),
-          cpp_typecheck_resolvet::BOTH,
-          cpp_typecheck_fargst());
-
-       t.swap(res);
-    }
-    else
-    {
-      exprt tmp(t);
-      typecheck_expr(tmp);
-      simplify(tmp);
-      t.swap(tmp);
-
-
-    }
-  }
-}
-
-
-/*******************************************************************\
-
-Function: cpp_typecheckt::build_template_map
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void cpp_typecheckt::build_template_map(
-  const typet &type,
-  const irept &template_args)
-{
-  const irept &type_arguments=type.arguments();
-  irept instance=template_args.arguments();
-
-  irept::subt::const_iterator t_it=
-    type_arguments.get_sub().begin();
-
-  #if 0
-  std::cout << "A: " << type_arguments.pretty() << std::endl;
-  std::cout << "I: " << instance.pretty() << std::endl;
-  #endif
-
-   if(instance.get_sub().size() < type_arguments.get_sub().size())
-   {
-	   // check for default parameters
-	   for(unsigned i = instance.get_sub().size();
-		i < type_arguments.get_sub().size();
-		i++)
-	   {
-		   const exprt& arg =
-			   static_cast<const exprt&>(type_arguments.get_sub()[i]);
-		   exprt value = static_cast<const exprt&>(arg.find("#default"));
-		   if(value.is_not_nil())
-			   instance.get_sub().push_back(value);
-		   else break;
-	   }
-   }
-
-
-  if(instance.get_sub().size()!=type_arguments.get_sub().size())
-  {
-    //ps_irep("type",type);
-    //ps_irep("template_args",template_args);
-    err_location(template_args);
-    str << "wrong number of template arguments "
-        << "(expected " << type_arguments.get_sub().size()
-        << ", but got " << instance.get_sub().size()
-        << ").\n"
-        << "Expected: " << type_arguments.pretty() << std::endl
-        << "But got: "  << instance.pretty() << std::endl;
-    throw 0;
-  }
-
-  forall_irep(i_it, instance.get_sub())
-  {
-    assert(t_it!=type_arguments.get_sub().end());
-
-    const exprt &t=(exprt &)*t_it;
-    const exprt &i=(exprt &)*i_it;
-
-    if(t.id()=="type")
-    {
-      if(i.id()!="type")
-      {
-        err_location(i);
-        str << "expected type, but got expression";
-        throw 0;
-      }
-
-      typet tmp(i.type());
-
-      template_map.type_map[t.type().identifier()] = tmp;
-      //template_map.type_map.insert(std::pair<irep_idt, typet>
-      //  (t.type().identifier(), tmp));
-    }
-    else
-    {
-      if(i.id()=="type")
-      {
-        err_location(*i_it);
-        str << "expected expression, but got type";
-        throw 0;
-      }
-
-      exprt tmp(i);
-      implicit_typecast(tmp, t.type());
-
-      template_map.expr_map.insert(std::pair<irep_idt, exprt>
-        (t.identifier(), tmp));
-    }
-
-    t_it++;
-  }
 }
 
 /*******************************************************************\

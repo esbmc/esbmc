@@ -1,0 +1,29 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+class QLayout{
+	QLayout (){}
+};
+
+class QWidget{
+public:
+void	setLayout ( QLayout * layout ){}
+void	setLayout ( void * layout ){}
+void	show (){}
+};
+
+class QGraphicsView
+{
+public:
+	QGraphicsView ( QWidget * parent = 0 ){}
+	QGraphicsView ( QGraphicsScene * scene, QWidget * parent = 0 ){
+		__ESBMC_assert(scene!=NULL, "invalid parameter");
+	}
+	void	show (){}
+	~QGraphicsView (){}
+};

@@ -86,7 +86,7 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
     typecheck_expr_explicit_typecast(expr);
   else if(expr.id()=="explicit-constructor-call")
     typecheck_expr_explicit_constructor_call(expr);
-  else if(expr.id()=="string_constant")
+  else if(expr.id()=="string-constant")
   {
     c_typecheck_baset::typecheck_expr_main(expr);
 
@@ -130,7 +130,7 @@ void cpp_typecheckt::typecheck_expr_main(exprt &expr)
   {
     // these appear to have type "struct _GUID"
     // and they are lvalues!
-    expr.type()=symbol_typet("c::struct._GUID");
+    expr.type()=symbol_typet("c::tag._GUID");
     follow(expr.type());
     expr.set("#lvalue", true);
   }
@@ -256,7 +256,6 @@ void cpp_typecheckt::typecheck_expr_trinary(exprt &expr)
   }
   else
   {
-
     exprt e1 = expr.op1();
     exprt e2 = expr.op2();
 
@@ -493,9 +492,7 @@ bool cpp_typecheckt::overloadable(const exprt &expr)
 
   forall_operands(it, expr)
   {
-    typet t(it->type());
-
-    follow_symbol(t);
+    typet t=follow(it->type());
 
     if(is_reference(t))
       t=t.subtype();
@@ -793,7 +790,7 @@ void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
     // nothing really to do; one can throw _almost_ anything
     const typet &exception_type=expr.op0().type();
 
-    irep_idt id = follow(exception_type).id();
+    irep_idt id=follow(exception_type).id();
 
     if(id=="empty")
     {
@@ -828,13 +825,7 @@ Purpose:
 
 void cpp_typecheckt::typecheck_expr_new(exprt &expr)
 {
-  expr.set("mode", "C++");
-
   // next, find out if we do an array
-
-//  const contextt &ctxt = namespacet::get_context();
-//  ctxt.show(std::cout);
-
 
   if(expr.type().id()=="array")
   {
@@ -842,7 +833,7 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     typecheck_type(expr.type().subtype());
 
     // typecheck the size
-    exprt &size=static_cast<exprt&>(expr.type().add("size"));
+    exprt &size=to_array_type(expr.type()).size();
     typecheck_expr(size);
 
     bool size_is_unsigned=(size.type().id()=="unsignedbv");
@@ -851,14 +842,6 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     implicit_typecast(size, integer_type);
 
     expr.statement("cpp_new[]");
-
-    // this must not have an initializer
-    if(expr.operands().size()!=0)
-    {
-      err_location(expr.op0());
-      str << "new with array type must not use explicit construction";
-      throw 0;
-    }
 
     // save the size expression
     expr.set("size", to_array_type(expr.type()).size());
@@ -889,22 +872,32 @@ void cpp_typecheckt::typecheck_expr_new(exprt &expr)
     object_expr.swap(tmp);
   }
 
-  Forall_operands(it, expr)
+  // not yet typechecked-stuff
+  exprt &initializer=static_cast<exprt &>(expr.add("initializer"));
+
+  // arrays must not have an initializer
+  if(!initializer.operands().empty() &&
+     expr.statement()=="cpp_new[]")
   {
-    exprt tmp("already_typechecked");
-    tmp.move_to_operands(*it);
-    it->swap(tmp);
+    err_location(expr.op0());
+    str << "new with array type must not use initializer";
+    throw 0;
   }
 
   exprt code=
     cpp_constructor(
       expr.find_location(),
       object_expr,
-      expr.operands());
+      initializer.operands());
 
   expr.add("initializer").swap(code);
-  expr.remove("operands");
 
+  // we add the size of the object for convenience of the
+  // runtime library
+
+  exprt &sizeof_expr=static_cast<exprt &>(expr.add("sizeof"));
+  sizeof_expr=c_sizeof(expr.type().subtype(), *this);
+  sizeof_expr.add("#c_sizeof_type")=expr.type().subtype();
 }
 
 /*******************************************************************\
@@ -945,6 +938,8 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
     // Explicitly given value, e.g., int(1).
     // There is an expr-vs-type ambiguity, as it is possible to write
     // (f)(1), where 'f' is a function symbol and not a type.
+    // This also exists with a "comma expression", e.g.,
+    // (f)(1, 2, 3)
 
     if(expr.type().id()=="cpp-name")
     {
@@ -989,6 +984,7 @@ void cpp_typecheckt::typecheck_expr_explicit_typecast(exprt &expr)
        reinterpret_typecast(expr.op0(), expr.type(), new_expr, false))
     {
       expr=new_expr;
+      add_implicit_dereference(expr);
     }
     else
     {
@@ -1096,7 +1092,7 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
   else
     assert(false);
 
-  typet pointer_type=expr.op0().type();
+  typet pointer_type=follow(expr.op0().type());
 
   if(pointer_type.id()!="pointer")
   {
@@ -1106,8 +1102,31 @@ void cpp_typecheckt::typecheck_expr_delete(exprt &expr)
     throw 0;
   }
 
-  // these are always void
+  // remove any const-ness of the argument
+  // (which would impair the call to the destructor)
+  pointer_type.subtype().remove("#constant");
+
+  // delete expressions are always void
   expr.type()=typet("empty");
+
+  // we provide the right destructor, for the convenience
+  // of later stages
+  exprt new_object("new_object", pointer_type.subtype());
+  new_object.location()=expr.location();
+  new_object.set("#lvalue", true);
+
+  already_typechecked(new_object);
+
+  codet destructor_code=cpp_destructor(
+    expr.location(),
+    pointer_type.subtype(),
+    new_object);
+
+  // this isn't typechecked yet
+  if(destructor_code.is_not_nil())
+    typecheck_code(destructor_code);
+
+  expr.set("destructor", destructor_code);
 }
 
 /*******************************************************************\
@@ -1156,6 +1175,21 @@ void cpp_typecheckt::typecheck_expr_member(
 
   exprt &op0=expr.op0();
   add_implicit_dereference(op0);
+
+  // The notation for explicit calls to destructors can be used regardless
+  // of whether the type defines a destructor.  This allows you to make such
+  // explicit calls without knowing if a destructor is defined for the type.
+  // An explicit call to a destructor where none is defined has no effect.
+
+  if(expr.find("component_cpp_name").is_not_nil() &&
+     to_cpp_name(expr.find("component_cpp_name")).is_destructor() &&
+     follow(op0.type()).id()!="struct")
+  {
+    exprt tmp("cpp_dummy_destructor");
+    tmp.location()=expr.location();
+    expr.swap(tmp);
+    return;
+  }
 
   #ifdef CPP_SYSTEMC_EXTENSION
   if(expr.op0().type().id() == "signedbv" ||
@@ -1223,7 +1257,7 @@ void cpp_typecheckt::typecheck_expr_member(
                         cpp_typecheck_resolvet::VAR,
                         new_fargs);
 
-    if(symbol_expr.id()== "dereference")
+    if(symbol_expr.id()=="dereference")
     {
       assert(symbol_expr.implicit());
       exprt tmp=symbol_expr.op0();
@@ -1269,7 +1303,7 @@ void cpp_typecheckt::typecheck_expr_member(
       expr=symbol_expr;
       return;
     }
-    else if (symbol_expr.id()=="constant")
+    else if(symbol_expr.id()=="constant")
     {
       expr=symbol_expr;
       return;
@@ -1406,7 +1440,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
   add_implicit_dereference(cast_op);
 
   const irep_idt &id=
-  f_op.get_sub().front().identifier();
+    f_op.get_sub().front().identifier();
 
   if(f_op.get_sub().size()!=2 ||
      f_op.get_sub()[1].id()!="template_args")
@@ -1453,6 +1487,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","const");
   }
   else if(id=="dynamic_cast")
   {
@@ -1464,6 +1499,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","dynamic");
   }
   else if(id=="reinterpret_cast")
   {
@@ -1475,6 +1511,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","reinterpret");
   }
   else if(id=="static_cast")
   {
@@ -1486,6 +1523,7 @@ void cpp_typecheckt::typecheck_cast_expr(exprt &expr)
       str << "cast type: `" << to_string(type) << "'";
       throw 0;
     }
+    new_expr.set("cast","static");
   }
   else
     assert(false);
@@ -1677,14 +1715,14 @@ void cpp_typecheckt::typecheck_expr_typeid(exprt &expr)
       // It's NULL :( Let's add a throw bad_typeid
 
       // Let's create the bad_typeid exception
+      irep_idt bad_typeid_identifier="cpp::std::tag.bad_typeid";
+
       // We must check if the user included typeinfo
-      std::cout << "**** WARNING: throwing a null pointer: ";
-      std::cout << "ensure that the typeinfo lib is included" << std::endl;
+      const symbolt *bad_typeid_symbol;
+      bool is_included = lookup(bad_typeid_identifier, bad_typeid_symbol);
 
-      irep_idt bad_typeid_identifier="cpp::std::struct.bad_typeid";
-
-      // If the user haven't included typeinfo, this will fail
-      symbolt bad_typeid_symbol=lookup(bad_typeid_identifier);
+      if(is_included)
+        throw "Error: must #include <typeinfo> before using typeid";
 
       // Ok! Let's create the temp object bad_typeid
       exprt bad_typeid;
@@ -1850,6 +1888,13 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
     // but usually just type adjustments.
     typecheck_cast_expr(expr);
     add_implicit_dereference(expr);
+    return;
+  }
+  else if(expr.function().id()=="cpp_dummy_destructor")
+  {
+    // these don't do anything, e.g., (char*)->~char()
+    expr.statement("skip");
+    expr.type()=empty_typet();
     return;
   }
 
@@ -2466,6 +2511,50 @@ void cpp_typecheckt::typecheck_side_effect_assignment(exprt &expr)
     // Note that in C++ (as opposed to C), the assignment yields
     // an lvalue!
     expr.set("#lvalue", true);
+
+    // If it was a type cast, we need to update the symbol
+    if(expr.operands().size()>0
+       && expr.op1().id()=="typecast")
+    {
+      if(expr.op0().identifier()!="")
+      {
+        symbolt &symbol=
+            context.symbols.find(expr.op0().identifier())->second;
+        if(expr.op1().has_operands())
+        {
+          exprt &initializer=
+              static_cast<exprt &>(expr.op1().op0().add("initializer"));
+
+          if(initializer.has_operands())
+          {
+            symbol.value = initializer.op0();
+          }
+        }
+      }
+      //Array
+      else if (expr.op0().type().subtype().identifier()!="")
+      {
+        const symbolt *symbol;
+        bool is_included = lookup(expr.op0().op0().identifier(), symbol);
+
+        if(expr.op1().has_operands())
+        {
+          exprt &initializer=
+              static_cast<exprt &>(expr.op1().op0().add("initializer"));
+
+          if(initializer.has_operands())
+          {
+            if(!is_included) //find
+            {
+              symbolt &symbol_temp=
+                  context.symbols.find(expr.op0().op0().identifier())->second;
+              symbol_temp.value.id("array");
+              symbol_temp.value.operands().push_back(initializer.op0());
+            }
+          }
+        }
+      }
+    }
     return;
   }
 

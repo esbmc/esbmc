@@ -132,6 +132,9 @@ protected:
   //
   // Templates
   //
+  void salvage_default_parameters(
+      const template_typet &old_type,
+      template_typet &new_type);
 
   void check_template_restrictions(
     const irept &cpp_name,
@@ -163,8 +166,6 @@ protected:
     const irep_idt &base_name,
     const template_typet &template_type,
     const typet &function_type);
-
-  void typecheck_template_args(irept &template_args);
 
   cpp_template_args_tct typecheck_template_args(
     const locationt &location,
@@ -205,12 +206,6 @@ protected:
 
   const symbolt &instantiate_template(
     const locationt &location,
-    const irep_idt &identifier,
-    const irept &template_args,
-    const typet &specialization = typet("nil"));
-
-  const symbolt &instantiate_template(
-    const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_tct &specialization_template_args,
     const cpp_template_args_tct &full_template_args,
@@ -218,10 +213,6 @@ protected:
 
   unsigned template_counter;
   unsigned anon_counter;
-
-  void build_template_map(
-    const typet &type,
-    const irept &template_args);
 
   template_mapt template_map;
 
@@ -367,11 +358,6 @@ protected:
     bool has_body,
     bool tag_only_declaration);
 
-  irep_idt compound_identifier(
-    const irep_idt &_identifier,
-    const irep_idt &_base_name,
-    bool has_body);
-
   void typecheck_compound_declarator(
     const symbolt &symbol,
     const cpp_declarationt &declaration,
@@ -426,6 +412,9 @@ protected:
   virtual void typecheck_member_initializer(codet &code);
   virtual void typecheck_decl(codet &code);
   virtual void typecheck_block(codet &code);
+  virtual void typecheck_ifthenelse(codet &code);
+  virtual void typecheck_while(codet &code);
+  virtual void typecheck_switch(codet &code);
 
   const struct_typet &this_struct_type();
 

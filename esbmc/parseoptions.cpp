@@ -237,7 +237,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-div-by-zero-check", true);
     options.set_option("no-pointer-check", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", true);
+    //options.set_option("partial-loops", true);
   }
 
   if(cmdline.isset("forward-condition") ||
@@ -1394,8 +1394,9 @@ void cbmc_parseoptionst::help()
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
-    " --version                    show current ESBMC version and exit\n\n"
     " --show-goto-functions        show goto program\n"
+    " --extended-try-analysis      check all the try block, even when an exception is throw\n"
+    " --version                    show current ESBMC version and exit\n\n"
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

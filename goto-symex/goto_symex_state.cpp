@@ -94,15 +94,12 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
     return true;
   }
-#if 1
   else if(expr.id()==exprt::arrayof)
   {
     if(expr.operands().size()==1)
       if (expr.op0().id()==exprt::constant && expr.op0().type().id()!=typet::t_bool)
         return true;
   }
-#endif
-#if 1
   else if(expr.id()==exprt::with)
   {
 	with_counter++;
@@ -124,7 +121,6 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
     with_counter=0;
     return true;
   }
-#endif
   else if(expr.id()=="struct")
   {
     forall_operands(it, expr)

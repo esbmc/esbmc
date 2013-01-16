@@ -28,36 +28,6 @@ int main ()
   it--;
   assert(*it == 30);
   it++;
-                                          
-  mylist2.splice (mylist2.begin(),mylist1, it);
-                                // mylist1: 1 10 20 30 3 4
-                                // mylist2: 2
-                                // "it" is now invalid.
-  assert(mylist1.size() == 6);                                
-  assert(mylist2.size() == 1);
-  
-  it = mylist1.begin();
-  advance(it,3);                // "it" points now to 30
-
-  mylist1.splice ( mylist1.begin(), mylist1, it, mylist1.end());
-                                // mylist1: 30 3 4 1 10 20
-  assert(mylist1.size() == 6);
-  it = mylist1.begin();
-  assert(*it == 30);   it++;
-  assert(*it == 3);  it++;
-  assert(*it == 4); it++;
-  assert(*it == 1); it++;
-  assert(*it == 10); it++;
-  assert(*it == 20);
-
-  cout << "mylist1 contains:";
-  for (it=mylist1.begin(); it!=mylist1.end(); it++)
-    cout << " " << *it;
-
-  cout << "\nmylist2 contains:";
-  for (it=mylist2.begin(); it!=mylist2.end(); it++)
-    cout << " " << *it;
-  cout << endl;
 
   return 0;
 }

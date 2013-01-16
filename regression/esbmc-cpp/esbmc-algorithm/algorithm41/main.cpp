@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool compare_as_ints (double i,double j)
@@ -9,25 +10,33 @@ bool compare_as_ints (double i,double j)
   return (int(i)<int(j));
 }
 
+//using default comparison: 1.32 1.41 1.62 1.73
+//using 'compare_as_ints' : 1.41 1.73 1.32 1.62
+
 int main () {
-  double mydoubles[] = {3.14, 1.41, 2.72, 4.67, 1.73, 1.32, 1.62, 2.58};
+  double mydoubles[] = {1.41, 1.73, 1.32, 1.62};
 
   vector<double> myvector;
   vector<double>::iterator it;
 
-  myvector.assign(mydoubles,mydoubles+8);
+  myvector.assign(mydoubles,mydoubles+4);
 
   cout << "using default comparison:";
   stable_sort (myvector.begin(), myvector.end());
-  for (it=myvector.begin(); it!=myvector.end(); ++it)
-    cout << " " << *it;
+  assert(myvector[0] == 1.32);
+  assert(myvector[1] == 1.41);
+  assert(myvector[2] == 1.62);
+  assert(myvector[3] == 1.73);
+//  for (it=myvector.begin(); it!=myvector.end(); ++it)
+//    cout << " " << *it;
 
-  myvector.assign(mydoubles,mydoubles+8);
+//  myvector.assign(mydoubles,mydoubles+4);
 
   cout << "\nusing 'compare_as_ints' :";
-  stable_sort (myvector.begin(), myvector.end(), compare_as_ints);
-  for (it=myvector.begin(); it!=myvector.end(); ++it)
-    cout << " " << *it;
+//  stable_sort (myvector.begin(), myvector.end(), compare_as_ints);
+  
+//  for (it=myvector.begin(); it!=myvector.end(); ++it)
+//    cout << " " << *it;
 
   cout << endl;
 

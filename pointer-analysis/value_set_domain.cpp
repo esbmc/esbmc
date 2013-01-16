@@ -33,10 +33,10 @@ void value_set_domaint::transform(
     // ignore for now
     break;
 
-  case END_FUNCTION:    
+  case END_FUNCTION:
     value_set.do_end_function(get_return_lhs(to_l), ns);
     break;
-  
+
   case RETURN:
   case OTHER:
   case ASSIGN:
@@ -51,7 +51,7 @@ void value_set_domaint::transform(
       value_set.do_function_call(to_l->function, code.arguments(), ns);
     }
     break;
-  
+
   default:;
     // do nothing
   }

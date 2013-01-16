@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
 #include <map>
+#include <stack>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
@@ -386,7 +387,7 @@ protected:
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw();
+  bool symex_throw();
 
   /** Register exception handler on stack. */
   void symex_catch();
@@ -395,8 +396,8 @@ protected:
   void symex_throw_decl();
 
   /** Update throw target. */
-  void update_throw_target(goto_symex_statet::framet* frame,
-    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+  void update_throw_target(goto_symex_statet::exceptiont* except,
+    goto_programt::targett target, codet code=codet("nil"));
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
@@ -408,8 +409,18 @@ protected:
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
    */
-  void handle_throw_decl(goto_symex_statet::framet* frame,
+  int handle_throw_decl(goto_symex_statet::exceptiont* frame,
     const irep_idt &id);
+
+  /**
+   * Call terminate function handler when needed.
+   */
+  bool terminate_handler();
+
+  /**
+   * Call unexpected function handler when needed.
+   */
+  bool unexpected_handler();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
@@ -583,8 +594,20 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  // exception
+  /* Exception Handling.
+   * This will stack the try-catch blocks, so we always know which catch
+   * we should jump.
+   */
+  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
+
+  /** Stack of try-catch blocks. */
+  stack_catcht stack_catch;
+
+  /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Flag to indicate if we are go into the unexpected flow. */
+  bool inside_unexpected;
 };
 
 #endif

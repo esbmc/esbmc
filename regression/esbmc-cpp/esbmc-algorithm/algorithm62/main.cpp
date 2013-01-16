@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <cctype>
+#include <cassert>
 using namespace std;
 
 // a case-insensitive comparison function:
@@ -13,6 +14,7 @@ int main () {
   char second[]="apartment";    // 9 letters
 
   cout << "Using default comparison (operator<): ";
+  assert(lexicographical_compare(first,first+5,second,second+9));
   if (lexicographical_compare(first,first+5,second,second+9))
     cout << first << " is less than " << second << endl;
   else
@@ -21,7 +23,7 @@ int main () {
   else
     cout << first << " and " << second << " are equivalent\n";
 
-
+  assert(lexicographical_compare(second,second+9,first,first+5,mycomp));
   cout << "Using mycomp as comparison object: ";
   if (lexicographical_compare(first,first+5,second,second+9,mycomp))
     cout << first << " is less than " << second << endl;
