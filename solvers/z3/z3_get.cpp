@@ -33,16 +33,31 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   m = value.substr(0, found);
   f = value.substr(found + 1, size);
 
+  if (m.compare("0") == 0 && f.compare("0") == 0)
+    return "0";
+
   v = atof(m.c_str()) / atof(f.c_str());
+
   magnitude = (int)v;
   fraction = v - magnitude;
   tmp = integer2string(power(2, width / 2), 10);
   expoent = atof(tmp.c_str());
   fraction = fraction * expoent;
   fraction = floor(fraction);
+
+  std::string integer_str;
+  integer_str = integer2binary(string2integer(double2string(magnitude), 10), width / 2);
+
   value = integer2binary(string2integer(double2string(magnitude), 10),width / 2)
-                         +integer2binary(string2integer(double2string(fraction),
-                         10), width / 2);
+        + integer2binary(string2integer(double2string(fraction), 10), width / 2);
+
+  if (magnitude == 0) {
+    if (v<0) {
+	  value = integer2binary(string2integer("-1", 10) - binary2integer(integer_str, true), width)
+	        + integer2binary(string2integer(double2string(fraction), 10), width / 2);
+    }
+  }
+
   return value;
 }
 
@@ -272,6 +287,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
     constant_exprt value_expr(type);
     value_expr.set_value(integer2binary(string2integer(value), width));
+    std::cout << "value_expr.pretty(): " << value_expr.pretty() << std::endl;
     return value_expr;
   } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
