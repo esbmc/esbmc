@@ -1,6 +1,6 @@
 /*******************************************************************\
 
-Module: 
+Module:
 
 Author: Felipe Rodrigues and Lucas Cordeiro
 
@@ -658,20 +658,48 @@ public:
 		return it;
 	}
 
-	void swap(deque<T>&);
-	void clear(){
+  void swap(deque<T>& v1)
+  {
+    deque<T> aux;
+    aux = v1;
+    v1 = *this;
+    *this = aux;
+  }
+
+	void clear()
+	{
 		_size = 0;
 		buf[0] = T();
 		buf[1] = T();
 		return;
 	}
 
-	// comparators:
+  // comparators:
+  bool operator==(const deque<T>& rhv)
+  {
+    if(this->size() != rhv.size()) return false;
+    int i = 0;
+    while(i != this->size()){
+      if(this->at(i) != rhv[i]) return false;
+      i++;
+    }
+    return true;
+  }
 
-	bool operator==(const deque<T>&);
-	bool operator!=(const deque<T>&);
-	bool operator>=(const deque<T>&);
-	bool operator<=(const deque<T>&);
+  bool operator!=(const deque<T>& rhv)
+  {
+    return (!(*this == rhv));
+  }
+
+	bool operator>=(const deque<T>& rhv)
+  {
+	  return ((*this == rhv)||(this->size() > rhv.size()));
+  }
+
+	bool operator<=(const deque<T>& rhv)
+  {
+	  return ((*this == rhv)||(this->size() < rhv.size()));
+  }
 
 private:
 	T buf[DEQUE_CAPACITY];
@@ -686,43 +714,6 @@ private:
 	}
 
 };
-
-template <class T>
-bool deque<T>::operator== (const deque<T>& rhv){
-	if(this->size() != rhv.size()) return false;
-	int i = 0;
-	while(i != this->size()){
-		if(this->at(i) != rhv[i]) return false;
-		i++;
-	}
-	return true;
-}
-
-template <class T>
-bool deque<T>::operator!= (const deque<T>& rhv){
-	return (!(*this == rhv));
-}
-
-template <class T>
-bool deque<T>::operator>= (const deque<T>& rhv){
-	return ((*this == rhv)||(this->size() > rhv.size()));
-}
-
-template <class T>
-bool deque<T>::operator<= (const deque<T>& rhv){
-	return ((*this == rhv)||(this->size() < rhv.size()));
-}
-
-// specialized algorithms:
-
-template <class T>
-void deque<T>::swap(deque<T>& v1){
-	deque<T> aux;
-	aux = v1;
-	v1 = *this;
-	*this = aux;
-
-}
 
 }
 

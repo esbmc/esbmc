@@ -1,6 +1,6 @@
 /*******************************************************************\
 
-Module: 
+Module:
 
 Authors: Lucas Cordeiro and Hendrio Marques
 
@@ -11,7 +11,6 @@ Date: August 2012
 #ifndef __STL_VECTOR
 #define __STL_VECTOR
 
-//#include "iterator"
 #include "stdexcept"
 
 #define VECTOR_CAPACITY 500
@@ -646,20 +645,48 @@ public:
 		return it;
 	}
 
-	void swap(vector<T>&);
-	void clear(){
-		_size = 0;
-		buf[0] = T();
-		buf[1] = T();
-		return;
+	void swap(vector<T>& v1)
+	{
+	  vector<T> aux;
+	  aux = v1;
+	  v1 = *this;
+	  *this = aux;
 	}
 
-	// comparators:
+  void clear()
+  {
+    _size = 0;
+	  buf[0] = T();
+    buf[1] = T();
+    return;
+  }
 
-	bool operator==(const vector<T>&);
-	bool operator!=(const vector<T>&);
-	bool operator>=(const vector<T>&);
-	bool operator<=(const vector<T>&);
+  // comparators:
+  bool operator==(const vector<T>& rhv)
+  {
+    if(this->size() != rhv.size()) return false;
+    int i = 0;
+    while(i != this->size()){
+      if(this->at(i) != rhv[i]) return false;
+      i++;
+    }
+    return true;
+  }
+
+  bool operator!=(const vector<T>& rhv)
+  {
+    return (!(*this == rhv));
+  }
+
+  bool operator>=(const vector<T>& rhv)
+  {
+    return ((*this == rhv)||(this->size() > rhv.size()));
+  }
+
+  bool operator<=(const vector<T>& rhv)
+  {
+    return ((*this == rhv)||(this->size() < rhv.size()));
+  }
 
 private:
 	T buf[VECTOR_CAPACITY];
@@ -674,43 +701,6 @@ private:
 	}
 
 };
-
-template <class T>
-bool vector<T>::operator== (const vector<T>& rhv){
-	if(this->size() != rhv.size()) return false;
-	int i = 0;
-	while(i != this->size()){
-		if(this->at(i) != rhv[i]) return false;
-		i++;
-	}
-	return true;
-}
-
-template <class T>
-bool vector<T>::operator!= (const vector<T>& rhv){
-	return (!(*this == rhv));
-}
-
-template <class T>
-bool vector<T>::operator>= (const vector<T>& rhv){
-	return ((*this == rhv)||(this->size() > rhv.size()));
-}
-
-template <class T>
-bool vector<T>::operator<= (const vector<T>& rhv){
-	return ((*this == rhv)||(this->size() < rhv.size()));
-}
-
-// specialized algorithms:
-
-template <class T>
-void vector<T>::swap(vector<T>& v1){
-	vector<T> aux;
-	aux = v1;
-	v1 = *this;
-	*this = aux;
-
-}
 
 }
 
