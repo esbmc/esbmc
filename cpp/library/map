@@ -92,6 +92,45 @@ public:
 		this->_size++;
 	}
 
+	void push_front(const T& x) {
+		if (this->empty()) {
+			this->head = new node(x, NULL, NULL);
+			this->tail = this->head;
+		} else {
+			this->head->prev = new node(x, NULL, this->head);
+			this->head = this->head->prev;
+			if (this->_size == 1)
+				this->tail->prev == this->head;
+		}
+		this->_size++;
+	}
+
+	//template<class X>
+	T search(T& par) {
+		node* tmp = this->head;
+		while (tmp != NULL) {
+			if (!(par.first < tmp->data.first)) {
+				if (tmp->data.first < par.first) {
+					if (tmp->prev == NULL) {
+						this->push_front(par);
+						return par;
+					} else {
+						node* new_node = new node(par, tmp->prev, tmp);
+						tmp->prev->next = new_node;
+						tmp->prev = new_node;
+						return tmp->prev->data;
+					}
+				}
+				par.second = tmp->data.second;
+				return par;
+			}
+		}
+		if (tmp == NULL) {
+			this->push_back(par);
+		}
+		return par;
+	}
+
 };
 #endif
 
@@ -241,7 +280,7 @@ namespace std {
     typedef Compare key_compare;
     typedef int size_type;
 
-	list_esbmc<value_type> map_list;
+	list_esbmc<value_type>* map_list;
 	int _size;
 
 	typedef bool (func)(Key, Key);
@@ -337,21 +376,33 @@ namespace std {
     */};
 
     map() : map_list() {
-    	this->_size = 0;
-    }
-    map( iterator first, iterator last);
-    map(func* x);
-    T& operator[](const Key& x){
-		value_type pair;
-    	if (this->map_list.empty()){
-    		pair.first = x;
-    		pair.second = T();
-    		this->map_list.push_back(pair);
-    		this->_size++;
-    	}
-    	return pair.second;
+        map_list = new list_esbmc<value_type>();
+      	this->_size = 0;
     }
 
+    map( iterator first, iterator last);
+
+    map(func* x);
+
+    map ( map& x ){
+    	this->map_list = x.map_list;
+    	this->_size = x._size;
+    }
+
+    T& operator[]( const Key& x){
+		value_type par(x,T());
+    	if (this->_size == 0){
+			this->map_list->push_back(par);
+    		this->_size++;
+    	}else{
+    		par = this->map_list->search(par);
+    	}
+    	return this->map_list->head->data.second;
+    }
+
+    ~map(){
+    	this->map_list->~list_esbmc();
+    }
     // iterators:
     iterator begin();
     const_iterator begin() const;
@@ -418,4 +469,3 @@ namespace std {
 }
 
 #endif
-
