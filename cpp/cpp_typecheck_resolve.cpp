@@ -1416,6 +1416,7 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.type().get_bool("is_template"))
       {
+        out << cpp_typecheck.lookup(to_symbol_expr(id_expr)).base_name;
       }
       else if(id_expr.type().id()=="code")
       {
@@ -1454,8 +1455,10 @@ void cpp_typecheck_resolvet::show_identifiers(
       }
       else if(id_expr.id()=="member")
       {
-        const symbolt &symbol=cpp_typecheck.lookup(id_expr.component_name());
-        out << " (" << symbol.location << ")";
+        const symbolt *symbol;
+        bool found=cpp_typecheck.lookup(id_expr.component_name(),symbol);
+        if(!found)
+          out << " (" << symbol->location << ")";
       }
       else if(id_expr.id()=="function_template_instance")
       {
@@ -1713,7 +1716,6 @@ exprt cpp_typecheck_resolvet::resolve(
 
   // We disambiguate functions
   resolve_identifierst new_identifiers=identifiers;
-
   remove_templates(new_identifiers);
 
   // we only want _exact_ matches, without templates!
