@@ -1727,7 +1727,8 @@ exprt cpp_typecheck_resolvet::resolve(
         new_identifiers=identifiers;
     }
 
-    disambiguate_functions(new_identifiers, fargs);
+    if(identifiers.size()>1)
+      disambiguate_functions(new_identifiers, fargs);
   }
 
   remove_duplicates(new_identifiers);
