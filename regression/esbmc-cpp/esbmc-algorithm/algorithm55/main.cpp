@@ -20,7 +20,7 @@ int main () {
   assert(v[4] == 40);
   assert(v[5] == 50);
 
-  cout << "symmetric difference has " << int(it - v.begin()) << " elements.\n";
+//  cout << "symmetric difference has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }
