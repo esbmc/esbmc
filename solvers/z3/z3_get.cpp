@@ -49,14 +49,13 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   integer_str = integer2binary(string2integer(double2string(magnitude), 10), width / 2);
   fraction_str = integer2binary(string2integer(double2string(fraction), 10), width / 2);
 
+	value = integer_str + fraction_str;
+
   if (magnitude == 0) {
     if (v<0) {
 	  value = integer2binary(string2integer("-1", 10) - binary2integer(integer_str, true), width)
 	        + integer2binary(string2integer(double2string(fraction), 10), width / 2);
     }
-  }
-  else {
-	value = integer_str + fraction_str;
   }
 
   return value;
