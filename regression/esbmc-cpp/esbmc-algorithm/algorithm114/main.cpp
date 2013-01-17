@@ -17,7 +17,7 @@ int main () {
   it = set_symmetric_difference (first, first+5, second, second+5, v.begin());
                                                // 5 15 25 30 40 50  0  0  0  0
   assert(v[5] != 50);
-  cout << "symmetric difference has " << int(it - v.begin()) << " elements.\n";
+//  cout << "symmetric difference has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }

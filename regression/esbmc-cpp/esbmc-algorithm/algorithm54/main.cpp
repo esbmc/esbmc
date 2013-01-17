@@ -17,7 +17,7 @@ int main () {
   assert(v[1] == 15);
   assert(v[2] == 25);
 
-  cout << "difference has " << int(it - v.begin()) << " elements.\n";
+//  cout << "difference has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }

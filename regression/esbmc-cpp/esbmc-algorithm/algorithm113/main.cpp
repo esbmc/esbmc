@@ -17,7 +17,7 @@ int main () {
   it = set_difference (first, first+5, second, second+5, v.begin());
                                                // 5 15 25  0  0  0  0  0  0  0
   assert(v[1] != 15);
-  cout << "difference has " << int(it - v.begin()) << " elements.\n";
+//  cout << "difference has " << int(it - v.begin()) << " elements.\n";
 
   return 0;
 }
