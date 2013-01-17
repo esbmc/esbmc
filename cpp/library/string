@@ -450,10 +450,12 @@ public:
 	int size() const;
 	size_t rfind(string& s, size_t pos = npos) const;
 	size_t rfind(const char* s, size_t pos = npos) const;
+	size_t rfind(char* s) const;
 	size_t rfind(char c, size_t pos = npos) const;
 	size_t rfind(const char* s, size_t pos = 0, size_t n) const;
 	size_t find_last_of(const string& s, size_t pos = npos) const;
 	size_t find_last_of(const char* s, size_t pos = npos) const;
+	size_t find_last_of(char* s) const;
 	size_t find_last_of(char c, size_t pos = npos) const;
 	size_t find_first_not_of(const string& s, size_t pos = 0) const;
 	size_t find_first_not_of(const char* s, size_t pos = 0) const;
@@ -2350,6 +2352,34 @@ size_t string::find_last_of(const char* s, size_t pos = npos) const {
 	}
 }
 
+size_t string::find_last_of(char* s) const {
+	//__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
+			//"overflow");
+	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
+	int pos = npos;
+	size_t i, j;
+
+	int len = this->length();
+	int lim = pos;
+	char* s1 = new char[len + 1];
+	strcpy(s1, this->str);
+
+	int slen = strlen(s);
+	char* s2 = new char[slen + 1];
+	for (i = 0; i < slen; i++) {
+		s2[i] = s[i];
+	}
+	s2[i] = '\0';
+
+	for (i = len; i > 0; i--) {
+		for (j = 0; j < slen; j++) {
+			if (s1[i] == s2[j]) {
+				return i;
+			}
+		}
+	}
+}
+
 size_t string::find_last_of(char c, size_t pos = npos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
@@ -2449,6 +2479,40 @@ size_t string::rfind(const char* s, size_t pos = 0, size_t n) const {
 size_t string::rfind(const char* s, size_t pos = 0) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
+	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
+	size_t i, j, k;
+	int num = 0;
+	int lim = pos;
+
+	int len = this->length();
+	char* s1 = new char[len + 1];
+	strcpy(s1, this->str);
+
+	int slen = strlen(s);
+	char* s2 = new char[slen + 1];
+	strcpy(s2, s);
+
+	for (i = len - 1; i >= lim; i--) {
+		for (k = i, j = slen - 1; j >= 0; j--) {
+			if (s1[k] != s2[j]) {
+				break;
+			} else {
+				num++;
+				if (num == slen) {
+					return k;
+				}
+				k--;
+			}
+		}
+	}
+	return -1;
+}
+
+size_t string::rfind( char* s ) const {
+	__ESBMC_HIDE:
+	int pos = 0;
+	//__ESBMC_assert((pos < this->length()) && (pos >= 0),
+			//"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
 	size_t i, j, k;
 	int num = 0;
