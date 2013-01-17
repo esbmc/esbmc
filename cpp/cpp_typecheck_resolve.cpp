@@ -555,7 +555,7 @@ void cpp_typecheck_resolvet::exact_match_functions(
   {
     unsigned distance;
     if(disambiguate_functions(*it, distance, fargs))
-      if(distance<=0)
+      if(distance<=1)
         identifiers.push_back(*it);
   }
 }
@@ -1452,6 +1452,11 @@ void cpp_typecheck_resolvet::show_identifiers(
         const symbolt &symbol=cpp_typecheck.lookup(to_symbol_expr(id_expr));
         out << " (" << symbol.location << ")";
       }
+      else if(id_expr.id()=="member")
+      {
+        const symbolt &symbol=cpp_typecheck.lookup(id_expr.component_name());
+        out << " (" << symbol.location << ")";
+      }
       else if(id_expr.id()=="function_template_instance")
       {
         const symbolt &symbol=cpp_typecheck.lookup(id_expr.type().get("#template"));
@@ -1726,10 +1731,10 @@ exprt cpp_typecheck_resolvet::resolve(
       if(new_identifiers.empty())
         new_identifiers=identifiers;
     }
-
-    if(identifiers.size()>1)
-      disambiguate_functions(new_identifiers, fargs);
   }
+
+  if(identifiers.size()>1)
+    disambiguate_functions(new_identifiers, fargs);
 
   remove_duplicates(new_identifiers);
 
