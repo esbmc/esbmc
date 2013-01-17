@@ -879,7 +879,9 @@ bool cpp_typecheckt::standard_conversion_sequence(
   if(curr_expr.type().id()=="array" ||
      curr_expr.type().id()=="incomplete_array")
   {
-    if(type.id()=="pointer")
+    if(type.id()=="array")
+      return true;
+    else if(type.id()=="pointer")
     {
       if(!standard_conversion_array_to_pointer(curr_expr, new_expr))
         return false;
