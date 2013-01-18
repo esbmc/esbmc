@@ -205,7 +205,7 @@ exprt pointer_logict::object_rec(
   else if(src.type().id()=="struct" ||
           src.type().id()=="union")
   {
-	if(offset==0 || offset<0) return src; // the struct itself
+	if (offset<=0) return src; // the struct itself
 
     const irept::subt &components=
       src.type().components().get_sub();
