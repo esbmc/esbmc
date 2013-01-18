@@ -17,10 +17,10 @@ int main () {
   assert(myvector[0] == 1);
   assert(myvector[1] == 2);
   assert(myvector[2] == 3);
-  assert(myvector[3] == 5);
+  assert(myvector[3] != 5);
   assert(myvector[4] == 4);
  
-    
+    /*
   // using function as comp
   cout << endl;
   myvector.assign(myints,myints+5);
@@ -31,7 +31,7 @@ int main () {
   assert(myvector[2] == 3);
   assert(myvector[3] == 5);
   assert(myvector[4] == 4);
-
+*/
   // print out content:
   cout << endl;
   cout << "myvector contains:";
