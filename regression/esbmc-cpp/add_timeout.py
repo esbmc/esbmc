@@ -10,7 +10,7 @@ import xml.etree.ElementTree as ET
 
 #STR_OPT = 'item_04_esbmc-option'
 STR_OPT = 'item_05_option_to_run_esbmc'
-TIMEOUT = '15m'
+TIMEOUT = '3600'
 
 def error(message):
     sys.stderr.write("error: %s\n" % message)
@@ -43,19 +43,24 @@ def ChangeExecutionParameters(path):
     timeout = ite_param.split();
     try:
        pos = timeout.index("--timeout") #unwind option
+       timeout[pos+1] = TIMEOUT
        print pos
+       timeout =  " ".join(timeout)
+       ite_par.text = timeout
+       print ite_par.text
     except:
        print "---> Writing test.desc"
        ite_par.text = ite_param + " --timeout " + TIMEOUT
        print ite_par.text
-       tree.write('test.desc',encoding="utf-8",xml_declaration=True)
-       #adding new empty line    
-       print
-       try:
-         open("test.desc","a").write("\n")
-         pass
-       except :
-        pass
+
+    tree.write('test.desc',encoding="utf-8",xml_declaration=True)
+    #adding new empty line
+    print
+    try:
+      open("test.desc","a").write("\n")
+      pass
+    except :
+      pass
 
 
 def main():
