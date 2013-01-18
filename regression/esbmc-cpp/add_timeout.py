@@ -2,13 +2,14 @@
 #############################
 # Script to add timeout parameter to test.desc
 ##############################
-
+import fnmatch
+import os
+import shutil
 import sys
 import os
 from sys import argv
 import xml.etree.ElementTree as ET
 
-#STR_OPT = 'item_04_esbmc-option'
 STR_OPT = 'item_05_option_to_run_esbmc'
 TIMEOUT = '3600'
 
@@ -16,7 +17,7 @@ def error(message):
     sys.stderr.write("error: %s\n" % message)
     #sys.exit(1)
 
-error_file = "resultados_error.log"
+error_file = "results_error.log"
 f = open(error_file, 'w')
 
 
@@ -25,11 +26,9 @@ def ChangeExecutionParameters(path):
     """
     Parse tree
     """
-    os.chdir(path)
-    print "##### Directory: " + path
-    print
+    print "##### File: " + path + " #####"
     try:
-        tree = ET.parse("test.desc")
+        tree = ET.parse(path)
     except IOError as e:
         error("Could not open test.desc")
         return
@@ -39,43 +38,46 @@ def ChangeExecutionParameters(path):
     res = root
     ite_par = res.find(STR_OPT)
     ite_param = ite_par.text 
-    print ite_param
+    print "## Actual parameter: " + ite_param
     timeout = ite_param.split();
+    print "## Changing the parameter... "
     try:
        pos = timeout.index("--timeout") #unwind option
        timeout[pos+1] = TIMEOUT
-       print pos
+       print "-> Timeout parameter already exists..."
+       print "-> Changing the timeout value to: " + TIMEOUT 
        timeout =  " ".join(timeout)
        ite_par.text = timeout
-       print ite_par.text
+       print "New parameter: " + ite_par.text
     except:
-       print "---> Writing test.desc"
+       print "-> Adding timeout parameter"
        ite_par.text = ite_param + " --timeout " + TIMEOUT
-       print ite_par.text
+       print "New parameter: " + ite_par.text
 
-    tree.write('test.desc',encoding="utf-8",xml_declaration=True)
-    #adding new empty line
+    tree.write(path,encoding="utf-8",xml_declaration=True)
+    #adding new empty line into file
     print
     try:
-      open("test.desc","a").write("\n")
+      open(path,"a").write("\n")
       pass
     except :
       pass
 
 
 def main():
-    if len(sys.argv) < 2:
-      print "usage: %s <PATH to test suite>" % argv[0]
-      sys.exit(1)
-    path = argv[1];
-    listing = os.listdir(path)
-    listing.sort() #sort files
-    os.chdir(path)
-    for infile in listing:
-      if os.path.isdir(infile):
-        ChangeExecutionParameters(infile)
-        print
-        os.chdir("..")
+  if len(sys.argv) < 2:
+    print "usage: %s <root PATH>" % argv[0]
+    sys.exit(1)
+  path = argv[1];
+
+  matches = []
+  print "Searching for test.desc files in: " + path
+  for root, dirnames, filenames in os.walk(path):
+   for filename in fnmatch.filter(filenames, 'test.desc'):
+      print
+      ac_path = os.path.join(root, filename)
+      matches.append(ac_path)
+      ChangeExecutionParameters(ac_path)
           
 if __name__ == "__main__":
     main()
