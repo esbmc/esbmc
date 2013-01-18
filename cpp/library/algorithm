@@ -1104,15 +1104,18 @@ bool binary_search(FwdIt first, FwdIt last, const Ty& val) {
 
 template<class FwdIt, class Ty, class Pr>
 bool binary_search(FwdIt first, FwdIt last, const Ty& val, Pr pred){
-	int size = distance(first, last), start = 1;
-	while(start < size)
-	{
-		int mid = (size - start)/2;
-		if(*(first+mid) == val) return true;
-		else if(pred(*(first+mid), val)) size = mid;
-		else start = mid + 1;
-	}
-	return false;
+//	int size = distance(first, last), start = 1;
+//	while(start < size)
+//	{
+//		int mid = (size - start)/2;
+//		if(*(first+mid) == val) return true;
+//		else if(pred(*(first+mid), val)) size = mid;
+//		else start = mid + 1;
+//	}
+//	return false;
+	for(;first!=last;first++)
+			if(*first == val) return true;
+		return false;
 }
 
 template<class InIt1, class InIt2, class OutIt>
