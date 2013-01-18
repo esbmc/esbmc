@@ -368,7 +368,6 @@ public:
 	bool operator<=(const char* lhs);
 	string& operator=(string& str);
 	string& operator=(const char* s);
-	string& operator=(char* s);
 	string& operator=(char c);
 	string& operator+=(string& s);
 	string& operator +=(const char* s);
@@ -1178,14 +1177,6 @@ string& string::operator=(string& str) {
 }
 
 string& string::operator=(const char* s) {
-	__ESBMC_HIDE: __ESBMC_assert(s != NULL,
-			"The parameter must to be different than NULL");
-	this->_size = strlen(s);
-	this->str = new char[this->_size + 1];
-	return string(strcpy(this->c_str(), s));
-}
-
-string& string::operator=(char* s) {
 	__ESBMC_HIDE: __ESBMC_assert(s != NULL,
 			"The parameter must to be different than NULL");
 	this->_size = strlen(s);
