@@ -22,6 +22,60 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 /*******************************************************************\
 
+Function: cpp_typecheckt::has_const
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+bool cpp_typecheckt::has_const(const typet &type)
+{
+  if(type.id()=="const")
+    return true;
+  else if(type.id()=="merged_type")
+  {
+    forall_subtypes(it, type)
+      if(has_const(*it)) return true;
+
+    return false;
+  }
+  else
+    return false;
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::has_volatile
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+bool cpp_typecheckt::has_volatile(const typet &type)
+{
+  if(type.id()=="volatile")
+    return true;
+  else if(type.id()=="merged_type")
+  {
+    forall_subtypes(it, type)
+      if(has_volatile(*it)) return true;
+
+    return false;
+  }
+  else
+    return false;
+}
+
+/*******************************************************************\
+
 Function: cpp_typecheckt::tag_scope
 
 Inputs:
@@ -357,8 +411,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
   if(declaration.member_spec().is_explicit())
     component.set("is_explicit", true);
 
-  typet &method_qualifier=
-    (typet &)declarator.add("method_qualifier");
+  // either blank, const, volatile, or const volatile
+  const typet &method_qualifier=
+     static_cast<const typet &>(declarator.add("method_qualifier"));
 
   if(is_static)
   {
@@ -385,8 +440,11 @@ void cpp_typecheckt::typecheck_compound_declarator(
       id2string(
         function_identifier(static_cast<const typet &>(component.type())));
 
-    if(method_qualifier.id()=="const")
-      virtual_name += "$const";
+    if(has_const(method_qualifier))
+      virtual_name+="$const";
+
+    if(has_volatile(method_qualifier))
+      virtual_name+="$virtual";
 
     if(component.type().get("return_type") == "destructor")
       virtual_name= "@dtor";
@@ -1290,7 +1348,7 @@ void cpp_typecheckt::typecheck_member_function(
   const irep_idt &compound_symbol,
   struct_typet::componentt &component,
   irept &initializers,
-  typet &method_qualifier,
+  const typet &method_qualifier,
   exprt &value)
 {
   symbolt symbol;
@@ -1299,7 +1357,7 @@ void cpp_typecheckt::typecheck_member_function(
 
   if(component.get_bool("is_static"))
   {
-    if(method_qualifier.id()!="")
+	if(method_qualifier.id()!=irep_idt())
     {
       err_location(component);
       throw "method is static -- no qualifiers allowed";
@@ -1385,7 +1443,7 @@ Purpose:
 void cpp_typecheckt::adjust_method_type(
   const irep_idt &compound_symbol,
   typet &type,
-  typet &method_type)
+  const typet &method_qualifier)
 {
   irept &arguments=type.add("arguments");
 
@@ -1400,16 +1458,11 @@ void cpp_typecheckt::adjust_method_type(
   argument.cmt_identifier("this");
   argument.cmt_base_name("this");
 
-  if(method_type.id()=="" || method_type.is_nil())
-  {
-  }
-  else if(method_type.id()=="const")
+  if(has_const(method_qualifier))
     argument.type().subtype().cmt_constant(true);
-  else
-  {
-    err_location(method_type);
-    throw "invalid method qualifier";
-  }
+
+  if(has_volatile(method_qualifier))
+    argument.type().subtype().cmt_volatile(true);
 }
 
 /*******************************************************************\
