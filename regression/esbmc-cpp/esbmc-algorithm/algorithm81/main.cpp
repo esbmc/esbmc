@@ -19,6 +19,7 @@ int main () {
   second.resize(first.size());     // allocate space
   transform (first.begin(), first.end(), second.begin(), op_increase);
                                                   // second: 11 21 31 41 51
+  assert(second[2] != 31);
 
   transform (first.begin(), first.end(), second.begin(), first.begin(), op_sum);
                                                   //  first: 21 41 61 81 101
