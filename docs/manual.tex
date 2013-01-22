@@ -37,21 +37,46 @@ All additional gunge, queries, complaints, to \url{jeremy.morse@gmail.com}
 In an order vaguely related to how ESBMCs execution order occurs, the
 following describes the contents of directories in the source tree.
 
+FIXME: This is ugly, make it a table.
+
 \begin{description}
-\item[ansi-c]
-\item[big-int]
-\item[cpp]
-\item[docs]
-\item[esbmc]
-\item[goto-programs]
-\item[goto-symex]
-\item[langapi]
-\item[papers]
-\item[pointer-analysis]
-\item[regression]
-\item[scripts]
-\item[solvers]
-\item[util]
+\item[docs] Directory for not-in-code documentation.
+\item[papers] Self explanatory.
+\item[scripts] Various scripts and auxilary files related to building ESBMC
+               and dealing with things that aren't source files. Makefile
+               scripts and release/binary manipulating scripts.
+\item[esbmc] Top level model checking control code. Process entry point,
+             option handling, general direction and invocation of the rest
+             of the code base.
+\item[langapi] Abstractions for handling input source files. Links a variety
+               of global functions up to input-language-appropriate routines.
+               Probably not massively necessary and could be ditched.
+\item[ansi-c] Parser for ANSI-C software. Contains all code required to lex,
+              parse, store as an AST, typecheck, and link, an input file.
+\item[ansi-c/cpp] C preprocessor - an import of the Portable C Compilers
+                  preprocessor, adapted to do what ESBMC needs.
+\item[ansi-c/headers] C langauge headers to override system headers.
+\item[ansi-c/library] C language implementations of various code libraries
+                      that we seek to model.
+\item[cpp] Parser for C++ language. Code for all compilation steps of C++.
+\item[cpp/library] Implementation / models of various C++ template libraries.
+\item[big-int] Arbitary length integer library. Used internally to avoid any
+               kind of problems modelling large machine integers using small
+               machine integers.
+\item[goto-programs] Routines for general operations on GOTO instructions, as
+                     well as all the code for converting a parsed AST into
+                     GOTO instructions.
+\item[pointer-analysis] Code for interpreting the execution of GOTO instructions
+                        and the analysis of their effect upon pointer tracking.
+                        Basically a static analysis of pointer assignment and
+                        reachability. Also, contains code for resolving pointer
+                        indirection in dereferences.
+\item[goto-symex] Symbolic execution of GOTO instructions into an SSA program.
+\item[solvers] Encoding of SSA program into SMT solver logic, and solving of
+               the produced SMT formula.
+\item[util] Miscellaneous functions, classes, and whatever to glue everything
+            else together.
+\item[regression] Regression tests for various different facets of ESBMC.
 \end{description}
 
 \section{Top level procedures}
