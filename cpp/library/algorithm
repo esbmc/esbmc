@@ -665,8 +665,10 @@ OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
 	InIt value = *first;
 	*dest = *first;
 	while (++first != last) {
-		if (!(value == *first))
-			*(++dest) = value = *first;
+		if (!(value == *first)){
+			dest++;
+			*dest = value = *first;
+		}
 	}
 	return ++dest;
 }
@@ -677,8 +679,10 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
 	InIt value = first;
 	dest = first;
 	while (++first != last) {
-		if (!pred(*value, *first))
-			*(++dest) = *value = *first;
+		if (!pred(*value, *first)){
+			dest++;
+			*dest = *value = *first;
+		}
 	}
 	return ++dest;
 #endif
