@@ -547,14 +547,18 @@ OutIt replace_copy_if(InIt first, InIt last, OutIt dest, Pr pred,
 
 template<class FwdIt, class Ty>
 void fill(FwdIt first, FwdIt last, const Ty& val) {
-	while (first != last)
-		*first++ = val;
+	while (first != last){
+		*first = val;
+		first++;
+	}
 }
 
 template<class OutIt, class Diff, class Ty>
 void fill_n(OutIt first, Diff n, const Ty& val) {
-	for (; n > 0; --n)
-		*first++ = val;
+	for (; n > 0; --n){
+		*first = val;
+		first++;
+	}
 }
 
 template<class FwdIt, class Fn0>
