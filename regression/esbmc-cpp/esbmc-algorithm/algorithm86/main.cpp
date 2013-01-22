@@ -12,7 +12,6 @@ int main () {
   assert(myvector[3] != 5);
 
 //  fill (myvector.begin()+3,myvector.end()-2,8);   // myvector: 5 5 5 8 8 8 0 0
-
 //  assert(myvector[3] != 8);
   cout << "myvector contains:";
   for (vector<int>::iterator it=myvector.begin(); it!=myvector.end(); ++it)
