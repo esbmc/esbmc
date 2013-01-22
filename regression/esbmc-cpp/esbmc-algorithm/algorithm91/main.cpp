@@ -18,14 +18,14 @@ int main () {
   it=unique_copy (myints,myints+9,myvector.begin());   // 10 20 30 20 10 0  0  0  0
                                                        //                ^
   assert(*it == 0);
-  sort (myvector.begin(),it);                          // 10 10 20 20 30 0  0  0  0
+//  sort (myvector.begin(),it);                          // 10 10 20 20 30 0  0  0  0
                                                        //                ^
 
   // using predicate comparison:
-  it=unique_copy (myvector.begin(), it, myvector.begin(), myfunction);
+//  it=unique_copy (myvector.begin(), it, myvector.begin(), myfunction);
                                                        // 10 20 30 20 30 0  0  0  0
                                                        //          ^
-  assert(*it != 20);
+//  assert(*it != 20);
 //  myvector.resize( it - myvector.begin() );            // 10 20 30
 
   // print out content:

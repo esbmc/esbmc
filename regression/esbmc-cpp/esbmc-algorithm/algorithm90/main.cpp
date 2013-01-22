@@ -19,10 +19,10 @@ int main () {
                                                   //                ^
   it2 = myvector.begin() + 2;
   assert(*it2 != 30);
-  myvector.resize( it - myvector.begin() );       // 10 20 30 20 10
+  //myvector.resize( it - myvector.begin() );       // 10 20 30 20 10
 
   // using predicate comparison:
-  unique (myvector.begin(), myvector.end(), myfunction);   // (no changes)
+//  unique (myvector.begin(), myvector.end(), myfunction);   // (no changes)
 
   // print out content:
   cout << "myvector contains:";
