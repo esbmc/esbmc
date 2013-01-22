@@ -1,9 +1,37 @@
 \documentclass{article}
+\usepackage{url}
 \begin{document}
 \author{Jeremy Morse}
 \title{A manual on some internals of ESBMC}
 \maketitle
 \section{Introduction and caveats}
+
+This ``manual'' is supposed to be an introduction to how the ESBMC model
+checkers internals are arranged and operate. It is not supposed to be a
+comprehensive piece of documentation on the exact behaviour of particular
+functions or facilities; nor will it ever, ever be up to date. Exact
+documentation on a particular function or method should be written in
+doxygen in headers; this documentation can be built to HTML by executing
+\texttt{make doxygen} in the top level directory of ESBMCs source tree.
+
+When referencing portions of code from within this manual, I'll probably
+end up referring to class names and methods within them. Source files and
+line numbers are liable to change, wheras the code layout of the project
+is the least likely to suffer significant churn. The location of such a
+class or method should be obvious from the context, or discoverable with
+grep.
+
+A huge amount of the code base is derived from the CBMC project. CBMC is
+open source (BSD 4-clause, ish), and available over SVN at
+\url{http://www.cprover.org/svn/cbmc}. A large number of design decisions
+are down to the development of CBMC; changes to ESBMC that cause
+significant divergance from CBMCs design should be carefully thought
+about, seeing how it's more mature than ESBMC. Likewise, code being
+pulled in from CBMC should be examined to see whether it'll actually fit
+into what ESBMC is doing nowdays.
+
+All additional gunge, queries, complaints, to \url{jeremy.morse@gmail.com}
+
 \section{Source tree structure}
 \section{Top level procedures}
 \section{Source file parsing}
