@@ -80,6 +80,51 @@ FIXME: This is ugly, make it a table.
 \end{description}
 
 \section{Top level procedures}
+
+Entry to the process starts (more or less) in the \texttt{doit} method of the
+\texttt{cbmc\_parseoptionst} object. Various command line options are checked
+for validity, before the \texttt{get\_goto\_program} method invokes the
+frontend parsers to compile input source code into an AST. The AST for the
+entire environment (all source files and libraries) is stored in a
+\texttt{contextt} object, containing a list of symbols and their AST value.
+
+The contents of the \texttt{contextt} object is passed to the
+\texttt{goto\_convert} function, which produces a set of
+\texttt{goto\_functiont}s corresponding to each function in the source language.
+Each function contains little more than a \texttt{goto\_programt}, which
+actually contain a list of instructions and some annotations.
+
+With the set of GOTO functions, the \texttt{process\_goto\_program} method
+applies the string abstraction transformation, the pointer analysis,
+installs various pointer validity checks, and anything else that transforms
+the source program into different instructions (such as LTL property monitors
+or data race checking).
+
+With these fixed-up goto functions, a \texttt{bmct} object is created and the
+\texttt{run} method invoked on the functions. These functions are fed into a
+\texttt{reachability\_treet} object, the primary interface to symbolic
+execution. Within the \texttt{bmct::run} method, the symbolic execution engine
+is asked to run through instructions creating an SSA program; potentially
+several times if there are multiple threads involved. A result itself is a
+\texttt{goto\_symext::symex\_resultt} containing the SSA program container and
+a count of how many assertions remain to be verified in the program.
+
+The SSA program is then optionally sliced; see the 'Misc' section for details.
+
+A solver object is then created, a subclass of \texttt{bmct::solver\_base}
+abstraction which solver to use. The SSA program is then fed to the solver,
+which encodes it to SMT or whatever appropritate encoding it uses. It's then
+asked to solve the equation, returning:
+\begin{description}
+\item[UNSATISFIABLE] The formula isn't satisfiable.
+\item[SATISFIABLE] The formula is satisfiable.
+\item[SMTLIB] A special case for printing the formula to a SMTLIB file.
+\item[ERROR] Some error occured during solving.
+\end{description}
+
+Finally, if the formula is satisfiable, an error trace is created and printed.
+Further details in the 'Misc' section.
+
 \section{Source file parsing}
 \section{GOTO instructions}
 \section{Pointer analysis}
