@@ -132,6 +132,70 @@ Finally, if the formula is satisfiable, an error trace is created and printed.
 Further details in the 'Misc' section.
 
 \section{Source file parsing}
+
+Code parsing is one of the untouched pastures of CBMC code, mostly. The ANSI-C
+frontend is almost entirely like the original, while the C++ frontend has been
+significantly developed by Manaus. The author is really familar with neither.
+I'll talk about the ANSI-C frontend, then how the C++ frontend relates to it.
+
+There are some significant conceptual steps involved. Firstly consider
+the input and the output. Coming in is a C source file that must be preprocessed
+and parsed - two fairly straightforward (although not easy) tasks. The top
+levels of ESBMC then receive an AST representing the types and code structure
+of the source file, which is more complex. The irep / structure of this data
+is entirely undocumented and closely coupled between the parsers and the
+\texttt{goto-programs} dir that converts it to GOTO instructions. However the
+contents of this AST tends to be fairly high level language constructs,
+for example \texttt{for} and \texttt{switch} statements. Refer to the method
+\texttt{goto\_convertt:convert} for an idea of what kind of constructs these
+are. The majority of the source file parsing code deals with converting between
+the parse tree and the AST.
+
+The preprocessing stage is contained in the \texttt{c\_preprocess} function.
+In CBMC this used to offload preprocessing to the host preprocessor, however
+our requirements have become more complicated since then. We now do
+preprocessing using the preprocessor from the Portable C Compiler project
+(which is BSD licensed). Unfortunately it wasn't designed with memory management
+in mind, so ESBMC picks an output file, forks, calls the preprocessor to pump
+outupt to the selected file, then exits the child process.
+
+The complicated requirements from the preprocessor is that we generally want
+code under test to have access to all headers on the host system, however we
+also want to shoehorn our own types and functions in there --- for example the
+glibc headers for assert have some obnoxious defines involved. Additionally
+given how much lee-way standards give to libraries to define the format of
+opaque data structures, we may need to define our own data structures to
+avoid having to special case code for different operating systems. For example,
+\texttt{pthread\_t}'s, \texttt{pthread\_mutex\_lock}'s and so forth differ
+between operating systems, and we currently rely on on using Linux' pthread.h
+header. The current fix for this is to intercept \texttt{\#include} statements
+and read in an ESBMC specific header file from \texttt{ansi-c/headers} rather
+than the system headers.
+
+We parse C in the normal way; a flex tokenizer is defined, and a yacc grammar
+defined which translate the input C into a parse tree. This needs no special
+description. A class (\texttt{ansi\_c\_convertt}) takes the parse tree and
+makes a simple translation to the format of the AST. The bulk of the work then
+lies in the \textit{typechecking} phase. Here, the nasty parts of C that are
+context-dependant\footnote{i.e., all of them} are fixed up. Factors such as
+integer promotion, operation signedness, and actual correctness are
+considered, and various casts or extensions are inserted. The output is stored
+as a set of symbols with associated AST values in a \texttt{contextt} object.
+
+After parsing and compilation is linking. In the past CBMC has just
+tacked all libraries available onto the end of a source file being compiled,
+and that's all. Nowdays the libraries are pre-compiled into a binary
+representation of GOTO instructions, and linked in after typechecking of C
+code, by copying in any symbol referred to from the compiled source files
+that are in the compiled library files.
+
+Finally there's the initialization of C global and static lifetime variables.
+Seeing how the GOTO language is only made up of assignments, ish, their
+initialization must be made by assignments too. So, an initial 'main' GOTO
+function is synthesized from the \texttt{c\_main} and
+\texttt{static\_lifetime\_init} functions. For each global variable an
+assignment is emitted assigning the initial value to the global variable.
+
 \section{GOTO instructions}
 \section{Pointer analysis}
 \section{Symbolic execution}
