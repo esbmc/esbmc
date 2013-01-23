@@ -134,15 +134,13 @@ size_t strspn(const char *s1, const char *s2) {
 }
 
 size_t strlen(const char *s) {
-  __ESBMC_assert(s != NULL, "string must contain any character");
-  const char *tmp=s;
-  size_t len = 0;
-  while (tmp != NULL) {
-    tmp++;
-    len++;
-  }
-  delete tmp;
-  return len;
+	__ESBMC_assert(s != NULL, "string must contain any character");
+	size_t len = 0;
+	while (*s != NULL) { //until the end of string
+		s++;
+		len++;
+	}
+	return len;
 }
 
 char *strtok_r(char *str, const char *delim, char **saveptr) {
