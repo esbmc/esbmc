@@ -87,7 +87,6 @@ Purpose:
 \*******************************************************************/
 
 cpp_scopet &cpp_typecheckt::tag_scope(
-  const irep_idt &elaborated_base_name,
   const irep_idt &base_name,
   bool has_body,
   bool tag_only_declaration)
@@ -153,20 +152,23 @@ void cpp_typecheckt::typecheck_compound_type(
 
   // get the tag name
   bool anonymous=type.find("tag").is_nil();
+  std::string identifier, base_name;
+  cpp_scopet *dest_scope=NULL;
   bool has_body=type.body().is_not_nil();
   bool tag_only_declaration=type.get_bool("#tag_only_declaration");
-  std::string identifier, base_name;
 
   if(anonymous)
   {
     base_name=identifier=
       "#anon_"+type.id_string()+i2string(anon_counter++);
     type.set("#is_anonymous",true);
+    // anonymous structs always go into the current scope
+    dest_scope=&cpp_scopes.current_scope();
   }
   else
   {
     const cpp_namet &cpp_name=
-      to_cpp_name(type.add("tag"));
+      to_cpp_name(type.find("tag"));
 
     cpp_name.convert(identifier, base_name);
 
@@ -175,14 +177,13 @@ void cpp_typecheckt::typecheck_compound_type(
       err_location(cpp_name.location());
       throw "no namespaces allowed in compound names";
     }
-  }
 
-  cpp_scopet &dest_scope=
-    tag_scope(identifier, base_name, has_body, tag_only_declaration);
+    dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
+  }
 
   const irep_idt symbol_name=
     cpp_identifier_prefix(current_mode)+"::"+
-    dest_scope.prefix+
+    dest_scope->prefix+
     "tag."+identifier;
 
   // check if we have it already

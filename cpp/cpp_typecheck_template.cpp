@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #include "cpp_template_args.h"
 
 /*******************************************************************\
+
 Function: cpp_typecheckt::salvage_default_parameters
 
   Inputs:
@@ -47,7 +48,6 @@ void cpp_typecheckt::salvage_default_parameters(
     }
   }
 }
-
 
 /*******************************************************************\
 
@@ -83,7 +83,7 @@ void cpp_typecheckt::check_template_restrictions(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::typecheck_template_class
+Function: cpp_typecheckt::typecheck_class_template
 
   Inputs:
 
@@ -93,7 +93,7 @@ Function: cpp_typecheckt::typecheck_template_class
 
 \*******************************************************************/
 
-void cpp_typecheckt::typecheck_template_class(
+void cpp_typecheckt::typecheck_class_template(
   cpp_declarationt &declaration)
 {
   // Do template parameters. This also sets up the template scope.
@@ -127,7 +127,7 @@ void cpp_typecheckt::typecheck_template_class(
     declaration.partial_specialization_args();
 
   const irep_idt symbol_name=
-    template_class_identifier(
+    class_template_identifier(
       base_name, template_type, partial_specialization_args);
 
   #if 0
@@ -164,11 +164,11 @@ void cpp_typecheckt::typecheck_template_class(
   if(previous_symbol!=context.symbols.end())
   {
     // there already
-    const cpp_declarationt &previous_declaration=
-        to_cpp_declaration(previous_symbol->second.type);
+    cpp_declarationt &previous_declaration=
+      to_cpp_declaration(previous_symbol->second.type);
 
     bool previous_has_body=
-      previous_symbol->second.type.type().body().is_not_nil();
+      previous_declaration.type().body().is_not_nil();
 
     // check if we have 2 bodies
     if(has_body && previous_has_body)
@@ -184,13 +184,24 @@ void cpp_typecheckt::typecheck_template_class(
     if(has_body)
     {
       // We replace the template!
+      // We have to retain any default parameters from the previous declaration.
       salvage_default_parameters(
-          previous_declaration.template_type(),
-          declaration.template_type());
+        previous_declaration.template_type(),
+        declaration.template_type());
       previous_symbol->second.type.swap(declaration);
 
       // We also replace the template scope (the old one could be deleted).
       cpp_scopes.id_map[symbol_name]=&template_scope;
+
+      // We also fix the parent scope in order to see the new
+      // template arguments
+    }
+    else
+    {
+      // just update any default parameters
+      salvage_default_parameters(
+        declaration.template_type(),
+        previous_declaration.template_type());
     }
 
     assert(cpp_scopes.id_map[symbol_name]->id_class == cpp_idt::TEMPLATE_SCOPE);
@@ -247,10 +258,6 @@ void cpp_typecheckt::typecheck_function_template(
 
   cpp_declaratort &declarator=declaration.declarators()[0];
   const cpp_namet &cpp_name=to_cpp_name(declarator.add("name"));
-
-  if(cpp_name.is_qualified() ||
-     cpp_name.has_template_args())
-    return typecheck_template_member_function(declaration);
 
   // do template arguments
   // this also sets up the template scope
@@ -342,7 +349,7 @@ void cpp_typecheckt::typecheck_function_template(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::typecheck_template_member_function
+Function: cpp_typecheckt::typecheck_class_template_member
 
   Inputs:
 
@@ -353,7 +360,7 @@ Function: cpp_typecheckt::typecheck_template_member_function
 
 \*******************************************************************/
 
-void cpp_typecheckt::typecheck_template_member_function(
+void cpp_typecheckt::typecheck_class_template_member(
   cpp_declarationt &declaration)
 {
   assert(declaration.declarators().size()==1);
@@ -391,7 +398,7 @@ void cpp_typecheckt::typecheck_template_member_function(
     throw 0;
   }
 
-  // let's find the template class this function template belongs to.
+  // let's find the class template this function template belongs to.
   cpp_scopet::id_sett id_set;
 
   cpp_scopes.current_scope().lookup(
@@ -402,16 +409,16 @@ void cpp_typecheckt::typecheck_template_member_function(
   {
     str << cpp_scopes.current_scope();
     err_location(cpp_name);
-    str << "template function/member identifier `"
-        << cpp_name.get_sub().front().get("identifier")
+    str << "class template `"
+        << cpp_name.get_sub().front().identifier()
         << "' not found";
     throw 0;
   }
   else if(id_set.size()>1)
   {
     err_location(cpp_name);
-    str << "template function/member identifier `"
-        << cpp_name.get_sub().front().get("identifier")
+    str << "class template `"
+        << cpp_name.get_sub().front().identifier()
         << "' is ambiguous";
     throw 0;
   }
@@ -419,7 +426,7 @@ void cpp_typecheckt::typecheck_template_member_function(
   {
     std::cerr << *(*id_set.begin()) << std::endl;
     err_location(cpp_name);
-    str << "template function/member identifier `"
+    str << "class template `"
         << cpp_name.get_sub().front().identifier()
         << "' is not a template";
     throw 0;
@@ -430,7 +437,7 @@ void cpp_typecheckt::typecheck_template_member_function(
     context.symbols.find(cpp_id.identifier)->second;
 
   exprt *template_methods=&static_cast<exprt &>(
-      template_symbol.value.add("template_methods"));
+    template_symbol.value.add("template_methods"));
   template_methods->copy_to_operands(declaration);
 
   // save current scope
@@ -466,7 +473,7 @@ void cpp_typecheckt::typecheck_template_member_function(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::template_class_identifier
+Function: cpp_typecheckt::class_template_identifier
 
   Inputs:
 
@@ -476,7 +483,7 @@ Function: cpp_typecheckt::template_class_identifier
 
 \*******************************************************************/
 
-std::string cpp_typecheckt::template_class_identifier(
+std::string cpp_typecheckt::class_template_identifier(
   const irep_idt &base_name,
   const template_typet &template_type,
   const cpp_template_args_non_tct &partial_specialization_args)
@@ -551,7 +558,7 @@ std::string cpp_typecheckt::function_template_identifier(
   // we first build something without function arguments
   cpp_template_args_non_tct partial_specialization_args;
   std::string identifier=
-    template_class_identifier(base_name, template_type,
+    class_template_identifier(base_name, template_type,
                               partial_specialization_args);
 
   // we must also add the signature of the function to the identifier
@@ -562,7 +569,7 @@ std::string cpp_typecheckt::function_template_identifier(
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::convert_template_class_specialization
+Function: cpp_typecheckt::convert_class_template_specialization
 
   Inputs:
 
@@ -572,7 +579,7 @@ Function: cpp_typecheckt::convert_template_class_specialization
 
 \*******************************************************************/
 
-void cpp_typecheckt::convert_template_class_specialization(
+void cpp_typecheckt::convert_class_template_specialization(
   cpp_declarationt &declaration)
 {
   cpp_save_scopet saved_scope(cpp_scopes);
@@ -673,7 +680,7 @@ void cpp_typecheckt::convert_template_class_specialization(
     throw "template specialization with wrong number of arguments";
   }
 
-  typecheck_template_class(declaration);
+    typecheck_class_template(declaration);
 }
 
 /*******************************************************************\
@@ -1053,7 +1060,7 @@ void cpp_typecheckt::convert_template_declaration(
   // 2) class templates
   // 3) members of class templates (static or methods)
 
-  if(declaration.is_template_class())
+  if(declaration.is_class_template())
   {
     // there should not be declarators
     if(!declaration.declarators().empty())
@@ -1075,11 +1082,11 @@ void cpp_typecheckt::convert_template_declaration(
     if((static_cast<const cpp_namet &>(
        type.find("tag"))).has_template_args())
     {
-      convert_template_class_specialization(declaration);
+      convert_class_template_specialization(declaration);
       return;
     }
 
-    typecheck_template_class(declaration);
+    typecheck_class_template(declaration);
     return;
   }
   else // maybe function template, maybe class template member
@@ -1109,7 +1116,7 @@ void cpp_typecheckt::convert_template_declaration(
 
     if(cpp_name.is_qualified() ||
        cpp_name.has_template_args())
-      return typecheck_template_member_function(declaration);
+      return typecheck_class_template_member(declaration);
 
     // must be function template
     typecheck_function_template(declaration);
