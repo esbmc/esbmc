@@ -1829,26 +1829,188 @@ bool lexicographical_compare(InIt1 *first1, InIt1 *last1, InIt2 *first2,
 
 template<class InIt1, class InIt2, class Pr>
 bool lexicographical_compare(InIt1 first1, InIt1 last1, InIt2 first2,
-		InIt2 last2, Pr pred);
+		InIt2 last2, Pr pred){
+	while (first1 != last1) {
+		if (first2 == last2 || pred(*first2, *first1))
+			return false;
+		else if (pred(*first1, *first2))
+			return true;
+		first1++;
+		first2++;
+	}
+	return (first2 != last2);
+}
 
 template<class InIt1, class InIt2, class Pr>
 bool lexicographical_compare(InIt1 *first1, InIt1 *last1, InIt2 *first2,
-		InIt2 *last2, Pr pred);
+		InIt2 *last2, Pr pred){
+	while (first1 != last1) {
+		if (first2 == last2 || pred(*first2, *first1))
+			return false;
+		else if (pred(*first1, *first2))
+			return true;
+		first1++;
+		first2++;
+	}
+	return (first2 != last2);
+}
 
 template<class BidIt>
-bool next_permutation(BidIt first, BidIt last);
+bool next_permutation(BidIt first, BidIt last){
+	if (first == last)
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (*i < *ii)
+		{
+			BidIt j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
 
 template<class BidIt>
-bool next_permutation(BidIt *first, BidIt *last);
+bool next_permutation(BidIt *first, BidIt *last){
+	if (first == last)
+		return false;
+	BidIt* i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt* ii = i;
+		--i;
+		if (*i < *ii)
+		{
+			BidIt* j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
 
 template<class BidIt, class Pr>
-bool next_permutation(BidIt first, BidIt last, Pr pred);
+bool next_permutation(BidIt first, BidIt last, Pr pred){
+	if (first == last)
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
+
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (pred(*i, *ii))
+		{
+			BidIt j = last;
+			while (!pred(*i, *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
+			}
+			return true;
+		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
+}
 
 template<class BidIt>
-bool prev_permutation(BidIt first, BidIt last);
+bool prev_permutation(BidIt first, BidIt last){
+	if (first == last)
+			return false;
+		BidIt i = first;
+		++i;
+		if (i == last)
+			return false;
+		i = last;
+		--i;
+
+		for(;;)
+		{
+			BidIt ii = i;
+			--i;
+			if (*i < *ii)
+			{
+				BidIt j = last;
+				while (!(*i < *--j))
+				{}
+				iter_swap(i, j);
+				while ((ii != last) && (ii != --last)){
+					swap(*ii, *last);
+					ii++;
+				}
+				return true;
+			}
+			if (i == first)
+			{
+				while ((first != last) && (first != --last)){
+					swap(*first, *last);
+					first++;
+				}
+				return false;
+			}
+		}
+}
 
 template<class BidIt>
-bool prev_permutation(BidIt *first, BidIt *last);
+bool prev_permutation(BidIt *first, BidIt *last){
+
+}
 
 template<class BidIt, class Pr>
 bool prev_permutation(BidIt first, BidIt last, Pr pred);
