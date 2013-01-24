@@ -196,7 +196,104 @@ function is synthesized from the \texttt{c\_main} and
 \texttt{static\_lifetime\_init} functions. For each global variable an
 assignment is emitted assigning the initial value to the global variable.
 
-\section{GOTO instructions}
+\section{GOTO programs}
+
+This section covers both the GOTO program record itself, and the GOTO
+instructions that make it up. Before launching into a description of these
+records, it is important to understand that CBMC synthesizes the
+\texttt{goto\_programt} class from the \texttt{goto\_program\_templatet}
+template. This can lead to the most confusing and obscure error messages
+if you do not realise that you're manipulating a template. From a design
+point of view, the reason for this appears to be so that the types of
+the GOTO program body could be parameterised; a decision that is almost
+entirely without merit.
+
+The \texttt{goto\_programt} class is more or less just a container for a
+list of GOTO instructions (of class \texttt{goto\_programt::instructiont}).
+It stores \textbf{no} additional information. Instead, all of its methods
+perform operations on the contained instructions. Most of these relate
+to the creation, insertion, and deletion of instructions, recalculating
+their contents to be consistent after such a modification, and a few
+special cases such as determining the successor instructions from a
+particular instruction,
+
+The actual GOTO instruction class itself's primary piece of data comes in
+two flavours -- the \texttt{code} member or the \texttt{guard} member.
+These store the internal representation of what the body of the instruction
+\textit{is}. Exactly what the instruction means depends on the \texttt{type}
+field, described thus:
+
+\begin{description}
+\item[GOTO] Jump from the current instruction to the instruction in the
+\texttt{targets} field. If \texttt{guard} is not true, then the jump is
+conditional, depending on the evaluation of \texttt{guard}. If \texttt{guard}
+is true the jump to the target occurs; if not, execution continues to the next
+instruction.
+\item[ASSUME] Encode an assumption, stored in the \texttt{guard} field, to the
+solver.
+\item[ASSERT] Encode an assertion, stored in the \texttt{guard} field, to the
+solver.
+\item[OTHER] Catch-all instruction for storing special cases, enumerated below.
+Identified by what kind of irep is stored in the \texttt{code} field.
+\begin{description}
+\item[cpp\_delete] Also \texttt{cpp\_delete[]}. Represents a deallocation of
+some memory allocated by C++'s \texttt{new} or \texttt{new[]} operators.
+\item[printf]\footnote{Yes, really} Represents a printf operation, for later
+printing in a counterexample.
+\item[decl] Represent declaration of a variable. Normally the declaration of
+a variable is uninteresting as we only care about when it is initialized.
+However in a loop where a variable is declared inside the loop block, it
+transitions from being initialized to uninitialized when the loop iteration
+finishes. Hence the importance of knowing where it is declared.
+\item[nondet] Represent a nondeterministic value, from a \texttt{nondet\_*}
+function call.
+\item[asm] Inline assembly statement. Mercifully ignored.
+\item[typeid] Fetch a C++ type ID record, I belive.
+\end{description}
+\item[SKIP] An ignored instruction.
+\item[LOCATION] Previously caused a ``location'' SSA step to be recorded for
+future tracking of the code path of the counterexample. Now redundant.
+\item[END\_FUNCTION] End instruction of a function. Not the same as a return,
+which can occur anywhere, but actually the final instruction in the list of
+instructions.
+\item[ATOMIC\_BEGIN] Self explanatory.
+\item[ATOMIC\_END] Self explanatory.
+\item[RETURN] Record a return statement, identifying the expression to return.
+Stored in a ``return'' irep in the \texttt{code} field.
+\item[ASSIGN] Self explanatory. An ``assign'' irep is stored in the
+\texttt{code} field, identifying the left and right hand sides.
+\item[DECL] Unused. Probably used to be, or was intended to be, the decl
+irep from the OTHER instruction.
+\item[DEAD] Unused. Comments say ``marks the end-of-live of a local variable''.
+\item[FUNCTION\_CALL] A function call record; stores a function call irep in
+the \texttt{code} field, which in turn records the left hand side of the call,
+the arguments, and the target.
+\item[THROW] Throw record; not familiar with this, but it'll result in some
+kind of an assignment to a record of what's been thrown, and a jump to somewhere
+else.
+\item[THROW\_DECL] Record the start of a catch block for a particular type
+of variable.
+\item[THROW\_DECL] Record the end of a catch block for a particular type
+of variable.
+\end{description}
+
+All behaviours of GOTO programs are described by lists of these instructions.
+Additional annotations are stored with each instruction, for example the
+\texttt{function} and \texttt{location} fields identify where in the source
+files the instruction came from. The \texttt{targets} list contains a list
+of where the instruction can jump to (which should only ever contain zero or
+one target instructions).
+
+\texttt{loop\_number} identifies a unique loop number for backwards
+GOTO instructions. \texttt{target\_number} is a numeric ID that labels
+the instruction within a function. This don't actually do anything, but
+is printed in the textual representation of GOTO instructions to indicate
+the targets of GOTOs.  There's also a set of local variable names, and
+a globally unique instruction ID in \texttt{location\_number}.
+
+That's the substance of instructions; more information on the interpretation
+of them lies in the symbolic execution section.
+
 \section{Pointer analysis}
 \section{Symbolic execution}
 \section{SMT conversion}
