@@ -10,10 +10,8 @@ int main () {
   cout << "The 3! possible permutations with 3 elements:\n";
 
   sort (myints,myints+3);
+  next_permutation (myints,myints+3);
+  assert(myints[2] == 3);
 
-  do {
-    cout << myints[0] << " " << myints[1] << " " << myints[2] << endl;
-    assert(myints[1] == 2);
-  } while ( next_permutation (myints,myints+3) );
   return 0;
 }
