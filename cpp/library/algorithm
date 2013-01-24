@@ -780,7 +780,7 @@ BidIt partition(BidIt first, BidIt last, Pr pred) {
 
 template<class BidIt, class Pr>
 BidIt stable_partition(BidIt first, BidIt last, Pr pred){
-	while (true) {
+	while (first <= last) {
 		while (first != last && pred(*first))
 			++first;
 		if (first == last--)
@@ -945,37 +945,37 @@ void partial_sort(RanIt first, RanIt mid, RanIt last){
 template<class RanIt, class Pr>
 void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred){
 	RanIt pilgrim, pos;
-		mid--;
-		swap(*first, *mid);
-		mid= first;
-		for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	mid--;
+	swap(*first, *mid);
+	mid= first;
+	for(pilgrim = first+1;pilgrim < last;pilgrim++)
+	{
+		if(pred(*pilgrim, *mid))
 		{
-			if(pred(*pilgrim, *mid))
+			swap(*pilgrim, *mid);
+			mid = pilgrim;
+			pos = mid - 1;
+			while(pred(*mid, *pos) )
 			{
-				swap(*pilgrim, *mid);
-				mid = pilgrim;
-				pos = mid - 1;
-				while(pred(*mid, *pos) )
-				{
-					swap(*mid, *pos);
-					mid = pos;
-					pos--;
-				}
+				swap(*mid, *pos);
+				mid = pos;
+				pos--;
 			}
 		}
-		RanIt i,j;
-		RanIt iMin;
-		for (j = first; j < mid-1; j++) {
-			iMin = j;
-			for ( i = j+1; i < mid; i++) {
-				if (pred(*i, *iMin)) {
-					iMin = i;
-				}
-			}
-			if ( iMin != j ) {
-				swap(*j, *iMin);
+	}
+	RanIt i,j;
+	RanIt iMin;
+	for (j = first; j < mid-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < mid; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
 			}
 		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
 }
 
 template<class InIt, class RanIt>
@@ -1040,24 +1040,24 @@ void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred){
 template<class FwdIt, class Ty>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val) {
 #if 0
-FwdIt it;
-FwdIt count, step;
-count = distance(first,last);
-while (count>0)
-{
-	it = first; step=count/2; advance (it,step);
-	if (*it<val) // or: if (comp(*it,value)), for the comp version
-			{	first=++it; count-=step+1;}
-	else count=step;
-}
-return first;
+	FwdIt it;
+	FwdIt count, step;
+	count = distance(first,last);
+	while (count>0)
+	{
+		it = first; step=count/2; advance (it,step);
+		if (*it<val) // or: if (comp(*it,value)), for the comp version
+		{	first=++it; count-=step+1;}
+		else count=step;
+	}
+	return first;
 #endif
-while(first != last)
-{
-	if(val <= *first) return first;
-	else first++;
-}
-return first;
+	while(first != last)
+	{
+		if(val <= *first) return first;
+		else first++;
+	}
+	return first;
 
 }
 
@@ -1121,18 +1121,18 @@ bool binary_search(FwdIt first, FwdIt last, const Ty& val) {
 
 template<class FwdIt, class Ty, class Pr>
 bool binary_search(FwdIt first, FwdIt last, const Ty& val, Pr pred){
-//	int size = distance(first, last), start = 1;
-//	while(start < size)
-//	{
-//		int mid = (size - start)/2;
-//		if(*(first+mid) == val) return true;
-//		else if(pred(*(first+mid), val)) size = mid;
-//		else start = mid + 1;
-//	}
-//	return false;
+	//	int size = distance(first, last), start = 1;
+	//	while(start < size)
+	//	{
+	//		int mid = (size - start)/2;
+	//		if(*(first+mid) == val) return true;
+	//		else if(pred(*(first+mid), val)) size = mid;
+	//		else start = mid + 1;
+	//	}
+	//	return false;
 	for(;first!=last;first++)
-			if(*first == val) return true;
-		return false;
+		if(*first == val) return true;
+	return false;
 }
 
 template<class InIt1, class InIt2, class OutIt>
@@ -1222,36 +1222,36 @@ bool includes(InIt1 first1[], InIt1 *last1, InIt2 first2[], InIt2 *last2) {
 template<class InIt1, class InIt2, class Pr>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred){
 	while (first1 != last1) {
-			if (pred(*first2, *first1))
-				break;
-			else if (pred(*first1, *first2))
-				++first1;
-			else {
-				++first1;
-				++first2;
-			}
-			if (first2 == last2)
-				return true;
+		if (pred(*first2, *first1))
+			break;
+		else if (pred(*first1, *first2))
+			++first1;
+		else {
+			++first1;
+			++first2;
 		}
-		return false;
+		if (first2 == last2)
+			return true;
+	}
+	return false;
 }
 
 template<class InIt1, class InIt2, class Pr>
 bool includes(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
 		Pr pred){
 	while (first1 != last1) {
-			if (pred(*first2, *first1))
-				break;
-			else if (pred(*first1, *first2))
-				++first1;
-			else {
-				++first1;
-				++first2;
-			}
-			if (first2 == last2)
-				return true;
+		if (pred(*first2, *first1))
+			break;
+		else if (pred(*first1, *first2))
+			++first1;
+		else {
+			++first1;
+			++first2;
 		}
-		return false;
+		if (first2 == last2)
+			return true;
+	}
+	return false;
 
 }
 
@@ -1288,87 +1288,87 @@ template<class InIt1, class InIt2, class OutIt>
 OutIt* set_union(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
 		OutIt *dest) {
 	OutIt* aux;
-		while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1)
-			{
-				while (first2 != last2) *dest++ = *first2++;
-				aux = dest;
-				break;
-			}
-			if (first2 == last2)
-			{
-				while (first1 != last1) *dest++ = *first1++;
-				aux = dest;
-				break;
-			}
-			if (*first1 < *first2)
-				*dest++ = *first1++;
-			else if (*first2 < *first1)
-				*dest++ = *first2++;
-			else {
-				*dest++ = *first1++;
-				first2++;
-			}
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
 		}
-		return aux;
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
 }
 
 template<class InIt1, class InIt2, class OutIt>
 OutIt set_union(InIt1 first1[], InIt1 *last1, InIt2 first2[], InIt2 *last2,
 		OutIt dest) {
 	OutIt aux;
-		while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1)
-			{
-				while (first2 != last2) *dest++ = *first2++;
-				aux = dest;
-				break;
-			}
-			if (first2 == last2)
-			{
-				while (first1 != last1) *dest++ = *first1++;
-				aux = dest;
-				break;
-			}
-			if (*first1 < *first2)
-				*dest++ = *first1++;
-			else if (*first2 < *first1)
-				*dest++ = *first2++;
-			else {
-				*dest++ = *first1++;
-				first2++;
-			}
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
 		}
-		return aux;
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (*first1 < *first2)
+			*dest++ = *first1++;
+		else if (*first2 < *first1)
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
 }
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
 OutIt set_union(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
 		OutIt dest, Pr pred){
 	OutIt aux;
-		while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1)
-			{
-				while (first2 != last2) *dest++ = *first2++;
-				aux = dest;
-				break;
-			}
-			if (first2 == last2)
-			{
-				while (first1 != last1) *dest++ = *first1++;
-				aux = dest;
-				break;
-			}
-			if (pred(*first1, *first2))
-				*dest++ = *first1++;
-			else if (pred(*first2 < *first1))
-				*dest++ = *first2++;
-			else {
-				*dest++ = *first1++;
-				first2++;
-			}
+	while (first1 <= last1 && first2 <= last2) {
+		if (first1 == last1)
+		{
+			while (first2 != last2) *dest++ = *first2++;
+			aux = dest;
+			break;
 		}
-		return aux;
+		if (first2 == last2)
+		{
+			while (first1 != last1) *dest++ = *first1++;
+			aux = dest;
+			break;
+		}
+		if (pred(*first1, *first2))
+			*dest++ = *first1++;
+		else if (pred(*first2 < *first1))
+			*dest++ = *first2++;
+		else {
+			*dest++ = *first1++;
+			first2++;
+		}
+	}
+	return aux;
 }
 
 template<class InIt1, class InIt2, class OutIt>
@@ -1416,32 +1416,32 @@ OutIt* set_intersection(InIt1 *first1, InIt1 *last1, InIt2 *first2,
 	return &dest;
 #endif
 	while (first1 != last1 && first2 != last2) {
-			if (*first1 < *first2)
-				++first1;
-			else if (*first2 < *first1)
-				++first2;
-			else {
-				*dest++ = *first1++;
-				first2++;
-			}
+		if (*first1 < *first2)
+			++first1;
+		else if (*first2 < *first1)
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
 		}
-		return dest;
+	}
+	return dest;
 }
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
 OutIt set_intersection(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2,
 		OutIt dest, Pr pred){
 	while (first1 != last1 && first2 != last2) {
-			if (pred(*first1, *first2))
-				++first1;
-			else if (pred(*first2, *first1))
-				++first2;
-			else {
-				*dest++ = *first1++;
-				first2++;
-			}
+		if (pred(*first1, *first2))
+			++first1;
+		else if (pred(*first2, *first1))
+			++first2;
+		else {
+			*dest++ = *first1++;
+			first2++;
 		}
-		return dest;
+	}
+	return dest;
 }
 
 template<class InIt1, class InIt2, class OutIt>
@@ -1550,75 +1550,75 @@ OutIt* set_symmetric_difference(InIt1 *first1, InIt1 *last1, InIt2 *first2,
 	}
 #endif
 	while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-			if (first2 == last2){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-
-			if (*first1 < *first2) {
-				*dest++ = *first1++;
-			} else if (*first2 < *first1) {
-				*dest++ = *first2++;
-			} else {
-				first1++;
-				first2++;
-			}
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
 		}
-		return dest;
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (*first1 < *first2) {
+			*dest++ = *first1++;
+		} else if (*first2 < *first1) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
 }
 
 template<class InIt1, class InIt2, class OutIt>
 OutIt set_symmetric_difference(InIt1 first1[], InIt1 *last1, InIt2 first2[],
 		InIt2 *last2, OutIt dest) {
 	while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-			if (first2 == last2){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-
-			if (*first1 < *first2) {
-				*dest++ = *first1++;
-			} else if (*first2 < *first1) {
-				*dest++ = *first2++;
-			} else {
-				first1++;
-				first2++;
-			}
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
 		}
-		return dest;
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (*first1 < *first2) {
+			*dest++ = *first1++;
+		} else if (*first2 < *first1) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
 }
 
 template<class InIt1, class InIt2, class OutIt, class Pr>
 OutIt set_symmetric_difference(InIt1 first1, InIt1 last1, InIt2 first2,
 		InIt2 last2, OutIt dest, Pr pred){
 	while (first1 <= last1 && first2 <= last2) {
-			if (first1 == last1){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-			if (first2 == last2){
-				while (first2!=last2) *dest++ = *first2++;
-				return dest;
-			}
-
-			if (pred(*first1, *first2)) {
-				*dest++ = *first1++;
-			} else if (pred(*first2, *first1)) {
-				*dest++ = *first2++;
-			} else {
-				first1++;
-				first2++;
-			}
+		if (first1 == last1){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
 		}
-		return dest;
+		if (first2 == last2){
+			while (first2!=last2) *dest++ = *first2++;
+			return dest;
+		}
+
+		if (pred(*first1, *first2)) {
+			*dest++ = *first1++;
+		} else if (pred(*first2, *first1)) {
+			*dest++ = *first2++;
+		} else {
+			first1++;
+			first2++;
+		}
+	}
+	return dest;
 }
 
 template<class RanIt>
