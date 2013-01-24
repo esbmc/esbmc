@@ -408,7 +408,8 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& value) {
 	FwdIt it, limit;
 	size_t i;
 
-	limit=first; advance(limit,distance(first,last)-count);
+	limit=last;
+	limit = limit - count;
 
 	while (first!=limit)
 	{
@@ -425,7 +426,8 @@ FwdIt search_n(FwdIt first, FwdIt last, Diff count, const Ty& val, Pr pred) {
 	FwdIt it, limit;
 	size_t i;
 
-	limit=first; advance(limit,distance(first,last)-count);
+	limit=last;
+	limit = limit - count;
 
 	while (first!=limit)
 	{
