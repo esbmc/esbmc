@@ -409,6 +409,27 @@ analysis\footnote{660 seconds ``GOTO processing'' compared to 20,000 seconds
 ``BMC time''}.
 
 \section{Symbolic execution}
+
+This portion of ESBMC is likely the most important in terms of theory,
+complexity, and performance. The overall task is to take an input set of
+GOTO functions, and interpret their instructions through an execution path
+that is bounded according to the rules of BMC. Along the way, a \textit{Single
+Static Assignment} (SSA) program is created recording the operations that
+occured during the trace, for later checking. We must also make decisions
+regarding the exploration of thread interleavings if multiple threads are
+involved. To cover this section, we'll first look at the substance of the
+SSA program, the concept of variable ``renaming'', the classes that make up
+the symex process, how specific instructions are interpreted in single
+threaded code including certain special case library functions,
+and finally how all this relates to multi-threaded code.
+
+\subsection{SSA programs}
+\subsection{Variable renaming}
+\subsection{Class overview}
+\subsection{Instruction interpretation}
+\subsection{Intrinsic library functions}
+\subsection{Multithreaded interactions}
+
 \section{SMT encoding}
 \section{Solving and counterexamples}
 \section{The inevitable 'misc'}
