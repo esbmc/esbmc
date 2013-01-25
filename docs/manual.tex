@@ -1,5 +1,6 @@
 \documentclass{article}
 \usepackage{url}
+\usepackage{listings}
 \begin{document}
 \author{Jeremy Morse}
 \title{A manual on some internals of ESBMC}
@@ -295,6 +296,118 @@ That's the substance of instructions; more information on the interpretation
 of them lies in the symbolic execution section.
 
 \section{Pointer analysis}
+
+The essence of the pointer analysis is a tracking of what pointer variables
+exist in the GOTO code, and what they might point at. This occurs more than once
+during each run of ESBMC. A static analysis of the instructions first attempts
+to establish a set of all (lexical) variables that a particular (lexical)
+variable in a function may point at. Then during symbolic execution, a similar
+tracking maintains a set of (``runtime'') variables that an actual pointer
+\textit{does} point at.
+
+The static analysis is initiated from the GOTO program processing code in the
+\texttt{cbmc\_parseoptionst} object. The high level analysis logic actually
+lies in the \texttt{goto-programs} directory with the
+\texttt{static\_analysist} and \texttt{abstract\_domain\_baset}
+classes. Code in these classes call abstract methods to perform transformations 
+between states as appropriate, over all GOTO instructions, to find a fixedpoint
+where all values of the abstract domain have been discovered for all states.
+
+The \texttt{value\_set\_analysist} and \texttt{value\_set\_domaint} classes
+subclass the above two classes respectively to provide concrete
+methods\footnote{I'm probably using all the wrong terminology here} for
+tracking states of what pointer variables might point at. Most of the logic
+itself lies in the latter class, storing both the actually tracking data
+and forwarding transformation method calls to the appropriate objects.
+
+A \texttt{value\_set\_domaint} contains only a \texttt{value\_sett} object.
+That itself contains the pointer tracking map, which is, unsuprisingly,
+string based. The core type is the \texttt{value\_sett::valuest} map,
+where a string identifying a variable name maps to a
+\texttt{value\_sett::entryt}, which stores a set of variables that may be
+pointed at and the offset into them.
+
+The string key of each of these entries is important -- When interpreting 
+an assignment of a pointer value to a variable, we take the original variable
+name being worked on and then interpret the left hand side, appending strings
+to indicate /what/ part of the variable is being assigned to. To illustrate,
+consider an assignment to the \texttt{bees} field of the following struct:
+\begin{lstlisting}
+struct face {
+  void *bees[4];
+};
+
+int main() {
+  struct face knees;
+  knees.bees[0] = NULL;
+  return 0;
+}
+\end{lstlisting}
+
+Here, the fully qualified name of the variable we are assigning to is
+\texttt{main::main::knees}, which becomes the starting point for the string
+key in the value tracking map. We then interpret the left hand side of the
+assignment, observe that we access the \texttt{bees} field, and so append the
+text \texttt{.bees} to the key we are calculating. The next part of the left
+hand side is the access to an element of the \texttt{bees} array, so we
+append the text \texttt{[]} to the key we calculate. The final key is then
+\texttt{main::main::knees.bees[]}. Observe that this approach allows every
+variable in the program to have a unique key in the tracking map, except for
+elements in an array --- we instead track what \textit{all} elements of the
+array may point at, thus forming an overapproximation. The reasons for this
+should be obvious.
+
+The \texttt{value\_sett::entryt} class is responsible for tracking the target
+variables that a pointer may point at. It stores a map between certain variable
+names and \texttt{value\_sett::objectt}s. The presence of a variable name key
+in the map indicates that the variable may be pointed at. The
+\texttt{value\_sett::objectt} object records whether the offset into the
+variable that is pointed at is nondeterministic or constant; and if fixed,
+then what the offset is. (NB: the actual implementation of this stores
+\texttt{symbol} ireps as the map keys. To optimise this, it uses a (global)
+pooling technique to assign each irep an ID number; see the
+\texttt{value\_sett::object\_numbering} object. The ID number is then used
+as the key into the \texttt{value\_sett::entryt} map).
+
+The \texttt{value\_sett} class also provides operations required in the course
+of the static analysis, most importantly the ability to interpret an instruction
+to record and update the tracking described above. The class can also merge
+value set records into each other. This follows the obvious merging procedure;
+however when the two tracking sets being merged have a pointer variable
+that points at different offsets into the same data object, the merged
+tracking set records a nondeterministic offset into that data object. This
+forms an overapproximation of the offset into an object that a pointer points
+at.
+
+No attempt is made to track what I'll term \textit{funky} pointer assignments.
+For example, if code deconstructs a pointer variable into bytes, then
+reconstructs these bytes into a pointer value, we are unable to track
+what the resulting pointer value points at. How to address this in the future
+is an open question. The byte array memory models of other tools neatly
+side-step this issue.
+
+The static analysis process eventually reaches a fixedpoint state where we
+have established all possible variables that may be pointed at byte pointer
+variables. The contents of this analysis is then handed to an object of
+class \texttt{goto\_program\_dereference}. This proceeds to enumerate all
+GOTO instructions and attempts to perform all dereferences in the instruction.
+Pointer safety assertions are then generated (see the section on dereferencing)
+and inserted as ASSERT instructions prior to the dereferencing instruction.
+
+The pointer analysis executed during symbolic execution uses the same records
+and functions as the static analysis. While the static analysis attempts to find
+all the variables a pointer might point at across all code paths, the symex
+tracking instead tracks the set of all variables a pointer may point at in the
+course of the current code path. The variables it tracks are also ``L1 renamed''
+(see the section on Symbolic Execution).
+
+It is speculated that the static analysis can be removed, and assertions
+encoded on-the-fly when dereferences occur during symbolic execution. While
+this might be a valid optimisation, the TACAS13 performance figures indicate
+that execution time is dominated by symex, rather than the pointer
+analysis\footnote{660 seconds ``GOTO processing'' compared to 20,000 seconds
+``BMC time''}.
+
 \section{Symbolic execution}
 \section{SMT conversion}
 \section{SMT encoding}
