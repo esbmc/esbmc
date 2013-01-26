@@ -424,7 +424,154 @@ threaded code including certain special case library functions,
 and finally how all this relates to multi-threaded code.
 
 \subsection{SSA programs}
+
+The output from a single symex run through a program is contained in a
+\texttt{symex\_target\_equationt} object. This primarily stores a list of
+\texttt{symex\_target\_equationt::SSA\_stept} objects, each of which represents
+a single operation in program, sometimes referred to as a \textit{trace}.
+The idea of SSA \textit{variables} will be discussed in the ``Variable
+Renaming'' section. A SSA step comes in four flavours:
+
+\begin{description}
+\item[ASSIGNMENT] An assignment to a variable, with a symbol on the left hand
+side, and an expression irep on the right hand side.
+\item[ASSERT] Represent an assertion that an expression evaluates to true.
+\item[ASSUME] Represent an assumption that an expression evaluates to true.
+\item[OUTPUT] Record an output from the trace. This is essentially a wrapper
+around a printf operation, that causes variables to be printed in the
+course of printing a counterexample. I recommend not asking.
+\end{description}
+
+Numerous expression fields in a step object record the details of the above
+operations, and are generally uninteresting for this discussion. The only
+other data of note is that each step stores a \texttt{source} object, recording
+where in the GOTO program the SSA step was generated.
+
 \subsection{Variable renaming}
+
+In the course of this manual there are numerous references to ``variables'',
+without futher elaboration. The different aspects of variables that might be
+referred to are below:
+
+\begin{itemize}
+\item The lexical variable, i.e. the variable name itself in a particular
+context, not specific to a particular value or function activation.
+\item The storage of a variable. The portion of memory reserved for storing
+the value of a variable, either a global variable or memory allocated on the
+stack if an automatically allocated variable in a function block.
+\item The contents of a variable. Simply the value assigned to the variable
+at a particular point in a program.
+\end{itemize}
+
+We name these different aspects \textit{level 0}, \textit{level 1}, and
+\textit{level 2} respectively, often shortened to L0, L1, or L2. The reason
+for this naming will become obvious shortly. An example is in order to fully
+understand this. Consider the following function, and how it relates to the
+pointer analysis:
+
+\lstset{numbers=left}
+\begin{lstlisting}
+int anint;
+
+void somefunc(int **beans) {
+  int *bears = *beans;
+  bears = &anint;
+}
+
+int main1(void) {
+  int wololololo = 0;
+  somefunc(&wololololo);
+}
+
+int main2(void) {
+  int ponies = 0;
+  somefunc(&ponies);
+}
+\end{lstlisting}
+
+Here, if we consider the variable \texttt{beans} as an L0 variable, what it
+points at is the set of all pointer targets it could potentially point at over
+\textit{all} execution traces that are available in the program, including
+all pointers that may be fed into \texttt{somefunc} at any point in the
+program. This set includes the \texttt{wololololo} and \texttt{ponies}
+variables. However if we consider \texttt{beans} as an L1 variable, what it
+points at is whatever it may point at across the lifetime of its storage. Thus,
+this depends on the path taken through the program -- the pointer may point
+at \texttt{wololololo} or \texttt{anint} if \texttt{somefunc} is called from
+\texttt{main1}, or alternately it may point at \texttt{ponies} or \texttt{anint}
+if called from \texttt{main2}. However it may never potentially point at all
+three. Finally, L2 variables are the actual value of the variable at a
+particular point in the program, in our example the L2 \texttt{beans} pointer
+may only ever point at a single value, which varies with both the path through
+the program and the actual instruction location.
+
+(These differences are important during the pointer analysis -- the static
+analysis tracks pointers as L0 variables, the symex pointer tracking considers
+L1 variables).
+
+The reason for describing these variable kinds in terms of ``level''s, is
+that we can consider a higher ``level'' of variable as representing a set of
+lower level variables. Consider: if we call the \texttt{somefunc} function
+in the above example three times, then the L0 \texttt{beans} variable exists
+only once (as the function only exists once, so the lexical variable exists
+once). However, three L1 instances of the L1 \texttt{beans} variable exist,
+because the function was called three times and storage allocated for the
+variable three times. In the same way, repeated assignment to a variable
+in a function causes only one L1 name to exist (as only one piece of storage
+is required), however multiple L2 variables exist as the variable has
+multiple values during the execution of the function.
+
+This then leads to the concept of ``renaming'', which is where we take a high
+level variable and reference a lower level variable, appropriate to the context.
+The two forms this can take are the transitions L0 to L1, and L1 to L2. In the
+former case, we are taking a lexical variable and referring to the actual
+storage of that variable. If the variable is global or of a static lifetime,
+no additional data is added to the record, as the variable is always the
+same piece of storage across the whole program execution. If the variable is
+allocated local to a function call, then the L0 variable is annotated with
+a unique \textit{activation record} number that identifies which invocation
+of the function we are dealing with, and a thread number. The actual values
+of these numbers are derived from the context of the renaming -- a thread number
+is always available, and the activation record number of the function is always
+available (as it's illegal to refer to a local variable outside of its
+scope\footnote{Indirect pointer references are special, see later}.
+
+
+When renaming an L1 variable to an L2 variable (effectively finding the value
+currently stored by that L1 variable) we annotate the L1 variable with
+a context switch ID number (see later sections) and an \textit{SSA assignment
+number}. The assignment number is a monotonically increasing counter giving each
+assignment to an L1 variable a unique identifier. So, if we assign to a
+variable four times in a function, four L2 variables are created with
+assignment numbers from one to four. This preserves the SSA constraint that we
+only ever assign to a variable once. When renaming an L1 variable to L2 for the
+purpose of using its value rather than making an assignment, we take the
+assignment number to be the greatest assignment number for that L1 variable,
+thus giving us the most recently assigned value of that L1 variable.
+
+The final complexity to this situation, is that there is never a particular
+object in ESBMC that represents any of these variables. Instead, variables
+are identified by \textit{name}, stored in a symbol irep. Unsuprisingly, this
+name is a string\footnote{Changes in the irep2 branch}. Multiple symbol irep
+objects can contain the name of the same variable; creating a new variable
+at any leve is as simple as creating a new name. An interesting side-effect
+of this is that, following the procedure for renaming an L1 variable to L2,
+if the L1 variable has never been assigned to then the greatest assignment
+number is zero, and so references to unassigned variables read from assignment
+number zero. (And because when we reach the solver level there is nothing
+constraining the zeroth assignment of that variable, it's a free variable).
+The format of this string is as follows:
+
+\begin{quote}
+full\_variable\_name@actv\_record!thread\_no\&cswitch\_no\#assign\_no
+\end{quote}
+
+Where \texttt{actv\_record}, \texttt{thread\_no}, \texttt{cswitch\_no}, and
+\texttt{assign\_no} are replaced with the appropriate numbers. L0 names only
+feature the variable name at the start; L1 names follow the above format
+up until the ampersand; and L2 names use the full format. These names will
+frequently crop up throughout almost all of ESBMC.
+
 \subsection{Class overview}
 \subsection{Instruction interpretation}
 \subsection{Intrinsic library functions}
