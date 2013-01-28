@@ -905,6 +905,15 @@ the future. Relevant fields of the \texttt{framet} object are
 \texttt{orig\_func\_ptr\_call}.
 
 \subsubsection{Other}
+
+``OTHER'' instructions, as mentioned, are more or less the catch-all instruction
+for special cases and ugly hacks. Interpretation of them is redirected to the
+\texttt{goto\_symext::symex\_other} method. A general description of what
+flavours of OTHER instructions there are lies in the section on GOTO
+instructions. Dynamic memory operations are described elsewhere. In an ideal
+world we would end up replacing all of these special case instructions with
+function call to intrinsics.
+
 \subsubsection{Exception handling}
 \subsection{Intrinsic library functions}
 \subsection{Multithreaded interactions}
