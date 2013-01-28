@@ -622,6 +622,77 @@ the future, and the actvation record number for renaming, live here too.
 There are also some hacks related to function pointer interpretation.
 
 \subsection{Instruction interpretation}
+
+The execution of instructions begins in the constructor for
+\texttt{execution\_statet} where the first thread is created and its program
+counter set to the entry of the \texttt{main} function. From that point
+onwards, the \texttt{goto\_symext::symex\_step} method is repeatedly called
+to take the next instruction, interpret it, and move forwards. Some
+instructions are handled in \texttt{execution\_statet::symex\_step},
+which overrides its superclass and interprets multithreading specific
+instructions. What follows is a narative of the (not quite) high level
+operations performed during the interpretation of these instructions. Assume
+that pointer dereferences are already handled as described in the section
+on dereferencing --- actions specific to dereferencing will be mentioned
+explicitly.
+
+\subsubsection{Assign}
+
+The substance of an assignment is a left hand side and right hand side. The
+outcome we need is an SSA assignment, where we calculate a value with a type
+n the right hand side, and then create a new left hand side variable that this
+right hand side can be bound to. Clearly the assignment of a constant rhs to
+a variable on the lhs is the simplest example of this. The operation becomes
+more complex when the left hand side is an array index, a struct field,
+a cast, or a nondeterminstic symbol due to pointer dereferencing. These
+assignments must be rewritten into a simple variable assignment.
+
+Performing this rewriting for an array index, we take the array variable
+on the left hand side, and create a WITH operation that updates the desired
+element with the right hand side. The assignment is rewritten to become an
+assignment of this new value to the array variable. A similar operation
+occurs for struct and union member assignments. For a nondeterministic
+assignment we encode multiple deterministic assignments, one for each left
+hand side, guarded by the appropriate guard. For assignment to a
+\texttt{byte\_extract} irep, we replace the right hand side with a
+\texttt{byte\_update} irep of the base data object on the left hand side.
+The logic for all these operations begins in the
+\texttt{goto\_symext::symex\_assign\_rec} method and methods called from there.
+
+Once we have an assignment in this form it is suitable for being an SSA
+assignment. However all the variables are L0 variables, and need to be
+renamed to refer to the appropriate piece of data or value. In the course
+of the \texttt{goto\_symext::symex\_assign\_symbol} method we call
+\texttt{goto\_symex\_statet::rename} which identifies each variable on the
+right hand side, renames to L1 (storage variables), and then to L2 (actual
+values). The identifying numbers for these operations are pulled from the
+top level \texttt{goto\_symex\_statet::framet} object of the most recently
+called function, and the global L2 state tracking. One notable exception here
+is that any operand to an \texttt{address\_of} operation will only be renamed
+to L1 --- we do not take the address of a particular variable value, but
+instead the storage of the variable.
+
+Once renamed, execution passes to \texttt{goto\_symex\_statet::assignment},
+which performs accounting for the assignment on the L2 level. Specifically,
+it bumps the SSA assignment number for the variable assigned to, so that future
+uses of it will have the updated / recently assigned value. Additionally
+we inspect the contents of the right hand side, and if it is a
+sufficiently\textsuperscript{\texttrademark} constant value it is cached
+in the program L2 state tracking, for constant propagation. Future rename
+operations on that variable will have the variable replaced with its constant
+value, rather than the variable itself. This method also passes the
+assignment to be interpreted by the pointer analysis, which updates what the
+left hand side may possibly point at.
+
+Finally the \texttt{symex\_target\_equationt::assignment} method is called
+to encode an SSA assignment, the program counter is incremented to point at the
+next instruction, and we are done.
+
+\subsubsection{Assert and assume}
+\subsubsection{Goto}
+\subsubsection{Function calls and ends}
+\subsubsection{Other}
+\subsubsection{Exception handling}
 \subsection{Intrinsic library functions}
 \subsection{Multithreaded interactions}
 
