@@ -954,6 +954,41 @@ from \texttt{reachability\_treet}, so I'll describe them elsewhere.
 
 \subsection{Intrinsic library functions}
 
+Numerous intrinsics exist, mostly related to multithreading operations.
+Hopefully in the future more features will move to being intrinsics, thus
+reducing special cases and being more obviously ESBMC-specific. All intrinsics
+are prefixed with ``\_\_ESBMC\_'', and include the operations below:
+
+\begin{description}
+\item[yield] Force a context switch point during exploration
+\item[switch\_from] Force a context switch point \textit{and} ensure that
+another thread runs at least once before this runs again.
+\item[switch\_to] Takes one integer argument. Forces a context switch from the
+current thread to the thread identified by the argument.
+\item[get\_thread\_id] Return the integer identifier of the current thread.
+\item[set\_thread\_data] Takes two arguments. The first is a thread ID num,
+the second  is a piece of constant value data to set as thread-specific
+data for that thread. Used for sending data to a thread without nondeterminism
+getting in the way.
+\item[get\_thread\_data] Takes one argument, a thread identifier. Retrieves
+a piece of data set with \texttt{set\_thread\_data}.
+\item[spawn\_thread] Creates a new thread. Takes one argument, the address
+of a function to start executing at. This start function must take no arguments
+and return nothing. The return of this intrinsic is the ID number of the
+created thread.
+\item[terminate\_thread] Terminate execution of the current thread, causing it
+to never be executed again.
+\item[get\_thread\_state] Takes one argument, a thread ID. Returns true boolean
+if the thread is still running, false if it has exited.
+\end{description}
+
+These are fairly peculiar as far as intrinsics go --- the justification is that
+we should be able to build other threading libraries on top of ESBMC that aren't
+just pthreads, and so there should be a simple generic interface to controlling
+threads. The pthread library implementation on top of this is probably out of
+scope for this document, and I'll end up sticking it in the pthread
+implementation
+
 \section{Dynamic memory}
 \section{SMT encoding}
 \section{Solving and counterexamples}
