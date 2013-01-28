@@ -70,14 +70,16 @@ namespace std
         char* temp = new char[NUM_SIZE];
         itoa(val, temp, DEC);
         _string.append(temp);
-        return ostream();
+        _string._size = strlen(_string.str) + strlen(temp);
+        return *this;
       }
 
       ostream& operator<< (long& val) {
         char* temp = new char[NUM_SIZE];
         itoa(val, temp, DEC);
+        _string._size = strlen(_string.str) + strlen(temp);
         _string.append(temp);
-        return ostream();
+        return *this;
       }
 
       ostream& operator<< (float val) {
@@ -123,6 +125,14 @@ namespace std
         int tam = strlen(val);
         _string.append(val, tam);
         return ostream();
+      }
+
+      ostream& operator<< (unsigned short& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
+        _string.append(temp);
+        _string._size = strlen(_string.str) + strlen(temp);
+        return *this;
       }
   };
 
