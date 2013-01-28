@@ -121,6 +121,11 @@ namespace std
         return *this;
       }
 
+      ostream& operator<< (unsigned char& val) {
+        _string.append(reinterpret_cast<const char*>(&val), 1);
+        return *this;
+      }
+
       ostream& operator<< (char* val) {
         int tam = strlen(val);
         _string.append(val, tam);
