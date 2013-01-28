@@ -1,9 +1,19 @@
 \documentclass{article}
 \usepackage{url}
 \usepackage{listings}
+
+\usepackage{titling}
+\newcommand{\subtitle}[1]{%
+  \posttitle{%
+    \par\end{center}
+    \begin{center}\large#1\end{center}
+    \vskip0.5em}%
+}
+
 \begin{document}
 \author{Jeremy Morse}
 \title{A manual on some internals of ESBMC}
+\subtitle{Caveat lector}
 \maketitle
 \tableofcontents
 \section{Introduction and caveats}
