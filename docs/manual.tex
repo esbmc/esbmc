@@ -689,7 +689,24 @@ to encode an SSA assignment, the program counter is incremented to point at the
 next instruction, and we are done.
 
 \subsubsection{Assert and assume}
+
+ASSERT and ASSUME instructions are no-where near complex. Their substance
+is the \texttt{guard} field of the GOTO instruction, which records the condition
+that we are asserting or assuming. This expression is renamed as above to refer
+to the appropriate L2 or L1 variables, and is passed to the expression
+simplifier in case we can determine the truth of the operation statically.
+The time and particularly memory benefits of determining this early are
+significant.
+
+The relevant methods are \texttt{goto\_symext::claim} for ASSERT and
+\texttt{goto\_symext::assume} for ASSUME. These perform the above operations,
+and then call \texttt{symex\_target\_equationt::assertion} and
+\texttt{symex\_target\_equationt::assumption} respectively.
+
 \subsubsection{Goto}
+
+
+
 \subsubsection{Function calls and ends}
 \subsubsection{Other}
 \subsubsection{Exception handling}
