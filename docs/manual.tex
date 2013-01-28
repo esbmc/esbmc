@@ -705,7 +705,131 @@ and then call \texttt{symex\_target\_equationt::assertion} and
 
 \subsubsection{Goto}
 
+GOTO is likely the most complex of all the GOTO instructions, due to the sheer
+amount of juggling of state that results. The substance of these is again
+the \texttt{guard} field of the instruction, and a target instruction where the
+GOTO is jumping to. There are two other factors that significant decisions
+are made on --- firstly whether the GOTO is \textit{backwards} to an earlier
+instruction in the program, and whether the guard of the instruction is (when
+simplified) a constant true or false, or nondeterministic.
 
+Consider the naive execution of some GOTO instructions. We start by executing
+the first instruction in the program, moving on to the next, and repeating until
+we reach the last instruction in the program. We can also handle loops by,
+whenever we execute a GOTO that jumps backwards, following that jump and
+executing from an earlier instruction in the program. This basic approach to
+interpretation is what is employed by ESBMC, with all control flows more
+complicated than the above encoded by making portions of the execution trace
+nondeterministically executed.
+
+The best way to describe this is through an example: below is a sample piece
+of C, and an approximation of the corresponding GOTO code that it translates to.
+
+\begin{lstlisting}
+if (somebool) {
+  a = b;
+} else {
+  a = c;
+}
+return a;
+\end{lstlisting}
+
+\begin{lstlisting}
+   IF somebool GOTO 1
+   ASSIGN a = b
+   GOTO 2
+1: ASSIGN a = c
+2: RETURN a
+\end{lstlisting}
+
+In the GOTO code for this program, there are two significant control flow
+operations. The first instruction (line 1) is a GOTO instruction with a
+guard\footnote{Even though it's a GOTO instruction, the textual representation
+always begins with IF on account of it being a conditional GOTO.}, then the
+RETURN instruction on line 6, with label ``2''.
+
+As alluded to in previous subsections, we encode complicated and
+nondeterministic executions of the program as small deterministic executions,
+and then merge them together later. The storage for such an execution is a
+\texttt{goto\_symex\_statet::goto\_statet} object, which contains a copy of
+the L2 variable assignment data, pointer tracking set, and a guard for whether
+this path is executed.  Taking our example, at the first GOTO instruction (line
+1) we duplicate the current symex state into a \texttt{goto\_statet}, with a
+guard evaluating to true when the GOTO's guard is true. This object is then
+placed in the stack frame's \texttt{framet} object, in the
+\texttt{goto\_state\_map} field, as a piece of program state to be considered
+in the future, at the target of the jump (line 4).
+
+Proceding from that GOTO instruction, the guard of the currently executing
+piece of code is adjusted to be true when the current instruction is reachable,
+i.e. when the guard for the GOTO on line one is false.
+We encode the assignment to \texttt{a} as normal. We then reach the next
+GOTO on line 3, which is an unconditional jump to label 2. At this point we
+duplicate the current symex state into another \texttt{goto\_statet} object,
+and file it for consideration at the jump target (line 5). The guard encoded
+in the \texttt{goto\_statet} is the guard for the current execution; we do not
+alter it as the jump is unconditional.
+
+ESBMC proceeds by setting the state guard of the current exploration to
+false --- this because any instructions following an unconditional jump cannot
+be executed. However when it moves onto the next instruction, in the course
+of the method \texttt{goto\_symext::merge\_gotos} we detect that a previous
+jump (from line 1) targetted the current instruction, and thus we should
+consider continuing the execution down that path. Given that the current state
+guard is false and thus nothing is actually being executed at the current
+point of exploration, the state in the \texttt{goto\_statet} from line 1 is
+simply copied back into the current exploration state, and the current
+exploration guard set to the guard in the \texttt{goto\_statet}. We now
+effectively have the program state that we would had if we had actually
+jumped the exploration from line 1 to line 4. The assignment in line 4 itself
+is executed as normal.
+
+The truly advanced part occurs when we move on to line 5. This is the point
+where the two deterministic paths that we could take from line 1 must be
+merged into a nondeterministic program. This is signified by the fact that the
+current exploration guard is non-false, and \texttt{goto\_symext::merge\_gotos}
+finds a \texttt{goto\_statet} to merge into the current exploration. To handle
+this, the method \texttt{goto\_statet::phi\_function} is invoked to merge the
+two states, nondeterministically. It begins by taking the difference between
+the two guards of the two explorations. It then iterates over all L2 variable
+assignments, and finds those that have been changed in either path. For such
+assignments, an additional assignment to the variable is made from an
+\texttt{if} irep\footnote{or the if-then-else operation, or a phi-function, or
+however you wish to call it}, with the guard difference as the condition, and
+the variable from either exploration path as the two operands. The net effect
+is that the value of any particular variable in the program changed over the
+two explored paths is now selected according to the truth of the condition
+on line 1. If it was true, we take the variables assigned in the true path,
+if it was false, then the variables assigned in the false path. We finally
+take this new L2 variable state, the union of the two pointer tracking sets,
+the disjunction of the guards for the paths we could have taken, and assign
+this back to the current symex exploration state.
+
+All control flow concepts are built on top of this principal. The unwinding of
+loops occurs by ESBMC following all jumps backwards (up to the unwind bound),
+with all paths that break out of the loop being filed as states to be merged
+once we have exited the loop. Then once we have reached the unwind bound and
+exited the loop\footnote{or statically determined that it always exits} these
+states are all merged following the procedure as above, and the program
+exploration continues.
+
+Special actions are taken during loops, due to this being a bounded model
+checker. As expected, we record how many times we have unwound a particular
+loop, and once the unwind bound given by the operating user has been reached
+we call the \texttt{goto\_symext::loop\_bound\_exceeded} method. In all
+circumstances exploration does not continue any further. However by default
+we encode an assertion that the condition of continuing the loop, i.e. the
+backwards jump we are currently considering, is false. This causes any path
+where additional unwindings are available, but have been ignored due to the loop
+bound, to trigger an assertion, letting the user know that their analysis is
+incomplete. This can be optionally disabled. If it is, we instead encode an
+assumption that the current (artifically bounded) path is not taken. This
+preserves the termination condition of the loop, ensuring that only executions
+that fufil the termination condition actually leave the loop. If this assumption
+is turned off\footnote{The legenday \texttt{--partial-loops} option} then
+ESBMC can consider unsound paths, for example an infinite loop with no
+\texttt{goto} or \texttt{break} statements will be able to exit and continue
+execution because the termination condition is not preserved.
 
 \subsubsection{Function calls and ends}
 \subsubsection{Other}
