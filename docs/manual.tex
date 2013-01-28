@@ -987,9 +987,42 @@ we should be able to build other threading libraries on top of ESBMC that aren't
 just pthreads, and so there should be a simple generic interface to controlling
 threads. The pthread library implementation on top of this is probably out of
 scope for this document, and I'll end up sticking it in the pthread
-implementation
+implementation file.
 
 \section{Dynamic memory}
+
+Currently, if you malloc a piece of dynamic memory what you'll get
+back is a pointer to a uniquely numbered variable, probably of type byte array.
+Some CBMC code attempts to determine what type variable the caller wants to be
+allocated when calling malloc, however this is difficult to do, particularly
+when the first call to the result is \texttt{memset}.
+
+Being a variable means that malloc'd items of data can be treated like any other
+piece of data in ESBMC. The complexity occurs when we have to perform assertions
+and checks to see whether or not pointers have been freed or point in bounds.
+A series of arrays of data are used to model that information. These are
+\texttt{\_\_ESBMC\_alloc}, \texttt{\_\_ESBMC\_deallocated},
+\texttt{\_\_ESBMC\_is\_dynamic} and \texttt{\_\_ESBMC\_alloc\_size}.
+The index of the array is the pointer object ID number, see the section on
+SMT encoding. Here, the boolean arrays \texttt{alloc} and \texttt{deallocated}
+store whether or not the pointer is valid and has been deallocated,
+respectively. Exactly what the difference is between the two is a mystery,
+and possibly nonexistant. \texttt{is\_dynamic} is an array of bools indicating
+whether or not a particular pointer was allocated dynamically or not.
+\texttt{alloc\_size} contains the size of the allocation, if dynamic.
+
+Assertions about pointer validity tend to be written in terms of these pieces
+of data. For example, the size of a piece of data is always available, unless
+it was allocated dynamically, in which case the \texttt{\_\_ESBMC\_alloc\_size}
+array is used to retrieve the actual size allocated. Currently no attempt is
+made to assert that stack objects that are out of scope are not accessed.
+
+Checking that dynamic memory is all freed before program termination is now
+handled by keeping a set of all allocated pieces of memory in
+\texttt{goto\_symext}. At the end of the exploration of the program, an
+ssertion is encoded that for all objects allocated, if the guard was true
+at the time of allocation, then the object has now been freed.
+
 \section{SMT encoding}
 \section{Solving and counterexamples}
 \section{Multithreading exploration}
