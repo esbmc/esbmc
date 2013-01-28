@@ -924,6 +924,33 @@ itself, which probably does the obvious.
 
 \subsection{Multithreaded interactions}
 
+The current way that ESBMC operates is to consider an interleaving wherever
+access to a piece of shared state occurs. The context switch itself is defined
+to occur \textit{after} the operation that causes it. This doesn't affect
+reachability at all so long as there is a context switch available at the start
+of any thread. This is because the context switch can actually occur at any
+point between two accesses to shared state, it's just most convenient to do
+it whenever one of those accesses occurs.
+
+To support this, several \texttt{goto\_symext} methods are overridden in the
+\texttt{execution\_statet} class. Then, whenever any assignments, asserts,
+assumes, and conditional jumps occur, the normal interpretation is still
+applied, but is followed by a call to the \texttt{reachability\_treet} object
+that controls the current exploration, to see whether any action should be
+taken. What action is actually taken depends on the multithreading exploration
+method, see another section.
+
+Two additional instructions are available for interpretation by
+\texttt{execution\_statet::symex\_step} --- ATOMIC\_BEGIN and ATOMIC\_END.
+These flag the currently executing thread as being in an atomic block,
+and not in an atomic block, respectfully. Other threading operations are
+available, but implemented in intrinsics rather than specific instructions.
+(I'd also prefer atomic begin / end to be intrinsics too).
+
+The \texttt{execution\_statet} class itself can perform many other operations,
+reporting facts about the current program state or making operations like
+switching which is the current active thread. However these are all called
+from \texttt{reachability\_treet}, so I'll describe them elsewhere.
 
 
 \subsection{Intrinsic library functions}
