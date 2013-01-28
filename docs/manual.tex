@@ -915,6 +915,13 @@ world we would end up replacing all of these special case instructions with
 function call to intrinsics.
 
 \subsubsection{Exception handling}
+
+I know practically nothing about the exception handling (and hopefully others
+can write this section). However there are THROW\_DECL instructions that I
+believe signify the start of a catch block, with THROW\_DECL\_END signifying
+the end of a particular type being caught. There's then the THROW instruction
+itself, which probably does the obvious.
+
 \subsection{Intrinsic library functions}
 \subsection{Multithreaded interactions}
 
