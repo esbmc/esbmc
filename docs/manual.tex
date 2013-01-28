@@ -831,7 +831,79 @@ ESBMC can consider unsound paths, for example an infinite loop with no
 \texttt{goto} or \texttt{break} statements will be able to exit and continue
 execution because the termination condition is not preserved.
 
-\subsubsection{Function calls and ends}
+\subsubsection{Function calls, ends, and returns}
+
+There are three function-related GOTO instructions, FUNCTION\_CALL,
+FUNCTION\_END, and RETURN. All deal with organizing the exploration of
+the program execution into sequential instructions, sometimes involving
+some nondeterminism. Consider the simplest case:
+
+\begin{lstlisting}
+int main(int argc, char **argv) {
+  return foo();
+}
+\end{lstlisting}
+
+Here, a call to main will be represented as a FUNCTION\_CALL instruction.
+The \texttt{code} field contains a \texttt{function\_call} irep that
+records what arguments to pass in, the function target (in a \texttt{symbol}
+irep), and the variable to assign the return value to. Interpretation begins
+in \texttt{goto\_symext::symex\_main}, where we may identify a function as
+being an intrinsic, and pass it off to \texttt{goto\_symext::run\_intrinsic}.
+All other function calls are passed to
+\texttt{goto\_symext::symex\_function\_call} and then
+\texttt{goto\_symext::symex\_function\_call\_symbol}.
+
+As part of setup for a function call, we check that the target function
+actually exists. Within ESBMC it is valid to call a declared function that has
+no body, otherwise we would have to write stubs for every library ever. If no
+body exists to be called, a warning is printed to the user, and the return value
+of the call becomes nondeterministic. Additionally we check how many times
+the target function has been called to detect recursion; if the number of
+active function calls exceeds the unwind bound, the function call is ignored.
+
+Following this, if we are still interpreting the function call, we allocate a
+new \texttt{framet} object to recall this call, and put it on the top of the
+call stack. The tracking data for L1 names is updated so that local variables
+get renamed to an L1 name local to this function call, rather than a call to
+the same function higher on the stack (\texttt{goto\_symext::locality}).
+The arguments to the function are iterated over, and assigned to the relevant
+local variables in the called function. A small amount of symex time type
+coercion also occurs. Finally we store which instruction to return to, what
+variable the return value should go to, and update the program counter to the
+first instruction in the target function.
+
+In the course of the functions execution we may run into many RETURN
+instructions. Each of these are encoded as an assignment to the return value
+in the calling function, stored in the \texttt{framet} object. Following this
+we encode an unconditional jump to the end of the function.
+
+Once all paths in the function have been explored we inevitably end up at the
+last instruction in the function, possibly with a large number of
+\texttt{goto\_statet}'s to be merged in. The final instruction itself is
+always a END\_FUNCTION. When this is executed, we reset the program counter to
+the calling function and dispose of the \texttt{framet} on the top level of the
+stack.
+
+Most of this is straight forward. It becomes more complicated when calls to
+function pointers are involved. In the past, the static pointer analysis
+has replaced all function pointer calls with code that takes the set of all
+functions that may be pointed at, and encoded a mishmash of conditional GOTOs
+and function calls. This results in all the functions the pointer may point at
+being called, and the correct outcome of the function call being determined
+by nondeterministic merging of states (see the interpretation of GOTOs). More
+recently, in a slow attempt to remove the static analysis, I've written code
+to dereference function pointers at symex time instead. This takes the set of
+pointed-to functions from the symex-time pointer tracking, and prepares function
+calls to each of them. One is started, then when that function returns the next
+function in the list is called. Once there are no more functions to call,
+states are merged in the same way as before. There's no massive benefit from
+this, but it will permit more control over function call interpretation in
+the future. Relevant fields of the \texttt{framet} object are
+\texttt{cur\_function\_ptr\_targets}, \texttt{function\_ptr\_call\_loc},
+\texttt{function\_ptr\_combine\_target}. and
+\texttt{orig\_func\_ptr\_call}.
+
 \subsubsection{Other}
 \subsubsection{Exception handling}
 \subsection{Intrinsic library functions}
