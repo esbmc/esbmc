@@ -576,6 +576,51 @@ up until the ampersand; and L2 names use the full format. These names will
 frequently crop up throughout almost all of ESBMC.
 
 \subsection{Class overview}
+
+The top level class for symex is \texttt{reachability\_treet}. This contains,
+at some level, all the state involved in the interpretation of GOTO
+instructions. It also has the high level entry-to-symex methods like
+\texttt{reachability\_treet::get\_next\_formula}. Almost all the actual
+logic in the class is related to the exploration of multithreaded interleavings,
+everything symex related exists in lower level classes. The main piece of
+data stored is a set of \texttt{execution\_statet}'s, each of which stores
+the full state of the program at a particular point in time.
+
+The next two classes of interest are the \texttt{goto\_symext} and its
+subclass, \texttt{execution\_statet}. The former contains all the logic
+for GOTO interpretation and anything else only related to single threaded
+execution, plus stores a few parameters for symex exploration. The latter
+overrides a number of methods and injects logic for discovering when
+multithreading operations must occur. The logic in this class only relates
+to operations on the program state rather than interleaving exploration.
+It stores a set of thread state objects, of class
+\texttt{goto\_symex\_statet}, while some specialised information is broken out
+into \texttt{execution\_statet} for easy accessibility (such as what threads
+are still running, atomic blocks, startup parameters). Global program state
+is also stored here as a \texttt{value\_sett} object to track pointer value
+sets, and a \texttt{renaming::level2t} storing data on the latest assignments
+to variables.
+
+Within the \texttt{goto\_symex\_statet} class are all thread specific pieces
+of data --- things like the program counter (in
+\texttt{symex\_targett::sourcet}) or the call stack (in
+\texttt{goto\_symex\_statet::framet}). Significantly more state is stored
+tracking the nondeterministic exploration of the program.
+\texttt{goto\_symex\_statet::goto\_statet} objects contain the whole program
+state resulting from a short deterministic path, which are then merged together
+where control paths merge\footnote{i.e., SSA phi functions} to form the
+nondeterministic program trace. Various objects of \texttt{guardt} class
+record the guard of a particular path being taken. Also stored is the count
+of how many times a loop has been unwound in the current context, for the
+purpose of loop bounding.
+
+A \texttt{goto\_symex\_statet::framet} stores information related to a
+particular stack frame / function activation. Mundane facts like the function
+name, call site location, return value variable and the names of local variables
+live here. More exciting items such as the set of executions to be merged in
+the future, and the actvation record number for renaming, live here too.
+There are also some hacks related to function pointer interpretation.
+
 \subsection{Instruction interpretation}
 \subsection{Intrinsic library functions}
 \subsection{Multithreaded interactions}
