@@ -40,10 +40,10 @@ namespace std
     public:
       string _string;
       explicit stringstream (openmode which = ios_base::out|ios_base::in)
-      : istream(), ostream() {}
+      : istream(), ostream(), _string("") {}
 
       explicit stringstream (const string & str, openmode which = ios_base::out|ios_base::in)
-      : istream(), ostream() {}
+      : istream(), ostream(), _string("") {}
 
       stringbuf* rdbuf ( ) const {}
 
@@ -118,7 +118,7 @@ namespace std
 
       ostream& operator<< (char& val) {
         _string.append(&val, 1);
-        return ostream();
+        return *this;
       }
 
       ostream& operator<< (char* val) {
