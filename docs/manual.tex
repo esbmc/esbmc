@@ -1336,5 +1336,63 @@ as ESBMC is quite entitled to discard the majority of an execution trace if
 none of it contributes to an assertion.
 
 \subsection{irep}
+
+I could write a large amount of stuff about the internal representation,
+how it is structured and what each piece of it \textit{means}. However, that
+wouldn't be useful in a manual, so I'll describe the substance of it instead.
+At its center, ireps are supposed to describe some form of operation, with
+operands, any require annotative information, and a type. This has been further
+abused so that the same data structure stores types, program statements, and
+in fact the entire AST.
+
+The base type is a \url{irept} object. This stores one primary piece of data,
+the ``identifier''. This is a string, and represents what the operation of
+the irep is (like \url{add}, \url{dereference}, \url{byte\_extract} and so
+forth). \url{irept} also stores a vector of \url{irept}s as numbered operands;
+a map of annotative information (mapping strings to more \url{irept}s), and
+another map of ``comments''. The point of this, is that \textit{every piece of
+data} in an irep is stored as the ``identifier'' string in an \url{irept}
+object, and are arranged in operands and annotations in some manner to represent
+an operation. Note that the strings themselves get stored into a string pool
+to avoid massive memory inflation.
+
+This by itself is fully offensive\footnote{Amounting to a war crime, as far as
+I'm concerned} as it seeks to replace normal classes and objects with something
+that isn't type safe. There are a few benefits (you can serialise, print, hash
+and search data simply as it's all the same type) but the speed and type-safety
+penalties are not worth it. In the most insane example, constant numbers are
+stored as an \url{irept} with identifier \url{constant}, and the annotative
+value \url{value} set to a binary representation of the number it represents.
+As in, it's a series of zeros and ones, in ascii.
+
+There are a series of methods that the reader is likely to encounter. First
+there is the \url{id} method, which returns the string identifier for the
+irep. The \url{operands} method returns the vector of operands, and \url{op0},
+\url{op1} and so forth methods accessing specific elements in it. The
+\url{find} and \url{add} methods find and set respectively annotative
+information by name. As well as these methods, there are additional classes
+such as \url{exprt} and \url{typet} that subclass \url{irept}, do not store any
+additional data, and essentially act as wrappers around an \url{irept} to
+provide methods for easier accessing of the data it stores. One can simply
+cast any \url{irept} to an \url{exprt} and treat it as an expression.
+
+The one vastly mis-understood and undocumented fact about \url{irept}s is that
+they are reference counted, and \url{const}ness of the object affects its
+operation. The only data stored in an \url{irept} is a pointer to an object
+storing all the fields described above; the \url{irept} object itself
+essentially contains it. Then, whenever a \url{const} copy of an \url{irept}
+is taken, the reference count of the storage object is increased. This allows
+\url{irept}s to be passed around as objects without duplicating them; it also
+means that if we re-use subtrees of an \url{irept} somewhere then the subtree
+is not duplicated, it just has an increased reference count.
+
+Clearly sometimes though we actually alter \url{irept}s. When either a
+changing operation occurs, or a non-\url{const} \url{irept} is constructed from
+another irept, the contents of the \url{irept} is duplicated and stored in
+the \url{irept} that is going to be changed. This way, we can have the shared
+data benefits described above, but without risking data corruption or
+inconsistency. It's actually quite elegant, and a redeeming feature of something
+that's absolutely terrible.
+
 \section{Conclusion}
 \end{document}
