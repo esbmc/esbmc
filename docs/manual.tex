@@ -1233,7 +1233,48 @@ In addition to this there is a round-robin scheduling method, which I'm mostly
 unfamiliar with.
 
 \section{The inevitable 'misc'}
+
+There are a large set of things in ESBMC, not all of which have a particularly
+important purpose, or are shared between with several. Here we cover such
+things.
+
 \subsection{Naming and namespaces}
+
+As defined by the C standard, ESBMC has a concept of naming scopes. Variables
+declared in one scope are not necessarily accessible from another. The substance
+of this is that any variable declared receives a symbol name that contains
+a series of double-colon (::) seperated components that specify its scope. All
+symbols start with ``c::'' to seperate program symbols from any internal
+ESBMC modelling variables. From there, if the symbol is of internal linkage
+(i.e. declared ``static'') it has the name of the C file it originated as
+the next scope component. Then follows the global name of the symbol, i.e.
+a global variable name or function name. For automatic allocation variables
+(i.e. block local variables) a series of numbers are inserted into the
+name to identify \textit{which} block in the function the variable is in, so
+that variables with identical names declared in different blocks can co-exist.
+Finally, the name of the variable is appended. Some examples:
+
+\begin{quote}
+c::main
+c::beards
+c::test::ponies
+c::main::1::varname
+c::main::1::1::1::varname
+\end{quote}
+
+Here, in order, we have a function symbol name, a global variable name,
+the name of a global variable declared \texttt{static} in a file called test.c,
+a local variable in the main function, and another local variable of the same
+name deeply nested in a series of blocks. Note that I don't know how CBMC
+decides what numbers to inject into the names of local variables.
+
+Most variables get thrown around ESBMC as \texttt{symbol} ireps, with the
+appropriate name as above with additional renaming data. To look up date about
+a particular variable, use the \texttt{contextt} object to fetch a
+\texttt{symbolt} object for the desired variable. The \texttt{symbolt} object
+stores the variables type, lifetime, scope, value (untranslated AST from
+parsing) and numerous other things.
+
 \subsection{Dereferencing}
 \subsection{Slicing}
 \subsection{irep}
