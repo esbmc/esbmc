@@ -1314,6 +1314,27 @@ attempt to juggle a byte representation of the incompatible object at this
 level, we leave it to the conversion to SMT.
 
 \subsection{Slicing}
+
+One notable fact about the programs being tested in ESBMC, is that not all
+variables and assignments actually contribute to the assertions being checked,
+and are thus a waste of memory and processing time. To work around this problem,
+CBMC introduce something known as ``slicing''. Here, once we have a list of
+SSA steps, we work through the steps backwords noting down what assertions
+occur, and what variables are used in these assertions in a set called
+\textit{depends}. We continue working through the steps backwards, and whenever
+we find an assignment to a variable that is not in the depends set,
+we mark it as being ``ignored'', while variables that \textit{are} used in the
+depends set have the variables they are calculated from added to the depends
+set.
+
+The net upshot of this is that we progressively calculate what variables
+actually contribute to the evaulation of an assertion, and mark all other
+variables as being ignored. Then, when we come to conversion to SMT, we ignore
+all varaibles that do not contribute. Unfortuantey this option is turned on by
+default, and can lead to significantly confusing counterexamples being printed
+as ESBMC is quite entitled to discard the majority of an execution trace if
+none of it contributes to an assertion.
+
 \subsection{irep}
 \section{Conclusion}
 \end{document}
