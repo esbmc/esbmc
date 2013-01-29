@@ -1171,6 +1171,14 @@ not printed. Assertion instructions are not printed, unless one is found where
 the guard is false. When this is found, we print a series of messages about
 the assertion that has failed, and the cease printing further trace steps.
 
+One major failing in ESBMC so far is having no useful or canonical
+representation in counterexamples of assignments to structs, unions and arrays,
+without making either a confusing or entirely inaccurate mess of braces.
+Additionally because in the symex phase we flattened all assignments to make the
+lhs a variable, an series of assignments to fields in a structs are printed
+as assignments of the entire contents of the struct each time (this is a
+difficult problem to solve though).
+
 \section{Multithreading exploration}
 \section{The inevitable 'misc'}
 \subsection{Naming and namespaces}
