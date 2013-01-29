@@ -46,9 +46,9 @@ public:
     state_counter=1;
     k_induction=false;
     inductive_step=
-    options.get_bool_option("inductive-step");
+      options.get_bool_option("inductive-step");
     base_case=
-    options.get_bool_option("base-case");
+      options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -380,12 +380,14 @@ protected:
   void do_array_set     (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
+  protected:
+    bool k_induction, inductive_step, base_case;
+    struct_typet state;
+
   private:
     bool is_thread, for_block, break_stmt,
-	 goto_stmt, while_block;
+         goto_stmt, while_block;
     unsigned int state_counter;
-    struct_typet state;
-    bool k_induction, inductive_step, base_case;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
 };
