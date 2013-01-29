@@ -1276,6 +1276,43 @@ stores the variables type, lifetime, scope, value (untranslated AST from
 parsing) and numerous other things.
 
 \subsection{Dereferencing}
+
+Dereferencing occurs at numerous points in ESBMC, during the initial pointer
+analysis to determine what pointer assertions to add, and during symbolic
+execution to actually read data through a pointer. To perform a dereference,
+we require a \url{dereference} irep with a pointer object as an operand,
+an a \url{value_sett} object tracking what pointers may point at. A
+\url{dereferencet} object is created and the \url{dereference} method in it
+called.
+
+One notable feature of the \url{dereferencet} class is that it takes a
+\url{dereference_callbackt} object as a constructor argument, the
+\url{dereference_failure} method of which is called when a dereference
+failure occurs. This allows the dereferencing code to be notified about
+dereference failures and handle them accordingly. The failure itself
+is a textual description and a guard for when the the failure will occur,
+for example when the pointer object does not match any of the expected
+pointers.
+
+In the actual dereference operation, we look up what pointer object is being
+dereferenced, and from the pointer tracking value set derive what it might
+possibly point at. Then a ``switch case'' is calculated, a large chain of
+\url{if} ireps, with guards that test whether the dereferenced pointer object
+matches a particular variable that is pointed at, and evaluate to that variable
+if this test is true. Thus the resulting expression evaluates to whatever
+the pointer points at, encoded symbolically. FIXME: does this make any sense?
+
+The frequent complication that can occur along the way is a type mistmatch.
+If we are selecting an integer out of some structure, but the pointer object
+can point at a wide range of variables, we will end up with an expression
+that attempts to select an integer out of, say, a float, or across a struct
+boundry. When this happens we can perform some limited type coercion, but
+will fall back to creating a \url{byte_extract} irep if that fails. A
+\url{byte_extract} irep represents the operation of extracting a particular
+type of data from some incompatible object, at a particular offset. Rather than
+attempt to juggle a byte representation of the incompatible object at this
+level, we leave it to the conversion to SMT.
+
 \subsection{Slicing}
 \subsection{irep}
 \section{Conclusion}
