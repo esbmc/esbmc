@@ -1131,7 +1131,45 @@ the appropriate conversion method to turn the operation into a piece of SMT.
 
 The act of solving is not massively complex. After the translations described
 in the section on SMT encoding have occured, we need only ask the solver
-whether or not it is able to
+whether or not it is able to make an assignment to variables that satisfies
+all assertions. If the result is unsat, then clearly we have little to be
+concerned about. However when the result is sat and we have a model of the
+formula, with assignments of values to all variables, then we have discovered
+a program trace that violates an assertion and we must print a counterexample
+to the user.
+
+One irregularity note is that the solver does not calculate assignments to
+\textit{all} the variables in the formula being checked. Intead, only the
+variables that are actually fundemental for satisfying assertions are
+decided upon. Variables in paths that are not part of the failing trace do
+not need to have their value decided by the solver, therefore they aren't.
+Even better, instructions that are sliced out (see the section on slicing)
+will not have been encoded, and thus there will be no assignments for even
+more variables. This can lead to confusing and uninterpretable counterexamples.
+
+To actually format a counterexample, high level code calls the function
+\url{build_goto_trace}. This takes a list of SSA steps in a
+\url{symex_target_equationt} object and strips out certain steps that are not
+of interest. These are assignments where the guard of the assignment is false
+(i.e., the code block it was in was not executed in is not part of the failing
+trace) or internal modelling assignments. The function then inspects each
+SSA step, and for each expression that makes up the step (i.e. the rhs,
+or guard) it queries the solver to extract from the model the concrete value
+of the expression. i.e., what value the solver assigned. These concrete values
+are then stored into \url{goto_trace_stept} objects, which are equivalents of
+SSA steps but with concrete values. All SSA steps we have not discarded are
+converted thus and stored in a \url{goto_tracet} object.
+
+From this point it is a matter of data presentation, the list of
+\url{goto_trace_stept} object are iterated over and printed. For assignments,
+Location information (of which file/line the instruction came from) is printed
+from the instruction, as well as a stack trace, followed by a representation
+of the assignment itself. If the solver didn't give a value for a particular
+variable assignment however, the extremely helpful message ``assignment
+removed'' is printed instead of a variable value. Assumption instructions are
+not printed. Assertion instructions are not printed, unless one is found where
+the guard is false. When this is found, we print a series of messages about
+the assertion that has failed, and the cease printing further trace steps.
 
 \section{Multithreading exploration}
 \section{The inevitable 'misc'}
