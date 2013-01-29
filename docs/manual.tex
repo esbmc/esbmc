@@ -2,6 +2,7 @@
 \usepackage{url}
 \usepackage{listings}
 \usepackage{tabularx}
+\usepackage{longtable}
 \usepackage{titling}
 \newcommand{\subtitle}[1]{%
   \posttitle{%
@@ -99,9 +100,7 @@ What follows is a short description of each command line option to ESBMC that
 exists. All are prefixed with \url{--} when given. Some information is also
 available by running \url{esbmc --help}.
 
-\begin{table*}[ht]
-\centering
-\begin{tabularx}{\linewidth}{|l|X|}
+\begin{longtable}{| p{.20\textwidth} | p{.80\textwidth} |} 
 \hline
 Option & Description\\
 \hline
@@ -266,8 +265,7 @@ is found.\\
 \hline
 symex-ssa-trace & Print SSA instructions as they are encoded. For debugging.\\
 \hline
-\end{tabularx}
-\end{table*}
+\end{longtable}
 
 \section{Top level procedures}
 
