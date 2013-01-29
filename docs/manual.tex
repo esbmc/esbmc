@@ -1254,13 +1254,13 @@ name to identify \textit{which} block in the function the variable is in, so
 that variables with identical names declared in different blocks can co-exist.
 Finally, the name of the variable is appended. Some examples:
 
-\begin{quote}
+\begin{lstlisting}
 c::main
 c::beards
 c::test::ponies
 c::main::1::varname
 c::main::1::1::1::varname
-\end{quote}
+\end{lstlisting}
 
 Here, in order, we have a function symbol name, a global variable name,
 the name of a global variable declared \texttt{static} in a file called test.c,
