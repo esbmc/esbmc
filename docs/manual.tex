@@ -1,7 +1,7 @@
 \documentclass{article}
 \usepackage{url}
 \usepackage{listings}
-
+\usepackage{tabularx}
 \usepackage{titling}
 \newcommand{\subtitle}[1]{%
   \posttitle{%
@@ -95,7 +95,20 @@ FIXME: This is ugly, make it a table.
 
 \section{Command line options}
 
-Insert here, descriptions on command line options.
+What follows is a short description of each command line option to ESBMC that
+exists. All are prefixed with \url{--} when given.
+
+\begin{table*}[ht]
+\centering
+\begin{tabularx}{\linewidth}{|l|X|}
+\hline
+Option & Description\\
+\hline
+inlining & Enables inlining of functions -- function calls are replaced with the
+bodies of the called function. It's unclear when these occur.\\
+\hline
+\end{tabularx}
+\end{table*}
 
 \section{Top level procedures}
 
