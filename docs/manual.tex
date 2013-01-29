@@ -1180,6 +1180,58 @@ as assignments of the entire contents of the struct each time (this is a
 difficult problem to solve though).
 
 \section{Multithreading exploration}
+
+Several algorithms exist for exploring the multithreaded state space in ESBMC.
+All of these currently operate by keeping historical program states (stored
+in \url{execution_statet} objects), switching
+which thread is being executed at certain points, and backtracking to a past
+state and exploring further when a failing trace is not discovered. The most
+significant thing about this is that we only ever store a program state and
+order a context switch between threads when there is some kind of shared
+state that a thread has accessed. If we were to context switch after every
+instruction, including accesses to local only state, we would produce a large
+set of identical SSA programs. A proof exists that you need only context switch
+when some kind of thread synchronisation occurs, such as access to shared state.
+
+Currently the two methods
+\url{reachability_treet::analyse_for_cswitch_after_read} and
+\url{reachability_treet::analyse_for_cswitch_after_assign} are called
+whenever an access or assignment respectively is made to any variable in the
+course of any instruction. If the expression read or written turns out to
+contain global variables (i.e. shared state), we consider a context switch at
+this point. The method \url{reachability_treet::analyse_for_cswitch_base} is
+then used to check numerous facts --- are we currently in an atomic block?
+Have we seen this state before (state hashing)? If these are untrue, we then
+iterate over all threads, attempting to find a thread we have not already
+context switched to from this point and that is not rejected by a partial
+order reduction.
+
+Once we have identified a thread to switch to, we duplicate the current thread
+state and push it onto the top of a list of historical thread states. It is
+then asked to switch to the desired thread, and symbolic execution continues
+from there.
+
+Later, once we have reached a point where there are no more threads to run,
+we return the produced SSA program to the high level routines. If it asks
+for another interleaving to be produced, we start backtracking. First, we remove
+the last (i.e., the completed run) program state from the list of historical
+states. We then attempt to find a context switch that we have not explored
+from the previous program state, and explore taking that context switch instead.
+If we have explored all context switches from a program state, we backtrack
+futher to the next previous program state. This continues until we have explored
+all interleavings that can be produced by the program.
+
+This particular search is the \texttt{depth first search} (DFS), where we run to
+a deep point in exploration and the progressively backtrack and explore from
+there. Also available is a full program exploration\footnote{The
+\url{--schedule} option} where we perform the same DFS, but store all SSA steps
+for all interleavings in the same \url{symex_target_equationt}. The presence
+of the \textit{context switch id} (see the section on variable renaming) in
+variables means that every unbroken run of SSA steps has its own identifier,
+and its assignments cannot conflict with any other interleavings assignments.
+In addition to this there is a round-robin scheduling method, which I'm mostly
+unfamiliar with.
+
 \section{The inevitable 'misc'}
 \subsection{Naming and namespaces}
 \subsection{Dereferencing}
