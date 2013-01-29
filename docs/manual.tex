@@ -1035,6 +1035,98 @@ ssertion is encoded that for all objects allocated, if the guard was true
 at the time of allocation, then the object has now been freed.
 
 \section{SMT encoding}
+
+Once we have an SSA program to operate upon, we have a series of assignments,
+assertions and assumptions. These are then converted into an SMT representation
+for checking whether any of the assertions are satisfiable.
+
+At a high level, variables being assigned to are turned into variable names,
+and we assert that the right hand side of an assignment is equal to the symbol
+name on the left hand side. Variables on the right hand side are turned into
+symbols too. To encode the conditions we are checking, we then assert that if
+all assumptions are true, it implies that the disjunction of inverted assertion
+conditions is true. This causes the formula to be unsatisfiable, unless there
+is at least one assertion condition that is false, and all the assumptions are
+true (which indicates an assertion failure).
+
+From this higher layer, we then reach the topic of how our SSA programs are
+encoded into SMT. We have two logics to use: QF\_AUFLIRA and
+QV\_AUFBV\footnote{Although more accurately, the logic we use is whatever Z3
+lets us get away with}, referred to as integer mode and bitvector mode.
+The primary difference between the two of these is that
+integer-mode integers have unbounded range, meaning they overapproximate normal
+integers, but have a significant performance boost when solving the formula.
+In comparison, bitvector-mode integers are fixed width bit vectors.
+The former also represents floating point numbers as reals, wheras the latter
+has to approximate floating point numbers with fixed width
+arithmetic\footnote{and it's likely all broken, I don't understand it}. However;
+the largest difference is that the unbounded range of integer-mode integers
+means there can be no accurate byte model of the data being worked on. For
+example, if we select the second byte from an unbounded number, what is the
+result?
+
+SMT does not support converting between the two representations of integers.
+Z3 however has an operation that pupports to do this, but in actuality is an
+uninterpreted function. Unfortunately this is used in a number of places
+around ESBMC.
+
+Onwards to more complex types. Structs are represented by tuples; the number
+of fields is the size of the tuple, and each field is an element in the tuple,
+in the order the fields were declared in the struct. Access to struct fields
+is then simply selecting or updating a tuple element.
+
+Arrays are a supported type in both logics we use, therefore array operations
+can be translated to SMT array operations directly. Note that while C supports
+multi dimensional arrays, we translate these to accessing a single dimension
+array in the normal manner.
+
+Unions are much more tricky. It appears that the solver backend code keeps track
+of what element in a union was most recently assigned to, and when the union
+is read in the future, that element is used. However, this is not amenable
+to nondeterminism, as an assignment to a union nondeterminstically through an
+\texttt{if} irep cannot be tracked this way. Unions are, thus, broken right
+now in the presence of nondeterminism.
+
+Pointers are also sticky. The chosen encoding for these is a two-tuple, where
+the first element is a unique integer identifying a particular piece of storage,
+i.e. the item pointed at. It is often referred to as the ``pointer object ID''.
+The second element is an offset into the pointed at item. Pointers are created
+When an \texttt{address\_of} operation is applied to a variable. The SMT
+converstion code tracks all variables that have had their address taken, and
+when translating an \texttt{address\_of} will return a pointer record with the
+(possibly newly allocated) pointer object ID, and a zero offset.
+
+The funkyest part is the casting from a pointer type to an integer type, and
+vice versa. This is perfectly legitimate in C languages and is how some pointer
+arithmetic occurs. It means however that we have to formulate an address
+space in the range of integers, give objects that are pointed at positions
+in it, and convert between pointer tuples and integers. We perform the first
+part by taking all pointer objects and their size, and defining a symbolic start
+and end position in the address space. We then assert that every pointer object
+there is does not overlap any other in the address space. The formula for this
+is distressingly quadratic, but never mind. We also create an array mapping
+pointer object IDs to the base address of that object, which lets us turn
+a cast from a pointer object to integer into an array index to find the base
+address, then an addition of the pointer offset. Casting from integer to
+pointer object is the most distressing --- we must enumerate all pointer
+objects and check whether the integer lies in its range.
+
+From a more practial point of view, the base class of SMT conversion is
+\texttt{prop\_convt}, which all solvers subclass. We'll only consider Z3 here.
+Actual conversion occurs by feeding a \texttt{symex\_target\_equationt} object,
+which stores all SSA steps, a \texttt{prop\_convt} object which it uses to
+encode a series of assertions. Flattening assignments, assumptions and
+assertions to just a series of solver assertions happens at this level. The
+\texttt{prop\_convt::set\_to} method is used to encode an assertion, converting
+the expression argument to SMT, and asserting that it evaluates either to
+true or false.
+
+Within the solver conversion code, most boolean operations are handled by
+solver-agnostic code, but any expression involving a non-bool type must be
+handed to the solver specific conversion routines. There, we just have a
+gigantic if else block that identifies what operation an irep is, and calls
+the appropriate conversion method to turn the operation into a piece of SMT.
+
 \section{Solving and counterexamples}
 \section{Multithreading exploration}
 \section{The inevitable 'misc'}
