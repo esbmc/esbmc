@@ -96,7 +96,8 @@ FIXME: This is ugly, make it a table.
 \section{Command line options}
 
 What follows is a short description of each command line option to ESBMC that
-exists. All are prefixed with \url{--} when given.
+exists. All are prefixed with \url{--} when given. Some information is also
+available by running \url{esbmc --help}.
 
 \begin{table*}[ht]
 \centering
@@ -106,6 +107,164 @@ Option & Description\\
 \hline
 inlining & Enables inlining of functions -- function calls are replaced with the
 bodies of the called function. It's unclear when these occur.\\
+\hline
+program-only & Symbolically execute the program until we have an SSA program,
+print the SSA program textually, then exit.\\
+\hline
+program-too & Like program-only, but don't exit, instead continue
+verification.\\
+\hline
+function & Specify function to begin execution at. If function takes arguments,
+horrible undefined behaviour occurs.\\
+\hline
+preprocess & Run the input source files through preprocessing, write the output
+to stdout, then exit. Useful for debugging.\\
+\hline
+no-simplify & Disable simplification of expressions; effectively neuters
+constant propagation so that no fact is statically determined to be true or
+false, and we end up always exploring to the top of the unwind bound.\\
+\hline
+unwind & Takes integer parameter. Specifies the general unwind bound to apply
+to all loops in the program.\\
+\hline
+unwindset & Takes string parameter, a comma seperate list of loopidnum:bound
+pairs. Allows exact specification of a loop bound for a particular loop, see
+the show-loops option.\\
+\hline
+z3-bv & Use Z3 solver in bitvector mode.\\
+\hline
+z3-ir & Use Z3 solver in integer mode.\\
+\hline
+boolector-bv & Use Boolector solver.\\
+\hline
+outfile & Output file to write an SMT formula to.\\
+\hline
+no-pointer-check & Disable all assertions related to pointers.\\
+\hline
+depth & Takes parameter n. Limit the maximum depth of the program to the
+execution of n instructions.\\
+\hline
+no-div-by-zero-check & Disable divide-by-zero assertion checks.\\
+\hline
+no-unwinding-assertions & Disable unwinding assertions.\\
+\hline
+partial-loops & Disable unwinding assumptions.\\
+\hline
+memory-leak-check & Enable checking for memory leaks.\\
+\hline
+overflow-check & Enable integer overflow assertions.\\
+\hline
+no-assertions & Disable the checking of any assertion encoded in the program
+with an \url{assert} function call.\\
+\hline
+minisat & Use the minisat sat solver.\\
+\hline
+16 & Model a 16 bit machine. Unlikely to work as this hasn't received any
+maintenence, ever.\\
+\hline
+32 & Model a 32 bit machine. The default.\\
+\hline
+64 & Model a 64 bit machine. Will probably have hiccups involving pointer
+widths.\\
+\hline
+little-endian & Model integers as being little endian. The default.\\
+\hline
+big-endian & Model integers as being big endian.\\
+\hline
+show-goto-functions & Print out all the functions and instructions in all the
+input code.\\
+\hline
+show-value-sets & Print out the same data as show-goto-functions, but also
+add the contents of the pointer tracking set (according to the static analysis)
+at each instruction.\\
+\hline
+show-loops & Print out a list of loops, where they are in the source files,
+and what loop ID number they have.\\
+\hline
+show-symbol-table & Print out a list of symbols and some simplified
+information about them.\\
+\hline
+show-claims & Print a list of all assertions in the program.\\
+\hline
+claim & Takes integer argument identifying what assertion to check in the
+program, from the list in show-claims. Disables all other assertions. Specify
+the claim option multiple times to check multiple claims.\\ 
+\hline
+atomicity-check & During multithreaded exploration, verify that expressions
+are executed atomically. Rewrites assignments to check that the variables on the
+rhs are not modified between before the assignment and afterwards.\\
+\hline
+error-label & Check for reachability of a particular C label in the program.\\
+\hline
+version & Print the version of ESBMC.\\
+\hline
+no-lock-check & Don't make assertions about correct operation of pthread
+mutexes.\\
+\hline
+deadlock-check & Encode assertions checking that the program under test does not
+deadlock.\\
+\hline
+string-abstraction & Enable an approximation of string operations. All string
+operations only consider the lenght of data, rather than its contents.\\
+\hline
+no-slice & Disable slicing step.\\
+\hline
+qf\_aufbv & Print the SMT formula for the program to the file given in the
+outfile option, in QF\_AUFBV logic.\\
+\hline
+qf\_auflira & Print the SMT formula for the program to the file given in the
+outfile option, in QF\_AUFLIRA logic.\\
+\hline
+context-switch & Takes one integer parameter. Specifies the number of thread
+context switches allowed during exploration. Defaults to infinite.\\
+\hline
+time-slice & How many time slice to permit during round-robin scheduling.\\
+\hline
+k-step & How many k-unrolls to make during k-induction.\\
+\hline
+no-por & Disable partial order reduction in multithreaded checking.\\
+\hline
+data-races-check & Check to see whether any concurrent reads/writes to a
+variable are possible. Rewrites assignments to encode an assertion that fails
+if an interleaving is found where either two threads can write to the same
+variable at the ~same time, or can write while the other reads.\\
+\hline
+DFS & Perform depth first search scheduling of multithreaded code. The
+default.\\
+\hline
+schedule & Perform a ``schedule'' scheduling of multithreaded code, encoding
+all interleavings into one SSA program.\\
+\hline
+all-runs & Explore all interleavings in the program, even after a counterexample
+is found.\\
+\hline
+timeout & Start a SIGALRM to time out and kill ESBMC in the future. See --help
+for more details.\\
+\hline
+memlimit & Encode a resource limit to kill ESBMC if it uses too much memory.
+See --help.\\
+\hline
+state-hashing & Enable state hashing. Attempts to hash program state in
+multithreaded exploration and reduce duplicate states.\\
+\hline
+symex-trace & Print GOTO instructions as they are executed. Useful for
+debugging.\\
+\hline
+round-robin & Enable round robin thread scheduling.\\
+\hline
+k-induction & Enable k-induction.\\
+\hline
+break-at & Takes integer parameter. Executes an x86 trap instruction when the
+specified GOTO instruction is executed. This is the equivalent of putting a
+breakpoint on it.\\
+\hline
+memstats & Cat /proc/self/status at the end of execution, to give details on
+how many bytes of memory were used, and so forth.\\
+\hline
+dump-z3-assigns & Print all assignments to SMT symbols if a counterexample
+is found.\\
+\hline
+symex-ssa-trace & Print SSA instructions as they are encoded. For debugging.\\
 \hline
 \end{tabularx}
 \end{table*}
