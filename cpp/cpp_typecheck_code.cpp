@@ -133,11 +133,10 @@ void cpp_typecheckt::typecheck_catch(codet &code)
           {
             irept name=block.op0().op0().op0().find("name");
             if(block.op0().op0().op0().find("name").get_sub().size())
-              if(name.get_sub()[0].identifier() != irep_idt("#anon"))
-              {
-                name.set("catch_decl",true);
-                block.op0().op0().op0().set("name",name);
-              }
+            {
+              name.set("catch_decl",true);
+              block.op0().op0().op0().set("name",name);
+            }
           }
 
     typecheck_code(block);
