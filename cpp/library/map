@@ -100,6 +100,28 @@ public:
 		}
 		this->_size++;
 	}
+
+	void pop_front(){
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->head->data = this->head->next->data;
+			this->head->prev = NULL;
+			this->head->next = this->head->next->next;
+		}
+		this->_size--;
+	}
+	void pop_back (){
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->tail->data = this->tail->prev->data;
+			this->tail->prev = this->tail->prev->prev;
+			this->tail->next = NULL;
+		}
+		this->_size--;
+	}
+
 };
 
 namespace std {
@@ -259,10 +281,6 @@ public:
 		}
 	}
 
-	~map() {
-		this->map_list->~list_esbmc();
-	}
-
 	// iterators:
 	iterator begin();
 	const_iterator begin() const;
@@ -273,17 +291,119 @@ public:
 	reverse_iterator rend();
 	const_reverse_iterator rend() const;
 
-	// capacity:
-	bool empty() const;
-	size_type size() const;
-	size_type max_size() const;
-
-	void clear();
 	size_type count(const key_type& x) const;
 	void erase(iterator position);
-	size_type erase(const key_type& x);
 	void erase(iterator first, iterator last);
-	void operator=() {
+
+	mapped_type& at(const Key& x) {
+		value_type par(x, mapped_type());
+		node<value_type>* tmp = this->map_list->head;
+
+		if (this->_size == 0) {
+			this->map_list->push_back(par);
+			this->_size++;
+			return this->map_list->head->data.second;
+		} else {
+			while (tmp != NULL) {
+				if (!(par.first < tmp->data.first)) {
+					if (tmp->data.first < par.first) {
+						if (tmp->prev == NULL) {
+							this->map_list->push_front(par);
+							this->_size++;
+							return this->map_list->head->data.second;
+						} else {
+							node<value_type>* new_node = new node<value_type>(
+									par, tmp->prev, tmp);
+							tmp->prev->next = new_node;
+							tmp->prev = new_node;
+							this->_size++;
+							return tmp->prev->data.second;
+						}
+					}
+					return tmp->data.second;
+				}
+				tmp = tmp->next;
+			}
+			if (tmp == NULL) {
+				this->map_list->push_back(par);
+				this->_size++;
+				return this->map_list->tail->data.second;
+			}
+		}
+	}
+
+	bool empty() const{
+		if(this->_size == 0)
+			return true;
+		return false;
+	}
+
+	size_type size() const{
+		return this->_size;
+	}
+
+	size_type max_size() const{
+		return nondet_int();
+	}
+
+	map& operator= (const map& x){
+		this->map_list = x.map_list;
+		this->_size = x._size;
+		return *this;
+	}
+
+	void clear(){
+		this->map_list->~list_esbmc();
+		this->_size = 0;
+	}
+
+	~map(){
+		this->map_list->~list_esbmc();
+		this->_size = 0;
+	}
+
+	void swap (map& x){
+		node<value_type>* tmpHead = this->map_list->head;
+		node<value_type>* tmpTail = this->map_list->tail;
+		size_type tmpSize = this->_size;
+		this->map_list->head = x.map_list->head;
+		this->map_list->tail = x.map_list->tail;
+		this->_size = x._size;
+		x.map_list->head = tmpHead;
+		x.map_list->tail = tmpTail;
+		x._size = tmpSize;
+	}
+
+	void insert (const value_type& val){
+		this->at(val.first) = val.second;
+	}
+
+	size_type erase (const key_type& k){
+		value_type par(k, mapped_type());
+		node<value_type>* tmp = this->map_list->head;
+
+		if (this->_size == 0) {
+			return this->_size;
+		} else {
+			while (tmp != NULL) {
+				if (!(par.first < tmp->data.first)) {
+					if (tmp->data.first < par.first) {
+						if (tmp->prev == NULL) {
+							return this->_size;
+						} else {
+							return this->_size;
+						}
+					}
+					if(tmp->prev != NULL)
+						tmp->prev->next = tmp->next;
+					if(tmp->next != NULL)
+						tmp->next->prev = tmp->prev;
+					return this->_size--;
+				}
+				tmp = tmp->next;
+			}
+			return this->_size;
+		}
 	}
 
 #if 0
