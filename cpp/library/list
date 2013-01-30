@@ -278,16 +278,16 @@ public:
 		}
 	}
     T& back (){
-	__ESBMC_assert(!empty(),
-			"\n  The following method was called, generating an invalid access to memory area:\n\n  >>> reference back();  <<<  \n\n  This method returns a reference to the last element in the list container.,\n  therefore, the list can't be empty.\n");
-	T tmp = this->tail->data;
-	return tmp;
+    	__ESBMC_assert(!empty(),
+    			"\n  The following method was called, generating an invalid access to memory area:\n\n  >>> reference back();  <<<  \n\n  This method returns a reference to the last element in the list container.,\n  therefore, the list can't be empty.\n");
+    	T tmp = this->tail->data;
+    	return tmp;
     }
     T& front ( ){
-	__ESBMC_assert(!empty(),
-			"\n  The following method was called, generating an invalid access to memory area:\n\n  >>> reference front();  <<<  \n\n  This method returns a reference to the first element in the list container.,\n  therefore, the list can't be empty.\n");
-	T tmp = this->head->data;
-	return tmp;
+    	__ESBMC_assert(!empty(),
+    			"\n  The following method was called, generating an invalid access to memory area:\n\n  >>> reference front();  <<<  \n\n  This method returns a reference to the first element in the list container.,\n  therefore, the list can't be empty.\n");
+    	T tmp = this->head->data;
+    	return tmp;
     }
 	void pop_front(){
 		__ESBMC_assert(!empty(),

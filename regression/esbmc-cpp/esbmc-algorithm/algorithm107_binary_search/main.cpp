@@ -24,7 +24,7 @@ int main () {
   // using myfunction as comp:
   sort (v.begin(), v.end(), myfunction);
   for(it = v.begin();it < v.end();it++)
-	cout << " " << *it << " " ;
+  	cout << " " << *it << " " ;
   */
   assert(!binary_search (v.begin(), v.end(), 6, myfunction));
 /*  cout << "looking for a 6... ";

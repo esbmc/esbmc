@@ -377,7 +377,7 @@ namespace std {
 
     map() : map_list() {
         map_list = new list_esbmc<value_type>();
-	this->_size = 0;
+      	this->_size = 0;
     }
 
     map( iterator first, iterator last);
@@ -385,23 +385,23 @@ namespace std {
     map(func* x);
 
     map ( map& x ){
-	this->map_list = x.map_list;
-	this->_size = x._size;
+    	this->map_list = x.map_list;
+    	this->_size = x._size;
     }
 
     T& operator[]( const Key& x){
 		value_type par(x,T());
-	if (this->_size == 0){
+    	if (this->_size == 0){
 			this->map_list->push_back(par);
     		this->_size++;
-	}else{
-		par = this->map_list->search(par);
+    	}else{
+    		par = this->map_list->search(par);
     	}
-	return this->map_list->head->data.second;
+    	return this->map_list->head->data.second;
     }
 
     ~map(){
-	this->map_list->~list_esbmc();
+    	this->map_list->~list_esbmc();
     }
     // iterators:
     iterator begin();

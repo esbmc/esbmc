@@ -885,8 +885,8 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
-	if (!is_expr_in_state(exp, str))
-	{
+    if (!is_expr_in_state(exp, str))
+    {
       //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
       //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
       unsigned int size = str.components().size();
@@ -894,7 +894,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
       str.components()[size] = (struct_typet::componentt &) exp;
       str.components()[size].set_name(exp.get_string("identifier"));
       str.components()[size].pretty_name(exp.get_string("identifier"));
-	}
+    }
   }
   else if (exp.operands().size()==1)
   {
@@ -920,7 +920,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
       //std::cout << "exp.id(): " << exp.id() << std::endl;
       //std::cout << "it->is_code(): " << it->is_code() << std::endl;
       DEBUGLOC;
-        get_struct_components(*it, str);
+      get_struct_components(*it, str);
     }
   }
   DEBUGLOC;
@@ -981,8 +981,6 @@ void goto_convertt::convert_decl(
     tmp.operands().resize(1); // just resize the vector, this will get rid of op1
 
     goto_programt sideeffects;
-
-
 
     if(options.get_bool_option("atomicity-check"))
     {
@@ -1864,7 +1862,7 @@ void goto_convertt::convert_for(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (/*base_case ||*/ (inductive_step)))
+			&& inductive_step)
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(cond, true, dest); //assert(!c)

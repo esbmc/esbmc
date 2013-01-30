@@ -10,7 +10,7 @@ int main () {
 
 //  fill_n (myvector.begin(),4,20);     // myvector: 20 20 20 20 10 10 10 10
 //  assert(myvector[3] != 20);
-
+  
   fill_n (myvector.begin()+3,3,33);   // myvector: 20 20 20 33 33 33 10 10
 
   assert(myvector[3] != 33);
@@ -20,6 +20,6 @@ int main () {
     cout << " " << *it;
 
   cout << endl;
-
+ 
   return 0;
 }

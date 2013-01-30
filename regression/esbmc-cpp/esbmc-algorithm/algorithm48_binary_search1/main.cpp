@@ -27,6 +27,6 @@ int main () {
   if (binary_search (v.begin(), v.end(), 6, myfunction))
     cout << "found!\n"; else cout << "not found.\n";
 */
-  assert(!binary_search (v.begin(), v.end(), 6, myfunction));
+  assert(!binary_search (v.begin(), v.end(), 6, myfunction)); 
   return 0;
 }

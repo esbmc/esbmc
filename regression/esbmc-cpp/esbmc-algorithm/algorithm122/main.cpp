@@ -12,6 +12,6 @@ int main () {
   sort (myints,myints+3);
   next_permutation (myints,myints+3);
   assert(myints[2] == 3);
-
+  
   return 0;
 }

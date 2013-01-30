@@ -28,6 +28,6 @@ int main () {
 
   if (it!=myvector.end())
     cout << "the second consecutive repeated elements are: " << *it << endl;
-
+  
   return 0;
 }

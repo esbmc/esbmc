@@ -27,7 +27,7 @@ int main () {
   assert(myvector[5] > 4);
   assert(myvector[6] > 4);
   assert(myvector[7] > 4);
-  assert(myvector[8] > 4);
+  assert(myvector[8] > 4); 
   // print out content:
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

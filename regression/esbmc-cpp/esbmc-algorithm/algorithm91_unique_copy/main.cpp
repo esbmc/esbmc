@@ -21,7 +21,7 @@ int main () {
 //  assert(*it == 0);
 //  sort (myvector.begin(),it);                          // 10 10 20 20 30 0  0  0  0
                                                        //                ^
-
+  
   // using predicate comparison:
   myvector.assign(myints1,myints1+9);
   it=unique_copy (myvector.begin(), it, myvector.begin(), myfunction);

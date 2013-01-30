@@ -45,7 +45,7 @@ def ChangeExecutionParameters(path):
        pos = timeout.index("--timeout") #unwind option
        timeout[pos+1] = TIMEOUT
        print "-> Timeout parameter already exists..."
-       print "-> Changing the timeout value to: " + TIMEOUT
+       print "-> Changing the timeout value to: " + TIMEOUT 
        timeout =  " ".join(timeout)
        ite_par.text = timeout
        print "New parameter: " + ite_par.text
