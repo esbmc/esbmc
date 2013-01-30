@@ -426,11 +426,11 @@ public:
 		__ESBMC_assert(pos < sLen, "string overflow");
 		__ESBMC_assert(n <= sLen, "string overflow");
 		__ESBMC_assert(n > 0, "string overflow");
-        __ESBMC_assert(pos <= n,
-                "second iterator must be equal or greather
-                 than first iterator");
 		__ESBMC_assert(s != NULL,
-				"The parameter must to be different than NULL");
+		    "The parameter must to be different than NULL");
+		if ((pos > sLen) || (pos > n))
+		  throw out_of_range();
+
 
 		int rhsLen = n;
 		int totalLen = this->_size + rhsLen;
