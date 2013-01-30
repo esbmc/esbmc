@@ -365,7 +365,7 @@ void cpp_typecheckt::typecheck_expr_sizeof(exprt &expr)
   if(expr.operands().size()==0)
   {
     const typet &type=
-      static_cast<const typet &>(expr.add("sizeof-type"));
+      static_cast<const typet &>(expr.find("sizeof-type"));
 
     if(type.id()=="cpp-name")
     {
