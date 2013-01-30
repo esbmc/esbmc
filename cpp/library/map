@@ -1,12 +1,11 @@
-/*******************************************************************\
+/*******************************************************************
+ Module:
 
-Module: 
+ Author: Felipe Rodrigues
 
-Author: Felipe Rodrigues
+ Date: February 2012
 
-Date: February 2012
-
-\*******************************************************************/
+ \*******************************************************************/
 
 #ifndef __STL_MAP
 #define __STL_MAP
@@ -16,9 +15,17 @@ Date: February 2012
 #include "vector"
 #include "functional"
 
-#define MAP_SIZE 1000
+template<class T>
+class node {
+public:
+	T data;
+	node* prev;
+	node* next;
+	node(T t, node* p, node* n) :
+			data(t), prev(p), next(n) {
+	}
+};
 
-#if 1
 template<class T>
 class list_esbmc {
 public:
@@ -26,40 +33,29 @@ public:
 	typedef bool (pred_double)(double, double);
 	typedef bool (pred)(const int &);
 
-	struct node {
-		T data;
-		node* prev;
-		node* next;
-		node(T t, node* p, node* n) :
-				data(t), prev(p), next(n) {
-		}
-	};
-
-	node* head;
-	node* tail;
+	node<T>* head;
+	node<T>* tail;
 	int _size;
 
-	explicit list_esbmc() : head(NULL), tail(NULL), _size(0) {}
+	explicit list_esbmc() :
+			head(NULL), tail(NULL), _size(0) {
+	}
 
-	explicit list_esbmc ( int n, const T& value = T() ){
-		__ESBMC_assert(n > 0, "\n  The following constructor was called, generating an error in container size specification:\n\n  >>>  explicit list (size_type n, const value_type& val = value_type());  <<<\n\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
+	explicit list_esbmc(int n, const T& value = T()) {
 		int i;
 		this->_size = 0;
-		for(i=0; i<n; i++)
+		for (i = 0; i < n; i++)
 			this->push_back(value);
 	}
 
-	explicit list_esbmc (T* t1, T* t2){
-		__ESBMC_assert(t1 != NULL,
-								"\n  The following method was called, generating an error in range containing the values to fill the container:\n\n  >>>  template <class InputIterator>\n         list (InputIterator first, InputIterator last); <<<  \n\n  In the first parameter (first) is specified the pointer to begining of the range,\n  therefore, this parameter must be different than NULL.\n");
-		__ESBMC_assert(t2 != NULL,
-								"\n  The following method was called, generating an error in range containing the values to fill the container:\n\n  >>>  template <class InputIterator>\n         list (InputIterator first, InputIterator last); <<<  \n\n  In the second parameter (last) is specified the pointer to final of the range,\n  therefore, this parameter must be different than NULL.\n");
+	explicit list_esbmc(T* t1, T* t2) {
+
 		this->_size = 0;
-		for(; t1!=t2; t1++)
+		for (; t1 != t2; t1++)
 			this->push_back(*t1);
 	}
 
-	list_esbmc(const list_esbmc<T>& x){
+	list_esbmc(const list_esbmc<T>& x) {
 		this->head = x.head;
 		this->tail = x.tail;
 		this->_size = x._size;
@@ -67,26 +63,26 @@ public:
 
 	~list_esbmc() {
 		while (head) {
-			node* temp(head);
+			node<T>* temp(head);
 			head = head->next;
 			delete temp;
 		}
 	}
 
-	bool empty () const{
+	bool empty() const {
 		if (this->_size == 0)
 			return true;
 		return false;
 	}
 
-	void push_back ( const T& x ){
-		if(this->empty()){
-			this->tail = new node(x, NULL, NULL);
+	void push_back(const T& x) {
+		if (this->empty()) {
+			this->tail = new node<T>(x, NULL, NULL);
 			this->head = this->tail;
-		}else{
-			this->tail->next = new node(x, this->tail, NULL);
+		} else {
+			this->tail->next = new node<T>(x, this->tail, NULL);
 			this->tail = this->tail->next;
-			if(this->_size == 1)
+			if (this->_size == 1)
 				this->head->next == this->tail;
 		}
 		this->_size++;
@@ -94,10 +90,10 @@ public:
 
 	void push_front(const T& x) {
 		if (this->empty()) {
-			this->head = new node(x, NULL, NULL);
+			this->head = new node<T>(x, NULL, NULL);
 			this->tail = this->head;
 		} else {
-			this->head->prev = new node(x, NULL, this->head);
+			this->head->prev = new node<T>(x, NULL, this->head);
 			this->head = this->head->prev;
 			if (this->_size == 1)
 				this->tail->prev == this->head;
@@ -105,366 +101,481 @@ public:
 		this->_size++;
 	}
 
-	//template<class X>
-	T search(T& par) {
-		node* tmp = this->head;
-		while (tmp != NULL) {
-			if (!(par.first < tmp->data.first)) {
-				if (tmp->data.first < par.first) {
-					if (tmp->prev == NULL) {
-						this->push_front(par);
-						return par;
-					} else {
-						node* new_node = new node(par, tmp->prev, tmp);
-						tmp->prev->next = new_node;
-						tmp->prev = new_node;
-						return tmp->prev->data;
-					}
-				}
-				par.second = tmp->data.second;
-				return par;
-			}
+	void pop_front(){
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->head->data = this->head->next->data;
+			this->head->prev = NULL;
+			this->head->next = this->head->next->next;
 		}
-		if (tmp == NULL) {
-			this->push_back(par);
+		this->_size--;
+	}
+	void pop_back (){
+		if (this->_size == 1){
+			this->head = this->tail = NULL;
+		}else{
+			this->tail->data = this->tail->prev->data;
+			this->tail->prev = this->tail->prev->prev;
+			this->tail->next = NULL;
 		}
-		return par;
+		this->_size--;
 	}
 
 };
-#endif
 
 namespace std {
 
-  template < class Key, class T, class Compare = less<Key>,
-             class Allocator = allocator<pair<const Key,T> > >
-  class multimap{
-  public:
-	  typedef Key key_type;
-	     typedef T mapped_type;
-	     typedef pair<const Key, T> value_type;
-	     typedef Compare key_compare;
-	     typedef int size_type;
+template<class Key, class T, class Compare = less<Key> >
+class map {
 
-	     class iterator{
-	       public:
+public:
 
-	       iterator(const iterator&);
-	       iterator();
-	       iterator& operator=(const iterator&);
-
-	       value_type * operator -> ();
-
-	       value_type & operator * ();
-
-	       iterator& operator ++ ();
-	       iterator& operator ++ (int);
-
-	       iterator& operator -- ();
-	       iterator& operator -- (int);
-
-	       bool operator == (const iterator& it) const;
-	       bool operator != (const iterator& it) const;
-	     };
-
-	     class const_iterator{
-	       public:
-	       const_iterator(const const_iterator&);
-	       const_iterator(iterator);
-	       const_iterator();
-	       const_iterator& operator=(const const_iterator&);
-
-	       const value_type * operator -> ();
-
-	       const value_type & operator * ();
-
-	       const_iterator& operator ++ ();
-	       const_iterator& operator ++ (int);
-
-	       const_iterator& operator -- ();
-	       const_iterator& operator -- (int);
-
-	       bool operator == ( const const_iterator&)const;
-	       bool operator != ( const const_iterator&)const;
-	     };
-/*
-	     class reverse_iterator{
-	       public:
-	       reverse_iterator(reverse_iterator);
-	       reverse_iterator();
-	       explicit reverse_iterator(iterator);
-
-	       iterator base() const; // explicit
-
-	       reverse_iterator& operator=(const reverse_iterator&);
-
-	       value_type * operator -> ();
-
-	       value_type & operator * ();
-
-	       reverse_iterator& operator ++ ();
-	       reverse_iterator& operator ++ (int);
-
-	       reverse_iterator& operator -- ();
-	       reverse_iterator& operator -- (int);
-
-	       bool operator == ( const reverse_iterator&)const;
-	       bool operator != ( const reverse_iterator&)const;
-	     };
-
-	     class  const_reverse_iterator {
-	       public:
-	       const_reverse_iterator(const_reverse_iterator);
-	       const_reverse_iterator();
-	       explicit const_reverse_iterator(const_iterator);
-
-	       const_iterator base() const; // explicit
-
-	       const_reverse_iterator& operator=(const const_reverse_iterator);
-
-	       const value_type * operator -> ();
-
-	       const value_type & operator * ();
-
-	       const_reverse_iterator& operator ++ ();
-	       const_reverse_iterator& operator ++ (int);
-
-	       const_reverse_iterator& operator -- ();
-	       const_reverse_iterator& operator -- (int);
-
-	       bool operator == ( const const_reverse_iterator&)const;
-	       bool operator != ( const const_reverse_iterator&)const;
-	     };
-
-	  explicit multimap ( const Compare& comp = Compare(),
-	                 const Allocator& = Allocator() );
-	  multimap ( const multimap<Key,T,Compare,Allocator>& x );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator== ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator<  ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator!= ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator>  ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator>= ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-      template <class Key, class T, class Compare, class Allocator>
-        bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
-                          const multimap<Key,T,Compare,Allocator>& y );
-*/
-	  size_type count ( const key_type& x ) const;
-	  iterator insert ( const value_type& x );
-	  iterator insert ( iterator position, const value_type& x );
-	  template <class InputIterator>
-	     void insert ( InputIterator first, InputIterator last );
-      iterator begin ();
-      const_iterator begin () const;
-      iterator end ();
-      const_iterator end () const;
-  };
-
-  template <class Key, class T, class Compare=less<Key> >
-  class map {
-
-    public:
-
-    typedef Key key_type;
-    typedef T mapped_type;
-    typedef pair<const Key, T> value_type;
-    typedef Compare key_compare;
-    typedef int size_type;
+	typedef Key key_type;
+	typedef T mapped_type;
+	typedef pair<const Key, T> value_type;
+	typedef Compare key_compare;
+	typedef int size_type;
 
 	list_esbmc<value_type>* map_list;
 	int _size;
 
 	typedef bool (func)(Key, Key);
 
-    class iterator{
-      public:
+	class iterator {
+	public:
 
-      iterator(const iterator& x);
-      iterator();
-      iterator& operator=(const iterator& x);
+		iterator(const iterator& x);
+		iterator();
+		iterator& operator=(const iterator& x);
 
-      value_type * operator -> ();
+		value_type * operator ->();
 
-      value_type & operator * ();
+		value_type & operator *();
 
-      iterator& operator ++ ();
-      iterator& operator ++ (int);
+		iterator& operator ++();
+		iterator& operator ++(int);
 
-      iterator& operator -- ();
-      iterator& operator -- (int);
+		iterator& operator --();
+		iterator& operator --(int);
 
-      //bool operator == (const iterator& it) const;
-      bool operator != (const iterator& it) const;
-    };
+		//bool operator == (const iterator& it) const;
+		bool operator !=(const iterator& it) const;
+	};
 
+	class const_iterator {/*
+	 public:
+	 const_iterator(const const_iterator&);
+	 const_iterator();
+	 const_iterator& operator=(const const_iterator&);
 
-    class const_iterator{/*
-      public:
-      const_iterator(const const_iterator&);
-      const_iterator();
-      const_iterator& operator=(const const_iterator&);
+	 //const value_type * operator -> ();
 
-      //const value_type * operator -> ();
+	 //const value_type & operator * ();
 
-      //const value_type & operator * ();
+	 const_iterator& operator ++ ();
+	 const_iterator& operator ++ (int);
 
-      const_iterator& operator ++ ();
-      const_iterator& operator ++ (int);
+	 const_iterator& operator -- ();
+	 const_iterator& operator -- (int);
 
-      const_iterator& operator -- ();
-      const_iterator& operator -- (int);
+	 bool operator == ( const const_iterator&)const;
+	 bool operator != ( const const_iterator&)const;
+	 */
+	};
 
-      bool operator == ( const const_iterator&)const;
-      bool operator != ( const const_iterator&)const;
-    */};
+	class reverse_iterator {
+	public:
+		//reverse_iterator(reverse_iterator);
+		reverse_iterator();
+		//explicit reverse_iterator(iterator);
 
-    class reverse_iterator{
-      public:
-      //reverse_iterator(reverse_iterator);
-      reverse_iterator();
-      //explicit reverse_iterator(iterator);
+		//iterator base() const; // explicit
 
-      //iterator base() const; // explicit
+		//reverse_iterator& operator=(const reverse_iterator&);
 
-      //reverse_iterator& operator=(const reverse_iterator&);
+		value_type * operator ->();
 
-      value_type * operator -> ();
+		value_type & operator *();
 
-      value_type & operator * ();
+		reverse_iterator& operator ++();
+		reverse_iterator& operator ++(int);
 
-      reverse_iterator& operator ++ ();
-      reverse_iterator& operator ++ (int);
+		//reverse_iterator& operator -- ();
+		//reverse_iterator& operator -- (int);
 
-      //reverse_iterator& operator -- ();
-      //reverse_iterator& operator -- (int);
+		//bool operator == ( const reverse_iterator&)const;
+		bool operator !=(const reverse_iterator&) const;
+	};
 
-      //bool operator == ( const reverse_iterator&)const;
-      bool operator != ( const reverse_iterator&)const;
-    };
+	class const_reverse_iterator {
+		/*public:
+		 const_reverse_iterator(const_reverse_iterator);
+		 const_reverse_iterator();
+		 explicit const_reverse_iterator(const_iterator);
 
-    class  const_reverse_iterator {
-      /*public:
-      const_reverse_iterator(const_reverse_iterator);
-      const_reverse_iterator();
-      explicit const_reverse_iterator(const_iterator);
+		 const_iterator base() const; // explicit
 
-      const_iterator base() const; // explicit
+		 const_reverse_iterator& operator=(const const_reverse_iterator);
 
-      const_reverse_iterator& operator=(const const_reverse_iterator);
+		 //const value_type * operator -> ();
 
-      //const value_type * operator -> ();
+		 //const value_type & operator * ();
 
-      //const value_type & operator * ();
+		 const_reverse_iterator& operator ++ ();
+		 const_reverse_iterator& operator++ (int);
 
-      const_reverse_iterator& operator ++ ();
-      const_reverse_iterator& operator++ (int);
+		 const_reverse_iterator& operator -- ();
+		 const_reverse_iterator& operator -- (int);
 
-      const_reverse_iterator& operator -- ();
-      const_reverse_iterator& operator -- (int);
+		 bool operator == ( const const_reverse_iterator&)const;
+		 bool operator != ( const const_reverse_iterator&)const;
+		 */};
 
-      bool operator == ( const const_reverse_iterator&)const;
-      bool operator != ( const const_reverse_iterator&)const;
-    */};
+	map() :
+			map_list() {
+		map_list = new list_esbmc<value_type>();
+		this->_size = 0;
+	}
 
-    map() : map_list() {
-        map_list = new list_esbmc<value_type>();
-      	this->_size = 0;
-    }
+	map(iterator first, iterator last);
 
-    map( iterator first, iterator last);
+	map(func* x);
 
-    map(func* x);
+	map(map& x) {
+		this->map_list = x.map_list;
+		this->_size = x._size;
+	}
 
-    map ( map& x ){
-    	this->map_list = x.map_list;
-    	this->_size = x._size;
-    }
+	T& operator[](const Key& x) {
+		value_type par(x, T());
+		node<value_type>* tmp = this->map_list->head;
 
-    T& operator[]( const Key& x){
-		value_type par(x,T());
-    	if (this->_size == 0){
+		if (this->_size == 0) {
 			this->map_list->push_back(par);
-    		this->_size++;
-    	}else{
-    		par = this->map_list->search(par);
-    	}
-    	return this->map_list->head->data.second;
-    }
+			this->_size++;
+			return this->map_list->head->data.second;
+		} else {
+			while (tmp != NULL) {
+				if (!(par.first < tmp->data.first)) {
+					if (tmp->data.first < par.first) {
+						if (tmp->prev == NULL) {
+							this->map_list->push_front(par);
+							return this->map_list->head->data.second;
+						} else {
+							node<value_type>* new_node = new node<value_type>(
+									par, tmp->prev, tmp);
+							tmp->prev->next = new_node;
+							tmp->prev = new_node;
+							return tmp->prev->data.second;
+						}
+					}
+					return tmp->data.second;
+				}
+				tmp = tmp->next;
+			}
+			if (tmp == NULL) {
+				this->map_list->push_back(par);
+				return this->map_list->tail->data.second;
+			}
+		}
+	}
 
-    ~map(){
-    	this->map_list->~list_esbmc();
-    }
-    // iterators:
-    iterator begin();
-    const_iterator begin() const;
-    iterator end();
-    const_iterator end() const;
-    reverse_iterator rbegin();
-    const_reverse_iterator rbegin() const;
-    reverse_iterator rend();
-    const_reverse_iterator rend() const;
+	// iterators:
+	iterator begin();
+	const_iterator begin() const;
+	iterator end();
+	const_iterator end() const;
+	reverse_iterator rbegin();
+	const_reverse_iterator rbegin() const;
+	reverse_iterator rend();
+	const_reverse_iterator rend() const;
 
-    // capacity:
-    bool empty() const;
-    size_type size() const;
-    size_type max_size() const;
+	size_type count(const key_type& x) const;
+	void erase(iterator position);
+	void erase(iterator first, iterator last);
 
-    void clear();
-    size_type count(const key_type& x) const;
+	mapped_type& at(const Key& x) {
+		value_type par(x, mapped_type());
+		node<value_type>* tmp = this->map_list->head;
 
-    void erase(iterator position);
-    size_type erase(const key_type& x);
-    void erase(iterator first, iterator last);
+		if (this->_size == 0) {
+			this->map_list->push_back(par);
+			this->_size++;
+			return this->map_list->head->data.second;
+		} else {
+			while (tmp != NULL) {
+				if (!(par.first < tmp->data.first)) {
+					if (tmp->data.first < par.first) {
+						if (tmp->prev == NULL) {
+							this->map_list->push_front(par);
+							this->_size++;
+							return this->map_list->head->data.second;
+						} else {
+							node<value_type>* new_node = new node<value_type>(
+									par, tmp->prev, tmp);
+							tmp->prev->next = new_node;
+							tmp->prev = new_node;
+							this->_size++;
+							return tmp->prev->data.second;
+						}
+					}
+					return tmp->data.second;
+				}
+				tmp = tmp->next;
+			}
+			if (tmp == NULL) {
+				this->map_list->push_back(par);
+				this->_size++;
+				return this->map_list->tail->data.second;
+			}
+		}
+	}
 
-    void operator= (){}
+	bool empty() const{
+		if(this->_size == 0)
+			return true;
+		return false;
+	}
+
+	size_type size() const{
+		return this->_size;
+	}
+
+	size_type max_size() const{
+		return nondet_int();
+	}
+
+	map& operator= (const map& x){
+		this->map_list = x.map_list;
+		this->_size = x._size;
+		return *this;
+	}
+
+	void clear(){
+		this->map_list->~list_esbmc();
+		this->_size = 0;
+	}
+
+	~map(){
+		this->map_list->~list_esbmc();
+		this->_size = 0;
+	}
+
+	void swap (map& x){
+		node<value_type>* tmpHead = this->map_list->head;
+		node<value_type>* tmpTail = this->map_list->tail;
+		size_type tmpSize = this->_size;
+		this->map_list->head = x.map_list->head;
+		this->map_list->tail = x.map_list->tail;
+		this->_size = x._size;
+		x.map_list->head = tmpHead;
+		x.map_list->tail = tmpTail;
+		x._size = tmpSize;
+	}
+
+	void insert (const value_type& val){
+		this->at(val.first) = val.second;
+	}
+
+	size_type erase (const key_type& k){
+		value_type par(k, mapped_type());
+		node<value_type>* tmp = this->map_list->head;
+
+		if (this->_size == 0) {
+			return this->_size;
+		} else {
+			while (tmp != NULL) {
+				if (!(par.first < tmp->data.first)) {
+					if (tmp->data.first < par.first) {
+						if (tmp->prev == NULL) {
+							return this->_size;
+						} else {
+							return this->_size;
+						}
+					}
+					if(tmp->prev != NULL)
+						tmp->prev->next = tmp->next;
+					if(tmp->next != NULL)
+						tmp->next->prev = tmp->prev;
+					return this->_size--;
+				}
+				tmp = tmp->next;
+			}
+			return this->_size;
+		}
+	}
 
 #if 0
-    // modifiers:
-    pair<iterator,bool> insert ( const value_type& x );
-               iterator insert ( iterator position, const value_type& x );
-    void insert ( map<Key,T>::iterator first, map<Key,T>::iterator last );
-    //pair<iterator, bool> insert(const value_type& x);
-    //pair<iterator, bool> insert(const std::pair<Key,T>& x);
-    //map<Key,T>::iterator insert(map<Key,T>::iterator position, const value_type& x);
-    void insert( map<Key,T>::iterator position, std::pair<Key,T>& x);
+	// modifiers:
+	pair<iterator,bool> insert ( const value_type& x );
+	iterator insert ( iterator position, const value_type& x );
+	void insert ( map<Key,T>::iterator first, map<Key,T>::iterator last );
+	//pair<iterator, bool> insert(const value_type& x);
+	//pair<iterator, bool> insert(const std::pair<Key,T>& x);
+	//map<Key,T>::iterator insert(map<Key,T>::iterator position, const value_type& x);
+	void insert( map<Key,T>::iterator position, std::pair<Key,T>& x);
 
-    //void swap(map<Key,T,Compare>);
+	//void swap(map<Key,T,Compare>);
 
-    // map operations:
-    iterator find(const key_type& x);
-    const_iterator find(const key_type& x) const;
-    iterator lower_bound(const key_type& x);
-    //const_iterator lower_bound(const key_type& x) const;
-    iterator upper_bound(const key_type& x);
-    //const_iterator upper_bound(const key_type& x) const;
-    pair<iterator,iterator> equal_range(const key_type& x);
-    pair<const_iterator,const_iterator> equal_range(const key_type& x) const;
-    key_compare key_comp ( ) const;
+	// map operations:
+	iterator find(const key_type& x);
+	const_iterator find(const key_type& x) const;
+	iterator lower_bound(const key_type& x);
+	//const_iterator lower_bound(const key_type& x) const;
+	iterator upper_bound(const key_type& x);
+	//const_iterator upper_bound(const key_type& x) const;
+	pair<iterator,iterator> equal_range(const key_type& x);
+	pair<const_iterator,const_iterator> equal_range(const key_type& x) const;
+	key_compare key_comp ( ) const;
 
-    void swap(map<Key,T>& x);
+	void swap(map<Key,T>& x);
 
-    /*
-    // comparators:
+	// comparators:
 
-    bool operator == (const map<Key,T,Compare>&) const;
-    bool operator != (const map<Key,T,Compare>&) const;
-    bool operator >= (const map<Key,T,Compare>&) const;
-    bool operator <= (const map<Key,T,Compare>&) const;
-    */
+	bool operator == (const map<Key,T,Compare>&) const;
+	bool operator != (const map<Key,T,Compare>&) const;
+	bool operator >= (const map<Key,T,Compare>&) const;
+	bool operator <= (const map<Key,T,Compare>&) const;
+
 #endif
-  };
-  // specialized algorithms:
-  template <class Key, class T, class Compare>
-  	  void swap(map<Key,T,Compare>&, vector<Key,T,Compare>&);
+};
+
+template<class Key, class T, class Compare>
+void swap(map<Key, T, Compare>&, vector<Key, T, Compare>&);
+
+template<class Key, class T, class Compare = less<Key>,
+		class Allocator = allocator<pair<const Key, T> > >
+class multimap {
+public:
+	typedef Key key_type;
+	typedef T mapped_type;
+	typedef pair<const Key, T> value_type;
+	typedef Compare key_compare;
+	typedef int size_type;
+
+	class iterator {
+	public:
+
+		iterator(const iterator&);
+		iterator();
+		iterator& operator=(const iterator&);
+
+		value_type * operator ->();
+
+		value_type & operator *();
+
+		iterator& operator ++();
+		iterator& operator ++(int);
+
+		iterator& operator --();
+		iterator& operator --(int);
+
+		bool operator ==(const iterator& it) const;
+		bool operator !=(const iterator& it) const;
+	};
+
+	class const_iterator {
+	public:
+		const_iterator(const const_iterator&);
+		const_iterator(iterator);
+		const_iterator();
+		const_iterator& operator=(const const_iterator&);
+
+		const value_type * operator ->();
+
+		const value_type & operator *();
+
+		const_iterator& operator ++();
+		const_iterator& operator ++(int);
+
+		const_iterator& operator --();
+		const_iterator& operator --(int);
+
+		bool operator ==(const const_iterator&) const;
+		bool operator !=(const const_iterator&) const;
+	};
+	/*
+	 class reverse_iterator{
+	 public:
+	 reverse_iterator(reverse_iterator);
+	 reverse_iterator();
+	 explicit reverse_iterator(iterator);
+
+	 iterator base() const; // explicit
+
+	 reverse_iterator& operator=(const reverse_iterator&);
+
+	 value_type * operator -> ();
+
+	 value_type & operator * ();
+
+	 reverse_iterator& operator ++ ();
+	 reverse_iterator& operator ++ (int);
+
+	 reverse_iterator& operator -- ();
+	 reverse_iterator& operator -- (int);
+
+	 bool operator == ( const reverse_iterator&)const;
+	 bool operator != ( const reverse_iterator&)const;
+	 };
+
+	 class  const_reverse_iterator {
+	 public:
+	 const_reverse_iterator(const_reverse_iterator);
+	 const_reverse_iterator();
+	 explicit const_reverse_iterator(const_iterator);
+
+	 const_iterator base() const; // explicit
+
+	 const_reverse_iterator& operator=(const const_reverse_iterator);
+
+	 const value_type * operator -> ();
+
+	 const value_type & operator * ();
+
+	 const_reverse_iterator& operator ++ ();
+	 const_reverse_iterator& operator ++ (int);
+
+	 const_reverse_iterator& operator -- ();
+	 const_reverse_iterator& operator -- (int);
+
+	 bool operator == ( const const_reverse_iterator&)const;
+	 bool operator != ( const const_reverse_iterator&)const;
+	 };
+
+	 explicit multimap ( const Compare& comp = Compare(),
+	 const Allocator& = Allocator() );
+	 multimap ( const multimap<Key,T,Compare,Allocator>& x );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator== ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator<  ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator!= ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator>  ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator>= ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 template <class Key, class T, class Compare, class Allocator>
+	 bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
+	 const multimap<Key,T,Compare,Allocator>& y );
+	 */
+	size_type count(const key_type& x) const;
+	iterator insert(const value_type& x);
+	iterator insert(iterator position, const value_type& x);
+	template<class InputIterator>
+	void insert(InputIterator first, InputIterator last);
+	iterator begin();
+	const_iterator begin() const;
+	iterator end();
+	const_iterator end() const;
+};
 
 }
 

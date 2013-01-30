@@ -80,18 +80,32 @@ public:
 		}
 
 		bool operator ==(const iterator& x) const{
-			iterator tmp;
-			if(x.it->next == NULL){
-				tmp.it = x.it->prev;
-			}else{
-				tmp.it = x.it;
-			}
-			if(this->it->data != tmp.it->data)
+			if(this->it == NULL){
 				return false;
-			return true;
-		}
-		bool operator !=( const iterator& x ) const{
+			}
 			if(x.it->next == NULL){
+				if(this->it->prev == NULL){
+						return false;
+				}
+				if(this->it->next == NULL){
+					return true;
+				}else{
+					return false;
+				}
+			}
+			if(this->it->data == x.it->data)
+				return true;
+			return false;
+		}
+
+		bool operator !=( const iterator& x ) const{
+			if(this->it == NULL){
+				return false;
+			}
+			if(x.it->next == NULL){
+				if(this->it->prev == NULL){
+						return true;
+				}
 				if(this->it->next == NULL){
 					return false;
 				}else{
