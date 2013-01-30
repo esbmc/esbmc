@@ -819,13 +819,6 @@ void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
       err_location(expr.op0());
       throw "cannot throw void";
     }
-    else if(id=="incomplete_array")
-    {
-      err_location(expr.op0());
-      str << "storage size of ‘" << lookup(expr.op0().identifier()).base_name;
-      str << "’ isn’t known\n";
-      throw 0;
-    }
 
     // annotate the relevant exception IDs
     expr.set("exception_list",
