@@ -15,8 +15,8 @@ int main () {
 
   low=lower_bound (v.begin(), v.end(), 20); //          ^
   assert(*low == 20);
-  up= upper_bound (v.begin(), v.end(), 20); //                   ^
-  assert(*up == 30);
+//  up= upper_bound (v.begin(), v.end(), 20); //                   ^
+//  assert(*up == 30);
 
   return 0;
 }

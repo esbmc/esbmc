@@ -12,8 +12,10 @@ int main () {
   vector<int> v(10);                           // 0  0  0  0  0  0  0  0  0  0
   vector<int>::iterator it;
 
-  it=set_union (first, first+5, second, second+5, v.begin());
+ it = set_union (first, first+5, second, second+5, v.begin());
                                                // 5 10 15 20 25 30 40 50  0  0
+  for(int i = 0;i < 10;i++) cout << v[i] << " ";
+  cout << endl;
   assert(v[0] == 5);
   assert(v[1] == 10);
   assert(v[2] == 15);
