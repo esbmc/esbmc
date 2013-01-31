@@ -70,6 +70,7 @@ void goto_symex_statet::initialize(const goto_programt::const_targett & start, c
 bool goto_symex_statet::constant_propagation(const exprt &expr) const
 {
   static unsigned int with_counter=0;
+
   if(expr.is_constant()) return true;
 
   if(expr.id()==exprt::addrof)
@@ -110,6 +111,9 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 		return false;
 	}
 
+	if (expr.op1().is_constant() && expr.op2().is_constant())
+	  return true;
+
     //forall_operands(it, expr)
     //{
       if(!constant_propagation(expr.op0()))
@@ -129,7 +133,6 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
 
     return true;
   }
-
   else if(expr.id()=="union")
   {
     if(expr.operands().size()==1)
@@ -170,10 +173,8 @@ bool goto_symex_statet::constant_propagation_reference(const exprt &expr) const
 
     return constant_propagation_reference(expr.op0());
   }
-#if 1
   else if(expr.id()=="string-constant")
     return true;
-#endif
 
   return false;
 }
