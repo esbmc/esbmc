@@ -11,7 +11,7 @@ from sys import argv
 import xml.etree.ElementTree as ET
 
 STR_OPT = 'item_05_option_to_run_esbmc'
-TIMEOUT = '3600'
+TIMEOUT = '3600s'
 
 def error(message):
     sys.stderr.write("error: %s\n" % message)
