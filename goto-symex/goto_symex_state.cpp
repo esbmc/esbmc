@@ -105,7 +105,7 @@ bool goto_symex_statet::constant_propagation(const exprt &expr) const
   {
 	with_counter++;
 
-	if (with_counter>6)
+	if (with_counter>10)
 	{
 		with_counter=0;
 		return false;
