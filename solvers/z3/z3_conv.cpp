@@ -1359,7 +1359,7 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
 	bv = args[0];
       else {
 	if (!to_width) to_width = config.ansi_c.int_width;
-	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, args[0]);
+	bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_width, args[0]);
       }
     }
   } else if (op.type().id() == "unsignedbv") {
