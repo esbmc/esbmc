@@ -1218,13 +1218,6 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     abort();
   }
 
-		//std::cout << "### to_fraction_bits: " << to_fraction_bits << std::endl;
-		//std::cout << "### to_integer_bits: " << to_integer_bits << std::endl;
-		//std::cout << "### op.pretty(): " << op.pretty() << std::endl;
-		//std::cout << "### op.type().id(): " << op.type().id() << std::endl;
-		//std::cout << "### expr.pretty(): " << expr.pretty() << std::endl;
-		//std::cout << "### expr.type().id(): " << expr.type().id() << std::endl;
-
   if (op.type().id() == "unsignedbv" ||
       op.type().id() == "signedbv" ||
       op.type().id() == "enum") {
@@ -1232,13 +1225,10 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
 
     get_type_width(op.type(), from_width);
 
-		//std::cout << "### from_width: " << from_width << std::endl;
-
     if (from_width == to_integer_bits) {
       convert_bv(op, bv);
     } else if (from_width > to_integer_bits)      {
       convert_bv(op, args[0]);
-      //bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, args[0]);			
       bv = Z3_mk_extract(z3_ctx, to_integer_bits-1, 0, args[0]);
     } else   {
       assert(from_width < to_integer_bits);
