@@ -1324,8 +1324,11 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
 				bv = Z3_mk_extract(z3_ctx, (to_width-1), (from_width/2), bv);
 				bv = Z3_mk_sign_ext(z3_ctx, (from_width/2), bv);
 			}
-
-      // XXXjmorse - there isn't a case here for if !int_encoding
+			else if (op.type().id() == "fixedbv" &&
+               expr.type().id() == "unsignedbv") {
+				bv = Z3_mk_extract(z3_ctx, (to_width-1), (from_width/2), bv);
+				bv = Z3_mk_zero_ext(z3_ctx, (from_width/2), bv);
+			}
 
     } else if (from_width < to_width)      {
       convert_bv(op, args[0]);
