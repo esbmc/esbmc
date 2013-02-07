@@ -371,6 +371,7 @@ public:
 	string& operator=(string& str);
 	string& operator=(const char* s);
 	string& operator=(char c);
+    string& operator=(const string& str);
 	string& operator+=(string& s);
 	string& operator +=(const char* s);
 	string& operator+=(char s);
@@ -1166,6 +1167,19 @@ bool string::empty() const {
 		return true;
 	return false;
 }
+
+string& string::operator=(const string& str) {
+    int i, len;
+    this->_size = str.length();
+    this->str = new char[this->_size + 1];
+    len = str.length();
+    for (i = 0; i < len; i++) {
+      this->str[i] = str.str[i];
+    }
+    this->str[i] = '\0';
+    return *this;
+}
+
 
 string& string::operator=(string& str) {
 //	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
