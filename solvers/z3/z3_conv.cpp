@@ -1317,8 +1317,9 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
           expr.type().id() == "fixedbv")
         bv = Z3_mk_int2real(z3_ctx, bv);
       else if (int_encoding && op.type().id() == "fixedbv" &&
-               expr.type().id() == "signedbv")
+               expr.type().id() == "signedbv") {
         bv = Z3_mk_real2int(z3_ctx, bv);
+      }
 	  else if (op.type().id() == "fixedbv" &&
                expr.type().id() == "signedbv") {
 	    Z3_ast i, f;
@@ -1353,9 +1354,18 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
           ((op.type().id() == "signedbv" && expr.type().id() == "fixedbv")))
 	    bv = Z3_mk_int2real(z3_ctx, args[0]);
       else if (int_encoding &&
-               (op.type().id() == "fixedbv" && expr.type().id() == "signedbv"))
-	    bv = Z3_mk_real2int(z3_ctx, args[0]);
-      else if (int_encoding)
+               (op.type().id() == "fixedbv" && expr.type().id() == "signedbv")) {
+	    //bv = Z3_mk_real2int(z3_ctx, args[0]);
+    	  Z3_ast temp[2];
+    	  temp[0] = Z3_mk_real2int(z3_ctx, args[0]);
+    	  temp[1] = convert_number_int(1, 0, true);
+    	  bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, args[0]),
+    			         temp[0],
+    			         Z3_mk_ite(z3_ctx, Z3_mk_gt(z3_ctx, temp[0], convert_number_int(0, 0, true)),
+    			        		   temp[0],
+    			        		   Z3_mk_add(z3_ctx, 2, temp)));
+
+      } else if (int_encoding)
 	    bv = args[0];
       else if (op.type().id() == "fixedbv" && expr.type().id() == "signedbv") {
 	    if (!to_width) to_width = config.ansi_c.int_width;
