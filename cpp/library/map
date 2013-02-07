@@ -135,10 +135,26 @@ public:
 	typedef T mapped_type;
 	typedef pair<const Key, T> value_type;
 	typedef Compare key_compare;
-	typedef int size_type;
+	typedef unsigned int size_type;
+
+	class value_compare
+	{
+	friend class map;
+	protected:
+		Compare comp;
+		value_compare (Compare c) : comp(c) {}
+	public:
+		typedef bool result_type;
+		typedef value_type first_argument_type;
+		typedef value_type second_argument_type;
+		bool operator() (const value_type& x, const value_type& y) const
+		{
+			return comp(x.first, y.first);
+		}
+	};
 
 	list_esbmc<value_type>* map_list;
-	int _size;
+	size_type _size;
 
 	typedef bool (func)(Key, Key);
 
@@ -232,8 +248,7 @@ public:
 		 bool operator != ( const const_reverse_iterator&)const;
 		 */};
 
-	map() :
-			map_list() {
+	map() {
 		map_list = new list_esbmc<value_type>();
 		this->_size = 0;
 	}
@@ -247,7 +262,7 @@ public:
 		this->_size = x._size;
 	}
 
-	T& operator[](const Key& x) {
+	mapped_type& operator[](const Key& x) {
 		value_type par(x, T());
 		node<value_type>* tmp = this->map_list->head;
 
@@ -406,6 +421,14 @@ public:
 		}
 	}
 
+	key_compare key_comp() const{
+		return key_compare();
+	}
+
+	value_compare value_comp() const;//{
+		//return value_compare(Compare());
+	//}
+
 #if 0
 	// modifiers:
 	pair<iterator,bool> insert ( const value_type& x );
@@ -416,8 +439,6 @@ public:
 	//map<Key,T>::iterator insert(map<Key,T>::iterator position, const value_type& x);
 	void insert( map<Key,T>::iterator position, std::pair<Key,T>& x);
 
-	//void swap(map<Key,T,Compare>);
-
 	// map operations:
 	iterator find(const key_type& x);
 	const_iterator find(const key_type& x) const;
@@ -427,9 +448,6 @@ public:
 	//const_iterator upper_bound(const key_type& x) const;
 	pair<iterator,iterator> equal_range(const key_type& x);
 	pair<const_iterator,const_iterator> equal_range(const key_type& x) const;
-	key_compare key_comp ( ) const;
-
-	void swap(map<Key,T>& x);
 
 	// comparators:
 
