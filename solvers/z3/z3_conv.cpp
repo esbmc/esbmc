@@ -1314,9 +1314,17 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
       convert_bv(op, bv);
 			
       if (int_encoding && op.type().id() == "signedbv" &&
-          expr.type().id() == "fixedbv")
+          expr.type().id() == "fixedbv") {
+#if 1
+				Z3_ast operands[2];
+    	  operands[0] = bv;
+    	  operands[1] = convert_number_int(1, 0, true);			
+				bv = Z3_mk_ite(z3_ctx, Z3_mk_gt(z3_ctx, bv, convert_number(0, 0, true)),
+												bv,
+												Z3_mk_add(z3_ctx, 2, operands)); 
+#endif
         bv = Z3_mk_int2real(z3_ctx, bv);
-      else if (int_encoding && op.type().id() == "fixedbv" &&
+      } else if (int_encoding && op.type().id() == "fixedbv" &&
                expr.type().id() == "signedbv") {
         bv = Z3_mk_real2int(z3_ctx, bv);
       }
