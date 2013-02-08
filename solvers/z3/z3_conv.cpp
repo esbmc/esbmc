@@ -38,9 +38,6 @@
 #define DEBUGLOC
 #endif
 
-static u_int unsat_core_size = 0;
-static u_int assumptions_status = 0;
-
 extern void finalize_symbols(void);
 
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
@@ -57,7 +54,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
   assumpt_mode = false;
   no_variables = 1;
-  max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
 
   z3::config conf;
@@ -368,31 +364,6 @@ z3_convt::get_cur_addrspace_ident(void)
   return str;
 }
 
-uint
-z3_convt::get_z3_core_size(void)
-{
-  return unsat_core_size;
-}
-
-uint
-z3_convt::get_z3_number_of_assumptions(void)
-{
-  return assumptions_status;
-}
-
-void
-z3_convt::set_z3_core_size(uint val)
-{
-  if (val)
-    max_core_size = val;
-}
-
-void
-z3_convt::set_filename(std::string file)
-{
-  filename = file;
-}
-
 std::string
 z3_convt::extract_magnitude(std::string v, unsigned width)
 {
@@ -510,8 +481,6 @@ z3_convt::check2_z3_properties(void)
   unsigned i;
   std::string literal;
   z3::expr_vector assumptions(ctx);
-
-  assumptions_status = assumpt.size();
 
   if (assumpt_mode) {
     std::list<z3::expr>::const_iterator it;

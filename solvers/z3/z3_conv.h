@@ -29,8 +29,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include "z3++.h"
 
-#define Z3_UNSAT_CORE_LIMIT 10000
-
 typedef unsigned int uint;
 
 class z3_convt: public prop_convt
@@ -49,9 +47,6 @@ public:
   virtual prop_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
   void set_filename(std::string file);
-  uint get_z3_core_size(void);
-  uint get_z3_number_of_assumptions(void);
-  void set_z3_core_size(uint val);
 
   // overloading
   virtual expr2tc get(const expr2tc &expr);
@@ -295,8 +290,6 @@ public:
   union_varst union_vars;
   typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
-
-  u_int max_core_size;
 
   unsigned int level_ctx;
   bool int_encoding, smtlib, assumpt_mode;

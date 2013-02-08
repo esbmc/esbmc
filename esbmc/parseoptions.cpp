@@ -1434,7 +1434,6 @@ void cbmc_parseoptionst::help()
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
-    " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
     " --- concurrency checking -----------------------------------------------------\n\n"

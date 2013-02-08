@@ -49,10 +49,6 @@ public:
     runtime_z3_conv = new z3_convt(opts.get_bool_option("int-encoding"),
                                    is_cpp, ns);
 
-    runtime_z3_conv->set_filename(opts.get_option("outfile"));
-    runtime_z3_conv->set_z3_core_size(
-                                    atol(opts.get_option("core-size").c_str()));
-
     if (options.get_bool_option("smt-during-symex")) {
       symex = new reachability_treet(funcs, ns, options,
                           new runtime_encoded_equationt(ns, *runtime_z3_conv),

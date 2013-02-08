@@ -604,8 +604,6 @@ bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("int-encoding"),
                               is_cpp, ns)
 {
-  z3_conv.set_filename(bmc.options.get_option("outfile"));
-  z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
   conv = &z3_conv;
 }
 
