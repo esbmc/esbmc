@@ -156,22 +156,6 @@ z3_convt::pop_ctx(void)
 }
 
 void
-z3_convt::soft_push_ctx(void)
-{
-
-  smt_convt::soft_push_ctx();
-  intr_push_ctx();
-}
-
-void
-z3_convt::soft_pop_ctx(void)
-{
-
-  intr_pop_ctx();
-  smt_convt::soft_pop_ctx();;
-}
-
-void
 z3_convt::intr_push_ctx(void)
 {
 

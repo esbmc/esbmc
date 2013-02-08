@@ -43,8 +43,6 @@ private:
 public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
-  virtual void soft_push_ctx(void);
-  virtual void soft_pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
   void set_filename(std::string file);
