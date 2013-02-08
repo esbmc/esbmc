@@ -50,14 +50,12 @@ Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
 Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
-z3_convt::z3_convt(bool int_encoding, bool smt, bool is_cpp,
-                   const namespacet &_ns)
+z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 : prop_convt(), ns(_ns)
 {
   this->int_encoding = int_encoding;
 
-  smtlib = smt;
-  assumpt_mode = smt;
+  assumpt_mode = false;
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
@@ -109,6 +107,8 @@ z3_convt::z3_convt(bool int_encoding, bool smt, bool is_cpp,
 z3_convt::~z3_convt()
 {
 
+  // jmorse - remove when smtlib printer exists and works.
+#if 0
   if (smtlib) {
     std::ofstream temp_out;
     Z3_string smt_lib_str, logic;
@@ -135,6 +135,7 @@ z3_convt::~z3_convt()
 
     temp_out << smt_lib_str << std::endl;
   }
+#endif
 }
 
 void
@@ -491,9 +492,6 @@ z3_convt::dec_solve(void)
   Z3_get_version(&major, &minor, &build, &revision);
 
   std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
-
-  if (smtlib)
-    return prop_convt::P_SMTLIB;
 
   result = check2_z3_properties();
 
@@ -3016,9 +3014,12 @@ z3_convt::assert_formula(const z3::expr &ast)
   z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, ast));
   solver.add(formula);
 
+  // jmorse - delete when smtlib printer exists and works
+#if 0
   if (smtlib)
     assumpt.push_back(ast);
   else
+#endif
     assumpt.push_back(z3_literal(l));
 
   return;

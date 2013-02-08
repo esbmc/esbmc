@@ -602,8 +602,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 #ifdef Z3
 bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("int-encoding"),
-                               bmc.options.get_bool_option("smt"),
-                               is_cpp, ns)
+                              is_cpp, ns)
 {
   z3_conv.set_filename(bmc.options.get_option("outfile"));
   z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
