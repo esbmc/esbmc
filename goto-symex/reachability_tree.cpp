@@ -22,6 +22,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <expr_util.h>
 #include <std_expr.h>
 #include <config.h>
+#include <message.h>
 
 #include "crypto_hash.h"
 
@@ -30,11 +31,13 @@ reachability_treet::reachability_treet(
     const namespacet &ns,
     const optionst &opts,
     symex_targett *target,
-    contextt &context) :
+    contextt &context,
+    message_handlert &_message_handler) :
     goto_functions(goto_functions),
     permanent_context(context),
     ns(ns),
-    options(opts)
+    options(opts),
+    message_handler(_message_handler)
 {
   CS_bound = atoi(options.get_option("context-switch").c_str());
   TS_slice = atoi(options.get_option("time-slice").c_str());
@@ -66,12 +69,14 @@ reachability_treet::setup_for_new_explore(void)
                                                this, schedule_target,
                                                permanent_context,
                                                options, &schedule_total_claims,
-                                               &schedule_remaining_claims));
+                                               &schedule_remaining_claims,
+                                               message_handler));
   } else {
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
                                                target_template->clone(),
-                                               permanent_context, options));
+                                               permanent_context, options,
+                                               message_handler));
     schedule_target = NULL;
   }
 
@@ -255,6 +260,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
   for(; tid < ex_state.threads_state.size(); tid++)
   {
     /* For all threads: */
+    if (!check_thread_viable(tid, expr, true))
+      continue;
 
     if (!ex_state.dfs_explore_thread(tid))
       continue;
@@ -597,15 +604,6 @@ reachability_treet::get_ileave_direction_from_scheduling(const exprt &expr) cons
 {
   unsigned int tid;
 
-    // If the guard on this execution trace is false, no context switches are
-    // going to be run over in the future and just general randomness is going to
-    // occur. So there's absolutely no reason exploring further.
-    if ((expr.operands().size() > 0) &&
-      get_cur_state().get_active_state().guard.is_false()) {
-          std::cout << "This trace's guard is false; it will not be evaulated." << std::endl;
-          exit(1);
-    }
-
     // First of all, are there actually any valid context switch targets?
     for (tid = 0; tid < get_cur_state().threads_state.size(); tid++) {
       if (check_thread_viable(tid, expr, true))
@@ -658,6 +656,12 @@ reachability_treet::check_thread_viable(int tid, const exprt &expr, bool quiet) 
   if (por && !ex.apply_static_por(expr, tid)) {
     if (!quiet)
       std::cout << "Thread unschedulable due to POR" << std::endl;
+    return false;
+  }
+
+  if (ex.tid_is_set && ex.monitor_tid == tid) {
+    if (!quiet)
+      std::cout << "Can't context switch to a monitor thread" << std::endl;
     return false;
   }
 
