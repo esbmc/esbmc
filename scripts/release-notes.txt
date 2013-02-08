@@ -1,5 +1,12 @@
 Release Notes of the ESBMC model checker
 
+*** Version 1.21
++ Enhance support for C++ model checking
++ Switch LTL modelling to support checking multiple property truth values.
+
+*** Version 1.20 ***
+TACAS13 competition release.
+
 *** Version 1.19 ***
 Date 20/06/2012
 + Support more of the pthreads library (pthread_join).

@@ -858,7 +858,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns)
 {
   std::map<std::string, std::string> strings;
 
@@ -900,6 +900,36 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     goto_programt &prog = func.body;
     Forall_goto_program_instructions(p_it, prog) {
       add_monitor_exprs(p_it, prog.instructions, monitors);
+    }
+  }
+
+  // Find main function; find first function call; insert updates to each
+  // property expression. This makes sure that there isn't inconsistent
+  // initialization of each monitor boolean.
+  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("main");
+  assert(f_it != goto_functions.function_map.end());
+  Forall_goto_program_instructions(p_it, f_it->second.body) {
+    if (p_it->type == FUNCTION_CALL) {
+      if (p_it->code.op1().identifier().as_string() != "c::main")
+        continue;
+
+      // Insert initializers for each monitor expr.
+      std::map<std::string, std::pair<std::set<std::string>, exprt> >
+        ::const_iterator it;
+      for (it = monitors.begin(); it != monitors.end(); it++) {
+        goto_programt::instructiont new_insn;
+        new_insn.type = ASSIGN;
+        std::string prop_name = "c::" + it->first + "_status";
+        exprt cast = typecast_exprt(signedbv_typet(32));
+        cast.op0() = it->second.second;
+        new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
+        new_insn.function = p_it->function;
+
+        // new_insn location field not set - I believe it gets numbered later.
+        f_it->second.body.instructions.insert(p_it, new_insn);
+      }
+
+      break;
     }
   }
 
@@ -998,33 +1028,23 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    new_insn.code = code_assignt(symbol_exprt(prop_name, typet("bool")), trig_it->second);
+    exprt cast = typecast_exprt(signedbv_typet(32));
+    cast.op0() = trig_it->second;
+    new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
   }
 
-  typet uint32 = typet("unsignedbv");
-  uint32.width(32);
-  new_insn.type = ASSIGN;
+  new_insn.type = FUNCTION_CALL;
+  new_insn.code = code_function_callt();
   new_insn.function = insn->function;
-  constant_exprt c_expr = constant_exprt(uint32);
-  c_expr.set_value("1");
-  exprt e = plus_exprt(symbol_exprt("c::_ltl2ba_transition_count", uint32), c_expr);
-  e.type() = uint32;
-  symbol_exprt sym_expr = symbol_exprt("c::_ltl2ba_transition_count", uint32);
-  new_insn.code = code_assignt(sym_expr, e);
+  new_insn.code.op1() = symbol_exprt("c::__ESBMC_switch_to_monitor");
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
-  insn_list.insert(insn, new_insn);
-
-  new_insn.type = FUNCTION_CALL;
-  new_insn.code = code_function_callt();
-  new_insn.function = insn->function;
-  new_insn.code.op1() = symbol_exprt("c::__ESBMC_yield");
   insn_list.insert(insn, new_insn);
 
   return;
@@ -1216,7 +1236,7 @@ bool cbmc_parseoptionst::process_goto_program(
     add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
-    add_property_monitors(goto_functions);
+    add_property_monitors(goto_functions, ns);
 
     // recalculate numbers, etc.
     goto_functions.update();

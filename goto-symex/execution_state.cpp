@@ -6,6 +6,10 @@
 
 \*******************************************************************/
 
+#include <langapi/mode.h>
+#include <langapi/languages.h>
+#include <langapi/language_ui.h>
+
 #include "execution_state.h"
 #include "reachability_tree.h"
 #include <string>
@@ -27,10 +31,12 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
                                    symex_targett *_target,
                                    contextt &context,
                                    ex_state_level2t *l2init,
-                                   const optionst &options) :
+                                   const optionst &options,
+                                   message_handlert &_message_handler) :
   goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
-  state_level2(l2init)
+  state_level2(l2init),
+  message_handler(_message_handler)
 {
 
   // XXXjmorse - C++s static initialization order trainwreck means
@@ -44,6 +50,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
+  tid_is_set = false;
+  monitor_tid = 0;
+  mon_from_tid = false;
+  monitor_from_tid = 0;
   guard_execution = "execution_statet::\\guard_exec";
 
   goto_functionst::function_mapt::const_iterator it =
@@ -82,6 +92,10 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   dynamic_counter = 0;
   DFS_traversed.reserve(1);
   DFS_traversed[0] = false;
+  check_ltl = false;
+  mon_thread_warning = false;
+
+  thread_cswitch_threshold = (options.get_bool_option("ltl")) ? 3 : 2;
 
 //  str_state = string_container.take_state_snapshot();
 }
@@ -89,7 +103,8 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
 execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
-  state_level2(ex.state_level2->clone())
+  state_level2(ex.state_level2->clone()),
+  message_handler(ex.message_handler)
 {
 
   *this = ex;
@@ -131,6 +146,15 @@ execution_statet::operator=(const execution_statet &ex)
   dynamic_counter = ex.dynamic_counter;
   node_id = ex.node_id;
   global_value_set = ex.global_value_set;
+  mon_thread_warning = ex.mon_thread_warning;
+  check_ltl = ex.check_ltl;
+  property_monitor_strings = ex.property_monitor_strings;
+
+  monitor_tid = ex.monitor_tid;
+  tid_is_set = ex.tid_is_set;
+  monitor_from_tid = ex.monitor_from_tid;
+  mon_from_tid = ex.mon_from_tid;
+  thread_cswitch_threshold = ex.thread_cswitch_threshold;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
@@ -249,7 +273,7 @@ execution_statet::symex_assign(const codet &code)
 
   goto_symext::symex_assign(code);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() >= thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_assign(code);
 
   return;
@@ -261,7 +285,7 @@ execution_statet::claim(const exprt &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() > thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_read(expr);
 
   return;
@@ -274,7 +298,7 @@ execution_statet::symex_goto(const exprt &old_guard)
   goto_symext::symex_goto(old_guard);
 
   if (!old_guard.is_nil())
-    if (threads_state.size() > 1)
+    if (threads_state.size() > thread_cswitch_threshold)
       owning_rt->analyse_for_cswitch_after_read(old_guard);
 
   return;
@@ -286,7 +310,7 @@ execution_statet::assume(const exprt &assumption)
 
   goto_symext::assume(assumption);
 
-  if (threads_state.size() > 1)
+  if (threads_state.size() > thread_cswitch_threshold)
     owning_rt->analyse_for_cswitch_after_read(assumption);
 
   return;
@@ -874,6 +898,133 @@ execution_statet::print_stack_traces(unsigned int indent) const
   }
 
   return;
+}
+
+void
+execution_statet::switch_to_monitor(void)
+{
+
+  if (threads_state[monitor_tid].thread_ended) {
+    if (!mon_thread_warning) {
+      std::cerr << "Switching to ended monitor; you need to increase its context or prefix bound" << std::endl;
+      mon_thread_warning = true;
+    }
+
+    return;
+  }
+
+  assert(tid_is_set && "Must set monitor thread before switching to monitor\n");
+  assert(!mon_from_tid &&"Switching to monitor without having switched away\n");
+
+  monitor_from_tid = active_thread;
+  mon_from_tid = true;
+
+  if (monitor_tid != get_active_state_number()) {
+    // Don't call switch_to_thread -- it'll execute the thread guard, which is
+    // an extremely bad plan.
+    last_active_thread = active_thread;
+    active_thread = monitor_tid;
+    cur_state = &threads_state[active_thread];
+    cur_state->guard = threads_state[last_active_thread].guard;
+  } else {
+    assert(0 && "Switching to monitor thread from self\n");
+  }
+}
+
+void
+execution_statet::switch_away_from_monitor(void)
+{
+
+  // Occurs when we rerun the automata to discover whether or not the property
+  // has been violated or not.
+  if (threads_state[monitor_tid].thread_ended)
+    return;
+
+  assert(tid_is_set && "Must set monitor thread before switching from mon\n");
+  assert(mon_from_tid && "Switching from monitor without switching to\n");
+
+  assert(monitor_tid == active_thread &&
+         "Must call switch_from_monitor from monitor thread\n");
+
+  // Don't call switch_to_thread -- it'll execute the thread guard, which is
+  // an extremely bad plan.
+  last_active_thread = active_thread;
+  active_thread = monitor_from_tid;
+  cur_state = &threads_state[active_thread];
+
+  cur_state->guard = threads_state[monitor_tid].guard;
+
+  mon_from_tid = false;
+}
+
+void
+execution_statet::kill_monitor_thread(void)
+{
+  assert(monitor_tid != active_thread &&
+         "You cannot kill monitor thread _from_ the monitor thread\n");
+
+  threads_state[monitor_tid].thread_ended = true;
+  return;
+}
+
+static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+{
+
+  if (e.id() ==  "symbol") {
+    std::string sym = e.identifier().as_string();
+    used_syms.insert(sym);
+  } else {
+    Forall_operands(it, e)
+      replace_symbol_names(*it, prefix, strings, used_syms);
+  }
+
+  return;
+}
+
+void
+execution_statet::init_property_monitors(void)
+{
+  std::map<std::string, std::string> strings;
+
+  symbolst::const_iterator it;
+  for (it = new_context.symbols.begin(); it != new_context.symbols.end(); it++){
+    if (it->first.as_string().find("__ESBMC_property_") != std::string::npos) {
+      // Munge back into the shape of an actual string
+      std::string str = "";
+      forall_operands(iter2, it->second.value) {
+        char c = (char)strtol(iter2->value().as_string().c_str(), NULL, 2);
+        if (c != 0)
+          str += c;
+        else
+          break;
+      }
+
+      strings[it->first.as_string()] = str;
+    }
+  }
+
+  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::string>::const_iterator str_it;
+  for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
+    if (str_it->first.find("$type") == std::string::npos) {
+      std::set<std::string> used_syms;
+      exprt main_expr;
+      std::string prop_name = str_it->first.substr(20, std::string::npos);
+
+      namespacet ns(new_context);
+      languagest languages(ns, MODE_C);
+
+      std::string expr_str = strings["c::__ESBMC_property_" + prop_name];
+      std::string dummy_str = "";
+
+      languages.to_expr(expr_str, dummy_str, main_expr, message_handler);
+
+      replace_symbol_names(main_expr, prop_name, strings, used_syms);
+
+      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+                                      (used_syms, main_expr);
+    }
+  }
 }
 
 bool execution_statet::expr_id_map_initialized = false;
