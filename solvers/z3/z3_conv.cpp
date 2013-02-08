@@ -1218,12 +1218,16 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     abort();
   }
 
+  std::cout << "op.type().id(): " << op.type().id() << std::endl;
   if (op.type().id() == "unsignedbv" ||
       op.type().id() == "signedbv" ||
       op.type().id() == "enum") {
     unsigned from_width;
 
     get_type_width(op.type(), from_width);
+
+    std::cout << "to_integer_bits: " << to_integer_bits << std::endl;
+    std::cout << "from_width: " << from_width << std::endl;
 
     if (from_width == to_integer_bits) {
       convert_bv(op, bv);
@@ -1254,6 +1258,12 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
     unsigned from_integer_bits = from_fixedbv_type.get_integer_bits();
     unsigned from_width = from_fixedbv_type.get_width();
 
+    std::cout << "to_integer_bits: " << to_integer_bits << std::endl;
+    std::cout << "from_integer_bits: " << from_integer_bits << std::endl;
+    std::cout << "from_fraction_bits: " << from_fraction_bits << std::endl;
+    std::cout << "to_fraction_bits: " << to_fraction_bits << std::endl;
+    std::cout << "from_width: " << from_width << std::endl;
+
     if (to_integer_bits <= from_integer_bits) {
       convert_bv(op, args[0]);
 
@@ -1264,7 +1274,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
       assert(to_integer_bits > from_integer_bits);
 
       convert_bv(op, args[0]);
-
+			std::cout << expr.pretty() << std::endl;
       magnitude =
         Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_integer_bits),
                        Z3_mk_extract(z3_ctx, from_width - 1, from_fraction_bits,
@@ -1282,11 +1292,9 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
       assert(to_fraction_bits > from_fraction_bits);
       convert_bv(op, args[0]);
 
-      fraction =
-        Z3_mk_concat(z3_ctx,
-                     Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0,args[0]),
-                     convert_number(0, to_fraction_bits - from_fraction_bits,
-                                    true));
+      fraction = 
+								Z3_mk_sign_ext(z3_ctx, to_fraction_bits - from_fraction_bits, 
+															 Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, args[0]));
     }
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   } else {
@@ -1332,7 +1340,7 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
     			        		         Z3_mk_add(z3_ctx, 2, operands),
 															 operands[0]));
 #endif
-      }
+    }
 	  else if (op.type().id() == "fixedbv" &&
                expr.type().id() == "signedbv") {
 	    Z3_ast i, f;
