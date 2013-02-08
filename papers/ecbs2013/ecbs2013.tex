@@ -389,8 +389,8 @@
 % author names and affiliations
 % use a multiple column layout for up to three different
 % affiliations
-\author{\IEEEauthorblockN{Mikhail Y. G. Ramalho$^1$, Mauro L. Freitas$^1$, Felipe R. M. Sousa$^1$, \\
-	Hendrio M. Marques$^1$, Lucas C. Cordeiro$^1$, and Bernd Fischer$^2$}
+\author{\IEEEauthorblockN{Mikhail Ramalho$^1$, Mauro Freitas$^1$, Felipe Sousa$^1$, \\
+	Hendrio Marques$^1$, Lucas Cordeiro$^1$, and Bernd Fischer$^2$}
 \IEEEauthorblockA{$^1$ Electronic and Information Research Center, Federal University of Amazonas, Brazil \\ $^2$ Electronics and Computer Science, University of Southampton, UK}
 %\IEEEauthorblockA{$^2$ Electronics and Computer Science, University of Southampton, UK}
 \url{esbmc@ecs.soton.ac.uk}}
@@ -791,7 +791,7 @@ with a specified type and creates a new internal representation of the
 class or function with the instantiated type; this new representation 
 is not a template anymore. At this point, ESBMC++ keeps track of the 
 generic template definition and the respective instantiated class or function.
-When a new template is instantiated, ESBMC++ first checks whether it was already 
+Note that, when a new template is instantiated, ESBMC++ first checks whether it was already 
 instantiated to avoid creating an existing representation of a previously 
 instantiated template. 
 
@@ -812,8 +812,7 @@ To formalize the verification of the STL containers,
 we define a core container language, and extend the translation
 functions $\cal C$ and  $\cal P$ of constraints and properties to this.
 We then use this core language to implement the operational model 
-of the containers. Figure~\ref{ccl-fig} summarizes the core container 
-syntax.
+of the containers. 
 
 \begin{figure}
 \[\begin{array}{r@{\:\:}r@{\:\:}l}
@@ -830,21 +829,49 @@ syntax.
 \\[0.5ex]
    P  & ::= & 
      p \:|\: P (+ \:|\: - ) P
-       \:|\: \mathit{It.pointer} \:|\: \: \mathit{It.source}
        \:|\: \mathit{C.array}
 \\[0.5ex]
   \mathit{Int}  & ::= & 
      n \:|\: \mathit{Int} (+ \:|\: * | \ldots) \mathit{Int}
+       \:|\: \mathit{It.pos}
        \:|\: \mathit{C.size} \: | \: \mathit{C.capacity}
+\\[0.5ex]
+   C  & ::= & 
+     c \:|\: \mathit{It.source}
   \end{array}
 \]
   \caption{\label{ccl-fig}Core container syntax}
 \end{figure}
 
-The container language comprises several syntactic domains, starting with
-the base elements $\mathit{T}$, iterators $\mathit{It}$, pointers $\mathit{P}$,
-and integer indices $\mathit{Int}$, and of course the (proper)
-container expressions $\mathit{C}$. The syntax for $\mathit{T}$
+The container language comprises several syntactic domains, starting with the
+base elements $\mathit{T}$, iterators $\mathit{It}$, pointers $\mathit{P}$, and
+integer indices $\mathit{Int}$, and of course the (proper) container
+expressions $\mathit{C}$.  Figure~\ref{ccl-fig} summarizes the core container
+syntax. Here $t$, $i$, $p$, and $c$ are variables of type $T$, $\mathit{It}$,
+$P$, and $C$, respectively.  $n$ is a variable or constant of type
+$\mathit{Int}$.
+
+$\mathit{*It}$ is the value stored in the position pointed
+by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value
+stored in the $\mathit{P}$ position of the memory.
+
+Iterators can be added and subtracted.  $\mathit{C.begin}$ and $\mathit{C.end}$
+are methods that return iterators which point to the beginning and the ending
+of a container, respectively.  Also, most container operations return an
+iterator pointing to the new focus element after the operation rather than
+returning an updated container. For example, for vectors $\mathit{C.erase}$
+returns an iterator pointing to the right neighbor of the erased element.
+Note that the only way in the core language to access the resulting container 
+is thus via the $\mathit{source}$ field of the returned iterator.
+
+Finally, $\mathit{C.array}$ is a memory address that stores the beginning of
+the container array, $\mathit{It.pos}$ is the index (within this array) of the
+element that an iterator points to, and $\mathit{C.size}$ and
+$\mathit{C.capacity}$ return the actual and maximum size, respectively of the
+containter $C$.
+
+\comment{%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+The syntax for $\mathit{T}$
 values is the following:
 
 \[\begin{array}{r@{\:\:}c@{\:\:}l}\label{element-semantics}
@@ -908,6 +935,7 @@ return the actual and maximum size, respectively of the containter $C$.
 %an integer value as well as the arithmetics
 %operations between integer values.
 
+}%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 %-------------------------------------------
 \subsection{Operational Container Model}
@@ -952,12 +980,14 @@ an overview of our operational model for the STL sequantial container.
 %$size$ is the total number of elements in the container, and $capacity$
 %is the total capacity of the vector, which is simulated internally in the model.
 
-The main methods of a vector (and the other sequential containers) have only
-five types of operation: $\mathit{insert\left(It, T, N\right)}$,
-$\mathit{insert\left(It, It, It\right)}$, $\mathit{erase\left(It, It, It\right)}$,
-$\mathit{erase\left(It\right)}$, and $\mathit{search\left(It\right)}$.
-Methods $push\_back\left(\right)$, $pop\_back\left(\right)$, $front\left(\right)$,
-$back\left(\right)$, $push\_front\left(\right)$, and $pop\_front\left(\right)$ are only
+%%% The main methods of a vector (and the other sequential containers) have only
+%%% five types of operation: $\mathit{insert\left(It, T, N\right)}$,
+%%% $\mathit{insert\left(It, It, It\right)}$, $\mathit{erase\left(It, It, It\right)}$,
+%%% $\mathit{erase\left(It\right)}$, and $\mathit{search\left(It\right)}$.
+
+The core container language only supports the methods listed in Fig.~\ref{ccl-fig}. 
+Other methods such as \emph{push\_back()}, \emph{pop\_back()}, \emph{front()},
+\emph{back()}, \emph{push\_front()}, and \emph{pop\_front()} are only
 a simplified variation of those main methods, which are optimized for some containers
 (e.g., popping the last element of a \textit{stack}).
 As part of the single static assignment (SSA) transformation, side-effects on the containers 
