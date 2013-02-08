@@ -4,6 +4,16 @@
 #include <irep2.h>
 #include <solvers/prop/prop_conv.h>
 
+enum smt_func {
+  // Terminals
+  SMT_FUNC_INT = 0,
+  SMT_FUNC_BVINT,
+  SMT_FUNC_REAL,
+  SMT_FUNC_SYMBOL,
+
+  // Nonterminals
+};
+
 class smt_ast;
 class smt_sort;
 
