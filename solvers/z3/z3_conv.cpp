@@ -50,16 +50,14 @@ Z3_ast workaround_Z3_mk_bvsub_no_overflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
 Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
-z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
+z3_convt::z3_convt(bool int_encoding, bool smt, bool is_cpp,
                    const namespacet &_ns)
 : prop_convt(), ns(_ns)
 {
   this->int_encoding = int_encoding;
 
   smtlib = smt;
-  store_assumptions = (smt || uw);
-  s_is_uw = uw;
-  this->uw = uw;
+  assumpt_mode = smt;
   no_variables = 1;
   max_core_size=Z3_UNSAT_CORE_LIMIT;
   level_ctx = 0;
@@ -163,12 +161,6 @@ z3_convt::pop_ctx(void)
 void
 z3_convt::soft_push_ctx(void)
 {
-
-  if (!uw) {
-    std::cerr << "z3_convt::soft_push_ctx - called without assumption based Z3";
-    std::cerr << " enabled. Invalid configuration." << std::endl;
-    abort();
-  }
 
   prop_convt::soft_push_ctx();
   intr_push_ctx();
@@ -523,7 +515,7 @@ z3_convt::check2_z3_properties(void)
 
   assumptions_status = assumpt.size();
 
-  if (uw) {
+  if (assumpt_mode) {
     std::list<z3::expr>::const_iterator it;
     for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
       assumptions.push_back(*it);
@@ -545,7 +537,7 @@ z3_convt::check2_z3_properties(void)
   // a significant performance hit.
   z3::expr_vector vec = solver.assertions();
 
-  if (uw) {
+  if (assumpt_mode) {
     result = solver.check(assumptions);
   } else {
     result = solver.check();
@@ -3014,7 +3006,7 @@ z3_convt::assert_formula(const z3::expr &ast)
 
   // If we're not going to be using the assumptions (ie, for unwidening and for
   // smtlib) then just assert the fact to be true.
-  if (!store_assumptions) {
+  if (!assumpt_mode) {
     solver.add(ast);
     return;
   }
@@ -3093,8 +3085,6 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
     z3::to_func_decl(ctx, Z3_get_tuple_sort_field_decl(ctx, ty, i));
   return proj_decl(t);
 }
-
-bool z3_convt::s_is_uw = false;
 
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {

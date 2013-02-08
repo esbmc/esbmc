@@ -36,7 +36,7 @@ typedef unsigned int uint;
 class z3_convt: public prop_convt
 {
 public:
-  z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
+  z3_convt(bool int_encoding, bool smt, bool is_cpp,
            const namespacet &ns);
   virtual ~z3_convt();
 private:
@@ -300,7 +300,7 @@ public:
   u_int max_core_size;
 
   unsigned int level_ctx;
-  bool int_encoding, smtlib, store_assumptions, uw;
+  bool int_encoding, smtlib, assumpt_mode;
   std::string filename;
 
   std::string dyn_info_arr_name;
@@ -326,7 +326,6 @@ public:
   const namespacet &ns;
 
   Z3_context z3_ctx;
-  static bool s_is_uw;
 };
 
 #endif

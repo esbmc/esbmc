@@ -46,8 +46,7 @@ public:
 
 
 #ifdef Z3
-    runtime_z3_conv = new z3_convt(false,
-                                   opts.get_bool_option("int-encoding"),
+    runtime_z3_conv = new z3_convt(opts.get_bool_option("int-encoding"),
                                    opts.get_bool_option("smt"), is_cpp, ns);
 
     runtime_z3_conv->set_filename(opts.get_option("outfile"));

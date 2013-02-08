@@ -601,8 +601,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 
 #ifdef Z3
 bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
-  : solver_base(bmc), z3_conv(false,
-                               bmc.options.get_bool_option("int-encoding"),
+  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("int-encoding"),
                                bmc.options.get_bool_option("smt"),
                                is_cpp, ns)
 {
