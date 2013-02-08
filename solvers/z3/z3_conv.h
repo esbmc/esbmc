@@ -19,6 +19,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <hash_cont.h>
 #include <solvers/prop/prop_conv.h>
 #include <solvers/prop/pointer_logic.h>
+#include <solvers/smt/smt_conv.h>
 #include <vector>
 #include <string.h>
 
@@ -31,7 +32,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_convt: public prop_convt
+class z3_convt: public smt_convt
 {
 public:
   z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);

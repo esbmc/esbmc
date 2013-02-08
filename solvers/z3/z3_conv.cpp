@@ -48,7 +48,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: prop_convt(), ns(_ns)
+: smt_convt(), ns(_ns)
 {
   this->int_encoding = int_encoding;
 
@@ -138,7 +138,7 @@ void
 z3_convt::push_ctx(void)
 {
 
-  prop_convt::push_ctx();
+  smt_convt::push_ctx();
   intr_push_ctx();
   solver.push();
 }
@@ -149,7 +149,7 @@ z3_convt::pop_ctx(void)
 
   solver.pop();
   intr_pop_ctx();
-  prop_convt::pop_ctx();;
+  smt_convt::pop_ctx();;
 
   // Clear model if we have one.
   model = z3::model();
@@ -159,7 +159,7 @@ void
 z3_convt::soft_push_ctx(void)
 {
 
-  prop_convt::soft_push_ctx();
+  smt_convt::soft_push_ctx();
   intr_push_ctx();
 }
 
@@ -168,7 +168,7 @@ z3_convt::soft_pop_ctx(void)
 {
 
   intr_pop_ctx();
-  prop_convt::soft_pop_ctx();;
+  smt_convt::soft_pop_ctx();;
 }
 
 void
