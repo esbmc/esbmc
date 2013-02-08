@@ -4,6 +4,9 @@
 #include <irep2.h>
 #include <solvers/prop/prop_conv.h>
 
+class smt_func_app;
+class smt_sort;
+
 class smt_convt: public prop_convt
 {
 public:
