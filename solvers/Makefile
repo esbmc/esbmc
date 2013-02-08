@@ -1,9 +1,9 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
-OBJS= prop/$(OBJDIR)/propobj.o
+OBJS= prop/$(OBJDIR)/propobj.o smt/$(OBJDIR)/smt.o
 
-DIRS= prop
+DIRS= prop smt
 
 ###############################################################################
 
