@@ -1315,20 +1315,24 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
         bv = Z3_mk_int2real(z3_ctx, bv);
       } else if (int_encoding && op.type().id() == "fixedbv" &&
                expr.type().id() == "signedbv") {
-#if 1				
-    	  Z3_ast operands[2], is_less_than_one, is_integer;
-    	  operands[0] = Z3_mk_real2int(z3_ctx, bv);
-    	  operands[1] = convert_number_int(1, 0, true);
-				is_integer = Z3_mk_is_int(z3_ctx, bv);
-    	  is_less_than_one = Z3_mk_ite(z3_ctx, 
+				if (expr.op0().operands().size()) {
+    	    Z3_ast operands[2], is_less_than_one, is_integer;
+    	    operands[0] = Z3_mk_real2int(z3_ctx, bv);
+    	    operands[1] = convert_number_int(1, 0, true);
+				  is_integer = Z3_mk_is_int(z3_ctx, bv);
+    	    is_less_than_one = Z3_mk_ite(z3_ctx, 
 																Z3_mk_lt(z3_ctx, operands[0], convert_number_int(-1, 0, true)),
     			  	  	  	  	  	  Z3_mk_true(z3_ctx),
     			  	  	  	  	  	  Z3_mk_false(z3_ctx));
-    	  bv = Z3_mk_ite(z3_ctx, is_integer, operands[0],
-															Z3_mk_ite(z3_ctx, is_less_than_one,
-    			        		         Z3_mk_add(z3_ctx, 2, operands),
-															 operands[0]));
-#endif
+				  bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, bv), 
+												 operands[0], 
+												 Z3_mk_ite(z3_ctx, 
+																	 is_less_than_one, 
+																	 Z3_mk_add(z3_ctx, 2, operands), 
+																	 operands[0]));
+				}
+				else
+					bv = Z3_mk_real2int(z3_ctx, bv);
     }
 	  else if (op.type().id() == "fixedbv" &&
                expr.type().id() == "signedbv") {
