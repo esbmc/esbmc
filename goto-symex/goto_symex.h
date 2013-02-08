@@ -385,6 +385,18 @@ protected:
   void intrinsic_terminate_thread(reachability_treet &art);
   /** Perform get_thead_state... defunct. */
   void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_begin(reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_end(reachability_treet &art);
+  /** Context switch to the monitor thread. */
+  void intrinsic_switch_to_monitor(reachability_treet &art);
+  /** Context switch from the monitor thread. */
+  void intrinsic_switch_from_monitor(reachability_treet &art);
+  /** Register which thread is the monitor thread. */
+  void intrinsic_register_monitor(code_function_callt &call, reachability_treet &art);
+  /** Terminate the monitor thread */
+  void intrinsic_kill_monitor(reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
