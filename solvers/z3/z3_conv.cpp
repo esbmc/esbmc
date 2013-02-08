@@ -1355,16 +1355,23 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
 	    bv = Z3_mk_int2real(z3_ctx, args[0]);
       else if (int_encoding &&
                (op.type().id() == "fixedbv" && expr.type().id() == "signedbv")) {
-	    //bv = Z3_mk_real2int(z3_ctx, args[0]);
-    	  Z3_ast temp[2];
-    	  temp[0] = Z3_mk_real2int(z3_ctx, args[0]);
-    	  temp[1] = convert_number_int(1, 0, true);
+    	  if (expr.op0().operands().size()) {
+    		  if (expr.op0().op0().operands().size()) {
+    			bv = Z3_mk_real2int(z3_ctx, args[0]);
+    			return bv;
+    		  }
+    	  }
+    	  Z3_ast operands[2], is_positive;
+    	  operands[0] = Z3_mk_real2int(z3_ctx, args[0]);
+    	  operands[1] = convert_number_int(1, 0, true);
+    	  is_positive = Z3_mk_ite(z3_ctx, Z3_mk_ge(z3_ctx, operands[0], convert_number_int(0, 0, true)),
+    			  	  	  	  	  	  	  Z3_mk_true(z3_ctx),
+    			  	  	  	  	  	  	  Z3_mk_false(z3_ctx));
     	  bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, args[0]),
-    			         temp[0],
-    			         Z3_mk_ite(z3_ctx, Z3_mk_gt(z3_ctx, temp[0], convert_number_int(0, 0, true)),
-    			        		   temp[0],
-    			        		   Z3_mk_add(z3_ctx, 2, temp)));
-
+    			  	  	 operands[0],
+    			         Z3_mk_ite(z3_ctx, is_positive,
+    			        		   operands[0],
+    			        		   Z3_mk_add(z3_ctx, 2, operands)));
       } else if (int_encoding)
 	    bv = args[0];
       else if (op.type().id() == "fixedbv" && expr.type().id() == "signedbv") {
