@@ -221,14 +221,6 @@ bool configt::set(const cmdlinet &cmdline)
   else
     ansi_c.deadlock_check=false;
 
-#if 0
-  if (cmdline.isset("uw-model"))
-  {
-    ansi_c.deadlock_check=false;
-    ansi_c.lock_check=false;
-  }
-#endif
-
   if(cmdline.isset("no-library"))
     ansi_c.lib=configt::ansi_ct::LIB_NONE;
 

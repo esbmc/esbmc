@@ -34,7 +34,6 @@ public:
     ns(_context),
     ui(ui_message_handlert::PLAIN)
   {
-    _unsat_core=0;
     interleaving_number = 0;
     interleaving_failed = 0;
     uw_loop = 0;
@@ -47,7 +46,7 @@ public:
 
 
 #ifdef Z3
-    runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
+    runtime_z3_conv = new z3_convt(false,
                                    opts.get_bool_option("int-encoding"),
                                    opts.get_bool_option("smt"), is_cpp, ns);
 
@@ -69,8 +68,6 @@ public:
 #endif
   }
 
-  uint _unsat_core;
-  uint _number_of_assumptions;
   optionst &options;
 
   unsigned int interleaving_number;

@@ -77,7 +77,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"eager",		switc,		""	},
 { 0,	"lazy",			switc,		""	},
 { 0,	"no-slice",		switc,		""	},
-{ 0,	"uw-model",		switc,		""	},
 { 0,	"control-flow-test",	switc,		""	},
 { 0,	"round-to-nearest",	switc,		""	},
 { 0,	"round-to-plus-inf",	switc,		""	},

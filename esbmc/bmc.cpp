@@ -139,7 +139,6 @@ prop_convt::resultt
 bmct::run_decision_procedure(prop_convt &prop_conv,
                              symex_target_equationt &equation)
 {
-  static bool first_uw=false;
   std::string logic;
 
   if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
@@ -180,14 +179,6 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
     str << "s";
     status(str.str());
   }
-
-  if(options.get_bool_option("uw-model") && first_uw)
-  {
-    std::cout << "number of assumptions: " << _number_of_assumptions << " literal(s)"<< std::endl;
-    std::cout << "size of the unsatisfiable core: " << _unsat_core << " literal(s)"<< std::endl;
-  }
-  else
-    first_uw=true;
 
   return dec_result;
 }
@@ -364,19 +355,7 @@ bool bmct::run(void)
 
   if(options.get_bool_option("schedule"))
   {
-    if(options.get_bool_option("uw-model"))
-        std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-
     resp = run_thread();
-
-
-    //underapproximation-widening model
-    while (_unsat_core)
-    {
-      std::cout << "*** UW loop " << ++uw_loop << " ***" << std::endl;
-      resp = run_thread();
-    }
-
     return resp;
   }
   else
@@ -622,7 +601,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 
 #ifdef Z3
 bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
-  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
+  : solver_base(bmc), z3_conv(false,
                                bmc.options.get_bool_option("int-encoding"),
                                bmc.options.get_bool_option("smt"),
                                is_cpp, ns)
@@ -635,8 +614,6 @@ bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
 bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
 {
   bool result = bmct::solver_base::run_solver(equation);
-  bmc._unsat_core = z3_conv.get_z3_core_size();
-  bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
 
@@ -651,8 +628,6 @@ bmct::z3_runtime_solver::z3_runtime_solver(bmct &bmc,
 bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
 {
   bool result = bmct::solver_base::run_solver(equation);
-  bmc._unsat_core = z3_conv->get_z3_core_size();
-  bmc._number_of_assumptions = z3_conv->get_z3_number_of_assumptions();
   return result;
 }
 

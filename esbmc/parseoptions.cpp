@@ -191,14 +191,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    else
      options.set_option("context-switch", -1);
 
-   if(cmdline.isset("uw-model"))
-   {
-     options.set_option("uw-model", true);
-     options.set_option("schedule", true);
-   }
-   else
-     options.set_option("uw-model", false);
-
    if(cmdline.isset("no-lock-check"))
      options.set_option("no-lock-check", true);
    else
@@ -1442,7 +1434,6 @@ void cbmc_parseoptionst::help()
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
-    " --uw-model                   use under-approximation and widening approach\n"
     " --core-size nr               limit num of assumpts in UW model(experimental)\n"
     " --round-robin                use the round robin scheduling approach\n"
     " --time-slice nr              set the time slice of the round robin algorithm (default is 1) \n\n"
