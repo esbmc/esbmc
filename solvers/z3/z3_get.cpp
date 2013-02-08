@@ -23,7 +23,6 @@
 std::string
 z3_convt::get_fixed_point(const unsigned width, std::string value) const
 {
-
   std::string m, f, tmp;
   size_t found, size;
   double v, magnitude, fraction, expoent;
@@ -31,7 +30,10 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   found = value.find_first_of("/");
   size = value.size();
   m = value.substr(0, found);
-  f = value.substr(found + 1, size);
+  if (found != std::string::npos)
+    f = value.substr(found + 1, size);
+  else 
+		f = "1";
 
   if (m.compare("0") == 0 && f.compare("0") == 0)
     return "0";
@@ -47,6 +49,7 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
 
   std::string integer_str, fraction_str;
   integer_str = integer2binary(string2integer(double2string(magnitude), 10), width / 2);
+	
   fraction_str = integer2binary(string2integer(double2string(fraction), 10), width / 2);
 
   value = integer_str + fraction_str;
