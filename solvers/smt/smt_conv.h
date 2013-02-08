@@ -7,8 +7,11 @@
 class smt_convt: public prop_convt
 {
 public:
-  smt_convt() { }
-  ~smt_convt() {}
+  smt_convt();
+  ~smt_convt();
+
+  virtual void push_ctx(void);
+  virtual void pop_ctx(void);
 
 };
 
