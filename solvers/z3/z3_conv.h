@@ -45,7 +45,6 @@ public:
   virtual void pop_ctx(void);
   virtual prop_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
-  void set_filename(std::string file);
 
   // overloading
   virtual expr2tc get(const expr2tc &expr);
