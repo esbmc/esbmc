@@ -179,6 +179,7 @@ private:
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
   void assert_formula(const z3::expr &ast);
+  virtual void assert_lit(const literalt &l);
 
   std::string double2string(double d) const;
 

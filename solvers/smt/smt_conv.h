@@ -63,6 +63,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
+  virtual void assert_lit(const literalt &l) = 0;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

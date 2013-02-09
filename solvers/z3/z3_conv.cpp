@@ -2952,6 +2952,14 @@ z3_convt::l_get(literalt a)
 }
 
 void
+z3_convt::assert_lit(const literalt &l)
+{
+  z3::expr thelit = z3_literal(l);
+  solver.add(thelit);
+  assumpt.push_back(thelit);
+}
+
+void
 z3_convt::assert_formula(const z3::expr &ast)
 {
 
