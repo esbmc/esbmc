@@ -31,9 +31,14 @@ class smt_ast {
   // different integer modes, signed and unsigned comparisons, the multitude of
   // things that an address-of can turn into, and so forth.
 public:
+  smt_ast(smt_func_kind k, const smt_ast *a);
+  smt_ast(smt_func_kind k, const smt_ast *a, const smt_ast *b);
+  smt_ast(smt_func_kind k, const smt_ast *a, const smt_ast *b,const smt_ast *c);
+  ~smt_ast();
+
   smt_sort sort;
   smt_func_kind kind;
-  smt_ast *arguments[3]; // No point in making this dynamically sized IMO.
+  const smt_ast *arguments[3]; // No point in making this dynamically sized IMO.
 };
 
 class smt_convt: public prop_convt
