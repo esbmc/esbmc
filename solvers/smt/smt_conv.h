@@ -22,36 +22,28 @@ enum smt_func_kind {
   // Nonterminals
 };
 
-class smt_sort {
-public:
-  smt_sort(smt_sort_kind k);
-  ~smt_sort(void);
-  smt_sort_kind kind;
-};
-
 class smt_ast {
-  // Question - should this AST node not be the same as any other expression
-  // in ESBMC and just use the existing expr representations?
-  // Answer - Perhaps, but there's a semantic shift between what ESBMC uses
-  // expressions for and what the SMT language actually /has/, i.e. just some
-  // function applications and suchlike. Plus an additional layer of type safety
-  // can be applied here that can't in the expression stuff.
+  // Completely opaque class for storing whatever data the backend solver feels
+  // is appropriate. I orignally thought this should contain useful tracking
+  // data for what kind of AST this is, but then realised that this is just
+  // overhead and whatever the solver stores should be enough for that too
+  //
+  // Question - should this AST node (or what it represents) not be the same as
+  // any other expression in ESBMC and just use the existing expr
+  // representations?  Answer - Perhaps, but there's a semantic shift between
+  // what ESBMC uses expressions for and what the SMT language actually /has/,
+  // i.e. just some function applications and suchlike. Plus an additional
+  // layer of type safety can be applied here that can't in the expression
+  // stuff.
   //
   // In particular, things where multiple SMT functions map onto one expression
   // operator are troublesome. This means multiple integer operators for
   // different integer modes, signed and unsigned comparisons, the multitude of
   // things that an address-of can turn into, and so forth.
-public:
-  smt_ast(const smt_sort *s, smt_func_kind k);
-  ~smt_ast();
+};
 
-  const smt_sort *sort;
-  smt_func_kind kind;
-
-  // Thought of storing ast arguments here; however what shape this takes
-  // depends on the backend sovler, so make that someone elses problem.
-  // You might ask why store /anything/ non solver specific here; valid
-  // question, I figure the sort and kind are seriously important for debugging.
+class smt_sort {
+  // Same story as smt_ast.
 };
 
 class smt_convt: public prop_convt
