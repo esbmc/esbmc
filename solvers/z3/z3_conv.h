@@ -244,6 +244,16 @@ public:
     }
   };
 
+  class z3_smt_ast : smt_ast {
+    z3_smt_ast(z3::expr &_e) : e(_e) { }
+    z3::expr e;
+  };
+
+  class z3_smt_sort : smt_sort {
+    z3_smt_sort(z3::sort &_s) : s(_s) { }
+    z3::sort s;
+  };
+
   // Types for bv_cache.
 
   struct bv_cache_entryt {
