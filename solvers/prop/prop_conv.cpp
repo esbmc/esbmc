@@ -81,13 +81,3 @@ void prop_convt::pop_ctx(void)
 
   ctx_level--;
 }
-
-void prop_convt::soft_push_ctx(void)
-{
-  push_ctx();
-}
-
-void prop_convt::soft_pop_ctx(void)
-{
-  pop_ctx();
-}
