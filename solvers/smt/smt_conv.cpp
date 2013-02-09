@@ -1,18 +1,19 @@
 #include "smt_conv.h"
 
-smt_ast::smt_ast(smt_func_kind k, const smt_ast *a)
+smt_ast::smt_ast(const smt_sort *s, smt_func_kind k, const smt_ast *a)
 {
-  smt_ast(k, a, NULL, NULL);
+  smt_ast(s, k, a, NULL, NULL);
 }
 
-smt_ast::smt_ast(smt_func_kind k, const smt_ast *a, const smt_ast *b)
+smt_ast::smt_ast(const smt_sort *s, smt_func_kind k, const smt_ast *a, const smt_ast *b)
 {
-  smt_ast(k, a, b, NULL);
+  smt_ast(s, k, a, b, NULL);
 }
 
-smt_ast::smt_ast(smt_func_kind k, const smt_ast *a, const smt_ast *b,
-                 const smt_ast *c)
+smt_ast::smt_ast(const smt_sort *s, smt_func_kind k, const smt_ast *a,
+                 const smt_ast *b, const smt_ast *c)
 {
+  sort = s;
   kind = k;
   arguments[0] = a;
   arguments[1] = b;
