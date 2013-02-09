@@ -4,7 +4,7 @@
 #include <irep2.h>
 #include <solvers/prop/prop_conv.h>
 
-enum smt_func {
+enum smt_func_kind {
   // Terminals
   SMT_FUNC_INT = 0,
   SMT_FUNC_BVINT,
@@ -14,8 +14,27 @@ enum smt_func {
   // Nonterminals
 };
 
-class smt_ast;
-class smt_sort;
+class smt_sort {
+  // Can't currently think what this should contain.
+};
+
+class smt_ast {
+  // Question - should this AST node not be the same as any other expression
+  // in ESBMC and just use the existing expr representations?
+  // Answer - Perhaps, but there's a semantic shift between what ESBMC uses
+  // expressions for and what the SMT language actually /has/, i.e. just some
+  // function applications and suchlike. Plus an additional layer of type safety
+  // can be applied here that can't in the expression stuff.
+  //
+  // In particular, things where multiple SMT functions map onto one expression
+  // operator are troublesome. This means multiple integer operators for
+  // different integer modes, signed and unsigned comparisons, the multitude of
+  // things that an address-of can turn into, and so forth.
+public:
+  smt_sort sort;
+  smt_func_kind kind;
+  smt_ast *arguments[3]; // No point in making this dynamically sized IMO.
+};
 
 class smt_convt: public prop_convt
 {
