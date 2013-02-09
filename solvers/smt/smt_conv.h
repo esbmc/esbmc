@@ -56,6 +56,10 @@ public:
   virtual void pop_ctx(void);
 
   virtual void assert_lit(const literalt &l) = 0;
+
+  virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
+                               smt_ast **args, unsigned int numargs) = 0;
+  virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

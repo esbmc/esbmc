@@ -3048,6 +3048,20 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   return proj_decl(t);
 }
 
+// SMT-abstraction migration routines.
+
+smt_ast *
+z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_sort *
+z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+{
+  assert(0);
+}
+
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {
   void ast::dump(void) const {
