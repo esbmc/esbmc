@@ -1,5 +1,14 @@
 #include "smt_conv.h"
 
+smt_sort::smt_sort(smt_sort_kind k)
+{
+  kind = k;
+}
+
+smt_sort::~smt_sort(void)
+{
+}
+
 smt_ast::smt_ast(const smt_sort *s, smt_func_kind k, const smt_ast *a)
 {
   smt_ast(s, k, a, NULL, NULL);

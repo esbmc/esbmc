@@ -4,6 +4,14 @@
 #include <irep2.h>
 #include <solvers/prop/prop_conv.h>
 
+enum smt_sort_kind {
+  SMT_SORT_INT,
+  SMT_SORT_REAL,
+  SMT_SORT_BV,
+  SMT_SORT_ARRAY,
+  SMT_SORT_BOOL,
+};
+
 enum smt_func_kind {
   // Terminals
   SMT_FUNC_INT = 0,
@@ -15,7 +23,10 @@ enum smt_func_kind {
 };
 
 class smt_sort {
-  // Can't currently think what this should contain.
+public:
+  smt_sort(smt_sort_kind k);
+  ~smt_sort(void);
+  smt_sort_kind kind;
 };
 
 class smt_ast {
