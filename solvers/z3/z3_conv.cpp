@@ -159,8 +159,6 @@ void
 z3_convt::intr_push_ctx(void)
 {
 
-  level_ctx++;
-
   // Also push/duplicate pointer logic state.
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
@@ -190,8 +188,6 @@ z3_convt::intr_pop_ctx(void)
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
   total_mem_space.pop_back();
-
-  level_ctx--;
 }
 
 void
