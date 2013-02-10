@@ -15,6 +15,7 @@ enum smt_sort_kind {
 enum smt_func_kind {
   // Terminals
   SMT_FUNC_INT = 0,
+  SMT_FUNC_HACKS, // indicate the solver /has/ to use the temp expr.
   SMT_FUNC_BVINT,
   SMT_FUNC_REAL,
   SMT_FUNC_SYMBOL,

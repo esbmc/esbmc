@@ -71,7 +71,7 @@ smt_convt::convert_expr(const expr2tc &expr)
   }
 
   // Funky recursion stuff goes here. In the meantime, dummy values.
-  smt_ast *a = mk_func_app(NULL, SMT_FUNC_INT, &args[0], 0, expr);
+  smt_ast *a = mk_func_app(NULL, SMT_FUNC_HACKS, &args[0], 0, expr);
 
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
