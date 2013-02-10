@@ -2954,11 +2954,13 @@ smt_ast *
 z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)), const expr2tc &temp __attribute__((unused)))
 {
 
-  // Before actually trying to move things over to being smtlike, instead
-  // just convert the expression as before.
-  z3::expr ast;
-  convert_bv(temp, ast);
-  return new z3_smt_ast(ast);
+  switch (k) {
+  case SMT_FUNC_HACKS:
+  default:
+    z3::expr ast;
+    convert_bv(temp, ast);
+    return new z3_smt_ast(ast);
+  }
 }
 
 smt_sort *
