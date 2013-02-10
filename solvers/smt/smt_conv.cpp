@@ -22,6 +22,8 @@ smt_convt::pop_ctx(void)
 
   union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
   union_numindex.erase(ctx_level);
+  smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
+  cache_numindex.erase(ctx_level);
 }
 
 void
@@ -62,8 +64,18 @@ smt_convt::convert_expr(const expr2tc &expr)
 {
   smt_ast *args[3];
 
+  if (caching) {
+    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    if (cache_result != smt_cache.end())
+      return mk_lit(cache_result->ast);
+  }
+
   // Funky recursion stuff goes here. In the meantime, dummy values.
   smt_ast *a = mk_func_app(NULL, SMT_FUNC_INT, &args[0], 0, expr);
+
+  struct smt_cache_entryt entry = { expr, a, ctx_level };
+  smt_cache.insert(entry);
+
   literalt l = mk_lit(a);
   return l;
 }
