@@ -61,6 +61,8 @@ public:
                                smt_ast **args, unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
 
+  virtual void set_to(const expr2tc &expr, bool value);
+
   // Types
 
   // Types for union map.
