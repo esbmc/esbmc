@@ -186,9 +186,6 @@ z3_convt::intr_pop_ctx(void)
   bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
   cache_numindex.erase(ctx_level);
 
-  union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
-  union_numindex.erase(ctx_level);
-
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();

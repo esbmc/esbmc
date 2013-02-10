@@ -60,6 +60,31 @@ public:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                smt_ast **args, unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
+
+  // Types
+
+  // Types for union map.
+  struct union_var_mapt {
+    std::string ident;
+    unsigned int idx;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    union_var_mapt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, std::string, ident)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > union_varst;
+
+  // Members
+  union_varst union_vars;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

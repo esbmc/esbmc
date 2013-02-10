@@ -275,33 +275,12 @@ public:
     >
   > bv_cachet;
 
-  // Types for union map.
-  struct union_var_mapt {
-    std::string ident;
-    unsigned int idx;
-    unsigned int level;
-  };
-
-  typedef boost::multi_index_container<
-    union_var_mapt,
-    boost::multi_index::indexed_by<
-      boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, std::string, ident)
-      >,
-      boost::multi_index::ordered_non_unique<
-        BOOST_MULTI_INDEX_MEMBER(union_var_mapt, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > union_varst;
-
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
   z3::solver solver;
   z3::model model;
 
   bv_cachet bv_cache;
-  union_varst union_vars;
   typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
