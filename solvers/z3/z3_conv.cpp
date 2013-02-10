@@ -3053,9 +3053,13 @@ z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 }
 
 literalt
-z3_convt::mk_lit(const smt_ast *a __attribute__((unused)))
+z3_convt::mk_lit(const smt_ast *a)
 {
-  assert(0);
+  const z3_smt_ast *b = static_cast<const z3_smt_ast *>(a);
+  literalt l = new_variable();
+  z3::expr eq = z3_literal(l) == b->e;
+  assert_formula(eq);
+  return l;
 }
 
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
