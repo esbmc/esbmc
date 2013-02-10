@@ -75,7 +75,9 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 {
   static unsigned int with_counter=0;
 
-  if (is_constant_expr(expr)) {
+  if (is_nil_expr(expr)) {
+    return true; // It's fine to constant propagate something that's absent.
+  } else if (is_constant_expr(expr)) {
     return true;
   }
   else if (is_symbol2t(expr) && to_symbol2t(expr).thename == "NULL")
@@ -93,8 +95,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_add2t(expr))
   {
-    forall_operands2(it, oper_list, expr)
-      if(!constant_propagation(**it))
+    forall_operands2(it, idx, expr)
+      if(!constant_propagation(*it))
         return false;
 
     return true;
@@ -102,7 +104,7 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   else if (is_constant_array_of2t(expr))
   {
     const expr2tc &init = to_constant_array_of2t(expr).initializer;
-    if (is_constant_expr(init) && !is_bool_type(init->type))
+    if (is_constant_expr(init) && !is_bool_type(init))
       return true;
   }
   else if (is_with2t(expr))
@@ -114,8 +116,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   }
   else if (is_constant_struct2t(expr))
   {
-    forall_operands2(it, oper_list, expr)
-      if(!constant_propagation(**it))
+    forall_operands2(it, idx, expr)
+      if(!constant_propagation(*it))
         return false;
 
     return true;
@@ -123,11 +125,16 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
   else if (is_constant_union2t(expr))
   {
-    expr2t::expr_operands operands;
-    expr->list_operands(operands);
-    if (operands.size() != 1)
+    const expr2tc *e = expr->get_sub_expr(0);
+    if (e == NULL)
       return false;
-    return constant_propagation(**operands.begin());
+    if (is_nil_expr(*e))
+      return false;
+    if (expr->get_sub_expr(1) != NULL) // Ensure only one operand (?????)
+                                       // Preserves previous behaviour.
+      return false;
+
+    return constant_propagation(*e);
   }
 
   /* No difference
@@ -225,8 +232,8 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it);
+    Forall_operands2(it, idx, expr)
+      rename(*it);
   }
 }
 
@@ -234,7 +241,11 @@ void goto_symex_statet::rename_address(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
-  if (is_symbol2t(expr))
+  if (is_nil_expr(expr))
+  {
+    return;
+  }
+  else if(is_symbol2t(expr))
   {
     // only do L1
     top().level1.rename(expr);
@@ -248,15 +259,19 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename_address(**it);
+    Forall_operands2(it, idx, expr)
+      rename_address(*it);
   }
 }
 
 void goto_symex_statet::get_original_name(expr2tc &expr) const
 {
-  Forall_operands2(it, oper_list, expr)
-    get_original_name(**it);
+
+  if (is_nil_expr(expr))
+    return;
+
+  Forall_operands2(it, idx, expr)
+    get_original_name(*it);
 
   if (is_symbol2t(expr))
   {

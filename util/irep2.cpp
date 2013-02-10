@@ -387,12 +387,12 @@ unsigned long
 expr2t::depth(void) const
 {
   unsigned long num_nodes = 0;
-  expr_operands ops;
 
-  list_operands(ops);
-
-  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++) {
-    unsigned long tmp = (***it).depth();
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    if (is_nil_expr(*e))
+      continue;
+    unsigned long tmp = (*e)->depth();
     num_nodes = std::max(num_nodes, tmp);
   }
 
@@ -404,12 +404,13 @@ unsigned long
 expr2t::num_nodes(void) const
 {
   unsigned long count = 0;
-  expr_operands ops;
 
-  list_operands(ops);
-
-  for (expr_operands::const_iterator it = ops.begin(); it != ops.end(); it++)
-    count += (***it).num_nodes();
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    if (is_nil_expr(*e))
+      continue;
+    count += (*e)->num_nodes();
+  }
 
   count++; // Count ourselves.
   return count;
@@ -496,16 +497,19 @@ expr2t::simplify(void) const
 
   // Try simplifying all the sub-operands.
   bool changed = false;
-  std::list<const expr2tc*> operands;
   std::list<expr2tc> newoperands;
 
-  list_operands(operands);
-  for (std::list<const expr2tc *>::iterator it = operands.begin();
-       it != operands.end(); it++) {
-    expr2tc tmp = (**it).get()->simplify();
+  for (unsigned int idx = 0; idx < get_num_sub_exprs(); idx++) {
+    const expr2tc *e = get_sub_expr(idx);
+    expr2tc tmp;
+
+    if (!is_nil_expr(*e)) {
+      tmp = e->get()->simplify();
+      if (!is_nil_expr(tmp))
+        changed = true;
+    }
+
     newoperands.push_back(tmp);
-    if (!is_nil_expr(tmp))
-      changed = true;
   }
 
   if (changed == false)
@@ -518,11 +522,11 @@ expr2t::simplify(void) const
   // An operand has been changed; clone ourselves and update.
   expr2tc new_us = clone();
   std::list<expr2tc>::iterator it2 = newoperands.begin();
-  Forall_operands2(it, expr_ops, new_us) {
+  Forall_operands2(it, idx, new_us) {
     if ((*it2) == NULL)
       ; // No change in operand;
     else
-      **it = *it2; // Operand changed; overwrite with new one.
+      *it = *it2; // Operand changed; overwrite with new one.
     it2++;
   }
 
@@ -614,8 +618,6 @@ static const char *expr_names[] = {
   "invalid_pointer",
   "buffer_size",
   "code_asm",
-  "from_bv_typecast",
-  "to_bv_typecast",
   "cpp_del_array",
   "cpp_delete",
   "cpp_catch",
@@ -914,6 +916,18 @@ type_to_string(const bool &thebool, int indent __attribute__((unused)))
 }
 
 static inline __attribute__((always_inline)) std::string
+type_to_string(const sideeffect_data::allockind &data,
+               int indent __attribute__((unused)))
+{
+  return (data == sideeffect_data::allockind::malloc) ? "malloc" :
+         (data == sideeffect_data::allockind::cpp_new) ? "cpp_new" :
+         (data == sideeffect_data::allockind::cpp_new_arr) ? "cpp_new_arr" :
+         (data == sideeffect_data::allockind::nondet) ? "nondet" :
+         (data == sideeffect_data::allockind::function_call) ? "function_call" :
+         "unknown";
+}
+
+static inline __attribute__((always_inline)) std::string
 type_to_string(const unsigned int &theval, int indent __attribute__((unused)))
 {
   char buffer[64];
@@ -1077,6 +1091,14 @@ do_type_cmp(const unsigned int &side1, const unsigned int &side2)
 {
   return (side1 == side2) ? true : false;
 }
+
+static inline __attribute__((always_inline)) bool
+do_type_cmp(const sideeffect_data::allockind &side1,
+            const sideeffect_data::allockind &side2)
+{
+  return (side1 == side2) ? true : false;
+}
+
 static inline __attribute__((always_inline)) bool
 do_type_cmp(const symbol_data::renaming_level &side1,
             const symbol_data::renaming_level &side2)
@@ -1177,6 +1199,18 @@ do_type_lt(const bool &side1, const bool &side2)
 
 static inline __attribute__((always_inline)) int
 do_type_lt(const unsigned int &side1, const unsigned int &side2)
+{
+  if (side1 < side2)
+    return -1;
+  else if (side2 < side1)
+    return 1;
+  else
+    return 0;
+}
+
+static inline __attribute__((always_inline)) int
+do_type_lt(const sideeffect_data::allockind &side1,
+           const sideeffect_data::allockind &side2)
 {
   if (side1 < side2)
     return -1;
@@ -1336,6 +1370,14 @@ do_type_crc(const unsigned int &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_crc(const sideeffect_data::allockind &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const symbol_data::renaming_level &theval, hacky_hash &hash)
 {
 
@@ -1444,6 +1486,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(const st
 static inline __attribute__((always_inline)) void do_type_list_operands(const type2tc &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const std::list<type2tc> &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const bool &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(const sideeffect_data::allockind  &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const unsigned int &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const BigInt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(const fixedbvt &theval __attribute__((unused)), std::list<const expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1457,6 +1500,7 @@ static inline __attribute__((always_inline)) void do_type_list_operands(std::vec
 static inline __attribute__((always_inline)) void do_type_list_operands(type2tc &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(std::list<type2tc> &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(bool &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
+static inline __attribute__((always_inline)) void do_type_list_operands(sideeffect_data::allockind &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(unsigned int &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(BigInt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
 static inline __attribute__((always_inline)) void do_type_list_operands(fixedbvt &theval __attribute__((unused)), std::list<expr2tc*> &inp __attribute__((unused))) { return; }
@@ -1530,6 +1574,107 @@ do_type2string<const expr2t::expr_ids>(const expr2t::expr_ids &thething,
                                  list_of_memberst &vec, unsigned int indent)
 {
   // Do nothing; this is a dummy member.
+}
+
+template <class T>
+bool
+do_get_sub_expr(const T &item __attribute__((unused)),
+                unsigned int idx __attribute__((unused)),
+                unsigned int &it __attribute__((unused)),
+                const expr2tc *&ptr __attribute__((unused)))
+{
+  return false;
+}
+
+template <>
+bool
+do_get_sub_expr<expr2tc>(const expr2tc &item, unsigned int idx,
+                               unsigned int &it, const expr2tc *&ptr)
+{
+  if (idx == it) {
+    ptr = &item;
+    return true;
+  } else {
+    it++;
+    return false;
+  }
+}
+
+template <>
+bool
+do_get_sub_expr<std::vector<expr2tc>>(const std::vector<expr2tc> &item,
+                                      unsigned int idx, unsigned int &it,
+                                      const expr2tc *&ptr)
+{
+  if (idx < it + item.size()) {
+    ptr = &item[idx - it];
+    return true;
+  } else {
+    it += item.size();
+    return false;
+  }
+}
+
+// Non-const versions of the above.
+
+template <class T>
+bool
+do_get_sub_expr(T &item __attribute__((unused)),
+                unsigned int idx __attribute__((unused)),
+                unsigned int &it __attribute__((unused)),
+                expr2tc *&ptr __attribute__((unused)))
+{
+  return false;
+}
+
+template <>
+bool
+do_get_sub_expr<expr2tc>(expr2tc &item, unsigned int idx, unsigned int &it,
+                         expr2tc *&ptr)
+{
+  if (idx == it) {
+    ptr = &item;
+    return true;
+  } else {
+    it++;
+    return false;
+  }
+}
+
+template <>
+bool
+do_get_sub_expr<std::vector<expr2tc>>(std::vector<expr2tc> &item,
+                                      unsigned int idx, unsigned int &it,
+                                      expr2tc *&ptr)
+{
+  if (idx < it + item.size()) {
+    ptr = &item[idx - it];
+    return true;
+  } else {
+    it += item.size();
+    return false;
+  }
+}
+
+template <class T>
+unsigned int
+do_count_sub_exprs(T &item __attribute__((unused)))
+{
+  return 0;
+}
+
+template <>
+unsigned int
+do_count_sub_exprs<const expr2tc>(const expr2tc &item __attribute__((unused)))
+{
+  return 1;
+}
+
+template <>
+unsigned int
+do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
+{
+  return item.size();
 }
 
 template <class derived, class subclass,
@@ -1787,6 +1932,109 @@ typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
 typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
 typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
 typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+const expr2tc *
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::get_sub_expr
+          (unsigned int idx) const
+{
+  unsigned int it = 0;
+  const expr2tc *ptr;
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  if (do_get_sub_expr(derived_this->*field1_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field2_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field3_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field4_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field5_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field6_ptr, idx, it, ptr))
+    return ptr;
+  return NULL;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+expr2tc *
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::get_sub_expr_nc
+          (unsigned int idx)
+{
+  unsigned int it = 0;
+  expr2tc *ptr;
+  derived *derived_this = static_cast<derived*>(this);
+
+  if (do_get_sub_expr(derived_this->*field1_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field2_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field3_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field4_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field5_ptr, idx, it, ptr))
+    return ptr;
+  if (do_get_sub_expr(derived_this->*field6_ptr, idx, it, ptr))
+    return ptr;
+  return NULL;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+unsigned int
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
+  ::get_num_sub_exprs() const
+{
+  unsigned int num = 0;
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  num += do_count_sub_exprs(derived_this->*field1_ptr);
+  num += do_count_sub_exprs(derived_this->*field2_ptr);
+  num += do_count_sub_exprs(derived_this->*field3_ptr);
+  num += do_count_sub_exprs(derived_this->*field4_ptr);
+  num += do_count_sub_exprs(derived_this->*field5_ptr);
+  num += do_count_sub_exprs(derived_this->*field6_ptr);
+  return num;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
 void
 esbmct::expr_methods<derived, subclass,
   field1_type, field1_class, field1_ptr,
@@ -2006,6 +2254,15 @@ const expr2tc true_expr __attribute__((init_priority(103)))
 const expr2tc false_expr __attribute__((init_priority(103)))
   = expr2tc(new constant_bool2t(false));
 
+const constant_int2tc zero_uint __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_uint(32), BigInt(0));
+const constant_int2tc one_uint __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_uint(32), BigInt(1));
+const constant_int2tc zero_int __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_int(32), BigInt(0));
+const constant_int2tc one_int __attribute__((init_priority(103)))
+  = constant_int2tc(type_pool.get_int(32), BigInt(1));
+
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
 std::string empty_type2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", "", ""};
@@ -2053,10 +2310,6 @@ std::string constant_string2t::field_names [esbmct::num_type_fields]  =
 std::string symbol2t::field_names [esbmct::num_type_fields]  =
 { "name", "renamelev", "level1_num", "level2_num", "thread_num", "node_num"};
 std::string typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
-std::string to_bv_typecast2t::field_names [esbmct::num_type_fields]  =
-{ "from", "", "", "", ""};
-std::string from_bv_typecast2t::field_names [esbmct::num_type_fields]  =
 { "from", "", "", "", ""};
 std::string if2t::field_names [esbmct::num_type_fields]  =
 { "cond", "true_value", "false_value", "", ""};
@@ -2125,9 +2378,9 @@ std::string pointer_object2t::field_names [esbmct::num_type_fields]  =
 std::string address_of2t::field_names [esbmct::num_type_fields]  =
 { "pointer_obj", "", "", "", ""};
 std::string byte_extract2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "", ""};
+{ "source_value", "source_offset", "big_endian", "", ""};
 std::string byte_update2t::field_names [esbmct::num_type_fields]  =
-{ "big_endian", "source_value", "source_offset", "update_value", ""};
+{ "source_value", "source_offset", "update_value", "big_endian", ""};
 std::string with2t::field_names [esbmct::num_type_fields]  =
 { "source_value", "update_field", "update_value", "", ""};
 std::string member2t::field_names [esbmct::num_type_fields]  =
@@ -2163,7 +2416,7 @@ std::string deallocated_obj2t::field_names [esbmct::num_type_fields]  =
 std::string dynamic_size2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string sideeffect2t::field_names [esbmct::num_type_fields]  =
-{ "operand", "size", "alloctype", "kind", "arguments"};
+{ "operand", "size", "arguments", "alloctype", "kind"};
 std::string code_block2t::field_names [esbmct::num_type_fields]  =
 { "operands", "", "", "", ""};
 std::string code_assign2t::field_names [esbmct::num_type_fields]  =
@@ -2275,10 +2528,6 @@ template class esbmct::expr_methods<symbol2t, symbol_data,
     unsigned int, symbol_data, &symbol_data::node_num>;
 template class esbmct::expr_methods<typecast2t, typecast_data,
     expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<to_bv_typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
-template class esbmct::expr_methods<from_bv_typecast2t, typecast_data,
-    expr2tc, typecast_data, &typecast_data::from>;
 template class esbmct::expr_methods<if2t, if_data,
     expr2tc, if_data, &if_data::cond,
     expr2tc, if_data, &if_data::true_value,
@@ -2373,14 +2622,14 @@ template class esbmct::expr_methods<pointer_object2t, pointer_ops,
 template class esbmct::expr_methods<address_of2t, pointer_ops,
     expr2tc, pointer_ops, &pointer_ops::ptr_obj>;
 template class esbmct::expr_methods<byte_extract2t, byte_extract_data,
-    bool, byte_extract_data, &byte_extract_data::big_endian,
     expr2tc, byte_extract_data, &byte_extract_data::source_value,
-    expr2tc, byte_extract_data, &byte_extract_data::source_offset>;
+    expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+    bool, byte_extract_data, &byte_extract_data::big_endian>;
 template class esbmct::expr_methods<byte_update2t, byte_update_data,
-    bool, byte_update_data, &byte_update_data::big_endian,
     expr2tc, byte_update_data, &byte_update_data::source_value,
     expr2tc, byte_update_data, &byte_update_data::source_offset,
-    expr2tc, byte_update_data, &byte_update_data::update_value>;
+    expr2tc, byte_update_data, &byte_update_data::update_value,
+    bool, byte_update_data, &byte_update_data::big_endian>;
 template class esbmct::expr_methods<with2t, with_data,
     expr2tc, with_data, &with_data::source_value,
     expr2tc, with_data, &with_data::update_field,
@@ -2422,9 +2671,9 @@ template class esbmct::expr_methods<dynamic_size2t, object_ops,
 template class esbmct::expr_methods<sideeffect2t, sideeffect_data,
     expr2tc, sideeffect_data, &sideeffect_data::operand,
     expr2tc, sideeffect_data, &sideeffect_data::size,
+    std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments,
     type2tc, sideeffect_data, &sideeffect_data::alloctype,
-    unsigned int, sideeffect_data, &sideeffect_data::kind,
-    std::vector<expr2tc>, sideeffect_data, &sideeffect_data::arguments>;
+    sideeffect_data::allockind, sideeffect_data, &sideeffect_data::kind>;
 template class esbmct::expr_methods<code_block2t, code_block_data,
     std::vector<expr2tc>, code_block_data, &code_block_data::operands>;
 template class esbmct::expr_methods<code_assign2t, code_assign_data,

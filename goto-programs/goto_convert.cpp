@@ -379,8 +379,7 @@ void goto_convertt::convert_catch(
   goto_programt::targett catch_pop_instruction=dest.add_instruction();
   catch_pop_instruction->make_catch();
   std::vector<irep_idt> empty_excp_list;
-  catch_pop_instruction->code =
-    expr2tc(new code_cpp_catch2t(empty_excp_list));
+  catch_pop_instruction->code = code_cpp_catch2tc(empty_excp_list);
 
   // add a goto to the end of the 'try' block
   dest.add_instruction()->make_goto(end_target);
@@ -403,7 +402,7 @@ void goto_convertt::convert_catch(
   // add end-target
   dest.destructive_append(end);
 
-  catch_push_instruction->code = expr2tc(new code_cpp_catch2t(exception_list));
+  catch_push_instruction->code = code_cpp_catch2tc(exception_list);
 }
 
 /*******************************************************************\
@@ -1284,6 +1283,9 @@ unsigned int goto_convertt::get_expr_number_globals(const exprt &expr)
 
 unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 {
+  if (is_nil_expr(expr))
+    return 0;
+
   if (!options.get_bool_option("atomicity-check"))
 	return 0;
 
@@ -1311,8 +1313,8 @@ unsigned int goto_convertt::get_expr_number_globals(const expr2tc &expr)
 
   unsigned int globals = 0;
 
-  forall_operands2(it, oper_list, expr)
-    globals += get_expr_number_globals(**it);
+  forall_operands2(it, idx, expr)
+    globals += get_expr_number_globals(*it);
 
   return globals;
 }
@@ -1702,7 +1704,7 @@ void goto_convertt::convert_for(
   v->make_goto(z);
   expr2tc tmp_cond;
   migrate_expr(cond, tmp_cond);
-  tmp_cond = expr2tc(new not2t(tmp_cond));
+  tmp_cond = not2tc(tmp_cond);
   v->guard = tmp_cond;
   v->location=cond.location();
 

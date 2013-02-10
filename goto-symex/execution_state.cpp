@@ -355,8 +355,8 @@ expr2tc
 execution_statet::get_guard_identifier()
 {
 
-  return expr2tc(new symbol2t(type_pool.get_bool(), guard_execution,
-                              symbol2t::level1, CS_number, 0, node_id, 0));
+  return symbol2tc(get_bool_type(), guard_execution, symbol2t::level1,
+                   CS_number, 0, node_id, 0);
 }
 
 void
@@ -471,7 +471,7 @@ execution_statet::is_cur_state_guard_false(void)
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target);
 
-    expr2tc the_question(new equality2t(true_expr, parent_guard));
+    equality2tc the_question(true_expr, parent_guard);
 
     try {
       tvt res = rte->ask_solver_question(the_question);
@@ -513,7 +513,7 @@ execution_statet::execute_guard(void)
   // Truth of this guard implies the parent is true.
   state_level2->rename(parent_guard);
   do_simplify(parent_guard);
-  expr2tc assumpt = expr2tc(new implies2t(guard_expr, parent_guard));
+  implies2tc assumpt(guard_expr, parent_guard);
 
   target->assumption(guardt().as_expr(), assumpt, get_active_state().source);
 
@@ -595,8 +595,9 @@ execution_statet::get_expr_write_globals(const namespacet &ns,
 
   unsigned int globals = 0;
 
-  forall_operands2(it, op_list, expr) {
-    globals += get_expr_write_globals(ns, **it);
+  forall_operands2(it, idx, expr) {
+    if (!is_nil_expr(*it))
+      globals += get_expr_write_globals(ns, *it);
   }
 
   return globals;
@@ -607,7 +608,7 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
   const expr2tc &expr)
 {
 
-  if (is_address_of2t(expr) || is_pointer_type(expr->type) ||
+  if (is_address_of2t(expr) || is_pointer_type(expr) ||
       is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
     return 0;
@@ -634,8 +635,9 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
   }
   unsigned int globals = 0;
 
-  forall_operands2(it, op_list, expr) {
-    globals += get_expr_read_globals(ns, **it);
+  forall_operands2(it, idx, expr) {
+    if (!is_nil_expr(*it))
+      globals += get_expr_read_globals(ns, *it);
   }
 
   return globals;

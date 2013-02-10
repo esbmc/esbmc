@@ -175,7 +175,7 @@ void goto_convert_functionst::add_return(
 
   expr2tc tmp_expr;
   migrate_expr(rhs, tmp_expr);
-  t->code = expr2tc(new code_return2t(tmp_expr));
+  t->code = code_return2tc(tmp_expr);
 }
 
 /*******************************************************************\

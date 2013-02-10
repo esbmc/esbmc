@@ -70,7 +70,7 @@ void goto_program_dereferencet::dereference_failure(
 
   if (assertions.insert(guard_expr).second)
   {
-    guard_expr = expr2tc(new not2t(guard_expr));
+    guard_expr = not2tc(guard_expr);
 
     // first try simplifier on it
     if (!options.get_bool_option("no-simplify"))
@@ -106,18 +106,18 @@ void goto_program_dereferencet::dereference_rec(
   {
     unsigned old_guards=guard.size();
 
-    assert(is_bool_type(expr->type));
+    assert(is_bool_type(expr));
 
-    Forall_operands2(it, oper_list, expr) {
-      expr2tc &op = **it;
+    Forall_operands2(it, idx, expr) {
+      expr2tc &op = *it;
 
-      assert(is_bool_type(op->type));
+      assert(is_bool_type(op));
 
       if (dereference.has_dereference(op))
         dereference_rec(op, guard, dereferencet::READ);
 
       if (is_or2t(expr)) {
-        expr2tc tmp = expr2tc(new not2t(op));
+        not2tc tmp(op);
         guard.move(tmp);
       } else {
         guard.add(op);
@@ -131,7 +131,7 @@ void goto_program_dereferencet::dereference_rec(
   else if (is_if2t(expr))
   {
     if2t &ifref = to_if2t(expr);
-    assert(is_bool_type(ifref.cond->type));
+    assert(is_bool_type(ifref.cond));
     dereference_rec(ifref.cond, guard, dereferencet::READ);
 
     bool o1 = dereference.has_dereference(ifref.true_value);
@@ -146,7 +146,7 @@ void goto_program_dereferencet::dereference_rec(
 
     if (o2) {
       unsigned old_guard=guard.size();
-      expr2tc tmp = expr2tc(new not2t(ifref.cond));
+      not2tc tmp(ifref.cond);
       guard.move(tmp);
       dereference_rec(ifref.false_value, guard, mode);
       guard.resize(old_guard);
@@ -167,14 +167,14 @@ void goto_program_dereferencet::dereference_rec(
       expr2tc result = deref.value;
 
       if (result->type != expr->type)
-        result = expr2tc(new typecast2t(expr->type, result));
+        result = typecast2tc(expr->type, result);
 
       expr = result;
     }
   }
 
-  Forall_operands2(it, expr_list, expr)
-    dereference_rec(**it, guard, mode);
+  Forall_operands2(it, idx, expr)
+    dereference_rec(*it, guard, mode);
 
   if (is_dereference2t(expr)) {
     dereference2t &deref = to_dereference2t(expr);
@@ -185,9 +185,8 @@ void goto_program_dereferencet::dereference_rec(
   } else if (is_index2t(expr)) {
     index2t &idx = to_index2t(expr);
 
-    if (is_pointer_type(idx.source_value->type)) {
-      expr2tc tmp = expr2tc(new add2t(idx.source_value->type, idx.source_value,
-                                      idx.index));
+    if (is_pointer_type(idx.source_value)) {
+      add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
       dereference.dereference(tmp, guard, mode);
     }
   }
@@ -289,7 +288,7 @@ void goto_program_dereferencet::dereference_instruction(
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
       const dereference2t &deref = to_dereference2t(func_call.function);
-      expr2tc invalid_ptr = expr2tc(new invalid_pointer2t(deref.value));
+      invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
       guard.move(invalid_ptr);
 #if 1
@@ -320,8 +319,8 @@ void goto_program_dereferencet::dereference_instruction(
       code_expression2t &theexp = to_code_expression2t(i.code);
       dereference_expr(theexp.operand, checks_only, dereferencet::READ);
     } else if (is_code_printf2t(i.code)) {
-      Forall_operands2(it, oper_list, i.code)
-        dereference_expr(**it, checks_only, dereferencet::READ);
+      Forall_operands2(it, idx, i.code)
+        dereference_expr(*it, checks_only, dereferencet::READ);
     } else if (is_code_free2t(i.code)) {
       code_free2t &free = to_code_free2t(i.code);
       expr2tc operand = free.operand;

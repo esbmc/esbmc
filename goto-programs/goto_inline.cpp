@@ -376,7 +376,7 @@ void goto_inlinet::expand_function_call(
       t->local_variables=target->local_variables;
       expr2tc tmp_expr;
       migrate_expr(*it, tmp_expr);
-      t->code = expr2tc(new code_expression2t(tmp_expr));
+      t->code = code_expression2tc(tmp_expr);
     }
     
     // return value

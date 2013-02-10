@@ -114,8 +114,8 @@ void base_type(expr2tc &expr, const namespacet &ns)
 {
   base_type(expr.get()->type, ns);
 
-  Forall_operands2(it, tmpops, expr)
-    base_type(**it, ns);
+  Forall_operands2(it, idx, expr)
+    base_type(*it, ns);
 }
 
 void base_type(exprt &expr, const namespacet &ns)
@@ -392,18 +392,22 @@ bool base_type_eqt::base_type_eq_rec(
   if (!base_type_eq(expr1->type, expr2->type))
     return false;
 
-  expr2t::expr_operands ops1, ops2;
-  expr1->list_operands(ops1);
-  expr2->list_operands(ops2);
-
-  if (ops1.size() != ops2.size())
+  if (expr1->get_num_sub_exprs() != expr2->get_num_sub_exprs())
     return false;
     
-  expr2t::expr_operands::const_iterator it1 = ops1.begin();
-  expr2t::expr_operands::const_iterator it2 = ops2.begin();
-  for (; it1 != ops1.end(); it1++, it2++)
-    if (!base_type_eq(**it1, **it2))
+  for (unsigned int idx = 0; idx < expr1->get_num_sub_exprs(); idx++) {
+    const expr2tc *e1 = expr1->get_sub_expr(idx);
+    const expr2tc *e2 = expr2->get_sub_expr(idx);
+
+    // Check for nil exprs, which are permitted.
+    if (is_nil_expr(*e1) && is_nil_expr(*e2))
+      continue;
+    else if (is_nil_expr(*e1) || is_nil_expr(*e2))
       return false;
+
+    if (!base_type_eq(*e1, *e2))
+      return false;
+  }
   
   return true;
 }

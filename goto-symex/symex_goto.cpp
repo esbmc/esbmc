@@ -34,7 +34,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   if (!new_guard_false && options.get_bool_option("smt-symex-guard")) {
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
                                                  (target);
-    expr2tc question(new equality2t(true_expr, new_guard));
+    equality2tc question(true_expr, new_guard);
     try {
       tvt res = rte->ask_solver_question(question);
 
@@ -134,7 +134,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       guard_expr = guard_identifier();
 
       expr2tc new_rhs = new_guard;
-      new_rhs = expr2tc(new not2t(new_rhs));
+      new_rhs = not2tc(new_rhs);
       do_simplify(new_rhs);
 
       cur_state->assignment(guard_expr, new_rhs, false);
@@ -149,10 +149,10 @@ goto_symext::symex_goto(const expr2tc &old_guard)
         cur_state->gen_stack_trace(),
         symex_targett::HIDDEN);
 
-      guard_expr = expr2tc(new not2t(guard_expr));
+      guard_expr = not2tc(guard_expr);
     }
 
-    expr2tc not_guard_expr = expr2tc(new not2t(guard_expr));
+    not2tc not_guard_expr(guard_expr);
     do_simplify(not_guard_expr);
 
     if (forward) {
@@ -247,10 +247,10 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
       expr2tc rhs;
 
       if (cur_state->guard.is_false()) {
-        rhs = expr2tc(new symbol2t(type, symbol.name));
+        rhs = symbol2tc(type, symbol.name);
         cur_state->current_name(goto_state, rhs);
       } else if (goto_state.guard.is_false())    {
-        rhs = expr2tc(new symbol2t(type, symbol.name));
+        rhs = symbol2tc(type, symbol.name);
         cur_state->current_name(goto_state, rhs);
       } else   {
 	guardt tmp_guard(goto_state.guard);
@@ -258,11 +258,11 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 	// this gets the diff between the guards
 	tmp_guard -= cur_state->guard;
 
-	expr2tc true_val = expr2tc(new symbol2t(type, symbol.name));
-	expr2tc false_val = expr2tc(new symbol2t(type, symbol.name));
+	symbol2tc true_val(type, symbol.name);
+	symbol2tc false_val(type, symbol.name);
         cur_state->current_name(goto_state, true_val);
         cur_state->current_name(false_val);
-        rhs = expr2tc(new if2t(type, tmp_guard.as_expr(), true_val, false_val));
+        rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
       }
 
       exprt tmp_lhs(symbol_expr(symbol));
@@ -299,7 +299,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   if (is_true(guard)) {
     negated_cond = false_expr;
   } else {
-    negated_cond = expr2tc(new not2t(guard));
+    negated_cond = not2tc(guard);
   }
 
   bool unwinding_assertions =
