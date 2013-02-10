@@ -50,7 +50,6 @@ public:
   virtual expr2tc get(const expr2tc &expr);
 
 private:
-  virtual literalt convert_expr(const expr2tc &expr);
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 

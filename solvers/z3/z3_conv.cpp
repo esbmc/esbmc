@@ -2519,37 +2519,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
   return;
 }
 
-literalt
-z3_convt::convert_expr(const expr2tc &expr)
-{
-  literalt l = new_variable();
-  z3::expr formula, constraint;
-
-  expr2tc new_expr;
-
-  try {
-    convert_bv(expr, constraint);
-  } catch (std::string *e) {
-    std::cerr << "Failed to convert an expression" << std::endl;
-    ignoring(expr);
-    return l;
-  } catch (conv_error *e) {
-    std::cerr << e->to_string() << std::endl;
-    ignoring(expr);
-    return l;
-  }
-
-  z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, constraint));
-
-  // While we have a literal, don't assert that it's true, only the link
-  // between the formula and the literal. Otherwise, we risk asserting that a
-  // formula within a assertion-statement is true or false.
-  assert_formula(formula);
-
-  return l;
-}
-
 void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      z3::expr &output)
