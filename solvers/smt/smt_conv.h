@@ -60,6 +60,7 @@ public:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                smt_ast **args, unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
+  virtual literalt mk_lit(const smt_ast *s) = 0;
 
   virtual void set_to(const expr2tc &expr, bool value);
 

@@ -3024,6 +3024,12 @@ z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
   assert(0);
 }
 
+literalt
+z3_convt::mk_lit(const smt_ast *a __attribute__((unused)))
+{
+  assert(0);
+}
+
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {
   void ast::dump(void) const {
