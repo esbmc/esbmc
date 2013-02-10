@@ -249,8 +249,9 @@ public:
     z3::expr e;
   };
 
-  class z3_smt_sort : smt_sort {
-    z3_smt_sort(z3::sort &_s) : s(_s) { }
+  class z3_smt_sort : public smt_sort {
+  public:
+    z3_smt_sort(z3::sort _s) : s(_s) { }
     z3::sort s;
   };
 

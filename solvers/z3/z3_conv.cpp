@@ -8,6 +8,7 @@
 #include <assert.h>
 #include <ctype.h>
 #include <malloc.h>
+#include <stdarg.h>
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>
@@ -3021,7 +3022,33 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
 smt_sort *
 z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
-  assert(0);
+  va_list ap;
+  z3_smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+    s = new z3_smt_sort(ctx.int_sort());
+    break;
+  case SMT_SORT_REAL:
+    s = new z3_smt_sort(ctx.real_sort());
+    break;
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    s = new z3_smt_sort(ctx.bv_sort(uint));
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, z3_smt_sort *); // Consider constness?
+    range = va_arg(ap, z3_smt_sort *);
+    s = new z3_smt_sort(ctx.array_sort(dom->s, range->s));
+    break;
+  case SMT_SORT_BOOL:
+    s = new z3_smt_sort(ctx.bool_sort());
+    break;
+  }
+
+  return s;
 }
 
 literalt
