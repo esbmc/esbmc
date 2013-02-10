@@ -49,7 +49,7 @@ class smt_sort {
 class smt_convt: public prop_convt
 {
 public:
-  smt_convt();
+  smt_convt(bool enable_cache);
   ~smt_convt();
 
   virtual void push_ctx(void);
@@ -88,8 +88,31 @@ public:
     >
   > union_varst;
 
+  // Type for (optional) AST cache
+
+  struct smt_cache_entryt {
+    const expr2tc val;
+    const smt_ast *ast;
+    unsigned int level;
+  };
+
+  typedef boost::multi_index_container<
+    smt_cache_entryt,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(smt_cache_entryt, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(smt_cache_entryt, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > smt_cachet;
+
   // Members
   union_varst union_vars;
+  smt_cachet smt_cache;
+  bool caching;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
