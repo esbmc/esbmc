@@ -55,3 +55,14 @@ smt_convt::set_to(const expr2tc &expr, bool value)
     }
   }
 }
+
+literalt
+smt_convt::convert_expr(const expr2tc &expr)
+{
+  smt_ast *args[3];
+
+  // Funky recursion stuff goes here. In the meantime, dummy values.
+  smt_ast *a = mk_func_app(NULL, SMT_FUNC_INT, &args[0], 0, expr);
+  literalt l = mk_lit(a);
+  return l;
+}
