@@ -55,7 +55,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
   assumpt_mode = false;
   no_variables = 1;
-  level_ctx = 0;
 
   z3::config conf;
   conf.set("MODEL", true);
@@ -2497,7 +2496,7 @@ z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
   expr->convert_smt(*this, reinterpret_cast<void*>(&val));
 
   // insert into cache
-  struct bv_cache_entryt cacheentry = { expr, val, level_ctx };
+  struct bv_cache_entryt cacheentry = { expr, val, ctx_level };
   bv_cache.insert(cacheentry);
   return;
 }

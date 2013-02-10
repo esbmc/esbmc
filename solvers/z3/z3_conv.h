@@ -286,7 +286,6 @@ public:
   typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
   sort_cachet sort_cache;
 
-  unsigned int level_ctx;
   bool int_encoding, smtlib, assumpt_mode;
   std::string filename;
 
