@@ -245,7 +245,8 @@ public:
     }
   };
 
-  class z3_smt_ast : smt_ast {
+  class z3_smt_ast : public smt_ast {
+  public:
     z3_smt_ast(z3::expr &_e) : e(_e) { }
     z3::expr e;
   };
