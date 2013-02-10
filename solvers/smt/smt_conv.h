@@ -20,6 +20,13 @@ enum smt_func_kind {
   SMT_FUNC_SYMBOL,
 
   // Nonterminals
+  SMT_FUNC_ADD,
+  SMT_FUNC_BVADD,
+  SMT_FUNC_SUB,
+  SMT_FUNC_BVSUB,
+  SMT_FUNC_MUL,
+  SMT_FUNC_DIV,
+  SMT_FUNC_BVDIV,
 };
 
 class smt_ast {
