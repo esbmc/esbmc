@@ -72,19 +72,7 @@ z3_convt::get(const expr2tc &expr)
     const symbol2t sym = to_symbol2t(expr);
     identifier = sym.get_symbol_name();
 
-    sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
-    if (cache_res != sort_cache.end()) {
-      sort = cache_res->second;
-    } else if (int_encoding && is_bv_type(expr)) {
-      // Special case: in integer mode, all int types become Z3 int's, which
-      // doesn't necessarily get put in the type cache.
-      sort = ctx.int_sort();
-    } else {
-      // This doesn't work; can't be bothered to debug it either.
-      //assert(cache_res != sort_cache.end() && "No cached copy of type when "
-      //       "fetching cex data");
-      convert_type(expr->type, sort);
-    }
+    convert_type(expr->type, sort);
 
     bv = ctx.constant(identifier.c_str(), sort);
 

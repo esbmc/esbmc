@@ -256,35 +256,10 @@ public:
     z3::sort s;
   };
 
-  // Types for bv_cache.
-
-  struct bv_cache_entryt {
-    const expr2tc val;
-    z3::expr output;
-    unsigned int level;
-  };
-
-  typedef boost::multi_index_container<
-    bv_cache_entryt,
-    boost::multi_index::indexed_by<
-      boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, const expr2tc, val)
-      >,
-      boost::multi_index::ordered_non_unique<
-        BOOST_MULTI_INDEX_MEMBER(bv_cache_entryt, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > bv_cachet;
-
   //  Must be first member; that way it's the last to be destroyed.
   z3::context ctx;
   z3::solver solver;
   z3::model model;
-
-  bv_cachet bv_cache;
-  typedef hash_map_cont<const type2tc, z3::sort, type2_hash> sort_cachet;
-  sort_cachet sort_cache;
 
   bool int_encoding, smtlib, assumpt_mode;
   std::string filename;

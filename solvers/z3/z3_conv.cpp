@@ -92,11 +92,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   } else {
     dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
   }
-
-  // Pre-seed type cache with a few values that might not go in due to
-  // specialised code paths.
-  sort_cache.insert(std::pair<const type2tc, z3::sort>(get_bool_type(),
-                    ctx.bool_sort()));
 }
 
 
@@ -180,9 +175,6 @@ z3_convt::intr_pop_ctx(void)
   ++it;
   assumpt.erase(it, assumpt.end());
   assumpt_ctx_stack.pop_back();
-
-  bv_cachet::nth_index<1>::type &cache_numindex = bv_cache.get<1>();
-  cache_numindex.erase(ctx_level);
 
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
@@ -2487,17 +2479,7 @@ void
 z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
 {
 
-  bv_cachet::const_iterator cache_result = bv_cache.find(expr);
-  if (cache_result != bv_cache.end()) {
-    val = cache_result->output;
-    return;
-  }
-
   expr->convert_smt(*this, reinterpret_cast<void*>(&val));
-
-  // insert into cache
-  struct bv_cache_entryt cacheentry = { expr, val, ctx_level };
-  bv_cache.insert(cacheentry);
   return;
 }
 
@@ -2505,16 +2487,7 @@ void
 z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
 {
 
-  sort_cachet::const_iterator cache_result = sort_cache.find(type);
-  if (cache_result != sort_cache.end()) {
-    outtype = z3::to_sort(ctx, cache_result->second);
-    return;
-  }
-
   type->convert_smt_type(*this, reinterpret_cast<void*>(&outtype));
-
-  // insert into cache
-  sort_cache.insert(std::pair<const type2tc, z3::sort>(type, outtype));
   return;
 }
 
