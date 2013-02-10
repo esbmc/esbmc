@@ -709,8 +709,8 @@ bool dereferencet::memory_model_bytes(
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
     // Byte extract currently produced one byte, regardless of given type.
-    value = byte_extract2tc(type_pool.get_uint(8), is_big_endian,
-                                       value, new_offset);
+    value = byte_extract2tc(type_pool.get_uint(8), value, new_offset,
+                            is_big_endian);
 
     // XXX jmorse - upcast the extracted byte to whatever type we're supposed to
     // have. In a correct world, we'd be stitching together the type from a

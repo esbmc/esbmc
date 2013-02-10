@@ -2210,33 +2210,34 @@ public:
 class byte_extract_data : public byte_ops
 {
 public:
-  byte_extract_data(const type2tc &t, expr2t::expr_ids id, bool be,
-                    const expr2tc &s, const expr2tc &o)
-    : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o) { }
+  byte_extract_data(const type2tc &t, expr2t::expr_ids id,
+                    const expr2tc &s, const expr2tc &o, bool be)
+    : byte_ops(t, id), source_value(s), source_offset(o), big_endian(be) { }
   byte_extract_data(const byte_extract_data &ref)
-    : byte_ops(ref), big_endian(ref.big_endian), source_value(ref.source_value),
-      source_offset(ref.source_offset) { }
+    : byte_ops(ref), source_value(ref.source_value),
+      source_offset(ref.source_offset), big_endian(ref.big_endian) { }
 
-  bool big_endian;
   expr2tc source_value;
   expr2tc source_offset;
+  bool big_endian;
 };
 
 class byte_update_data : public byte_ops
 {
 public:
-  byte_update_data(const type2tc &t, expr2t::expr_ids id, bool be,
-                    const expr2tc &s, const expr2tc &o, const expr2tc &v)
-    : byte_ops(t, id), big_endian(be), source_value(s), source_offset(o),
-      update_value(v) { }
+  byte_update_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &s,
+                   const expr2tc &o, const expr2tc &v, bool be)
+    : byte_ops(t, id), source_value(s), source_offset(o), update_value(v),
+      big_endian(be) { }
   byte_update_data(const byte_update_data &ref)
-    : byte_ops(ref), big_endian(ref.big_endian), source_value(ref.source_value),
-      source_offset(ref.source_offset), update_value(ref.update_value) { }
+    : byte_ops(ref), source_value(ref.source_value),
+      source_offset(ref.source_offset), update_value(ref.update_value),
+      big_endian(ref.big_endian) { }
 
-  bool big_endian;
   expr2tc source_value;
   expr2tc source_offset;
   expr2tc update_value;
+  bool big_endian;
 };
 
 class datatype_ops : public expr2t
@@ -2387,19 +2388,19 @@ public:
   };
 
   sideeffect_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &op,
-                  const expr2tc &sz, const type2tc &tp, allockind k,
-                  const std::vector<expr2tc> &args)
-    : expr2t(t, id), operand(op), size(sz), alloctype(tp), kind(k),
-      arguments(args) { }
+                  const expr2tc &sz, const std::vector<expr2tc> &args,
+                  const type2tc &tp, allockind k)
+    : expr2t(t, id), operand(op), size(sz), arguments(args), alloctype(tp),
+                     kind(k) { }
   sideeffect_data(const sideeffect_data &ref)
     : expr2t(ref), operand(ref.operand), size(ref.size),
-      alloctype(ref.alloctype), kind(ref.kind), arguments(ref.arguments) { }
+      arguments(ref.arguments), alloctype(ref.alloctype), kind(ref.kind) { }
 
   expr2tc operand;
   expr2tc size;
+  std::vector<expr2tc> arguments;
   type2tc alloctype;
   allockind kind;
-  std::vector<expr2tc> arguments;
 };
 
 class code_base : public expr2t
@@ -2606,6 +2607,8 @@ public:
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods;
 
+// New rule: anything containing an expr2tc must be first in the template list,
+// everything else afterwards. This is to simplify iterating over subexprs.
 irep_typedefs(constant_int, constant_int_data, esbmct::takestype,
               BigInt, constant_int_data, &constant_int_data::constant_value);
 irep_typedefs(constant_fixedbv, constant_fixedbv_data, esbmct::takestype,
@@ -2729,14 +2732,14 @@ irep_typedefs(pointer_object, pointer_ops, esbmct::takestype,
 irep_typedefs(address_of, pointer_ops, esbmct::takestype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(byte_extract, byte_extract_data, esbmct::takestype,
-              bool, byte_extract_data, &byte_extract_data::big_endian,
               expr2tc, byte_extract_data, &byte_extract_data::source_value,
-              expr2tc, byte_extract_data, &byte_extract_data::source_offset);
+              expr2tc, byte_extract_data, &byte_extract_data::source_offset,
+              bool, byte_extract_data, &byte_extract_data::big_endian);
 irep_typedefs(byte_update, byte_update_data, esbmct::takestype,
-              bool, byte_update_data, &byte_update_data::big_endian,
               expr2tc, byte_update_data, &byte_update_data::source_value,
               expr2tc, byte_update_data, &byte_update_data::source_offset,
-              expr2tc, byte_update_data, &byte_update_data::update_value);
+              expr2tc, byte_update_data, &byte_update_data::update_value,
+              bool, byte_update_data, &byte_update_data::big_endian);
 irep_typedefs(with, with_data, esbmct::takestype,
               expr2tc, with_data, &with_data::source_value,
               expr2tc, with_data, &with_data::update_field,
@@ -2778,11 +2781,11 @@ irep_typedefs(dynamic_size, object_ops, esbmct::notype,
 irep_typedefs(sideeffect, sideeffect_data, esbmct::takestype,
               expr2tc, sideeffect_data, &sideeffect_data::operand,
               expr2tc, sideeffect_data, &sideeffect_data::size,
+              std::vector<expr2tc>, sideeffect_data,
+              &sideeffect_data::arguments,
               type2tc, sideeffect_data, &sideeffect_data::alloctype,
               sideeffect_data::allockind, sideeffect_data,
-              &sideeffect_data::kind,
-              std::vector<expr2tc>, sideeffect_data,
-              &sideeffect_data::arguments);
+              &sideeffect_data::kind);
 irep_typedefs(code_block, code_block_data, esbmct::notype,
               std::vector<expr2tc>, code_block_data,
               &code_block_data::operands);
@@ -3667,10 +3670,10 @@ public:
    *         of source object.
    *  @param source Object to extract data from. Any type.
    *  @param offset Offset into source data object to extract from. */
-  byte_extract2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
-                 const expr2tc &offset)
-    : byte_extract_expr_methods(type, byte_extract_id, is_big_endian,
-                               source, offset) {}
+  byte_extract2t(const type2tc &type, const expr2tc &source,
+                 const expr2tc &offset, bool is_big_endian)
+    : byte_extract_expr_methods(type, byte_extract_id,
+                               source, offset, is_big_endian) {}
   byte_extract2t(const byte_extract2t &ref)
     : byte_extract_expr_methods(ref) {}
 
@@ -3690,10 +3693,11 @@ public:
    *  @param is_big_endian Whether to use big endian byte representation.
    *  @param source Source object in which to update a byte.
    *  @param updateval Value of byte to  update source with. */
-  byte_update2t(const type2tc &type, bool is_big_endian, const expr2tc &source,
-                 const expr2tc &offset, const expr2tc &updateval)
-    : byte_update_expr_methods(type, byte_update_id, is_big_endian,
-                               source, offset, updateval) {}
+  byte_update2t(const type2tc &type, const expr2tc &source,
+                 const expr2tc &offset, const expr2tc &updateval,
+                 bool is_big_endian)
+    : byte_update_expr_methods(type, byte_update_id, source, offset,
+                               updateval, is_big_endian) {}
   byte_update2t(const byte_update2t &ref)
     : byte_update_expr_methods(ref) {}
 
@@ -4012,9 +4016,9 @@ public:
    *  @param alloct Type of piece of data to allocate.
    *  @param a Vector of arguments to function call. */
   sideeffect2t(const type2tc &t, const expr2tc &oper, const expr2tc &sz,
-               const type2tc &alloct, allockind k,
-               const std::vector<expr2tc> &a)
-    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, alloct, k, a) {}
+               const std::vector<expr2tc> &a,
+               const type2tc &alloct, allockind k)
+    : sideeffect_expr_methods(t, sideeffect_id, oper, sz, a, alloct, k) {}
   sideeffect2t(const sideeffect2t &ref)
     : sideeffect_expr_methods(ref) {}
 
