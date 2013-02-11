@@ -130,12 +130,21 @@ public:
     >
   > smt_cachet;
 
+  struct expr_op_convert {
+    smt_func_kind int_mode_func;
+    smt_func_kind bv_mode_func;
+    unsigned int args;
+    unsigned long permitted_sorts;
+  };
+
   // Members
   union_varst union_vars;
   smt_cachet smt_cache;
   type2tc pointer_struct;
   bool caching;
   bool int_encoding;
+
+  static expr_op_convert smt_convert_table[];
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
