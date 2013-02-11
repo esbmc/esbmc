@@ -2960,6 +2960,12 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   // layer, and all this method does is actually pass arguments through to
   // the solver, then that's absolutely fine.
   switch (k) {
+  case SMT_FUNC_ADD:
+    return new z3_smt_ast(mk_add(z3_smt_downcast(args[0])->e,
+                                 z3_smt_downcast(args[1])->e), temp);
+  case SMT_FUNC_BVADD:
+    return new z3_smt_ast(mk_add(z3_smt_downcast(args[0])->e,
+                                 z3_smt_downcast(args[1])->e), temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;

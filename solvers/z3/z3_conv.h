@@ -252,6 +252,7 @@ public:
     }
   };
 
+  #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   class z3_smt_ast : public smt_ast {
   public:
     z3_smt_ast(z3::expr _e, const expr2tc &e2) : e(_e), expr(e2) { }
