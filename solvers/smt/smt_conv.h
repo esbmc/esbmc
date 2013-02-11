@@ -131,6 +131,7 @@ public:
   // Members
   union_varst union_vars;
   smt_cachet smt_cache;
+  type2tc pointer_struct;
   bool caching;
   bool int_encoding;
 };

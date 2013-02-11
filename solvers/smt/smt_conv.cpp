@@ -3,6 +3,15 @@
 smt_convt::smt_convt(bool enable_cache, bool intmode)
   : caching(enable_cache), int_encoding(intmode)
 {
+  std::vector<type2tc> members;
+  std::vector<irep_idt> names;
+
+  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  names.push_back(irep_idt("pointer_object"));
+  names.push_back(irep_idt("pointer_offset"));
+
+  pointer_struct = type2tc(new struct_type2t(members, names, "pointer_struct"));
 }
 
 smt_convt::~smt_convt(void)
