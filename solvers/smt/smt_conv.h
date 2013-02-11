@@ -26,6 +26,7 @@ enum smt_func_kind {
   SMT_FUNC_SUB,
   SMT_FUNC_BVSUB,
   SMT_FUNC_MUL,
+  SMT_FUNC_BVMUL,
   SMT_FUNC_DIV,
   SMT_FUNC_BVDIV,
 };
