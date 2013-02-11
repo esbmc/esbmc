@@ -2951,7 +2951,7 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), const smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)), const expr2tc &temp __attribute__((unused)))
+z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k, const smt_ast **args, unsigned int numargs __attribute__((unused)), const expr2tc &temp)
 {
 
   // So: this method is liable to become one /huge/ switch case that deals with
@@ -3012,7 +3012,7 @@ z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2t
 }
 
 smt_sort *
-z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+z3_convt::mk_sort(const smt_sort_kind k, ...)
 {
   va_list ap;
   z3_smt_sort *s = NULL, *dom, *range;
