@@ -1,7 +1,7 @@
 #include "smt_conv.h"
 
-smt_convt::smt_convt(bool enable_cache)
-  : caching(enable_cache)
+smt_convt::smt_convt(bool enable_cache, bool intmode)
+  : caching(enable_cache), int_encoding(intmode)
 {
 }
 

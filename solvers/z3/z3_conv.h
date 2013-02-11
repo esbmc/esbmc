@@ -267,7 +267,7 @@ public:
   z3::solver solver;
   z3::model model;
 
-  bool int_encoding, smtlib, assumpt_mode;
+  bool smtlib, assumpt_mode;
   std::string filename;
 
   std::string dyn_info_arr_name;

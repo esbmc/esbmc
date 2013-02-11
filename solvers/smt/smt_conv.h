@@ -57,7 +57,7 @@ class smt_sort {
 class smt_convt: public prop_convt
 {
 public:
-  smt_convt(bool enable_cache);
+  smt_convt(bool enable_cache, bool int_encoding);
   ~smt_convt();
 
   virtual void push_ctx(void);
@@ -128,6 +128,7 @@ public:
   union_varst union_vars;
   smt_cachet smt_cache;
   bool caching;
+  bool int_encoding;
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
