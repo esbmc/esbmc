@@ -70,6 +70,11 @@ public:
                                const expr2tc &temp) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
+  virtual smt_ast *mk_smt_int(const mp_integer &theint) = 0;
+  virtual smt_ast *mk_smt_real(const mp_integer &thereal) = 0;
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w) = 0;
+  virtual smt_ast *mk_smt_bool(bool val) = 0;
+  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) =0;
 
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);

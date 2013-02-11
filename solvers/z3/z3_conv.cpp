@@ -2963,6 +2963,43 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   }
 }
 
+smt_ast *
+z3_convt::mk_smt_int(const mp_integer &theint)
+{
+  if (theint.is_negative())
+    return new z3_smt_ast(ctx.int_val(theint.to_int64()));
+  else
+    return new z3_smt_ast(ctx.int_val(theint.to_uint64()));
+}
+
+smt_ast *
+z3_convt::mk_smt_real(const mp_integer &theval)
+{
+  return new z3_smt_ast(ctx.real_val(theval.to_int64()));
+}
+
+smt_ast *
+z3_convt::mk_smt_bvint(const mp_integer &theint, unsigned int width)
+{
+  if (theint.is_negative())
+    return new z3_smt_ast(ctx.bv_val(theint.to_int64(), width));
+  else
+    return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width));
+}
+
+smt_ast *
+z3_convt::mk_smt_bool(bool val)
+{
+  return new z3_smt_ast(ctx.bool_val(val));
+}
+
+smt_ast *
+z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+{
+  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
+  return new z3_smt_ast(ctx.constant(name.c_str(), zs->s));
+}
+
 smt_sort *
 z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {

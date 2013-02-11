@@ -179,6 +179,12 @@ private:
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
 
+  virtual smt_ast *mk_smt_int(const mp_integer &theint);
+  virtual smt_ast *mk_smt_real(const mp_integer &theint);
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w);
+  virtual smt_ast *mk_smt_bool(bool val);
+  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate
@@ -246,7 +252,7 @@ public:
 
   class z3_smt_ast : public smt_ast {
   public:
-    z3_smt_ast(z3::expr &_e) : e(_e) { }
+    z3_smt_ast(z3::expr _e) : e(_e) { }
     z3::expr e;
   };
 
