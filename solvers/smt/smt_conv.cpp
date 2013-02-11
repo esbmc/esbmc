@@ -102,13 +102,16 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::constant_bool_id:
   case expr2t::symbol_id:
     a = convert_terminal(expr);
+    break;
   case expr2t::add_id:
   {
     smt_func_kind k = (int_encoding) ? SMT_FUNC_ADD : SMT_FUNC_BVADD;
     a = mk_func_app(sort, k, &args[0], 2, expr);
+    break;
   }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
+    break;
   }
 
   struct smt_cache_entryt entry = { expr, a, ctx_level };
