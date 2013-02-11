@@ -290,6 +290,27 @@ smt_convt::convert_terminal(const expr2tc &expr)
   }
 }
 
+smt_ast *
+smt_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
+                         unsigned int i __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
+                        unsigned int i __attribute__((unused)),
+                        const smt_ast *v __attribute__((unused)))
+{
+  assert(0);
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
