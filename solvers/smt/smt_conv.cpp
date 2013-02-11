@@ -120,6 +120,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
   }
 
+  if ((int_encoding && cvt->int_mode_func == SMT_FUNC_INVALID) ||
+      (!int_encoding && cvt->bv_mode_func_signed == SMT_FUNC_INVALID)) {
+    std::cerr << "Invalid expression " << get_expr_id(expr) << " for encoding "
+      << "mode discovered, refusing to convert to SMT" << std::endl;
+    abort();
+  }
+
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   case expr2t::constant_fixedbv_id:
