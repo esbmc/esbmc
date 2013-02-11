@@ -2,13 +2,13 @@
 
 // Helpers extracted from z3_convt.
 
-std::string
+static std::string
 extract_magnitude(std::string v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
 }
 
-std::string
+static std::string
 extract_fraction(std::string v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
