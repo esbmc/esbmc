@@ -2975,6 +2975,18 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
   case SMT_FUNC_MUL:
   case SMT_FUNC_BVMUL:
     return new z3_smt_ast((asts[0]->e * asts[1]->e), s, temp);
+  case SMT_FUNC_MOD:
+    return new z3_smt_ast(
+                    z3::to_expr(ctx, Z3_mk_mod(z3_ctx, asts[0]->e, asts[1]->e)),
+                    s, temp);
+  case SMT_FUNC_BVSMOD:
+    return new z3_smt_ast(
+                 z3::to_expr(ctx, Z3_mk_bvsrem(z3_ctx, asts[0]->e, asts[1]->e)),
+                 s, temp);
+  case SMT_FUNC_BVUMOD:
+    return new z3_smt_ast(
+                 z3::to_expr(ctx, Z3_mk_bvurem(z3_ctx, asts[0]->e, asts[1]->e)),
+                 s, temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;
