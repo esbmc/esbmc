@@ -158,8 +158,27 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv div yet");
     assert(0);
   }
-  // Blocked on tuple support:
-  case expr2t::with_id: // That is, struct with's
+  case expr2t::with_id:
+  {
+    // We reach here if we're with'ing a struct, not an array.
+    assert(is_struct_type(expr->type));
+    const with2t &with = to_with2t(expr);
+    const constant_string2t &str = to_constant_string2t(with.update_field);
+    unsigned int idx = 0;
+
+    const struct_union_data &data_ref =
+            dynamic_cast<const struct_union_data &>(*with.type);
+
+    forall_names(it, data_ref.member_names) {
+      if (*it == str.value)
+        break;
+      idx++;
+    }
+    assert(idx != data_ref.member_names.size() &&
+           "Member name of with expr not found in struct/union type");
+
+    a = tuple_update(args[0], idx, args[2], expr);
+  }
   case expr2t::same_object_id:
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
