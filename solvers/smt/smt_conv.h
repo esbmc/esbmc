@@ -5,11 +5,11 @@
 #include <solvers/prop/prop_conv.h>
 
 enum smt_sort_kind {
-  SMT_SORT_INT,
-  SMT_SORT_REAL,
-  SMT_SORT_BV,
-  SMT_SORT_ARRAY,
-  SMT_SORT_BOOL,
+  SMT_SORT_INT = 1,
+  SMT_SORT_REAL = 2,
+  SMT_SORT_BV = 4,
+  SMT_SORT_ARRAY = 8,
+  SMT_SORT_BOOL = 16,
 };
 
 enum smt_func_kind {
