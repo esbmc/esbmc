@@ -93,9 +93,33 @@ smt_convt::convert_terminal(const expr2tc &expr)
 {
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
+  {
+    const constant_int2t &theint = to_constant_int2t(expr);
+    unsigned int width = expr->type->get_width();
+    if (int_encoding)
+      return mk_smt_int(theint.constant_value, expr);
+    else
+      return mk_smt_bvint(theint.constant_value, width, expr);
+  }
   case expr2t::constant_fixedbv_id:
+  {
+    const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
+    return mk_smt_real(thereal.value.to_integer(), expr);
+  }
   case expr2t::constant_bool_id:
+  {
+    const constant_bool2t &thebool = to_constant_bool2t(expr);
+    return mk_smt_bool(thebool.constant_value, expr);
+  }
   case expr2t::symbol_id:
+  {
+    // Can't do this right now due to not having sort conversion yet.
+#if 0
+    const symbol2t &sym = to_symbol2t(expr);
+    std::string name = sym.get_symbol_name();
+    return mk_smt_symbol(name, expr);
+#endif
+  }
   default:
     return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0, expr);
   }
