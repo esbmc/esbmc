@@ -162,11 +162,10 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     // Can't do this right now due to not having sort conversion yet.
-#if 0
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
-    return mk_smt_symbol(name, expr);
-#endif
+    const smt_sort *sort = convert_sort(sym.type);
+    return mk_smt_symbol(name, sort, expr);
   }
   default:
     return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0, expr);
