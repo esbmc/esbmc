@@ -43,6 +43,7 @@ enum smt_func_kind {
   SMT_FUNC_NEG,
   SMT_FUNC_BVNEG,
   SMT_FUNC_BVLSHR,
+  SMT_FUNC_BVNOT,
 };
 
 class smt_sort {
