@@ -3006,6 +3006,8 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
                  s, temp);
   case SMT_FUNC_BVNOT:
     return new z3_smt_ast((~asts[0]->e), s, temp);
+  case SMT_FUNC_BVNXOR:
+    return new z3_smt_ast(mk_bvxnor(asts[0]->e, asts[1]->e), s, temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;
