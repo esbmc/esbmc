@@ -50,6 +50,13 @@ enum smt_func_kind {
   SMT_FUNC_BVXOR,
   SMT_FUNC_BVOR,
   SMT_FUNC_BVAND,
+
+  // Logic
+  SMT_FUNC_IMPLIES,
+  SMT_FUNC_XOR,
+  SMT_FUNC_OR,
+  SMT_FUNC_AND,
+  SMT_FUNC_NOT,
 };
 
 class smt_sort {
