@@ -195,7 +195,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     const smt_sort *sort = convert_sort(expr->type);
     const member2t &memb = to_member2t(expr);
-    unsigned int idx = get_member_name_field(expr->type, memb.member);
+    unsigned int idx = get_member_name_field(memb.source_value->type, memb.member);
     a = tuple_project(args[0], sort, idx, expr);
   }
   case expr2t::same_object_id:
