@@ -2951,8 +2951,14 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k, const smt_ast **args, unsigned int numargs __attribute__((unused)), const expr2tc &temp)
+z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k, const smt_ast **args, unsigned int numargs, const expr2tc &temp)
 {
+  const z3_smt_ast *asts[4];
+  unsigned int i;
+
+  assert(numargs <= 4);
+  for (i = 0; i < numargs; i++)
+    asts[i] = z3_smt_downcast(args[i]);
 
   // So: this method is liable to become one /huge/ switch case that deals with
   // the conversion of most SMT function applications. This normally would
@@ -2961,11 +2967,9 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   // the solver, then that's absolutely fine.
   switch (k) {
   case SMT_FUNC_ADD:
-    return new z3_smt_ast(mk_add(z3_smt_downcast(args[0])->e,
-                                 z3_smt_downcast(args[1])->e), temp);
+    return new z3_smt_ast(mk_add(asts[i]->e, asts[i]->e), temp);
   case SMT_FUNC_BVADD:
-    return new z3_smt_ast(mk_add(z3_smt_downcast(args[0])->e,
-                                 z3_smt_downcast(args[1])->e), temp);
+    return new z3_smt_ast(mk_add(asts[i]->e, asts[i]->e), temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;
