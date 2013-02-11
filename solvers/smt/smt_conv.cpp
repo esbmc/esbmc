@@ -118,6 +118,12 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_func_app(sort, k, &args[0], 2, expr);
     break;
   }
+  case expr2t::sub_id:
+  {
+    smt_func_kind k = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
+    a = mk_func_app(sort, k, &args[0], 2, expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
