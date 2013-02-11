@@ -2951,7 +2951,7 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)), const expr2tc &temp __attribute__((unused)))
+z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), const smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)), const expr2tc &temp __attribute__((unused)))
 {
 
   // So: this method is liable to become one /huge/ switch case that deals with

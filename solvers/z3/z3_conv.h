@@ -174,7 +174,7 @@ private:
 
   // SMT-abstraction migration:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               smt_ast **args, unsigned int numargs,
+                               const smt_ast **args, unsigned int numargs,
                                const expr2tc &temp);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
