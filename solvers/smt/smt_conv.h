@@ -19,6 +19,7 @@ enum smt_func_kind {
   // Terminals
   SMT_FUNC_INT = 0,
   SMT_FUNC_HACKS, // indicate the solver /has/ to use the temp expr.
+  SMT_FUNC_INVALID, // For conversion lookup table only
   SMT_FUNC_BVINT,
   SMT_FUNC_REAL,
   SMT_FUNC_SYMBOL,
@@ -147,7 +148,7 @@ public:
   bool caching;
   bool int_encoding;
 
-  static expr_op_convert smt_convert_table[];
+  static expr_op_convert smt_convert_table[expr2t::end_expr_id];
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

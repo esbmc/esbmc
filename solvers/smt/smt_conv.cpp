@@ -249,3 +249,90 @@ smt_convt::convert_terminal(const expr2tc &expr)
     return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0, expr);
   }
 }
+
+smt_convt::expr_op_convert
+smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const int
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const bool
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const string
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const struct
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const union
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const array
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //const array_of
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //symbol
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //typecast
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //if
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //equality
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //notequal
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //lt
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //gt
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //lte
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //gte
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //not
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //and
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //or
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //xor
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //impiles
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitand
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitor
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitxor
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitnand
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitnor
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitnxor
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //bitnot
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //lshr
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //neg
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //abs
+{ SMT_FUNC_ADD, SMT_FUNC_BVADD, 2, SMT_SORT_ALLINTS},       //add
+{ SMT_FUNC_SUB, SMT_FUNC_BVSUB, 2, SMT_SORT_ALLINTS},       //sub
+{ SMT_FUNC_MUL, SMT_FUNC_BVMUL, 2, SMT_SORT_ALLINTS},       //mul
+{ SMT_FUNC_DIV, SMT_FUNC_BVDIV, 2, SMT_SORT_ALLINTS},       //div
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //mod
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //shl
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //ashr
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //dyn_obj_id
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //same_obj_id
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //ptr_offs
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //ptr_obj
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //addr_of
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //byte_extract
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //byte_update
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //with
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //member
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //index
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //zero_str_id
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //zero_len_str
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //isnan
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //overflow
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //overflow_cast
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //overflow_neg
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //unknown
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //invalid
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //null_obj
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //deref
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //valid_obj
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //deallocated
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //dyn_size
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //sideeffect
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_block
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_assign
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_init
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_decl
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_printf
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_expr
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_return
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_skip
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_free
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_goto
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //obj_desc
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_func_call
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_comma
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //invalid_ptr
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //buffer_sz
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_asm
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_cpp_del_arr
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_cpp_del_id
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_cpp_catch
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_cpp_throw
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},                //code_cpp_throw_dec
+};
