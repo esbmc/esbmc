@@ -158,6 +158,8 @@ lolarith:
 smt_sort *
 smt_convt::convert_sort(const type2tc &type)
 {
+  bool is_signed = true;
+
   switch (type->type_id) {
   case type2t::bool_id:
     return mk_sort(SMT_SORT_BOOL);
@@ -168,13 +170,15 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::pointer_id:
     return mk_struct_sort(pointer_struct);
   case type2t::unsignedbv_id:
+    is_signed = false;
+    /* FALLTHROUGH */
   case type2t::signedbv_id:
   {
     unsigned int width = type->get_width();
     if (int_encoding)
-      return mk_sort(SMT_SORT_INT);
+      return mk_sort(SMT_SORT_INT, is_signed);
     else
-      return mk_sort(SMT_SORT_BV, width);
+      return mk_sort(SMT_SORT_BV, width, is_signed);
   }
   case type2t::fixedbv_id:
   {

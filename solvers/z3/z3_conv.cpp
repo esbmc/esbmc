@@ -3026,18 +3026,21 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   va_list ap;
   z3_smt_sort *s = NULL, *dom, *range;
   unsigned long uint;
+  int thebool;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
-    s = new z3_smt_sort(ctx.int_sort());
+    thebool = va_arg(ap, int);
+    s = new z3_smt_sort(ctx.int_sort(), thebool);
     break;
   case SMT_SORT_REAL:
     s = new z3_smt_sort(ctx.real_sort());
     break;
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
-    s = new z3_smt_sort(ctx.bv_sort(uint));
+    thebool = va_arg(ap, int);
+    s = new z3_smt_sort(ctx.bv_sort(uint), thebool);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?

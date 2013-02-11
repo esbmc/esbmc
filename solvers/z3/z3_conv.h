@@ -262,8 +262,9 @@ public:
 
   class z3_smt_sort : public smt_sort {
   public:
-    z3_smt_sort(z3::sort _s) : s(_s) { }
+    z3_smt_sort(z3::sort _s, bool is_s = false) : s(_s), is_signed(is_s) { }
     z3::sort s;
+    bool is_signed;
   };
 
   //  Must be first member; that way it's the last to be destroyed.
