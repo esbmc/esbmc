@@ -3032,6 +3032,22 @@ z3_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
   return s;
 }
 
+smt_sort *
+z3_convt::mk_struct_sort(const type2tc &type)
+{
+  z3::sort s;
+  convert_type(type, s);
+  return new z3_smt_sort(s);
+}
+
+smt_sort *
+z3_convt::mk_union_sort(const type2tc &type)
+{
+  z3::sort s;
+  convert_type(type, s);
+  return new z3_smt_sort(s);
+}
+
 literalt
 z3_convt::mk_lit(const smt_ast *a)
 {

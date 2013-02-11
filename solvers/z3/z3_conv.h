@@ -184,6 +184,8 @@ private:
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w, const expr2tc &t);
   virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t);
+  virtual smt_sort *mk_struct_sort(const type2tc &type);
+  virtual smt_sort *mk_union_sort(const type2tc &type);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions

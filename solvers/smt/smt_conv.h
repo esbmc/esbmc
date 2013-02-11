@@ -75,6 +75,9 @@ public:
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w, const expr2tc &t) = 0;
   virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t) = 0;
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t) =0;
+  virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;
+  // XXX XXX XXX -- turn this into a formulation on top of structs.
+  virtual smt_sort *mk_union_sort(const type2tc &type) = 0;
 
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);

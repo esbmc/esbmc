@@ -95,7 +95,9 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::bool_id:
     return mk_sort(SMT_SORT_BOOL);
   case type2t::struct_id:
+    return mk_struct_sort(type);
   case type2t::union_id:
+    return mk_union_sort(type);
   case type2t::pointer_id:
     assert(0);
   case type2t::unsignedbv_id:
