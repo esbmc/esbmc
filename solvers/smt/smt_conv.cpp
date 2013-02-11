@@ -192,6 +192,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     const with2t &with = to_with2t(expr);
     unsigned int idx = get_member_name_field(expr->type, with.update_field);
     a = tuple_update(args[0], idx, args[2], expr);
+    break;
   }
   case expr2t::member_id:
   {
@@ -199,6 +200,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     const member2t &memb = to_member2t(expr);
     unsigned int idx = get_member_name_field(memb.source_value->type, memb.member);
     a = tuple_project(args[0], sort, idx, expr);
+    break;
   }
   case expr2t::same_object_id:
   {
