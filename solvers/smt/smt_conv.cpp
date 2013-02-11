@@ -93,13 +93,28 @@ smt_convt::convert_sort(const type2tc &type)
 {
   switch (type->type_id) {
   case type2t::bool_id:
+    return mk_sort(SMT_SORT_BOOL);
   case type2t::struct_id:
   case type2t::union_id:
   case type2t::pointer_id:
+    assert(0);
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+  {
+    unsigned int width = type->get_width();
+    if (int_encoding)
+      return mk_sort(SMT_SORT_INT);
+    else
+      return mk_sort(SMT_SORT_BV, width);
+  }
   case type2t::fixedbv_id:
-    assert(0);
+  {
+    unsigned int width = type->get_width();
+    if (int_encoding)
+      return mk_sort(SMT_SORT_REAL);
+    else
+      return mk_sort(SMT_SORT_BV, width);
+  }
   case type2t::code_id:
   case type2t::string_id:
   case type2t::cpp_name_id:
