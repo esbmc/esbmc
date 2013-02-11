@@ -14,6 +14,25 @@ extract_fraction(std::string v, unsigned width)
     return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
+static unsigned int
+get_member_name_field(const type2tc &t, const expr2tc &name)
+{
+  const constant_string2t &str = to_constant_string2t(name);
+  unsigned int idx = 0;
+  const struct_union_data &data_ref =
+          dynamic_cast<const struct_union_data &>(*t);
+
+  forall_names(it, data_ref.member_names) {
+    if (*it == str.value)
+      break;
+    idx++;
+  }
+  assert(idx != data_ref.member_names.size() &&
+         "Member name of with expr not found in struct/union type");
+
+  return idx;
+}
+
 smt_convt::smt_convt(bool enable_cache, bool intmode)
   : caching(enable_cache), int_encoding(intmode)
 {
@@ -163,20 +182,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     // We reach here if we're with'ing a struct, not an array.
     assert(is_struct_type(expr->type));
     const with2t &with = to_with2t(expr);
-    const constant_string2t &str = to_constant_string2t(with.update_field);
-    unsigned int idx = 0;
-
-    const struct_union_data &data_ref =
-            dynamic_cast<const struct_union_data &>(*with.type);
-
-    forall_names(it, data_ref.member_names) {
-      if (*it == str.value)
-        break;
-      idx++;
-    }
-    assert(idx != data_ref.member_names.size() &&
-           "Member name of with expr not found in struct/union type");
-
+    unsigned int idx = get_member_name_field(expr->type, with.update_field);
     a = tuple_update(args[0], idx, args[2], expr);
   }
   case expr2t::same_object_id:
