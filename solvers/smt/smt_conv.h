@@ -18,9 +18,9 @@ enum smt_sort_kind {
 
 enum smt_func_kind {
   // Terminals
-  SMT_FUNC_INT = 0,
-  SMT_FUNC_HACKS, // indicate the solver /has/ to use the temp expr.
-  SMT_FUNC_INVALID, // For conversion lookup table only
+  SMT_FUNC_HACKS = 0, // indicate the solver /has/ to use the temp expr.
+  SMT_FUNC_INVALID = 1, // For conversion lookup table only
+  SMT_FUNC_INT = 2,
   SMT_FUNC_BVINT,
   SMT_FUNC_REAL,
   SMT_FUNC_SYMBOL,

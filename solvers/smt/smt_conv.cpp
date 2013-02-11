@@ -102,8 +102,8 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
 
-  if ((int_encoding && cvt->int_mode_func != SMT_FUNC_INVALID) ||
-      (!int_encoding && cvt->bv_mode_func_signed != SMT_FUNC_INVALID)) {
+  if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
+      (!int_encoding && cvt->bv_mode_func_signed > SMT_FUNC_INVALID)) {
     assert(cvt->args == num_args);
     // An obvious check, but catches cases where we add a field to a future expr
     // and then fail to update the SMT layer, leading to an ignored field.
