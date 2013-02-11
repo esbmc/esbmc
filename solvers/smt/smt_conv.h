@@ -84,6 +84,7 @@ public:
 
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
+  const smt_ast *convert_ast(const expr2tc &expr);
 
   // Types
 

@@ -71,13 +71,27 @@ smt_convt::set_to(const expr2tc &expr, bool value)
 literalt
 smt_convt::convert_expr(const expr2tc &expr)
 {
-  smt_ast *args[3];
+  const smt_ast *a = convert_ast(expr);
+  return mk_lit(a);
+}
+
+const smt_ast *
+smt_convt::convert_ast(const expr2tc &expr)
+{
+  smt_ast *args[4];
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
     if (cache_result != smt_cache.end())
-      return mk_lit(cache_result->ast);
+      return (cache_result->ast);
   }
+
+#if 0
+  // Convert /all the arguments/.
+  unsigned int i = 0;
+  forall_operands(it, idx, expr) {
+#endif
+
 
   smt_ast *a;
   switch (expr->expr_id) {
@@ -92,9 +106,7 @@ smt_convt::convert_expr(const expr2tc &expr)
 
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
-
-  literalt l = mk_lit(a);
-  return l;
+  return a;
 }
 
 smt_sort *
