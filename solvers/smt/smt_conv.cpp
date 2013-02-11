@@ -213,14 +213,14 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::pointer_offset_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[0]);
-    a = tuple_project(args[0], s, 0, expr);
+    smt_sort *s = convert_sort(pointer_type_data->members[1]);
+    a = tuple_project(args[0], s, 1, expr);
     break;
   }
   case expr2t::pointer_object_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[1]);
-    a = tuple_project(args[0], s, 1, expr);
+    smt_sort *s = convert_sort(pointer_type_data->members[0]);
+    a = tuple_project(args[0], s, 0, expr);
     break;
   }
   default:
