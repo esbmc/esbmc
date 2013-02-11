@@ -81,8 +81,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_ast *args[4];
   const smt_sort *sort;
   smt_ast *a;
-  unsigned int num_args;
-  bool pointer_arith_detected = false;
+  unsigned int num_args, used_sorts = 0;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -93,18 +92,28 @@ smt_convt::convert_ast(const expr2tc &expr)
   // Convert /all the arguments/.
   unsigned int i = 0;
   forall_operands2(it, idx, expr) {
-    args[i++] = convert_ast(*it);
-    if (is_pointer_type(*it))
-      pointer_arith_detected = true;
+    args[i] = convert_ast(*it);
+    used_sorts |= args[i]->sort->id;
+    i++;
   }
   num_args = i;
 
   sort = convert_sort(expr->type);
 
-  if (pointer_arith_detected) {
-    // Skip thinking about pointer arith for the moment
-    a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
-    goto lolarith;
+  const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
+  // An obvious check, but catches cases where we add a field to a future expr
+  // and then fail to update the SMT layer, leading to an ignored field.
+  assert(cvt->args == num_args);
+
+  if ((int_encoding && cvt->int_mode_func != SMT_FUNC_INVALID) ||
+      (!int_encoding && cvt->bv_mode_func != SMT_FUNC_INVALID)) {
+    // Check sort types.
+    if ((used_sorts | cvt->permitted_sorts) == cvt->permitted_sorts) {
+      // Matches; we can just convert this.
+      smt_func_kind k = (int_encoding) ? cvt->int_mode_func : cvt->bv_mode_func;
+      a = mk_func_app(sort, k, &args[0], cvt->args, expr);
+      goto done;
+    }
   }
 
   switch (expr->expr_id) {
@@ -114,42 +123,22 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::symbol_id:
     a = convert_terminal(expr);
     break;
-  case expr2t::add_id:
-  {
-    assert(num_args == 2);
-    smt_func_kind k = (int_encoding) ? SMT_FUNC_ADD : SMT_FUNC_BVADD;
-    a = mk_func_app(sort, k, &args[0], 2, expr);
-    break;
-  }
-  case expr2t::sub_id:
-  {
-    assert(num_args == 2);
-    smt_func_kind k = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
-    a = mk_func_app(sort, k, &args[0], 2, expr);
-    break;
-  }
   case expr2t::mul_id:
   {
-    assert(num_args == 2);
     assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv mul yet");
-    smt_func_kind k = (int_encoding) ? SMT_FUNC_MUL : SMT_FUNC_BVMUL;
-    a = mk_func_app(sort, k, &args[0], 2, expr);
-    break;
+    assert(0);
   }
   case expr2t::div_id:
   {
-    assert(num_args == 2);
     assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv div yet");
-    smt_func_kind k = (int_encoding) ? SMT_FUNC_DIV : SMT_FUNC_BVDIV;
-    a = mk_func_app(sort, k, &args[0], 2, expr);
-    break;
+    assert(0);
   }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
   }
 
-lolarith:
+done:
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
   return a;
