@@ -37,6 +37,8 @@ enum smt_func_kind {
   SMT_FUNC_MOD,
   SMT_FUNC_BVSMOD,
   SMT_FUNC_BVUMOD,
+  SMT_FUNC_SHL,
+  SMT_FUNC_BVSHL,
 };
 
 class smt_sort {
