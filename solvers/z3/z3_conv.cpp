@@ -2951,7 +2951,7 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k, const smt_ast **args, unsigned int numargs, const expr2tc &temp)
+z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, unsigned int numargs, const expr2tc &temp)
 {
   const z3_smt_ast *asts[4];
   unsigned int i;
@@ -2968,56 +2968,60 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   switch (k) {
   case SMT_FUNC_ADD:
   case SMT_FUNC_BVADD:
-    return new z3_smt_ast(mk_add(asts[0]->e, asts[1]->e), temp);
+    return new z3_smt_ast(mk_add(asts[0]->e, asts[1]->e), s, temp);
   case SMT_FUNC_SUB:
   case SMT_FUNC_BVSUB:
-    return new z3_smt_ast(mk_sub(asts[0]->e, asts[1]->e), temp);
+    return new z3_smt_ast(mk_sub(asts[0]->e, asts[1]->e), s, temp);
   case SMT_FUNC_MUL:
   case SMT_FUNC_BVMUL:
-    return new z3_smt_ast((asts[0]->e * asts[1]->e), temp);
+    return new z3_smt_ast((asts[0]->e * asts[1]->e), s, temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;
     convert_bv(temp, ast);
-    return new z3_smt_ast(ast, temp);
+    return new z3_smt_ast(ast, s, temp);
   }
 }
 
 smt_ast *
-z3_convt::mk_smt_int(const mp_integer &theint, const expr2tc &temp)
+z3_convt::mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &temp)
 {
+  smt_sort *s = mk_sort(SMT_SORT_INT, sign);
   if (theint.is_negative())
-    return new z3_smt_ast(ctx.int_val(theint.to_int64()), temp);
+    return new z3_smt_ast(ctx.int_val(theint.to_int64()), s, temp);
   else
-    return new z3_smt_ast(ctx.int_val(theint.to_uint64()), temp);
+    return new z3_smt_ast(ctx.int_val(theint.to_uint64()), s, temp);
 }
 
 smt_ast *
 z3_convt::mk_smt_real(const mp_integer &theval, const expr2tc &temp)
 {
-  return new z3_smt_ast(ctx.real_val(theval.to_int64()), temp);
+  smt_sort *s = mk_sort(SMT_SORT_REAL);
+  return new z3_smt_ast(ctx.real_val(theval.to_int64()), s, temp);
 }
 
 smt_ast *
-z3_convt::mk_smt_bvint(const mp_integer &theint, unsigned int width, const expr2tc &temp)
+z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width, const expr2tc &temp)
 {
+  smt_sort *s = mk_sort(SMT_SORT_BV, width, sign);
   if (theint.is_negative())
-    return new z3_smt_ast(ctx.bv_val(theint.to_int64(), width), temp);
+    return new z3_smt_ast(ctx.bv_val(theint.to_int64(), width), s, temp);
   else
-    return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width), temp);
+    return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width), s, temp);
 }
 
 smt_ast *
 z3_convt::mk_smt_bool(bool val, const expr2tc &temp)
 {
-  return new z3_smt_ast(ctx.bool_val(val), temp);
+  smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(ctx.bool_val(val), s, temp);
 }
 
 smt_ast *
 z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &temp)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
-  return new z3_smt_ast(ctx.constant(name.c_str(), zs->s), temp);
+  return new z3_smt_ast(ctx.constant(name.c_str(), zs->s), s, temp);
 }
 
 smt_sort *

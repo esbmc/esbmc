@@ -220,12 +220,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   {
+    bool sign = is_signedbv_type(expr);
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if (int_encoding)
-      return mk_smt_int(theint.constant_value, expr);
+      return mk_smt_int(theint.constant_value, sign, expr);
     else
-      return mk_smt_bvint(theint.constant_value, width, expr);
+      return mk_smt_bvint(theint.constant_value, sign, width, expr);
   }
   case expr2t::constant_fixedbv_id:
   {

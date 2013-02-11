@@ -35,8 +35,12 @@ enum smt_func_kind {
   SMT_FUNC_BVDIV,
 };
 
+class smt_sort {
+  // Same story as smt_ast.
+};
+
 class smt_ast {
-  // Completely opaque class for storing whatever data the backend solver feels
+  // Mostly opaque class for storing whatever data the backend solver feels
   // is appropriate. I orignally thought this should contain useful tracking
   // data for what kind of AST this is, but then realised that this is just
   // overhead and whatever the solver stores should be enough for that too
@@ -53,10 +57,13 @@ class smt_ast {
   // operator are troublesome. This means multiple integer operators for
   // different integer modes, signed and unsigned comparisons, the multitude of
   // things that an address-of can turn into, and so forth.
-};
 
-class smt_sort {
-  // Same story as smt_ast.
+  // We /do/ need some sort information in conversion.
+public:
+  const smt_sort *sort;
+
+  smt_ast(const smt_sort *s) : sort(s) { }
+
 };
 
 class smt_convt: public prop_convt
@@ -75,9 +82,9 @@ public:
                                const expr2tc &temp) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, const expr2tc &t) = 0;
+  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &t) = 0;
   virtual smt_ast *mk_smt_real(const mp_integer &thereal, const expr2tc &t) = 0;
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w, const expr2tc &t) = 0;
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w, const expr2tc &t) = 0;
   virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t) = 0;
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t) =0;
   virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;

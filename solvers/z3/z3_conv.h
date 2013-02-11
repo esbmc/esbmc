@@ -179,9 +179,9 @@ private:
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
 
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, const expr2tc &t);
+  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &t);
   virtual smt_ast *mk_smt_real(const mp_integer &theint, const expr2tc &t);
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, unsigned int w, const expr2tc &t);
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w, const expr2tc &t);
   virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
@@ -255,7 +255,8 @@ public:
   #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   class z3_smt_ast : public smt_ast {
   public:
-    z3_smt_ast(z3::expr _e, const expr2tc &e2) : e(_e), expr(e2) { }
+    z3_smt_ast(z3::expr _e, const smt_sort *_s, const expr2tc &e2) :
+              smt_ast(_s), e(_e), expr(e2) { }
     z3::expr e;
     expr2tc expr;
   };
