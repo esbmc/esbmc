@@ -74,6 +74,8 @@ enum smt_func_kind {
 
   SMT_FUNC_EQ,
   SMT_FUNC_NOTEQ,
+
+  SMT_FUNC_ITE,
 };
 
 class smt_sort {
