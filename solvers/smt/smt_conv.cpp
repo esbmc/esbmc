@@ -1,5 +1,19 @@
 #include "smt_conv.h"
 
+// Helpers extracted from z3_convt.
+
+std::string
+extract_magnitude(std::string v, unsigned width)
+{
+    return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
+}
+
+std::string
+extract_fraction(std::string v, unsigned width)
+{
+    return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
+}
+
 smt_convt::smt_convt(bool enable_cache, bool intmode)
   : caching(enable_cache), int_encoding(intmode)
 {
@@ -236,7 +250,27 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
-    return mk_smt_real(thereal.value.to_integer(), expr);
+    if (int_encoding) {
+      return mk_smt_real(thereal.value.to_integer(), expr);
+    } else {
+      assert(thereal.type->get_width() <= 64 && "Converting fixedbv constant to"
+             " SMT, too large to fit into a uint64_t");
+
+      uint64_t magnitude, fraction, fin;
+      unsigned int bitwidth = thereal.type->get_width();
+      std::string m, f, c;
+      std::string theval = thereal.value.to_expr().value().as_string();
+
+      m = extract_magnitude(theval, bitwidth);
+      f = extract_fraction(theval, bitwidth);
+      magnitude = atoi(m.c_str());
+      fraction = atoi(f.c_str());
+
+      magnitude <<= (bitwidth / 2);
+      fin = magnitude | fraction;
+
+      return mk_smt_bvint(mp_integer(fin), false, bitwidth, expr);
+    }
   }
   case expr2t::constant_bool_id:
   {
