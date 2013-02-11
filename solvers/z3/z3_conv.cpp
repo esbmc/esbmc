@@ -2959,45 +2959,45 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   default:
     z3::expr ast;
     convert_bv(temp, ast);
-    return new z3_smt_ast(ast);
+    return new z3_smt_ast(ast, temp);
   }
 }
 
 smt_ast *
-z3_convt::mk_smt_int(const mp_integer &theint)
+z3_convt::mk_smt_int(const mp_integer &theint, const expr2tc &temp)
 {
   if (theint.is_negative())
-    return new z3_smt_ast(ctx.int_val(theint.to_int64()));
+    return new z3_smt_ast(ctx.int_val(theint.to_int64()), temp);
   else
-    return new z3_smt_ast(ctx.int_val(theint.to_uint64()));
+    return new z3_smt_ast(ctx.int_val(theint.to_uint64()), temp);
 }
 
 smt_ast *
-z3_convt::mk_smt_real(const mp_integer &theval)
+z3_convt::mk_smt_real(const mp_integer &theval, const expr2tc &temp)
 {
-  return new z3_smt_ast(ctx.real_val(theval.to_int64()));
+  return new z3_smt_ast(ctx.real_val(theval.to_int64()), temp);
 }
 
 smt_ast *
-z3_convt::mk_smt_bvint(const mp_integer &theint, unsigned int width)
+z3_convt::mk_smt_bvint(const mp_integer &theint, unsigned int width, const expr2tc &temp)
 {
   if (theint.is_negative())
-    return new z3_smt_ast(ctx.bv_val(theint.to_int64(), width));
+    return new z3_smt_ast(ctx.bv_val(theint.to_int64(), width), temp);
   else
-    return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width));
+    return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width), temp);
 }
 
 smt_ast *
-z3_convt::mk_smt_bool(bool val)
+z3_convt::mk_smt_bool(bool val, const expr2tc &temp)
 {
-  return new z3_smt_ast(ctx.bool_val(val));
+  return new z3_smt_ast(ctx.bool_val(val), temp);
 }
 
 smt_ast *
-z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
+z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &temp)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
-  return new z3_smt_ast(ctx.constant(name.c_str(), zs->s));
+  return new z3_smt_ast(ctx.constant(name.c_str(), zs->s), temp);
 }
 
 smt_sort *
