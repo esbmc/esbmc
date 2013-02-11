@@ -47,6 +47,7 @@ enum smt_func_kind {
   SMT_FUNC_BVNXOR,
   SMT_FUNC_BVNOR,
   SMT_FUNC_BVNAND,
+  SMT_FUNC_BVXOR,
 };
 
 class smt_sort {
