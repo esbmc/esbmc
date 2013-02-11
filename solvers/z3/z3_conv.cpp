@@ -2967,15 +2967,12 @@ z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k
   // the solver, then that's absolutely fine.
   switch (k) {
   case SMT_FUNC_ADD:
-    return new z3_smt_ast(mk_add(asts[0]->e, asts[1]->e), temp);
   case SMT_FUNC_BVADD:
     return new z3_smt_ast(mk_add(asts[0]->e, asts[1]->e), temp);
   case SMT_FUNC_SUB:
-    return new z3_smt_ast(mk_sub(asts[0]->e, asts[1]->e), temp);
   case SMT_FUNC_BVSUB:
     return new z3_smt_ast(mk_sub(asts[0]->e, asts[1]->e), temp);
   case SMT_FUNC_MUL:
-    return new z3_smt_ast((asts[0]->e * asts[1]->e), temp);
   case SMT_FUNC_BVMUL:
     return new z3_smt_ast((asts[0]->e * asts[1]->e), temp);
   case SMT_FUNC_HACKS:
