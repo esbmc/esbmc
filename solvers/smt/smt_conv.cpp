@@ -144,6 +144,10 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv div yet");
     assert(0);
   }
+  // Blocked on tuple support:
+  case expr2t::same_object_id:
+  case expr2t::pointer_offset_id:
+  case expr2t::pointer_object_id:
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
