@@ -81,6 +81,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_ast *args[4];
   const smt_sort *sort;
   smt_ast *a;
+  unsigned int num_args;
   bool pointer_arith_detected = false;
 
   if (caching) {
@@ -96,6 +97,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_pointer_type(*it))
       pointer_arith_detected = true;
   }
+  num_args = i;
 
   sort = convert_sort(expr->type);
 
@@ -114,12 +116,14 @@ smt_convt::convert_ast(const expr2tc &expr)
     break;
   case expr2t::add_id:
   {
+    assert(num_args == 2);
     smt_func_kind k = (int_encoding) ? SMT_FUNC_ADD : SMT_FUNC_BVADD;
     a = mk_func_app(sort, k, &args[0], 2, expr);
     break;
   }
   case expr2t::sub_id:
   {
+    assert(num_args == 2);
     smt_func_kind k = (int_encoding) ? SMT_FUNC_SUB : SMT_FUNC_BVSUB;
     a = mk_func_app(sort, k, &args[0], 2, expr);
     break;
