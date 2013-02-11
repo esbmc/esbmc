@@ -81,6 +81,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_ast *args[4];
   const smt_sort *sort;
   smt_ast *a;
+  bool pointer_arith_detected = false;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -92,9 +93,17 @@ smt_convt::convert_ast(const expr2tc &expr)
   unsigned int i = 0;
   forall_operands2(it, idx, expr) {
     args[i++] = convert_ast(*it);
+    if (is_pointer_type(*it))
+      pointer_arith_detected = true;
   }
 
   sort = convert_sort(expr->type);
+
+  if (pointer_arith_detected) {
+    // Skip thinking about pointer arith for the moment
+    a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
+    goto lolarith;
+  }
 
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
@@ -114,6 +123,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
 
+lolarith:
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
   return a;
