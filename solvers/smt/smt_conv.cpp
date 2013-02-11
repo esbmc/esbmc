@@ -156,6 +156,15 @@ smt_convt::convert_sort(const type2tc &type)
                                 : mk_sort(SMT_SORT_BV, 8);
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
+  case type2t::array_id:
+  {
+    // All arrays are indexed by integerse
+    smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
+                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width);
+    const array_type2t &arr = to_array_type(type);
+    smt_sort *r = convert_sort(arr.subtype);
+    return mk_sort(SMT_SORT_ARRAY, d, r);
+  }
   case type2t::code_id:
   case type2t::cpp_name_id:
   case type2t::symbol_id:
