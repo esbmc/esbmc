@@ -148,7 +148,7 @@ public:
   bool caching;
   bool int_encoding;
 
-  static expr_op_convert smt_convert_table[expr2t::end_expr_id];
+  static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
