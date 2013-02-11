@@ -247,6 +247,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //const int
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //const fixedbv
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //const bool
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //const string
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //const struct
