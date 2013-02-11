@@ -15,15 +15,14 @@ extract_fraction(std::string v, unsigned width)
 }
 
 static unsigned int
-get_member_name_field(const type2tc &t, const expr2tc &name)
+get_member_name_field(const type2tc &t, const irep_idt &name)
 {
-  const constant_string2t &str = to_constant_string2t(name);
   unsigned int idx = 0;
   const struct_union_data &data_ref =
           dynamic_cast<const struct_union_data &>(*t);
 
   forall_names(it, data_ref.member_names) {
-    if (*it == str.value)
+    if (*it == name)
       break;
     idx++;
   }
@@ -31,6 +30,13 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
          "Member name of with expr not found in struct/union type");
 
   return idx;
+}
+
+static unsigned int
+get_member_name_field(const type2tc &t, const expr2tc &name)
+{
+  const constant_string2t &str = to_constant_string2t(name);
+  return get_member_name_field(t, str.value);
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode)
@@ -184,6 +190,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     const with2t &with = to_with2t(expr);
     unsigned int idx = get_member_name_field(expr->type, with.update_field);
     a = tuple_update(args[0], idx, args[2], expr);
+  }
+  case expr2t::member_id:
+  {
+    const smt_sort *sort = convert_sort(expr->type);
+    const member2t &memb = to_member2t(expr);
+    unsigned int idx = get_member_name_field(expr->type, memb.member);
+    a = tuple_project(args[0], sort, idx, expr);
   }
   case expr2t::same_object_id:
   case expr2t::pointer_offset_id:
