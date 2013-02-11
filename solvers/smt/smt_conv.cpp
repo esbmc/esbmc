@@ -78,7 +78,9 @@ smt_convt::convert_expr(const expr2tc &expr)
 const smt_ast *
 smt_convt::convert_ast(const expr2tc &expr)
 {
-  smt_ast *args[4];
+  const smt_ast *args[4];
+  const smt_sort *sort;
+  smt_ast *a;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -86,22 +88,27 @@ smt_convt::convert_ast(const expr2tc &expr)
       return (cache_result->ast);
   }
 
-#if 0
   // Convert /all the arguments/.
   unsigned int i = 0;
-  forall_operands(it, idx, expr) {
-#endif
+  forall_operands2(it, idx, expr) {
+    args[i++] = convert_ast(*it);
+  }
 
+  sort = convert_sort(expr->type);
 
-  smt_ast *a;
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   case expr2t::constant_fixedbv_id:
   case expr2t::constant_bool_id:
   case expr2t::symbol_id:
     a = convert_terminal(expr);
+  case expr2t::add_id:
+  {
+    smt_func_kind k = (int_encoding) ? SMT_FUNC_ADD : SMT_FUNC_BVADD;
+    a = mk_func_app(sort, k, &args[0], 2, expr);
+  }
   default:
-    a = mk_func_app(NULL, SMT_FUNC_HACKS, &args[0], 0, expr);
+    a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
   }
 
   struct smt_cache_entryt entry = { expr, a, ctx_level };
