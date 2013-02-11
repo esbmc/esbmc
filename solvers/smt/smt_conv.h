@@ -71,6 +71,9 @@ enum smt_func_kind {
   SMT_FUNC_GTE,
   SMT_FUNC_BVSGTE,
   SMT_FUNC_BVUGTE,
+
+  SMT_FUNC_EQ,
+  SMT_FUNC_NOTEQ,
 };
 
 class smt_sort {
