@@ -145,6 +145,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     assert(0);
   }
   // Blocked on tuple support:
+  case expr2t::with_id: // That is, struct with's
   case expr2t::same_object_id:
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
