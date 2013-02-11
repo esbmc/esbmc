@@ -298,7 +298,9 @@ smt_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
 
 smt_ast *
 smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
-                         unsigned int i __attribute__((unused)))
+                         const smt_sort *s __attribute__((unused)),
+                         unsigned int i __attribute__((unused)),
+                         const expr2tc &tmp __attribute__((unused)))
 {
   assert(0);
 }
@@ -306,7 +308,8 @@ smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
 smt_ast *
 smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
                         unsigned int i __attribute__((unused)),
-                        const smt_ast *v __attribute__((unused)))
+                        const smt_ast *v __attribute__((unused)),
+                        const expr2tc &tmp __attribute__((unused)))
 {
   assert(0);
 }

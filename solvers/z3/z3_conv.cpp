@@ -3171,6 +3171,30 @@ z3_convt::mk_lit(const smt_ast *a)
   return l;
 }
 
+smt_ast *
+z3_convt::tuple_create(const expr2tc &structdef)
+{
+  z3::expr e;
+  convert_bv(structdef, e);
+  smt_sort *s = mk_struct_sort(structdef->type);
+  return new z3_smt_ast(e, s, structdef);
+}
+
+smt_ast *
+z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field, const expr2tc &tmp)
+{
+  const z3_smt_ast *za = z3_smt_downcast(a);
+  return new z3_smt_ast(mk_tuple_select(za->e, field), s, tmp);
+}
+
+smt_ast *
+z3_convt::tuple_update(const smt_ast *a, unsigned int field, const smt_ast *val, const expr2tc &tmp)
+{
+  const z3_smt_ast *za = z3_smt_downcast(a);
+  const z3_smt_ast *zu = z3_smt_downcast(val);
+  return new z3_smt_ast(mk_tuple_update(za->e, field, zu->e), za->sort, tmp);
+}
+
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {
   void ast::dump(void) const {

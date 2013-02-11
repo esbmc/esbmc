@@ -147,9 +147,9 @@ public:
   // solver being used might have its own support for (in which case it should
   // override the below).
   virtual smt_ast *tuple_create(const expr2tc &structdef);
-  virtual smt_ast *tuple_project(const smt_ast *a, unsigned int field);
+  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field, const expr2tc &tmp);
   virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                const smt_ast *val);
+                                const smt_ast *val, const expr2tc &tmp);
 
   // Internal foo
 
