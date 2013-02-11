@@ -70,12 +70,33 @@ smt_convt::convert_expr(const expr2tc &expr)
       return mk_lit(cache_result->ast);
   }
 
-  // Funky recursion stuff goes here. In the meantime, dummy values.
-  smt_ast *a = mk_func_app(NULL, SMT_FUNC_HACKS, &args[0], 0, expr);
+  smt_ast *a;
+  switch (expr->expr_id) {
+  case expr2t::constant_int_id:
+  case expr2t::constant_fixedbv_id:
+  case expr2t::constant_bool_id:
+  case expr2t::symbol_id:
+    a = convert_terminal(expr);
+  default:
+    a = mk_func_app(NULL, SMT_FUNC_HACKS, &args[0], 0, expr);
+  }
 
   struct smt_cache_entryt entry = { expr, a, ctx_level };
   smt_cache.insert(entry);
 
   literalt l = mk_lit(a);
   return l;
+}
+
+smt_ast *
+smt_convt::convert_terminal(const expr2tc &expr)
+{
+  switch (expr->expr_id) {
+  case expr2t::constant_int_id:
+  case expr2t::constant_fixedbv_id:
+  case expr2t::constant_bool_id:
+  case expr2t::symbol_id:
+  default:
+    return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0, expr);
+  }
 }
