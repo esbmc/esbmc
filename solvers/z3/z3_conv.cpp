@@ -3036,24 +3036,26 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   switch (k) {
   case SMT_SORT_INT:
     thebool = va_arg(ap, int);
-    s = new z3_smt_sort(ctx.int_sort(), thebool);
+    s = new z3_smt_sort(k, ctx.int_sort(), thebool);
     break;
   case SMT_SORT_REAL:
-    s = new z3_smt_sort(ctx.real_sort());
+    s = new z3_smt_sort(k, ctx.real_sort());
     break;
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    s = new z3_smt_sort(ctx.bv_sort(uint), thebool);
+    s = new z3_smt_sort(k, ctx.bv_sort(uint), thebool);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
-    s = new z3_smt_sort(ctx.array_sort(dom->s, range->s));
+    s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s));
     break;
   case SMT_SORT_BOOL:
-    s = new z3_smt_sort(ctx.bool_sort());
+    s = new z3_smt_sort(k, ctx.bool_sort());
     break;
+  default:
+    assert(0);
   }
 
   return s;
@@ -3064,7 +3066,7 @@ z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(s);
+  return new z3_smt_sort(SMT_SORT_STRUCT, s);
 }
 
 smt_sort *
@@ -3072,7 +3074,7 @@ z3_convt::mk_union_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(s);
+  return new z3_smt_sort(SMT_SORT_UNION, s);
 }
 
 literalt

@@ -10,7 +10,8 @@ enum smt_sort_kind {
   SMT_SORT_BV = 4,
   SMT_SORT_ARRAY = 8,
   SMT_SORT_BOOL = 16,
-  // How about structs? Tuples? Not SMT but could be identified.
+  SMT_SORT_STRUCT = 32,
+  SMT_SORT_UNION = 64, // Contencious
 };
 
 #define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
@@ -37,6 +38,9 @@ enum smt_func_kind {
 
 class smt_sort {
   // Same story as smt_ast.
+public:
+  smt_sort_kind id;
+  smt_sort(smt_sort_kind i) : id(i) { }
 };
 
 class smt_ast {
