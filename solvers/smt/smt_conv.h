@@ -10,7 +10,10 @@ enum smt_sort_kind {
   SMT_SORT_BV = 4,
   SMT_SORT_ARRAY = 8,
   SMT_SORT_BOOL = 16,
+  // How about structs? Tuples? Not SMT but could be identified.
 };
+
+#define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
 
 enum smt_func_kind {
   // Terminals
