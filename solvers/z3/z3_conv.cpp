@@ -2954,6 +2954,11 @@ smt_ast *
 z3_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)), smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)), const expr2tc &temp __attribute__((unused)))
 {
 
+  // So: this method is liable to become one /huge/ switch case that deals with
+  // the conversion of most SMT function applications. This normally would
+  // be bad; however I figure that if _all_ logic is handled at the higher SMT
+  // layer, and all this method does is actually pass arguments through to
+  // the solver, then that's absolutely fine.
   switch (k) {
   case SMT_FUNC_HACKS:
   default:
