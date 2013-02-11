@@ -148,8 +148,15 @@ smt_convt::convert_sort(const type2tc &type)
     else
       return mk_sort(SMT_SORT_BV, width);
   }
-  case type2t::code_id:
   case type2t::string_id:
+  {
+    smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
+                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width);
+    smt_sort *r = (int_encoding)? mk_sort(SMT_SORT_INT)
+                                : mk_sort(SMT_SORT_BV, 8);
+    return mk_sort(SMT_SORT_ARRAY, d, r);
+  }
+  case type2t::code_id:
   case type2t::cpp_name_id:
   case type2t::symbol_id:
   case type2t::empty_id:
