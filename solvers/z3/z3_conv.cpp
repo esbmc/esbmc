@@ -3028,6 +3028,27 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
     return new z3_smt_ast(mk_and(asts[0]->e, asts[1]->e), s, temp);
   case SMT_FUNC_NOT:
     return new z3_smt_ast(!asts[0]->e, s, temp);
+  // NB: mk_{l,g}t{,e} ignore unsigned arg in integer mode.
+  case SMT_FUNC_LT:
+  case SMT_FUNC_BVULT:
+    return new z3_smt_ast(mk_lt(asts[0]->e, asts[1]->e, true), s, temp);
+  case SMT_FUNC_BVSLT:
+    return new z3_smt_ast(mk_lt(asts[0]->e, asts[1]->e, false), s, temp);
+  case SMT_FUNC_GT:
+  case SMT_FUNC_BVUGT:
+    return new z3_smt_ast(mk_gt(asts[0]->e, asts[1]->e, true), s, temp);
+  case SMT_FUNC_BVSGT:
+    return new z3_smt_ast(mk_gt(asts[0]->e, asts[1]->e, false), s, temp);
+  case SMT_FUNC_LTE:
+  case SMT_FUNC_BVULTE:
+    return new z3_smt_ast(mk_le(asts[0]->e, asts[1]->e, true), s, temp);
+  case SMT_FUNC_BVSLTE:
+    return new z3_smt_ast(mk_le(asts[0]->e, asts[1]->e, false), s, temp);
+  case SMT_FUNC_GTE:
+  case SMT_FUNC_BVUGTE:
+    return new z3_smt_ast(mk_ge(asts[0]->e, asts[1]->e, true), s, temp);
+  case SMT_FUNC_BVSGTE:
+    return new z3_smt_ast(mk_ge(asts[0]->e, asts[1]->e, false), s, temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;

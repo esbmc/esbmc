@@ -57,6 +57,20 @@ enum smt_func_kind {
   SMT_FUNC_OR,
   SMT_FUNC_AND,
   SMT_FUNC_NOT,
+
+  // Comparisons
+  SMT_FUNC_LT,
+  SMT_FUNC_BVSLT,
+  SMT_FUNC_BVULT,
+  SMT_FUNC_GT,
+  SMT_FUNC_BVSGT,
+  SMT_FUNC_BVUGT,
+  SMT_FUNC_LTE,
+  SMT_FUNC_BVSLTE,
+  SMT_FUNC_BVULTE,
+  SMT_FUNC_GTE,
+  SMT_FUNC_BVSGTE,
+  SMT_FUNC_BVUGTE,
 };
 
 class smt_sort {
