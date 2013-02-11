@@ -88,6 +88,27 @@ smt_convt::convert_expr(const expr2tc &expr)
   return l;
 }
 
+smt_sort *
+smt_convt::convert_sort(const type2tc &type)
+{
+  switch (type->type_id) {
+  case type2t::bool_id:
+  case type2t::empty_id:
+  case type2t::symbol_id:
+  case type2t::struct_id:
+  case type2t::union_id:
+  case type2t::code_id:
+  case type2t::pointer_id:
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  case type2t::fixedbv_id:
+  case type2t::string_id:
+  case type2t::cpp_name_id:
+  default:
+    assert(0);
+  }
+}
+
 smt_ast *
 smt_convt::convert_terminal(const expr2tc &expr)
 {

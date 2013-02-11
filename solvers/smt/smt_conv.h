@@ -79,6 +79,7 @@ public:
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
 
+  smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
 
   // Types
