@@ -212,6 +212,7 @@ public:
   union_varst union_vars;
   smt_cachet smt_cache;
   type2tc pointer_struct;
+  const struct_type2t *pointer_type_data; // ptr of pointer_struct
   bool caching;
   bool int_encoding;
 

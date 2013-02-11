@@ -50,7 +50,9 @@ smt_convt::smt_convt(bool enable_cache, bool intmode)
   names.push_back(irep_idt("pointer_object"));
   names.push_back(irep_idt("pointer_offset"));
 
-  pointer_struct = type2tc(new struct_type2t(members, names, "pointer_struct"));
+  struct_type2t *tmp = new struct_type2t(members, names, "pointer_struct");
+  pointer_type_data = tmp;
+  pointer_struct = type2tc(tmp);
 }
 
 smt_convt::~smt_convt(void)
@@ -199,6 +201,14 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = tuple_project(args[0], sort, idx, expr);
   }
   case expr2t::same_object_id:
+  {
+    // Two projects, then comparison.
+    smt_sort *s = convert_sort(pointer_type_data->members[0]);
+    args[0] = tuple_project(args[0], s, 0, expr2tc());
+    args[1] = tuple_project(args[1], s, 0, expr2tc());
+    a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr);
+    break;
+  }
   case expr2t::pointer_offset_id:
   case expr2t::pointer_object_id:
   default:
