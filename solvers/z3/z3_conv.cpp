@@ -553,7 +553,7 @@ z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
   Z3_symbol proj_names[2];
   Z3_sort proj_types[2];
 
-  tuple_name = z3::symbol(ctx, "pointer_tuple");
+  tuple_name = z3::symbol(ctx, "struct_type_pointer_struct");
   int_sort = ctx.esbmc_int_sort();
   proj_types[0] = proj_types[1] = int_sort;
 
@@ -680,7 +680,7 @@ z3_convt::setup_pointer_sort(void)
   proj_type = ctx.esbmc_int_sort();
   sort_arr[0] = sort_arr[1] = proj_type;
 
-  mk_tuple_name = z3::symbol(ctx, "pointer_tuple");
+  mk_tuple_name = z3::symbol(ctx, "struct_type_pointer_struct");
   proj_names[0] = z3::symbol(ctx, "object");
   proj_names[1] = z3::symbol(ctx, "index");
   proj_names_ref[0] = proj_names[0];
