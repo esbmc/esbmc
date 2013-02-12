@@ -161,6 +161,7 @@ public:
   smt_ast *convert_terminal(const expr2tc &expr);
   const smt_ast *convert_ast(const expr2tc &expr);
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  const smt_ast *convert_addr_of(const expr2tc &expr);
 
   // Types
 

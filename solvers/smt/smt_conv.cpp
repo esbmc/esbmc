@@ -474,6 +474,86 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   assert(0 && "Fell through convert_pointer_logic");
 }
 
+#if 0
+const smt_ast *
+smt_convt::convert_addr_of(const expr2tc &expr)
+{
+  const address_of2t &addrof = to_address_of2t(expr);
+
+  std::string symbol_name, out;
+
+  if (is_index2t(obj.ptr_obj)) {
+    const index2t &idx = to_index2t(obj.ptr_obj);
+
+    if (!is_string_type(idx.source_value)) {
+      const array_type2t &arr = to_array_type(idx.source_value->type);
+
+      // Pick pointer-to array subtype; need to make pointer arith work.
+      address_of2tc addrof(arr.subtype, idx.source_value);
+      add2tc plus(addrof->type, addrof, idx.index);
+      return convert_ast(plus);
+    } else {
+      // Strings; convert with slightly different types.
+      type2tc stringtype(new unsignedbv_type2t(8));
+      address_of2tc addrof(stringtype, idx.source_value);
+      add2tc plus(addrof->type, addrof, idx.index);
+      convert_ast(plus);
+    }
+  } else if (is_member2t(obj.ptr_obj)) {
+    const member2t &memb = to_member2t(obj.ptr_obj);
+
+    int64_t offs;
+    if (is_struct_type(memb.source_value)) {
+      const struct_type2t &type = to_struct_type(memb.source_value->type);
+      offs = member_offset(type, memb.member).to_long();
+    } else {
+      offs = 0; // Offset is always zero for unions.
+    }
+
+    address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
+                       memb.source_value);
+
+    const smt_ast *a = convert_ast(addr);
+
+    // Update pointer offset to offset to that field.
+    constant_int2tc offset(get_int_type(config.ansi_c.int_width), BigInt(offs));
+    const smt_ast *o = convert_ast(offset);
+    return tuple_update(a, 1, o, expr);
+  } else if (is_symbol2t(obj.ptr_obj)) {
+// XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
+
+    const symbol2t &symbol = to_symbol2t(obj.ptr_obj);
+#error bees
+    convert_identifier_pointer(obj.ptr_obj, symbol.get_symbol_name(), output);
+  } else if (is_constant_string2t(obj.ptr_obj)) {
+    // XXXjmorse - we should avoid encoding invalid characters in the symbol,
+    // but this works for now.
+    const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
+    std::string identifier =
+      "address_of_str_const(" + str.value.as_string() + ")";
+    convert_identifier_pointer(obj.ptr_obj, identifier, output);
+  } else if (is_if2t(obj.ptr_obj)) {
+    // We can't nondeterministically take the address of something; So instead
+    // rewrite this to be if (cond) ? &a : &b;.
+
+    const if2t &ifval = to_if2t(obj.ptr_obj);
+
+    address_of2tc addrof1(obj.type, ifval.true_value);
+    address_of2tc addrof2(obj.type, ifval.false_value);
+    if2tc newif(obj.type, ifval.cond, addrof1, addrof2);
+    return convert_ast(newif);
+  } else if (is_typecast2t(obj.ptr_obj)) {
+    // Take the address of whatevers being casted. Either way, they all end up
+    // being of a pointer_tuple type, so this should be fine.
+    address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
+    tmp.get()->type = obj.type;
+    return convert_ast(tmp);
+  } else {
+    assert(0 && "Unrecognized address_of operand");
+  }
+}
+#endif
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
