@@ -475,6 +475,253 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 }
 
 #if 0
+void
+z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
+                                     z3::expr &output)
+{
+  std::string cte, identifier;
+  unsigned int obj_num;
+  bool got_obj_num = false;
+
+  if (is_symbol2t(expr)) {
+    const symbol2t &sym = to_symbol2t(expr);
+    if (sym.thename == "NULL" || sym.thename == "0") {
+      obj_num = pointer_logic.back().get_null_object();
+      got_obj_num = true;
+    }
+  }
+
+  if (!got_obj_num)
+    // add object won't duplicate objs for identical exprs (it's a map)
+    obj_num = pointer_logic.back().add_object(expr);
+
+  output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
+
+  // If this object hasn't yet been put in the address space record, we need to
+  // assert that the symbol has the object ID we've allocated, and then fill out
+  // the address space record.
+  if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
+
+    z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
+                                       ctx.esbmc_int_val(0));
+
+    z3::expr constraint = output == ptr_val;
+    assert_formula(constraint);
+
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+
+    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
+    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
+
+    symbol2tc start_sym(ptr_loc_type, start_name);
+    symbol2tc end_sym(ptr_loc_type, end_name);
+
+    // Another thing to note is that the end var must be /the size of the obj/
+    // from start. Express this in irep.
+    expr2tc endisequal;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      constant_int2tc const_offs(ptr_loc_type, BigInt(type_size));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Dynamically (nondet) sized array; take that size and use it for the
+      // offset-to-end expression.
+      const expr2tc size_expr = e->size;
+      add2tc start_plus_offs(ptr_loc_type, start_sym, size_expr);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      constant_int2tc const_offs(ptr_loc_type, BigInt(1));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    }
+
+    // Also record the amount of memory space we're working with for later usage
+    total_mem_space.back() +=
+      pointer_offset_size(*expr->type.get()).to_long() + 1;
+
+    // Assert that start + offs == end
+    z3::expr offs_eq;
+    convert_bv(endisequal, offs_eq);
+    assert_formula(offs_eq);
+
+    // Even better, if we're operating in bitvector mode, it's possible that
+    // Z3 will try to be clever and arrange the pointer range to cross the end
+    // of the address space (ie, wrap around). So, also assert that end > start
+    greaterthan2tc wraparound(end_sym, start_sym);
+    z3::expr wraparound_eq;
+    convert_bv(wraparound, wraparound_eq);
+    assert_formula(wraparound_eq);
+
+    // Generate address space layout constraints.
+    finalize_pointer_chain(obj_num);
+
+    addr_space_data.back()[obj_num] =
+          pointer_offset_size(*expr->type.get()).to_long() + 1;
+
+    z3::expr start_ast, end_ast;
+    convert_bv(start_sym, start_ast);
+    convert_bv(end_sym, end_ast);
+
+    // Actually store into array
+    z3::expr range_tuple = ctx.constant(
+                       ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
+                       addr_space_tuple_sort);
+    z3::expr init_val =
+      addr_space_tuple_decl.make_tuple("", &start_ast, &end_ast, NULL);
+    z3::expr eq = range_tuple == init_val;
+    assert_formula(eq);
+
+    // Update array
+    bump_addrspace_array(obj_num, range_tuple);
+
+    // Finally, ensure that the array storing whether this pointer is dynamic,
+    // is initialized for this ptr to false. That way, only pointers created
+    // through malloc will be marked dynamic.
+
+    type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
+                                     expr2tc((expr2t*)NULL), true));
+    symbol2tc allocarr(arrtype, dyn_info_arr_name);
+    z3::expr allocarray;
+    convert_bv(allocarr, allocarray);
+
+    z3::expr idxnum = ctx.esbmc_int_val(obj_num);
+    z3::expr select = z3::select(allocarray, idxnum);
+    z3::expr isfalse = ctx.bool_val(false) == select;
+    assert_formula(isfalse);
+  }
+
+  DEBUGLOC;
+}
+
+void
+z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
+                                     z3::expr &output)
+{
+  std::string cte, identifier;
+  unsigned int obj_num;
+  bool got_obj_num = false;
+
+  if (is_symbol2t(expr)) {
+    const symbol2t &sym = to_symbol2t(expr);
+    if (sym.thename == "NULL" || sym.thename == "0") {
+      obj_num = pointer_logic.back().get_null_object();
+      got_obj_num = true;
+    }
+  }
+
+  if (!got_obj_num)
+    // add object won't duplicate objs for identical exprs (it's a map)
+    obj_num = pointer_logic.back().add_object(expr);
+
+  output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
+
+  // If this object hasn't yet been put in the address space record, we need to
+  // assert that the symbol has the object ID we've allocated, and then fill out
+  // the address space record.
+  if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
+
+    z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
+                                       ctx.esbmc_int_val(0));
+
+    z3::expr constraint = output == ptr_val;
+    assert_formula(constraint);
+
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+
+    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
+    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
+
+    symbol2tc start_sym(ptr_loc_type, start_name);
+    symbol2tc end_sym(ptr_loc_type, end_name);
+
+    // Another thing to note is that the end var must be /the size of the obj/
+    // from start. Express this in irep.
+    expr2tc endisequal;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      constant_int2tc const_offs(ptr_loc_type, BigInt(type_size));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      // Dynamically (nondet) sized array; take that size and use it for the
+      // offset-to-end expression.
+      const expr2tc size_expr = e->size;
+      add2tc start_plus_offs(ptr_loc_type, start_sym, size_expr);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      constant_int2tc const_offs(ptr_loc_type, BigInt(1));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      endisequal = equality2tc(start_plus_offs, end_sym);
+    }
+
+    // Also record the amount of memory space we're working with for later usage
+    total_mem_space.back() +=
+      pointer_offset_size(*expr->type.get()).to_long() + 1;
+
+    // Assert that start + offs == end
+    z3::expr offs_eq;
+    convert_bv(endisequal, offs_eq);
+    assert_formula(offs_eq);
+
+    // Even better, if we're operating in bitvector mode, it's possible that
+    // Z3 will try to be clever and arrange the pointer range to cross the end
+    // of the address space (ie, wrap around). So, also assert that end > start
+    greaterthan2tc wraparound(end_sym, start_sym);
+    z3::expr wraparound_eq;
+    convert_bv(wraparound, wraparound_eq);
+    assert_formula(wraparound_eq);
+
+    // Generate address space layout constraints.
+    finalize_pointer_chain(obj_num);
+
+    addr_space_data.back()[obj_num] =
+          pointer_offset_size(*expr->type.get()).to_long() + 1;
+
+    z3::expr start_ast, end_ast;
+    convert_bv(start_sym, start_ast);
+    convert_bv(end_sym, end_ast);
+
+    // Actually store into array
+    z3::expr range_tuple = ctx.constant(
+                       ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
+                       addr_space_tuple_sort);
+    z3::expr init_val =
+      addr_space_tuple_decl.make_tuple("", &start_ast, &end_ast, NULL);
+    z3::expr eq = range_tuple == init_val;
+    assert_formula(eq);
+
+    // Update array
+    bump_addrspace_array(obj_num, range_tuple);
+
+    // Finally, ensure that the array storing whether this pointer is dynamic,
+    // is initialized for this ptr to false. That way, only pointers created
+    // through malloc will be marked dynamic.
+
+    type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
+                                     expr2tc((expr2t*)NULL), true));
+    symbol2tc allocarr(arrtype, dyn_info_arr_name);
+    z3::expr allocarray;
+    convert_bv(allocarr, allocarray);
+
+    z3::expr idxnum = ctx.esbmc_int_val(obj_num);
+    z3::expr select = z3::select(allocarray, idxnum);
+    z3::expr isfalse = ctx.bool_val(false) == select;
+    assert_formula(isfalse);
+  }
+
+  DEBUGLOC;
+}
+
+
 const smt_ast *
 smt_convt::convert_addr_of(const expr2tc &expr)
 {
