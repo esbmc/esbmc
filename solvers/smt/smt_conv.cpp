@@ -39,8 +39,8 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool enable_cache, bool intmode)
-  : caching(enable_cache), int_encoding(intmode)
+smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns)
+  : caching(enable_cache), int_encoding(intmode), ns(_ns)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -375,9 +375,9 @@ smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
 }
 
 const smt_ast *
-smt_convt::convert_pointer_arith(const expr2tc &expr __attribute__((unused)))
+smt_convt::convert_pointer_arith(const expr2tc &expr, const expr2tc &side1,
+                                 const expr2tc &side2, const type2tc &type)
 {
-#if 0
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
   //    return    op1        op2        action
@@ -404,13 +404,12 @@ smt_convt::convert_pointer_arith(const expr2tc &expr __attribute__((unused)))
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands");
+      assert(0 && "Pointer arithmetic with two pointer operands");
       break;
     case 4:
-      // Artithmatic operation that has the result type of ptr.
+      // Artithmetic operation that has the result type of ptr.
       // Should have been handled at a higher level
-      throw new conv_error("Non-pointer op being interpreted as pointer without"
-                           " typecast");
+      assert(0 && "Non-pointer op being interpreted as pointer without cast");
       break;
     case 1:
     case 2:
@@ -421,8 +420,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr __attribute__((unused)))
       add2tc add(ptr_op->type, ptr_op, non_ptr_op);
       // That'll generate the correct pointer arithmatic; now typecast
       typecast2tc cast(type, add);
-      convert_bv(cast, output);
-      break;
+      return convert_ast(cast);
       }
     case 5:
     case 6:
@@ -446,7 +444,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr __attribute__((unused)))
       expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
 
       expr2tc newexpr;
-      if (id == expr2t::add_id) {
+      if (is_add2t(expr)) {
         newexpr = add2tc(inttype, mul, ptr_offset);
       } else {
         // Preserve order for subtraction.
@@ -456,18 +454,15 @@ smt_convt::convert_pointer_arith(const expr2tc &expr __attribute__((unused)))
       }
 
       // Voila, we have our pointer arithmatic
-      convert_bv(newexpr, output);
+      const smt_ast *a = convert_ast(newexpr);
+      const smt_ast *the_ptr = convert_ast(ptr_op);
 
       // That calculated the offset; update field in pointer.
-      z3::expr the_ptr;
-      convert_bv(ptr_op, the_ptr);
-      output = mk_tuple_update(the_ptr, 1, output);
-
-      break;
+      return tuple_update(the_ptr, 1, a, expr);
       }
   }
-#endif
-abort();
+
+  assert(0 && "Fell through convert_pointer_logic");
 }
 
 const smt_convt::expr_op_convert

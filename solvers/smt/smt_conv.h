@@ -2,6 +2,10 @@
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
 #include <irep2.h>
+#include <namespace.h>
+
+#include <util/pointer_offset_size.h>
+
 #include <solvers/prop/prop_conv.h>
 
 enum smt_sort_kind {
@@ -118,7 +122,7 @@ public:
 class smt_convt: public prop_convt
 {
 public:
-  smt_convt(bool enable_cache, bool int_encoding);
+  smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns);
   ~smt_convt();
 
   virtual void push_ctx(void);
@@ -156,7 +160,8 @@ public:
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
   const smt_ast *convert_ast(const expr2tc &expr);
-  const smt_ast *convert_pointer_arith(const expr2tc &expr);
+  const smt_ast *convert_pointer_arith(const expr2tc &expr, const expr2tc &s1,
+                                       const expr2tc &s2, const type2tc &t);
 
   // Types
 
@@ -216,6 +221,7 @@ public:
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
   bool caching;
   bool int_encoding;
+  const namespacet &ns;
 
   static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
 };

@@ -302,8 +302,6 @@ public:
   z3::sort pointer_sort;
   z3::func_decl pointer_decl;
 
-  const namespacet &ns;
-
   Z3_context z3_ctx;
 };
 
