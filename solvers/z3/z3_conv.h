@@ -238,8 +238,6 @@ private:
 
   bool process_clause(const bvt &bv, bvt &dest);
 
-  std::list<pointer_logict> pointer_logic;
-
   // Some useful types
 public:
   class conv_error {

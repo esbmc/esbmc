@@ -7,6 +7,7 @@
 #include <util/pointer_offset_size.h>
 
 #include <solvers/prop/prop_conv.h>
+#include <solvers/prop/pointer_logic.h>
 
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
@@ -217,6 +218,7 @@ public:
   // Members
   union_varst union_vars;
   smt_cachet smt_cache;
+  std::list<pointer_logict> pointer_logic;
   type2tc pointer_struct;
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
   bool caching;

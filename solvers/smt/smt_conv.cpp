@@ -53,6 +53,8 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns)
   struct_type2t *tmp = new struct_type2t(members, names, "pointer_struct");
   pointer_type_data = tmp;
   pointer_struct = type2tc(tmp);
+
+  pointer_logic.push_back(pointer_logict());
 }
 
 smt_convt::~smt_convt(void)
@@ -62,6 +64,7 @@ smt_convt::~smt_convt(void)
 void
 smt_convt::push_ctx(void)
 {
+  pointer_logic.push_back(pointer_logic.back());
   prop_convt::push_ctx();
 }
 
@@ -74,6 +77,7 @@ smt_convt::pop_ctx(void)
   union_numindex.erase(ctx_level);
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
+  pointer_logic.pop_back();
 }
 
 void
