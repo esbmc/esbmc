@@ -121,7 +121,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 {
   const smt_ast *args[4];
   const smt_sort *sort;
-  smt_ast *a;
+  const smt_ast *a;
   unsigned int num_args, used_sorts = 0;
 
   if (caching) {
@@ -175,6 +175,12 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::symbol_id:
     a = convert_terminal(expr);
     break;
+  case expr2t::add_id:
+  case expr2t::sub_id:
+  {
+    a = convert_pointer_arith(expr, expr->type);
+    break;
+  }
   case expr2t::mul_id:
   {
     assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv mul yet");
