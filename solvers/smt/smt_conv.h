@@ -160,8 +160,7 @@ public:
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
   const smt_ast *convert_ast(const expr2tc &expr);
-  const smt_ast *convert_pointer_arith(const expr2tc &expr, const expr2tc &s1,
-                                       const expr2tc &s2, const type2tc &t);
+  const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
 
   // Types
 

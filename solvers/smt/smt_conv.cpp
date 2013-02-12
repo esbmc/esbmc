@@ -375,9 +375,12 @@ smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
 }
 
 const smt_ast *
-smt_convt::convert_pointer_arith(const expr2tc &expr, const expr2tc &side1,
-                                 const expr2tc &side2, const type2tc &type)
+smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
+  const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
+  const expr2tc &side1 = expr_ref.side_1;
+  const expr2tc &side2 = expr_ref.side_2;
+
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
   //    return    op1        op2        action
