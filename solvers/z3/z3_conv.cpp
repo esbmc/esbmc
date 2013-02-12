@@ -2370,72 +2370,72 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
   op2_is_ptr = (is_pointer_type(side2)) ? 1 : 0;
 
   switch (ret_is_ptr | op1_is_ptr | op2_is_ptr) {
-    case 0:
-      assert(false);
-      break;
-    case 3:
-    case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands");
-      break;
-    case 4:
-      // Artithmatic operation that has the result type of ptr.
-      // Should have been handled at a higher level
-      throw new conv_error("Non-pointer op being interpreted as pointer without"
-                           " typecast");
-      break;
-    case 1:
-    case 2:
-      { // Block required to give a variable lifetime to the cast/add variables
-      expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
-      expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
+  case 0:
+    assert(false);
+    break;
+  case 3:
+  case 7:
+    throw new conv_error("Pointer arithmatic with two pointer operands");
+    break;
+  case 4:
+    // Artithmatic operation that has the result type of ptr.
+    // Should have been handled at a higher level
+    throw new conv_error("Non-pointer op being interpreted as pointer without"
+                         " typecast");
+    break;
+  case 1:
+  case 2:
+    { // Block required to give a variable lifetime to the cast/add variables
+    expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
+    expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
-      add2tc add(ptr_op->type, ptr_op, non_ptr_op);
-      // That'll generate the correct pointer arithmatic; now typecast
-      typecast2tc cast(type, add);
-      convert_bv(cast, output);
-      break;
-      }
-    case 5:
-    case 6:
-      {
-      expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
-      expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
+    add2tc add(ptr_op->type, ptr_op, non_ptr_op);
+    // That'll generate the correct pointer arithmatic; now typecast
+    typecast2tc cast(type, add);
+    convert_bv(cast, output);
+    break;
+    }
+  case 5:
+  case 6:
+    {
+    expr2tc ptr_op = (op1_is_ptr) ? side1 : side2;
+    expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
-      // Actually perform some pointer arith
-      const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
-      typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
-      type2tc followed_type;
-      migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+    // Actually perform some pointer arith
+    const pointer_type2t &ptr_type = to_pointer_type(ptr_op->type);
+    typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
+    type2tc followed_type;
+    migrate_type(followed_type_old, followed_type);
+    mp_integer type_size = pointer_offset_size(*followed_type);
 
-      // Generate nonptr * constant.
-      type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
-      constant_int2tc constant(get_uint_type(32), type_size);
-      expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
+    // Generate nonptr * constant.
+    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    constant_int2tc constant(get_uint_type(32), type_size);
+    expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
 
-      // Add or sub that value
-      expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
+    // Add or sub that value
+    expr2tc ptr_offset = pointer_offset2tc(inttype, ptr_op);
 
-      expr2tc newexpr;
-      if (id == expr2t::add_id) {
-        newexpr = add2tc(inttype, mul, ptr_offset);
-      } else {
-        // Preserve order for subtraction.
-        expr2tc tmp_op1 = (op1_is_ptr) ? ptr_offset : mul;
-        expr2tc tmp_op2 = (op1_is_ptr) ? mul : ptr_offset;
-        newexpr = sub2tc(inttype, tmp_op1, tmp_op2);
-      }
+    expr2tc newexpr;
+    if (id == expr2t::add_id) {
+      newexpr = add2tc(inttype, mul, ptr_offset);
+    } else {
+      // Preserve order for subtraction.
+      expr2tc tmp_op1 = (op1_is_ptr) ? ptr_offset : mul;
+      expr2tc tmp_op2 = (op1_is_ptr) ? mul : ptr_offset;
+      newexpr = sub2tc(inttype, tmp_op1, tmp_op2);
+    }
 
-      // Voila, we have our pointer arithmatic
-      convert_bv(newexpr, output);
+    // Voila, we have our pointer arithmatic
+    convert_bv(newexpr, output);
 
-      // That calculated the offset; update field in pointer.
-      z3::expr the_ptr;
-      convert_bv(ptr_op, the_ptr);
-      output = mk_tuple_update(the_ptr, 1, output);
+    // That calculated the offset; update field in pointer.
+    z3::expr the_ptr;
+    convert_bv(ptr_op, the_ptr);
+    output = mk_tuple_update(the_ptr, 1, output);
 
-      break;
-      }
+    break;
+    }
   }
 }
 
