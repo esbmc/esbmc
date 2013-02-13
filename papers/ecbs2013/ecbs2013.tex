@@ -526,6 +526,12 @@ several C++ benchmarks and a real-world C++ application used in the telecommunic
 In Section~\ref{related-work}, we discuss the related work and we conclude and describe
 future work in Section~\ref{conclusions}.
 
+\begin{figure*}[ht] \centering
+\includegraphics[scale=0.45]{figures/esbmc-arch}
+\caption{ESBMC++ Architecture.}
+\label{figure:esbmc-arch}
+\end{figure*}
+
 %------------------------------
 \section{Background}
 %------------------------------
@@ -718,7 +724,7 @@ same.
 \smallskip\noindent{\bf Tool Architecture.}
 %------------------------------------------------------
 %
-The tool's architecture is shown in XXXXX. The first step is the source code parser,
+The tool's architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step is the source code parser,
 ESBMC++ takes a C++ source code as input and creates most of the intermediary
 representation of the program (IRep) which will be the base for the remaining steps
 of the program verification. The source code parser is heavily based on Gnu C++
@@ -727,7 +733,7 @@ Compiler as this allows ESBMC++ to finds most of the syntax errors reported by G
 The next step is the C++ Typecheck. In this step, checks are made on the IRep,
 such as assignment checks, typecast checks, pointer initialization checks, function
 call checks and template IRep creation and instantiation (this will be explained later).
-On the goto programs converter step, the IRep will be converted on goto expressions.
+On the goto programs step, the IRep will be converted on goto expressions.
 The convertion simplifies the representation (e.g, replacement of $switch$ and $while$
 by $if$ and $goto$ statements), and handles the unrolling of the loops and the
 elimination of recursive functions. On goto symex step, the simplified goto program
@@ -1235,7 +1241,6 @@ of the derived class and thus allows an easier validation, as the tool
 does not search for attributes or methods from base classes on each access.
 On the other hand, we replicate information to any new class, thus wasting
 memory resources.
-
 
 \begin{figure}[ht]
 \centering
