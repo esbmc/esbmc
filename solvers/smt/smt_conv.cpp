@@ -480,9 +480,10 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 
 #if 0
 void
-z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
-                                     z3::expr &output)
+z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
+  const smt_ast *a;
+  const smt_sort *s;
   std::string cte, identifier;
   unsigned int obj_num;
   bool got_obj_num = false;
@@ -499,18 +500,22 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
 
-  output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
+  s = convert_sort(pointer_type);
+  a = mk_smt_symbol(symbol, s, expr);
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
-    z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
-                                       ctx.esbmc_int_val(0));
-
-    z3::expr constraint = output == ptr_val;
-    assert_formula(constraint);
+    std::vector<expr2tc> membs;
+    membs.push_back(gen_uint(obj_num));
+    membs.push_back(zero_uint);
+    constant_struct2tc ptr_val_s(pointer_type, membs);
+    const smt_ast *ptr_val = tuple_create(ptr_val_s);
+    const smt_ast *constraint = tuple_equality(a, ptr_val);
+    literalt l = mk_lit(constraint);
+    assert_lit(l);
 
     type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
 
@@ -549,17 +554,18 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
       pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
-    z3::expr offs_eq;
-    convert_bv(endisequal, offs_eq);
-    assert_formula(offs_eq);
+    const smt_ast *offs_eq = convert_ast(endisequal);
+    l = mk_lit(offs_eq);
+    assert_lit(l);
 
     // Even better, if we're operating in bitvector mode, it's possible that
-    // Z3 will try to be clever and arrange the pointer range to cross the end
-    // of the address space (ie, wrap around). So, also assert that end > start
+    // the solver will try to be clever and arrange the pointer range to cross
+    // the end of the address space (ie, wrap around). So, also assert that
+    // end > start
     greaterthan2tc wraparound(end_sym, start_sym);
-    z3::expr wraparound_eq;
-    convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    const smt_ast *wraparound_formula = convert_ast(wraparound);
+    l = mk_lit(wraparound_formula)
+    assert_lit(l);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
