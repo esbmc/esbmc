@@ -192,6 +192,8 @@ private:
                                  unsigned int field, const expr2tc &tmp);
   virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                 const smt_ast *val, const expr2tc &tmp);
+  virtual smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val,
+                                  const expr2tc &tmp);
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions

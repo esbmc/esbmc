@@ -384,6 +384,14 @@ smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
   assert(0);
 }
 
+smt_ast *
+smt_convt::tuple_equality(const smt_ast *a __attribute__((unused)),
+                          const smt_ast *b __attribute__((unused)),
+                          const expr2tc &tmp __attribute__((unused)))
+{
+  assert(0);
+}
+
 const smt_ast *
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
@@ -513,7 +521,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     membs.push_back(zero_uint);
     constant_struct2tc ptr_val_s(pointer_type, membs);
     const smt_ast *ptr_val = tuple_create(ptr_val_s);
-    const smt_ast *constraint = tuple_equality(a, ptr_val);
+    const smt_ast *constraint = tuple_equality(a, ptr_val, expr);
     literalt l = mk_lit(constraint);
     assert_lit(l);
 
