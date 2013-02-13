@@ -714,6 +714,33 @@ of tuple $t$ while the expression $\mathit{store}(t, f, v)$ denotes a tuple $t$
 that at field $f$ has the value $v$ and all other fields remain the
 same.
 
+%------------------------------------------------------
+\smallskip\noindent{\bf Tool Architecture.}
+%------------------------------------------------------
+%
+The tool's architecture is shown in XXXXX. The first step is the source code parser,
+ESBMC++ takes a C++ source code as input and creates most of the intermediary
+representation of the program (IRep) which will be the base for the remaining steps
+of the program verification. The source code parser is heavily based on Gnu C++
+Compiler as this allows ESBMC++ to finds most of the syntax errors reported by GCC.
+
+The next step is the C++ Typecheck. In this step, checks are made on the IRep,
+such as assignment checks, typecast checks, pointer initialization checks, function
+call checks and template IRep creation and instantiation (this will be explained later).
+On the goto programs converter step, the IRep will be converted on goto expressions.
+The convertion simplifies the representation (e.g, replacement of $switch$ and $while$
+by $if$ and $goto$ statements), and handles the unrolling of the loops and the
+elimination of recursive functions. On goto symex step, the simplified goto program
+is converted to SSA expressions and assertions are inserted on the output SSA
+expressions, to check pointer safety, memory-leak, double-free, division by zero, etc.
+Also, in this step, most of the exception handling is done, such as jump instruction
+from throw statements and exception specification for function calls.
+
+Finally, two set of quantifier-free formulae are created based on the SSA expressions:
+$C$ for the constraints and $P$ for the properties. Those sets will be used as input for
+a SMT solver, that will present a satisfiable answer if there was a violation in a given
+property $\phi$ or unsatisfiable if the property holds.
+
 %------------------------------
 \section{C++ Operational Model}
 \label{cpp-operational-model}
