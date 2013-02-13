@@ -390,8 +390,8 @@
 % use a multiple column layout for up to three different
 % affiliations
 \author{\IEEEauthorblockN{Mikhail Ramalho$^1$, Mauro Freitas$^1$, Felipe Sousa$^1$, \\
-	Hendrio Marques$^1$, Lucas Cordeiro$^1$, and Bernd Fischer$^2$}
-\IEEEauthorblockA{$^1$ Electronic and Information Research Center, Federal University of Amazonas, Brazil \\ $^2$ Electronics and Computer Science, University of Southampton, UK}
+	Hendrio Marques$^1$, Lucas Cordeiro$^1$, and Bernd Fischer$^{2,3}$}
+\IEEEauthorblockA{$^1$ Electronic and Information Research Center, Federal University of Amazonas, Brazil \\ $^2$ Electronics and Computer Science, University of Southampton, UK \\  $^3$ Department of Computer Science, Stellenbosch University, South Africa}
 %\IEEEauthorblockA{$^2$ Electronics and Computer Science, University of Southampton, UK}
 \url{esbmc@ecs.soton.ac.uk}}
 
@@ -1957,21 +1957,29 @@ Note that ESBMC++ does not crash or runs out of memory or time in any module.
 \label{verifying-the-sniffer-code}
 %-----------------------------------
 
-This section describes the results of the verification process using the
-ESBMC++ against the sniffer code provided by Nokia Institute of Technology
-(INdT). The sniffer code contains 20 classes, 85 methods, and approximately
-2839 lines of C++ code. The following properties were verified using the customer version
-of the sniffer code: array bounds, pointer safety, division by zero,
-and arithmetic under-and over-flow. Due to confidential issues, we were able to model check
-50 out of 85 methods (since we did not have access to some external classes that the sniffer
-code requires). In this sense, ESBMC++ identified five bugs that are mostly related to arithmetic under-
-and over-flow. Note that all bugs were reported to the developers and confirmed by them.
+This section describes the results of the verification process using the 
+ESBMC++ and LLBMC model checkers against the sniffer code provided by 
+Nokia Institute of Technology (INdT). The sniffer code is responsible for 
+capturing and logging traffic passing over a network that supports the Message 
+Transfer Part Level 3 User Adaptation Layer (M3UA); it enables the transport of 
+Signaling System 7 (SS7) protocol’s user parts and it uses the services provided
+by the Stream Control Transmission Protocol (SCTP). The sniffer code contains 
+approximately 20 classes, 85 methods, and 2839 lines of C++ code. 
 
-As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows
+The following properties were verified using the customer version 
+of the sniffer code: array bounds, division by zero, and arithmetic under- 
+and over-flow. Due to confidential issues, we were able to model check 
+50 out of 85 methods (since we did not have access to some external classes that 
+the sniffer code requires). In this sense, ESBMC++ was able to identify five bugs 
+that are mostly related to arithmetic under- and over-flow while LLBMC was able to 
+identify only three of them. Note that all bugs were reported to the developers 
+and confirmed by them.
+
+As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows 
 a code fragment of the method \textit{getPayloadSize} from the class \textit{PacketM3UA}.
-Here, an arithmetic over-flow might occur on the typecast operation since the method
-\textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} returns
-an integer data-type. To fix this bug, one possible solution is to change the return type
+Here, an arithmetic over-flow might occur on the typecast operation since the method 
+\textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} is
+expected to return an integer data-type. One possible way to fix this bug is to change the return type 
 of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast over-flow.
 
 \begin{figure}[ht]
@@ -1980,12 +1988,12 @@ of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast 
 \begin{lstlisting}
 int PacketM3UA::getPayloadSize() {
   return ntohs(m3uaParamHeader->paramSize)
-          - (M3UA_PROTOCOL_DATA_HEADER_SIZE
+          - (M3UA_PROTOCOL_DATA_HEADER_SIZE 
           + M3UA_PARAMETER_HEADER_SIZE);
 }
 \end{lstlisting}
 \end{minipage}
-\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.}
+\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.} 
 \label{figure:PacketM3UA}
 \end{figure}
 
