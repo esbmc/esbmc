@@ -55,6 +55,19 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns)
   pointer_struct = type2tc(tmp);
 
   pointer_logic.push_back(pointer_logict());
+
+  addr_space_sym_num.push_back(0);
+
+  members.clear();
+  names.clear();
+  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
+  names.push_back(irep_idt("start"));
+  names.push_back(irep_idt("end"));
+  addr_space_type = type2tc(new struct_type2t(members, names,
+                                              "addr_space_type"));
+
+  addr_space_data.push_back(std::map<unsigned, unsigned>());
 }
 
 smt_convt::~smt_convt(void)
@@ -64,6 +77,8 @@ smt_convt::~smt_convt(void)
 void
 smt_convt::push_ctx(void)
 {
+  addr_space_data.push_back(addr_space_data.back());
+  addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
   prop_convt::push_ctx();
 }
@@ -78,6 +93,8 @@ smt_convt::pop_ctx(void)
   smt_cachet::nth_index<1>::type &cache_numindex = smt_cache.get<1>();
   cache_numindex.erase(ctx_level);
   pointer_logic.pop_back();
+  addr_space_sym_num.pop_back();
+  addr_space_data.pop_back();
 }
 
 void

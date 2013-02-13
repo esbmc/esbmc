@@ -73,8 +73,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   solver = z3::solver(ctx);
 
   setup_pointer_sort();
-  addr_space_sym_num.push_back(0);
-  addr_space_data.push_back(std::map<unsigned, unsigned>());
   total_mem_space.push_back(0);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
@@ -154,8 +152,6 @@ z3_convt::intr_push_ctx(void)
 {
 
   // Also push/duplicate pointer logic state.
-  addr_space_sym_num.push_back(addr_space_sym_num.back());
-  addr_space_data.push_back(addr_space_data.back());
   total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
@@ -174,8 +170,6 @@ z3_convt::intr_pop_ctx(void)
   assumpt.erase(it, assumpt.end());
   assumpt_ctx_stack.pop_back();
 
-  addr_space_sym_num.pop_back();
-  addr_space_data.pop_back();
   total_mem_space.pop_back();
 }
 

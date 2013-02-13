@@ -226,6 +226,10 @@ public:
   bool int_encoding;
   const namespacet &ns;
 
+  std::list<unsigned int> addr_space_sym_num;
+  type2tc addr_space_type;
+  std::list<std::map<unsigned, unsigned> > addr_space_data;
+
   static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
 };
 
