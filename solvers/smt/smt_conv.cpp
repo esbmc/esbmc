@@ -852,9 +852,21 @@ smt_convt::get_cur_addrspace_ident(void)
 }
 
 const smt_ast *
-smt_convt::convert_typecast_bool(const typecast2t &cast __attribute__((unused)))
+smt_convt::convert_typecast_bool(const typecast2t &cast)
 {
-  assert(0);
+
+  if (is_bv_type(cast.from)) {
+    notequal2tc neq(cast.from, zero_uint);
+    return convert_ast(neq);
+  } else if (is_pointer_type(cast.from)) {
+    // Convert to two casts.
+    typecast2tc to_int(get_uint_type(config.ansi_c.pointer_width), cast.from);
+    constant_int2tc zero(get_uint_type(config.ansi_c.pointer_width), BigInt(0));
+    equality2tc as_bool(zero, to_int);
+    return convert_ast(as_bool);
+  } else {
+    assert(0 && "Unimplemented bool typecast");
+  }
 }
 
 const smt_ast *
