@@ -526,7 +526,6 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   assert(0 && "Fell through convert_pointer_logic");
 }
 
-#if 0
 const smt_ast *
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
@@ -548,7 +547,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
 
-  s = convert_sort(pointer_type);
+  s = convert_sort(pointer_struct);
   a = mk_smt_symbol(symbol, s, expr);
 
   // If this object hasn't yet been put in the address space record, we need to
@@ -559,7 +558,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     std::vector<expr2tc> membs;
     membs.push_back(gen_uint(obj_num));
     membs.push_back(zero_uint);
-    constant_struct2tc ptr_val_s(pointer_type, membs);
+    constant_struct2tc ptr_val_s(pointer_struct, membs);
     const smt_ast *ptr_val = tuple_create(ptr_val_s);
     const smt_ast *constraint = tuple_equality(a, ptr_val, expr);
     literalt l = mk_lit(constraint);
@@ -567,8 +566,11 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 
     type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
 
-    std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
-    std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
+    std::stringstream sse1, sse2;
+    sse1 << "__ESBMC_ptr_obj_start_" << obj_num;
+    sse2 << "__ESBMC_ptr_obj_end_" << obj_num;
+    std::string start_name = sse1.str();
+    std::string end_name = sse2.str();
 
     symbol2tc start_sym(ptr_loc_type, start_name);
     symbol2tc end_sym(ptr_loc_type, end_name);
@@ -597,10 +599,6 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
       endisequal = equality2tc(start_plus_offs, end_sym);
     }
 
-    // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() +=
-      pointer_offset_size(*expr->type.get()).to_long() + 1;
-
     // Assert that start + offs == end
     assert_expr(endisequal);
 
@@ -612,12 +610,13 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     assert_expr(wraparound);
 
     // Generate address space layout constraints.
-    finalize_pointer_chain(obj_num);
+assert(0);
+//    finalize_pointer_chain(obj_num);
 
     addr_space_data.back()[obj_num] =
           pointer_offset_size(*expr->type.get()).to_long() + 1;
 
-    std::vector<expr2tc> membs;
+    membs.clear();
     membs.push_back(start_sym);
     membs.push_back(end_sym);
     constant_struct2tc range_struct(addr_space_type, membs);
@@ -643,8 +642,11 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     equality2tc dyn_eq(idx, false_expr);
     assert_expr(dyn_eq);
   }
+
+  return a;
 }
 
+#if 0
 const smt_ast *
 smt_convt::convert_addr_of(const expr2tc &expr)
 {

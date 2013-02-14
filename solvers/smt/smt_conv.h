@@ -165,6 +165,8 @@ public:
   const smt_ast *convert_ast(const expr2tc &expr);
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
   const smt_ast *convert_addr_of(const expr2tc &expr);
+  const smt_ast *convert_identifier_pointer(const expr2tc &expr,
+                                            std::string sym);
   void assert_expr(const expr2tc &e);
 
   void init_addr_space_array(void);
