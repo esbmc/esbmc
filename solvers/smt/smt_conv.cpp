@@ -605,21 +605,18 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     addr_space_data.back()[obj_num] =
           pointer_offset_size(*expr->type.get()).to_long() + 1;
 
-    z3::expr start_ast, end_ast;
-    convert_bv(start_sym, start_ast);
-    convert_bv(end_sym, end_ast);
-
-    // Actually store into array
-    z3::expr range_tuple = ctx.constant(
-                       ("__ESBMC_ptr_addr_range_" + itos(obj_num)).c_str(),
-                       addr_space_tuple_sort);
-    z3::expr init_val =
-      addr_space_tuple_decl.make_tuple("", &start_ast, &end_ast, NULL);
-    z3::expr eq = range_tuple == init_val;
-    assert_formula(eq);
+    std::vector<expr2tc> membs;
+    membs.push_back(start_sym);
+    membs.push_back(end_sym);
+    constant_struct2tc range_struct(addr_space_type, membs);
+    std::stringstream ss;
+    ss << "__ESBMC_ptr_addr_range_" <<  obj_num;
+    symbol2tc range_sym(addr_space_type, ss.str());
+    equality2tc eq(range_sym, range_struct);
+    assert_expr(eq);
 
     // Update array
-    bump_addrspace_array(obj_num, range_tuple);
+    bump_addrspace_array(obj_num, range_struct);
 
     // Finally, ensure that the array storing whether this pointer is dynamic,
     // is initialized for this ptr to false. That way, only pointers created
@@ -628,16 +625,12 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
-    z3::expr allocarray;
-    convert_bv(allocarr, allocarray);
-
-    z3::expr idxnum = ctx.esbmc_int_val(obj_num);
-    z3::expr select = z3::select(allocarray, idxnum);
-    z3::expr isfalse = ctx.bool_val(false) == select;
-    assert_formula(isfalse);
+    constant_int2tc objid(get_uint_type(config.ansi_c.int_width),
+                          BigInt(obj_num));
+    index2tc idx(get_bool_type(), allocarr, objid);
+    equality2tc dyn_eq(idx, false_expr);
+    assert_expr(dyn_eq);
   }
-
-  DEBUGLOC;
 }
 
 const smt_ast *
