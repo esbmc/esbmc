@@ -282,8 +282,6 @@ public:
   bool smtlib, assumpt_mode;
   std::string filename;
 
-  std::string dyn_info_arr_name;
-
   uint64_t no_variables;
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;

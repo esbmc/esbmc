@@ -123,7 +123,8 @@ public:
 class smt_convt: public prop_convt
 {
 public:
-  smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns);
+  smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
+            bool is_cpp);
   ~smt_convt();
 
   virtual void push_ctx(void);
@@ -230,6 +231,7 @@ public:
   bool caching;
   bool int_encoding;
   const namespacet &ns;
+  std::string dyn_info_arr_name;
 
   std::list<unsigned int> addr_space_sym_num;
   type2tc addr_space_type;

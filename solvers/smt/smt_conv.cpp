@@ -41,7 +41,8 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns)
+smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
+                     bool is_cpp)
   : caching(enable_cache), int_encoding(intmode), ns(_ns)
 {
   std::vector<type2tc> members;
@@ -70,6 +71,17 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns)
                                               "addr_space_type"));
 
   addr_space_data.push_back(std::map<unsigned, unsigned>());
+
+  // Pick a modelling array to shoehorn initialization data into. Because
+  // we don't yet have complete data for whether pointers are dynamic or not,
+  // this is the one modelling array that absolutely _has_ to be initialized
+  // to false for each element, which is going to be shoved into
+  // convert_identifier_pointer.
+  if (is_cpp) {
+    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
+  } else {
+    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
+  }
 }
 
 smt_convt::~smt_convt(void)

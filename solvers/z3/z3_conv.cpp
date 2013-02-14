@@ -49,7 +49,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(caching, int_encoding, _ns)
+: smt_convt(caching, int_encoding, _ns, is_cpp)
 {
   this->int_encoding = int_encoding;
 
@@ -78,17 +78,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   assumpt_ctx_stack.push_back(assumpt.begin());
 
   init_addr_space_array();
-
-  // Pick a modelling array to shoehorn initialization data into. Because
-  // we don't yet have complete data for whether pointers are dynamic or not,
-  // this is the one modelling array that absolutely _has_ to be initialized
-  // to false for each element, which is going to be shoved into
-  // convert_identifier_pointer.
-  if (is_cpp) {
-    dyn_info_arr_name = "cpp::__ESBMC_is_dynamic&0#1";
-  } else {
-    dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
-  }
 }
 
 
