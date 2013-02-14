@@ -172,6 +172,7 @@ public:
   void init_addr_space_array(void);
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   std::string get_cur_addrspace_ident(void);
+  void finalize_pointer_chain(unsigned int obj_num);
 
   // Types
 
