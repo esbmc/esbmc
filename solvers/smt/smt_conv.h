@@ -169,6 +169,9 @@ public:
                                             std::string sym);
   void assert_expr(const expr2tc &e);
 
+  // To be called by the subclass when all other construction has occured.
+  // It needs to be able to convert a variety of things, which need to be
+  // available.
   void init_addr_space_array(void);
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   std::string get_cur_addrspace_ident(void);
