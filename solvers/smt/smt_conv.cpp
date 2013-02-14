@@ -263,6 +263,15 @@ done:
   return a;
 }
 
+void
+smt_convt::assert_expr(const expr2tc &e)
+{
+  const smt_ast *a = convert_ast(e);
+  literalt l = mk_lit(a);
+  assert_lit(l);
+  return;
+}
+
 smt_sort *
 smt_convt::convert_sort(const type2tc &type)
 {
@@ -581,18 +590,14 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
       pointer_offset_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
-    const smt_ast *offs_eq = convert_ast(endisequal);
-    l = mk_lit(offs_eq);
-    assert_lit(l);
+    assert_expr(endisequal);
 
     // Even better, if we're operating in bitvector mode, it's possible that
     // the solver will try to be clever and arrange the pointer range to cross
     // the end of the address space (ie, wrap around). So, also assert that
     // end > start
     greaterthan2tc wraparound(end_sym, start_sym);
-    const smt_ast *wraparound_formula = convert_ast(wraparound);
-    l = mk_lit(wraparound_formula)
-    assert_lit(l);
+    assert_expr(wraparound);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
@@ -725,13 +730,8 @@ smt_convt::init_addr_space_array(void)
   equality2tc obj0_start_eq(obj0_start, zero_uint);
   equality2tc obj0_end_eq(obj0_start, zero_uint);
 
-  const smt_ast *a = convert_ast(obj0_start_eq);
-  literalt l = mk_lit(a);
-  assert_lit(l);
-
-  a = convert_ast(obj0_end_eq);
-  l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(obj0_start_eq);
+  assert_expr(obj0_end_eq);
 
   symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
   symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_start_1");
@@ -739,13 +739,8 @@ smt_convt::init_addr_space_array(void)
   equality2tc obj1_start_eq(obj1_start, one_uint);
   equality2tc obj1_end_eq(obj1_end, obj1_end_const);
 
-  a = convert_ast(obj1_start_eq);
-  l = mk_lit(a);
-  assert_lit(l);
-
-  a = convert_ast(obj1_end_eq);
-  l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(obj1_start_eq);
+  assert_expr(obj1_end_eq);
 
   std::vector<expr2tc> membs;
   membs.push_back(obj0_start);
@@ -753,9 +748,7 @@ smt_convt::init_addr_space_array(void)
   constant_struct2tc addr0_tuple(addr_space_type, membs);
   symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
   equality2tc addr0_range_eq(addr0_tuple, addr0_range);
-  a = convert_ast(addr0_range_eq);
-  l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(addr0_range_eq);
 
   membs.clear();
   membs.push_back(obj1_start);
@@ -763,9 +756,7 @@ smt_convt::init_addr_space_array(void)
   constant_struct2tc addr1_tuple(addr_space_type, membs);
   symbol2tc addr1_range(addr_space_type, "__ESBMC_ptr_addr_range_1");
   equality2tc addr1_range_eq(addr1_tuple, addr1_range);
-  a = convert_ast(addr1_range_eq);
-  l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(addr1_range_eq);
 
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
   bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
@@ -788,17 +779,9 @@ smt_convt::init_addr_space_array(void)
   equality2tc null_eq(null_ptr, null_ptr_tuple);
   equality2tc invalid_eq(invalid_ptr, invalid_ptr_tuple);
 
-  a = convert_ast(zero_eq);
-  l = mk_lit(a);
-  assert_lit(l);
-
-  a = convert_ast(null_eq);
-  l = mk_lit(a);
-  assert_lit(l);
-
-  a = convert_ast(invalid_eq);
-  l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(zero_eq);
+  assert_expr(null_eq);
+  assert_expr(invalid_eq);
 }
 
 
@@ -817,10 +800,7 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
   symbol2tc newname(addr_space_type, ss2.str());
   equality2tc eq(newname, store);
-
-  const smt_ast *a = convert_ast(eq);
-  literalt l = mk_lit(a);
-  assert_lit(l);
+  assert_expr(eq);
   return;
 }
 
