@@ -824,6 +824,14 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   return;
 }
 
+std::string
+smt_convt::get_cur_addrspace_ident(void)
+{
+  std::stringstream ss;
+  ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
+  return ss.str();
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
