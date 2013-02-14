@@ -851,6 +851,42 @@ smt_convt::get_cur_addrspace_ident(void)
   return ss.str();
 }
 
+const smt_ast *
+smt_convt::convert_typecast_bool(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
+const smt_ast *
+convert_typecast_fixedbv_nonint(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
+const smt_ast *
+convert_typecast_to_ints(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
+const smt_ast *
+convert_typecast_to_ptr(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
+const smt_ast *
+convert_typecast_from_ptr(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
+const smt_ast *
+convert_typecast_struct(const typecast2t &cast __attribute__((unused)))
+{
+  assert(0);
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
