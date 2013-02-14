@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "smt_conv.h"
 
 // Helpers extracted from z3_convt.
@@ -711,6 +713,116 @@ smt_convt::convert_addr_of(const expr2tc &expr)
   }
 }
 #endif
+
+void
+smt_convt::init_addr_space_array(void)
+{
+  addr_space_sym_num.back() = 1;
+
+  type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+  symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
+  symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_start_0");
+  equality2tc obj0_start_eq(obj0_start, zero_uint);
+  equality2tc obj0_end_eq(obj0_start, zero_uint);
+
+  const smt_ast *a = convert_ast(obj0_start_eq);
+  literalt l = mk_lit(a);
+  assert_lit(l);
+
+  a = convert_ast(obj0_end_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
+  symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_start_1");
+  constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
+  equality2tc obj1_start_eq(obj1_start, one_uint);
+  equality2tc obj1_end_eq(obj1_end, obj1_end_const);
+
+  a = convert_ast(obj1_start_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  a = convert_ast(obj1_end_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  std::vector<expr2tc> membs;
+  membs.push_back(obj0_start);
+  membs.push_back(obj0_start);
+  constant_struct2tc addr0_tuple(addr_space_type, membs);
+  symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
+  equality2tc addr0_range_eq(addr0_tuple, addr0_range);
+  a = convert_ast(addr0_range_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  membs.clear();
+  membs.push_back(obj1_start);
+  membs.push_back(obj1_end);
+  constant_struct2tc addr1_tuple(addr_space_type, membs);
+  symbol2tc addr1_range(addr_space_type, "__ESBMC_ptr_addr_range_1");
+  equality2tc addr1_range_eq(addr1_tuple, addr1_range);
+  a = convert_ast(addr1_range_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
+  bump_addrspace_array(pointer_logic.back().get_invalid_object(), addr1_tuple);
+
+  // Give value to '0', 'NULL', 'INVALID' symbols
+  symbol2tc zero_ptr(pointer_struct, "0");
+  symbol2tc null_ptr(pointer_struct, "NULL");
+  symbol2tc invalid_ptr(pointer_struct, "INVALID");
+
+  membs.clear();
+  membs.push_back(zero_uint);
+  membs.push_back(zero_uint);
+  constant_struct2tc null_ptr_tuple(pointer_struct, membs);
+  membs.clear();
+  membs.push_back(one_uint);
+  membs.push_back(zero_uint);
+  constant_struct2tc invalid_ptr_tuple(pointer_struct, membs);
+
+  equality2tc zero_eq(zero_ptr, null_ptr_tuple);
+  equality2tc null_eq(null_ptr, null_ptr_tuple);
+  equality2tc invalid_eq(invalid_ptr, invalid_ptr_tuple);
+
+  a = convert_ast(zero_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  a = convert_ast(null_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+
+  a = convert_ast(invalid_eq);
+  l = mk_lit(a);
+  assert_lit(l);
+}
+
+
+void
+smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
+{
+  std::stringstream ss, ss2;
+  std::string str, new_str;
+  type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+
+  ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
+  symbol2tc oldname(addr_space_type, ss2.str());
+  constant_int2tc ptr_idx(ptr_int_type, BigInt(idx));
+
+  with2tc store(addr_space_type, oldname, ptr_idx, val);
+  ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
+  symbol2tc newname(addr_space_type, ss2.str());
+  equality2tc eq(newname, store);
+
+  const smt_ast *a = convert_ast(eq);
+  literalt l = mk_lit(a);
+  assert_lit(l);
+  return;
+}
 
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {

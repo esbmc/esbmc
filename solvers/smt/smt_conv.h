@@ -165,6 +165,9 @@ public:
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
   const smt_ast *convert_addr_of(const expr2tc &expr);
 
+  void init_addr_space_array(void);
+  void bump_addrspace_array(unsigned int idx, const expr2tc &val);
+
   // Types
 
   // Types for union map.
