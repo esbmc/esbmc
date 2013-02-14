@@ -681,11 +681,10 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
   return;
 }
 
-#if 0
 const smt_ast *
 smt_convt::convert_addr_of(const expr2tc &expr)
 {
-  const address_of2t &addrof = to_address_of2t(expr);
+  const address_of2t &obj = to_address_of2t(expr);
 
   std::string symbol_name, out;
 
@@ -754,11 +753,10 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     address_of2tc tmp(type2tc(), to_typecast2t(obj.ptr_obj).from);
     tmp.get()->type = obj.type;
     return convert_ast(tmp);
-  } else {
-    assert(0 && "Unrecognized address_of operand");
   }
+
+  assert(0 && "Unrecognized address_of operand");
 }
-#endif
 
 void
 smt_convt::init_addr_space_array(void)
