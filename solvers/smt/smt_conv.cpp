@@ -546,6 +546,90 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
 }
 
 const smt_ast *
+smt_convt::convert_byte_extract(const expr2tc &expr)
+{
+  const byte_extract2t &data = to_byte_extract2t(expr);
+
+  if (!is_constant_int2t(data.source_offset)) {
+    std::cerr << "byte_extract expects constant 2nd arg";
+    abort();
+  }
+
+  const constant_int2t &intref = to_constant_int2t(data.source_offset);
+
+  unsigned width;
+  width = data.source_value->type->get_width();
+  // XXXjmorse - looks like this only ever reads a single byte, not the desired
+  // number of bytes to fill the type.
+
+  uint64_t upper, lower;
+  if (!data.big_endian) {
+    upper = ((intref.constant_value.to_long() + 1) * 8) - 1; //((i+1)*w)-1;
+    lower = intref.constant_value.to_long() * 8; //i*w;
+  } else {
+    uint64_t max = width - 1;
+    upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
+    lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
+  }
+
+  const smt_ast *source = convert_ast(data.source_value);;
+
+  if (int_encoding) {
+    std::cerr << "Refusing to byte extract in integer mode; re-run in "
+                 "bitvector mode" << std::endl;
+    abort();
+  } else {
+    if (is_struct_type(data.source_value)) {
+      const struct_type2t &struct_type =to_struct_type(data.source_value->type);
+      unsigned i = 0, num_elems = struct_type.members.size();
+      const smt_ast *struct_elem[num_elems + 1], *struct_elem_inv[num_elems +1];
+
+      forall_types(it, struct_type.members) {
+        struct_elem[i] = tuple_project(source, convert_sort(*it), i, expr2tc());
+        i++;
+      }
+
+      for (unsigned k = 0; k < num_elems; k++)
+        struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
+
+      // Concat into one massive vector.
+      const smt_ast *args[2];
+      for (unsigned k = 0; k < num_elems; k++)
+      {
+        if (k == 1) {
+          args[0] = struct_elem_inv[k - 1];
+          args[1] = struct_elem_inv[k];
+          // FIXME: sorts
+          struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
+                                                   2, expr2tc());
+        } else if (k > 1) {
+          args[0] = struct_elem_inv[num_elems];
+          args[1] = struct_elem_inv[k];
+          // FIXME: sorts
+          struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
+                                                   2, expr2tc());
+        }
+      }
+
+      source = struct_elem_inv[num_elems];
+    }
+
+    unsigned int sort_sz = data.source_value->type->get_width();
+    if (sort_sz < upper) {
+      // Extends past the end of this data item. Should be fixed in some other
+      // dedicated feature branch, in the meantime stop Z3 from crashing
+      const smt_sort *s = mk_sort(SMT_SORT_BV, 8, false);
+      return mk_smt_symbol("out_of_bounds_byte_extract", s, expr2tc());
+    } else {
+      return mk_extract(source, upper, lower, convert_sort(expr->type), expr);
+    }
+  }
+
+  std::cerr << "Unsupported byte extract operand" << std::endl;
+  abort();
+}
+
+const smt_ast *
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
   const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
