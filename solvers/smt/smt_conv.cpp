@@ -1,5 +1,7 @@
 #include <sstream>
 
+#include <base_type.h>
+
 #include "smt_conv.h"
 
 // Helpers extracted from z3_convt.
@@ -1223,9 +1225,41 @@ smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 }
 
 const smt_ast *
-convert_typecast_struct(const typecast2t &cast __attribute__((unused)))
+smt_convt::convert_typecast_struct(const typecast2t &cast)
 {
-  assert(0);
+
+  const struct_type2t &struct_type_from = to_struct_type(cast.from->type);
+  const struct_type2t &struct_type_to = to_struct_type(cast.type);
+
+  u_int i = 0, i2 = 0;
+
+  std::vector<type2tc> new_members;
+  std::vector<irep_idt> new_names;
+  new_members.reserve(struct_type_to.members.size());
+  new_names.reserve(struct_type_to.members.size());
+
+  i = 0;
+  forall_types(it, struct_type_to.members) {
+    if (!base_type_eq(struct_type_from.members[i], *it, ns)) {
+      std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
+      abort();
+    }
+
+    i++;
+  }
+
+  // Abuse the constant_struct2tc concept.
+  std::vector<expr2tc> membs;
+
+  i2 = 0;
+  forall_types(it, struct_type_to.members) {
+    member2tc tmp(*it, cast.from, struct_type_to.member_names[i2]);
+    membs.push_back(tmp);
+    i2++;
+  }
+
+  constant_struct2tc newstruct(cast.type, membs);
+  return convert_ast(newstruct);
 }
 
 const smt_convt::expr_op_convert
