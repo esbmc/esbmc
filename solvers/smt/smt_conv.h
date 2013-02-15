@@ -192,9 +192,10 @@ public:
   const smt_ast *convert_typecast_bool(const typecast2t &cast);
   const smt_ast *convert_typecast_fixedbv_nonint(const expr2tc &cast);
   const smt_ast *convert_typecast_to_ints(const typecast2t &cast);
-  const smt_ast *convert_typecast_to_ptr(const typecast2t &castj);
+  const smt_ast *convert_typecast_to_ptr(const typecast2t &cast);
   const smt_ast *convert_typecast_from_ptr(const typecast2t &cast);
   const smt_ast *convert_typecast_struct(const typecast2t &cast);
+  const smt_ast *convert_typecast(const expr2tc &expr);
 
   // Types
 

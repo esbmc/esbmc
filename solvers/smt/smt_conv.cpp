@@ -1262,6 +1262,40 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   return convert_ast(newstruct);
 }
 
+const smt_ast *
+smt_convt::convert_typecast(const expr2tc &expr)
+{
+
+  const typecast2t &cast = to_typecast2t(expr);
+
+  if (is_pointer_type(cast.type)) {
+    return convert_typecast_to_ptr(cast);
+  } else if (is_pointer_type(cast.from)) {
+    return convert_typecast_from_ptr(cast);
+  } else if (is_bool_type(cast.type)) {
+    return convert_typecast_bool(cast);
+  } else if (is_fixedbv_type(cast.type) && !int_encoding)      {
+    return convert_typecast_fixedbv_nonint(expr);
+  } else if (is_bv_type(cast.type) ||
+             is_fixedbv_type(cast.type) ||
+             is_pointer_type(cast.type)) {
+    return convert_typecast_to_ints(cast);
+  } else if (is_struct_type(cast.type))     {
+    return convert_typecast_struct(cast);
+  } else if (is_union_type(cast.type)) {
+    if (base_type_eq(cast.type, cast.from->type, namespacet(contextt()))) {
+      return convert_ast(cast.from); // No additional conversion required
+    } else {
+      std::cerr << "Can't typecast between unions" << std::endl;
+      abort();
+    }
+  }
+
+  // XXXjmorse -- what about all other types, eh?
+  std::cerr << "Typecast for unexpected type" << std::endl;
+  abort();
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
