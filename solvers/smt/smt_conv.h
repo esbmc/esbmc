@@ -174,6 +174,8 @@ public:
                                             std::string sym);
   const smt_ast *convert_sign_ext(const smt_ast *a, const smt_sort *s,
                                   unsigned int topbit, unsigned int topwidth);
+  const smt_ast *convert_zero_ext(const smt_ast *a, const smt_sort *s,
+                                  unsigned int topwidth);
   void assert_expr(const expr2tc &e);
 
   // To be called by the subclass when all other construction has occured.

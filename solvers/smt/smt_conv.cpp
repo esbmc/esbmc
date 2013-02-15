@@ -883,6 +883,18 @@ smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
 }
 
 const smt_ast *
+smt_convt::convert_zero_ext(const smt_ast *a, const smt_sort *s,
+                            unsigned int topwidth)
+{
+  const smt_ast *args[2];
+
+  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth, expr2tc());
+  args[0] = z;
+  args[1] = a;
+  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr2tc());
+}
+
+const smt_ast *
 smt_convt::convert_typecast_bool(const typecast2t &cast)
 {
 
