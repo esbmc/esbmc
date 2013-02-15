@@ -1186,7 +1186,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   std::vector<expr2tc> membs;
   membs.push_back(id);
   membs.push_back(offs);
-  constant_struct2tc prev_in_chain(pointer_struct, membs);
+  expr2tc prev_in_chain = constant_struct2tc(pointer_struct, membs);
 
   // Now that big ite chain,
   for (i = 0; i < addr_space_data.back().size(); i++) {
