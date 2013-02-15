@@ -315,21 +315,24 @@ smt_convt::convert_sort(const type2tc &type)
     if (int_encoding)
       return mk_sort(SMT_SORT_REAL);
     else
-      return mk_sort(SMT_SORT_BV, width);
+      return mk_sort(SMT_SORT_BV, width, false);
   }
   case type2t::string_id:
   {
     smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width);
+                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
+                                          !config.ansi_c.char_is_unsigned);
     smt_sort *r = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, 8);
+                                : mk_sort(SMT_SORT_BV, 8,
+                                          !config.ansi_c.char_is_unsigned);
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
   case type2t::array_id:
   {
     // All arrays are indexed by integerse
     smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width);
+                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
+                                          false);
     const array_type2t &arr = to_array_type(type);
     smt_sort *r = convert_sort(arr.subtype);
     return mk_sort(SMT_SORT_ARRAY, d, r);
