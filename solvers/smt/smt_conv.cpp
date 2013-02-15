@@ -67,8 +67,12 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  addr_space_type = type2tc(new struct_type2t(members, names,
-                                              "addr_space_type"));
+  tmp = new struct_type2t(members, names, "addr_space_type");
+  addr_space_type_data = tmp;
+  addr_space_type = type2tc(tmp);
+
+  addr_space_arr_type = type2tc(new array_type2t(addr_space_type,
+                                                 expr2tc(), true)) ;
 
   addr_space_data.push_back(std::map<unsigned, unsigned>());
 
