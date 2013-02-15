@@ -163,6 +163,129 @@ z3_convt::intr_pop_ctx(void)
 }
 
 void
+z3_convt::init_addr_space_array(void)
+{
+  z3::symbol mk_tuple_name, proj_names[2];
+  Z3_symbol proj_names_sym[2];
+  Z3_sort proj_types[2];
+  Z3_func_decl mk_tuple_decl, proj_decls[2];
+
+  addr_space_sym_num.back() = 1;
+
+  // Place locations of numerical addresses for null and invalid_obj.
+
+  z3::expr tmp =
+    ctx.constant("__ESBMC_ptr_obj_start_0", ctx.esbmc_int_sort());
+  z3::expr num = ctx.esbmc_int_val(0);
+  z3::expr eq = tmp == num;
+
+  assert_formula(eq);
+
+  tmp = ctx.constant("__ESBMC_ptr_obj_end_0", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val(0);
+  eq = tmp == num;
+
+  assert_formula(eq);
+
+  tmp = ctx.constant("__ESBMC_ptr_obj_start_1", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val(1);
+  eq = tmp == num;
+  assert_formula(eq);
+
+  tmp = ctx.constant("__ESBMC_ptr_obj_end_1", ctx.esbmc_int_sort());
+  num = ctx.esbmc_int_val((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+  eq = tmp == num;
+  assert_formula(eq);
+
+  z3::sort tmp_proj_type = ctx.esbmc_int_sort();
+  proj_types[0] = proj_types[1] = tmp_proj_type;
+
+  mk_tuple_name = z3::symbol(ctx, "struct_type_addr_space_tuple");
+  proj_names[0] = z3::symbol(ctx, "start");
+  proj_names[1] = z3::symbol(ctx, "end");
+  proj_names_sym[0] = proj_names[0];
+  proj_names_sym[1] = proj_names[1];
+
+  addr_space_tuple_sort = z3::to_sort(ctx, Z3_mk_tuple_sort(
+                                      ctx, mk_tuple_name, 2,
+                                      proj_names_sym, proj_types,
+                                      &mk_tuple_decl, proj_decls));
+  Z3_func_decl tmp_addr_space_decl =
+    Z3_get_tuple_sort_mk_decl(ctx, addr_space_tuple_sort);
+  addr_space_tuple_decl = z3::func_decl(ctx, tmp_addr_space_decl);
+
+  // Generate initial array with all zeros for all fields.
+  addr_space_arr_sort = 
+                  ctx.array_sort(ctx.esbmc_int_sort(), addr_space_tuple_sort);
+
+  num = ctx.esbmc_int_val(0);
+
+  z3::expr initial_val =
+    addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
+
+  z3::expr initial_const = z3::const_array(ctx.esbmc_int_sort(), initial_val);
+  z3::expr first_name =
+    ctx.constant("__ESBMC_addrspace_arr_0", addr_space_arr_sort);
+
+  eq = first_name == initial_const;
+  assert_formula(eq);
+
+  z3::expr range_tuple =
+    ctx.constant("__ESBMC_ptr_addr_range_0", addr_space_tuple_sort);
+  initial_val = addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
+
+  eq = initial_val == range_tuple;
+  assert_formula(eq);
+
+  bump_addrspace_array(pointer_logic.back().get_null_object(), range_tuple);
+
+  // We also have to initialize the invalid object... however, I've no idea
+  // what it /means/ yet, so go for some arbitary value.
+  num = ctx.esbmc_int_val(1);
+  range_tuple = ctx.constant("__ESBMC_ptr_addr_range_1",
+                              addr_space_tuple_sort);
+  initial_val = addr_space_tuple_decl.make_tuple("", &num, &num, NULL);
+  eq = initial_val == range_tuple;
+  assert_formula(eq);
+
+  bump_addrspace_array(pointer_logic.back().get_invalid_object(), range_tuple);
+
+  // Associate the symbol "0" with the null object; this is necessary because
+  // of the situation where 0 is valid as a representation of null, but the
+  // frontend (for whatever reasons) converts it to a symbol rather than the
+  // way it handles NULL (constant with val "NULL")
+  z3::expr zero_sym = ctx.constant("0", pointer_sort);
+
+  z3::expr zero_int= ctx.esbmc_int_val(0);
+  z3::expr ptr_val = pointer_decl(zero_int, zero_int);
+  z3::expr constraint = zero_sym == ptr_val;
+  assert_formula(constraint);
+
+  // Do the same thing, for the name "NULL".
+  z3::expr null_sym = ctx.constant("NULL", pointer_sort);
+  constraint = null_sym == ptr_val;
+  assert_formula(constraint);
+
+  // And for the "INVALID" object (which we're issuing with a name now), have
+  // a pointer object num of 1, and a free pointer offset. Anything of worth
+  // using this should extract only the object number.
+
+  z3::expr args[2];
+  args[0] = ctx.esbmc_int_val(1);
+  args[1] = ctx.fresh_const(NULL, pointer_sort);
+  z3::expr invalid = mk_tuple_update(args[1], 0, args[0]);
+  z3::expr invalid_name = ctx.constant("INVALID", pointer_sort);
+  constraint = invalid == invalid_name;
+  assert_formula(constraint);
+
+  // Record the fact that we've registered these objects
+  addr_space_data.back()[0] = 0;
+  addr_space_data.back()[1] = 0;
+
+  return;
+}
+
+void
 z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
 {
   std::string str, new_str;
