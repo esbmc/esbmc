@@ -852,6 +852,34 @@ smt_convt::get_cur_addrspace_ident(void)
 }
 
 const smt_ast *
+smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
+                            unsigned int topbit, unsigned int topwidth)
+{
+  const smt_ast *args[4];
+
+  const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
+  args[0] = mk_extract(a, topbit-1, topbit-2, bit, expr2tc());
+  args[1] = mk_smt_bvint(BigInt(0), false, 1, expr2tc());
+  const smt_sort *b = mk_sort(SMT_SORT_BOOL);
+  const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2, expr2tc());
+
+  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth, expr2tc());
+  const smt_ast *f = mk_smt_bvint(BigInt(0xFFFFFFFFFFFFFFFFULL), false,
+                                  topwidth, expr2tc());
+
+  args[0] = t;
+  args[1] = z;
+  args[2] = f;
+  const smt_sort *topsort = mk_sort(SMT_SORT_BV, topwidth, false);
+  const smt_ast *topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3,
+                                       expr2tc());
+
+  args[0] = topbits;
+  args[1] = a;
+  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr2tc());
+}
+
+const smt_ast *
 smt_convt::convert_typecast_bool(const typecast2t &cast)
 {
 
