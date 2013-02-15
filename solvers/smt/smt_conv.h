@@ -168,6 +168,9 @@ public:
   virtual smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort,
                              const expr2tc &expr);
+  virtual smt_ast *overflow_arith(const expr2tc &expr);
+  virtual smt_ast *overflow_cast(const expr2tc &expr);
+  virtual smt_ast *overflow_neg(const expr2tc &expr);
 
   // Internal foo
 

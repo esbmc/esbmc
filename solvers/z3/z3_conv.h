@@ -201,6 +201,10 @@ private:
                              const smt_ast *false_val, const smt_sort *sort,
                              const expr2tc &expr);
 
+  virtual smt_ast *overflow_arith(const expr2tc &expr);
+  virtual smt_ast *overflow_cast(const expr2tc &expr);
+  virtual smt_ast *overflow_neg(const expr2tc &expr);
+
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions
   // that are not "propositional variables or their negation". So we associate

@@ -468,6 +468,24 @@ smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
   assert(0);
 }
 
+smt_ast *
+smt_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::overflow_cast(const expr2tc &expr __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::overflow_neg(const expr2tc &expr __attribute__((unused)))
+{
+  assert(0);
+}
+
 const smt_ast *
 smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
 {

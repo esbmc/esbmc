@@ -3171,6 +3171,173 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                                 z3_smt_downcast(false_val)->e), sort, tmp);
 }
 
+
+smt_ast *
+z3_convt::overflow_arith(const expr2tc &expr)
+{
+  const overflow2t &overflow = to_overflow2t(expr);
+  z3::expr output;
+  z3::expr result[2], operand[2];
+  unsigned width_op0, width_op1;
+
+  // XXX jmorse - we can't tell whether or not we're supposed to be treating
+  // the _result_ as being a signedbv or an unsignedbv, because we only have
+  // operands. Ideally, this needs to be encoded somewhere.
+  // Specifically, when irep2 conversion reaches code creation, we should
+  // encode the resulting type in the overflow operands type. Right now it's
+  // inferred.
+  Z3_bool is_signed = Z3_L_FALSE;
+
+  typedef Z3_ast (*type1)(Z3_context, Z3_ast, Z3_ast, Z3_bool);
+  typedef Z3_ast (*type2)(Z3_context, Z3_ast, Z3_ast);
+  type1 call1;
+  type2 call2;
+
+  // Unseen downside of flattening templates. Should consider reformatting
+  // typecast2t.
+  if (is_add2t(overflow.operand)) {
+    convert_bv(to_add2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_add2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_add2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_add2t(overflow.operand).side_2->type->get_width();
+    call1 = workaround_Z3_mk_bvadd_no_overflow;
+    call2 = workaround_Z3_mk_bvadd_no_underflow;
+    if (is_signedbv_type(to_add2t(overflow.operand).side_1) ||
+        is_signedbv_type(to_add2t(overflow.operand).side_2))
+      is_signed = Z3_L_TRUE;
+  } else if (is_sub2t(overflow.operand)) {
+    convert_bv(to_sub2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_sub2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_sub2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_sub2t(overflow.operand).side_2->type->get_width();
+    call1 = workaround_Z3_mk_bvsub_no_underflow;
+    call2 = workaround_Z3_mk_bvsub_no_overflow;
+    if (is_signedbv_type(to_sub2t(overflow.operand).side_1) ||
+        is_signedbv_type(to_sub2t(overflow.operand).side_2))
+      is_signed = Z3_L_TRUE;
+  } else if (is_mul2t(overflow.operand)) {
+    convert_bv(to_mul2t(overflow.operand).side_1, operand[0]);
+    convert_bv(to_mul2t(overflow.operand).side_2, operand[1]);
+    width_op0 = to_mul2t(overflow.operand).side_1->type->get_width();
+    width_op1 = to_mul2t(overflow.operand).side_2->type->get_width();
+    // XXX jmorse - no reference counting workaround for this; disassembling
+    // these Z3 routines show that they've been touched by reference count
+    // switchover, and so are likely actually reference counting correctly.
+    call1 = Z3_mk_bvmul_no_overflow;
+    call2 = Z3_mk_bvmul_no_underflow;
+    if (is_signedbv_type(to_mul2t(overflow.operand).side_1) ||
+        is_signedbv_type(to_mul2t(overflow.operand).side_2))
+      is_signed = Z3_L_TRUE;
+  } else {
+    std::cerr << "Overflow operation with invalid operand";
+    abort();
+  }
+
+  // XXX jmorse - int2bv trainwreck.
+  if (int_encoding) {
+    operand[0] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op0, operand[0]));
+    operand[1] = z3::to_expr(ctx, Z3_mk_int2bv(z3_ctx, width_op1, operand[1]));
+  }
+
+  result[0] = z3::to_expr(ctx, call1(z3_ctx, operand[0], operand[1], is_signed));
+  result[1] = z3::to_expr(ctx, call2(z3_ctx, operand[0], operand[1]));
+  output = !(result[0] && result[1]);
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(output, s, expr);
+}
+
+smt_ast *
+z3_convt::overflow_cast(const expr2tc &expr)
+{
+  const overflow_cast2t &ocast = to_overflow_cast2t(expr);
+  z3::expr output;
+  uint64_t result;
+  u_int width;
+
+  width = ocast.operand->type->get_width();
+
+  if (ocast.bits >= width || ocast.bits == 0)
+    throw new conv_error("overflow-typecast got wrong number of bits");
+
+  assert(ocast.bits <= 32 && ocast.bits != 0);
+  result = 1 << ocast.bits;
+
+  expr2tc oper = ocast.operand;
+
+  // Cast fixedbv to its integer form.
+  if (is_fixedbv_type(ocast.operand)) {
+    const fixedbv_type2t &fbvt = to_fixedbv_type(ocast.operand->type);
+    type2tc signedbv(new signedbv_type2t(fbvt.integer_bits));
+    oper = typecast2tc(signedbv, oper);
+  }
+
+  expr2tc lessthan, greaterthan;
+  if (is_signedbv_type(ocast.operand) ||
+      is_fixedbv_type(ocast.operand)) {
+    // Produce some useful constants
+    unsigned int nums_width = (is_signedbv_type(ocast.operand))
+                               ? width : width / 2;
+    type2tc signedbv(new signedbv_type2t(nums_width));
+
+    constant_int2tc result_val = gen_uint(result / 2);
+    constant_int2tc two = gen_uint(2);
+    constant_int2tc minus_one(signedbv, BigInt(-1));
+
+    // Now produce numbers that bracket the selected bitwidth. So for 16 bis
+    // we would generate 2^15-1 and -2^15
+    sub2tc upper(signedbv, result_val, minus_one);
+    mul2tc lower(signedbv, result_val, minus_one);
+
+    // Ensure operand lies between these braces
+    lessthan = lessthan2tc(oper, upper);
+    greaterthan = greaterthan2tc(oper, lower);
+  } else if (is_unsignedbv_type(ocast.operand)) {
+    // Create zero and 2^bitwidth,
+    type2tc unsignedbv(new unsignedbv_type2t(width));
+
+    constant_int2tc zero = zero_uint;
+    constant_int2tc the_width = gen_uint(result);
+
+    // Ensure operand lies between those numbers.
+    lessthan = lessthan2tc(oper, the_width);
+    greaterthan = greaterthanequal2tc(oper, zero);
+  }
+
+  z3::expr ops[2];
+  convert_bv(lessthan, ops[0]);
+  convert_bv(greaterthan, ops[1]);
+
+  output = !(ops[0] && ops[1]);
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(output, s, expr);
+}
+
+smt_ast *
+z3_convt::overflow_neg(const expr2tc &expr)
+{
+  const overflow_neg2t &neg = to_overflow_neg2t(expr);
+  z3::expr output, operand;
+  unsigned width;
+
+  convert_bv(neg.operand, operand);
+
+  // XXX jmorse - clearly wrong. Neg of pointer?
+  if (is_pointer_type(neg.operand))
+    operand = mk_tuple_select(operand, 1);
+
+  width = neg.operand->type->get_width();
+
+  // XXX jmorse - int2bv trainwreck
+  if (int_encoding)
+    operand = to_expr(ctx, Z3_mk_int2bv(z3_ctx, width, operand));
+
+  z3::expr no_over = z3::to_expr(ctx,
+                           workaround_Z3_mk_bvneg_no_overflow(z3_ctx, operand));
+  output = z3::to_expr(ctx, Z3_mk_not(z3_ctx, no_over));
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(output, s, expr);
+}
+
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {
   void ast::dump(void) const {
