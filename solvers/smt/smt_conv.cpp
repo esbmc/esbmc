@@ -302,6 +302,18 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = overflow_neg(expr);
     break;
   }
+  case expr2t::zero_length_string_id:
+  {
+    // Extremely unclear.
+    a = tuple_project(args[0], sort, 0, expr);
+    break;
+  }
+  case expr2t::zero_string_id:
+  {
+    // Actually broken. And always has been.
+    a = mk_smt_symbol("zero_string", sort, expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
