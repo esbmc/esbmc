@@ -1197,9 +1197,29 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 }
 
 const smt_ast *
-convert_typecast_from_ptr(const typecast2t &cast __attribute__((unused)))
+smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
-  assert(0);
+
+  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
+
+  // The plan: index the object id -> address-space array and pick out the
+  // start address, then add it to any additional pointer offset.
+
+  pointer_object2tc obj_num(int_type, cast.from);
+
+  symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
+  index2tc idx(addr_space_type, addrspacesym, obj_num);
+
+  // We've now grabbed the pointer struct, now get first element. Represent
+  // as fetching the first element of the struct representation.
+  member2tc memb(int_type, idx, addr_space_type_data->member_names[0]);
+
+  pointer_offset2tc ptr_offs(int_type, cast.from);
+  add2tc add(int_type, memb, ptr_offs);
+
+  // Finally, replace typecast
+  typecast2tc new_cast(cast.type, add);
+  return convert_ast(new_cast);
 }
 
 const smt_ast *
