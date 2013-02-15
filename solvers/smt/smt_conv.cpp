@@ -278,7 +278,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s
-    assert(is_struct_type(expr));
+    assert(is_struct_type(expr) || is_pointer_type(expr));
     a = tuple_ite(args[0], args[1], args[2], sort, expr);
     break;
   }
