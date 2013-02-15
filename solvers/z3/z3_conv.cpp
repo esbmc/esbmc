@@ -3160,6 +3160,17 @@ z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b, const expr2tc &tmp)
   return new z3_smt_ast((za->e == zb->e), za->sort, tmp);
 }
 
+smt_ast *
+z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
+                    const smt_ast *false_val, const smt_sort *sort,
+                    const expr2tc &tmp)
+{
+
+  return new z3_smt_ast(z3::ite(z3_smt_downcast(cond)->e,
+                                z3_smt_downcast(true_val)->e,
+                                z3_smt_downcast(false_val)->e), sort, tmp);
+}
+
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {
   void ast::dump(void) const {
