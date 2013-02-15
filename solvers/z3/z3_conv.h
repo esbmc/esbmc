@@ -186,6 +186,9 @@ private:
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
+  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
+                              unsigned int low, const smt_sort *s,
+                              const expr2tc &tmp);
 
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,

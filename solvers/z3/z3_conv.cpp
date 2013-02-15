@@ -3016,6 +3016,15 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
 }
 
 smt_ast *
+z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
+                     const smt_sort *s, const expr2tc &tmp)
+{
+
+  return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_extract(ctx, high, low,
+                                         z3_smt_downcast(a)->e)), s, tmp);
+}
+
+smt_ast *
 z3_convt::mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &temp)
 {
   smt_sort *s = mk_sort(SMT_SORT_INT, sign);

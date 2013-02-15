@@ -147,6 +147,9 @@ public:
   virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;
   // XXX XXX XXX -- turn this into a formulation on top of structs.
   virtual smt_sort *mk_union_sort(const type2tc &type) = 0;
+  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
+                              unsigned int low, const smt_sort *s,
+                              const expr2tc &tmp) = 0;
 
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
