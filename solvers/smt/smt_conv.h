@@ -187,6 +187,7 @@ public:
                                   unsigned int topwidth);
   const smt_ast *convert_is_nan(const expr2tc &expr, const smt_ast *oper);
   const smt_ast *convert_byte_extract(const expr2tc &expr);
+  const smt_ast *convert_byte_update(const expr2tc &expr);
   void assert_expr(const expr2tc &e);
 
   // To be called by the subclass when all other construction has occured.

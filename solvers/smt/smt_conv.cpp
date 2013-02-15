@@ -635,6 +635,77 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
 }
 
 const smt_ast *
+smt_convt::convert_byte_update(const expr2tc &expr)
+{
+  const byte_update2t &data = to_byte_update2t(expr);
+
+  // op0 is the object to update
+  // op1 is the byte number
+  // op2 is the value to update with
+
+  if (!is_constant_int2t(data.source_offset)) {
+    std::cerr << "byte_extract expects constant 2nd arg";
+    abort();
+  }
+
+  const constant_int2t &intref = to_constant_int2t(data.source_offset);
+
+  const smt_ast *tuple, *value;
+  uint width_op0, width_op2;
+
+  tuple = convert_ast(data.source_value);
+  value = convert_ast(data.update_value);
+
+  width_op2 = data.update_value->type->get_width();
+
+  if (int_encoding) {
+    std::cerr << "Can't byte update in integer mode; rerun in bitvector mode"
+              << std::endl;
+    abort();
+  }
+
+  if (is_struct_type(data.source_value)) {
+    const struct_type2t &struct_type = to_struct_type(data.source_value->type);
+    bool has_field = false;
+
+    // XXXjmorse, this isn't going to be the case if it's a with.
+
+    forall_types(it, struct_type.members) {
+      width_op0 = (*it)->get_width();
+
+      if (((*it)->type_id == data.update_value->type->type_id) &&
+          (width_op0 == width_op2))
+	has_field = true;
+    }
+
+    if (has_field)
+      return tuple_update(tuple, intref.constant_value.to_long(), value,expr);
+    else
+      return tuple;
+  } else if (is_signedbv_type(data.source_value->type)) {
+    width_op0 = data.source_value->type->get_width();
+
+    if (width_op0 == 0) {
+      // XXXjmorse - can this ever happen now?
+      std::cerr << "failed to get width of byte_update operand";
+      abort();
+    }
+
+    if (width_op0 > width_op2) {
+      return convert_sign_ext(value, convert_sort(expr->type), width_op2,
+                              width_op0 - width_op2);
+    } else {
+      std::cerr << "unsupported irep for conver_byte_update" << std::endl;
+      abort();
+    }
+  }
+
+  std::cerr << "unsupported irep for convert_byte_update" << std::endl;;
+  abort();
+}
+
+
+const smt_ast *
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
   const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
