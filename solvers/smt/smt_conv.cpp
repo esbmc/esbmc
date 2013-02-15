@@ -270,6 +270,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = tuple_project(args[0], s, 0, expr);
     break;
   }
+  case expr2t::typecast_id:
+  {
+    a = convert_typecast(expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
