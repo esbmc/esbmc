@@ -86,6 +86,9 @@ enum smt_func_kind {
   SMT_FUNC_SELECT,
 
   SMT_FUNC_CONCAT,
+
+  SMT_FUNC_INT2REAL,
+  SMT_FUNC_REAL2INT,
 };
 
 class smt_sort {

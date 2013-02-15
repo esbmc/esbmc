@@ -1017,9 +1017,91 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
 }
 
 const smt_ast *
-convert_typecast_to_ints(const typecast2t &cast __attribute__((unused)))
+smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 {
-  assert(0);
+  unsigned to_width = cast.type->get_width();
+  const smt_sort *s = convert_sort(cast.type);
+  const smt_ast *a = convert_ast(cast.from);
+
+  if (is_signedbv_type(cast.from) || is_fixedbv_type(cast.from)) {
+    unsigned from_width = cast.from->type->get_width();
+
+    if (from_width == to_width) {
+      if (int_encoding && is_signedbv_type(cast.from) &&
+               is_fixedbv_type(cast.type)) {
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+      } else if (int_encoding && is_fixedbv_type(cast.from) &&
+               is_signedbv_type(cast.type)) {
+        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+      }
+      // XXXjmorse - there isn't a case here for if !int_encoding
+    } else if (from_width < to_width) {
+      if (int_encoding &&
+          ((is_fixedbv_type(cast.type) && is_signedbv_type(cast.from)))) {
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+      } else if (int_encoding) {
+	return a; // output = output
+      } else {
+        return convert_sign_ext(a, s, from_width, (to_width - from_width));
+      }
+    } else if (from_width > to_width) {
+      if (int_encoding &&
+          ((is_signedbv_type(cast.from) && is_fixedbv_type(cast.type)))) {
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+      } else if (int_encoding &&
+                (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
+        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+      } else if (int_encoding) {
+        return a; // output = output
+      } else {
+	if (!to_width)
+          to_width = config.ansi_c.int_width;
+
+        return mk_extract(a, to_width-1, 0, s, expr2tc());
+      }
+    }
+  } else if (is_unsignedbv_type(cast.from)) {
+    unsigned from_width = cast.from->type->get_width();
+
+    if (from_width == to_width) {
+      return a; // output = output
+    } else if (from_width < to_width) {
+      if (int_encoding) {
+	return a; // output = output
+      } else {
+        return convert_zero_ext(a, s, (to_width - from_width));
+      }
+    } else if (from_width > to_width) {
+      if (int_encoding) {
+	return a; // output = output
+      } else {
+        return mk_extract(a, to_width - 1, 0, s, expr2tc());
+      }
+    }
+  } else if (is_bool_type(cast.from)) {
+    const smt_ast *zero, *one;
+    unsigned width = cast.type->get_width();
+
+    if (is_bv_type(cast.type)) {
+      zero = mk_smt_bvint(BigInt(0), false, width, expr2tc());
+      one = mk_smt_bvint(BigInt(1), false, width, expr2tc());
+    } else if (is_fixedbv_type(cast.type)) {
+      zero = mk_smt_real(BigInt(0), expr2tc());
+      one = mk_smt_real(BigInt(1), expr2tc());
+    } else {
+      std::cerr << "Unexpected type in typecast of bool" << std::endl;
+      abort();
+    }
+
+    const smt_ast *args[3];
+    args[0] = a;
+    args[1] = one;
+    args[2] = zero;
+    return mk_func_app(s, SMT_FUNC_ITE, args, 3, expr2tc());
+  }
+
+  std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
+  abort();
 }
 
 const smt_ast *
