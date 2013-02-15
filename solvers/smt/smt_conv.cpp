@@ -1105,9 +1105,91 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 }
 
 const smt_ast *
-convert_typecast_to_ptr(const typecast2t &cast __attribute__((unused)))
+smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 {
-  assert(0);
+
+  // First, sanity check -- typecast from one kind of a pointer to another kind
+  // is a simple operation. Check for that first.
+  if (is_pointer_type(cast.from)) {
+    return convert_ast(cast.from);
+  }
+
+  // Unpleasentness; we don't know what pointer this integer is going to
+  // correspond to, and there's no way of telling statically, so we have
+  // to enumerate all pointers it could point at. IE, all of them. Which
+  // is expensive, but here we are.
+
+  // First cast it to an unsignedbv
+  type2tc int_type = get_uint_type(config.ansi_c.int_width);
+  typecast2tc cast_to_unsigned(int_type, cast.from);
+  expr2tc target = cast_to_unsigned;
+
+  // Construct array for all possible object outcomes
+  expr2tc is_in_range[addr_space_data.back().size()];
+  expr2tc obj_ids[addr_space_data.back().size()];
+  expr2tc obj_starts[addr_space_data.back().size()];
+
+  std::map<unsigned,unsigned>::const_iterator it;
+  unsigned int i;
+  for (it = addr_space_data.back().begin(), i = 0;
+       it != addr_space_data.back().end(); it++, i++)
+  {
+    unsigned id = it->first;
+    obj_ids[i] = constant_int2tc(int_type, BigInt(id));
+
+    std::stringstream ss1, ss2;
+    ss1 << "__ESBMC_ptr_obj_start_" << id;
+    symbol2tc ptr_start(int_type, ss1.str());
+    ss2 << "__ESBMC_ptr_obj_end_" << id;
+    symbol2tc ptr_end(int_type, ss2.str());
+
+    obj_starts[i] = ptr_start;
+
+    greaterthanequal2tc ge(target, ptr_start);
+    lessthanequal2tc le(target, ptr_end);
+    and2tc theand(ge, le);
+    is_in_range[i] = theand;
+  }
+
+  // Generate a big ITE chain, selecing a particular pointer offset. A
+  // significant question is what happens when it's neither; in which case I
+  // suggest the ptr becomes invalid_object. However, this needs frontend
+  // support to check for invalid_object after all dereferences XXXjmorse.
+
+  // So, what's the default value going to be if it doesn't match any existing
+  // pointers? Answer, it's going to be the invalid object identifier, but with
+  // an offset that calculates to the integer address of this object.
+  // That's so that we can store an invalid pointer in a pointer type, that
+  // eventually can be converted back via some mechanism to a valid pointer.
+  expr2tc id, offs;
+  id = constant_int2tc(int_type, pointer_logic.back().get_invalid_object());
+
+  // Calculate ptr offset - target minus start of invalid range, ie 1
+  offs = sub2tc(int_type, target, one_uint);
+
+  std::vector<expr2tc> membs;
+  membs.push_back(id);
+  membs.push_back(offs);
+  constant_struct2tc prev_in_chain(pointer_struct, membs);
+
+  // Now that big ite chain,
+  for (i = 0; i < addr_space_data.back().size(); i++) {
+    membs.clear();
+
+    // Calculate ptr offset were it this
+    offs = sub2tc(int_type, target, obj_starts[i]);
+
+    membs.push_back(obj_ids[i]);
+    membs.push_back(offs);
+    constant_struct2tc selected_tuple(pointer_struct, membs);
+
+    prev_in_chain = if2tc(pointer_struct, is_in_range[i],
+                          selected_tuple, prev_in_chain);
+  }
+
+  // Finally, we're now at the point where prev_in_chain represents a pointer
+  // object. Hurrah.
+  return convert_ast(prev_in_chain);
 }
 
 const smt_ast *
