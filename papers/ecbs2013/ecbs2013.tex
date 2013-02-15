@@ -527,7 +527,7 @@ In Section~\ref{related-work}, we discuss the related work and we conclude and d
 future work in Section~\ref{conclusions}.
 
 \begin{figure*}[ht] \centering
-\includegraphics[scale=0.45]{figures/esbmc-arch}
+\includegraphics[scale=0.4]{figures/esbmc-arch}
 \caption{ESBMC++ Architecture.}
 \label{figure:esbmc-arch}
 \end{figure*}
@@ -724,28 +724,30 @@ same.
 \smallskip\noindent{\bf Tool Architecture.}
 %------------------------------------------------------
 %
-The tool's architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step is the source code parser,
-ESBMC++ takes a C++ source code as input and creates most of the intermediary
-representation of the program (IRep) which will be the base for the remaining steps
-of the program verification. The source code parser is heavily based on Gnu C++
-Compiler as this allows ESBMC++ to finds most of the syntax errors reported by GCC.
+The tool architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step 
+is the source code parser; ESBMC++ takes a C++ source code as input and creates 
+most of the intermediate representation of the program, which will be the base 
+for the remaining steps of the program verification. The source code parser is 
+heavily based on the GNU C++ compiler since this allows ESBMC++ to finds most of the 
+syntax errors already reported by GCC.
 
-The next step is the C++ Typecheck. In this step, checks are made on the IRep,
-such as assignment checks, typecast checks, pointer initialization checks, function
-call checks and template IRep creation and instantiation (this will be explained later).
-On the goto programs step, the IRep will be converted on goto expressions.
-The convertion simplifies the representation (e.g, replacement of $switch$ and $while$
+The next step is the C++ type-check; here, additional checks are performed in the IRep
+tree, which include: assignment checks, type-cast checks, pointer initialization checks, function
+call checks as well as template creation and instantiation (this will be explained later).
+In the goto programs step, the IRep tree is converted into goto expressions; this conversion 
+simplifies the representation of the C++ program (e.g, replacement of $switch$ and $while$
 by $if$ and $goto$ statements), and handles the unrolling of the loops and the
-elimination of recursive functions. On goto symex step, the simplified goto program
-is converted to SSA expressions and assertions are inserted on the output SSA
-expressions, to check pointer safety, memory-leak, double-free, division by zero, etc.
-Also, in this step, most of the exception handling is done, such as jump instruction
-from throw statements and exception specification for function calls.
+elimination of recursive functions. In the goto symex step, the simplified goto program
+is then converted to SSA expressions and assertions are inserted in the resulting SSA
+expressions to check for safety properties related to array out-of-bounds, arithmetic under- 
+and over-flow, memory leaks, double frees, and division by zero.
+Additionally, in this step most of the exception handling is carried out, such as \textit{jump} instruction
+from \textit{throw} statements and exception specification for function calls.
 
 Finally, two set of quantifier-free formulae are created based on the SSA expressions:
-$C$ for the constraints and $P$ for the properties. Those sets will be used as input for
-a SMT solver, that will present a satisfiable answer if there was a violation in a given
-property $\phi$ or unsatisfiable if the property holds.
+$C$ for the constraints and $P$ for the properties as previously described in Section~\ref{sec:C-Bounded-Model-Checker}. 
+Those two sets of formulae will be used as input for an SMT solver, that will produce a satisfiable answer 
+if there is a violation of a given property $\phi$ or an unsatisfiable answer if the property $\phi$ holds.
 
 %------------------------------
 \section{C++ Operational Model}
@@ -804,7 +806,8 @@ as shown in Figure~\ref{figure:cpp-diagram}.
 %------------------------------
 
 Note that the COM also includes the ANSI-C libraries already
-supported by ESBMC.  Since ESBMC++ uses a different front-end, we have to build
+supported by ESBMC. Since ESBMC++ uses a different front-end 
+(as shown in Figure~\ref{figure:esbmc-arch}), we have to build
 a representation of the ANSI-C libraries into the COM; otherwise, ESBMC++ would
 not recognize the library methods and fail to parse the C++ programs.
 %
