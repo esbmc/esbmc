@@ -314,6 +314,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = mk_smt_symbol("zero_string", sort, expr);
     break;
   }
+  case expr2t::byte_extract_id:
+  {
+    a = convert_byte_extract(expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
