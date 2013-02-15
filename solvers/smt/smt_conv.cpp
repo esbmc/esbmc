@@ -944,8 +944,8 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     unsigned from_width = cast.from->type->get_width();
 
     if (from_width == to_integer_bits) {
-      ; // No-op, already converted by higher caller
-      return a;
+      // Just concat fraction ozeros at the bottom
+      args[0] = a;
     } else if (from_width > to_integer_bits) {
       const smt_sort *tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
                                     false);
