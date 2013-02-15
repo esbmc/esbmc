@@ -287,6 +287,21 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_is_nan(expr, args[0]);
     break;
   }
+  case expr2t::overflow_id:
+  {
+    a = overflow_arith(expr);
+    break;
+  }
+  case expr2t::overflow_cast_id:
+  {
+    a = overflow_cast(expr);
+    break;
+  }
+  case expr2t::overflow_neg_id:
+  {
+    a = overflow_neg(expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
