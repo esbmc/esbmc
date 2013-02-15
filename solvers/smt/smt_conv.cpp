@@ -1094,8 +1094,10 @@ smt_convt::init_addr_space_array(void)
   assert_expr(zero_eq);
   assert_expr(null_eq);
   assert_expr(invalid_eq);
-}
 
+  addr_space_data.back()[0] = 0;
+  addr_space_data.back()[1] = 0;
+}
 
 void
 smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
