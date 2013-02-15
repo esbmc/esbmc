@@ -839,12 +839,12 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
 
   ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
-  symbol2tc oldname(addr_space_type, ss2.str());
+  symbol2tc oldname(addr_space_arr_type, ss2.str());
   constant_int2tc ptr_idx(ptr_int_type, BigInt(idx));
 
-  with2tc store(addr_space_type, oldname, ptr_idx, val);
+  with2tc store(addr_space_arr_type, oldname, ptr_idx, val);
   ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
-  symbol2tc newname(addr_space_type, ss2.str());
+  symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
   assert_expr(eq);
   return;
