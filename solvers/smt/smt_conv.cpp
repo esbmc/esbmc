@@ -282,6 +282,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = tuple_ite(args[0], args[1], args[2], sort, expr);
     break;
   }
+  case expr2t::isnan_id:
+  {
+    a = convert_is_nan(expr, args[0]);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
@@ -461,6 +466,38 @@ smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
                      const expr2tc &tmp __attribute__((unused)))
 {
   assert(0);
+}
+
+const smt_ast *
+smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
+{
+  const smt_ast *args[3];
+  const isnan2t &isnan = to_isnan2t(expr);
+  const smt_sort *bs = mk_sort(SMT_SORT_BOOL);
+
+  // Assumes operand is fixedbv.
+  assert(is_fixedbv_type(isnan.value));
+  unsigned width = isnan.value->type->get_width();
+
+  const smt_ast *t = mk_smt_bool(true, expr2tc());
+  const smt_ast *f = mk_smt_bool(false, expr2tc());
+
+  if (int_encoding) {
+    const smt_sort *tmpsort = mk_sort(SMT_SORT_INT, false);
+    args[0] = mk_func_app(tmpsort, SMT_FUNC_REAL2INT, &operand, 1, expr2tc());
+    args[1] = mk_smt_int(BigInt(0), false, expr2tc());
+    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2, expr2tc());
+    args[1] = t;
+    args[2] = f;
+    return mk_func_app(bs, SMT_FUNC_ITE, args, 3, expr2tc());
+  } else {
+    args[0] = operand;
+    args[1] = mk_smt_bvint(BigInt(0), false, width, expr2tc());
+    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2, expr2tc());
+    args[1] = t;
+    args[2] = f;
+    return mk_func_app(bs, SMT_FUNC_ITE, args, 3, expr2tc());
+  }
 }
 
 const smt_ast *
