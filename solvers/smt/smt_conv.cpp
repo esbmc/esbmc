@@ -1044,8 +1044,13 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       } else if (int_encoding && is_fixedbv_type(cast.from) &&
                is_signedbv_type(cast.type)) {
         return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+      } else if (!int_encoding) {
+        // Just return the bit representation. It's fffiiiiiiinnneeee.
+        return convert_ast(cast.from);
+      } else {
+        std::cerr << "Unrecognized equal-width int typecast format" <<std::endl;
+        abort();
       }
-      // XXXjmorse - there isn't a case here for if !int_encoding
     } else if (from_width < to_width) {
       if (int_encoding &&
           ((is_fixedbv_type(cast.type) && is_signedbv_type(cast.from)))) {
