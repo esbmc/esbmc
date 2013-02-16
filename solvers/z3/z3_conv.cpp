@@ -215,14 +215,6 @@ z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
 }
 
 std::string
-z3_convt::get_cur_addrspace_ident(void)
-{
-
-  std::string str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
-  return str;
-}
-
-std::string
 z3_convt::extract_magnitude(std::string v, unsigned width)
 {
   return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
