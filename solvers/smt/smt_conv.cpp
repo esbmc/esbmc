@@ -1205,8 +1205,8 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   std::string str, new_str;
   type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
 
-  ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
-  symbol2tc oldname(addr_space_arr_type, ss2.str());
+  ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
+  symbol2tc oldname(addr_space_arr_type, ss.str());
   constant_int2tc ptr_idx(ptr_int_type, BigInt(idx));
 
   with2tc store(addr_space_arr_type, oldname, ptr_idx, val);
