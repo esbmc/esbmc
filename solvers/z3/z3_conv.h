@@ -201,6 +201,16 @@ private:
                              const smt_ast *false_val, const smt_sort *sort,
                              const expr2tc &expr);
 
+  virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
+                                      const smt_sort *domain);
+  virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
+                                      const smt_ast *field, const expr2tc &tmp);
+  virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
+                                      const smt_ast *val, const expr2tc &tmp);
+  virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
+                                   const smt_ast *false_val,
+                                   const smt_sort *sort, const expr2tc &expr);
+
   virtual smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual smt_ast *overflow_neg(const expr2tc &expr);
