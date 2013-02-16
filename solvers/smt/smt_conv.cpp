@@ -546,6 +546,40 @@ smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
 }
 
 smt_ast *
+smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
+                              const smt_sort *s __attribute__((unused)),
+                              unsigned int field __attribute__((unused)),
+                              const expr2tc &tmp __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
+                              unsigned int field __attribute__((unused)),
+                              const smt_ast *val __attribute__((unused)),
+                              const expr2tc &tmp __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_array_ite(const smt_ast *cond __attribute__((unused)),
+                           const smt_ast *trueval __attribute__((unused)),
+                           const smt_ast *false_val __attribute__((unused)),
+                           const smt_sort *sort __attribute__((unused)),
+                           const expr2tc &expr __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
 smt_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
 {
   assert(0);
