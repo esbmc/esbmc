@@ -554,7 +554,7 @@ smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)))
 smt_ast *
 smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
                               const smt_sort *s __attribute__((unused)),
-                              unsigned int field __attribute__((unused)),
+                              const smt_ast *field __attribute__((unused)),
                               const expr2tc &tmp __attribute__((unused)))
 {
   assert(0);
@@ -562,7 +562,7 @@ smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
 
 smt_ast *
 smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
-                              unsigned int field __attribute__((unused)),
+                              const smt_ast *field __attribute__((unused)),
                               const smt_ast *val __attribute__((unused)),
                               const expr2tc &tmp __attribute__((unused)))
 {
