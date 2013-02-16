@@ -415,6 +415,7 @@ smt_convt::convert_sort(const type2tc &type)
     return mk_struct_sort(type);
   case type2t::union_id:
     return mk_union_sort(type);
+  case type2t::code_id:
   case type2t::pointer_id:
     return mk_struct_sort(pointer_struct);
   case type2t::unsignedbv_id:
@@ -456,7 +457,6 @@ smt_convt::convert_sort(const type2tc &type)
     smt_sort *r = convert_sort(arr.subtype);
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
-  case type2t::code_id:
   case type2t::cpp_name_id:
   case type2t::symbol_id:
   case type2t::empty_id:
