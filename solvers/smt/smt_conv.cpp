@@ -224,8 +224,27 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::mul_id:
   {
-    assert(!is_fixedbv_type(expr) && "haven't got SMT backend supporting fixedbv mul yet");
-    assert(0);
+    assert(!int_encoding);
+
+    // Handle BV mode multiplies: for normal integers multiply normally, for
+    // fixedbv apply hacks.
+    if (is_fixedbv_type(expr)) {
+      const mul2t &mul = to_mul2t(expr);
+      const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
+      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
+      unsigned int topbit = mul.side_1->type->get_width();
+      const smt_sort *s1 = convert_sort(mul.side_1->type);
+      const smt_sort *s2 = convert_sort(mul.side_2->type);
+      args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
+      args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
+      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2, expr);
+      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort,
+                     expr);
+    } else {
+      assert(is_bv_type(expr));
+      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2, expr);
+    }
+    break;
   }
   case expr2t::div_id:
   {
@@ -1607,7 +1626,7 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //abs
 { SMT_FUNC_ADD, SMT_FUNC_BVADD, SMT_FUNC_BVADD, 2, SMT_SORT_ALLINTS},//add
 { SMT_FUNC_SUB, SMT_FUNC_BVSUB, SMT_FUNC_BVSUB, 2, SMT_SORT_ALLINTS},//sub
-{ SMT_FUNC_MUL, SMT_FUNC_BVMUL, SMT_FUNC_BVMUL, 2, SMT_SORT_ALLINTS},//mul
+{ SMT_FUNC_MUL, SMT_FUNC_BVMUL, SMT_FUNC_BVMUL, 2, SMT_SORT_INT | SMT_SORT_REAL },//mul
 { SMT_FUNC_DIV, SMT_FUNC_BVDIV, SMT_FUNC_BVDIV, 2, SMT_SORT_ALLINTS},//div
 { SMT_FUNC_MOD, SMT_FUNC_BVSMOD, SMT_FUNC_BVUMOD, 2, SMT_SORT_BV | SMT_SORT_INT},//mod
 { SMT_FUNC_SHL, SMT_FUNC_BVSHL, SMT_FUNC_BVSHL, 2, SMT_SORT_BV | SMT_SORT_INT},  //shl
