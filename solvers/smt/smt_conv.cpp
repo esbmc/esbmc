@@ -546,7 +546,8 @@ smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
 }
 
 smt_ast *
-smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)))
+smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)),
+                              const smt_sort *domain __attribute__((unused)))
 {
   assert(0);
 }
