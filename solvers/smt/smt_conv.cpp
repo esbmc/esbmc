@@ -216,6 +216,16 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::symbol_id:
     a = convert_terminal(expr);
     break;
+  case expr2t::constant_array_id:
+  {
+    const smt_sort *domain;
+    if (int_encoding)
+      domain = mk_sort(SMT_SORT_INT, false);
+    else
+      domain = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+    a = tuple_array_create(expr, domain);
+    break;
+  }
   case expr2t::add_id:
   case expr2t::sub_id:
   {
@@ -273,6 +283,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::index_id:
+  {
+    a = tuple_array_select(args[0], sort, args[1], expr);
+    break;
+  }
   case expr2t::with_id:
   {
     // We reach here if we're with'ing a struct, not an array.
@@ -281,8 +296,8 @@ smt_convt::convert_ast(const expr2tc &expr)
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2], expr);
     } else {
-      // XXX XXX XXX temporary, smt arrays of structs :(
-      a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
+      assert(is_array_type(expr->type));
+      a = tuple_array_update(args[0], args[1], args[2], expr);
     }
     break;
   }
@@ -323,8 +338,12 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s
-    assert(is_struct_type(expr) || is_pointer_type(expr));
-    a = tuple_ite(args[0], args[1], args[2], sort, expr);
+    if (is_struct_type(expr) || is_pointer_type(expr)) {
+      a = tuple_ite(args[0], args[1], args[2], sort, expr);
+    } else {
+      assert(is_array_type(expr));
+      a = tuple_array_ite(args[0], args[1], args[2], sort, expr);
+    }
     break;
   }
   case expr2t::isnan_id:
