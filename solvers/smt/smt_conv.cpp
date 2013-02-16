@@ -1155,7 +1155,7 @@ smt_convt::init_addr_space_array(void)
 
   std::vector<expr2tc> membs;
   membs.push_back(obj0_start);
-  membs.push_back(obj0_start);
+  membs.push_back(obj0_end);
   constant_struct2tc addr0_tuple(addr_space_type, membs);
   symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
   equality2tc addr0_range_eq(addr0_tuple, addr0_range);
