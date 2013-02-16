@@ -1042,7 +1042,7 @@ smt_convt::init_addr_space_array(void)
 
   type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
-  symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_start_0");
+  symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
   equality2tc obj0_start_eq(obj0_start, zero_uint);
   equality2tc obj0_end_eq(obj0_start, zero_uint);
 
@@ -1050,7 +1050,7 @@ smt_convt::init_addr_space_array(void)
   assert_expr(obj0_end_eq);
 
   symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
-  symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_start_1");
+  symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_end_1");
   constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
   equality2tc obj1_start_eq(obj1_start, one_uint);
   equality2tc obj1_end_eq(obj1_end, obj1_end_const);
