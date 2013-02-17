@@ -164,6 +164,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_sort *sort;
   const smt_ast *a;
   unsigned int num_args, used_sorts = 0;
+  bool seen_signed_operand = false;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -177,6 +178,8 @@ smt_convt::convert_ast(const expr2tc &expr)
     args[i] = convert_ast(*it);
     used_sorts |= args[i]->sort->id;
     i++;
+    if (is_signedbv_type(*it))
+      seen_signed_operand = true;
   }
   num_args = i;
 
@@ -194,7 +197,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     if ((used_sorts | cvt->permitted_sorts) == cvt->permitted_sorts) {
       // Matches; we can just convert this.
       smt_func_kind k = (int_encoding) ? cvt->int_mode_func
-                      : (is_signedbv_type(expr->type))
+                      : (seen_signed_operand)
                           ? cvt->bv_mode_func_signed
                           : cvt->bv_mode_func_unsigned;
       a = mk_func_app(sort, k, &args[0], cvt->args, expr);
