@@ -291,7 +291,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::with_id:
   {
     // We reach here if we're with'ing a struct, not an array.
-    if (is_struct_type(expr->type)) {
+    if (is_struct_type(expr->type) || is_union_type(expr)) {
       const with2t &with = to_with2t(expr);
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2], expr);
