@@ -261,7 +261,7 @@ std::string fixedbvt::format(
   unsigned fraction_bits=spec.get_fraction_bits();
 
   mp_integer int_value=v;
-  mp_integer factor=mp_integer(1)<<fraction_bits;
+  mp_integer factor=power(2, fraction_bits);//mp_integer(1)<<fraction_bits;
 
   if(int_value.is_negative())
   {

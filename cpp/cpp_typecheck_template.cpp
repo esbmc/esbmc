@@ -660,44 +660,20 @@ void cpp_typecheckt::convert_template_class_specialization(
     str << "expected a template";
   }
 
-  #if 0
-  // is this partial specialization?
-  if(declaration.template_type().parameters().empty())
+  // partial -- we typecheck
+  declaration.partial_specialization_args()=template_args_non_tc;
+  declaration.set_specialization_of(template_symbol.name);
+
+  // We can't typecheck arguments yet, they are used
+  // for guessing later. But we can check the number.
+  if(template_args_non_tc.arguments().size()!=
+      to_cpp_declaration(template_symbol.type).template_type().parameters().size())
   {
-    // typecheck arguments -- these are for the 'primary' template!
-    cpp_template_args_tct template_args_tc=
-      typecheck_template_args(
-        declaration.location(),
-        to_cpp_declaration(template_symbol.type).template_type(),
-        template_args_non_tc);
-
-    // Full specialization, i.e., template<>.
-    // We instantiate.
-    instantiate_template(
-      cpp_name.location(),
-      template_symbol,
-      template_args_tc,
-      type);
+    err_location(cpp_name.location());
+    throw "template specialization with wrong number of arguments";
   }
-  else
-  #endif
 
-  {
-    // partial -- we typecheck
-    declaration.partial_specialization_args()=template_args_non_tc;
-    declaration.set_specialization_of(template_symbol.name);
-
-    // We can't typecheck arguments yet, they are used
-    // for guessing later. But we can check the number.
-    if(template_args_non_tc.arguments().size()!=
-       to_cpp_declaration(template_symbol.type).template_type().parameters().size())
-    {
-      err_location(cpp_name.location());
-      throw "template specialization with wrong number of arguments";
-    }
-
-    typecheck_template_class(declaration);
-  }
+  typecheck_template_class(declaration);
 }
 
 /*******************************************************************\

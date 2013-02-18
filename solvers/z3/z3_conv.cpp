@@ -1229,7 +1229,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
       convert_bv(op, bv);
     } else if (from_width > to_integer_bits)      {
       convert_bv(op, args[0]);
-      bv = Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, args[0]);
+      bv = Z3_mk_extract(z3_ctx, to_integer_bits-1, 0, args[0]);
     } else   {
       assert(from_width < to_integer_bits);
       convert_bv(op, args[0]);
@@ -1262,7 +1262,6 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
                       from_fraction_bits, args[0]);
     } else   {
       assert(to_integer_bits > from_integer_bits);
-
       convert_bv(op, args[0]);
 
       magnitude =
@@ -1282,11 +1281,9 @@ z3_convt::convert_typecast_fixedbv_nonint(const exprt &expr, Z3_ast &bv)
       assert(to_fraction_bits > from_fraction_bits);
       convert_bv(op, args[0]);
 
-      fraction =
-        Z3_mk_concat(z3_ctx,
-                     Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0,args[0]),
-                     convert_number(0, to_fraction_bits - from_fraction_bits,
-                                    true));
+      fraction = 
+								Z3_mk_sign_ext(z3_ctx, to_fraction_bits - from_fraction_bits, 
+															 Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, args[0]));
     }
     bv = Z3_mk_concat(z3_ctx, magnitude, fraction);
   } else {
@@ -1312,42 +1309,108 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
 
     if (from_width == to_width) {
       convert_bv(op, bv);
-
+			
       if (int_encoding && op.type().id() == "signedbv" &&
-               expr.type().id() == "fixedbv")
-	bv = Z3_mk_int2real(z3_ctx, bv);
-      else if (int_encoding && op.type().id() == "fixedbv" &&
-               expr.type().id() == "signedbv")
-	bv = Z3_mk_real2int(z3_ctx, bv);
-      // XXXjmorse - there isn't a case here for if !int_encoding
-
+          expr.type().id() == "fixedbv") {
+        bv = Z3_mk_int2real(z3_ctx, bv);
+      } else if (int_encoding && op.type().id() == "fixedbv" &&
+               expr.type().id() == "signedbv") {
+				if (expr.op0().operands().size()) {
+    	    Z3_ast operands[2], is_less_than_one, is_integer;
+    	    operands[0] = Z3_mk_real2int(z3_ctx, bv);
+    	    operands[1] = convert_number_int(1, 0, true);
+				  is_integer = Z3_mk_is_int(z3_ctx, bv);
+    	    is_less_than_one = Z3_mk_ite(z3_ctx, 
+																Z3_mk_lt(z3_ctx, operands[0], convert_number_int(-1, 0, true)),
+    			  	  	  	  	  	  Z3_mk_true(z3_ctx),
+    			  	  	  	  	  	  Z3_mk_false(z3_ctx));
+				  bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, bv), 
+												 operands[0], 
+												 Z3_mk_ite(z3_ctx, 
+																	 is_less_than_one, 
+																	 Z3_mk_add(z3_ctx, 2, operands), 
+																	 operands[0]));
+				}
+				else
+					bv = Z3_mk_real2int(z3_ctx, bv);
+    }
+	  else if (op.type().id() == "fixedbv" &&
+               expr.type().id() == "signedbv") {
+	    Z3_ast i, f;
+	    i = Z3_mk_extract(z3_ctx, (to_width - 1), from_width/2, bv);
+	    f = Z3_mk_extract(z3_ctx, (to_width/2 - 1), 0, bv);
+	    bv = Z3_mk_ite(z3_ctx,
+					   Z3_mk_bvsge(z3_ctx, i, convert_number(0, to_width/2, true)), i,
+					   Z3_mk_ite(z3_ctx, Z3_mk_eq(z3_ctx,
+					   Z3_mk_bvneg(z3_ctx, f), convert_number(0, to_width/2, true)), i,
+					   Z3_mk_bvadd(z3_ctx, i, convert_number(1, to_width/2, true))));
+	    bv = Z3_mk_sign_ext(z3_ctx, (from_width/2), bv);
+	  }
+	  else if (op.type().id() == "fixedbv" &&
+               expr.type().id() == "unsignedbv") {
+	    bv = Z3_mk_extract(z3_ctx, (to_width-1), (from_width/2), bv);
+		bv = Z3_mk_zero_ext(z3_ctx, (from_width/2), bv);
+	  }
     } else if (from_width < to_width)      {
       convert_bv(op, args[0]);
 
       if (int_encoding &&
-          ((expr.type().id() == "fixedbv" && op.type().id() == "signedbv")))
-	bv = Z3_mk_int2real(z3_ctx, args[0]);
-      else if (int_encoding)
-	bv = args[0];
+          ((op.type().id() == "signedbv" && 
+						expr.type().id() == "fixedbv"))) {
+	      bv = Z3_mk_int2real(z3_ctx, args[0]);
+      } else if (int_encoding)
+	      bv = args[0];
       else
-	bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), args[0]);
-    } else if (from_width > to_width)     {
+	      bv = Z3_mk_sign_ext(z3_ctx, (to_width - from_width), args[0]);
+    } 
+    else if (from_width > to_width)     {
       convert_bv(op, args[0]);
 
       if (int_encoding &&
-          ((op.type().id() == "signedbv" && expr.type().id() == "fixedbv")))
-	bv = Z3_mk_int2real(z3_ctx, args[0]);
+          ((op.type().id() == "signedbv" && expr.type().id() == "fixedbv"))) {
+	      bv = Z3_mk_int2real(z3_ctx, args[0]);
+			}
       else if (int_encoding &&
-               (op.type().id() == "fixedbv" && expr.type().id() == "signedbv"))
-	bv = Z3_mk_real2int(z3_ctx, args[0]);
+               (op.type().id() == "fixedbv" && expr.type().id() == "signedbv")) {
+    	  if (expr.op0().operands().size()) {
+    		  if (expr.op0().op0().operands().size()) {
+    			bv = Z3_mk_real2int(z3_ctx, args[0]);
+    			return bv;
+    		  }
+    	  }
+
+    	  Z3_ast operands[2], is_less_than_one, is_integer;
+    	  operands[0] = Z3_mk_real2int(z3_ctx, args[0]);
+    	  operands[1] = convert_number_int(1, 0, true);
+				is_integer = Z3_mk_is_int(z3_ctx, args[0]);
+    	  is_less_than_one = Z3_mk_ite(z3_ctx, Z3_mk_lt(z3_ctx, operands[0], convert_number_int(-1, 0, true)),
+    			  	  	  	  	  	  	  Z3_mk_true(z3_ctx),
+    			  	  	  	  	  	  	  Z3_mk_false(z3_ctx));
+    	  bv = Z3_mk_ite(z3_ctx, is_integer, operands[0],
+											 Z3_mk_ite(z3_ctx, is_less_than_one,
+    			   		       Z3_mk_add(z3_ctx, 2, operands),
+									     operands[0]));
+      } 
       else if (int_encoding)
-	bv = args[0];
+	      bv = args[0];
+      else if (op.type().id() == "fixedbv" 
+								&& expr.type().id() == "signedbv") {
+	      if (!to_width) to_width = config.ansi_c.int_width;
+	      Z3_ast i, f;
+	      i = Z3_mk_extract(z3_ctx, (from_width - 1), to_width, args[0]);
+	      f = Z3_mk_extract(z3_ctx, (to_width - 1), 0, args[0]);
+	      bv = Z3_mk_ite(z3_ctx,
+					   Z3_mk_bvsge(z3_ctx, i, convert_number(0, from_width - to_width, true)), i,
+					   Z3_mk_ite(z3_ctx, Z3_mk_bvsgt(z3_ctx,
+					   Z3_mk_bvneg(z3_ctx, f), convert_number(0, to_width, true)),
+					   Z3_mk_bvadd(z3_ctx, i, convert_number(1, from_width - to_width, true)), i));
+      }
       else {
-	if (!to_width) to_width = config.ansi_c.int_width;
-	bv = Z3_mk_extract(z3_ctx, (to_width - 1), 0, args[0]);
+        bv = Z3_mk_extract(z3_ctx, to_width-1, 0, args[0]);
       }
     }
-  } else if (op.type().id() == "unsignedbv") {
+  } 
+	else if (op.type().id() == "unsignedbv") {
     unsigned from_width;
 
     get_type_width(op.type(), from_width);

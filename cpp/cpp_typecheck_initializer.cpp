@@ -62,6 +62,13 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
           << "' is declared as reference but is not initialized";
       throw 0;
     }
+    else if(symbol.type.id()=="incomplete_array")
+    {
+      err_location(symbol.location);
+      str << "storage size of `" << symbol.base_name
+          << "' isn't know";
+      throw 0;
+    }
 
     // done
     return;
@@ -259,7 +266,7 @@ void cpp_typecheckt::zero_initializer(
   }
   else if(final_type.id()=="union")
   {
-    c_sizeoft so(*this);
+    c_sizeoft c_sizeof(*this);
 
     // Select the largest component
     mp_integer comp_size=0;
@@ -275,7 +282,7 @@ void cpp_typecheckt::zero_initializer(
       if(component.type().id()=="code")
         continue;
 
-      exprt exs=so(component.type());
+      exprt exs=c_sizeof(component.type());
 
       mp_integer size;
       bool to_int = !to_integer(exs,size);
@@ -292,6 +299,8 @@ void cpp_typecheckt::zero_initializer(
     {
       irept name("name");
       name.identifier(comp.base_name());
+      name.set("#location", location);
+
       cpp_namet cpp_name;
       cpp_name.move_to_sub(name);
 
@@ -321,6 +330,13 @@ void cpp_typecheckt::zero_initializer(
 
     typecheck_code(assign);
     ops.push_back(assign);
+  }
+  else if(final_type.id()=="incomplete_struct" ||
+          final_type.id()=="incomplete_union")
+  {
+    err_location(location);
+    str << "cannot zero-initialize incomplete compound";
+    throw 0;
   }
   else
   {

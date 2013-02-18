@@ -365,12 +365,12 @@ void cpp_typecheckt::typecheck_expr_sizeof(exprt &expr)
   if(expr.operands().size()==0)
   {
     const typet &type=
-      static_cast<const typet &>(expr.add("sizeof-type"));
+      static_cast<const typet &>(expr.find("sizeof-type"));
 
     if(type.id()=="cpp-name")
     {
-      // this may be ambiguous -- it can be either a type or
-      // an expression
+      // sizeof(X) may be ambiguous -- X can be either a type or
+      // an expression.
 
       cpp_typecheck_fargst fargs;
 
@@ -383,6 +383,28 @@ void cpp_typecheckt::typecheck_expr_sizeof(exprt &expr)
       {
         expr.copy_to_operands(symbol_expr);
         expr.remove("sizeof-type");
+      }
+    }
+    else if(type.id()=="array")
+    {
+      // sizeof(expr[index]) can be parsed as an array type!
+
+      if(type.subtype().id()=="cpp-name")
+      {
+        cpp_typecheck_fargst fargs;
+
+        exprt symbol_expr=resolve(
+          to_cpp_name(static_cast<const irept &>(type.subtype())),
+          cpp_typecheck_resolvet::BOTH,
+          fargs);
+
+        if(symbol_expr.id()!="type")
+        {
+          // _NOT_ a type
+          index_exprt index_expr(symbol_expr, to_array_type(type).size());
+          expr.copy_to_operands(index_expr);
+          expr.remove("sizeof-type");
+        }
       }
     }
   }
@@ -796,13 +818,6 @@ void cpp_typecheckt::typecheck_expr_throw(exprt &expr)
     {
       err_location(expr.op0());
       throw "cannot throw void";
-    }
-    else if(id=="incomplete_array")
-    {
-      err_location(expr.op0());
-      str << "storage size of ‘" << lookup(expr.op0().identifier()).base_name;
-      str << "’ isn’t known\n";
-      throw 0;
     }
 
     // annotate the relevant exception IDs
