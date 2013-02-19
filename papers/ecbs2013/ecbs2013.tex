@@ -551,7 +551,7 @@ and SMT solvers.
 %------------------------------------------------------
 %
 CBMC implements BMC for ANSI-C/C++ programs using SAT/SMT
-solvers~\cite{Clarke04}.  It can process %%% C/C++ 
+solvers~\cite{Clarke04}.  It can process %%% C/C++
 the code using the goto-cc
 tool~\cite{Wintersteiger09}, which compiles the C/C++ code into
 equivalent GOTO-programs (i.e., control-flow graphs) using a
@@ -727,29 +727,29 @@ same.
 \smallskip\noindent{\bf Tool Architecture.}
 %------------------------------------------------------
 %
-The tool architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step 
-is the source code parser; ESBMC++ takes a C++ source code as input and creates 
-most of the intermediate representation of the program, which will be the base 
-for the remaining steps of the program verification. The source code parser is 
-heavily based on the GNU C++ compiler since this allows ESBMC++ to finds most of the 
+The tool architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step
+is the source code parser; ESBMC++ takes a C++ source code as input and creates
+most of the intermediate representation of the program, which will be the base
+for the remaining steps of the program verification. The source code parser is
+heavily based on the GNU C++ compiler since this allows ESBMC++ to finds most of the
 syntax errors already reported by GCC.
 
 The next step is the C++ type-check; here, additional checks are performed in the IRep
 tree, which include: assignment checks, type-cast checks, pointer initialization checks, function
 call checks as well as template creation and instantiation (which will be explained later).
-In the next programs step, the IRep tree is converted into goto expressions; this conversion 
+In the next programs step, the IRep tree is converted into goto expressions; this conversion
 simplifies the representation of the C++ program (e.g, replacement of \emph{switch} and \emph{while}
 by \emph{if} and \emph{goto} statements), and handles the unrolling of the loops and the
 elimination of recursive functions. In the symbolic execution of the goto programs, the simplified goto program
 is then converted to SSA expressions and assertions are inserted in the resulting SSA
-expressions to check for safety properties related to array out-of-bounds, arithmetic under- 
+expressions to check for safety properties related to array out-of-bounds, arithmetic under-
 and over-flow, memory leaks, double frees, and division by zero.
 Additionally, in this step most of the exception handling is carried out, such as \textit{jump} instruction
 from \textit{throw} statements and exception specification for function calls.
 
 Finally, two set of quantifier-free formulae are created based on the SSA expressions:
-${\cal C}$ for the constraints and ${\cal P}$ for the properties as 
-previously described above. %%% in Section~\ref{sec:C-Bounded-Model-Checker}. 
+${\cal C}$ for the constraints and ${\cal P}$ for the properties as
+previously described above. %%% in Section~\ref{sec:C-Bounded-Model-Checker}.
 Those two sets of formulae will be used as input for an SMT solver
 that will produce a counterexample
 if there is a violation of a given property, or an ``unsatisfiable'' answer if the property holds.
@@ -811,7 +811,7 @@ as shown in Figure~\ref{figure:cpp-diagram}.
 %------------------------------
 
 Note that the COM also includes the ANSI-C libraries already
-supported by ESBMC. Since ESBMC++ uses a different front-end 
+supported by ESBMC. Since ESBMC++ uses a different front-end
 (as shown in Figure~\ref{figure:esbmc-arch}), we have to build
 a representation of the ANSI-C libraries into the COM; otherwise, ESBMC++ would
 not recognize the library methods and fail to parse the C++ programs.
@@ -999,7 +999,7 @@ use of three variables: a variable of type $P$ called \emph{array} that points
 to the first element of the array, a natural number \emph{size} that stores
 the quantity of elements in the container, and a natural value \emph{capacity}
 that stores the total capacity of a container (which is valid only for vectors).
-Note that, as the elements are added to a vector container 
+Note that, as the elements are added to a vector container
 and the size grows, the capacity is doubled every time
 the size reaches the existing capacity value. Similarly, iterators are modeled using
 two variables: a variable of type \textit{Int} called \emph{pos},
@@ -1060,7 +1060,7 @@ insertion position, using both iterator or pointer bounds.
 Let $\mathit{it}_0$ be an iterator that marks the first element
 to be inserted, $\mathit{it}_k$ be another iterator that
 points to the first element after the end of the sequence to be inserted
-in the required position and let $k$ be the length of the array 
+in the required position and let $k$ be the length of the array
 $[\mathit{it}_0\, \mathit{it}_k)$.
 Thus, we have:
 
@@ -1227,14 +1227,14 @@ we call this \textit{shared inheritance}.
 
 A formal description to represent
 the relationship between classes can be described by the class hierarchy graph
-(CHG). This graph $\zeta$ is composed of a triple 
+(CHG). This graph $\zeta$ is composed of a triple
 $\langle \mathit{C}, \prec_{s}, \prec_{r}\rangle$,
-where $\mathit{C}$ is the set of classes, 
+where $\mathit{C}$ is the set of classes,
 $\prec_s \subseteq C \times C$ refers to \textit{shared inheritance} edges,
-and $\prec_r\subseteq C \times C$ are \textit{replicated inheritance} edges. 
+and $\prec_r\subseteq C \times C$ are \textit{replicated inheritance} edges.
 %%% The symbols $\prec_{s}$ and $\prec_{r}$
 %%% are the set of edges that represent the inheritance relationship between
-%%% classes and both sets are in $\mathit{C_{sr}}$ 
+%%% classes and both sets are in $\mathit{C_{sr}}$
 %%% (where $\mathit{C_{sr}} \subseteq \mathit{C} \times \mathit{C}$.
 We also define $\prec_{sr} = \prec_s \cup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$.
 ($\mathit{C}, \leq_{sr}$) is then a partially ordered set~\cite{Neggers99}
@@ -1298,7 +1298,7 @@ C := \left [ \begin{array}{ll}
         \wedge\: j_{4} = \mathit{store}(j_{3}, \mathit{vtable}, \mathit{Square}) \\
         \wedge\: j_{5} = \mathit{store}(j_{4}, \mathit{width}, 10) \\
         \wedge\: \mathit{return\_value}_{1} = \\
-        \:\:\:\:\:\:\mathit{select}(j_{5}, \mathit{width}) \times 
+        \:\:\:\:\:\:\mathit{select}(j_{5}, \mathit{width}) \times
                     \mathit{select}(j_{5}, \mathit{width}) \\
               \end{array} \right ],  \\
 \end{equation}
@@ -1313,13 +1313,13 @@ P := \left [ \begin{array}{ll}
 
 The classes \textit{Rectangle} (which is the base class)
 and \textit{Square} (which is the derived class) each have a virtual method
-called $\mathit{area}()$, which have the same signature. 
+called $\mathit{area}()$, which have the same signature.
 %%% As our running example
 %%% calls this method on a base class pointer, then this called function
-%%% cannot be determined at compile-time. 
+%%% cannot be determined at compile-time.
 If we assume that the example
 calls this method on a base class pointer, then the actually executed function
-cannot be determined at compile-time. 
+cannot be determined at compile-time.
 To overcome this problem,
 we thus create a \textit{vtable} to contain the address of the object's bound
 methods so that the call to this method is fetched with the address from
@@ -1354,10 +1354,10 @@ correct use of \textit{bad\_cast} thrown by dynamic cast.
 
 One of the main features that C++ provides is exception handling.
 %%% Exceptions are unexpected situations
-%%% that the program was not designed to handle. 
+%%% that the program was not designed to handle.
 The exception handling
-is split into three elements: a \emph{try} block, where an exception may 
-occur; a \emph{catch} block (also called \emph{handler}), where an exception 
+is split into three elements: a \emph{try} block, where an exception may
+occur; a \emph{catch} block (also called \emph{handler}), where an exception
 can be handled; and a \emph{throw}
 expression to connect both blocks. Figure~\ref{figure:try-catch-example}
 shows a C++ code example with exception handling.
@@ -1786,15 +1786,15 @@ updates a rethrow if this reference is not \verb|NULL|.}
 
 The exception specifications define which exceptions a
 function or method (including constructors
-and destructors) can throw. 
+and destructors) can throw.
 %Alongside a method or
 %function declaration a throw expression containing
 %the exceptions list can define none or
 %multiple exceptions, which will forbid that
 %any exception that is not in the exception
-%specification to go out the function or method. 
+%specification to go out the function or method.
 For each method or function declaration the exception
-specification lists the exceptions that can ``escape'' the 
+specification lists the exceptions that can ``escape'' the
 respective function or method, i.e., are not guaranteed to be
 handled within.
 Note that an exception can still be handled inside
@@ -1990,29 +1990,29 @@ Note that ESBMC++ does not crash or runs out of memory or time in any suite.
 \label{verifying-the-sniffer-code}
 %-----------------------------------
 
-This section describes the results of the verification process using the 
-ESBMC++ and LLBMC model checkers against the sniffer code provided by 
-Nokia Institute of Technology (INdT). The sniffer code is responsible for 
-capturing and logging traffic passing over a network that supports the Message 
-Transfer Part Level 3 User Adaptation Layer (M3UA); it enables the transport of 
+This section describes the results of the verification process using the
+ESBMC++ and LLBMC model checkers against the sniffer code provided by
+Nokia Institute of Technology (INdT). The sniffer code is responsible for
+capturing and logging traffic passing over a network that supports the Message
+Transfer Part Level 3 User Adaptation Layer (M3UA); it enables the transport of
 Signaling System 7 (SS7) protocol's user parts and it uses the services provided
-by the Stream Control Transmission Protocol (SCTP). The sniffer code contains 
-approximately 20 classes, 85 methods, and 2800 lines of C++ code. 
+by the Stream Control Transmission Protocol (SCTP). The sniffer code contains
+approximately 20 classes, 85 methods, and 2800 lines of C++ code.
 
-The following properties were verified using the customer version 
-of the sniffer code: array bounds violations, division by zero, and arithmetic under- 
-and over-flow. Due to confidentiality issues, we were able to model check 
-50 out of 85 methods (since we did not have access to some external classes that 
-the sniffer code requires). In the remaining code base, ESBMC++ was able to identify five bugs 
-that are mostly related to arithmetic under- and over-flow while LLBMC was able to 
-identify only three of them. Note that all bugs were reported to the developers 
+The following properties were verified using the customer version
+of the sniffer code: array bounds violations, division by zero, and arithmetic under-
+and over-flow. Due to confidentiality issues, we were able to model check
+50 out of 85 methods (since we did not have access to some external classes that
+the sniffer code requires). In the remaining code base, ESBMC++ was able to identify five bugs
+that are mostly related to arithmetic under- and over-flow while LLBMC was able to
+identify only three of them. Note that all bugs were reported to the developers
 and confirmed by them.
 
-As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows 
+As an example of the bugs that were found, Figure~\ref{figure:PacketM3UA} shows
 a code fragment of the method \textit{getPayloadSize} from the class \textit{PacketM3UA}.
-Here, an arithmetic over-flow might occur on the typecast operation since the method 
+Here, an arithmetic over-flow might occur on the typecast operation since the method
 \textit{ntohs} returns an unsigned integer, but the method \textit{getPayloadSize} is
-expected to return an integer data-type. One possible way to fix this bug is to change the return type 
+expected to return an integer data-type. One possible way to fix this bug is to change the return type
 of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast over-flow.
 
 \begin{figure}[ht]
@@ -2021,12 +2021,12 @@ of the method \textit{getPayloadSize} to unsigned integer to avoid the typecast 
 \begin{lstlisting}
 int PacketM3UA::getPayloadSize() {
   return ntohs(m3uaParamHeader->paramSize)
-          - (M3UA_PROTOCOL_DATA_HEADER_SIZE 
+          - (M3UA_PROTOCOL_DATA_HEADER_SIZE
           + M3UA_PARAMETER_HEADER_SIZE);
 }
 \end{lstlisting}
 \end{minipage}
-\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.} 
+\caption{Arithmetic over-flow on the typecast operation of the \textit{getPayloadSize}.}
 \label{figure:PacketM3UA}
 \end{figure}
 
@@ -2195,7 +2195,7 @@ as well as novel approaches to handle inheritance, polymorphism, and exception h
 (in particular, exception specification, which is a feature that is not supported by other
 BMC tools). Our experiments contain C++ programs with most of the features that the C++ language
 has to offer. Additionally, we have verified a commercial application of medium-size
-used in the telecommunications domain. The results show that ESBMC++ outperforms LLBMC 
+used in the telecommunications domain. The results show that ESBMC++ outperforms LLBMC
 for the verification of C++ programs. In particular, ESBMC++ is able to verify most of the
 C++ programs; we are able to verify programs
 with exceptions enabled (a missing feature of LLBMC that decreases the verification accuracy of
