@@ -529,7 +529,7 @@ In Section~\ref{related-work}, we discuss the related work and we conclude and d
 future work in Section~\ref{conclusions}.
 
 \begin{figure*}[ht] \centering
-\includegraphics[scale=0.4]{figures/esbmc-arch}
+\includegraphics[scale=0.35]{figures/esbmc-arch}
 \caption{ESBMC/ESBMC++ Architecture.}
 \label{figure:esbmc-arch}
 \end{figure*}
@@ -1215,7 +1215,7 @@ have only one base class, C++ also allows multiple inheritance, where a class
 may inherit from one or more unrelated base classes. This particular feature
 makes C++ programs harder to model check than programs in other object-oriented
 programming languages (e.g., Java) since it disallows the direct transfer of
-techniques developed for other, simpler programming languages.
+techniques developed for other, simpler programming languages~\cite{Pasareanu04,Visser05}.
 
 To deal with inheritance in ESBMC++, we simply replicate the methods
 and attributes of the base classes to the inherited class to have
@@ -1237,15 +1237,15 @@ and $\prec_r\subseteq C \times C$ are \textit{replicated inheritance} edges.
 %%% classes and both sets are in $\mathit{C_{sr}}$
 %%% (where $\mathit{C_{sr}} \subseteq \mathit{C} \times \mathit{C}$.
 We also define $\prec_{sr} = \prec_s \cup \prec_r$ and $\leq_{sr} = (\prec_{sr})^*$.
-($\mathit{C}, \leq_{sr}$) is then a partially ordered set~\cite{Neggers99}
+$\left( \mathit{C}, \leq_{sr} \right)$ is then a partially ordered set~\cite{Neggers99}
 and $\leq_{sr}$ is anti-symmetric (i.e., if one element A of the set precedes B,
 the opposite relation cannot exist).
 %
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
 that represents the \textit{Shape} class hierarchy that contains multiple inheritance.
-The Rectangle class relation can be formalized by
-($\left(C, \left\langle Rectangle, Shape \right\rangle \right)$,
-$\left(C, \left\langle Rectangle, Display \right\rangle \right)$).
+The replicated inheritance in the Rectangle class relation can be formalized by
+$\left\langle C, \emptyset,\left\{ Rectangle, Shape \right\} \right\rangle$ and
+$\left\langle C, \emptyset, \left\{ Rectangle, Display \right\} \right\rangle $.
 
 Our tool creates an intermediate model for single and multiple inheritance, handling
 replicated and shared inheritance where all classes are converted into structures and all
@@ -1328,7 +1328,7 @@ the \textit{vtable} at verification-time.
 In addition, we also support indirect inheritance,
 where a class inherits features from a derived class with one
 or more classes not directly connected. In Figure~\ref{figure:uml_diagram}, we have
-$\left(C, \left\langle Square, Rectangle, Shape \right\rangle \right)$.
+$\left\langle C, \emptyset, \left\{ Square, Rectangle, Shape \right\} \right\rangle$.
 Thus, the \textit{Square} class can access features from the \textit{Shape} class,
 but they are not directly connected. We tackle this problem by
 looking for the features using a depth search from the derived to base classes
@@ -2305,7 +2305,7 @@ R.~Brummayer and A.~Biere, Boolector: An efficient {SMT} solver for  bit-vectors
 %A.~Cimatti, A.~Micheli, I.~Narasamdya, and M.~Roveri.
 A.~Cimatti et~al.
 \newblock Verifying {SystemC}: a software model checking approach.
-\newblock In {\em FMCAD}, 2010, pp.\ 121--128.
+\newblock In {\em FMCAD}, pp.\ 121--128, 2010.
 
 \bibitem{Clarke04}
 E.~Clarke, D.~Kroening, and F.~Lerda.
@@ -2357,6 +2357,11 @@ C.~Pasareanu and W.~Visser,
 \newblock Verification of Java Programs Using Symbolic Execution and Invariant
 Generation.
 \newblock In {\em SPIN}, LNCS 2989, pp. 164--181, 2004.
+
+\bibitem{Visser05}
+W.~Visser and P.~Mehlitz 
+\newblock Model Checking Programs with Java PathFinder. 
+\newblock In {\em SPIN}, LNCS 3639, pp. 27, 2005.
 
 \bibitem{PrabhuMBIG11}
 %P.~Prabhu, N.~Maeda, G.~Balakrishnan, F.~Ivancic, and A.~Gupta,
