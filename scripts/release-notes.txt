@@ -3,6 +3,7 @@ Release Notes of the ESBMC model checker
 *** Version 1.21
 + Enhance support for C++ model checking
 + Switch LTL modelling to support checking multiple property truth values.
++ Fixed a pointer-tracking error breaking some leaked-memory detection tests.
 
 *** Version 1.20 ***
 TACAS13 competition release.
