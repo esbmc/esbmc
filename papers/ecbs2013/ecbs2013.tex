@@ -530,7 +530,7 @@ future work in Section~\ref{conclusions}.
 
 \begin{figure*}[ht] \centering
 \includegraphics[scale=0.4]{figures/esbmc-arch}
-\caption{ESBMC++ Architecture.}
+\caption{ESBMC/ESBMC++ Architecture.}
 \label{figure:esbmc-arch}
 \end{figure*}
 
@@ -1387,7 +1387,7 @@ int main() {
 \end{figure}
 
 In ESBMC++, the exception handling happens in two steps,
-during the type-checking and sthe symbolic execution phases.
+during the type-checking and the symbolic execution phases.
 In the type-checking phase, an AST is built based on the code
 inside the try block, but with a few modifications: before the try block,
 a CATCH instruction with an empty map (which will be filled later during
@@ -1442,13 +1442,13 @@ that we may have try-catch blocks inside other
 try-catch blocks and ESBMC++ should always handle
 the most internal first. Following the symbolic execution
 for the code that is inside the try block, ESBMC++ will continue
-to execute the code until it finds a throw expression.
+to execute the code until it finds a THROW expression.
 When it happens, ESBMC++ looks at the map for a valid catch
 for the exception thrown; if it finds a valid catch, then the label
 will now be saved, but it will only be handled later;
 if it is unable to find an exception, then an error will be thrown.
-ESBMC++ will also ignore any other \textit{throw} or \textit{goto}
-instruction after the first \textit{throw} is found, but it will continue
+ESBMC++ will also ignore any other THROW or GOTO
+instruction after the first THROW is found, but it will continue
 to verify all the try block code. When the second CATCH is found,
 which means that the try block ended, the catch map is unstacked for
  memory efficiency and the GOTO instruction is thus updated (if needed).
@@ -1595,12 +1595,12 @@ that we may have try-catch blocks inside other
 try-catch blocks and ESBMC++ should always handle
 the most internal first. Following the symbolic execution
 for the code that was inside the try block, ESBMC++ will continue
-until it finds a throw expression. When this happens, ESBMC++ will
+until it finds a THROW expression. When this happens, ESBMC++ will
 look at the map for a valid catch for the exception thrown; if it finds
 a valid catch, then the label will be saved for now and handled later;
 if it was unable to find an exception, then an error will be thrown.
-ESBMC++ will also ignore any other throw or goto instruction after
-the first throw is found but will continue to verify all the try
+ESBMC++ will also ignore any other THROW or goto instruction after
+the first THROW is found but will continue to verify all the try
 block code. When the second CATCH is found, which means that the try
 block ended, the catch map is unstacked for memory efficiency
 and the GOTO instruction is updated (if needed).
