@@ -400,6 +400,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_byte_extract(expr);
     break;
   }
+  case expr2t::address_of_id:
+  {
+    a = convert_addr_of(expr);
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
