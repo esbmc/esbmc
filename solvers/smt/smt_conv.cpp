@@ -324,12 +324,26 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::pointer_offset_id:
   {
     smt_sort *s = convert_sort(pointer_type_data->members[1]);
+    const pointer_offset2t &obj = to_pointer_offset2t(expr);
+    // Can you cay super irritating?
+    const expr2tc *ptr = &obj.ptr_obj;
+    while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+      ptr = &to_typecast2t(*ptr).from;
+
+    args[0] = convert_ast(*ptr);
     a = tuple_project(args[0], s, 1, expr);
     break;
   }
   case expr2t::pointer_object_id:
   {
     smt_sort *s = convert_sort(pointer_type_data->members[0]);
+    const pointer_object2t &obj = to_pointer_object2t(expr);
+    // Can you cay super irritating?
+    const expr2tc *ptr = &obj.ptr_obj;
+    while (is_typecast2t(*ptr) && !is_pointer_type((*ptr)))
+      ptr = &to_typecast2t(*ptr).from;
+
+    args[0] = convert_ast(*ptr);
     a = tuple_project(args[0], s, 0, expr);
     break;
   }
