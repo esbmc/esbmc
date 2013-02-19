@@ -1097,7 +1097,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
       type2tc stringtype(new unsignedbv_type2t(8));
       address_of2tc addrof(stringtype, idx.source_value);
       add2tc plus(addrof->type, addrof, idx.index);
-      convert_ast(plus);
+      return convert_ast(plus);
     }
   } else if (is_member2t(obj.ptr_obj)) {
     const member2t &memb = to_member2t(obj.ptr_obj);
