@@ -58,9 +58,6 @@ private:
 
   void convert_bv(const expr2tc &expr, z3::expr &bv);
 
-  void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
-                                  z3::expr &output);
-
   void convert_struct_union(const std::vector<expr2tc> &members,
                             const std::vector<type2tc> &member_types,
                             const type2tc &type, z3::expr &bv);
