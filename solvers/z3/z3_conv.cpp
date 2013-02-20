@@ -1484,8 +1484,14 @@ z3_convt::overflow_cast(const expr2tc &expr)
   }
 
   z3::expr ops[2];
-  convert_bv(lessthan, ops[0]);
-  convert_bv(greaterthan, ops[1]);
+  const z3_smt_ast *tmp1, *tmp2;
+  tmp1 = z3_smt_downcast(convert_ast(lessthan));
+  ops[0] = tmp1->e;
+  tmp2 = z3_smt_downcast(convert_ast(greaterthan));
+  ops[0] = tmp2->e;
+
+  free(const_cast<z3_smt_ast*>(tmp1));
+  free(const_cast<z3_smt_ast*>(tmp2));
 
   output = !(ops[0] && ops[1]);
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
