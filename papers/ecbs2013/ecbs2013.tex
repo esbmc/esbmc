@@ -1894,29 +1894,29 @@ and \textit{MO} represents the number of memory-outs.
   & & & & \multicolumn{8}{c|}{ESBMC++}
         & \multicolumn{8}{c|}{LLBMC} \\  \cline{5-20}
   & Testsuite   & $N$  & $L$   & Time  & P    & N   & FP  & FN   & Fail & TO   & MO    & Time   & P   & N   & FP  & FN  & Fail & TO  & MO \\\hline
-1 & algorithm   & 130  & 3376  & 813   & 65   & 39  & 16  & 10   & 0  & 0  & 0     & 22964  & 53  & 45  & 1   & 2   & 0    & 24  & 2\\ % OK
+1 & algorithm   & 130  & 3376  & 996   & 63   & 38  & 16  & 13   & 0    & 0    & 0     & 22964  & 53  & 45  & 1   & 5   & 0    & 24  & 2\\ % OK
 \hline
-2 & deque       & 43   & 1239  & 233   & 19   & 20  & 0   & 4    & 0  & 0  & 0     & 8585   & 16  & 17  & 0   & 0   & 1    & 9   & 0\\ % OK
+2 & deque       & 43   & 1239  & 238   & 19   & 20  & 0   & 4    & 0    & 0    & 0     & 8585   & 16  & 17  & 0   & 0   & 1    & 9   & 0\\ % OK
 \hline
-3 & vector      & 146  & 6853  & 1710  & 95   & 37  & 3   & 11   & 0  & 0  & 0     & 7234   & 91  & 38  & 1   & 3   & 4    & 6   & 3\\ % OK
+3 & vector      & 146  & 6853  & 2714  & 95   & 37  & 3   & 11   & 0    & 0    & 0     & 7234   & 91  & 38  & 1   & 3   & 4    & 6   & 3\\ % OK
 \hline
-4 & list        & 70   & 2292  & 9734  & 26   & 25  & 1   & 18   & 0  & 0  & 0     & 2562   & 5   & 26  & 5   & 28  & 0    & 0   & 4\\ % OK
+4 & list        & 70   & 2292  & 3928  & 25   & 25  & 3   & 17   & 0    & 0    & 0     & 2562   & 5   & 26  & 5   & 30  & 0    & 0   & 4\\ % OK
 \hline
-5 & queue       & 14   & 328   & 241   & 7    & 7   & 0   & 0    & 0  & 0  & 0     & 45     & 6   & 7   & 0   & 1   & 0    & 0   & 0\\ % OK
+5 & queue       & 14   & 328   & 177   & 7    & 7   & 0   & 0    & 0    & 0    & 0     & 45     & 6   & 7   & 0   & 1   & 0    & 0   & 0\\ % OK
 \hline
-6 & stack       & 12   & 286   & 90    & 6    & 6   & 0   & 0    & 0  & 0  & 0     & 45     & 6   & 6   & 0   & 0   & 0    & 0   & 0\\ % OK
+6 & stack       & 12   & 286   & 82    & 6    & 6   & 0   & 0    & 0    & 0    & 0     & 45     & 6   & 6   & 0   & 0   & 0    & 0   & 0\\ % OK
 \hline
-7 & inheritance & 51   & 3460  & 209   & 29   & 16  & 1   & 2    & 3  & 0  & 0     & 122    & 32  & 12  & 1   & 3   & 3    & 0   & 0\\ % OK
+7 & inheritance & 51   & 3460  & 311   & 28   & 17  & 1   & 2    & 3    & 0    & 0     & 122    & 32  & 12  & 1   & 3   & 3    & 0   & 0\\ % OK
 \hline
-8 & try\_catch  & 67   & 4743  & 1943  & 16   & 43  & 2   & 6    & 0  & 0  & 0     & 4      & 0   & 1   & 0   & 0   & 66   & 0   & 0 \\ % OK
+8 & try\_catch  & 67   & 4743  & 45    & 17   & 41  & 7   & 2    & 0    & 0    & 0     & 4      & 0   & 1   & 0   & 0   & 66   & 0   & 0 \\ % OK
 \hline
-9 & stream      & 66   & 1831  & 1209  & 50   & 13  & 0   & 3    & 0  & 0  & 0     & 11     & 17  & 13  & 0   & 35  & 1    & 0   & 0\\ % OK
+9 & stream      & 66   & 1831  & 1892  & 51   & 13  & 0   & 2    & 0    & 0    & 0     & 11     & 17  & 13  & 0   & 35  & 1    & 0   & 0\\ % OK
 \hline
-10 & string     & 233  & 4921  & 48304 & 99   & 105 & 4   & 25   & 0  & 0  & 0     & 37     & 6   & 121 & 4   & 102 & 0    & 0   & 0\\ % OK
+10 & string     & 233  & 4921  & 46186 & 100  & 112 & 5   & 16   & 0    & 0    & 0     & 37     & 6   & 121 & 4   & 102 & 0    & 0   & 0\\ % OK
 \hline
-11 & cpp        & 343  & 26624 & 1591  & 268  & 38  & 7   & 26   & 4  & 0  & 0     & 3260   & 235 & 24  & 10  & 52  & 15   & 2   & 1\\ % OK
+11 & cpp        & 343  & 26624 & 1817  & 269  & 38  & 7   & 25   & 4    & 0    & 0     & 3260   & 235 & 24  & 10  & 56  & 15   & 2   & 1\\ % OK
 \hline\hline
-  &             & 1175 & 55953 & 66077 & 680  & 349 & 34  & 105  & 7  & 0  & 0     & 44869  & 467 & 310 & 22  & 226 & 90   & 41  & 10\\ % OK
+  &             & 1175 & 55953 & 58386 & 680  & 354 & 42  & 92   & 7    & 0    & 0     & 44869  & 467 & 310 & 22  & 235 & 90   & 41  & 10\\ % OK
 \hline
 \end{tabular} }
 \end{center}
@@ -1928,7 +1928,7 @@ and \textit{MO} represents the number of memory-outs.
 %%% The tool developed by Merz et al.~\cite{Florian12} is called LLBMC.
 We invoked both tools using two scripts: one for ESBMC++, that reads
 the parameters from a file and calls the tool,%
-\footnote[1]{esbmc -\/-unwind \textit{B}  -\/-no-unwinding-assertions -I /libraries/}
+\footnote[1]{esbmc -\/-unwind \textit{B}  -\/-no-unwinding-assertions -I /libraries/ --timeout 15m}
 and another for LLBMC that first compiles the code to bytecode using CLANG~\cite{CLANG},%
 \footnote[2]{/usr/bin/clang++ -c -g -emit-llvm *.cpp -fno-exceptions \newline /usr/bin/llvm-link *.o -o main.bc}
 reads the parameters from a file and calls the tool.\footnote[3]
@@ -1973,8 +1973,8 @@ using classes constructors. And lastly, in the \textit{cpp} suite, which has tes
 the other suites (but are not redundant), most of the errors presented were already seen during
 the verification of other suites.
 
-ESBMC++ verified all suites in 66077 seconds (approximately 18 hours)
-and gave the right results for 1029 out of 1175 programs (87\%) while LLBMC verified all suites
+ESBMC++ verified all suites in 58386 seconds (approximately 16 hours)
+and gave the right results for 1034 out of 1175 programs (88\%) while LLBMC verified all suites
 in 44869 seconds (approximately 12 hours) and gave the right results for 777 out of 1175 programs
 (66\%). We can see that LLBMC is slower than ESBMC++ on most of the containers
 and \textit{algorithm} suites, while it is faster on \textit{stream} and
