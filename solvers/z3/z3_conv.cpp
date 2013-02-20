@@ -542,6 +542,55 @@ z3_convt::setup_pointer_sort(void)
 }
 
 void
+z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
+                               const std::vector<type2tc> &member_types,
+                               const type2tc &type, bool is_union, void *_bv)
+{
+  z3::expr &output = cast_to_z3(_bv);
+
+  // Converts a static struct/union - IE, one that hasn't had any "with"
+  // operations applied to it, perhaps due to initialization or constant
+  // propagation.
+  u_int i = 0;
+
+  z3::sort sort;
+  convert_type(type, sort);
+
+  unsigned size = member_types.size();
+  if (is_union)
+    size++;
+
+  z3::expr *args = new z3::expr[size];
+
+  unsigned int numoperands = members.size();
+  // Populate tuple with members of that struct/union
+  forall_types(it, member_types) {
+    if (i < numoperands) {
+      convert_bv(members[i], args[i]);
+    } else {
+      // Turns out that unions don't necessarily initialize all members.
+      // If no initialization give, use free (fresh) variable.
+      z3::sort s;
+      convert_type(*it, s);
+      args[i] = ctx.fresh_const(NULL, s);
+    }
+
+    i++;
+  }
+
+  // Update unions "last-set" member to be the last field
+  if (is_union)
+    args[size-1] = ctx.esbmc_int_val(i);
+
+  // Create tuple itself, return to caller. This is a lump of data, we don't
+  // need to bind it to a name or symbol.
+  Z3_func_decl decl = Z3_get_tuple_sort_mk_decl(ctx, sort);
+  z3::func_decl d(ctx, decl);
+  output = d.make_tuple_from_array(size, args);
+  delete[] args;
+}
+
+void
 z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
 {
 

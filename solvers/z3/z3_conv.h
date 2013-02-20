@@ -61,6 +61,10 @@ private:
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
 
+  void convert_struct_union(const std::vector<expr2tc> &members,
+                            const std::vector<type2tc> &member_types,
+                            const type2tc &type, bool is_union, void *_bv);
+
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
   virtual void convert_smt_type(const signedbv_type2t &type, void *bv);
