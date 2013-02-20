@@ -433,6 +433,11 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_byte_extract(expr);
     break;
   }
+  case expr2t::byte_update_id:
+  {
+    a = convert_byte_update(expr);
+    break;
+  }
   case expr2t::address_of_id:
   {
     a = convert_addr_of(expr);
