@@ -58,13 +58,6 @@ private:
 
   void convert_bv(const expr2tc &expr, z3::expr &bv);
 
-  void convert_typecast_bool(const typecast2t &cast, z3::expr &output);
-  void convert_typecast_fixedbv_nonint(const typecast2t &cast, z3::expr &out);
-  void convert_typecast_to_ints(const typecast2t &cast, z3::expr &output);
-  void convert_typecast_to_ptr(const typecast2t &castj, z3::expr &outupt);
-  void convert_typecast_from_ptr(const typecast2t &cast, z3::expr &outupt);
-  void convert_typecast_struct(const typecast2t &cast, z3::expr &outupt);
-
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
 
@@ -77,83 +70,9 @@ private:
 
   typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
 
-  void convert_rel(const expr2tc &side1, const expr2tc &side2,
-                   ast_convert_calltype_new convert, void *_bv);
-  void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
-                          ast_logic_convert convert, void *_bv);
-  void convert_binop(const expr2tc &side1, const expr2tc &side2,
-                    const type2tc &type, ast_logic_convert convert,
-                    void *_bv);
-  void convert_arith2ops(const expr2tc &side1, const expr2tc &side2,
-                         ast_logic_convert convert, void *_bv);
-
-  typedef Z3_ast (*ast_convert_calltype)(Z3_context ctx, Z3_ast op1, Z3_ast op2);
-  void convert_shift(const expr2t &shift, const expr2tc &part1,
-                     const expr2tc &part2, ast_convert_calltype convert,
-                     void *_bv);
-
-  void convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
-                             const expr2tc &side2,
-                             const type2tc &type, z3::expr &output);
-
   void convert_struct_union(const std::vector<expr2tc> &members,
                             const std::vector<type2tc> &member_types,
                             const type2tc &type, bool is_union, void *_bv);
-
-  virtual void convert_smt_expr(const symbol2t &sym, void *bv);
-  virtual void convert_smt_expr(const constant_int2t &sym, void *bv);
-  virtual void convert_smt_expr(const constant_fixedbv2t &sym, void *bv);
-  virtual void convert_smt_expr(const constant_bool2t &b, void *bv);
-  virtual void convert_smt_expr(const constant_struct2t &strt, void *bv);
-  virtual void convert_smt_expr(const constant_union2t &strt, void *bv);
-  virtual void convert_smt_expr(const constant_array2t &array, void *bv);
-  virtual void convert_smt_expr(const constant_array_of2t &array, void *bv);
-  virtual void convert_smt_expr(const constant_string2t &str, void *bv);
-  virtual void convert_smt_expr(const if2t &ifirep, void *bv);
-  virtual void convert_smt_expr(const equality2t &equality, void *bv);
-  virtual void convert_smt_expr(const notequal2t &notequal, void *bv);
-  virtual void convert_smt_expr(const lessthan2t &lessthan, void *bv);
-  virtual void convert_smt_expr(const greaterthan2t &greaterthan, void *bv);
-  virtual void convert_smt_expr(const lessthanequal2t &le, void *bv);
-  virtual void convert_smt_expr(const greaterthanequal2t &le, void *bv);
-  virtual void convert_smt_expr(const not2t &notval, void *bv);
-  virtual void convert_smt_expr(const and2t &andval, void *bv);
-  virtual void convert_smt_expr(const or2t &orval, void *bv);
-  virtual void convert_smt_expr(const xor2t &xorval, void *bv);
-  virtual void convert_smt_expr(const implies2t &implies, void *bv);
-  virtual void convert_smt_expr(const bitand2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitor2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitxor2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitnand2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitnor2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitnxor2t &bitval, void *bv);
-  virtual void convert_smt_expr(const bitnot2t &bitval, void *bv);
-  virtual void convert_smt_expr(const lshr2t &bitval, void *bv);
-  virtual void convert_smt_expr(const neg2t &neg, void *bv);
-  virtual void convert_smt_expr(const abs2t &abs, void *bv);
-  virtual void convert_smt_expr(const add2t &add, void *bv);
-  virtual void convert_smt_expr(const sub2t &sub, void *bv);
-  virtual void convert_smt_expr(const mul2t &mul, void *bv);
-  virtual void convert_smt_expr(const div2t &mul, void *bv);
-  virtual void convert_smt_expr(const modulus2t &mod, void *bv);
-  virtual void convert_smt_expr(const shl2t &shl, void *bv);
-  virtual void convert_smt_expr(const ashr2t &ashr, void *bv);
-  virtual void convert_smt_expr(const same_object2t &same, void *bv);
-  virtual void convert_smt_expr(const pointer_offset2t &offs, void *bv);
-  virtual void convert_smt_expr(const pointer_object2t &obj, void *bv);
-  virtual void convert_smt_expr(const address_of2t &obj, void *bv);
-  virtual void convert_smt_expr(const byte_extract2t &data, void *bv);
-  virtual void convert_smt_expr(const byte_update2t &data, void *bv);
-  virtual void convert_smt_expr(const with2t &with, void *bv);
-  virtual void convert_smt_expr(const member2t &member, void *bv);
-  virtual void convert_smt_expr(const typecast2t &cast, void *bv);
-  virtual void convert_smt_expr(const index2t &index, void *bv);
-  virtual void convert_smt_expr(const zero_string2t &zstr, void *bv);
-  virtual void convert_smt_expr(const zero_length_string2t &s, void *bv);
-  virtual void convert_smt_expr(const isnan2t &isnan, void *bv);
-  virtual void convert_smt_expr(const overflow2t &overflow, void *bv);
-  virtual void convert_smt_expr(const overflow_cast2t &ocast, void *arg);
-  virtual void convert_smt_expr(const overflow_neg2t &neg, void *arg);
 
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
