@@ -1467,6 +1467,25 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       } else if (int_encoding && is_fixedbv_type(cast.from) &&
                is_signedbv_type(cast.type)) {
         return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+      } else if (int_encoding && is_unsignedbv_type(cast.from) &&
+                 is_signedbv_type(cast.type)) {
+        // Unsigned -> Signed. Seeing how integer mode is an approximation,
+        // just return the original value, and if it would have wrapped around,
+        // too bad.
+        return convert_ast(cast.from);
+      } else if (int_encoding && is_signedbv_type(cast.from) &&
+                 is_unsignedbv_type(cast.type)) {
+        // Signed -> Unsigned. Work a little more to make this accurate; if it's
+        // a negative number return abs(x)+1 to honour twos compliment. If it's
+        // positive, just return it.
+        abs2tc abs(cast.type, cast.from);
+        constant_int2tc one(cast.type, BigInt(1));
+        add2tc absplusone(cast.type, abs, one);
+
+        constant_int2tc zero(cast.from->type, BigInt(0));
+        lessthan2tc lt(cast.from, zero);
+        if2tc ite(cast.type, lt, absplusone, cast.from);
+        return convert_ast(ite);
       } else if (!int_encoding) {
         // Just return the bit representation. It's fffiiiiiiinnneeee.
         return convert_ast(cast.from);
