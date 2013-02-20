@@ -1140,9 +1140,7 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
                                       s, temp);
   case SMT_FUNC_HACKS:
   default:
-    z3::expr ast;
-    convert_bv(temp, ast);
-    return new z3_smt_ast(ast, s, temp);
+    assert(0 && "Unhandled SMT func in z3 conversion");
   }
 }
 
