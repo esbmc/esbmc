@@ -528,8 +528,10 @@ smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   default:
-    a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
-    break;
+    std::cerr << "Couldn't convert expression in unrecognized format"
+              << std::endl;
+    expr->dump();
+    abort();
   }
 
 done:
