@@ -544,9 +544,8 @@ z3_convt::setup_pointer_sort(void)
 void
 z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
                                const std::vector<type2tc> &member_types,
-                               const type2tc &type, bool is_union, void *_bv)
+                               const type2tc &type, z3::expr &output)
 {
-  z3::expr &output = cast_to_z3(_bv);
 
   // Converts a static struct/union - IE, one that hasn't had any "with"
   // operations applied to it, perhaps due to initialization or constant
@@ -557,8 +556,6 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
   convert_type(type, sort);
 
   unsigned size = member_types.size();
-  if (is_union)
-    size++;
 
   z3::expr *args = new z3::expr[size];
 
@@ -577,10 +574,6 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 
     i++;
   }
-
-  // Update unions "last-set" member to be the last field
-  if (is_union)
-    args[size-1] = ctx.esbmc_int_val(i);
 
   // Create tuple itself, return to caller. This is a lump of data, we don't
   // need to bind it to a name or symbol.
@@ -1311,8 +1304,7 @@ z3_convt::tuple_create(const expr2tc &structdef)
   const struct_union_data &type =
     static_cast<const struct_union_data &>(*strct.type);
 
-  convert_struct_union(strct.datatype_members, type.members, strct.type,
-                       false, &e);
+  convert_struct_union(strct.datatype_members, type.members, strct.type, e);
   smt_sort *s = mk_struct_sort(structdef->type);
   return new z3_smt_ast(e, s, structdef);
 }
