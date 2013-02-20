@@ -586,14 +586,6 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 }
 
 void
-z3_convt::convert_bv(const expr2tc &expr, z3::expr &val)
-{
-
-  expr->convert_smt(*this, reinterpret_cast<void*>(&val));
-  return;
-}
-
-void
 z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
 {
 

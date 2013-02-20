@@ -56,8 +56,6 @@ private:
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
-  void convert_bv(const expr2tc &expr, z3::expr &bv);
-
   void convert_struct_union(const std::vector<expr2tc> &members,
                             const std::vector<type2tc> &member_types,
                             const type2tc &type, z3::expr &bv);
