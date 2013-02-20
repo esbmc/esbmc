@@ -61,15 +61,6 @@ private:
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
 
-  typedef z3::expr (*ast_convert_calltype_new)(const z3::expr &op1,
-                                           const z3::expr &op2,
-                                           bool is_unsigned);
-  typedef z3::expr (*ast_convert_multiargs_new)(unsigned int numargs,
-                                            z3::expr const args[],
-                                            bool is_unsigned);
-
-  typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
-
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
   virtual void convert_smt_type(const signedbv_type2t &type, void *bv);
