@@ -461,6 +461,9 @@ smt_convt::convert_ast(const expr2tc &expr)
     } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
       // Pointers are tuples
       a = tuple_equality(args[0], args[1], expr);
+    } else if (is_union_type(eq.side_1) && is_union_type(eq.side_2)) {
+      // Unions are also tuples
+      a = tuple_equality(args[0], args[1], expr);
     } else {
       std::cerr << "Unrecognized equality form" << std::endl;
       expr->dump();
