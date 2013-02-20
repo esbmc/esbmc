@@ -248,7 +248,15 @@ smt_convt::convert_ast(const expr2tc &expr)
     break;
   }
   case expr2t::constant_array_id:
+  case expr2t::constant_array_of_id:
   {
+    const array_type2t &arr = to_array_type(expr->type);
+    if (arr.size_is_infinite) {
+      // Don't honour inifinite sized array initializers. Modelling only.
+      a = mk_fresh(sort);
+      break;
+    }
+
     const smt_sort *domain;
     if (int_encoding)
       domain = mk_sort(SMT_SORT_INT, false);
