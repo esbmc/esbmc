@@ -423,6 +423,24 @@ smt_convt::convert_ast(const expr2tc &expr)
     a = convert_addr_of(expr);
     break;
   }
+  case expr2t::equality_id:
+  {
+    const equality2t &eq = to_equality2t(expr);
+    if (is_struct_type(eq.side_1->type) && is_struct_type(eq.side_2->type)) {
+      // Struct equality
+      a = tuple_equality(args[0], args[1], expr);
+    } else if (is_array_type(eq.side_1->type) &&
+               is_array_type(eq.side_2->type)) {
+      if (is_struct_type(to_array_type(eq.side_1->type).subtype)) {
+        // Array of structs equality.
+        a = tuple_array_equality(args[0], args[1], expr);
+      } else {
+        // Normal array equality
+        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 0, expr);
+      }
+    }
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
@@ -625,6 +643,14 @@ smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
                               const smt_ast *field __attribute__((unused)),
                               const smt_ast *val __attribute__((unused)),
                               const expr2tc &tmp __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::tuple_array_equality(const smt_ast *a __attribute__((unused)),
+                                const smt_ast *b __attribute__((unused)),
+                                const expr2tc &tmp __attribute__((unused)))
 {
   assert(0);
 }

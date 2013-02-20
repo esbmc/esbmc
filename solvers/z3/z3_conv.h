@@ -207,6 +207,8 @@ private:
                                       const smt_ast *field, const expr2tc &tmp);
   virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
                                       const smt_ast *val, const expr2tc &tmp);
+  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b,
+                                        const expr2tc &tmp);
   virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                                    const smt_ast *false_val,
                                    const smt_sort *sort, const expr2tc &expr);

@@ -3171,6 +3171,16 @@ z3_convt::tuple_array_update(const smt_ast *a, const smt_ast *field,
   return new z3_smt_ast(output, a->sort, tmp);
 }
 
+
+smt_ast *
+z3_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b,
+                             const expr2tc &tmp)
+{
+  z3::expr e = z3_smt_downcast(a)->e == z3_smt_downcast(b)->e;
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(e, s, tmp);
+}
+
 smt_ast *
 z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                           const smt_ast *false_val, const smt_sort *sort,
