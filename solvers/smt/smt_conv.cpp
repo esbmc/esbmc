@@ -1478,6 +1478,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         // Signed -> Unsigned. Work a little more to make this accurate; if it's
         // a negative number return abs(x)+1 to honour twos compliment. If it's
         // positive, just return it.
+        // XXX XXX XXX actually this code doesn't do that. Erk.
         abs2tc abs(cast.type, cast.from);
         constant_int2tc one(cast.type, BigInt(1));
         add2tc absplusone(cast.type, abs, one);
