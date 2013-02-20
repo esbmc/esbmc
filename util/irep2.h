@@ -557,23 +557,6 @@ public:
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
-  /** SMT conversion despatcher function.
-   *  In a similar vein to convert_smt_type, this method is overridden by all
-   *  subclasses to call an appropriate method in the passed in prop_convt
-   *  object that will convert itself to a piece of SMT AST. That's then
-   *  returned in the arg ptr passed down, which is assumed to be of an
-   *  appropriate pointer type for the prop_convt object doing the converting.
-   *
-   *  This means that the procedure to look up what method to convert an irep
-   *  with is now O(1) rather than O(n), where n is a large number of irep
-   *  names that we have to compare the expr id against before working out
-   *  what method to call.
-   *  @see type2t::convert_smt_type
-   *  @param obj SMT converter object to use to convert this expr
-   *  @param arg Pointer that will receive converted piece of AST.
-   */
-  virtual void convert_smt(prop_convt &obj, void *arg) const = 0;
-
   /* These are all self explanatory */
   bool operator==(const expr2t &ref) const;
   bool operator<(const expr2t &ref) const;
@@ -830,8 +813,7 @@ namespace esbmct {
    *  via overloading), and then inspecting the output of that.
    *
    *  In fact, we can make type generic implementations of all the following
-   *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
-   *  list_operands.
+   *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -967,7 +949,6 @@ namespace esbmct {
 
     // Override expr2t methods that we're going to be generating automagically
 
-    virtual void convert_smt(prop_convt &obj, void *arg) const;
     virtual expr2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const expr2t &ref) const;

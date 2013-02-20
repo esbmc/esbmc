@@ -352,10 +352,6 @@ expr2t::expr2t(const expr2t &ref)
 {
 }
 
-void expr2t::convert_smt(prop_convt &obj, void *arg) const
-{ obj.convert_smt_expr(*this, arg); }
-
-
 bool
 expr2t::operator==(const expr2t &ref) const
 {
@@ -1675,28 +1671,6 @@ unsigned int
 do_count_sub_exprs<const std::vector<expr2tc>>(const std::vector<expr2tc> &item)
 {
   return item.size();
-}
-
-template <class derived, class subclass,
-typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
-typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
-typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
-typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
-typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
-typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
-void
-esbmct::expr_methods<derived, subclass,
-  field1_type, field1_class, field1_ptr,
-  field2_type, field2_class, field2_ptr,
-  field3_type, field3_class, field3_ptr,
-  field4_type, field4_class, field4_ptr,
-  field5_type, field5_class, field5_ptr,
-  field6_type, field6_class, field6_ptr>
-  ::convert_smt(prop_convt &obj, void *arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_expr(*new_this, arg);
-  return;
 }
 
 template <class derived, class subclass,
