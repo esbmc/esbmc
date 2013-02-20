@@ -321,7 +321,10 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = mk_extract(a, fbt.spec.width - 1, 0, s2, expr);
     } else {
       assert(is_bv_type(expr));
-      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2, expr);
+      smt_func_kind k = (seen_signed_operand)
+              ? cvt->bv_mode_func_signed
+              : cvt->bv_mode_func_unsigned;
+      a = mk_func_app(sort, k, args, 2, expr);
     }
     break;
   }
