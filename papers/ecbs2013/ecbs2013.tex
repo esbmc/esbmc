@@ -1044,16 +1044,19 @@ makes use of an iterator \textit{ipos} that points to the desired
 to be inserted and an integer \textit{qtd} that denotes the amount
 of elements to be inserted.
 
-\begin{equation}
-% \label{}
-C := \left [ \begin{array}{ll}
-        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
-        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0}+\mathit{qtd}) \\
-        j_{2} = \mathit{store}(con_{1}, \mathit{ipos}, \mathit{val}) \\
-        \ldots \\
-        j_{2 + qtd - 1} = \mathit{store}(con_{1}, \mathit{ipos + qtd + 1}, \mathit{val}) \\
-              \end{array} \right ]  \\
-\end{equation}
+\[\begin{array}{lll}
+\multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.insert}(i, t, n)):=}\\
+  & \multicolumn{2}{l}{\:c'\mathit{.size} = c\mathit{.size}+n}\\
+  & \wedge\: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}(\\
+  & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, i\textit{.pos}, t),\\
+  & & \:\:\:\:\:\:\ldots,\\
+  & & \:\:\:\:\:\:i\textit{.pos}+n-1, t), \\
+  & & i\textit{.pos}+n, \textit{select}(c\textit{.array}, i\textit{.pos})), \\
+  & & \ldots, \\
+  & & c\textit{.size}+n-1, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.source}=c'}\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+n}\\
+\end{array}\]
 
 There is another way to represent the insert method.
 It is possible to insert a sequence of elements in the desired
@@ -1066,18 +1069,20 @@ and $\mathit{it}_k$ are pointing to and let $k$ be the length of the array
 $[\mathit{it}_0\, \mathit{it}_k)$.
 Thus, we have:
 
-\begin{equation}
-% \label{}
-C := \left [ \begin{array}{ll}
-        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
-        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0}+\mathit{k}) \\
-        j_{2} = \mathit{select}(acon, \mathit{ipos}) \\
-	j_{3} = \mathit{store}(con_{1}, \mathit{ipos}, j_{3}) \\
-        \ldots  \\
-        j_{2 + k - 1} = \mathit{select}(acon, \mathit{it_{k - 1}}) \\
-        j_{3 + k - 1} = \mathit{store}(con_{1}, \mathit{ipos + k - 1}, j_{2 + k - 1}) \\
-              \end{array} \right ]  \\
-\end{equation}
+\[\begin{array}{lll}
+\multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.insert}(it_{0}, it_{k})):=}\\
+  & \multicolumn{2}{l}{\:c'\mathit{.size} = c\mathit{.size}+k}\\
+  & \wedge\: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}(\\
+  & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, i\textit{.pos}, \\
+  & & \:\:\:\:\:\:\:\:\:\:\:\:select(acon\textit{.array}, it_{0}\textit{.pos})),\\
+  & & \:\:\:\:\:\:\ldots,\\
+  & & \:\:\:\:\:\:i\textit{.pos}+k-1, select(acon\textit{.array}, it_{k}\textit{.pos})), \\
+  & & i\textit{.pos}+k, \textit{select}(c\textit{.array}, i\textit{.pos})), \\
+  & & \ldots, \\
+  & & c\textit{.size}+k-1, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.source}=c'}\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+k}\\
+\end{array}\]
 
 The same model above is valid for pointers $pt_0$ and $pt_k$.
 This kind of insertion (with pointers) does not return an iterator.
@@ -1138,37 +1143,35 @@ is made by a given position, regardless the value. It also returns an iterator p
 pointing to the position next to the previously erased part of the container.
 The following model shows an \textit{erase} method that deletes a single element:
 
-\begin{equation}
-% \label{}
-C := \left [ \begin{array}{ll}
-        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
-        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0} - 1) \\
-        j_{2} = \mathit{select}(con_{1}, \mathit{ipos + 1}) \\
-	j_{3} = \mathit{store}(con_{1}, \mathit{ipos}, j_{2}) \\
-        \ldots \\
-        j_{2 + size - 1} = \mathit{select}(con_{1}, \mathit{ipos + size - 1}) \\
-        j_{3 + size - 1} = \mathit{store}(con_{1}, \mathit{ipos + size - 1}, j_{2 + size - 1}) \\
-              \end{array} \right ]  \\
-\end{equation}
-
+\[\begin{array}{lll}
+\multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.erase}(i)):=}\\
+  &  c'\textit{.array}=&\!\!\!\!\textit{store}(  \\
+  & & \textit{store}(c.\textit{array}, i\textit{.pos}, select(c.array, i.pos+1)) \\
+  & & \ldots, \\
+  & & c\textit{.size}-2, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
+  & & \wedge\:c'\mathit{.size} = c\mathit{.size}-1\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.source}=c'}\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+n}\\
+\end{array}\]
 
 It is also possible to delete a number $k$ of elements from the container by
 marking the bounds with iterators ($it_0$ and $it_k$, considering both pointing to the container $con$).
  It works similarly to the equivalent
 \textit{insert} method:
 
-\begin{equation}
-% \label{}
-C := \left [ \begin{array}{ll}
-        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
-        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0} - k) \\
-        j_{2} = \mathit{select}(con_{1}, \mathit{it_{0} + k}) \\
-	j_{3} = \mathit{store}(con_{1}, \mathit{it_{0}}, j_{2}) \\
-      \ldots \\
-        j_{2 + size - k} = \mathit{select}(con_{1}, \mathit{ipos + size - k}) \\
-        j_{3 + size - k} = \mathit{store}(con_{1}, \mathit{ipos + size - k}, j_{2 + size - k}) \\
-              \end{array} \right ]  \\
-\end{equation}
+
+\[\begin{array}{lll}
+\multicolumn{3}{l}{ {\cal C}((c',i')=c\mathit{.erase}(it_0, it_k)):= }\\
+  & \: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}) \\
+  & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, it_0\textit{.pos}, \\
+  & & \:\:\:\:\:\:\:\:\:\:select(c.array, it_0.pos+k)),\\
+  & & \:\:\:\:\:\:\ldots,\\
+  & & \:\:\:\:\:\:it_0\textit{.pos}+k-1, \\
+  & & \:\:\:\:\:\:\:\:\:\:select(c.array, it_0.pos+2*k-1)), \\
+  & & it_0\textit{.pos}+k, \textit{select}(c\textit{.array}, it_0\textit{.pos+2*k})), \\
+  & & \ldots, \\
+  & & c\textit{.size}-k-1, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
+\end{array}\]
 
 Searches are made in a container by using reference operators
 and a pointing type (pointer or iterator), and return the reference
