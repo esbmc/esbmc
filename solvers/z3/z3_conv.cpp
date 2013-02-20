@@ -1505,7 +1505,9 @@ z3_convt::overflow_neg(const expr2tc &expr)
   z3::expr output, operand;
   unsigned width;
 
-  convert_bv(neg.operand, operand);
+  const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(neg.operand));
+  operand = tmpast->e;
+  free(const_cast<z3_smt_ast*>(tmpast)); // XXX
 
   // XXX jmorse - clearly wrong. Neg of pointer?
   if (is_pointer_type(neg.operand))
