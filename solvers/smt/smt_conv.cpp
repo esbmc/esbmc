@@ -297,25 +297,28 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::div_id:
   {
-    assert(!int_encoding);
-
     // Handle BV mode divisions. Similar arrangement to multiplies.
-    if (is_fixedbv_type(expr)) {
+    if (int_encoding) {
+      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2, expr);
+    } else if (is_fixedbv_type(expr)) {
       const div2t &div = to_div2t(expr);
-      const fixedbv_type2t &fbvt = to_fixedbv_type(div.type);
-      unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
-      unsigned int topbit = div.side_1->type->get_width();
+      fixedbvt fbt(migrate_expr_back(expr));
+
+      unsigned int fraction_bits = fbt.spec.get_fraction_bits();
+      unsigned int topbit2 = div.side_2->type->get_width();
       const smt_sort *s2 = convert_sort(div.side_2->type);
 
+      args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
+      const smt_ast *zero = mk_smt_bvint(BigInt(0), false, fraction_bits, expr2tc());
       const smt_ast *op0 = args[0];
-      const smt_ast *op1 = args[1];
-      args[0] = mk_smt_bvint(BigInt(0), false, fraction_bits, expr2tc());
-      args[1] = op0;
-      args[0] = mk_func_app(sort, SMT_FUNC_CONCAT, args, 2, expr2tc());
-      args[1] = convert_sign_ext(op1, s2, topbit, fraction_bits);
-      // XXX sort?
-      a = mk_func_app(NULL, SMT_FUNC_DIV, args, 2, expr);
-      a = mk_extract(a, fbvt.width - 1, 0, sort, expr);
+      const smt_ast *concatargs[2];
+      concatargs[0] = op0;
+      concatargs[1] = zero;
+      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, concatargs, 2, expr2tc());
+
+      // Sorts.
+      a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2, expr2tc());
+      a = mk_extract(a, fbt.spec.width - 1, 0, s2, expr);
     } else {
       assert(is_bv_type(expr));
       a = mk_func_app(sort, SMT_FUNC_DIV, args, 2, expr);
