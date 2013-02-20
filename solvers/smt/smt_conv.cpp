@@ -1614,17 +1614,14 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         return convert_ast(cast.from);
       } else if (int_encoding && is_signedbv_type(cast.from) &&
                  is_unsignedbv_type(cast.type)) {
-        // Signed -> Unsigned. Work a little more to make this accurate; if it's
-        // a negative number return abs(x)+1 to honour twos compliment. If it's
-        // positive, just return it.
-        // XXX XXX XXX actually this code doesn't do that. Erk.
-        abs2tc abs(cast.type, cast.from);
-        constant_int2tc one(cast.type, BigInt(1));
-        add2tc absplusone(cast.type, abs, one);
+        // XXX XXX XXX seriously rethink what this code attempts to do,
+        // implementing something that tries to look like twos compliment.
+        constant_int2tc maxint(cast.type, BigInt(0xFFFFFFFF));
+        add2tc add(cast.type, maxint, cast.from);
 
         constant_int2tc zero(cast.from->type, BigInt(0));
         lessthan2tc lt(cast.from, zero);
-        if2tc ite(cast.type, lt, absplusone, cast.from);
+        if2tc ite(cast.type, lt, add, cast.from);
         return convert_ast(ite);
       } else if (!int_encoding) {
         // Just return the bit representation. It's fffiiiiiiinnneeee.
