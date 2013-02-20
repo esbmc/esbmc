@@ -463,6 +463,32 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::ashr_id:
+  {
+    const ashr2t &ashr = to_ashr2t(expr);
+
+    if (ashr.side_1->type->get_width() != ashr.side_2->type->get_width()) {
+      // FIXME: frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(ashr.side_1->type, ashr.side_2);
+      args[1] = convert_ast(cast);
+    }
+
+    if (int_encoding) {
+      // Raise 2^shift, then divide first operand by that value. If it's
+      // negative, I suspect the correct operation is to latch to -1,
+      // XXX XXX XXX haven't implemented that yet.
+      constant_int2tc two(ashr.type, BigInt(2));
+      const smt_ast *powargs[2];
+      powargs[0] = args[1];
+      powargs[1] = convert_ast(two);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2, expr);
+      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2, expr);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2, expr);
+    }
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
@@ -683,6 +709,12 @@ smt_convt::tuple_array_ite(const smt_ast *cond __attribute__((unused)),
                            const smt_ast *false_val __attribute__((unused)),
                            const smt_sort *sort __attribute__((unused)),
                            const expr2tc &expr __attribute__((unused)))
+{
+  assert(0);
+}
+
+smt_ast *
+smt_convt::mk_fresh(const smt_sort *s __attribute__((unused)))
 {
   assert(0);
 }

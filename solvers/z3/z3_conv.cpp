@@ -2914,6 +2914,9 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
   case SMT_FUNC_INT2REAL:
     return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_int2real(ctx, asts[0]->e)),
                           s, temp);
+  case SMT_FUNC_POW:
+        return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_power(ctx, asts[0]->e,                                                       asts[1]->e)),
+                                      s, temp);
   case SMT_FUNC_HACKS:
   default:
     z3::expr ast;
@@ -3190,6 +3193,13 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                             z3_smt_downcast(trueval)->e,
                             z3_smt_downcast(false_val)->e);
   return new z3_smt_ast(output, sort, expr);
+}
+
+smt_ast *
+z3_convt::mk_fresh(const smt_sort *sort)
+{
+  const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(sort);
+  return new z3_smt_ast(ctx.fresh_const(NULL, zs->s), sort, expr2tc());
 }
 
 smt_ast *

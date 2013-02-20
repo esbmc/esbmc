@@ -89,6 +89,7 @@ enum smt_func_kind {
 
   SMT_FUNC_INT2REAL,
   SMT_FUNC_REAL2INT,
+  SMT_FUNC_POW,
 };
 
 class smt_sort {
@@ -184,6 +185,8 @@ public:
   virtual smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual smt_ast *overflow_neg(const expr2tc &expr);
+
+  virtual smt_ast *mk_fresh(const smt_sort *s);
 
   // Internal foo
 
