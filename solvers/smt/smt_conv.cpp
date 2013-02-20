@@ -235,6 +235,11 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::symbol_id:
     a = convert_terminal(expr);
     break;
+  case expr2t::constant_struct_id:
+  {
+    a = tuple_create(expr);
+    break;
+  }
   case expr2t::constant_array_id:
   {
     const smt_sort *domain;
