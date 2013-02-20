@@ -165,6 +165,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_ast *a;
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
+  bool make_ptrs_ints = false;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -172,10 +173,25 @@ smt_convt::convert_ast(const expr2tc &expr)
       return (cache_result->ast);
   }
 
+  // Complexity: C section 6.3.8 defines relation operators on pointers to be
+  // comparisons on their bit representation, with pointers to
+  // array/struct/union fields comparing as you might expect. So, pump in
+  // some casts prior to conversion if required.
+  // Optimise this later with some expr id attribute array?
+  if (dynamic_cast<const relation_data *>(expr.get()) != NULL &&
+      !is_equality2t(expr) && !is_notequal2t(expr))
+    make_ptrs_ints = true;
+
   // Convert /all the arguments/.
   unsigned int i = 0;
   forall_operands2(it, idx, expr) {
-    args[i] = convert_ast(*it);
+    if (make_ptrs_ints) {
+      typecast2tc cast(get_uint_type(config.ansi_c.pointer_width), *it);
+      args[i] = convert_ast(cast);
+    } else {
+      args[i] = convert_ast(*it);
+    }
+
     used_sorts |= args[i]->sort->id;
     i++;
     if (is_signedbv_type(*it))
