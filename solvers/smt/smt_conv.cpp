@@ -235,6 +235,13 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::symbol_id:
     a = convert_terminal(expr);
     break;
+  case expr2t::constant_string_id:
+  {
+    const constant_string2t &str = to_constant_string2t(expr);
+    expr2tc newarr = str.to_array();
+    a = convert_ast(newarr);
+    break;
+  }
   case expr2t::constant_struct_id:
   {
     a = tuple_create(expr);
