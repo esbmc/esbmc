@@ -1307,7 +1307,12 @@ smt_ast *
 z3_convt::tuple_create(const expr2tc &structdef)
 {
   z3::expr e;
-  convert_bv(structdef, e);
+  const constant_struct2t &strct = to_constant_struct2t(structdef);
+  const struct_union_data &type =
+    static_cast<const struct_union_data &>(*strct.type);
+
+  convert_struct_union(strct.datatype_members, type.members, strct.type,
+                       false, &e);
   smt_sort *s = mk_struct_sort(structdef->type);
   return new z3_smt_ast(e, s, structdef);
 }
