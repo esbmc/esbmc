@@ -489,6 +489,21 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::notequal_id:
+  {
+    const notequal2t &notequal = to_notequal2t(expr);
+    // Handle all kinds of structs by inverted equality. The only that's really
+    // going to turn up is pointers though.
+    if (is_struct_type(notequal.side_1) || is_pointer_type(notequal.side_1)) {
+      a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr2tc());
+      a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1, expr);
+    } else {
+      std::cerr << "Unexpected inequailty operands" << std::endl;
+      expr->dump();
+      abort();
+    }
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
