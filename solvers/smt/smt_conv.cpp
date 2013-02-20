@@ -1481,8 +1481,13 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     unsigned width = cast.type->get_width();
 
     if (is_bv_type(cast.type)) {
-      zero = mk_smt_bvint(BigInt(0), false, width, expr2tc());
-      one = mk_smt_bvint(BigInt(1), false, width, expr2tc());
+      if (int_encoding) {
+        zero = mk_smt_int(BigInt(0), false, expr2tc());
+        one = mk_smt_int(BigInt(1), false, expr2tc());
+      } else {
+        zero = mk_smt_bvint(BigInt(0), false, width, expr2tc());
+        one = mk_smt_bvint(BigInt(1), false, width, expr2tc());
+      }
     } else if (is_fixedbv_type(cast.type)) {
       zero = mk_smt_real(BigInt(0), expr2tc());
       one = mk_smt_real(BigInt(1), expr2tc());
