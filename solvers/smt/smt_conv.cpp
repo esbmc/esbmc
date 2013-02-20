@@ -512,6 +512,21 @@ smt_convt::convert_ast(const expr2tc &expr)
     }
     break;
   }
+  case expr2t::abs_id:
+  {
+    const abs2t &abs = to_abs2t(expr);
+    if (is_unsignedbv_type(abs.value)) {
+      // No need to do anything.
+      a = args[0];
+    } else {
+      constant_int2tc zero(abs.value->type, BigInt(0));
+      lessthan2tc lt(abs.value, zero);
+      sub2tc sub(abs.value->type, zero, abs.value);
+      if2tc ite(abs.type, lt, sub, abs.value);
+      a = convert_ast(ite);
+    }
+    break;
+  }
   default:
     a = mk_func_app(sort, SMT_FUNC_HACKS, &args[0], 0, expr);
     break;
