@@ -1253,7 +1253,9 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
 
     size = sz.as_long();
 
-    convert_bv(array.initializer, value);
+    const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(array.initializer));
+    value = tmpast->e;
+    free(const_cast<z3_smt_ast*>(tmpast)); // XXX
 
     if (is_bool_type(arrtype.subtype)) {
       value = ctx.bool_val(false);
@@ -1284,10 +1286,9 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
     i = 0;
     forall_exprs(it, array.datatype_members) {
       int_cte = ctx.esbmc_int_val(i);
-
-      convert_bv(*it, val_cte);
-
-      output = z3::store(output, int_cte, val_cte);
+      const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(*it));
+      output = z3::store(output, int_cte, tmpast->e);
+      free(const_cast<z3_smt_ast*>(tmpast)); // XXX
       ++i;
     }
   }
