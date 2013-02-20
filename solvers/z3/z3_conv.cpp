@@ -965,6 +965,18 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args, 
     return new z3_smt_ast(
                  z3::to_expr(ctx, Z3_mk_bvurem(z3_ctx, asts[0]->e, asts[1]->e)),
                  s, temp);
+  case SMT_FUNC_DIV:
+    return new z3_smt_ast(
+                 z3::to_expr(ctx, Z3_mk_div(z3_ctx, asts[0]->e, asts[1]->e)),
+                 s, temp);
+  case SMT_FUNC_BVSDIV:
+    return new z3_smt_ast(
+                 z3::to_expr(ctx, Z3_mk_bvsdiv(z3_ctx, asts[0]->e, asts[1]->e)),
+                 s, temp);
+  case SMT_FUNC_BVUDIV:
+    return new z3_smt_ast(
+                 z3::to_expr(ctx, Z3_mk_bvudiv(z3_ctx, asts[0]->e, asts[1]->e)),
+                 s, temp);
   case SMT_FUNC_SHL:
     return new z3_smt_ast(asts[0]->e * pw(ctx.int_val(2), asts[1]->e), s, temp);
   case SMT_FUNC_BVSHL:
