@@ -185,7 +185,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   // Convert /all the arguments/.
   unsigned int i = 0;
   forall_operands2(it, idx, expr) {
-    if (make_ptrs_ints) {
+    if (make_ptrs_ints && is_pointer_type(*it)) {
       typecast2tc cast(get_uint_type(config.ansi_c.pointer_width), *it);
       args[i] = convert_ast(cast);
     } else {
