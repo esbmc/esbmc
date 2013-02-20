@@ -1044,15 +1044,16 @@ makes use of an iterator \textit{ipos} that points to the desired
 to be inserted and an integer \textit{qtd} that denotes the amount
 of elements to be inserted.
 
-\[\begin{array}{ll}
-%\label{eqnarray:transformations}
-\multicolumn{2}{l}{{\cal C}(\mathit{con}'=\mathit{con.insert}(\mathit{ipos}, \mathit{val}, \mathit{qtd}))=}\\
-%\Longrightarrow &
-  &  \mathit{con}'\mathit{.size} = \mathit{con.size} + \mathit{qtd}\\
-  & \wedge \: *\mathit{ipos} = \mathit{val} \\
-  & \ldots \\
-  & \wedge \: *(\mathit{ipos} + \mathit{qtd} - 1) = \mathit{val} \\
-\end{array}\]
+\begin{equation}
+% \label{}
+C := \left [ \begin{array}{ll}
+        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
+        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0}+\mathit{qtd}) \\
+        j_{2} = \mathit{store}(con_{1}, \mathit{ipos}, \mathit{val}) \\
+        \ldots \\
+        j_{2 + qtd - 1} = \mathit{store}(con_{1}, \mathit{ipos + qtd + 1}, \mathit{val}) \\
+              \end{array} \right ]  \\
+\end{equation}
 
 There is another way to represent the insert method.
 It is possible to insert a sequence of elements in the desired
@@ -1060,21 +1061,25 @@ insertion position, using both iterator or pointer bounds.
 Let $\mathit{it}_0$ be an iterator that marks the first element
 to be inserted, $\mathit{it}_k$ be another iterator that
 points to the first element after the end of the sequence to be inserted
-in the required position and let $k$ be the length of the array
+in the required position, $\mathit{acon}$ be another container whom iterators $\mathit{it}_0$ 
+and $\mathit{it}_k$ are pointing to and let $k$ be the length of the array
 $[\mathit{it}_0\, \mathit{it}_k)$.
 Thus, we have:
 
-\[\begin{array}{ll}
-%\label{eqnarray:transformations}
-\multicolumn{2}{l}{{\cal C}(\mathit{con.insert}(\mathit{ipos}, \mathit{it}_0, \mathit{it}_k))=}\\
-% \Longrightarrow
-  & \mathit{con}'\mathit{.size} = \mathit{con.size} + k\\
-  & \wedge \: *\mathit{ipos} = *\mathit{it}_0 \\
-  & \ldots \\
-  & \wedge \: *(\mathit{ipos} + k - 1) = *(\mathit{it}_k - 1) \\
-\end{array}\]
+\begin{equation}
+% \label{}
+C := \left [ \begin{array}{ll}
+        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
+        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0}+\mathit{k}) \\
+        j_{2} = \mathit{select}(acon, \mathit{ipos}) \\
+	j_{3} = \mathit{store}(con_{1}, \mathit{ipos}, j_{3}) \\
+        \ldots  \\
+        j_{2 + k - 1} = \mathit{select}(acon, \mathit{it_{k - 1}}) \\
+        j_{3 + k - 1} = \mathit{store}(con_{1}, \mathit{ipos + k - 1}, j_{2 + k - 1}) \\
+              \end{array} \right ]  \\
+\end{equation}
 
-The same model above is valid for pointers $\mathit{pt}_0$ and $\mathit{pt}_k$.
+The same model above is valid for pointers $pt_0$ and $pt_k$.
 This kind of insertion (with pointers) does not return an iterator.
 
 \comment{
@@ -1133,23 +1138,37 @@ is made by a given position, regardless the value. It also returns an iterator p
 pointing to the position next to the previously erased part of the container.
 The following model shows an \textit{erase} method that deletes a single element:
 
-\[\begin{array}{ll}
-%\label{erase1-model}
-\multicolumn{2}{l}{{\cal C}(\textit{con.erase}(\mathit{ipos})=}\\
-% \Longrightarrow
-  & \mathit{con}'\mathit{.size} = \mathit{con.size} - 1 \wedge \: \mathit{ipos}' = \mathit{ipos} + 1
-\end{array}\]
+\begin{equation}
+% \label{}
+C := \left [ \begin{array}{ll}
+        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
+        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0} - 1) \\
+        j_{2} = \mathit{select}(con_{1}, \mathit{ipos + 1}) \\
+	j_{3} = \mathit{store}(con_{1}, \mathit{ipos}, j_{2}) \\
+        \ldots \\
+        j_{2 + size - 1} = \mathit{select}(con_{1}, \mathit{ipos + size - 1}) \\
+        j_{3 + size - 1} = \mathit{store}(con_{1}, \mathit{ipos + size - 1}, j_{2 + size - 1}) \\
+              \end{array} \right ]  \\
+\end{equation}
 
-It is also possible to delete a number of elements from the container by
-marking the bounds with iterators. It works similarly to the equivalent
+
+It is also possible to delete a number $k$ of elements from the container by
+marking the bounds with iterators ($it_0$ and $it_k$, considering both pointing to the container $con$).
+ It works similarly to the equivalent
 \textit{insert} method:
 
-\[\begin{array}{ll}
-%\label{erase2-model}
-\multicolumn{2}{l}{{\cal C}(con.erase(ipos, it_0, it_k)=}\\
-%\Longrightarrow
-  & 	con'.size = con.size - k \wedge \: ipos' = it_k
-\end{array}\]
+\begin{equation}
+% \label{}
+C := \left [ \begin{array}{ll}
+        j_{0} = \mathit{select}(con_{0}, \mathit{size}) \\
+        j_{1} = \mathit{store}(con_{1}, \mathit{size}, j_{0} - k) \\
+        j_{2} = \mathit{select}(con_{1}, \mathit{it_{0} + k}) \\
+	j_{3} = \mathit{store}(con_{1}, \mathit{it_{0}}, j_{2}) \\
+      \ldots \\
+        j_{2 + size - k} = \mathit{select}(con_{1}, \mathit{ipos + size - k}) \\
+        j_{3 + size - k} = \mathit{store}(con_{1}, \mathit{ipos + size - k}, j_{2 + size - k}) \\
+              \end{array} \right ]  \\
+\end{equation}
 
 Searches are made in a container by using reference operators
 and a pointing type (pointer or iterator), and return the reference
