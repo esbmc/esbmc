@@ -1479,7 +1479,7 @@ z3_convt::overflow_cast(const expr2tc &expr)
   tmp1 = z3_smt_downcast(convert_ast(lessthan));
   ops[0] = tmp1->e;
   tmp2 = z3_smt_downcast(convert_ast(greaterthan));
-  ops[0] = tmp2->e;
+  ops[1] = tmp2->e;
 
   output = !(ops[0] && ops[1]);
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
