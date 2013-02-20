@@ -628,16 +628,13 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Assert that start + offs == end
     z3::expr offs_eq;
-    convert_bv(endisequal, offs_eq);
-    assert_formula(offs_eq);
+    assert_expr(endisequal);
 
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
     // of the address space (ie, wrap around). So, also assert that end > start
     greaterthan2tc wraparound(end_sym, start_sym);
-    z3::expr wraparound_eq;
-    convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    assert_expr(wraparound);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
@@ -1446,8 +1443,10 @@ z3_convt::overflow_arith(const expr2tc &expr)
   // Unseen downside of flattening templates. Should consider reformatting
   // typecast2t.
   if (is_add2t(overflow.operand)) {
-    convert_bv(to_add2t(overflow.operand).side_1, operand[0]);
-    convert_bv(to_add2t(overflow.operand).side_2, operand[1]);
+    const smt_ast *o1 = convert_ast(to_add2t(overflow.operand).side_1);
+    const smt_ast *o2 = convert_ast(to_add2t(overflow.operand).side_2);
+    operand[0] = z3_smt_downcast(o1)->e;
+    operand[1] = z3_smt_downcast(o2)->e;
     width_op0 = to_add2t(overflow.operand).side_1->type->get_width();
     width_op1 = to_add2t(overflow.operand).side_2->type->get_width();
     call1 = workaround_Z3_mk_bvadd_no_overflow;
@@ -1456,8 +1455,10 @@ z3_convt::overflow_arith(const expr2tc &expr)
         is_signedbv_type(to_add2t(overflow.operand).side_2))
       is_signed = Z3_L_TRUE;
   } else if (is_sub2t(overflow.operand)) {
-    convert_bv(to_sub2t(overflow.operand).side_1, operand[0]);
-    convert_bv(to_sub2t(overflow.operand).side_2, operand[1]);
+    const smt_ast *o1 = convert_ast(to_sub2t(overflow.operand).side_1);
+    const smt_ast *o2 = convert_ast(to_sub2t(overflow.operand).side_2);
+    operand[0] = z3_smt_downcast(o1)->e;
+    operand[1] = z3_smt_downcast(o2)->e;
     width_op0 = to_sub2t(overflow.operand).side_1->type->get_width();
     width_op1 = to_sub2t(overflow.operand).side_2->type->get_width();
     call1 = workaround_Z3_mk_bvsub_no_underflow;
@@ -1466,8 +1467,10 @@ z3_convt::overflow_arith(const expr2tc &expr)
         is_signedbv_type(to_sub2t(overflow.operand).side_2))
       is_signed = Z3_L_TRUE;
   } else if (is_mul2t(overflow.operand)) {
-    convert_bv(to_mul2t(overflow.operand).side_1, operand[0]);
-    convert_bv(to_mul2t(overflow.operand).side_2, operand[1]);
+    const smt_ast *o1 = convert_ast(to_mul2t(overflow.operand).side_1);
+    const smt_ast *o2 = convert_ast(to_mul2t(overflow.operand).side_2);
+    operand[0] = z3_smt_downcast(o1)->e;
+    operand[1] = z3_smt_downcast(o2)->e;
     width_op0 = to_mul2t(overflow.operand).side_1->type->get_width();
     width_op1 = to_mul2t(overflow.operand).side_2->type->get_width();
     // XXX jmorse - no reference counting workaround for this; disassembling
