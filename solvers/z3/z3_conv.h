@@ -70,10 +70,6 @@ private:
 
   typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
 
-  void convert_struct_union(const std::vector<expr2tc> &members,
-                            const std::vector<type2tc> &member_types,
-                            const type2tc &type, bool is_union, void *_bv);
-
   virtual void convert_smt_type(const bool_type2t &type, void *bv);
   virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
   virtual void convert_smt_type(const signedbv_type2t &type, void *bv);
