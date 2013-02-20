@@ -443,7 +443,7 @@ smt_convt::convert_ast(const expr2tc &expr)
         a = tuple_array_equality(args[0], args[1], expr);
       } else {
         // Normal array equality
-        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 0, expr);
+        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr);
       }
     } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
       // Pointers are tuples
