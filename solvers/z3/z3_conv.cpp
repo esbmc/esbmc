@@ -565,7 +565,6 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
     if (i < numoperands) {
       const z3_smt_ast *tmp = z3_smt_downcast(convert_ast(members[i]));
       args[i] = tmp->e;
-      free(const_cast<z3_smt_ast *>(tmp));
     } else {
       // Turns out that unions don't necessarily initialize all members.
       // If no initialization give, use free (fresh) variable.
@@ -1249,7 +1248,6 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
 
     const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(array.initializer));
     value = tmpast->e;
-    free(const_cast<z3_smt_ast*>(tmpast)); // XXX
 
     if (is_bool_type(arrtype.subtype)) {
       value = ctx.bool_val(false);
@@ -1282,7 +1280,6 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
       int_cte = ctx.esbmc_int_val(i);
       const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(*it));
       output = z3::store(output, int_cte, tmpast->e);
-      free(const_cast<z3_smt_ast*>(tmpast)); // XXX
       ++i;
     }
   }
@@ -1484,9 +1481,6 @@ z3_convt::overflow_cast(const expr2tc &expr)
   tmp2 = z3_smt_downcast(convert_ast(greaterthan));
   ops[0] = tmp2->e;
 
-  free(const_cast<z3_smt_ast*>(tmp1));
-  free(const_cast<z3_smt_ast*>(tmp2));
-
   output = !(ops[0] && ops[1]);
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new z3_smt_ast(output, s, expr);
@@ -1501,7 +1495,6 @@ z3_convt::overflow_neg(const expr2tc &expr)
 
   const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(neg.operand));
   operand = tmpast->e;
-  free(const_cast<z3_smt_ast*>(tmpast)); // XXX
 
   // XXX jmorse - clearly wrong. Neg of pointer?
   if (is_pointer_type(neg.operand))
