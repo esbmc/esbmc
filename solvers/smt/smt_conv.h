@@ -190,6 +190,7 @@ public:
   const smt_ast *convert_ast(const expr2tc &expr);
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
   const smt_ast *convert_addr_of(const expr2tc &expr);
+  const smt_ast *convert_member(const expr2tc &expr, const smt_ast *src);
   const smt_ast *convert_identifier_pointer(const expr2tc &expr,
                                             std::string sym);
   const smt_ast *convert_sign_ext(const smt_ast *a, const smt_sort *s,

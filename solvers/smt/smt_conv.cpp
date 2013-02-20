@@ -306,10 +306,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::member_id:
   {
-    const smt_sort *sort = convert_sort(expr->type);
-    const member2t &memb = to_member2t(expr);
-    unsigned int idx = get_member_name_field(memb.source_value->type, memb.member);
-    a = tuple_project(args[0], sort, idx, expr);
+    a = convert_member(expr, args[0]);
     break;
   }
   case expr2t::same_object_id:
@@ -1150,6 +1147,50 @@ smt_convt::convert_addr_of(const expr2tc &expr)
   }
 
   assert(0 && "Unrecognized address_of operand");
+}
+
+const smt_ast *
+smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
+{
+  const smt_sort *sort = convert_sort(expr->type);
+  const member2t &member = to_member2t(expr);
+  unsigned int idx = -1;
+
+  if (is_union_type(member.source_value->type)) {
+    union_varst::const_iterator cache_result;
+    const union_type2t &data_ref = to_union_type(member.source_value->type);
+
+    if (is_symbol2t(member.source_value)) {
+      const symbol2t &sym = to_symbol2t(member.source_value);
+      cache_result = union_vars.find(sym.get_symbol_name().c_str());
+    } else {
+      cache_result = union_vars.end();
+    }
+
+    if (cache_result != union_vars.end()) {
+      const std::vector<type2tc> &members = data_ref.get_structure_members();
+
+      const type2tc source_type = members[cache_result->idx];
+      if (source_type == member.type) {
+        // Type we're fetching from union matches expected type; just return it.
+        idx = cache_result->idx;
+      } else {
+        // Union field and expected type mismatch. Need to insert a cast.
+        // Duplicate expr as we're changing it
+        member2tc memb2(source_type, member.source_value, member.member);
+        typecast2tc cast(member.type, memb2);
+        return convert_ast(cast);
+      }
+    } else {
+      // If no assigned result available, we're probably broken for whatever
+      // reason, just go haywire.
+      idx = get_member_name_field(member.source_value->type, member.member);
+    }
+  } else {
+    idx = get_member_name_field(member.source_value->type, member.member);
+  }
+
+  return tuple_project(src, sort, idx, expr);
 }
 
 void
