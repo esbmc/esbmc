@@ -445,6 +445,10 @@ smt_convt::convert_ast(const expr2tc &expr)
         // Normal array equality
         a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 0, expr);
       }
+    } else {
+      std::cerr << "Unrecognized equality form" << std::endl;
+      expr->dump();
+      abort();
     }
     break;
   }
