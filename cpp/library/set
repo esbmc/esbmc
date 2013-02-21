@@ -145,15 +145,10 @@ public:
 
 template < class Key, class Compare = less<Key> >
 class set {
-private:
-
+public:
 	Key buf[MAX];
 	size_t _size;
 	Compare rule;
-
-
-public:
-
 	// types:
 	typedef Key key_type;
 	typedef Key value_type;
@@ -299,7 +294,7 @@ public:
 
 	// construct/copy/destroy:
 	explicit set ( const Compare& comp = Compare() ) : _size(0){
-		rule = comp;
+		//this->rule = comp;
 	}
 
 	explicit set ( Key v1[] , Key* v2 ){
@@ -307,7 +302,7 @@ public:
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		sort(begin(),end());
+		std::sort(buf,buf+_size);
 	}
 
 	set() : _size(0){
@@ -315,27 +310,38 @@ public:
 	}
 
 	set ( const set<Key,Compare>& x ){
-
+		_size = 0;
+		for(int i = 0 ; i < x._size ; i++){
+			buf[i] = x.buf[i];
+		}
+		buf[_size] = 0;
 	}
 
-	set<Key,Compare>& operator= ( const set<Key,Compare>& x );
+	set<Key,Compare>& operator= ( const set<Key,Compare>& x ){
+		_size = 0;
+		for(int i = 0 ; i < x._size ; i++){
+			buf[i] = x.buf[i];
+		}
+		buf[_size] = 0;
+	}
 
 	// iterators:
 	iterator begin(){
 		return iterator(buf, 0);
 	}
-	//const_iterator begin() const;
+
 	iterator end(){
 		return iterator(buf, _size);
 	}
 /*
+ * const_iterator begin() const;
 	const_iterator end() const;
 	reverse_iterator rbegin();
 	const_reverse_iterator rbegin() const;
 	reverse_iterator rend();
 	const_reverse_iterator rend() const;
 */
-#if 1
+
 	// capacity:
 	bool empty() const{
 		return !(_size==0);
@@ -347,39 +353,33 @@ public:
 
 	// modifiers:
 	pair<iterator,bool> insert(const value_type& x){
-#if 0
-		//for(int i = 0; i < _size ; i++)
-		//if (buf[i] == x)
-		//	return make_pair(iterator(buf, i), false);
-		//buf[_size] = x;
-		//_size++;
-		//    	std::sort(begin(), end()/*, std::less<Key>()*/);
-		/*
-    	key_type *i, *j;
-    	key_type *iMin;
-    	for (j = buf; j < buf+_size-1; j++) {
-    		iMin = j;
-    		for ( i = j+1; i < buf+_size; i++) {
-    			if (*i < *iMin) {
-    				iMin = i;
-    			}
-    		}
-    		if ( iMin != j ) {
-    			swap(*j, *iMin);
-    		}
-    	}*/
-		//	for(int i = 0; i < _size ; i++)
-		//	if (buf[i] == x)
-		//	return make_pair(iterator(buf, i), true);
-#endif
+		iterator it = std::find(begin(), end(), x);
+		if(it != end())
+			return make_pair(it, false);
+		else
+			return make_pair(insert(it, x), true);
 	}
-	iterator insert(iterator position, const value_type& x);
+
+	iterator insert(iterator position, const value_type& x){
+		_size++;
+		int i = _size;
+		int aux;
+		while( i > position.pos - 1){
+			aux = i +1;
+			buf[aux] = buf[i];
+			i--;
+		}
+		buf[position.pos] = x;
+		return position;
+	}
 
 	void erase(iterator position);
 	size_type erase(const key_type& x);
 	void erase(iterator first, iterator last);
 	void swap(set<Key,Compare>&);
-	void clear();
+	void clear(){
+		_size = 0;
+	}
 
 	// observers:
 	key_compare key_comp() const;
@@ -396,7 +396,7 @@ public:
 	bool operator >= (const set<Key,Compare>&) const;
 	bool operator <= (const set<Key,Compare>&) const;
 
-#endif
+
 };
 }
 
