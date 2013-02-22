@@ -6,8 +6,6 @@
 #include "migrate.h"
 #include "i2string.h"
 
-#include <solvers/prop/prop_conv.h>
-
 #include <boost/algorithm/string.hpp>
 #include <boost/static_assert.hpp>
 
@@ -2028,27 +2026,6 @@ esbmct::expr_methods<derived, subclass,
   do_type_list_operands(derived_this->*field4_ptr, inp);
   do_type_list_operands(derived_this->*field5_ptr, inp);
   do_type_list_operands(derived_this->*field6_ptr, inp);
-  return;
-}
-
-template <class derived, class subclass,
-  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
-  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
-  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
-  class field4_type, class field4_class, field4_type field4_class::*field4_ptr,
-  class field5_type, class field5_class, field5_type field5_class::*field5_ptr,
-  class field6_type, class field6_class, field6_type field6_class::*field6_ptr>
-void
-esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
-                                        field2_type, field2_class, field2_ptr,
-                                        field3_type, field3_class, field3_ptr,
-                                        field4_type, field4_class, field4_ptr,
-                                        field5_type, field5_class, field5_ptr,
-                                        field6_type, field6_class, field6_ptr>
-      ::convert_smt_type(prop_convt &obj, void *arg) const
-{
-  const derived *new_this = static_cast<const derived*>(this);
-  obj.convert_smt_type(*new_this, arg);
   return;
 }
 

@@ -60,15 +60,6 @@ private:
                             const std::vector<type2tc> &member_types,
                             const type2tc &type, z3::expr &bv);
 
-  virtual void convert_smt_type(const bool_type2t &type, void *bv);
-  virtual void convert_smt_type(const unsignedbv_type2t &type, void *bv);
-  virtual void convert_smt_type(const signedbv_type2t &type, void *bv);
-  virtual void convert_smt_type(const array_type2t &type, void *bv);
-  virtual void convert_smt_type(const pointer_type2t &type, void *bv);
-  virtual void convert_smt_type(const struct_type2t &type, void *bv);
-  virtual void convert_smt_type(const union_type2t &type, void *bv);
-  virtual void convert_smt_type(const fixedbv_type2t &type, void *bv);
-
   void convert_struct_union_type(const std::vector<type2tc> &members,
                                  const std::vector<irep_idt> &member_names,
                                  const irep_idt &name, bool uni, void *_bv);

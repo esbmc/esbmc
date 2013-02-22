@@ -259,66 +259,6 @@ z3_convt::check2_z3_properties(void)
 }
 
 void
-z3_convt::convert_smt_type(const bool_type2t &type __attribute__((unused)),
-                           void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv);
-
-  sort = ctx.bool_sort();
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const unsignedbv_type2t &type, void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv);
-
-  if (int_encoding) {
-    sort = ctx.esbmc_int_sort();
-  } else {
-    unsigned int width = type.get_width();
-    sort = ctx.bv_sort(width);
-  }
-
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const signedbv_type2t &type, void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv);
-
-  if (int_encoding) {
-    sort = ctx.esbmc_int_sort();
-  } else {
-    unsigned int width = type.get_width();
-    sort = ctx.bv_sort(width);
-  }
-
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const array_type2t &type, void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv), elem_sort;
-
-  convert_type(type.subtype, elem_sort);
-  sort = ctx.array_sort(ctx.esbmc_int_sort(), elem_sort);
-
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const pointer_type2t &type __attribute__((unused)),
-                           void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv);
-  sort = pointer_sort;
-  return;
-}
-
-void
 z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
                                     const std::vector<irep_idt> &member_names,
                                     const irep_idt &struct_name, bool uni,
@@ -382,39 +322,6 @@ z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
   delete[] proj_names;
   delete[] proj_types;
   delete[] proj_decls;
-
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const struct_type2t &type, void *_bv)
-{
-
-  convert_struct_union_type(type.members, type.member_names, type.name,
-                            false, _bv);
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const union_type2t &type, void *_bv)
-{
-
-  convert_struct_union_type(type.members, type.member_names, type.name,
-                            true, _bv);
-  return;
-}
-
-void
-z3_convt::convert_smt_type(const fixedbv_type2t &type, void *_bv)
-{
-  z3::sort &sort = cast_to_z3_sort(_bv);
-
-  unsigned int width = type.get_width();
-
-  if (int_encoding)
-    sort = ctx.real_sort();
-  else
-    sort = ctx.bv_sort(width);
 
   return;
 }

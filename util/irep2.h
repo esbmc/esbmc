@@ -149,7 +149,6 @@ public:
   unsigned int pos;
 };
 
-class prop_convt;
 class type2t;
 class expr2t;
 class constant_array2t;
@@ -307,19 +306,6 @@ protected:
   type2t(const type2t &ref);
 
 public:
-  /** Despatcher for SMT conversion.
-   *  Each subclass of type2t overrides this method, and provides a routine
-   *  that will invoke a method in the class prop_convt that will convert it
-   *  to SMT representation. This converted representation is assigned to the
-   *  pointer arg, which is assumed to be an appropriate pointer type for the
-   *  prop_convt object being passed down. Implemented in bulk by type_methods
-   *  template.
-   *  @see type_methods
-   *  @param prop_convt Object to perform SMT conversion with.
-   *  @param arg Pointer to assign output to.
-   */
-  virtual void convert_smt_type(prop_convt &obj, void *arg) const = 0;
-
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
    *  itself. May throw various exceptions depending on whether this operation
@@ -1043,7 +1029,6 @@ namespace esbmct {
                                     field6_type, field6_class, field6_ptr> &ref)
       : subclass(ref) { }
 
-    virtual void convert_smt_type(prop_convt &obj, void *arg) const;
     virtual type2tc clone(void) const;
     virtual list_of_memberst tostring(unsigned int indent) const;
     virtual bool cmp(const type2t &ref) const;
