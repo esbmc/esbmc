@@ -226,40 +226,6 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
-std::string
-z3_convt::fixed_point(std::string v, unsigned width)
-{
-  const int precision = 10000;
-  std::string i, f, b, result;
-  double integer, fraction, base;
-  int i_int, f_int;
-
-  i = extract_magnitude(v, width);
-  f = extract_fraction(v, width);
-  b = integer2string(power(2, width / 2), 10);
-
-  integer = atof(i.c_str());
-  fraction = atof(f.c_str());
-  base = (atof(b.c_str()));
-
-  fraction = (fraction / base);
-
-  if (fraction < 0)
-    fraction = -fraction;
-
-  fraction = fraction * precision;
-
-  i_int = (int)integer;
-  f_int = (int)fraction + 1;
-
-  if (fraction != 0)
-    result = itos(i_int * precision + f_int) + "/" + itos(precision);
-  else
-    result = itos(i_int);
-
-  return result;
-}
-
 void
 z3_convt::finalize_pointer_chain(unsigned int objnum)
 {

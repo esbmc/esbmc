@@ -140,7 +140,6 @@ private:
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
   std::string itos(int i);
-  std::string fixed_point(std::string v, unsigned width);
   std::string extract_magnitude(std::string v, unsigned width);
   std::string extract_fraction(std::string v, unsigned width);
   void debug_label_formula(std::string name, const z3::expr &formula);
