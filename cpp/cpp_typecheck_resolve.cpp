@@ -576,6 +576,9 @@ void cpp_typecheck_resolvet::disambiguate_functions(
   resolve_identifierst &identifiers,
   const cpp_typecheck_fargst &fargs)
 {
+  if(identifiers.size()<2)
+    return;
+
   resolve_identifierst old_identifiers;
   old_identifiers.swap(identifiers);
 
@@ -1735,8 +1738,7 @@ exprt cpp_typecheck_resolvet::resolve(
     }
   }
 
-  if(identifiers.size()>1)
-    disambiguate_functions(new_identifiers, fargs);
+  disambiguate_functions(new_identifiers, fargs);
 
   remove_duplicates(new_identifiers);
 

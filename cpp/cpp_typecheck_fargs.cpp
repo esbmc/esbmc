@@ -158,6 +158,8 @@ bool cpp_typecheck_fargst::match(
     if(cpp_typecheck.implicit_conversion_sequence(
         operand, argument.type(), new_expr, rank))
     {
+      operand.swap(new_expr);
+
       // ok
       distance+=rank;
       #if 0
