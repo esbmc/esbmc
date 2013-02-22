@@ -680,7 +680,7 @@ void cpp_typecheckt::convert_class_template_specialization(
     throw "template specialization with wrong number of arguments";
   }
 
-    typecheck_class_template(declaration);
+  typecheck_class_template(declaration);
 }
 
 /*******************************************************************\

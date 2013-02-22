@@ -1,0 +1,1571 @@
+\documentclass{article}
+\usepackage{url}
+\usepackage{listings}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{titling}
+\newcommand{\subtitle}[1]{%
+  \posttitle{%
+    \par\end{center}
+    \begin{center}\large#1\end{center}
+    \vskip0.5em}%
+}
+
+\begin{document}
+\author{Jeremy Morse}
+\title{A manual on some internals of ESBMC}
+\subtitle{Caveat lector}
+\maketitle
+\tableofcontents
+\section{Introduction and caveats}
+
+This ``manual'' is supposed to be an introduction to how the ESBMC model
+checkers internals are arranged and operate. It is not supposed to be a
+comprehensive piece of documentation on the exact behaviour of particular
+functions or facilities; nor will it ever, ever be up to date. Exact
+documentation on a particular function or method should be written in
+doxygen in headers; this documentation can be built to HTML by executing
+\texttt{make doxygen} in the top level directory of ESBMCs source tree.
+
+When referencing portions of code from within this manual, I'll probably
+end up referring to class names and methods within them. Source files and
+line numbers are liable to change, wheras the code layout of the project
+is the least likely to suffer significant churn. The location of such a
+class or method should be obvious from the context, or discoverable with
+grep. Numerous references will also be made to the \textit{Internal
+representation}, or \textit{irep} of something. This refers to how some piece
+of data is structured or stored, see the 'Misc' section for detail.
+
+A huge amount of the code base is derived from the CBMC project. CBMC is
+open source (BSD 4-clause, ish), and available over SVN at
+\url{http://www.cprover.org/svn/cbmc}. A large number of design decisions
+are down to the development of CBMC; changes to ESBMC that cause
+significant divergance from CBMCs design should be carefully thought
+about, seeing how it's more mature than ESBMC. Likewise, code being
+pulled in from CBMC should be examined to see whether it'll actually fit
+into what ESBMC is doing nowdays.
+
+All additional gunge, queries, complaints, to \url{jeremy.morse@gmail.com}
+
+\section{Source tree structure}
+
+In an order vaguely related to how ESBMCs execution order occurs, the
+following describes the contents of directories in the source tree.
+
+FIXME: This is ugly, make it a table.
+
+\begin{description}
+\item[docs] Directory for not-in-code documentation.
+\item[papers] Self explanatory.
+\item[scripts] Various scripts and auxilary files related to building ESBMC
+               and dealing with things that aren't source files. Makefile
+               scripts and release/binary manipulating scripts.
+\item[esbmc] Top level model checking control code. Process entry point,
+             option handling, general direction and invocation of the rest
+             of the code base.
+\item[langapi] Abstractions for handling input source files. Links a variety
+               of global functions up to input-language-appropriate routines.
+               Probably not massively necessary and could be ditched.
+\item[ansi-c] Parser for ANSI-C software. Contains all code required to lex,
+              parse, store as an AST, typecheck, and link, an input file.
+\item[ansi-c/cpp] C preprocessor - an import of the Portable C Compilers
+                  preprocessor, adapted to do what ESBMC needs.
+\item[ansi-c/headers] C langauge headers to override system headers.
+\item[ansi-c/library] C language implementations of various code libraries
+                      that we seek to model.
+\item[cpp] Parser for C++ language. Code for all compilation steps of C++.
+\item[cpp/library] Implementation / models of various C++ template libraries.
+\item[big-int] Arbitary length integer library. Used internally to avoid any
+               kind of problems modelling large machine integers using small
+               machine integers.
+\item[goto-programs] Routines for general operations on GOTO instructions, as
+                     well as all the code for converting a parsed AST into
+                     GOTO instructions.
+\item[pointer-analysis] Code for interpreting the execution of GOTO instructions
+                        and the analysis of their effect upon pointer tracking.
+                        Basically a static analysis of pointer assignment and
+                        reachability. Also, contains code for resolving pointer
+                        indirection in dereferences.
+\item[goto-symex] Symbolic execution of GOTO instructions into an SSA program.
+\item[solvers] Encoding of SSA program into SMT solver logic, and solving of
+               the produced SMT formula.
+\item[util] Miscellaneous functions, classes, and whatever to glue everything
+            else together.
+\item[regression] Regression tests for various different facets of ESBMC.
+\end{description}
+
+\section{Command line options}
+
+What follows is a short description of each command line option to ESBMC that
+exists. All are prefixed with \url{--} when given. Some information is also
+available by running \url{esbmc --help}.
+
+\begin{longtable}{| p{.20\textwidth} | p{.80\textwidth} |} 
+\hline
+Option & Description\\
+\hline
+inlining & Enables inlining of functions -- function calls are replaced with the
+bodies of the called function. It's unclear when these occur.\\
+\hline
+program-only & Symbolically execute the program until we have an SSA program,
+print the SSA program textually, then exit.\\
+\hline
+program-too & Like program-only, but don't exit, instead continue
+verification.\\
+\hline
+function & Specify function to begin execution at. If function takes arguments,
+horrible undefined behaviour occurs.\\
+\hline
+preprocess & Run the input source files through preprocessing, write the output
+to stdout, then exit. Useful for debugging.\\
+\hline
+no-simplify & Disable simplification of expressions; effectively neuters
+constant propagation so that no fact is statically determined to be true or
+false, and we end up always exploring to the top of the unwind bound.\\
+\hline
+unwind & Takes integer parameter. Specifies the general unwind bound to apply
+to all loops in the program.\\
+\hline
+unwindset & Takes string parameter, a comma seperate list of loopidnum:bound
+pairs. Allows exact specification of a loop bound for a particular loop, see
+the show-loops option.\\
+\hline
+z3-bv & Use Z3 solver in bitvector mode.\\
+\hline
+z3-ir & Use Z3 solver in integer mode.\\
+\hline
+boolector-bv & Use Boolector solver.\\
+\hline
+outfile & Output file to write an SMT formula to.\\
+\hline
+no-pointer-check & Disable all assertions related to pointers.\\
+\hline
+depth & Takes parameter n. Limit the maximum depth of the program to the
+execution of n instructions.\\
+\hline
+no-div-by-zero-check & Disable divide-by-zero assertion checks.\\
+\hline
+no-unwinding-assertions & Disable unwinding assertions.\\
+\hline
+partial-loops & Disable unwinding assumptions.\\
+\hline
+memory-leak-check & Enable checking for memory leaks.\\
+\hline
+overflow-check & Enable integer overflow assertions.\\
+\hline
+no-assertions & Disable the checking of any assertion encoded in the program
+with an \url{assert} function call.\\
+\hline
+minisat & Use the minisat sat solver.\\
+\hline
+16 & Model a 16 bit machine. Unlikely to work as this hasn't received any
+maintenence, ever.\\
+\hline
+32 & Model a 32 bit machine. The default.\\
+\hline
+64 & Model a 64 bit machine. Will probably have hiccups involving pointer
+widths.\\
+\hline
+little-endian & Model integers as being little endian. The default.\\
+\hline
+big-endian & Model integers as being big endian.\\
+\hline
+show-goto-functions & Print out all the functions and instructions in all the
+input code.\\
+\hline
+show-value-sets & Print out the same data as show-goto-functions, but also
+add the contents of the pointer tracking set (according to the static analysis)
+at each instruction.\\
+\hline
+show-loops & Print out a list of loops, where they are in the source files,
+and what loop ID number they have.\\
+\hline
+show-symbol-table & Print out a list of symbols and some simplified
+information about them.\\
+\hline
+show-claims & Print a list of all assertions in the program.\\
+\hline
+claim & Takes integer argument identifying what assertion to check in the
+program, from the list in show-claims. Disables all other assertions. Specify
+the claim option multiple times to check multiple claims.\\ 
+\hline
+atomicity-check & During multithreaded exploration, verify that expressions
+are executed atomically. Rewrites assignments to check that the variables on the
+rhs are not modified between before the assignment and afterwards.\\
+\hline
+error-label & Check for reachability of a particular C label in the program.\\
+\hline
+version & Print the version of ESBMC.\\
+\hline
+no-lock-check & Don't make assertions about correct operation of pthread
+mutexes.\\
+\hline
+deadlock-check & Encode assertions checking that the program under test does not
+deadlock.\\
+\hline
+string-abstraction & Enable an approximation of string operations. All string
+operations only consider the lenght of data, rather than its contents.\\
+\hline
+no-slice & Disable slicing step.\\
+\hline
+qf\_aufbv & Print the SMT formula for the program to the file given in the
+outfile option, in QF\_AUFBV logic.\\
+\hline
+qf\_auflira & Print the SMT formula for the program to the file given in the
+outfile option, in QF\_AUFLIRA logic.\\
+\hline
+context-switch & Takes one integer parameter. Specifies the number of thread
+context switches allowed during exploration. Defaults to infinite.\\
+\hline
+time-slice & How many time slice to permit during round-robin scheduling.\\
+\hline
+k-step & How many k-unrolls to make during k-induction.\\
+\hline
+no-por & Disable partial order reduction in multithreaded checking.\\
+\hline
+data-races-check & Check to see whether any concurrent reads/writes to a
+variable are possible. Rewrites assignments to encode an assertion that fails
+if an interleaving is found where either two threads can write to the same
+variable at the ~same time, or can write while the other reads.\\
+\hline
+DFS & Perform depth first search scheduling of multithreaded code. The
+default.\\
+\hline
+schedule & Perform a ``schedule'' scheduling of multithreaded code, encoding
+all interleavings into one SSA program.\\
+\hline
+all-runs & Explore all interleavings in the program, even after a counterexample
+is found.\\
+\hline
+timeout & Start a SIGALRM to time out and kill ESBMC in the future. See --help
+for more details.\\
+\hline
+memlimit & Encode a resource limit to kill ESBMC if it uses too much memory.
+See --help.\\
+\hline
+state-hashing & Enable state hashing. Attempts to hash program state in
+multithreaded exploration and reduce duplicate states.\\
+\hline
+symex-trace & Print GOTO instructions as they are executed. Useful for
+debugging.\\
+\hline
+round-robin & Enable round robin thread scheduling.\\
+\hline
+k-induction & Enable k-induction.\\
+\hline
+break-at & Takes integer parameter. Executes an x86 trap instruction when the
+specified GOTO instruction is executed. This is the equivalent of putting a
+breakpoint on it.\\
+\hline
+memstats & Cat /proc/self/status at the end of execution, to give details on
+how many bytes of memory were used, and so forth.\\
+\hline
+dump-z3-assigns & Print all assignments to SMT symbols if a counterexample
+is found.\\
+\hline
+symex-ssa-trace & Print SSA instructions as they are encoded. For debugging.\\
+\hline
+\end{longtable}
+
+\section{Top level procedures}
+
+Entry to the process starts (more or less) in the \url{doit} method of the
+\url{cbmc_parseoptionst} object. Various command line options are checked
+for validity, before the \url{get_goto_program} method invokes the
+frontend parsers to compile input source code into an AST. The AST for the
+entire environment (all source files and libraries) is stored in a
+\url{contextt} object, containing a list of symbols and their AST value.
+
+The contents of the \url{contextt} object is passed to the
+\url{goto_convert} function, which produces a set of
+\url{goto_functiont}s corresponding to each function in the source language.
+Each function contains little more than a \url{goto_programt}, which
+actually contain a list of instructions and some annotations.
+
+With the set of GOTO functions, the \url{process_goto_program} method
+applies the string abstraction transformation, the pointer analysis,
+installs various pointer validity checks, and anything else that transforms
+the source program into different instructions (such as LTL property monitors
+or data race checking).
+
+With these fixed-up goto functions, a \url{bmct} object is created and the
+\url{run} method invoked on the functions. These functions are fed into a
+\url{reachability_treet} object, the primary interface to symbolic
+execution. Within the \url{bmct::run} method, the symbolic execution engine
+is asked to run through instructions creating an SSA program; potentially
+several times if there are multiple threads involved. A result itself is a
+\url{goto_symext::symex_resultt} containing the SSA program container and
+a count of how many assertions remain to be verified in the program.
+
+The SSA program is then optionally sliced; see the 'Misc' section for details.
+
+A solver object is then created, a subclass of \url{bmct::solver_base}
+abstraction which solver to use. The SSA program is then fed to the solver,
+which encodes it to SMT or whatever appropritate encoding it uses. It's then
+asked to solve the equation, returning:
+\begin{description}
+\item[UNSATISFIABLE] The formula isn't satisfiable.
+\item[SATISFIABLE] The formula is satisfiable.
+\item[SMTLIB] A special case for printing the formula to a SMTLIB file.
+\item[ERROR] Some error occured during solving.
+\end{description}
+
+Finally, if the formula is satisfiable, an error trace is created and printed.
+Further details in the 'Misc' section.
+
+\section{Source file parsing}
+
+Code parsing is one of the untouched pastures of CBMC code, mostly. The ANSI-C
+frontend is almost entirely like the original, while the C++ frontend has been
+significantly developed by Manaus. The author is really familar with neither.
+I'll talk about the ANSI-C frontend, then how the C++ frontend relates to it.
+
+There are some significant conceptual steps involved. Firstly consider
+the input and the output. Coming in is a C source file that must be preprocessed
+and parsed - two fairly straightforward (although not easy) tasks. The top
+levels of ESBMC then receive an AST representing the types and code structure
+of the source file, which is more complex. The irep / structure of this data
+is entirely undocumented and closely coupled between the parsers and the
+\url{goto-programs} dir that converts it to GOTO instructions. However the
+contents of this AST tends to be fairly high level language constructs,
+for example \url{for} and \url{switch} statements. Refer to the method
+\url{goto_convertt:convert} for an idea of what kind of constructs these
+are. The majority of the source file parsing code deals with converting between
+the parse tree and the AST.
+
+The preprocessing stage is contained in the \url{c_preprocess} function.
+In CBMC this used to offload preprocessing to the host preprocessor, however
+our requirements have become more complicated since then. We now do
+preprocessing using the preprocessor from the Portable C Compiler project
+(which is BSD licensed). Unfortunately it wasn't designed with memory management
+in mind, so ESBMC picks an output file, forks, calls the preprocessor to pump
+outupt to the selected file, then exits the child process.
+
+The complicated requirements from the preprocessor is that we generally want
+code under test to have access to all headers on the host system, however we
+also want to shoehorn our own types and functions in there --- for example the
+glibc headers for assert have some obnoxious defines involved. Additionally
+given how much lee-way standards give to libraries to define the format of
+opaque data structures, we may need to define our own data structures to
+avoid having to special case code for different operating systems. For example,
+\url{pthread_t}'s, \url{pthread_mutex_lock}'s and so forth differ
+between operating systems, and we currently rely on on using Linux' pthread.h
+header. The current fix for this is to intercept \url{\#include} statements
+and read in an ESBMC specific header file from \url{ansi-c/headers} rather
+than the system headers.
+
+We parse C in the normal way; a flex tokenizer is defined, and a yacc grammar
+defined which translate the input C into a parse tree. This needs no special
+description. A class (\url{ansi_c_convertt}) takes the parse tree and
+makes a simple translation to the format of the AST. The bulk of the work then
+lies in the \textit{typechecking} phase. Here, the nasty parts of C that are
+context-dependant\footnote{i.e., all of them} are fixed up. Factors such as
+integer promotion, operation signedness, and actual correctness are
+considered, and various casts or extensions are inserted. The output is stored
+as a set of symbols with associated AST values in a \url{contextt} object.
+
+After parsing and compilation is linking. In the past CBMC has just
+tacked all libraries available onto the end of a source file being compiled,
+and that's all. Nowdays the libraries are pre-compiled into a binary
+representation of GOTO instructions, and linked in after typechecking of C
+code, by copying in any symbol referred to from the compiled source files
+that are in the compiled library files.
+
+Finally there's the initialization of C global and static lifetime variables.
+Seeing how the GOTO language is only made up of assignments, ish, their
+initialization must be made by assignments too. So, an initial 'main' GOTO
+function is synthesized from the \url{c_main} and
+\url{static_lifetime_init} functions. For each global variable an
+assignment is emitted assigning the initial value to the global variable.
+
+\section{GOTO programs}
+
+This section covers both the GOTO program record itself, and the GOTO
+instructions that make it up. Before launching into a description of these
+records, it is important to understand that CBMC synthesizes the
+\url{goto_programt} class from the \url{goto_program_templatet}
+template. This can lead to the most confusing and obscure error messages
+if you do not realise that you're manipulating a template. From a design
+point of view, the reason for this appears to be so that the types of
+the GOTO program body could be parameterised; a decision that is almost
+entirely without merit.
+
+The \url{goto_programt} class is more or less just a container for a
+list of GOTO instructions (of class \url{goto_programt::instructiont}).
+It stores \textbf{no} additional information. Instead, all of its methods
+perform operations on the contained instructions. Most of these relate
+to the creation, insertion, and deletion of instructions, recalculating
+their contents to be consistent after such a modification, and a few
+special cases such as determining the successor instructions from a
+particular instruction,
+
+The actual GOTO instruction class itself's primary piece of data comes in
+two flavours -- the \url{code} member or the \url{guard} member.
+These store the internal representation of what the body of the instruction
+\textit{is}. Exactly what the instruction means depends on the \url{type}
+field, described thus:
+
+\begin{description}
+\item[GOTO] Jump from the current instruction to the instruction in the
+\url{targets} field. If \url{guard} is not true, then the jump is
+conditional, depending on the evaluation of \url{guard}. If \url{guard}
+is true the jump to the target occurs; if not, execution continues to the next
+instruction.
+\item[ASSUME] Encode an assumption, stored in the \url{guard} field, to the
+solver.
+\item[ASSERT] Encode an assertion, stored in the \url{guard} field, to the
+solver.
+\item[OTHER] Catch-all instruction for storing special cases, enumerated below.
+Identified by what kind of irep is stored in the \url{code} field.
+\begin{description}
+\item[cpp\_delete] Also \url{cpp_delete[]}. Represents a deallocation of
+some memory allocated by C++'s \url{new} or \url{new[]} operators.
+\item[printf]\footnote{Yes, really} Represents a printf operation, for later
+printing in a counterexample.
+\item[decl] Represent declaration of a variable. Normally the declaration of
+a variable is uninteresting as we only care about when it is initialized.
+However in a loop where a variable is declared inside the loop block, it
+transitions from being initialized to uninitialized when the loop iteration
+finishes. Hence the importance of knowing where it is declared.
+\item[nondet] Represent a nondeterministic value, from a \url{nondet_*}
+function call.
+\item[asm] Inline assembly statement. Mercifully ignored.
+\item[typeid] Fetch a C++ type ID record, I belive.
+\end{description}
+\item[SKIP] An ignored instruction.
+\item[LOCATION] Previously caused a ``location'' SSA step to be recorded for
+future tracking of the code path of the counterexample. Now redundant.
+\item[END\_FUNCTION] End instruction of a function. Not the same as a return,
+which can occur anywhere, but actually the final instruction in the list of
+instructions.
+\item[ATOMIC\_BEGIN] Self explanatory.
+\item[ATOMIC\_END] Self explanatory.
+\item[RETURN] Record a return statement, identifying the expression to return.
+Stored in a ``return'' irep in the \url{code} field.
+\item[ASSIGN] Self explanatory. An ``assign'' irep is stored in the
+\url{code} field, identifying the left and right hand sides.
+\item[DECL] Unused. Probably used to be, or was intended to be, the decl
+irep from the OTHER instruction.
+\item[DEAD] Unused. Comments say ``marks the end-of-live of a local variable''.
+\item[FUNCTION\_CALL] A function call record; stores a function call irep in
+the \url{code} field, which in turn records the left hand side of the call,
+the arguments, and the target.
+\item[THROW] Throw record; not familiar with this, but it'll result in some
+kind of an assignment to a record of what's been thrown, and a jump to somewhere
+else.
+\item[THROW\_DECL] Record the start of a catch block for a particular type
+of variable.
+\item[THROW\_DECL] Record the end of a catch block for a particular type
+of variable.
+\end{description}
+
+All behaviours of GOTO programs are described by lists of these instructions.
+Additional annotations are stored with each instruction, for example the
+\url{function} and \url{location} fields identify where in the source
+files the instruction came from. The \url{targets} list contains a list
+of where the instruction can jump to (which should only ever contain zero or
+one target instructions).
+
+\url{loop_number} identifies a unique loop number for backwards
+GOTO instructions. \url{target_number} is a numeric ID that labels
+the instruction within a function. This don't actually do anything, but
+is printed in the textual representation of GOTO instructions to indicate
+the targets of GOTOs.  There's also a set of local variable names, and
+a globally unique instruction ID in \url{location_number}.
+
+That's the substance of instructions; more information on the interpretation
+of them lies in the symbolic execution section.
+
+\section{Pointer analysis}
+
+The essence of the pointer analysis is a tracking of what pointer variables
+exist in the GOTO code, and what they might point at. This occurs more than once
+during each run of ESBMC. A static analysis of the instructions first attempts
+to establish a set of all (lexical) variables that a particular (lexical)
+variable in a function may point at. Then during symbolic execution, a similar
+tracking maintains a set of (``runtime'') variables that an actual pointer
+\textit{does} point at.
+
+The static analysis is initiated from the GOTO program processing code in the
+\url{cbmc_parseoptionst} object. The high level analysis logic actually
+lies in the \url{goto-programs} directory with the
+\url{static_analysist} and \url{abstract_domain_baset}
+classes. Code in these classes call abstract methods to perform transformations 
+between states as appropriate, over all GOTO instructions, to find a fixedpoint
+where all values of the abstract domain have been discovered for all states.
+
+The \url{value_set_analysist} and \url{value_set_domaint} classes
+subclass the above two classes respectively to provide concrete
+methods\footnote{I'm probably using all the wrong terminology here} for
+tracking states of what pointer variables might point at. Most of the logic
+itself lies in the latter class, storing both the actually tracking data
+and forwarding transformation method calls to the appropriate objects.
+
+A \url{value_set_domaint} contains only a \url{value_sett} object.
+That itself contains the pointer tracking map, which is, unsuprisingly,
+string based. The core type is the \url{value_sett::valuest} map,
+where a string identifying a variable name maps to a
+\url{value_sett::entryt}, which stores a set of variables that may be
+pointed at and the offset into them.
+
+The string key of each of these entries is important -- When interpreting 
+an assignment of a pointer value to a variable, we take the original variable
+name being worked on and then interpret the left hand side, appending strings
+to indicate /what/ part of the variable is being assigned to. To illustrate,
+consider an assignment to the \url{bees} field of the following struct:
+\begin{lstlisting}
+struct face {
+  void *bees[4];
+};
+
+int main() {
+  struct face knees;
+  knees.bees[0] = NULL;
+  return 0;
+}
+\end{lstlisting}
+
+Here, the fully qualified name of the variable we are assigning to is
+\url{main::main::knees}, which becomes the starting point for the string
+key in the value tracking map. We then interpret the left hand side of the
+assignment, observe that we access the \url{bees} field, and so append the
+text \url{.bees} to the key we are calculating. The next part of the left
+hand side is the access to an element of the \url{bees} array, so we
+append the text \url{[]} to the key we calculate. The final key is then
+\url{main::main::knees.bees[]}. Observe that this approach allows every
+variable in the program to have a unique key in the tracking map, except for
+elements in an array --- we instead track what \textit{all} elements of the
+array may point at, thus forming an overapproximation. The reasons for this
+should be obvious.
+
+The \url{value_sett::entryt} class is responsible for tracking the target
+variables that a pointer may point at. It stores a map between certain variable
+names and \url{value_sett::objectt}s. The presence of a variable name key
+in the map indicates that the variable may be pointed at. The
+\url{value_sett::objectt} object records whether the offset into the
+variable that is pointed at is nondeterministic or constant; and if fixed,
+then what the offset is. (NB: the actual implementation of this stores
+\url{symbol} ireps as the map keys. To optimise this, it uses a (global)
+pooling technique to assign each irep an ID number; see the
+\url{value_sett::object_numbering} object. The ID number is then used
+as the key into the \url{value_sett::entryt} map).
+
+The \url{value_sett} class also provides operations required in the course
+of the static analysis, most importantly the ability to interpret an instruction
+to record and update the tracking described above. The class can also merge
+value set records into each other. This follows the obvious merging procedure;
+however when the two tracking sets being merged have a pointer variable
+that points at different offsets into the same data object, the merged
+tracking set records a nondeterministic offset into that data object. This
+forms an overapproximation of the offset into an object that a pointer points
+at.
+
+No attempt is made to track what I'll term \textit{funky} pointer assignments.
+For example, if code deconstructs a pointer variable into bytes, then
+reconstructs these bytes into a pointer value, we are unable to track
+what the resulting pointer value points at. How to address this in the future
+is an open question. The byte array memory models of other tools neatly
+side-step this issue.
+
+The static analysis process eventually reaches a fixedpoint state where we
+have established all possible variables that may be pointed at byte pointer
+variables. The contents of this analysis is then handed to an object of
+class \url{goto_program_dereference}. This proceeds to enumerate all
+GOTO instructions and attempts to perform all dereferences in the instruction.
+Pointer safety assertions are then generated (see the section on dereferencing)
+and inserted as ASSERT instructions prior to the dereferencing instruction.
+
+The pointer analysis executed during symbolic execution uses the same records
+and functions as the static analysis. While the static analysis attempts to find
+all the variables a pointer might point at across all code paths, the symex
+tracking instead tracks the set of all variables a pointer may point at in the
+course of the current code path. The variables it tracks are also ``L1 renamed''
+(see the section on Symbolic Execution).
+
+It is speculated that the static analysis can be removed, and assertions
+encoded on-the-fly when dereferences occur during symbolic execution. While
+this might be a valid optimisation, the TACAS13 performance figures indicate
+that execution time is dominated by symex, rather than the pointer
+analysis\footnote{660 seconds ``GOTO processing'' compared to 20,000 seconds
+``BMC time''}.
+
+\section{Symbolic execution}
+
+This portion of ESBMC is likely the most important in terms of theory,
+complexity, and performance. The overall task is to take an input set of
+GOTO functions, and interpret their instructions through an execution path
+that is bounded according to the rules of BMC. Along the way, a \textit{Single
+Static Assignment} (SSA) program is created recording the operations that
+occured during the trace, for later checking. We must also make decisions
+regarding the exploration of thread interleavings if multiple threads are
+involved. To cover this section, we'll first look at the substance of the
+SSA program, the concept of variable ``renaming'', the classes that make up
+the symex process, how specific instructions are interpreted in single
+threaded code including certain special case library functions,
+and finally how all this relates to multi-threaded code.
+
+\subsection{SSA programs}
+
+The output from a single symex run through a program is contained in a
+\url{symex_target_equationt} object. This primarily stores a list of
+\url{symex_target_equationt::SSA_stept} objects, each of which represents
+a single operation in program, sometimes referred to as a \textit{trace}.
+The idea of SSA \textit{variables} will be discussed in the ``Variable
+Renaming'' section. A SSA step comes in four flavours:
+
+\begin{description}
+\item[ASSIGNMENT] An assignment to a variable, with a symbol on the left hand
+side, and an expression irep on the right hand side.
+\item[ASSERT] Represent an assertion that an expression evaluates to true.
+\item[ASSUME] Represent an assumption that an expression evaluates to true.
+\item[OUTPUT] Record an output from the trace. This is essentially a wrapper
+around a printf operation, that causes variables to be printed in the
+course of printing a counterexample. I recommend not asking.
+\end{description}
+
+Numerous expression fields in a step object record the details of the above
+operations, and are generally uninteresting for this discussion. The only
+other data of note is that each step stores a \url{source} object, recording
+where in the GOTO program the SSA step was generated.
+
+\subsection{Variable renaming}
+
+FIXME: this section is likely worded in a cack handed manner, requires
+verification.
+
+In the course of this manual there are numerous references to ``variables'',
+without futher elaboration. The different aspects of variables that might be
+referred to are below:
+
+\begin{itemize}
+\item The lexical variable, i.e. the variable name itself in a particular
+context, not specific to a particular value or function activation.
+\item The storage of a variable. The portion of memory reserved for storing
+the value of a variable, either a global variable or memory allocated on the
+stack if an automatically allocated variable in a function block.
+\item The contents of a variable. Simply the value assigned to the variable
+at a particular point in a program.
+\end{itemize}
+
+We name these different aspects \textit{level 0}, \textit{level 1}, and
+\textit{level 2} respectively, often shortened to L0, L1, or L2. The reason
+for this naming will become obvious shortly. An example is in order to fully
+understand this. Consider the following function, and how it relates to the
+pointer analysis:
+
+\lstset{numbers=left}
+\begin{lstlisting}
+int anint;
+
+void somefunc(int **beans) {
+  int *bears = *beans;
+  bears = &anint;
+}
+
+int main1(void) {
+  int wololololo = 0;
+  somefunc(&wololololo);
+}
+
+int main2(void) {
+  int ponies = 0;
+  somefunc(&ponies);
+}
+\end{lstlisting}
+
+Here, if we consider the variable \url{beans} as an L0 variable, what it
+points at is the set of all pointer targets it could potentially point at over
+\textit{all} execution traces that are available in the program, including
+all pointers that may be fed into \url{somefunc} at any point in the
+program. This set includes the \url{wololololo} and \url{ponies}
+variables. However if we consider \url{beans} as an L1 variable, what it
+points at is whatever it may point at across the lifetime of its storage. Thus,
+this depends on the path taken through the program -- the pointer may point
+at \url{wololololo} or \url{anint} if \url{somefunc} is called from
+\url{main1}, or alternately it may point at \url{ponies} or \url{anint}
+if called from \url{main2}. However it may never potentially point at all
+three. Finally, L2 variables are the actual value of the variable at a
+particular point in the program, in our example the L2 \url{beans} pointer
+may only ever point at a single value, which varies with both the path through
+the program and the actual instruction location.
+
+(These differences are important during the pointer analysis -- the static
+analysis tracks pointers as L0 variables, the symex pointer tracking considers
+L1 variables).
+
+The reason for describing these variable kinds in terms of ``level''s, is
+that we can consider a higher ``level'' of variable as representing a set of
+lower level variables. Consider: if we call the \url{somefunc} function
+in the above example three times, then the L0 \url{beans} variable exists
+only once (as the function only exists once, so the lexical variable exists
+once). However, three L1 instances of the L1 \url{beans} variable exist,
+because the function was called three times and storage allocated for the
+variable three times. In the same way, repeated assignment to a variable
+in a function causes only one L1 name to exist (as only one piece of storage
+is required), however multiple L2 variables exist as the variable has
+multiple values during the execution of the function.
+
+This then leads to the concept of ``renaming'', which is where we take a high
+level variable and reference a lower level variable, appropriate to the context.
+The two forms this can take are the transitions L0 to L1, and L1 to L2. In the
+former case, we are taking a lexical variable and referring to the actual
+storage of that variable. If the variable is global or of a static lifetime,
+no additional data is added to the record, as the variable is always the
+same piece of storage across the whole program execution. If the variable is
+allocated local to a function call, then the L0 variable is annotated with
+a unique \textit{activation record} number that identifies which invocation
+of the function we are dealing with, and a thread number. The actual values
+of these numbers are derived from the context of the renaming -- a thread number
+is always available, and the activation record number of the function is always
+available (as it's illegal to refer to a local variable outside of its
+scope\footnote{Indirect pointer references are special, see later}).
+
+
+When renaming an L1 variable to an L2 variable (effectively finding the value
+currently stored by that L1 variable) we annotate the L1 variable with
+a context switch ID number (see later sections) and an \textit{SSA assignment
+number}. The assignment number is a monotonically increasing counter giving each
+assignment to an L1 variable a unique identifier. So, if we assign to a
+variable four times in a function, four L2 variables are created with
+assignment numbers from one to four. This preserves the SSA constraint that we
+only ever assign to a variable once. When renaming an L1 variable to L2 for the
+purpose of using its value rather than making an assignment, we take the
+assignment number to be the greatest assignment number for that L1 variable,
+thus giving us the most recently assigned value of that L1 variable.
+
+The final complexity to this situation, is that there is never a particular
+object in ESBMC that represents any of these variables. Instead, variables
+are identified by \textit{name}, stored in a symbol irep. Unsuprisingly, this
+name is a string\footnote{Changes in the irep2 branch}. Multiple symbol irep
+objects can contain the name of the same variable; creating a new variable
+at any leve is as simple as creating a new name. An interesting side-effect
+of this is that, following the procedure for renaming an L1 variable to L2,
+if the L1 variable has never been assigned to then the greatest assignment
+number is zero, and so references to unassigned variables read from assignment
+number zero. (And because when we reach the solver level there is nothing
+constraining the zeroth assignment of that variable, it's a free variable).
+The format of this string is as follows:
+
+\begin{quote}
+full\_variable\_name@actv\_record!thread\_no\&cswitch\_no\#assign\_no
+\end{quote}
+
+Where \url{actv_record}, \url{thread_no}, \url{cswitch_no}, and
+\url{assign_no} are replaced with the appropriate numbers. L0 names only
+feature the variable name at the start; L1 names follow the above format
+up until the ampersand; and L2 names use the full format. These names will
+frequently crop up throughout almost all of ESBMC.
+
+\subsection{Class overview}
+
+The top level class for symex is \url{reachability_treet}. This contains,
+at some level, all the state involved in the interpretation of GOTO
+instructions. It also has the high level entry-to-symex methods like
+\url{reachability_treet::get_next_formula}. Almost all the actual
+logic in the class is related to the exploration of multithreaded interleavings,
+everything symex related exists in lower level classes. The main piece of
+data stored is a set of \url{execution_statet}'s, each of which stores
+the full state of the program at a particular point in time.
+
+The next two classes of interest are the \url{goto_symext} and its
+subclass, \url{execution_statet}. The former contains all the logic
+for GOTO interpretation and anything else only related to single threaded
+execution, plus stores a few parameters for symex exploration. The latter
+overrides a number of methods and injects logic for discovering when
+multithreading operations must occur. The logic in this class only relates
+to operations on the program state rather than interleaving exploration.
+It stores a set of thread state objects, of class
+\url{goto_symex_statet}, while some specialised information is broken out
+into \url{execution_statet} for easy accessibility (such as what threads
+are still running, atomic blocks, startup parameters). Global program state
+is also stored here as a \url{value_sett} object to track pointer value
+sets, and a \url{renaming::level2t} storing data on the latest assignments
+to variables.
+
+Within the \url{goto_symex_statet} class are all thread specific pieces
+of data --- things like the program counter (in
+\url{symex_targett::sourcet}) or the call stack (in
+\url{goto_symex_statet::framet}). Significantly more state is stored
+tracking the nondeterministic exploration of the program.
+\url{goto_symex_statet::goto_statet} objects contain the whole program
+state resulting from a short deterministic path, which are then merged together
+where control paths merge\footnote{i.e., SSA phi functions} to form the
+nondeterministic program trace. Various objects of \url{guardt} class
+record the guard of a particular path being taken. Also stored is the count
+of how many times a loop has been unwound in the current context, for the
+purpose of loop bounding.
+
+A \url{goto_symex_statet::framet} stores information related to a
+particular stack frame / function activation. Mundane facts like the function
+name, call site location, return value variable and the names of local variables
+live here. More exciting items such as the set of executions to be merged in
+the future, and the actvation record number for renaming, live here too.
+There are also some hacks related to function pointer interpretation.
+
+\subsection{Instruction interpretation}
+
+The execution of instructions begins in the constructor for
+\url{execution_statet} where the first thread is created and its program
+counter set to the entry of the \url{main} function. From that point
+onwards, the \url{goto_symext::symex_step} method is repeatedly called
+to take the next instruction, interpret it, and move forwards. Some
+instructions are handled in \url{execution_statet::symex_step},
+which overrides its superclass and interprets multithreading specific
+instructions. What follows is a narative of the (not quite) high level
+operations performed during the interpretation of these instructions. Assume
+that pointer dereferences are already handled as described in the section
+on dereferencing --- actions specific to dereferencing will be mentioned
+explicitly.
+
+\subsubsection{Assign}
+
+The substance of an assignment is a left hand side and right hand side. The
+outcome we need is an SSA assignment, where we calculate a value with a type
+n the right hand side, and then create a new left hand side variable that this
+right hand side can be bound to. Clearly the assignment of a constant rhs to
+a variable on the lhs is the simplest example of this. The operation becomes
+more complex when the left hand side is an array index, a struct field,
+a cast, or a nondeterminstic symbol due to pointer dereferencing. These
+assignments must be rewritten into a simple variable assignment.
+
+Performing this rewriting for an array index, we take the array variable
+on the left hand side, and create a WITH operation that updates the desired
+element with the right hand side. The assignment is rewritten to become an
+assignment of this new value to the array variable. A similar operation
+occurs for struct and union member assignments. For a nondeterministic
+assignment we encode multiple deterministic assignments, one for each left
+hand side, guarded by the appropriate guard. For assignment to a
+\url{byte_extract} irep, we replace the right hand side with a
+\url{byte_update} irep of the base data object on the left hand side.
+The logic for all these operations begins in the
+\url{goto_symext::symex_assign_rec} method and methods called from there.
+
+Once we have an assignment in this form it is suitable for being an SSA
+assignment. However all the variables are L0 variables, and need to be
+renamed to refer to the appropriate piece of data or value. In the course
+of the \url{goto_symext::symex_assign_symbol} method we call
+\url{goto_symex_statet::rename} which identifies each variable on the
+right hand side, renames to L1 (storage variables), and then to L2 (actual
+values). The identifying numbers for these operations are pulled from the
+top level \url{goto_symex_statet::framet} object of the most recently
+called function, and the global L2 state tracking. One notable exception here
+is that any operand to an \url{address_of} operation will only be renamed
+to L1 --- we do not take the address of a particular variable value, but
+instead the storage of the variable.
+
+Once renamed, execution passes to \url{goto_symex_statet::assignment},
+which performs accounting for the assignment on the L2 level. Specifically,
+it bumps the SSA assignment number for the variable assigned to, so that future
+uses of it will have the updated / recently assigned value. Additionally
+we inspect the contents of the right hand side, and if it is a
+sufficiently\textsuperscript{\texttrademark} constant value it is cached
+in the program L2 state tracking, for constant propagation. Future rename
+operations on that variable will have the variable replaced with its constant
+value, rather than the variable itself. This method also passes the
+assignment to be interpreted by the pointer analysis, which updates what the
+left hand side may possibly point at.
+
+Finally the \url{symex_target_equationt::assignment} method is called
+to encode an SSA assignment, the program counter is incremented to point at the
+next instruction, and we are done.
+
+\subsubsection{Assert and assume}
+
+ASSERT and ASSUME instructions are no-where near complex. Their substance
+is the \url{guard} field of the GOTO instruction, which records the condition
+that we are asserting or assuming. This expression is renamed as above to refer
+to the appropriate L2 or L1 variables, and is passed to the expression
+simplifier in case we can determine the truth of the operation statically.
+The time and particularly memory benefits of determining this early are
+significant.
+
+The relevant methods are \url{goto_symext::claim} for ASSERT and
+\url{goto_symext::assume} for ASSUME. These perform the above operations,
+and then call \url{symex_target_equationt::assertion} and
+\url{symex_target_equationt::assumption} respectively.
+
+\subsubsection{Goto}
+
+GOTO is likely the most complex of all the GOTO instructions, due to the sheer
+amount of juggling of state that results. The substance of these is again
+the \url{guard} field of the instruction, and a target instruction where the
+GOTO is jumping to. There are two other factors that significant decisions
+are made on --- firstly whether the GOTO is \textit{backwards} to an earlier
+instruction in the program, and whether the guard of the instruction is (when
+simplified) a constant true or false, or nondeterministic.
+
+Consider the naive execution of some GOTO instructions. We start by executing
+the first instruction in the program, moving on to the next, and repeating until
+we reach the last instruction in the program. We can also handle loops by,
+whenever we execute a GOTO that jumps backwards, following that jump and
+executing from an earlier instruction in the program. This basic approach to
+interpretation is what is employed by ESBMC, with all control flows more
+complicated than the above encoded by making portions of the execution trace
+nondeterministically executed.
+
+The best way to describe this is through an example: below is a sample piece
+of C, and an approximation of the corresponding GOTO code that it translates to.
+
+\begin{lstlisting}
+if (somebool) {
+  a = b;
+} else {
+  a = c;
+}
+return a;
+\end{lstlisting}
+
+\begin{lstlisting}
+   IF somebool GOTO 1
+   ASSIGN a = b
+   GOTO 2
+1: ASSIGN a = c
+2: RETURN a
+\end{lstlisting}
+
+In the GOTO code for this program, there are two significant control flow
+operations. The first instruction (line 1) is a GOTO instruction with a
+guard\footnote{Even though it's a GOTO instruction, the textual representation
+always begins with IF on account of it being a conditional GOTO.}, then the
+RETURN instruction on line 6, with label ``2''.
+
+As alluded to in previous subsections, we encode complicated and
+nondeterministic executions of the program as small deterministic executions,
+and then merge them together later. The storage for such an execution is a
+\url{goto_symex_statet::goto_statet} object, which contains a copy of
+the L2 variable assignment data, pointer tracking set, and a guard for whether
+this path is executed.  Taking our example, at the first GOTO instruction (line
+1) we duplicate the current symex state into a \url{goto_statet}, with a
+guard evaluating to true when the GOTO's guard is true. This object is then
+placed in the stack frame's \url{framet} object, in the
+\url{goto_state_map} field, as a piece of program state to be considered
+in the future, at the target of the jump (line 4).
+
+Proceding from that GOTO instruction, the guard of the currently executing
+piece of code is adjusted to be true when the current instruction is reachable,
+i.e. when the guard for the GOTO on line one is false.
+We encode the assignment to \url{a} as normal. We then reach the next
+GOTO on line 3, which is an unconditional jump to label 2. At this point we
+duplicate the current symex state into another \url{goto_statet} object,
+and file it for consideration at the jump target (line 5). The guard encoded
+in the \url{goto_statet} is the guard for the current execution; we do not
+alter it as the jump is unconditional.
+
+ESBMC proceeds by setting the state guard of the current exploration to
+false --- this because any instructions following an unconditional jump cannot
+be executed. However when it moves onto the next instruction, in the course
+of the method \url{goto_symext::merge_gotos} we detect that a previous
+jump (from line 1) targetted the current instruction, and thus we should
+consider continuing the execution down that path. Given that the current state
+guard is false and thus nothing is actually being executed at the current
+point of exploration, the state in the \url{goto_statet} from line 1 is
+simply copied back into the current exploration state, and the current
+exploration guard set to the guard in the \url{goto_statet}. We now
+effectively have the program state that we would had if we had actually
+jumped the exploration from line 1 to line 4. The assignment in line 4 itself
+is executed as normal.
+
+The truly advanced part occurs when we move on to line 5. This is the point
+where the two deterministic paths that we could take from line 1 must be
+merged into a nondeterministic program. This is signified by the fact that the
+current exploration guard is non-false, and \url{goto_symext::merge_gotos}
+finds a \url{goto_statet} to merge into the current exploration. To handle
+this, the method \url{goto_statet::phi_function} is invoked to merge the
+two states, nondeterministically. It begins by taking the difference between
+the two guards of the two explorations. It then iterates over all L2 variable
+assignments, and finds those that have been changed in either path. For such
+assignments, an additional assignment to the variable is made from an
+\url{if} irep\footnote{or the if-then-else operation, or a phi-function, or
+however you wish to call it}, with the guard difference as the condition, and
+the variable from either exploration path as the two operands. The net effect
+is that the value of any particular variable in the program changed over the
+two explored paths is now selected according to the truth of the condition
+on line 1. If it was true, we take the variables assigned in the true path,
+if it was false, then the variables assigned in the false path. We finally
+take this new L2 variable state, the union of the two pointer tracking sets,
+the disjunction of the guards for the paths we could have taken, and assign
+this back to the current symex exploration state.
+
+All control flow concepts are built on top of this principal. The unwinding of
+loops occurs by ESBMC following all jumps backwards (up to the unwind bound),
+with all paths that break out of the loop being filed as states to be merged
+once we have exited the loop. Then once we have reached the unwind bound and
+exited the loop\footnote{or statically determined that it always exits} these
+states are all merged following the procedure as above, and the program
+exploration continues.
+
+Special actions are taken during loops, due to this being a bounded model
+checker. As expected, we record how many times we have unwound a particular
+loop, and once the unwind bound given by the operating user has been reached
+we call the \url{goto_symext::loop_bound_exceeded} method. In all
+circumstances exploration does not continue any further. However by default
+we encode an assertion that the condition of continuing the loop, i.e. the
+backwards jump we are currently considering, is false. This causes any path
+where additional unwindings are available, but have been ignored due to the loop
+bound, to trigger an assertion, letting the user know that their analysis is
+incomplete. This can be optionally disabled. If it is, we instead encode an
+assumption that the current (artifically bounded) path is not taken. This
+preserves the termination condition of the loop, ensuring that only executions
+that fufil the termination condition actually leave the loop. If this assumption
+is turned off\footnote{The legenday \url{--partial-loops} option} then
+ESBMC can consider unsound paths, for example an infinite loop with no
+\url{goto} or \url{break} statements will be able to exit and continue
+execution because the termination condition is not preserved.
+
+\subsubsection{Function calls, ends, and returns}
+
+There are three function-related GOTO instructions, FUNCTION\_CALL,
+FUNCTION\_END, and RETURN. All deal with organizing the exploration of
+the program execution into sequential instructions, sometimes involving
+some nondeterminism. Consider the simplest case:
+
+\begin{lstlisting}
+int main(int argc, char **argv) {
+  return foo();
+}
+\end{lstlisting}
+
+Here, a call to main will be represented as a FUNCTION\_CALL instruction.
+The \url{code} field contains a \url{function_call} irep that
+records what arguments to pass in, the function target (in a \url{symbol}
+irep), and the variable to assign the return value to. Interpretation begins
+in \url{goto_symext::symex_main}, where we may identify a function as
+being an intrinsic, and pass it off to \url{goto_symext::run_intrinsic}.
+All other function calls are passed to
+\url{goto_symext::symex_function_call} and then
+\url{goto_symext::symex_function_call_symbol}.
+
+As part of setup for a function call, we check that the target function
+actually exists. Within ESBMC it is valid to call a declared function that has
+no body, otherwise we would have to write stubs for every library ever. If no
+body exists to be called, a warning is printed to the user, and the return value
+of the call becomes nondeterministic. Additionally we check how many times
+the target function has been called to detect recursion; if the number of
+active function calls exceeds the unwind bound, the function call is ignored.
+
+Following this, if we are still interpreting the function call, we allocate a
+new \url{framet} object to recall this call, and put it on the top of the
+call stack. The tracking data for L1 names is updated so that local variables
+get renamed to an L1 name local to this function call, rather than a call to
+the same function higher on the stack (\url{goto_symext::locality}).
+The arguments to the function are iterated over, and assigned to the relevant
+local variables in the called function. A small amount of symex time type
+coercion also occurs. Finally we store which instruction to return to, what
+variable the return value should go to, and update the program counter to the
+first instruction in the target function.
+
+In the course of the functions execution we may run into many RETURN
+instructions. Each of these are encoded as an assignment to the return value
+in the calling function, stored in the \url{framet} object. Following this
+we encode an unconditional jump to the end of the function.
+
+Once all paths in the function have been explored we inevitably end up at the
+last instruction in the function, possibly with a large number of
+\url{goto_statet}'s to be merged in. The final instruction itself is
+always a END\_FUNCTION. When this is executed, we reset the program counter to
+the calling function and dispose of the \url{framet} on the top level of the
+stack.
+
+Most of this is straight forward. It becomes more complicated when calls to
+function pointers are involved. In the past, the static pointer analysis
+has replaced all function pointer calls with code that takes the set of all
+functions that may be pointed at, and encoded a mishmash of conditional GOTOs
+and function calls. This results in all the functions the pointer may point at
+being called, and the correct outcome of the function call being determined
+by nondeterministic merging of states (see the interpretation of GOTOs). More
+recently, in a slow attempt to remove the static analysis, I've written code
+to dereference function pointers at symex time instead. This takes the set of
+pointed-to functions from the symex-time pointer tracking, and prepares function
+calls to each of them. One is started, then when that function returns the next
+function in the list is called. Once there are no more functions to call,
+states are merged in the same way as before. There's no massive benefit from
+this, but it will permit more control over function call interpretation in
+the future. Relevant fields of the \url{framet} object are
+\url{cur_function_ptr_targets}, \url{function_ptr_call_loc},
+\url{function_ptr_combine_target}. and
+\url{orig_func_ptr_call}.
+
+\subsubsection{Other}
+
+``OTHER'' instructions, as mentioned, are more or less the catch-all instruction
+for special cases and ugly hacks. Interpretation of them is redirected to the
+\url{goto_symext::symex_other} method. A general description of what
+flavours of OTHER instructions there are lies in the section on GOTO
+instructions. Dynamic memory operations are described elsewhere. In an ideal
+world we would end up replacing all of these special case instructions with
+function call to intrinsics.
+
+\subsubsection{Exception handling}
+
+I know practically nothing about the exception handling (and hopefully others
+can write this section). However there are THROW\_DECL instructions that I
+believe signify the start of a catch block, with THROW\_DECL\_END signifying
+the end of a particular type being caught. There's then the THROW instruction
+itself, which probably does the obvious.
+
+\subsection{Multithreaded interactions}
+
+The current way that ESBMC operates is to consider an interleaving wherever
+access to a piece of shared state occurs. The context switch itself is defined
+to occur \textit{after} the operation that causes it. This doesn't affect
+reachability at all so long as there is a context switch available at the start
+of any thread. This is because the context switch can actually occur at any
+point between two accesses to shared state, it's just most convenient to do
+it whenever one of those accesses occurs.
+
+To support this, several \url{goto_symext} methods are overridden in the
+\url{execution_statet} class. Then, whenever any assignments, asserts,
+assumes, and conditional jumps occur, the normal interpretation is still
+applied, but is followed by a call to the \url{reachability_treet} object
+that controls the current exploration, to see whether any action should be
+taken. What action is actually taken depends on the multithreading exploration
+method, see another section.
+
+Two additional instructions are available for interpretation by
+\url{execution_statet::symex_step} --- ATOMIC\_BEGIN and ATOMIC\_END.
+These flag the currently executing thread as being in an atomic block,
+and not in an atomic block, respectfully. Other threading operations are
+available, but implemented in intrinsics rather than specific instructions.
+(I'd also prefer atomic begin / end to be intrinsics too).
+
+The \url{execution_statet} class itself can perform many other operations,
+reporting facts about the current program state or making operations like
+switching which is the current active thread. However these are all called
+from \url{reachability_treet}, so I'll describe them elsewhere.
+
+\subsection{Intrinsic library functions}
+
+Numerous intrinsics exist, mostly related to multithreading operations.
+Hopefully in the future more features will move to being intrinsics, thus
+reducing special cases and being more obviously ESBMC-specific. All intrinsics
+are prefixed with ``\_\_ESBMC\_'', and include the operations below:
+
+\begin{description}
+\item[yield] Force a context switch point during exploration
+\item[switch\_from] Force a context switch point \textit{and} ensure that
+another thread runs at least once before this runs again.
+\item[switch\_to] Takes one integer argument. Forces a context switch from the
+current thread to the thread identified by the argument.
+\item[get\_thread\_id] Return the integer identifier of the current thread.
+\item[set\_thread\_data] Takes two arguments. The first is a thread ID num,
+the second  is a piece of constant value data to set as thread-specific
+data for that thread. Used for sending data to a thread without nondeterminism
+getting in the way.
+\item[get\_thread\_data] Takes one argument, a thread identifier. Retrieves
+a piece of data set with \url{set_thread_data}.
+\item[spawn\_thread] Creates a new thread. Takes one argument, the address
+of a function to start executing at. This start function must take no arguments
+and return nothing. The return of this intrinsic is the ID number of the
+created thread.
+\item[terminate\_thread] Terminate execution of the current thread, causing it
+to never be executed again.
+\item[get\_thread\_state] Takes one argument, a thread ID. Returns true boolean
+if the thread is still running, false if it has exited.
+\end{description}
+
+These are fairly peculiar as far as intrinsics go --- the justification is that
+we should be able to build other threading libraries on top of ESBMC that aren't
+just pthreads, and so there should be a simple generic interface to controlling
+threads. The pthread library implementation on top of this is probably out of
+scope for this document, and I'll end up sticking it in the pthread
+implementation file.
+
+\section{Dynamic memory}
+
+Currently, if you malloc a piece of dynamic memory what you'll get
+back is a pointer to a uniquely numbered variable, probably of type byte array.
+Some CBMC code attempts to determine what type variable the caller wants to be
+allocated when calling malloc, however this is difficult to do, particularly
+when the first call to the result is \url{memset}.
+
+Being a variable means that malloc'd items of data can be treated like any other
+piece of data in ESBMC. The complexity occurs when we have to perform assertions
+and checks to see whether or not pointers have been freed or point in bounds.
+A series of arrays of data are used to model that information. These are
+\url{__ESBMC_alloc}, \url{__ESBMC_deallocated},
+\url{__ESBMC_is_dynamic} and \url{__ESBMC_alloc_size}.
+The index of the array is the pointer object ID number, see the section on
+SMT encoding. Here, the boolean arrays \url{alloc} and \url{deallocated}
+store whether or not the pointer is valid and has been deallocated,
+respectively. Exactly what the difference is between the two is a mystery,
+and possibly nonexistant. \url{is_dynamic} is an array of bools indicating
+whether or not a particular pointer was allocated dynamically or not.
+\url{alloc_size} contains the size of the allocation, if dynamic.
+
+Assertions about pointer validity tend to be written in terms of these pieces
+of data. For example, the size of a piece of data is always available, unless
+it was allocated dynamically, in which case the \url{__ESBMC_alloc_size}
+array is used to retrieve the actual size allocated. Currently no attempt is
+made to assert that stack objects that are out of scope are not accessed.
+
+Checking that dynamic memory is all freed before program termination is now
+handled by keeping a set of all allocated pieces of memory in
+\url{goto_symext}. At the end of the exploration of the program, an
+ssertion is encoded that for all objects allocated, if the guard was true
+at the time of allocation, then the object has now been freed.
+
+\section{SMT encoding}
+
+Once we have an SSA program to operate upon, we have a series of assignments,
+assertions and assumptions. These are then converted into an SMT representation
+for checking whether any of the assertions are satisfiable.
+
+At a high level, variables being assigned to are turned into variable names,
+and we assert that the right hand side of an assignment is equal to the symbol
+name on the left hand side. Variables on the right hand side are turned into
+symbols too. To encode the conditions we are checking, we then assert that if
+all assumptions are true, it implies that the disjunction of inverted assertion
+conditions is true. This causes the formula to be unsatisfiable, unless there
+is at least one assertion condition that is false, and all the assumptions are
+true (which indicates an assertion failure).
+
+From this higher layer, we then reach the topic of how our SSA programs are
+encoded into SMT. We have two logics to use: QF\_AUFLIRA and
+QV\_AUFBV\footnote{Although more accurately, the logic we use is whatever Z3
+lets us get away with}, referred to as integer mode and bitvector mode.
+The primary difference between the two of these is that
+integer-mode integers have unbounded range, meaning they overapproximate normal
+integers, but have a significant performance boost when solving the formula.
+In comparison, bitvector-mode integers are fixed width bit vectors.
+The former also represents floating point numbers as reals, wheras the latter
+has to approximate floating point numbers with fixed width
+arithmetic\footnote{and it's likely all broken, I don't understand it}. However;
+the largest difference is that the unbounded range of integer-mode integers
+means there can be no accurate byte model of the data being worked on. For
+example, if we select the second byte from an unbounded number, what is the
+result?
+
+SMT does not support converting between the two representations of integers.
+Z3 however has an operation that pupports to do this, but in actuality is an
+uninterpreted function. Unfortunately this is used in a number of places
+around ESBMC.
+
+Onwards to more complex types. Structs are represented by tuples; the number
+of fields is the size of the tuple, and each field is an element in the tuple,
+in the order the fields were declared in the struct. Access to struct fields
+is then simply selecting or updating a tuple element.
+
+Arrays are a supported type in both logics we use, therefore array operations
+can be translated to SMT array operations directly. Note that while C supports
+multi dimensional arrays, we translate these to accessing a single dimension
+array in the normal manner.
+
+Unions are much more tricky. It appears that the solver backend code keeps track
+of what element in a union was most recently assigned to, and when the union
+is read in the future, that element is used. However, this is not amenable
+to nondeterminism, as an assignment to a union nondeterminstically through an
+\url{if} irep cannot be tracked this way. Unions are, thus, broken right
+now in the presence of nondeterminism.
+
+Pointers are also sticky. The chosen encoding for these is a two-tuple, where
+the first element is a unique integer identifying a particular piece of storage,
+i.e. the item pointed at. It is often referred to as the ``pointer object ID''.
+The second element is an offset into the pointed at item. Pointers are created
+When an \url{address_of} operation is applied to a variable. The SMT
+converstion code tracks all variables that have had their address taken, and
+when translating an \url{address_of} will return a pointer record with the
+(possibly newly allocated) pointer object ID, and a zero offset.
+
+The funkyest part is the casting from a pointer type to an integer type, and
+vice versa. This is perfectly legitimate in C languages and is how some pointer
+arithmetic occurs. It means however that we have to formulate an address
+space in the range of integers, give objects that are pointed at positions
+in it, and convert between pointer tuples and integers. We perform the first
+part by taking all pointer objects and their size, and defining a symbolic start
+and end position in the address space. We then assert that every pointer object
+there is does not overlap any other in the address space. The formula for this
+is distressingly quadratic, but never mind. We also create an array mapping
+pointer object IDs to the base address of that object, which lets us turn
+a cast from a pointer object to integer into an array index to find the base
+address, then an addition of the pointer offset. Casting from integer to
+pointer object is the most distressing --- we must enumerate all pointer
+objects and check whether the integer lies in its range.
+
+From a more practial point of view, the base class of SMT conversion is
+\url{prop_convt}, which all solvers subclass. We'll only consider Z3 here.
+Actual conversion occurs by feeding a \url{symex_target_equationt} object,
+which stores all SSA steps, a \url{prop_convt} object which it uses to
+encode a series of assertions. Flattening assignments, assumptions and
+assertions to just a series of solver assertions happens at this level. The
+\url{prop_convt::set_to} method is used to encode an assertion, converting
+the expression argument to SMT, and asserting that it evaluates either to
+true or false.
+
+Within the solver conversion code, most boolean operations are handled by
+solver-agnostic code, but any expression involving a non-bool type must be
+handed to the solver specific conversion routines. There, we just have a
+gigantic if else block that identifies what operation an irep is, and calls
+the appropriate conversion method to turn the operation into a piece of SMT.
+
+\section{Solving and counterexamples}
+
+The act of solving is not massively complex. After the translations described
+in the section on SMT encoding have occured, we need only ask the solver
+whether or not it is able to make an assignment to variables that satisfies
+all assertions. If the result is unsat, then clearly we have little to be
+concerned about. However when the result is sat and we have a model of the
+formula, with assignments of values to all variables, then we have discovered
+a program trace that violates an assertion and we must print a counterexample
+to the user.
+
+One irregularity note is that the solver does not calculate assignments to
+\textit{all} the variables in the formula being checked. Intead, only the
+variables that are actually fundemental for satisfying assertions are
+decided upon. Variables in paths that are not part of the failing trace do
+not need to have their value decided by the solver, therefore they aren't.
+Even better, instructions that are sliced out (see the section on slicing)
+will not have been encoded, and thus there will be no assignments for even
+more variables. This can lead to confusing and uninterpretable counterexamples.
+
+To actually format a counterexample, high level code calls the function
+\url{build_goto_trace}. This takes a list of SSA steps in a
+\url{symex_target_equationt} object and strips out certain steps that are not
+of interest. These are assignments where the guard of the assignment is false
+(i.e., the code block it was in was not executed in is not part of the failing
+trace) or internal modelling assignments. The function then inspects each
+SSA step, and for each expression that makes up the step (i.e. the rhs,
+or guard) it queries the solver to extract from the model the concrete value
+of the expression. i.e., what value the solver assigned. These concrete values
+are then stored into \url{goto_trace_stept} objects, which are equivalents of
+SSA steps but with concrete values. All SSA steps we have not discarded are
+converted thus and stored in a \url{goto_tracet} object.
+
+From this point it is a matter of data presentation, the list of
+\url{goto_trace_stept} object are iterated over and printed. For assignments,
+Location information (of which file/line the instruction came from) is printed
+from the instruction, as well as a stack trace, followed by a representation
+of the assignment itself. If the solver didn't give a value for a particular
+variable assignment however, the extremely helpful message ``assignment
+removed'' is printed instead of a variable value. Assumption instructions are
+not printed. Assertion instructions are not printed, unless one is found where
+the guard is false. When this is found, we print a series of messages about
+the assertion that has failed, and the cease printing further trace steps.
+
+One major failing in ESBMC so far is having no useful or canonical
+representation in counterexamples of assignments to structs, unions and arrays,
+without making either a confusing or entirely inaccurate mess of braces.
+Additionally because in the symex phase we flattened all assignments to make the
+lhs a variable, an series of assignments to fields in a structs are printed
+as assignments of the entire contents of the struct each time (this is a
+difficult problem to solve though).
+
+\section{Multithreading exploration}
+
+Several algorithms exist for exploring the multithreaded state space in ESBMC.
+All of these currently operate by keeping historical program states (stored
+in \url{execution_statet} objects), switching
+which thread is being executed at certain points, and backtracking to a past
+state and exploring further when a failing trace is not discovered. The most
+significant thing about this is that we only ever store a program state and
+order a context switch between threads when there is some kind of shared
+state that a thread has accessed. If we were to context switch after every
+instruction, including accesses to local only state, we would produce a large
+set of identical SSA programs. A proof exists that you need only context switch
+when some kind of thread synchronisation occurs, such as access to shared state.
+
+Currently the two methods
+\url{reachability_treet::analyse_for_cswitch_after_read} and
+\url{reachability_treet::analyse_for_cswitch_after_assign} are called
+whenever an access or assignment respectively is made to any variable in the
+course of any instruction. If the expression read or written turns out to
+contain global variables (i.e. shared state), we consider a context switch at
+this point. The method \url{reachability_treet::analyse_for_cswitch_base} is
+then used to check numerous facts --- are we currently in an atomic block?
+Have we seen this state before (state hashing)? If these are untrue, we then
+iterate over all threads, attempting to find a thread we have not already
+context switched to from this point and that is not rejected by a partial
+order reduction.
+
+Once we have identified a thread to switch to, we duplicate the current thread
+state and push it onto the top of a list of historical thread states. It is
+then asked to switch to the desired thread, and symbolic execution continues
+from there.
+
+Later, once we have reached a point where there are no more threads to run,
+we return the produced SSA program to the high level routines. If it asks
+for another interleaving to be produced, we start backtracking. First, we remove
+the last (i.e., the completed run) program state from the list of historical
+states. We then attempt to find a context switch that we have not explored
+from the previous program state, and explore taking that context switch instead.
+If we have explored all context switches from a program state, we backtrack
+futher to the next previous program state. This continues until we have explored
+all interleavings that can be produced by the program.
+
+This particular search is the \texttt{depth first search} (DFS), where we run to
+a deep point in exploration and the progressively backtrack and explore from
+there. Also available is a full program exploration\footnote{The
+\url{--schedule} option} where we perform the same DFS, but store all SSA steps
+for all interleavings in the same \url{symex_target_equationt}. The presence
+of the \textit{context switch id} (see the section on variable renaming) in
+variables means that every unbroken run of SSA steps has its own identifier,
+and its assignments cannot conflict with any other interleavings assignments.
+In addition to this there is a round-robin scheduling method, which I'm mostly
+unfamiliar with.
+
+\section{The inevitable 'misc'}
+
+There are a large set of things in ESBMC, not all of which have a particularly
+important purpose, or are shared between with several. Here we cover such
+things.
+
+\subsection{Naming and namespaces}
+
+As defined by the C standard, ESBMC has a concept of naming scopes. Variables
+declared in one scope are not necessarily accessible from another. The substance
+of this is that any variable declared receives a symbol name that contains
+a series of double-colon (::) seperated components that specify its scope. All
+symbols start with ``c::'' to seperate program symbols from any internal
+ESBMC modelling variables. From there, if the symbol is of internal linkage
+(i.e. declared ``static'') it has the name of the C file it originated as
+the next scope component. Then follows the global name of the symbol, i.e.
+a global variable name or function name. For automatic allocation variables
+(i.e. block local variables) a series of numbers are inserted into the
+name to identify \textit{which} block in the function the variable is in, so
+that variables with identical names declared in different blocks can co-exist.
+Finally, the name of the variable is appended. Some examples:
+
+\begin{lstlisting}
+c::main
+c::beards
+c::test::ponies
+c::main::1::varname
+c::main::1::1::1::varname
+\end{lstlisting}
+
+Here, in order, we have a function symbol name, a global variable name,
+the name of a global variable declared \texttt{static} in a file called test.c,
+a local variable in the main function, and another local variable of the same
+name deeply nested in a series of blocks. Note that I don't know how CBMC
+decides what numbers to inject into the names of local variables.
+
+Most variables get thrown around ESBMC as \texttt{symbol} ireps, with the
+appropriate name as above with additional renaming data. To look up date about
+a particular variable, use the \texttt{contextt} object to fetch a
+\texttt{symbolt} object for the desired variable. The \texttt{symbolt} object
+stores the variables type, lifetime, scope, value (untranslated AST from
+parsing) and numerous other things.
+
+\subsection{Dereferencing}
+
+Dereferencing occurs at numerous points in ESBMC, during the initial pointer
+analysis to determine what pointer assertions to add, and during symbolic
+execution to actually read data through a pointer. To perform a dereference,
+we require a \url{dereference} irep with a pointer object as an operand,
+an a \url{value_sett} object tracking what pointers may point at. A
+\url{dereferencet} object is created and the \url{dereference} method in it
+called.
+
+One notable feature of the \url{dereferencet} class is that it takes a
+\url{dereference_callbackt} object as a constructor argument, the
+\url{dereference_failure} method of which is called when a dereference
+failure occurs. This allows the dereferencing code to be notified about
+dereference failures and handle them accordingly. The failure itself
+is a textual description and a guard for when the the failure will occur,
+for example when the pointer object does not match any of the expected
+pointers.
+
+In the actual dereference operation, we look up what pointer object is being
+dereferenced, and from the pointer tracking value set derive what it might
+possibly point at. Then a ``switch case'' is calculated, a large chain of
+\url{if} ireps, with guards that test whether the dereferenced pointer object
+matches a particular variable that is pointed at, and evaluate to that variable
+if this test is true. Thus the resulting expression evaluates to whatever
+the pointer points at, encoded symbolically. FIXME: does this make any sense?
+
+The frequent complication that can occur along the way is a type mistmatch.
+If we are selecting an integer out of some structure, but the pointer object
+can point at a wide range of variables, we will end up with an expression
+that attempts to select an integer out of, say, a float, or across a struct
+boundry. When this happens we can perform some limited type coercion, but
+will fall back to creating a \url{byte_extract} irep if that fails. A
+\url{byte_extract} irep represents the operation of extracting a particular
+type of data from some incompatible object, at a particular offset. Rather than
+attempt to juggle a byte representation of the incompatible object at this
+level, we leave it to the conversion to SMT.
+
+\subsection{Slicing}
+
+One notable fact about the programs being tested in ESBMC, is that not all
+variables and assignments actually contribute to the assertions being checked,
+and are thus a waste of memory and processing time. To work around this problem,
+CBMC introduce something known as ``slicing''. Here, once we have a list of
+SSA steps, we work through the steps backwords noting down what assertions
+occur, and what variables are used in these assertions in a set called
+\textit{depends}. We continue working through the steps backwards, and whenever
+we find an assignment to a variable that is not in the depends set,
+we mark it as being ``ignored'', while variables that \textit{are} used in the
+depends set have the variables they are calculated from added to the depends
+set.
+
+The net upshot of this is that we progressively calculate what variables
+actually contribute to the evaulation of an assertion, and mark all other
+variables as being ignored. Then, when we come to conversion to SMT, we ignore
+all varaibles that do not contribute. Unfortuantey this option is turned on by
+default, and can lead to significantly confusing counterexamples being printed
+as ESBMC is quite entitled to discard the majority of an execution trace if
+none of it contributes to an assertion.
+
+\subsection{irep}
+
+I could write a large amount of stuff about the internal representation,
+how it is structured and what each piece of it \textit{means}. However, that
+wouldn't be useful in a manual, so I'll describe the substance of it instead.
+At its center, ireps are supposed to describe some form of operation, with
+operands, any require annotative information, and a type. This has been further
+abused so that the same data structure stores types, program statements, and
+in fact the entire AST.
+
+The base type is a \url{irept} object. This stores one primary piece of data,
+the ``identifier''. This is a string, and represents what the operation of
+the irep is (like \url{add}, \url{dereference}, \url{byte\_extract} and so
+forth). \url{irept} also stores a vector of \url{irept}s as numbered operands;
+a map of annotative information (mapping strings to more \url{irept}s), and
+another map of ``comments''. The point of this, is that \textit{every piece of
+data} in an irep is stored as the ``identifier'' string in an \url{irept}
+object, and are arranged in operands and annotations in some manner to represent
+an operation. Note that the strings themselves get stored into a string pool
+to avoid massive memory inflation.
+
+This by itself is fully offensive\footnote{Amounting to a war crime, as far as
+I'm concerned} as it seeks to replace normal classes and objects with something
+that isn't type safe. There are a few benefits (you can serialise, print, hash
+and search data simply as it's all the same type) but the speed and type-safety
+penalties are not worth it. In the most insane example, constant numbers are
+stored as an \url{irept} with identifier \url{constant}, and the annotative
+value \url{value} set to a binary representation of the number it represents.
+As in, it's a series of zeros and ones, in ascii.
+
+There are a series of methods that the reader is likely to encounter. First
+there is the \url{id} method, which returns the string identifier for the
+irep. The \url{operands} method returns the vector of operands, and \url{op0},
+\url{op1} and so forth methods accessing specific elements in it. The
+\url{find} and \url{add} methods find and set respectively annotative
+information by name. As well as these methods, there are additional classes
+such as \url{exprt} and \url{typet} that subclass \url{irept}, do not store any
+additional data, and essentially act as wrappers around an \url{irept} to
+provide methods for easier accessing of the data it stores. One can simply
+cast any \url{irept} to an \url{exprt} and treat it as an expression.
+
+The one vastly mis-understood and undocumented fact about \url{irept}s is that
+they are reference counted, and \url{const}ness of the object affects its
+operation. The only data stored in an \url{irept} is a pointer to an object
+storing all the fields described above; the \url{irept} object itself
+essentially contains it. Then, whenever a \url{const} copy of an \url{irept}
+is taken, the reference count of the storage object is increased. This allows
+\url{irept}s to be passed around as objects without duplicating them; it also
+means that if we re-use subtrees of an \url{irept} somewhere then the subtree
+is not duplicated, it just has an increased reference count.
+
+Clearly sometimes though we actually alter \url{irept}s. When either a
+changing operation occurs, or a non-\url{const} \url{irept} is constructed from
+another irept, the contents of the \url{irept} is duplicated and stored in
+the \url{irept} that is going to be changed. This way, we can have the shared
+data benefits described above, but without risking data corruption or
+inconsistency. It's actually quite elegant, and a redeeming feature of something
+that's absolutely terrible.
+
+\section{Conclusion}
+
+I'm covered in bees, and so can you.
+
+\end{document}
