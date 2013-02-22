@@ -226,51 +226,6 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
-void
-z3_convt::finalize_pointer_chain(unsigned int objnum)
-{
-  unsigned int num_ptrs = addr_space_data.back().size();
-  if (num_ptrs == 0)
-    return;
-
-  // Floating model - we assert that all objects don't overlap each other,
-  // but otherwise their locations are entirely defined by Z3. Inefficient,
-  // but necessary for accuracy. Unfortunately, has high complexity (O(n^2))
-
-  // Implementation: iterate through all objects; assert that those with lower
-  // object nums don't overlap the current one. So for every particular pair
-  // of object numbers in the set there'll be a doesn't-overlap clause.
-
-  z3::expr i_start = ctx.constant(
-                       ("__ESBMC_ptr_obj_start_" + itos(objnum)).c_str(),
-                       ctx.esbmc_int_sort());
-  z3::expr i_end = ctx.constant(
-                       ("__ESBMC_ptr_obj_end_" + itos(objnum)).c_str(),
-                       ctx.esbmc_int_sort());
-
-  for (unsigned j = 0; j < objnum; j++) {
-    // Obj 1 is designed to overlap
-    if (j == 1)
-      continue;
-
-    z3::expr j_start = ctx.constant(
-                       ("__ESBMC_ptr_obj_start_" + itos(j)).c_str(),
-                       ctx.esbmc_int_sort());
-    z3::expr j_end = ctx.constant(
-                       ("__ESBMC_ptr_obj_end_" + itos(j)).c_str(),
-                       ctx.esbmc_int_sort());
-
-    // Formula: (i_end < j_start) || (i_start > j_end)
-    // Previous assertions ensure start < end for all objs.
-    // Hey hey, I can just write that with the C++y api!
-    z3::expr formula;
-    formula = (mk_lt(i_end, j_start, true)) || (mk_gt(i_start, j_end, true));
-    assert_formula(formula);
-  }
-
-  return;
-}
-
 prop_convt::resultt
 z3_convt::dec_solve(void)
 {

@@ -144,7 +144,6 @@ private:
   std::string extract_fraction(std::string v, unsigned width);
   void debug_label_formula(std::string name, const z3::expr &formula);
   void bump_addrspace_array(unsigned int idx, const z3::expr &val);
-  void finalize_pointer_chain(unsigned int objnum);
   void init_addr_space_array(void);
 
   virtual literalt land(literalt a, literalt b);
