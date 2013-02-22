@@ -141,7 +141,6 @@ private:
 
   std::string itos(int i);
   void debug_label_formula(std::string name, const z3::expr &formula);
-  void bump_addrspace_array(unsigned int idx, const z3::expr &val);
   void init_addr_space_array(void);
 
   virtual literalt land(literalt a, literalt b);

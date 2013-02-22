@@ -194,26 +194,6 @@ z3_convt::init_addr_space_array(void)
   return;
 }
 
-void
-z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
-{
-  std::string str, new_str;
-
-  str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back()++);
-  z3::expr addr_sym = ctx.constant(str.c_str(), addr_space_arr_sort);
-  z3::expr obj_idx = ctx.esbmc_int_val(idx);
-
-  z3::expr store = z3::store(addr_sym, obj_idx, val);
-
-  new_str = "__ESBMC_addrspace_arr_" + itos(addr_space_sym_num.back());
-  z3::expr new_addr_sym = ctx.constant(new_str.c_str(), addr_space_arr_sort);
-
-  z3::expr eq = new_addr_sym == store;
-  assert_formula(eq);
-
-  return;
-}
-
 prop_convt::resultt
 z3_convt::dec_solve(void)
 {
