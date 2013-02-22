@@ -166,6 +166,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ptrs_ints = false;
+  bool make_ints_reals = false;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -179,8 +180,18 @@ smt_convt::convert_ast(const expr2tc &expr)
   // some casts prior to conversion if required.
   // Optimise this later with some expr id attribute array?
   if (dynamic_cast<const relation_data *>(expr.get()) != NULL &&
-      !is_equality2t(expr) && !is_notequal2t(expr))
+      !is_equality2t(expr) && !is_notequal2t(expr)) {
     make_ptrs_ints = true;
+
+  }
+
+  // Second fail -- comparisons are turning up in 01_cbmc_abs1 that compare
+  // ints and reals, which is invalid. So convert ints up to reals.
+  if (int_encoding && expr->get_num_sub_exprs() >= 2 &&
+                      (is_fixedbv_type((*expr->get_sub_expr(0))->type) ||
+                       is_fixedbv_type((*expr->get_sub_expr(1))->type))) {
+    make_ints_reals = true;
+  }
 
   // Convert /all the arguments/.
   unsigned int i = 0;
@@ -190,6 +201,11 @@ smt_convt::convert_ast(const expr2tc &expr)
       args[i] = convert_ast(cast);
     } else {
       args[i] = convert_ast(*it);
+    }
+
+    if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
+      args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL,
+                            &args[i], 1, expr2tc());
     }
 
     used_sorts |= args[i]->sort->id;
