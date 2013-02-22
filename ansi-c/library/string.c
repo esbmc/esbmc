@@ -36,15 +36,6 @@ char *strncpy(char *dst, const char *src, size_t n)
     dst[i]=ch;
     end=end || ch==(char)0;
   }
-
-#if 0
-  size_t i=0;
-  for( ; i<n && src[i]!=0; i++)
-    dst[i]=src[i];
-  for( ; i<n ; i++)
-    dst[i]=0;
-  return dst;
-#endif
   return dst;
 }
 
