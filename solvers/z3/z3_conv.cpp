@@ -39,8 +39,6 @@
 #define DEBUGLOC
 #endif
 
-extern void finalize_symbols(void);
-
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvadd_no_underflow(Z3_context ctx, Z3_ast a1,Z3_ast a2);
