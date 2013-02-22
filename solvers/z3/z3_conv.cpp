@@ -474,10 +474,67 @@ z3_convt::convert_struct_union(const std::vector<expr2tc> &members,
 }
 
 void
-z3_convt::convert_type(const type2tc &type, z3::sort &outtype)
+z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 {
 
-  type->convert_smt_type(*this, reinterpret_cast<void*>(&outtype));
+  switch (type->type_id) {
+  case type2t::bool_id:
+    sort = ctx.bool_sort();
+    break;
+  case type2t::struct_id:
+  {
+    const struct_type2t &strct = to_struct_type(type);
+    convert_struct_union_type(strct.members, strct.member_names, strct.name,
+                              false, &sort);
+    break;
+  }
+  case type2t::union_id:
+  {
+    const union_type2t &uni = to_union_type(type);
+    convert_struct_union_type(uni.members, uni.member_names, uni.name,
+                              true, &sort);
+    break;
+  }
+  case type2t::array_id:
+  {
+    const array_type2t &arr = to_array_type(type);
+    z3::sort subtype;
+    convert_type(arr.subtype, subtype);
+    sort = ctx.array_sort(ctx.esbmc_int_sort(), subtype);
+    break;
+  }
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  {
+    if (int_encoding) {
+      sort = ctx.esbmc_int_sort();
+    } else {
+      unsigned int width = type->get_width();
+      sort = ctx.bv_sort(width);
+    }
+    break;
+  }
+  case type2t::fixedbv_id:
+  {
+    unsigned int width = type->get_width();
+
+    if (int_encoding)
+      sort = ctx.real_sort();
+    else
+      sort = ctx.bv_sort(width);
+    break;
+  }
+  case type2t::pointer_id:
+    convert_type(pointer_struct, sort);
+    break;
+  case type2t::string_id:
+  case type2t::code_id:
+  default:
+    std::cerr << "Invalid type ID being converted to Z3 sort" << std::endl;
+    type->dump();
+    abort();
+  }
+
   return;
 }
 
