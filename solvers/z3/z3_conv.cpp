@@ -214,18 +214,6 @@ z3_convt::bump_addrspace_array(unsigned int idx, const z3::expr &val)
   return;
 }
 
-std::string
-z3_convt::extract_magnitude(std::string v, unsigned width)
-{
-  return integer2string(binary2integer(v.substr(0, width / 2), true), 10);
-}
-
-std::string
-z3_convt::extract_fraction(std::string v, unsigned width)
-{
-  return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
-}
-
 prop_convt::resultt
 z3_convt::dec_solve(void)
 {
