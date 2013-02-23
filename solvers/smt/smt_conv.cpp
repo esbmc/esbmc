@@ -983,7 +983,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
   assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
 
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(s);
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
   assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_project");
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
@@ -997,7 +997,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
       is_pointer_type(data.members[i]))
     sym_name = sym_name + ".";
 
-  return mk_smt_symbol(sym_name, convert_sort(data.members[i]));
+  return mk_smt_symbol(sym_name, s);
 }
 
 smt_ast *
