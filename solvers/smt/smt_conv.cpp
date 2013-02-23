@@ -1015,11 +1015,11 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
   const tuple_smt_ast *tb = dynamic_cast<const tuple_smt_ast *>(b);
-  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
-  assert(tb != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
+  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_equality");
+  assert(tb != NULL && "Non tuple_smt_ast class in smt_convt::tuple_equality");
 
   const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
-  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_project");
+  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_equality");
 
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
