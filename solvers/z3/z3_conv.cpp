@@ -427,30 +427,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 }
 
 literalt
-z3_convt::lor(const bvt &bv)
-{
-
-  literalt l = new_variable();
-  uint size = bv.size();
-  z3::expr args[size];
-  Z3_ast args_ast[size];
-  z3::expr result, formula;
-
-  for (unsigned int i = 0; i < bv.size(); i++) {
-    args[i] = z3_literal(bv[i]);
-    args_ast[i] = args[i];
-  }
-
-  result = z3::to_expr(ctx, Z3_mk_or(z3_ctx, bv.size(), args_ast));
-
-  z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
-  assert_formula(formula);
-
-  return l;
-}
-
-literalt
 z3_convt::land(literalt a, literalt b)
 {
   if (a == const_literal(true)) return b;

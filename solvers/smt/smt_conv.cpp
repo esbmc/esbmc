@@ -186,10 +186,17 @@ smt_convt::lcnf(const bvt &bv)
   if (new_bv.size() == 0)
     return;
 
-  const smt_ast *args[new_bv.size()];
+  literalt l = lor(new_bv);
+  assert_lit(l);
+}
+
+literalt
+smt_convt::lor(const bvt &bv)
+{
+  const smt_ast *args[bv.size()];
   unsigned int i = 0;
 
-  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++) {
+  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++, i++) {
     args[i] = lit_to_ast(*it);
   }
 
@@ -204,10 +211,10 @@ smt_convt::lcnf(const bvt &bv)
       argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2, expr2tc());
     }
     literalt tmp = mk_lit(argstwo[0]);
-    assert_lit(tmp);
+    return tmp;
   } else {
     literalt tmp = mk_lit(args[0]);
-    assert_lit(tmp);
+    return tmp;
   }
 }
 
