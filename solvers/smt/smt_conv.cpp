@@ -760,8 +760,11 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
 
 done:
-  struct smt_cache_entryt entry = { expr, a, ctx_level };
-  smt_cache.insert(entry);
+  if (caching) {
+    struct smt_cache_entryt entry = { expr, a, ctx_level };
+    smt_cache.insert(entry);
+  }
+
   return a;
 }
 
