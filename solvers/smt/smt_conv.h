@@ -100,6 +100,17 @@ class smt_sort {
 public:
   smt_sort_kind id;
   smt_sort(smt_sort_kind i) : id(i) { }
+  virtual ~smt_sort() { }
+};
+
+class tuple_smt_sort : public smt_sort
+{
+public:
+  const type2tc thetype;
+  tuple_smt_sort(const type2tc &type) : smt_sort(SMT_SORT_STRUCT), thetype(type)
+  {
+  }
+  virtual ~tuple_smt_sort() { }
 };
 
 class smt_ast {

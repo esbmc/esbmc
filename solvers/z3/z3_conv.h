@@ -150,6 +150,7 @@ public:
   class z3_smt_sort : public smt_sort {
   public:
     z3_smt_sort(smt_sort_kind i, z3::sort _s, bool is_s = false) : smt_sort(i), s(_s), is_signed(is_s) { }
+    virtual ~z3_smt_sort() { }
     z3::sort s;
     bool is_signed;
   };
