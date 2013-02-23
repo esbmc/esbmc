@@ -559,13 +559,16 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   ty = t.get_sort();
 
   if (!ty.is_datatype()) {
-    throw new z3_convt::conv_error("argument must be a tuple");
+    std::cerr << "Z3 conversion: argument must be a tuple" << std::endl;
+    abort();
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(ctx, ty);
 
   if (i >= num_fields) {
-    throw new z3_convt::conv_error("invalid tuple select, index is too big");
+    std::cerr << "Z3 conversion: invalid tuple select, index is too large"
+              << std::endl;
+    abort();
   }
 
   z3::func_decl proj_decl =
@@ -1086,8 +1089,11 @@ z3_convt::overflow_cast(const expr2tc &expr)
 
   width = ocast.operand->type->get_width();
 
-  if (ocast.bits >= width || ocast.bits == 0)
-    throw new conv_error("overflow-typecast got wrong number of bits");
+  if (ocast.bits >= width || ocast.bits == 0) {
+    std::cerr << "Z3 conversion: overflow-typecast got wrong number of bits"
+              << std::endl;
+    abort();
+  }
 
   assert(ocast.bits <= 32 && ocast.bits != 0);
   result = 1 << ocast.bits;

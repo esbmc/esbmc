@@ -62,8 +62,6 @@ expr2tc
 z3_convt::get(const expr2tc &expr)
 {
 
-  try {
-
   if (is_symbol2t(expr)) {
     std::string identifier, tmp;
     z3::sort sort;
@@ -92,12 +90,6 @@ z3_convt::get(const expr2tc &expr)
     std::cerr << "Unrecognized irep fetched from Z3: " << get_expr_id(expr);
     std::cerr << std::endl;
     abort();
-  }
-
-  } catch (conv_error *e) {
-    std::cerr << "Conversion error fetching counterexample:" << std::endl;
-    std::cerr << e->to_string() << std::endl;
-    return expr2tc();
   }
 }
 
