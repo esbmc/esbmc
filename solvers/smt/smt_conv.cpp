@@ -211,6 +211,36 @@ smt_convt::lcnf(const bvt &bv)
   }
 }
 
+literalt
+smt_convt::land(const bvt &bv)
+{
+  literalt l = new_variable();
+  uint size = bv.size();
+  const smt_ast *args[size];
+  unsigned int i;
+
+  for (i = 0; i < bv.size(); i++) {
+    args[i] = lit_to_ast(bv[i]);
+  }
+
+  // Chain these.
+  if (i > 1) {
+    unsigned int j;
+    const smt_ast *argstwo[2];
+    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    argstwo[0] = args[0];
+    for (j = 1; j < i; j++) {
+      argstwo[1] = args[j];
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_AND, argstwo, 2, expr2tc());
+    }
+    l = mk_lit(argstwo[0]);
+  } else {
+    l = mk_lit(args[0]);
+  }
+
+  return l;
+}
+
 const smt_ast *
 smt_convt::lit_to_ast(const literalt &l)
 {

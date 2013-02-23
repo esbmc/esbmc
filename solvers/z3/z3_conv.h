@@ -136,7 +136,6 @@ private:
 
   virtual literalt land(literalt a, literalt b);
   virtual literalt lor(literalt a, literalt b);
-  virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);

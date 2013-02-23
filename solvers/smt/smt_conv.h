@@ -142,6 +142,7 @@ public:
   bool process_clause(const bvt &bv, bvt &dest);
   virtual literalt new_variable();
   virtual void lcnf(const bvt &bv);
+  virtual literalt land(const bvt &bv);
 
   virtual void assert_lit(const literalt &l) = 0;
   virtual const smt_ast *lit_to_ast(const literalt &l);
