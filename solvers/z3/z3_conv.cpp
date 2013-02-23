@@ -47,7 +47,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(caching, int_encoding, _ns, is_cpp)
+: smt_convt(true, int_encoding, _ns, is_cpp)
 {
   this->int_encoding = int_encoding;
 
