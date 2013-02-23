@@ -984,10 +984,10 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
 }
 
 smt_ast *
-z3_convt::mk_fresh(const smt_sort *sort)
+z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(sort);
-  return new z3_smt_ast(ctx.fresh_const(NULL, zs->s), sort);
+  return new z3_smt_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
 }
 
 smt_ast *

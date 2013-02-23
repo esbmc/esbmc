@@ -211,7 +211,7 @@ public:
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual smt_ast *overflow_neg(const expr2tc &expr);
 
-  virtual smt_ast *mk_fresh(const smt_sort *s);
+  virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
 
   // Internal foo
 

@@ -474,7 +474,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     const array_type2t &arr = to_array_type(expr->type);
     if (arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
-      a = mk_fresh(sort);
+      a = mk_fresh(sort, "inf_array");
       break;
     }
 
@@ -976,7 +976,8 @@ smt_convt::tuple_array_ite(const smt_ast *cond __attribute__((unused)),
 }
 
 smt_ast *
-smt_convt::mk_fresh(const smt_sort *s __attribute__((unused)))
+smt_convt::mk_fresh(const smt_sort *s __attribute__((unused)),
+                    const std::string &tag __attribute__((unused)))
 {
   assert(0);
 }
