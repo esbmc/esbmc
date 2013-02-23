@@ -282,6 +282,12 @@ smt_convt::land(literalt a, literalt b)
   return mk_lit(c);
 }
 
+literalt
+smt_convt::lnot(literalt a)
+{
+  a.invert();
+  return a;
+}
 
 const smt_ast *
 smt_convt::lit_to_ast(const literalt &l)

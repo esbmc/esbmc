@@ -427,14 +427,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 }
 
 literalt
-z3_convt::lnot(literalt a)
-{
-  a.invert();
-
-  return a;
-}
-
-literalt
 z3_convt::limplies(literalt a, literalt b)
 {
   return lor(lnot(a), b);
