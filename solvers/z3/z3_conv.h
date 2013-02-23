@@ -143,6 +143,7 @@ public:
   public:
     z3_smt_ast(z3::expr _e, const smt_sort *_s) :
               smt_ast(_s), e(_e) { }
+    virtual ~z3_smt_ast() { }
     z3::expr e;
   };
 

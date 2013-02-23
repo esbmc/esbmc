@@ -126,7 +126,7 @@ public:
   const smt_sort *sort;
 
   smt_ast(const smt_sort *s) : sort(s) { }
-
+  virtual ~smt_ast() { }
 };
 
 class tuple_smt_ast : public smt_ast {
@@ -137,6 +137,7 @@ public:
   // in this ast class.
   tuple_smt_ast (const smt_sort *s, const std::string &_name) : smt_ast(s),
             name(_name) { }
+  virtual ~tuple_smt_ast() { }
 
   const std::string name;
 };
