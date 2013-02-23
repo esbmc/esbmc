@@ -1001,11 +1001,12 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 }
 
 smt_ast *
-smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
-                        unsigned int i __attribute__((unused)),
-                        const smt_ast *v __attribute__((unused)))
+smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
 {
-  assert(0);
+  const smt_ast *args[2];
+  args[0] = tuple_project(a, v->sort, i);
+  args[1] = v;
+  return mk_func_app(v->sort, SMT_FUNC_EQ, args, 2);
 }
 
 smt_ast *
