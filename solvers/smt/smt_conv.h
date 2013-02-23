@@ -141,8 +141,10 @@ public:
 
   bool process_clause(const bvt &bv, bvt &dest);
   virtual literalt new_variable();
+  virtual void lcnf(const bvt &bv);
 
   virtual void assert_lit(const literalt &l) = 0;
+  virtual const smt_ast *lit_to_ast(const literalt &l);
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast **args, unsigned int numargs,

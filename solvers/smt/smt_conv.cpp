@@ -175,6 +175,58 @@ smt_convt::process_clause(const bvt &bv, bvt &dest)
 }
 
 void
+smt_convt::lcnf(const bvt &bv)
+{
+
+  bvt new_bv;
+
+  if (process_clause(bv, new_bv))
+    return;
+
+  if (new_bv.size() == 0)
+    return;
+
+  const smt_ast *args[new_bv.size()];
+  unsigned int i = 0;
+
+  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++) {
+    args[i] = lit_to_ast(*it);
+  }
+
+  // Chain these.
+  if (i > 1) {
+    unsigned int j;
+    const smt_ast *argstwo[2];
+    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    argstwo[0] = args[0];
+    for (j = 1; j < i; j++) {
+      argstwo[1] = args[j];
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2, expr2tc());
+    }
+    literalt tmp = mk_lit(argstwo[0]);
+    assert_lit(tmp);
+  } else {
+    literalt tmp = mk_lit(args[0]);
+    assert_lit(tmp);
+  }
+}
+
+const smt_ast *
+smt_convt::lit_to_ast(const literalt &l)
+{
+  std::stringstream ss;
+  ss << "l" << l.var_no();
+  std::string name = ss.str();
+  symbol2tc sym(get_bool_type(), name);
+  if (l.sign()) {
+    not2tc anot(sym);
+    return convert_ast(anot);
+  } else {
+    return convert_ast(sym);
+  }
+}
+
+void
 smt_convt::set_to(const expr2tc &expr, bool value)
 {
 

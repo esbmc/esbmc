@@ -531,35 +531,6 @@ z3_convt::limplies(literalt a, literalt b)
   return lor(lnot(a), b);
 }
 
-void
-z3_convt::lcnf(const bvt &bv)
-{
-
-  bvt new_bv;
-
-  if (process_clause(bv, new_bv))
-    return;
-
-  if (new_bv.size() == 0)
-    return;
-
-  z3::expr lor_var, args[new_bv.size()];
-  Z3_ast args_ast[new_bv.size()];
-  unsigned int i = 0;
-
-  for (bvt::const_iterator it = new_bv.begin(); it != new_bv.end(); it++, i++) {
-    args[i] = z3_literal(*it);
-    args_ast[i] = args[i];
-  }
-
-  if (i > 1) {
-    lor_var = z3::expr(ctx, Z3_mk_or(z3_ctx, i, args_ast));
-    assert_formula(lor_var);
-  } else   {
-    assert_formula(args[0]);
-  }
-}
-
 z3::expr
 z3_convt::z3_literal(literalt l)
 {

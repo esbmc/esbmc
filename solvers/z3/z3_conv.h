@@ -141,7 +141,6 @@ private:
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
   virtual uint64_t get_no_variables() const { return no_variables; }
-  virtual void lcnf(const bvt &bv);
 
   virtual const std::string solver_text()
   { return "Z3"; }
