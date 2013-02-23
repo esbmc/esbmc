@@ -979,7 +979,10 @@ smt_ast *
 smt_convt::mk_fresh(const smt_sort *s __attribute__((unused)),
                     const std::string &tag __attribute__((unused)))
 {
-  assert(0);
+  std::string new_name = "smt_conv::" + tag;
+  std::stringstream ss;
+  ss << new_name << fresh_map[new_name]++;
+  return mk_smt_symbol(ss.str(), s);
 }
 
 smt_ast *

@@ -312,6 +312,8 @@ public:
   bool tuple_support;
   std::string dyn_info_arr_name;
 
+  std::map<std::string, unsigned int> fresh_map;
+
   std::list<unsigned int> addr_space_sym_num;
   type2tc addr_space_type;
   const struct_type2t *addr_space_type_data;
