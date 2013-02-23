@@ -143,22 +143,6 @@ private:
 
   // Some useful types
 public:
-  class conv_error {
-    std::string msg;
-
-  public:
-    conv_error(std::string msg) {
-      this->msg = msg;
-      return;
-    }
-
-    std::string to_string(void) {
-      std::string out;
-      out = "Encountered Z3 conversion error: \"" + msg + "\"\n";
-      return out;
-    }
-  };
-
   #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   class z3_smt_ast : public smt_ast {
   public:
