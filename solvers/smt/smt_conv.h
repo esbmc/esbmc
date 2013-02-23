@@ -205,7 +205,7 @@ public:
   virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                 const smt_ast *val);
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
-  virtual smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
+  virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort);
 
   virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
@@ -248,7 +248,9 @@ public:
                         const std::vector<type2tc> &types,
                         const std::vector<irep_idt> &type_names,
                         const std::vector<expr2tc> &fields);
-
+  void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
+                     const tuple_smt_ast *true_val,
+                     const tuple_smt_ast *false_val);
 
   // To be called by the subclass when all other construction has occured.
   // It needs to be able to convert a variety of things, which need to be

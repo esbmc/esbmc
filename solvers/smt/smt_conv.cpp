@@ -1059,13 +1059,73 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   return lit_to_ast(l);
 }
 
-smt_ast *
-smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
-                     const smt_ast *true_val __attribute__((unused)),
-                     const smt_ast *false_val __attribute__((unused)),
-                     const smt_sort *sort __attribute__((unused)))
+const smt_ast *
+smt_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
+                     const smt_ast *false_val, const smt_sort *sort)
 {
-  assert(0);
+  // Encode as an ite of each element.
+  const tuple_smt_ast *trueast = dynamic_cast<const tuple_smt_ast *>(true_val);
+  const tuple_smt_ast *falseast = dynamic_cast<const tuple_smt_ast*>(false_val);
+  assert(trueast != NULL && "Non tuple_smt_ast class in smt_convt::tuple_ite");
+  assert(falseast != NULL && "Non tuple_smt_ast class in smt_convt::tuple_ite");
+
+  // Create a fresh tuple to store the result in
+  std::string name_prefix = "smt_conv::tuple_ite::";
+  std::stringstream ss;
+  ss << name_prefix << fresh_map[name_prefix]++ << ".";
+  std::string name = ss.str();
+  const tuple_smt_ast *result = new tuple_smt_ast(sort, name);
+
+  tuple_ite_rec(result, cond, trueast, falseast);
+  return result;
+}
+
+void
+smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
+                         const tuple_smt_ast *true_val,
+                         const tuple_smt_ast *false_val)
+{
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const tuple_smt_sort *ts =
+    dynamic_cast<const tuple_smt_sort *>(true_val->sort);
+  assert(true_val != NULL &&
+         "Non tuple_smt_sort class in smt_convt::tuple_ite");
+
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+
+  // Iterate through each field and encode an ite.
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = data.members.begin();
+       it != data.members.end(); it++, i++) {
+    if (is_structure_type(ts->thetype)) {
+      // Recurse.
+      const tuple_smt_ast *args[3];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] =
+        static_cast<const tuple_smt_ast *>(tuple_project(result, sort, i));
+      args[1] =
+        static_cast<const tuple_smt_ast *>(tuple_project(true_val, sort, i));
+      args[2] =
+        static_cast<const tuple_smt_ast *>(tuple_project(false_val, sort, i));
+      tuple_ite_rec(args[0], cond, args[1], args[2]);
+    } else if (is_pointer_type(ts->thetype)) {
+      std::cerr << "XXX pointer equality not implemented yet (tuple_ite)"
+                << std::endl;
+      abort();
+    } else {
+      const smt_ast *args[3], *eqargs[2];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] = cond;
+      args[1] = tuple_project(true_val, sort, i);
+      args[2] = tuple_project(false_val, sort, i);
+      eqargs[0] = mk_func_app(sort, SMT_FUNC_ITE, args, 3);
+      eqargs[1] = tuple_project(result, sort, i);
+      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, eqargs, 2);
+      literalt l = mk_lit(eq);
+      assert_lit(l);
+    }
+  }
 }
 
 smt_ast *

@@ -862,7 +862,7 @@ z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   return new z3_smt_ast((za->e == zb->e), sort);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                     const smt_ast *false_val, const smt_sort *sort)
 {
