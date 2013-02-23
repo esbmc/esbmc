@@ -993,11 +993,14 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   std::string sym_name = ta->name + fieldname;
 
   // Cope with recursive structs.
-  if (is_struct_type(data.members[i]) || is_union_type(data.members[i]) ||
-      is_pointer_type(data.members[i]))
+  const type2tc &restype = data.members[i];
+  if (is_struct_type(restype) || is_union_type(restype) ||
+      is_pointer_type(restype)) {
     sym_name = sym_name + ".";
-
-  return mk_smt_symbol(sym_name, s);
+    return new tuple_smt_ast(s, sym_name);
+  } else {
+    return mk_smt_symbol(sym_name, s);
+  }
 }
 
 smt_ast *
