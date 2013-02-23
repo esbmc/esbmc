@@ -130,7 +130,6 @@ private:
 
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
-  std::string itos(int i);
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
 
