@@ -886,14 +886,15 @@ smt_convt::convert_terminal(const expr2tc &expr)
   }
   case expr2t::symbol_id:
   {
-    // Can't do this right now due to not having sort conversion yet.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     const smt_sort *sort = convert_sort(sym.type);
     return mk_smt_symbol(name, sort);
   }
   default:
-    return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0);
+    std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
+    expr->dump();
+    abort();
   }
 }
 
