@@ -129,6 +129,18 @@ public:
 
 };
 
+class tuple_smt_ast : public smt_ast {
+public:
+  // A class for representing tuple-typed ASTs. In circumstances where the SMT
+  // solver doesn't have a tuple extension, we have to perform all tuple
+  // operations ourselves. That requires some data storage; that data will live
+  // in this ast class.
+  tuple_smt_ast (const smt_sort *s, const expr2tc &_const_tuple) : smt_ast(s),
+            const_tuple(_const_tuple) { }
+
+  const expr2tc const_tuple;
+};
+
 class smt_convt: public prop_convt
 {
 public:
