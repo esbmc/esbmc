@@ -154,21 +154,20 @@ public:
   virtual const smt_ast *lit_to_ast(const literalt &l);
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs,
-                               const expr2tc &temp) = 0;
+                               const smt_ast **args, unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &t) = 0;
-  virtual smt_ast *mk_smt_real(const mp_integer &thereal, const expr2tc &t) = 0;
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w, const expr2tc &t) = 0;
-  virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t) = 0;
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t) =0;
+  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
+  virtual smt_ast *mk_smt_real(const mp_integer &thereal) = 0;
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
+                                unsigned int w) = 0;
+  virtual smt_ast *mk_smt_bool(bool val) = 0;
+  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) =0;
   virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;
   // XXX XXX XXX -- turn this into a formulation on top of structs.
   virtual smt_sort *mk_union_sort(const type2tc &type) = 0;
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
-                              unsigned int low, const smt_sort *s,
-                              const expr2tc &tmp) = 0;
+                              unsigned int low, const smt_sort *s) = 0;
 
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
@@ -177,25 +176,24 @@ public:
   // solver being used might have its own support for (in which case it should
   // override the below).
   virtual smt_ast *tuple_create(const expr2tc &structdef);
-  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field, const expr2tc &tmp);
+  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
+                                 unsigned int field);
   virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                const smt_ast *val, const expr2tc &tmp);
-  virtual smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b, const expr2tc &tmp);
+                                const smt_ast *val);
+  virtual smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
   virtual smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
-                             const smt_ast *false_val, const smt_sort *sort,
-                             const expr2tc &expr);
+                             const smt_ast *false_val, const smt_sort *sort);
 
   virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
   virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const smt_ast *field, const expr2tc &tmp);
+                                      const smt_ast *field);
   virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
-                                      const smt_ast *val, const expr2tc &tmp);
-  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b,
-                                        const expr2tc &tmp);
+                                      const smt_ast *val);
+  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
   virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                                    const smt_ast *false_val,
-                                   const smt_sort *sort, const expr2tc &expr);
+                                   const smt_sort *sort);
 
   virtual smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);

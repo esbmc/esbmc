@@ -208,7 +208,7 @@ smt_convt::lor(const bvt &bv)
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
       argstwo[1] = args[j];
-      argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2, expr2tc());
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2);
     }
     literalt tmp = mk_lit(argstwo[0]);
     return tmp;
@@ -231,7 +231,7 @@ smt_convt::lor(literalt a, literalt b)
   args[0] = lit_to_ast(a);
   args[1] = lit_to_ast(b);
   const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *c = mk_func_app(sort, SMT_FUNC_OR, args, 2, expr2tc());
+  const smt_ast *c = mk_func_app(sort, SMT_FUNC_OR, args, 2);
   return mk_lit(c);
 }
 
@@ -255,7 +255,7 @@ smt_convt::land(const bvt &bv)
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
       argstwo[1] = args[j];
-      argstwo[0] = mk_func_app(sort, SMT_FUNC_AND, argstwo, 2, expr2tc());
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_AND, argstwo, 2);
     }
     l = mk_lit(argstwo[0]);
   } else {
@@ -278,7 +278,7 @@ smt_convt::land(literalt a, literalt b)
   args[0] = lit_to_ast(a);
   args[1] = lit_to_ast(b);
   const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *c = mk_func_app(sort, SMT_FUNC_AND, args, 2, expr2tc());
+  const smt_ast *c = mk_func_app(sort, SMT_FUNC_AND, args, 2);
   return mk_lit(c);
 }
 
@@ -296,7 +296,7 @@ smt_convt::limplies(literalt a, literalt b)
   args[0] = lit_to_ast(a);
   args[1] = lit_to_ast(b);
   const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *c = mk_func_app(sort, SMT_FUNC_IMPLIES, args, 2, expr2tc());
+  const smt_ast *c = mk_func_app(sort, SMT_FUNC_IMPLIES, args, 2);
   return mk_lit(c);
 }
 
@@ -409,7 +409,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
       args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL,
-                            &args[i], 1, expr2tc());
+                            &args[i], 1);
     }
 
     used_sorts |= args[i]->sort->id;
@@ -436,7 +436,7 @@ smt_convt::convert_ast(const expr2tc &expr)
                       : (seen_signed_operand)
                           ? cvt->bv_mode_func_signed
                           : cvt->bv_mode_func_unsigned;
-      a = mk_func_app(sort, k, &args[0], cvt->args, expr);
+      a = mk_func_app(sort, k, &args[0], cvt->args);
       goto done;
     }
   }
@@ -506,12 +506,11 @@ smt_convt::convert_ast(const expr2tc &expr)
       const smt_sort *s2 = convert_sort(mul.side_2->type);
       args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2, expr);
-      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort,
-                     expr);
+      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+      a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
       assert(is_bv_type(expr));
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2, expr);
+      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
     }
     break;
   }
@@ -519,7 +518,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     // Handle BV mode divisions. Similar arrangement to multiplies.
     if (int_encoding) {
-      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2, expr);
+      a = mk_func_app(sort, SMT_FUNC_DIV, args, 2);
     } else if (is_fixedbv_type(expr)) {
       const div2t &div = to_div2t(expr);
       fixedbvt fbt(migrate_expr_back(expr));
@@ -529,28 +528,28 @@ smt_convt::convert_ast(const expr2tc &expr)
       const smt_sort *s2 = convert_sort(div.side_2->type);
 
       args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
-      const smt_ast *zero = mk_smt_bvint(BigInt(0), false, fraction_bits, expr2tc());
+      const smt_ast *zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
       const smt_ast *op0 = args[0];
       const smt_ast *concatargs[2];
       concatargs[0] = op0;
       concatargs[1] = zero;
-      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, concatargs, 2, expr2tc());
+      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, concatargs, 2);
 
       // Sorts.
-      a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2, expr2tc());
-      a = mk_extract(a, fbt.spec.width - 1, 0, s2, expr);
+      a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
+      a = mk_extract(a, fbt.spec.width - 1, 0, s2);
     } else {
       assert(is_bv_type(expr));
       smt_func_kind k = (seen_signed_operand)
               ? cvt->bv_mode_func_signed
               : cvt->bv_mode_func_unsigned;
-      a = mk_func_app(sort, k, args, 2, expr);
+      a = mk_func_app(sort, k, args, 2);
     }
     break;
   }
   case expr2t::index_id:
   {
-    a = tuple_array_select(args[0], sort, args[1], expr);
+    a = tuple_array_select(args[0], sort, args[1]);
     break;
   }
   case expr2t::with_id:
@@ -559,10 +558,10 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       const with2t &with = to_with2t(expr);
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(args[0], idx, args[2], expr);
+      a = tuple_update(args[0], idx, args[2]);
     } else {
       assert(is_array_type(expr->type));
-      a = tuple_array_update(args[0], args[1], args[2], expr);
+      a = tuple_array_update(args[0], args[1], args[2]);
     }
     break;
   }
@@ -575,9 +574,9 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     // Two projects, then comparison.
     smt_sort *s = convert_sort(pointer_type_data->members[0]);
-    args[0] = tuple_project(args[0], s, 0, expr2tc());
-    args[1] = tuple_project(args[1], s, 0, expr2tc());
-    a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr);
+    args[0] = tuple_project(args[0], s, 0);
+    args[1] = tuple_project(args[1], s, 0);
+    a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
     break;
   }
   case expr2t::pointer_offset_id:
@@ -590,7 +589,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 1, expr);
+    a = tuple_project(args[0], s, 1);
     break;
   }
   case expr2t::pointer_object_id:
@@ -603,7 +602,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 0, expr);
+    a = tuple_project(args[0], s, 0);
     break;
   }
   case expr2t::typecast_id:
@@ -615,10 +614,10 @@ smt_convt::convert_ast(const expr2tc &expr)
   {
     // Only attempt to handle struct.s
     if (is_struct_type(expr) || is_pointer_type(expr)) {
-      a = tuple_ite(args[0], args[1], args[2], sort, expr);
+      a = tuple_ite(args[0], args[1], args[2], sort);
     } else {
       assert(is_array_type(expr));
-      a = tuple_array_ite(args[0], args[1], args[2], sort, expr);
+      a = tuple_array_ite(args[0], args[1], args[2], sort);
     }
     break;
   }
@@ -645,13 +644,13 @@ smt_convt::convert_ast(const expr2tc &expr)
   case expr2t::zero_length_string_id:
   {
     // Extremely unclear.
-    a = tuple_project(args[0], sort, 0, expr);
+    a = tuple_project(args[0], sort, 0);
     break;
   }
   case expr2t::zero_string_id:
   {
     // Actually broken. And always has been.
-    a = mk_smt_symbol("zero_string", sort, expr);
+    a = mk_smt_symbol("zero_string", sort);
     break;
   }
   case expr2t::byte_extract_id:
@@ -674,22 +673,22 @@ smt_convt::convert_ast(const expr2tc &expr)
     const equality2t &eq = to_equality2t(expr);
     if (is_struct_type(eq.side_1->type) && is_struct_type(eq.side_2->type)) {
       // Struct equality
-      a = tuple_equality(args[0], args[1], expr);
+      a = tuple_equality(args[0], args[1]);
     } else if (is_array_type(eq.side_1->type) &&
                is_array_type(eq.side_2->type)) {
       if (is_struct_type(to_array_type(eq.side_1->type).subtype)) {
         // Array of structs equality.
-        a = tuple_array_equality(args[0], args[1], expr);
+        a = tuple_array_equality(args[0], args[1]);
       } else {
         // Normal array equality
-        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr);
+        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
       }
     } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
       // Pointers are tuples
-      a = tuple_equality(args[0], args[1], expr);
+      a = tuple_equality(args[0], args[1]);
     } else if (is_union_type(eq.side_1) && is_union_type(eq.side_2)) {
       // Unions are also tuples
-      a = tuple_equality(args[0], args[1], expr);
+      a = tuple_equality(args[0], args[1]);
     } else {
       std::cerr << "Unrecognized equality form" << std::endl;
       expr->dump();
@@ -716,10 +715,10 @@ smt_convt::convert_ast(const expr2tc &expr)
       const smt_ast *powargs[2];
       powargs[0] = args[1];
       powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2, expr);
-      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2, expr);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
-      a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2, expr);
+      a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
     }
     break;
   }
@@ -729,8 +728,8 @@ smt_convt::convert_ast(const expr2tc &expr)
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
     if (is_struct_type(notequal.side_1) || is_pointer_type(notequal.side_1)) {
-      a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2, expr2tc());
-      a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1, expr);
+      a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     } else {
       std::cerr << "Unexpected inequailty operands" << std::endl;
       expr->dump();
@@ -847,15 +846,15 @@ smt_convt::convert_terminal(const expr2tc &expr)
     const constant_int2t &theint = to_constant_int2t(expr);
     unsigned int width = expr->type->get_width();
     if (int_encoding)
-      return mk_smt_int(theint.constant_value, sign, expr);
+      return mk_smt_int(theint.constant_value, sign);
     else
-      return mk_smt_bvint(theint.constant_value, sign, width, expr);
+      return mk_smt_bvint(theint.constant_value, sign, width);
   }
   case expr2t::constant_fixedbv_id:
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
     if (int_encoding) {
-      return mk_smt_real(thereal.value.to_integer(), expr);
+      return mk_smt_real(thereal.value.to_integer());
     } else {
       assert(thereal.type->get_width() <= 64 && "Converting fixedbv constant to"
              " SMT, too large to fit into a uint64_t");
@@ -873,13 +872,13 @@ smt_convt::convert_terminal(const expr2tc &expr)
       magnitude <<= (bitwidth / 2);
       fin = magnitude | fraction;
 
-      return mk_smt_bvint(mp_integer(fin), false, bitwidth, expr);
+      return mk_smt_bvint(mp_integer(fin), false, bitwidth);
     }
   }
   case expr2t::constant_bool_id:
   {
     const constant_bool2t &thebool = to_constant_bool2t(expr);
-    return mk_smt_bool(thebool.constant_value, expr);
+    return mk_smt_bool(thebool.constant_value);
   }
   case expr2t::symbol_id:
   {
@@ -887,10 +886,10 @@ smt_convt::convert_terminal(const expr2tc &expr)
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     const smt_sort *sort = convert_sort(sym.type);
-    return mk_smt_symbol(name, sort, expr);
+    return mk_smt_symbol(name, sort);
   }
   default:
-    return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0, expr);
+    return mk_func_app(NULL, SMT_FUNC_HACKS, NULL, 0);
   }
 }
 
@@ -903,8 +902,7 @@ smt_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
 smt_ast *
 smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
                          const smt_sort *s __attribute__((unused)),
-                         unsigned int i __attribute__((unused)),
-                         const expr2tc &tmp __attribute__((unused)))
+                         unsigned int i __attribute__((unused)))
 {
   assert(0);
 }
@@ -912,16 +910,14 @@ smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
 smt_ast *
 smt_convt::tuple_update(const smt_ast *a __attribute__((unused)),
                         unsigned int i __attribute__((unused)),
-                        const smt_ast *v __attribute__((unused)),
-                        const expr2tc &tmp __attribute__((unused)))
+                        const smt_ast *v __attribute__((unused)))
 {
   assert(0);
 }
 
 smt_ast *
 smt_convt::tuple_equality(const smt_ast *a __attribute__((unused)),
-                          const smt_ast *b __attribute__((unused)),
-                          const expr2tc &tmp __attribute__((unused)))
+                          const smt_ast *b __attribute__((unused)))
 {
   assert(0);
 }
@@ -930,8 +926,7 @@ smt_ast *
 smt_convt::tuple_ite(const smt_ast *cond __attribute__((unused)),
                      const smt_ast *true_val __attribute__((unused)),
                      const smt_ast *false_val __attribute__((unused)),
-                     const smt_sort *sort __attribute__((unused)),
-                     const expr2tc &tmp __attribute__((unused)))
+                     const smt_sort *sort __attribute__((unused)))
 {
   assert(0);
 }
@@ -946,8 +941,7 @@ smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)),
 smt_ast *
 smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
                               const smt_sort *s __attribute__((unused)),
-                              const smt_ast *field __attribute__((unused)),
-                              const expr2tc &tmp __attribute__((unused)))
+                              const smt_ast *field __attribute__((unused)))
 {
   assert(0);
 }
@@ -955,16 +949,14 @@ smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
 smt_ast *
 smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
                               const smt_ast *field __attribute__((unused)),
-                              const smt_ast *val __attribute__((unused)),
-                              const expr2tc &tmp __attribute__((unused)))
+                              const smt_ast *val __attribute__((unused)))
 {
   assert(0);
 }
 
 smt_ast *
 smt_convt::tuple_array_equality(const smt_ast *a __attribute__((unused)),
-                                const smt_ast *b __attribute__((unused)),
-                                const expr2tc &tmp __attribute__((unused)))
+                                const smt_ast *b __attribute__((unused)))
 {
   assert(0);
 }
@@ -973,8 +965,7 @@ smt_ast *
 smt_convt::tuple_array_ite(const smt_ast *cond __attribute__((unused)),
                            const smt_ast *trueval __attribute__((unused)),
                            const smt_ast *false_val __attribute__((unused)),
-                           const smt_sort *sort __attribute__((unused)),
-                           const expr2tc &expr __attribute__((unused)))
+                           const smt_sort *sort __attribute__((unused)))
 {
   assert(0);
 }
@@ -1014,24 +1005,24 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
   assert(is_fixedbv_type(isnan.value));
   unsigned width = isnan.value->type->get_width();
 
-  const smt_ast *t = mk_smt_bool(true, expr2tc());
-  const smt_ast *f = mk_smt_bool(false, expr2tc());
+  const smt_ast *t = mk_smt_bool(true);
+  const smt_ast *f = mk_smt_bool(false);
 
   if (int_encoding) {
     const smt_sort *tmpsort = mk_sort(SMT_SORT_INT, false);
-    args[0] = mk_func_app(tmpsort, SMT_FUNC_REAL2INT, &operand, 1, expr2tc());
-    args[1] = mk_smt_int(BigInt(0), false, expr2tc());
-    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2, expr2tc());
+    args[0] = mk_func_app(tmpsort, SMT_FUNC_REAL2INT, &operand, 1);
+    args[1] = mk_smt_int(BigInt(0), false);
+    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2);
     args[1] = t;
     args[2] = f;
-    return mk_func_app(bs, SMT_FUNC_ITE, args, 3, expr2tc());
+    return mk_func_app(bs, SMT_FUNC_ITE, args, 3);
   } else {
     args[0] = operand;
-    args[1] = mk_smt_bvint(BigInt(0), false, width, expr2tc());
-    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2, expr2tc());
+    args[1] = mk_smt_bvint(BigInt(0), false, width);
+    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2);
     args[1] = t;
     args[2] = f;
-    return mk_func_app(bs, SMT_FUNC_ITE, args, 3, expr2tc());
+    return mk_func_app(bs, SMT_FUNC_ITE, args, 3);
   }
 }
 
@@ -1075,7 +1066,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       const smt_ast *struct_elem[num_elems + 1], *struct_elem_inv[num_elems +1];
 
       forall_types(it, struct_type.members) {
-        struct_elem[i] = tuple_project(source, convert_sort(*it), i, expr2tc());
+        struct_elem[i] = tuple_project(source, convert_sort(*it), i);
         i++;
       }
 
@@ -1091,13 +1082,13 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
           args[1] = struct_elem_inv[k];
           // FIXME: sorts
           struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
-                                                   2, expr2tc());
+                                                   2);
         } else if (k > 1) {
           args[0] = struct_elem_inv[num_elems];
           args[1] = struct_elem_inv[k];
           // FIXME: sorts
           struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
-                                                   2, expr2tc());
+                                                   2);
         }
       }
 
@@ -1109,9 +1100,9 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       // Extends past the end of this data item. Should be fixed in some other
       // dedicated feature branch, in the meantime stop Z3 from crashing
       const smt_sort *s = mk_sort(SMT_SORT_BV, 8, false);
-      return mk_smt_symbol("out_of_bounds_byte_extract", s, expr2tc());
+      return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
-      return mk_extract(source, upper, lower, convert_sort(expr->type), expr);
+      return mk_extract(source, upper, lower, convert_sort(expr->type));
     }
   }
 
@@ -1164,7 +1155,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     if (has_field)
-      return tuple_update(tuple, intref.constant_value.to_long(), value,expr);
+      return tuple_update(tuple, intref.constant_value.to_long(), value);
     else
       return tuple;
   } else if (is_signedbv_type(data.source_value->type)) {
@@ -1277,7 +1268,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       const smt_ast *the_ptr = convert_ast(ptr_op);
 
       // That calculated the offset; update field in pointer.
-      return tuple_update(the_ptr, 1, a, expr);
+      return tuple_update(the_ptr, 1, a);
       }
   }
 
@@ -1306,7 +1297,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     obj_num = pointer_logic.back().add_object(expr);
 
   s = convert_sort(pointer_struct);
-  a = mk_smt_symbol(symbol, s, expr);
+  a = mk_smt_symbol(symbol, s);
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
@@ -1318,7 +1309,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     membs.push_back(zero_uint);
     constant_struct2tc ptr_val_s(pointer_struct, membs);
     const smt_ast *ptr_val = tuple_create(ptr_val_s);
-    const smt_ast *constraint = tuple_equality(a, ptr_val, expr);
+    const smt_ast *constraint = tuple_equality(a, ptr_val);
     literalt l = mk_lit(constraint);
     assert_lit(l);
 
@@ -1482,7 +1473,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     // Update pointer offset to offset to that field.
     constant_int2tc offset(get_int_type(config.ansi_c.int_width), BigInt(offs));
     const smt_ast *o = convert_ast(offset);
-    return tuple_update(a, 1, o, expr);
+    return tuple_update(a, 1, o);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 
@@ -1557,7 +1548,7 @@ smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
     idx = get_member_name_field(member.source_value->type, member.member);
   }
 
-  return tuple_project(src, sort, idx, expr);
+  return tuple_project(src, sort, idx);
 }
 
 void
@@ -1662,25 +1653,24 @@ smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
   const smt_ast *args[4];
 
   const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
-  args[0] = mk_extract(a, topbit-1, topbit-1, bit, expr2tc());
-  args[1] = mk_smt_bvint(BigInt(0), false, 1, expr2tc());
+  args[0] = mk_extract(a, topbit-1, topbit-1, bit);
+  args[1] = mk_smt_bvint(BigInt(0), false, 1);
   const smt_sort *b = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2, expr2tc());
+  const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
 
-  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth, expr2tc());
+  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
   const smt_ast *f = mk_smt_bvint(BigInt(0xFFFFFFFFFFFFFFFFULL), false,
-                                  topwidth, expr2tc());
+                                  topwidth);
 
   args[0] = t;
   args[1] = z;
   args[2] = f;
   const smt_sort *topsort = mk_sort(SMT_SORT_BV, topwidth, false);
-  const smt_ast *topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3,
-                                       expr2tc());
+  const smt_ast *topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3);
 
   args[0] = topbits;
   args[1] = a;
-  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr2tc());
+  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 }
 
 const smt_ast *
@@ -1689,10 +1679,10 @@ smt_convt::convert_zero_ext(const smt_ast *a, const smt_sort *s,
 {
   const smt_ast *args[2];
 
-  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth, expr2tc());
+  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
   args[0] = z;
   args[1] = a;
-  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr2tc());
+  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 }
 
 const smt_ast *
@@ -1739,7 +1729,7 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     } else if (from_width > to_integer_bits) {
       const smt_sort *tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
                                     false);
-      args[0] = mk_extract(a, (from_width - 1), to_integer_bits, tmp, expr);
+      args[0] = mk_extract(a, (from_width - 1), to_integer_bits, tmp);
     } else {
       assert(from_width < to_integer_bits);
       const smt_sort *tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
@@ -1748,18 +1738,18 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     }
 
     // Make all zeros fraction bits
-    args[1] = mk_smt_bvint(BigInt(0), false, to_fraction_bits, expr2tc());
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr);
+    args[1] = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
+    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
   } else if (is_bool_type(cast.from)) {
     const smt_ast *args[3];
     const smt_sort *intsort;
     args[0] = a;
-    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits, expr2tc());
-    args[2] = mk_smt_bvint(BigInt(1), false, to_integer_bits, expr2tc());
+    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
+    args[2] = mk_smt_bvint(BigInt(1), false, to_integer_bits);
     intsort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-    args[0] = mk_func_app(intsort, SMT_FUNC_ITE, args, 3, expr2tc());
-    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits, expr2tc());
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr);
+    args[0] = mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
+    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
+    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
   } else if (is_fixedbv_type(cast.from)) {
     const smt_ast *magnitude, *fraction;
 
@@ -1772,13 +1762,13 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     if (to_integer_bits <= from_integer_bits) {
       const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
       magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
-                             from_fraction_bits, tmp_sort, expr2tc());
+                             from_fraction_bits, tmp_sort);
     } else   {
       assert(to_integer_bits > from_integer_bits);
       const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV,
                                         from_width - from_fraction_bits, false);
       const smt_ast *ext = mk_extract(a, from_width - 1, from_fraction_bits,
-                                      tmp_sort, expr2tc());
+                                      tmp_sort);
 
       tmp_sort = mk_sort(SMT_SORT_BV, (from_width - from_fraction_bits)
                                       + (to_integer_bits - from_integer_bits),
@@ -1791,26 +1781,24 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     if (to_fraction_bits <= from_fraction_bits) {
       const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
       fraction = mk_extract(a, from_fraction_bits - 1,
-                            from_fraction_bits - to_fraction_bits, tmp_sort,
-                            expr2tc());
+                            from_fraction_bits - to_fraction_bits, tmp_sort);
     } else {
       const smt_ast *args[2];
       assert(to_fraction_bits > from_fraction_bits);
       const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
                                          false);
-      args[0] = mk_extract(a, from_fraction_bits -1, 0, tmp_sort, expr2tc());
+      args[0] = mk_extract(a, from_fraction_bits -1, 0, tmp_sort);
       args[1] = mk_smt_bvint(BigInt(0), false,
-                             to_fraction_bits - from_fraction_bits,
-                             expr2tc());
+                             to_fraction_bits - from_fraction_bits);
 
       tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
-      fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2, expr2tc());
+      fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
     }
 
     const smt_ast *args[2];
     args[0] = magnitude;
     args[1] = fraction;
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2, expr);
+    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
   }
 
   std::cerr << "unexpected typecast to fixedbv" << std::endl;
@@ -1830,10 +1818,10 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     if (from_width == to_width) {
       if (int_encoding && is_signedbv_type(cast.from) &&
                is_fixedbv_type(cast.type)) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
       } else if (int_encoding && is_fixedbv_type(cast.from) &&
                is_signedbv_type(cast.type)) {
-        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1);
       } else if (int_encoding && is_unsignedbv_type(cast.from) &&
                  is_signedbv_type(cast.type)) {
         // Unsigned -> Signed. Seeing how integer mode is an approximation,
@@ -1861,7 +1849,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     } else if (from_width < to_width) {
       if (int_encoding &&
           ((is_fixedbv_type(cast.type) && is_signedbv_type(cast.from)))) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
       } else if (int_encoding) {
 	return a; // output = output
       } else {
@@ -1870,17 +1858,17 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     } else if (from_width > to_width) {
       if (int_encoding &&
           ((is_signedbv_type(cast.from) && is_fixedbv_type(cast.type)))) {
-        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1, expr2tc());
+        return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
       } else if (int_encoding &&
                 (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
-        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1, expr2tc());
+        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1);
       } else if (int_encoding) {
         return a; // output = output
       } else {
 	if (!to_width)
           to_width = config.ansi_c.int_width;
 
-        return mk_extract(a, to_width-1, 0, s, expr2tc());
+        return mk_extract(a, to_width-1, 0, s);
       }
     }
   } else if (is_unsignedbv_type(cast.from)) {
@@ -1898,7 +1886,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       if (int_encoding) {
 	return a; // output = output
       } else {
-        return mk_extract(a, to_width - 1, 0, s, expr2tc());
+        return mk_extract(a, to_width - 1, 0, s);
       }
     }
   } else if (is_bool_type(cast.from)) {
@@ -1907,15 +1895,15 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 
     if (is_bv_type(cast.type)) {
       if (int_encoding) {
-        zero = mk_smt_int(BigInt(0), false, expr2tc());
-        one = mk_smt_int(BigInt(1), false, expr2tc());
+        zero = mk_smt_int(BigInt(0), false);
+        one = mk_smt_int(BigInt(1), false);
       } else {
-        zero = mk_smt_bvint(BigInt(0), false, width, expr2tc());
-        one = mk_smt_bvint(BigInt(1), false, width, expr2tc());
+        zero = mk_smt_bvint(BigInt(0), false, width);
+        one = mk_smt_bvint(BigInt(1), false, width);
       }
     } else if (is_fixedbv_type(cast.type)) {
-      zero = mk_smt_real(BigInt(0), expr2tc());
-      one = mk_smt_real(BigInt(1), expr2tc());
+      zero = mk_smt_real(BigInt(0));
+      one = mk_smt_real(BigInt(1));
     } else {
       std::cerr << "Unexpected type in typecast of bool" << std::endl;
       abort();
@@ -1925,7 +1913,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
     args[0] = a;
     args[1] = one;
     args[2] = zero;
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3, expr2tc());
+    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
   }
 
   std::cerr << "Unexpected type in int/ptr typecast" << std::endl;

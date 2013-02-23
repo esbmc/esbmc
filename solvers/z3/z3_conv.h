@@ -70,44 +70,40 @@ private:
 
   // SMT-abstraction migration:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs,
-                               const expr2tc &temp);
+                               const smt_ast **args, unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
 
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign, const expr2tc &t);
-  virtual smt_ast *mk_smt_real(const mp_integer &theint, const expr2tc &t);
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w, const expr2tc &t);
-  virtual smt_ast *mk_smt_bool(bool val, const expr2tc &t);
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s, const expr2tc &t);
+  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
+  virtual smt_ast *mk_smt_real(const mp_integer &theint);
+  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
+                                unsigned int w);
+  virtual smt_ast *mk_smt_bool(bool val);
+  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
-                              unsigned int low, const smt_sort *s,
-                              const expr2tc &tmp);
+                              unsigned int low, const smt_sort *s);
 
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
-                                 unsigned int field, const expr2tc &tmp);
+                                 unsigned int field);
   virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                const smt_ast *val, const expr2tc &tmp);
-  virtual smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val,
-                                  const expr2tc &tmp);
+                                const smt_ast *val);
+  virtual smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val);
   virtual smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
-                             const smt_ast *false_val, const smt_sort *sort,
-                             const expr2tc &expr);
+                             const smt_ast *false_val, const smt_sort *sort);
 
   virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
   virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const smt_ast *field, const expr2tc &tmp);
+                                      const smt_ast *field);
   virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
-                                      const smt_ast *val, const expr2tc &tmp);
-  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b,
-                                        const expr2tc &tmp);
+                                      const smt_ast *val);
+  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
   virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                                    const smt_ast *false_val,
-                                   const smt_sort *sort, const expr2tc &expr);
+                                   const smt_sort *sort);
 
   virtual smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
@@ -145,10 +141,9 @@ public:
   #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   class z3_smt_ast : public smt_ast {
   public:
-    z3_smt_ast(z3::expr _e, const smt_sort *_s, const expr2tc &e2) :
-              smt_ast(_s), e(_e), expr(e2) { }
+    z3_smt_ast(z3::expr _e, const smt_sort *_s) :
+              smt_ast(_s), e(_e) { }
     z3::expr e;
-    expr2tc expr;
   };
 
   class z3_smt_sort : public smt_sort {
