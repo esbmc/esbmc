@@ -85,6 +85,7 @@ private:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+#if 0
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
@@ -93,6 +94,7 @@ private:
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val);
   virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort);
+#endif
 
   virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
