@@ -145,7 +145,7 @@ class smt_convt: public prop_convt
 {
 public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp);
+            bool is_cpp, bool tuple_support);
   ~smt_convt();
 
   virtual void push_ctx(void);
@@ -309,6 +309,7 @@ public:
   bool int_encoding;
   uint64_t no_variables;
   const namespacet &ns;
+  bool tuple_support;
   std::string dyn_info_arr_name;
 
   std::list<unsigned int> addr_space_sym_num;

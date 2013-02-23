@@ -46,8 +46,9 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp)
-  : caching(enable_cache), int_encoding(intmode), ns(_ns)
+                     bool is_cpp, bool _tuple_support)
+  : caching(enable_cache), int_encoding(intmode), ns(_ns),
+    tuple_support(_tuple_support)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
