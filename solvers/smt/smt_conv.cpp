@@ -901,7 +901,57 @@ smt_convt::convert_terminal(const expr2tc &expr)
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
-  return new tuple_smt_ast(convert_sort(structdef->type), structdef);
+  std::string name_prefix = "smt_conv::tuple_create::";
+  std::stringstream ss;
+  ss << name_prefix << fresh_map[name_prefix]++ << ".";
+  std::string name = ss.str();
+
+  const struct_union_data &def =
+    dynamic_cast<const struct_union_data &>(*structdef->type.get());
+
+  const constant_struct2t &strct = to_constant_struct2t(structdef);
+
+  tuple_create_rec(name, def.members, def.member_names, strct.datatype_members);
+
+  return new tuple_smt_ast(convert_sort(structdef->type), name);
+}
+
+void
+smt_convt::tuple_create_rec(const std::string &name,
+                            const std::vector<type2tc> &types,
+                            const std::vector<irep_idt> &type_names,
+                            const std::vector<expr2tc> &fields)
+{
+  assert((types.size() == type_names.size()) &&
+         (types.size() == fields.size()));
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = types.begin();
+       it != types.end(); it++, i++) {
+    if (is_struct_type(*it) || is_union_type(*it)) {
+      // Do something recursive
+      const struct_union_data &def =
+        dynamic_cast<const struct_union_data &>(*(*it).get());
+      const constant_struct2t &strct = to_constant_struct2t(fields[i]);
+      std::string subname = name + type_names[i].as_string() + ".";
+      tuple_create_rec(subname, def.members, def.member_names,
+                       strct.datatype_members);
+    } else if (is_pointer_type(*it)) {
+      std::cerr << "XXX - tuple_create_rec constant ptr unimplemented"
+                << std::endl;
+      abort();
+    } else {
+      std::string symname = name + type_names[i].as_string();
+      const smt_sort *sort = convert_sort(*it);
+      const smt_ast *args[2];
+      args[0] = mk_smt_symbol(symname, sort);
+      args[1] = convert_ast(fields[i]);
+      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      literalt l = mk_lit(eq);
+      assert_lit(l);
+    }
+  }
 }
 
 smt_ast *

@@ -135,10 +135,10 @@ public:
   // solver doesn't have a tuple extension, we have to perform all tuple
   // operations ourselves. That requires some data storage; that data will live
   // in this ast class.
-  tuple_smt_ast (const smt_sort *s, const expr2tc &_const_tuple) : smt_ast(s),
-            const_tuple(_const_tuple) { }
+  tuple_smt_ast (const smt_sort *s, const std::string &_name) : smt_ast(s),
+            name(_name) { }
 
-  const expr2tc const_tuple;
+  const std::string name;
 };
 
 class smt_convt: public prop_convt
@@ -231,6 +231,11 @@ public:
   const smt_ast *convert_byte_extract(const expr2tc &expr);
   const smt_ast *convert_byte_update(const expr2tc &expr);
   void assert_expr(const expr2tc &e);
+  void tuple_create_rec(const std::string &name,
+                        const std::vector<type2tc> &types,
+                        const std::vector<irep_idt> &type_names,
+                        const std::vector<expr2tc> &fields);
+
 
   // To be called by the subclass when all other construction has occured.
   // It needs to be able to convert a variety of things, which need to be
