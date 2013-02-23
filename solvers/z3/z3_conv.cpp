@@ -872,7 +872,6 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                                 z3_smt_downcast(true_val)->e,
                                 z3_smt_downcast(false_val)->e), sort);
 }
-#endif
 
 smt_ast *
 z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
@@ -984,6 +983,7 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                             z3_smt_downcast(false_val)->e);
   return new z3_smt_ast(output, sort);
 }
+#endif
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
