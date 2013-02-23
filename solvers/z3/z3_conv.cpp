@@ -427,28 +427,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
 }
 
 literalt
-z3_convt::lor(literalt a, literalt b)
-{
-  if (a == const_literal(false)) return b;
-  if (b == const_literal(false)) return a;
-  if (a == const_literal(true)) return const_literal(true);
-  if (b == const_literal(true)) return const_literal(true);
-  if (a == b) return a;
-
-  literalt l = new_variable();
-  z3::expr result, operand[2], formula;
-
-  operand[0] = z3_literal(a);
-  operand[1] = z3_literal(b);
-  result = operand[0] || operand[1];
-  z3::expr thelit = z3_literal(l);
-  formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, result));
-  assert_formula(formula);
-
-  return l;
-}
-
-literalt
 z3_convt::lnot(literalt a)
 {
   a.invert();

@@ -134,7 +134,6 @@ private:
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
 
-  virtual literalt lor(literalt a, literalt b);
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
   virtual uint64_t get_no_variables() const { return no_variables; }

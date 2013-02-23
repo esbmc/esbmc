@@ -219,6 +219,23 @@ smt_convt::lor(const bvt &bv)
 }
 
 literalt
+smt_convt::lor(literalt a, literalt b)
+{
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return const_literal(true);
+  if (b == const_literal(true)) return const_literal(true);
+  if (a == b) return a;
+
+  const smt_ast *args[2];
+  args[0] = lit_to_ast(a);
+  args[1] = lit_to_ast(b);
+  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  const smt_ast *c = mk_func_app(sort, SMT_FUNC_OR, args, 2, expr2tc());
+  return mk_lit(c);
+}
+
+literalt
 smt_convt::land(const bvt &bv)
 {
   literalt l = new_variable();
