@@ -148,6 +148,7 @@ public:
   virtual literalt lor(literalt a, literalt b);
   virtual literalt lnot(literalt a);
   virtual literalt limplies(literalt a, literalt b);
+  virtual uint64_t get_no_variables() const;
 
   virtual void assert_lit(const literalt &l) = 0;
   virtual const smt_ast *lit_to_ast(const literalt &l);

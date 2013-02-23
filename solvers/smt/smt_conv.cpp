@@ -315,6 +315,12 @@ smt_convt::lit_to_ast(const literalt &l)
   }
 }
 
+uint64_t
+smt_convt::get_no_variables() const
+{
+  return no_variables;
+}
+
 void
 smt_convt::set_to(const expr2tc &expr, bool value)
 {

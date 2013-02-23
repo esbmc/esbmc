@@ -134,8 +134,6 @@ private:
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
 
-  virtual uint64_t get_no_variables() const { return no_variables; }
-
   virtual const std::string solver_text()
   { return "Z3"; }
 
