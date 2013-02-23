@@ -787,9 +787,17 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::bool_id:
     return mk_sort(SMT_SORT_BOOL);
   case type2t::struct_id:
-    return mk_struct_sort(type);
+    if (!tuple_support) {
+      return new tuple_smt_sort(type);
+    } else {
+      return mk_struct_sort(type);
+    }
   case type2t::union_id:
-    return mk_union_sort(type);
+    if (!tuple_support) {
+      return new tuple_smt_sort(type);
+    } else {
+      return mk_union_sort(type);
+    }
   case type2t::code_id:
   case type2t::pointer_id:
     return mk_struct_sort(pointer_struct);
