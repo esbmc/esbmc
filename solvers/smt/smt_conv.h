@@ -231,6 +231,7 @@ public:
   const smt_ast *convert_byte_extract(const expr2tc &expr);
   const smt_ast *convert_byte_update(const expr2tc &expr);
   void assert_expr(const expr2tc &e);
+  smt_ast *mk_tuple_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name,
                         const std::vector<type2tc> &types,
                         const std::vector<irep_idt> &type_names,

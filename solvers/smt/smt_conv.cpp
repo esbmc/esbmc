@@ -886,6 +886,12 @@ smt_convt::convert_terminal(const expr2tc &expr)
   }
   case expr2t::symbol_id:
   {
+    // Special case for tuple symbols
+    if (!tuple_support &&
+        (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
+      // Perform smt-tuple hacks.
+      return mk_tuple_symbol(expr);
+    }
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     const smt_sort *sort = convert_sort(sym.type);
@@ -952,6 +958,15 @@ smt_convt::tuple_create_rec(const std::string &name,
       assert_lit(l);
     }
   }
+}
+
+smt_ast *
+smt_convt::mk_tuple_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  std::string name = sym.get_symbol_name() + ".";
+  const smt_sort *sort = convert_sort(sym.type);
+  return new tuple_smt_ast(sort, name);
 }
 
 smt_ast *
