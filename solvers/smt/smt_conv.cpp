@@ -978,11 +978,26 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
 }
 
 smt_ast *
-smt_convt::tuple_project(const smt_ast *a __attribute__((unused)),
-                         const smt_sort *s __attribute__((unused)),
-                         unsigned int i __attribute__((unused)))
+smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 {
-  assert(0);
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
+
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(s);
+  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_project");
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+
+  assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
+  const std::string &fieldname = data.member_names[i].as_string();
+  std::string sym_name = ta->name + fieldname;
+
+  // Cope with recursive structs.
+  if (is_struct_type(data.members[i]) || is_union_type(data.members[i]) ||
+      is_pointer_type(data.members[i]))
+    sym_name = sym_name + ".";
+
+  return mk_smt_symbol(sym_name, convert_sort(data.members[i]));
 }
 
 smt_ast *
