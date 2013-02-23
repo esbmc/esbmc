@@ -531,18 +531,6 @@ z3_convt::limplies(literalt a, literalt b)
   return lor(lnot(a), b);
 }
 
-literalt
-z3_convt::new_variable()
-{
-  literalt l;
-
-  l.set(no_variables, false);
-
-  set_no_variables(no_variables + 1);
-
-  return l;
-}
-
 void
 z3_convt::lcnf(const bvt &bv)
 {

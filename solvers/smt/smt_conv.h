@@ -140,6 +140,7 @@ public:
   virtual void pop_ctx(void);
 
   bool process_clause(const bvt &bv, bvt &dest);
+  virtual literalt new_variable();
 
   virtual void assert_lit(const literalt &l) = 0;
 

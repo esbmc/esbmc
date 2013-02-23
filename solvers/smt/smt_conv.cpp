@@ -4,6 +4,7 @@
 #include <base_type.h>
 
 #include "smt_conv.h"
+#include <solvers/prop/literal.h>
 
 // Helpers extracted from z3_convt.
 
@@ -118,6 +119,18 @@ smt_convt::pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+}
+
+literalt
+smt_convt::new_variable()
+{
+  literalt l;
+
+  l.set(no_variables, false);
+
+  no_variables = no_variables + 1;
+
+  return l;
 }
 
 bool
