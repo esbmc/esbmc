@@ -1,6 +1,8 @@
 #ifndef _ESBMC_PROP_SMT_SMT_CONV_H_
 #define _ESBMC_PROP_SMT_SMT_CONV_H_
 
+#include <stdint.h>
+
 #include <irep2.h>
 #include <namespace.h>
 
@@ -136,6 +138,8 @@ public:
 
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
+
+  bool process_clause(const bvt &bv, bvt &dest);
 
   virtual void assert_lit(const literalt &l) = 0;
 
@@ -283,6 +287,7 @@ public:
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
   bool caching;
   bool int_encoding;
+  uint64_t no_variables;
   const namespacet &ns;
   std::string dyn_info_arr_name;
 

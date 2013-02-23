@@ -152,8 +152,6 @@ private:
 
   z3::expr z3_literal(literalt l);
 
-  bool process_clause(const bvt &bv, bvt &dest);
-
   // Some useful types
 public:
   class conv_error {
@@ -196,7 +194,6 @@ public:
   bool smtlib, assumpt_mode;
   std::string filename;
 
-  uint64_t no_variables;
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 

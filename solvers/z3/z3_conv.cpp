@@ -52,7 +52,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   this->int_encoding = int_encoding;
 
   assumpt_mode = false;
-  no_variables = 1;
 
   z3::config conf;
   conf.set("MODEL", true);
@@ -542,47 +541,6 @@ z3_convt::new_variable()
   set_no_variables(no_variables + 1);
 
   return l;
-}
-
-bool
-z3_convt::process_clause(const bvt &bv, bvt &dest)
-{
-
-  dest.clear();
-
-  // empty clause! this is UNSAT
-  if (bv.empty()) return false;
-
-  std::set<literalt> s;
-
-  dest.reserve(bv.size());
-
-  for (bvt::const_iterator it = bv.begin();
-       it != bv.end();
-       it++)
-  {
-    literalt l = *it;
-
-    // we never use index 0
-    assert(l.var_no() != 0);
-
-    if (l.is_true())
-      return true;  // clause satisfied
-
-    if (l.is_false())
-      continue;
-
-    assert(l.var_no() < no_variables);
-
-    // prevent duplicate literals
-    if (s.insert(l).second)
-      dest.push_back(l);
-
-    if (s.find(lnot(l)) != s.end())
-      return true;  // clause satisfied
-  }
-
-  return false;
 }
 
 void

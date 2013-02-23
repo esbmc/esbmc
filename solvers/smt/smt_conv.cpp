@@ -1,4 +1,5 @@
 #include <sstream>
+#include <set>
 
 #include <base_type.h>
 
@@ -49,6 +50,8 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
+
+  no_variables = 1;
 
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
@@ -115,6 +118,47 @@ smt_convt::pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+}
+
+bool
+smt_convt::process_clause(const bvt &bv, bvt &dest)
+{
+
+  dest.clear();
+
+  // empty clause! this is UNSAT
+  if (bv.empty()) return false;
+
+  std::set<literalt> s;
+
+  dest.reserve(bv.size());
+
+  for (bvt::const_iterator it = bv.begin();
+       it != bv.end();
+       it++)
+  {
+    literalt l = *it;
+
+    // we never use index 0
+    assert(l.var_no() != 0);
+
+    if (l.is_true())
+      return true;  // clause satisfied
+
+    if (l.is_false())
+      continue;
+
+    assert(l.var_no() < no_variables);
+
+    // prevent duplicate literals
+    if (s.insert(l).second)
+      dest.push_back(l);
+
+    if (s.find(lnot(l)) != s.end())
+      return true;  // clause satisfied
+  }
+
+  return false;
 }
 
 void
