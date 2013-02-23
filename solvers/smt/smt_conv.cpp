@@ -1009,11 +1009,54 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
   return mk_func_app(v->sort, SMT_FUNC_EQ, args, 2);
 }
 
-smt_ast *
-smt_convt::tuple_equality(const smt_ast *a __attribute__((unused)),
-                          const smt_ast *b __attribute__((unused)))
+const smt_ast *
+smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 {
-  assert(0);
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  const tuple_smt_ast *tb = dynamic_cast<const tuple_smt_ast *>(b);
+  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
+  assert(tb != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
+
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
+  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_project");
+
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+
+  std::vector<literalt> lits;
+  lits.reserve(data.members.size());
+
+  // Iterate through each field and encode an equality.
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = data.members.begin();
+       it != data.members.end(); it++, i++) {
+    if (is_structure_type(ts->thetype)) {
+      // Recurse.
+      const smt_ast *args[2];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] = tuple_project(a, sort, i);
+      args[1] = tuple_project(b, sort, i);
+      const smt_ast *eq = tuple_equality(args[0], args[1]);
+      literalt l = mk_lit(eq);
+      lits.push_back(l);
+    } else if (is_pointer_type(ts->thetype)) {
+      std::cerr << "XXX pointer equality not implemented yet (tuple_equality)"
+                << std::endl;
+      abort();
+    } else {
+      const smt_ast *args[2];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] = tuple_project(a, sort, i);
+      args[1] = tuple_project(b, sort, i);
+      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      literalt l = mk_lit(eq);
+      lits.push_back(l);
+    }
+  }
+
+  literalt l = land(lits);
+  return lit_to_ast(l);
 }
 
 smt_ast *

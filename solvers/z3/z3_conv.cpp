@@ -853,7 +853,7 @@ z3_convt::tuple_update(const smt_ast *a, unsigned int field, const smt_ast *val)
   return new z3_smt_ast(mk_tuple_update(za->e, field, zu->e), za->sort);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
