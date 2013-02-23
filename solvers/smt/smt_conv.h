@@ -144,6 +144,7 @@ public:
   virtual void lcnf(const bvt &bv);
   virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
+  virtual literalt land(literalt a, literalt b);
 
   virtual void assert_lit(const literalt &l) = 0;
   virtual const smt_ast *lit_to_ast(const literalt &l);

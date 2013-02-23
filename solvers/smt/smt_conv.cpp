@@ -248,6 +248,24 @@ smt_convt::land(const bvt &bv)
   return l;
 }
 
+literalt
+smt_convt::land(literalt a, literalt b)
+{
+  if (a == const_literal(true)) return b;
+  if (b == const_literal(true)) return a;
+  if (a == const_literal(false)) return const_literal(false);
+  if (b == const_literal(false)) return const_literal(false);
+  if (a == b) return a;
+
+  const smt_ast *args[2];
+  args[0] = lit_to_ast(a);
+  args[1] = lit_to_ast(b);
+  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  const smt_ast *c = mk_func_app(sort, SMT_FUNC_AND, args, 2, expr2tc());
+  return mk_lit(c);
+}
+
+
 const smt_ast *
 smt_convt::lit_to_ast(const literalt &l)
 {
