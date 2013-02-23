@@ -897,9 +897,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
 }
 
 smt_ast *
-smt_convt::tuple_create(const expr2tc &structdef __attribute__((unused)))
+smt_convt::tuple_create(const expr2tc &structdef)
 {
-  assert(0);
+  return new tuple_smt_ast(convert_sort(structdef->type), structdef);
 }
 
 smt_ast *
