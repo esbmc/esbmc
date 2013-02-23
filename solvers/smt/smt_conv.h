@@ -147,6 +147,7 @@ public:
   virtual literalt land(literalt a, literalt b);
   virtual literalt lor(literalt a, literalt b);
   virtual literalt lnot(literalt a);
+  virtual literalt limplies(literalt a, literalt b);
 
   virtual void assert_lit(const literalt &l) = 0;
   virtual const smt_ast *lit_to_ast(const literalt &l);

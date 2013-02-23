@@ -426,12 +426,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   return;
 }
 
-literalt
-z3_convt::limplies(literalt a, literalt b)
-{
-  return lor(lnot(a), b);
-}
-
 z3::expr
 z3_convt::z3_literal(literalt l)
 {
