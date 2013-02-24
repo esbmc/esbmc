@@ -210,7 +210,7 @@ public:
 
   virtual const smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
-  virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
+  virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const smt_ast *field);
   virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
                                       const smt_ast *val);
@@ -252,7 +252,8 @@ public:
   void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                      const tuple_smt_ast *true_val,
                      const tuple_smt_ast *false_val);
-
+  void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
+                              const tuple_smt_ast *result,const smt_ast *field);
   // To be called by the subclass when all other construction has occured.
   // It needs to be able to convert a variety of things, which need to be
   // available.

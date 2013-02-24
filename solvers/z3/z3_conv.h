@@ -97,7 +97,7 @@ private:
 
   virtual const smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
-  virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
+  virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const smt_ast *field);
   virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
                                       const smt_ast *val);

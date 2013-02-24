@@ -946,7 +946,7 @@ out:
   return new z3_smt_ast(output, asort);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
                              const smt_ast *idx)
 {

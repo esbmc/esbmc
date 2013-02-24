@@ -1200,12 +1200,67 @@ smt_convt::tuple_array_create(const expr2tc &expr,
   }
 }
 
-smt_ast *
-smt_convt::tuple_array_select(const smt_ast *a __attribute__((unused)),
-                              const smt_sort *s __attribute__((unused)),
-                              const smt_ast *field __attribute__((unused)))
+const smt_ast *
+smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
+                              const smt_ast *field)
 {
-  assert(0);
+  // Select everything at the given element into a fresh tulple. Don't attempt
+  // to support selecting array fields. In the future we can arrange something
+  // whereby tuple operations are aware of this array situation and don't
+  // have to take this inefficient approach.
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL &&
+         "Non tuple_smt_ast class in smt_convt::tuple_array_select");
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(s);
+  assert(ts != NULL &&
+         "Non tuple_smt_sort class in smt_convt::tuple_array_select");
+
+  std::string new_name = "smt_conv::tuple_array_select[]";
+  std::stringstream ss;
+  ss << new_name << fresh_map[new_name]++;
+  const tuple_smt_ast *result = new tuple_smt_ast(s, new_name);
+
+  tuple_array_select_rec(ta, ts->thetype, result, field);
+  return result;
+}
+
+void
+smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
+                                  const tuple_smt_ast *result,
+                                  const smt_ast *field)
+{
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const array_type2t &array_type = to_array_type(type);
+  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+    ? *pointer_type_data
+    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
+       it != struct_type.members.end(); it++, i++) {
+    if (is_structure_type(*it)) {
+      const smt_sort *sort = convert_sort(*it);
+      const tuple_smt_ast *result_field =
+        static_cast<const tuple_smt_ast *>(tuple_project(result, sort, i));
+      std::string substruct_name =
+        ta->name + struct_type.member_names[i].as_string() + ".";
+      const tuple_smt_ast *array_name = new tuple_smt_ast(sort, substruct_name);
+      tuple_array_select_rec(array_name, *it, result_field, field);
+    } else if (is_pointer_type(*it)) {
+      std::cerr << "XXX pointer tuple arrays unimplemented" << std::endl;
+      abort();
+    } else {
+      std::string name = ta->name + struct_type.member_names[i].as_string();
+      const smt_ast *args[2];
+      const smt_sort *field_sort = convert_sort(*it);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, field->sort,field_sort);
+      args[0] = mk_smt_symbol(name, arrsort);
+      args[1] = tuple_project(result, field_sort, i);
+      const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      literalt l = mk_lit(res);
+      assert_lit(l);
+    }
+  }
 }
 
 smt_ast *
