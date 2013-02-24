@@ -957,7 +957,7 @@ z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
 
 smt_ast *
 z3_convt::tuple_array_update(const smt_ast *a, const smt_ast *field,
-                             const smt_ast *val)
+                             const smt_ast *val, const smt_sort *s)
 {
   Z3_ast ast = Z3_mk_store(z3_ctx, z3_smt_downcast(a)->e,
                           z3_smt_downcast(field)->e, z3_smt_downcast(val)->e);

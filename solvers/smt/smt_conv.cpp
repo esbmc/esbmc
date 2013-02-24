@@ -562,7 +562,9 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = tuple_update(args[0], idx, args[2]);
     } else {
       assert(is_array_type(expr->type));
-      a = tuple_array_update(args[0], args[1], args[2]);
+      const with2t &with = to_with2t(expr);
+      const smt_sort *sort = convert_sort(with.update_value->type);
+      a = tuple_array_update(args[0], args[1], args[2], sort);
     }
     break;
   }
@@ -1167,6 +1169,7 @@ smt_convt::tuple_array_create(const expr2tc &expr,
     abort();
   }
 
+  const smt_sort *fieldsort = convert_sort(arr_type.subtype);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
@@ -1179,7 +1182,7 @@ smt_convt::tuple_array_create(const expr2tc &expr,
       const smt_ast *field = (int_encoding)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      newsym = tuple_array_update(newsym, field, init);
+      newsym = tuple_array_update(newsym, field, init, fieldsort);
     }
 
     return newsym;
@@ -1193,7 +1196,7 @@ smt_convt::tuple_array_create(const expr2tc &expr,
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
       const smt_ast *val = convert_ast(array.datatype_members[i]);
-      newsym = tuple_array_update(newsym, field, val);
+      newsym = tuple_array_update(newsym, field, val, fieldsort);
     }
 
     return newsym;
@@ -1266,7 +1269,8 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
 smt_ast *
 smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
                               const smt_ast *field __attribute__((unused)),
-                              const smt_ast *val __attribute__((unused)))
+                              const smt_ast *val __attribute__((unused)),
+                              const smt_sort *fieldsort __attribute__((unused)))
 {
   assert(0);
 }
