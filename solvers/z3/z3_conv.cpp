@@ -873,7 +873,7 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                                 z3_smt_downcast(false_val)->e), sort);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
 {
   z3::expr output;

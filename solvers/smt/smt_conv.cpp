@@ -1131,11 +1131,59 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
   }
 }
 
-smt_ast *
-smt_convt::tuple_array_create(const expr2tc &arrayof __attribute__((unused)),
+const smt_ast *
+smt_convt::tuple_array_create(const expr2tc &expr,
                               const smt_sort *domain __attribute__((unused)))
 {
-  assert(0);
+  const smt_sort *sort = convert_sort(expr->type);
+  std::string new_name = "smt_conv::tuple_array_create::";
+  std::stringstream ss;
+  ss << new_name << fresh_map[new_name]++;
+  const smt_ast *newsym = new tuple_smt_ast(sort, ss.str());
+
+  // Check size
+  const array_type2t &arr_type =
+    static_cast<const array_type2t &>(*expr->type.get());
+  if (arr_type.size_is_infinite) {
+    // Guarentee nothing, this is modelling only.
+    return newsym;
+  } else if (!is_constant_int2t(arr_type.array_size)) {
+    std::cerr << "Non-constant sized array of type constant_array_of2t"
+              << std::endl;
+    abort();
+  }
+
+  const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  uint64_t sz = thesize.constant_value.to_ulong();
+
+  if (is_constant_array_of2t(expr)) {
+    const constant_array_of2t &array = to_constant_array_of2t(expr);
+
+    // Repeatedly store things into this.
+    const smt_ast *init = convert_ast(array.initializer);
+    for (unsigned int i = 0; i < sz; i++) {
+      const smt_ast *field = (int_encoding)
+        ? mk_smt_int(BigInt(i), false)
+        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
+      newsym = tuple_array_update(newsym, field, init);
+    }
+
+    return newsym;
+  } else {
+    assert(is_constant_array2t(expr));
+    const constant_array2t &array = to_constant_array2t(expr);
+
+    // Repeatedly store things into this.
+    for (unsigned int i = 0; i < sz; i++) {
+      const smt_ast *field = (int_encoding)
+        ? mk_smt_int(BigInt(i), false)
+        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
+      const smt_ast *val = convert_ast(array.datatype_members[i]);
+      newsym = tuple_array_update(newsym, field, val);
+    }
+
+    return newsym;
+  }
 }
 
 smt_ast *

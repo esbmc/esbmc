@@ -208,7 +208,7 @@ public:
   virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort);
 
-  virtual smt_ast *tuple_array_create(const expr2tc &arrayof,
+  virtual const smt_ast *tuple_array_create(const expr2tc &arrayof,
                                       const smt_sort *domain);
   virtual smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const smt_ast *field);
