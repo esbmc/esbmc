@@ -899,6 +899,11 @@ smt_convt::convert_terminal(const expr2tc &expr)
         (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
       // Perform smt-tuple hacks.
       return mk_tuple_symbol(expr);
+    } else if (!tuple_support && is_array_type(expr) &&
+                (is_struct_type(to_array_type(expr->type).subtype) ||
+                 is_union_type(to_array_type(expr->type).subtype) ||
+                 is_pointer_type(to_pointer_type(expr->type).subtype))) {
+      return mk_tuple_array_symbol(expr);
     }
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
@@ -973,6 +978,15 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
 {
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + ".";
+  const smt_sort *sort = convert_sort(sym.type);
+  return new tuple_smt_ast(sort, name);
+}
+
+smt_ast *
+smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  std::string name = sym.get_symbol_name() + "[]";
   const smt_sort *sort = convert_sort(sym.type);
   return new tuple_smt_ast(sort, name);
 }
