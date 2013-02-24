@@ -1258,6 +1258,8 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
       const smt_sort *field_sort = convert_sort(*it);
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, field->sort,field_sort);
       args[0] = mk_smt_symbol(name, arrsort);
+      args[1] = field;
+      args[0] = mk_func_app(field_sort, SMT_SORT_SELECT, args, 2);
       args[1] = tuple_project(result, field_sort, i);
       const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       literalt l = mk_lit(res);
