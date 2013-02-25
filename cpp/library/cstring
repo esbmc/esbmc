@@ -37,18 +37,6 @@ char *strncpy(char *d, const char *s, size_t n) {
 		end=end || ch==(char)0;
 	}
 	return d;
-#if 0
-	size_t i;
-
-	for (i = 0; s[i] != '\0' && i < n; i++) {
-		d[i] = s[i];
-	}
-	for (; i < n; i++) {
-		d[i] = '\0';
-	}
-
-	return d;
-#endif
 }
 
 char *strcat(char d[], const char s[]) {
