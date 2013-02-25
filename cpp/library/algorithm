@@ -1633,10 +1633,10 @@ template<class Iterator>
 void maxHeapify(Iterator begin, Iterator end, int pos, int n){
 	int max = 2*pos + 1;
 	if(max < n){
-		if((max+1) < n && *(begin+max) < *(begin+max+1))
+		if((max+1) < n && (*begin+max) < (*begin+max+1))
 			++max;
-		if(*(begin+max) > *(begin+pos)){
-			swap(*(begin+max), *(begin+pos));
+		if((*begin+max) > (*begin+pos)){
+			swap((*begin+max), (*begin+pos));
 			maxHeapify(begin, end, max, n);
 		}
 	}
