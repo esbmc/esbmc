@@ -540,6 +540,7 @@ void cpp_typecheck_resolvet::exact_match_functions(
   resolve_identifierst &identifiers,
   const cpp_typecheck_fargst &fargs)
 {
+  if(!identifiers.size()) return;
   if(!fargs.in_use) return;
 
   resolve_identifierst old_identifiers;
