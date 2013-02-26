@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version='1.0' encoding='utf-8'?>
 <test-case>
   <item_01_test_case_version>Versão 1.0</item_01_test_case_version>
   <item_02_id>esbmc-list</item_02_id>
