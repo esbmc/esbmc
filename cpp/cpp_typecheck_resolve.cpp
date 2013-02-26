@@ -970,7 +970,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::resolve_scope(
+cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
   cpp_template_args_non_tct &template_args)
@@ -993,13 +993,13 @@ void cpp_typecheck_resolvet::resolve_scope(
     recursive=false;
   }
 
-  base_name="";
+  std::string final_base_name="";
   template_args.make_nil();
 
   while(pos!=cpp_name.get_sub().end())
   {
     if(pos->id()=="name")
-      base_name+=pos->get_string("identifier");
+      final_base_name+=pos->get_string("identifier");
     else if(pos->id()=="template_args")
       template_args=to_cpp_template_args_non_tc(*pos);
     else if(pos->id()=="::")
@@ -1008,7 +1008,7 @@ void cpp_typecheck_resolvet::resolve_scope(
 
       if(template_args.is_not_nil())
       {
-        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, !recursive);
+        cpp_typecheck.cpp_scopes.get_ids(final_base_name,cpp_idt::TEMPLATE, id_set, !recursive);
 
         symbolt template_symbol=
           cpp_typecheck.context.symbols.find((*id_set.begin())->identifier)->second;
@@ -1033,7 +1033,7 @@ void cpp_typecheck_resolvet::resolve_scope(
       }
       else
       {
-        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, !recursive);
+        cpp_typecheck.cpp_scopes.get_ids(final_base_name, id_set, !recursive);
 
         filter_for_named_scopes(id_set);
 
@@ -1041,7 +1041,7 @@ void cpp_typecheck_resolvet::resolve_scope(
         {
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
           cpp_typecheck.err_location(location);
-          cpp_typecheck.str << "scope `" << base_name << "' not found";
+          cpp_typecheck.str << "scope `" << final_base_name << "' not found";
           throw 0;
         }
         else if(id_set.size()>=2)
@@ -1049,7 +1049,7 @@ void cpp_typecheck_resolvet::resolve_scope(
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
           cpp_typecheck.err_location(location);
           cpp_typecheck.str << "scope `"
-                            << base_name << "' is ambiguous";
+                            << final_base_name << "' is ambiguous";
           throw 0;
         }
 
@@ -1058,11 +1058,11 @@ void cpp_typecheck_resolvet::resolve_scope(
       }
 
       // we start from fresh
-      base_name.clear();
+      final_base_name.clear();
     }
     else if(pos->id()=="operator")
     {
-      base_name+="operator";
+      final_base_name+="operator";
 
       irept::subt::const_iterator next=pos+1;
       assert(next != cpp_name.get_sub().end());
@@ -1079,16 +1079,20 @@ void cpp_typecheck_resolvet::resolve_scope(
         typet op_name;
         op_name.swap(next_ir);
         cpp_typecheck.typecheck_type(op_name);
-        base_name+="("+cpp_type2name(op_name)+")";
+        final_base_name+="("+cpp_type2name(op_name)+")";
         pos++;
       }
 
     }
     else
-      base_name+=pos->id_string();
+      final_base_name+=pos->id_string();
 
     pos++;
   }
+
+  base_name=final_base_name;
+
+  return cpp_typecheck.cpp_scopes.current_scope();
 }
 
 /*******************************************************************\
