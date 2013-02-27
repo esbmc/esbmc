@@ -357,6 +357,13 @@ const symbolt &cpp_typecheckt::instantiate_template(
     const symbolt &new_symb=
       lookup(new_decl.type().identifier());
 
+    // any template instance to remember?
+    if(new_decl.find("#template").is_not_nil())
+    {
+      new_symb.type.set("#template", new_decl.find("#template"));
+      new_symb.type.set("#template_arguments", new_decl.find("#template_arguments"));
+    }
+
     return new_symb;
   }
 
