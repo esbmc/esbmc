@@ -1954,10 +1954,48 @@ void cpp_typecheck_resolvet::guess_template_args(
 
     if(cpp_name.has_template_args())
     {
-      // this could be s.th. like my_template<T>, and we need
-      // to match 'T'. Then 'desired_type' has to be a template instance.
+      std::string base_name;
+      cpp_template_args_non_tct template_args;
+      resolve_scope(cpp_name, base_name, template_args);
 
-      // TODO
+      const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
+      cpp_template_args_non_tct instantiated_args=
+        to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+
+      cpp_template_args_non_tct::argumentst args=template_args.arguments();
+
+      for(unsigned i=0; i<args.size();++i)
+      {
+        resolve_scope(to_cpp_name(args[i].type()),base_name, template_args);
+
+        cpp_scopest::id_sett id_set;
+        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
+
+        // alright, rummage through these
+        for(cpp_scopest::id_sett::const_iterator
+            it=id_set.begin();
+            it!=id_set.end();
+            it++)
+        {
+          const cpp_idt &id=**it;
+
+          // template argument?
+          if(id.id_class==cpp_idt::TEMPLATE_ARGUMENT)
+          {
+            // see if unassigned
+            typet &t=cpp_typecheck.template_map.type_map[id.identifier];
+
+            if(t.id()=="unassigned")
+            {
+              t=instantiated_args.arguments()[i].type();
+
+              // remove const, volatile (these can be added in the call)
+              t.remove("#constant");
+              t.remove("#volatile");
+            }
+          }
+        }
+      }
     }
     else
     {
@@ -1984,6 +2022,7 @@ void cpp_typecheck_resolvet::guess_template_args(
           {
             // see if unassigned
             typet &t=cpp_typecheck.template_map.type_map[id.identifier];
+
             if(t.id()=="unassigned")
             {
               t=desired_type;
@@ -2157,7 +2196,6 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   }
 
   // see if that has worked out
-
   cpp_template_args_tct template_args=
     cpp_typecheck.template_map.build_template_args(
       cpp_declaration.template_type());
