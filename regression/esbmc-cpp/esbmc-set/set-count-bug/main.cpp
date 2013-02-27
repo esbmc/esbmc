@@ -10,9 +10,10 @@ int main ()
 
   // set some initial values:
   for (i=1; i<5; i++) myset.insert(i*3);    // set: 3 6 9 12
+  assert(0);/*
   assert(myset.count(3) == 1);
   assert(myset.count(6) == 1);
-  assert(myset.count(9) != 1);
+  assert(myset.count(9) == 1);
   assert(myset.count(12) == 1);
   myset.insert(3);
   myset.insert(3);
@@ -26,6 +27,6 @@ int main ()
     else 
       cout << " is not an element of myset.\n";
   }
-
+*/	
   return 0;
 }
