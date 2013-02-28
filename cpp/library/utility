@@ -25,6 +25,11 @@ struct pair {
 	pair(const T1& x, const T2& y) :
 			first(x), second(y) {
 	}
+	bool operator!=( const pair< T1,T2 >& p){
+		if (this->first != p.first && this->second != p.second)
+			return true;
+		return false;
+	}
 	template<class U, class V>
 	pair(const pair<U, V> &p) :
 			first(p.first), second(p.second) {
