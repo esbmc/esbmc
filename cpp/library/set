@@ -152,7 +152,7 @@ template <class Key, class Compare = less<Key> >
 class set {
 public:
 	Key buf[MAX];
-	size_t _size;
+	size_t _size = 0;
 	Compare rule;
     class const_iterator;
 	// types:
@@ -185,8 +185,9 @@ public:
 
 		}
 		iterator& operator=(const iterator& i){
-			this->pos = i.pos;
-			this->base = i.base;
+			pos = i.pos;
+			base = i.base;
+			return *this;
 		}
 
 		value_type * operator -> (){
@@ -433,10 +434,12 @@ public:
 
 	// construct/copy/destroy:
 	explicit set ( const Compare& comp = Compare() ) : _size(0){
+		_size = 0;
 		this->rule = comp;
 	}
 
 	explicit set ( Key v1[] , Key* v2 ){
+		_size = 0;
 		int i = 0;
 		while(v1 != v2)
 			buf[i++] = *v1++;
@@ -445,6 +448,7 @@ public:
 	}
 	template<class Iterator>
 	explicit set ( Iterator first , Iterator last ){
+			_size = 0;
 			int i = 0;
 			while(first != last)
 				buf[i++] = *first++;
@@ -454,7 +458,7 @@ public:
 
 
 	set() : _size(0){
-
+		_size = 0;
 	}
 
 	set ( const set& x ){
@@ -479,7 +483,10 @@ public:
 	}
 
 	iterator end()const{
-		return iterator(buf, _size);
+		iterator buffer;
+		buffer.base = &buf[0];
+		buffer.pos = _size;
+		return buffer;
 	}
 
 //    const_iterator begin() const{
@@ -506,7 +513,7 @@ public:
 
 	// capacity:
 	bool empty() const{
-		return !(_size==0);
+		return (_size==0);
 	}
 	size_type size() const{
 		return _size;
@@ -518,25 +525,25 @@ public:
 	// modifiers:
 	pair<iterator,bool> insert(const value_type& x){
 		iterator it = begin();
+		int i, aux;
 		while(it != end())
 			if(*it == x) break;
 
-		if(it != end()){
-			return make_pair(it, false);}
-		else {
-			_size++;
-			int i = _size;
-			int aux;
+		if(it != end())
+			return make_pair(it, false);
 
-			while( i > it.pos - 1){
-				aux = i +1;
-				buf[aux] = buf[i];
-				i--;
-			}
+		_size++;
+		i = _size;
 
-			buf[it.pos] = x;
-			return make_pair(it, true);
+		while( i > it.pos - 1){
+			aux = i +1;
+			buf[aux] = buf[i];
+			i--;
 		}
+
+		buf[it.pos] = x;
+		return make_pair(it, true);
+
 	}
 
 	iterator insert(iterator position, const value_type& x){
@@ -578,7 +585,7 @@ public:
 	}
 	void erase(iterator first, iterator last){
 		while (first != last)
-			erase(first);
+			erase(first++);
 	}
 
 	void swap(set& x){
