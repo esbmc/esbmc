@@ -54,6 +54,10 @@ public:
     operands.erase(operands.begin());
     has_object = false;
   }
+
 };
+
+std::ostream &operator<<(std::ostream &out,
+  const cpp_typecheck_fargst &fargs);
 
 #endif
