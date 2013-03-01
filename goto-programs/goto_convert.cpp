@@ -2212,6 +2212,8 @@ void goto_convertt::init_nondet_expr(
   exprt &tmp,
   goto_programt &dest)
 {
+
+  if (!tmp.is_symbol()) return ;
   exprt nondet_expr=side_effect_expr_nondett(tmp.type());
   code_assignt new_assign_nondet(tmp,nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
