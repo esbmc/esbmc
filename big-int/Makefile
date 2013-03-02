@@ -11,4 +11,4 @@ clean:
 	-$(RM) $(OBJS)
 	-rm -f $(OBJDIR)/.deps
 
-allobjs: $(OBJS)
+allobjs: $(OBJS) | $(HOSTOBJS)
