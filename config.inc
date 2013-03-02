@@ -78,8 +78,10 @@ endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
 OBJDIR?= .objs
+HOSTOBJDIR?= .hostobjs
 # Danger: evaluating expression creates directory :o
 CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+CREATEOBJDIR2 := $(shell mkdir $(HOSTOBJDIR) 2>/dev/null)
 
 # Extract a sat solver location from {SATDIR64,SATDIR32,HOME}, depending on
 # which mode we're in {64,32} and what the user has defined.

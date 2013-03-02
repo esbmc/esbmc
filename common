@@ -11,6 +11,11 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
+# Create a set of dependancies that build source files into HOSTOBJDIR using
+# the host compiler.
+HOSTOBJS1 = $(HOSTSRCS:%.c=$(HOSTOBJDIR)/%.o)
+HOSTOBJS+= $(HOSTOBJS1:%.cpp=$(HOSTOBJDIR)/%.o)
+
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
@@ -24,6 +29,12 @@ $(OBJDIR)/%.o : %.cpp
 
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
+
+$(HOSTOBJDIR)/%.o : %.cpp
+	$(HOSTCXX) -c $(CXXFLAGS) -o $@ $<
+
+$(HOSTOBJDIR)/%.o : %.c
+	$(HOSTCC) -c $(CFLAGS) -o $@ $<
 
 # A generic target; potentially not defined by the includer
 
@@ -74,13 +85,13 @@ endif
 # builds.
 
 debug:
-	env OBJDIR=.debugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+	env OBJDIR=.debugobjs HOSTOBJDIR=.hostdebugobjs OPTS=-O0 GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugclean:
-	env OBJDIR=.debugobjs $(MAKE) clean
+	env OBJDIR=.debugobjs HOSTOBJDIR=.hostdebugobjs $(MAKE) clean
 
 debugfast:
-	env OBJDIR=.debugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
+	env OBJDIR=.debugfastobjs HOSTOBJDIR=.hostdebugfastobjs GCCFLAGS="$(GCCFLAGS) -ggdb3" $(MAKE)
 
 debugfastclean:
-	env OBJDIR=.debugfastobjs $(MAKE) clean
+	env OBJDIR=.debugfastobjs HOSTOBJDIR=.hostdebugfastobjs $(MAKE) clean
