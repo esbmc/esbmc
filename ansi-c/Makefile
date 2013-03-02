@@ -54,7 +54,7 @@ C2GOTO_DEPS= ../util/$(HOSTOBJDIR)/* ../langapi/$(HOSTOBJDIR)/* \
 	     cpp/$(HOSTOBJDIR)/* headers/$(HOSTOBJDIR)/*
 
 $(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOTO_OBJS)
-	$(HOSTFINLINKBIN) $(CXXFLAGS) $^ $(HOSTFINLINKOUT) $@ $(C2GOTO_OBJS) $(C2GOTO_DEPS) $(HOSTFINLINKTAIL)
+	$(HOSTFINLINKBIN) $(HOSTCXXFLAGS) $^ $(HOSTFINLINKOUT) $@ $(C2GOTO_OBJS) $(C2GOTO_DEPS) $(HOSTFINLINKTAIL)
 
 $(OBJDIR)/clib32.o: $(HOSTOBJDIR)/c2goto library/*.c
 	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
