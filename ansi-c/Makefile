@@ -16,6 +16,7 @@ SRCS= c_typecast.cpp ansi_c_parser.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp \
 
 OBJS= $(OBJDIR)/y.tab.o $(OBJDIR)/lex.yy.o
+HOSTOBJS= $(HOSTOBJDIR)/y.tab.o $(HOSTOBJDIR)/lex.yy.o
 
 INCLUDES= -I .. -I ../util
 
