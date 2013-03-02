@@ -4,8 +4,7 @@
 
 ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 
-LINUX=1
-#WIN_MSVC=1
+#LINUX=1
 #WIN_MINGW32=1
 
 # 32 or 64 bits? If left unset, default to whatever your host machine is.
@@ -118,8 +117,4 @@ endif
 
 ifdef WIN_MINGW32 
 include $(ESBMCDIR)/scripts/mingw.inc
-endif
-
-ifdef WIN_MSVC
-include $(ESBMCDIR)/scripts/msvc.inc
 endif
