@@ -74,7 +74,7 @@ public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
     contextt &context,
     message_handlert &message_handler);
@@ -406,7 +406,7 @@ protected:
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
   /** Options that are enabled */
-  optionst options;
+  optionst &options;
   /** Message handler reference. */
   message_handlert &message_handler;
 

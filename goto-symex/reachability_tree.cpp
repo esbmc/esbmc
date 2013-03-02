@@ -29,7 +29,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
     contextt &context,
     message_handlert &_message_handler) :
