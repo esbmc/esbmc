@@ -76,9 +76,24 @@ CLIB64FLAG=--32
 CLIB32FLAG=--32
 endif
 
+ifdef LINUX
+include $(ESBMCDIR)/scripts/linux.inc
+endif
+
+ifdef WIN_MINGW32
+include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
 OBJDIR?= .objs
-HOSTOBJDIR?= .hostobjs
+
+# If we're cross compiling, we need a different hostobjdir.
+ifdef CROSSCOMPILE
+HOSTOBJDIR= .hostobjs
+else
+HOSTOBJDIR= $(OBJDIR)
+endif
+
 # Danger: evaluating expression creates directory :o
 CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
 CREATEOBJDIR2 := $(shell mkdir $(HOSTOBJDIR) 2>/dev/null)
@@ -113,10 +128,3 @@ else
 BITWIDTH_STR='32'
 endif
 
-ifdef LINUX
-include $(ESBMCDIR)/scripts/linux.inc
-endif
-
-ifdef WIN_MINGW32 
-include $(ESBMCDIR)/scripts/mingw.inc
-endif
