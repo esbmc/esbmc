@@ -64,7 +64,7 @@ $(OBJDIR)/clib64.o: $(HOSTOBJDIR)/c2goto library/*.c
 	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
-$(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
+$(OBJDIR)/clib.o: $(HOSTOBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT)$(OBJDIR)/clib.o $(PARTLINKOPTS)
 
 ###############################################################################
