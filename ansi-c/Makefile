@@ -48,11 +48,11 @@ include $(ESBMCDIR)/common
 
 C2GOTO_OBJS= $(HOSTOBJS)
 
-C2GOTO_DEPS= ../util/$(HOSTOBJDIR)/* ../langapi/$(HOSTOBJDIR)/* \
-	     ../big-int/$(HOSTOBJDIR)/* \
-	     ../goto-programs/$(HOSTOBJDIR)/* \
-	     ../pointer-analysis/$(HOSTOBJDIR)/* \
-	     cpp/$(HOSTOBJDIR)/* headers/$(HOSTOBJDIR)/*
+C2GOTO_DEPS= ../util/$(HOSTOBJDIR)/util.o ../langapi/$(HOSTOBJDIR)/langapi.o \
+	     ../big-int/$(HOSTOBJDIR)/bigint.o \
+	     ../goto-programs/$(HOSTOBJDIR)/goto-programs.o \
+	     ../pointer-analysis/$(HOSTOBJDIR)/pointer-analysis.o \
+	     cpp/$(HOSTOBJDIR)/preproc.o headers/$(HOSTOBJDIR)/headers.o
 
 $(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOTO_OBJS)
 	echo $(HOSTFINLINKBIN)
