@@ -55,7 +55,6 @@ C2GOTO_DEPS= ../util/$(HOSTOBJDIR)/util.o ../langapi/$(HOSTOBJDIR)/langapi.o \
 	     cpp/$(HOSTOBJDIR)/preproc.o headers/$(HOSTOBJDIR)/headers.o
 
 $(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOTO_OBJS)
-	echo $(HOSTFINLINKBIN)
 	$(HOSTFINLINKBIN) $(HOSTCXXFLAGS) $^ $(HOSTFINLINKOUT) $@ $(C2GOTO_OBJS) $(C2GOTO_DEPS) $(HOSTFINLINKTAIL)
 
 $(OBJDIR)/clib32.o: $(HOSTOBJDIR)/c2goto library/*.c
