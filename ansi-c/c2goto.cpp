@@ -1,3 +1,6 @@
+#include <stdio.h>
+#include <wchar.h>
+
 #include <ostream>
 #include <fstream>
 
