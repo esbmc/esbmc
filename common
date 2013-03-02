@@ -11,10 +11,15 @@ OBJS+= $(OBJS1:%.cpp=$(OBJDIR)/%.o)
 # Given the presence of OBJDIR, $(OBJS) can't now automatically infer
 # dependancies between .o's and .cpp's etc
 
+ifdef CROSSCOMPILE
 # Create a set of dependancies that build source files into HOSTOBJDIR using
-# the host compiler.
-HOSTOBJS1 = $(HOSTSRCS:%.c=$(HOSTOBJDIR)/%.o)
+# the host compiler. A downside of c2goto and the like is that we have to build
+# almost everything for the host, and everything for the target too. Too bad.
+HOSTOBJS1 = $(SRCS:%.c=$(HOSTOBJDIR)/%.o)
 HOSTOBJS+= $(HOSTOBJS1:%.cpp=$(HOSTOBJDIR)/%.o)
+else
+HOSTOBJS=$OBJS
+endif
 
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
@@ -30,11 +35,13 @@ $(OBJDIR)/%.o : %.cpp
 $(OBJDIR)/%.o : %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
 
+ifdef CROSSCOMPILE
 $(HOSTOBJDIR)/%.o : %.cpp
 	$(HOSTCXX) -c $(CXXFLAGS) -o $@ $<
 
 $(HOSTOBJDIR)/%.o : %.c
 	$(HOSTCC) -c $(CFLAGS) -o $@ $<
+endif
 
 # A generic target; potentially not defined by the includer
 
