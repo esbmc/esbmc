@@ -41,5 +41,8 @@ endif
 
 include $(ESBMCDIR)/common
 
-$(OBJDIR)/preproc.o: $(OBJS) | $(HOSTOBJS)
+$(HOSTOBJDIR)/preproc.o: $(HOSTOBJS)
+	$(HOSTBLOBGENLD) $(HOSTLDFLAGS) $^ -o $@ -r
+
+$(OBJDIR)/preproc.o: $(OBJS) | $(HOSTOBJDIR)/preproc.o
 	$(BLOBGENLD) $(LDFLAGS) $^ -o $@ -r
