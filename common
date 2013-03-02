@@ -37,10 +37,10 @@ $(OBJDIR)/%.o : %.c
 
 ifdef CROSSCOMPILE
 $(HOSTOBJDIR)/%.o : %.cpp
-	$(HOSTCXX) -c $(CXXFLAGS) -o $@ $<
+	$(HOSTCXX) -c $(HOSTCXXFLAGS) -o $@ $<
 
 $(HOSTOBJDIR)/%.o : %.c
-	$(HOSTCC) -c $(CFLAGS) -o $@ $<
+	$(HOSTCC) -c $(HOSTCFLAGS) -o $@ $<
 endif
 
 # A generic target; potentially not defined by the includer
