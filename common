@@ -18,7 +18,7 @@ ifdef CROSSCOMPILE
 HOSTOBJS1 = $(SRCS:%.c=$(HOSTOBJDIR)/%.o)
 HOSTOBJS+= $(HOSTOBJS1:%.cpp=$(HOSTOBJDIR)/%.o)
 else
-HOSTOBJS=$OBJS
+HOSTOBJS=$(OBJS)
 endif
 
 # list of includes, potentially modified by includer
