@@ -3,7 +3,7 @@ include $(ESBMCDIR)/config.inc
 all: $(OBJDIR)/.deps allobjs
 
 RM = rm -f
-SRCS= bigint-test.cpp bigint-func.cpp bigint.cpp
+SRCS= bigint-func.cpp bigint.cpp
 
 include $(ESBMCDIR)/common
 
