@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/flattening.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=flattening.o
 
 SRCS= equality.cpp arrays.cpp functions.cpp boolbv_width.cpp \
 	boolbv.cpp bv_pointers.cpp bv_utils.cpp boolbv_abs.cpp \
@@ -30,3 +30,5 @@ clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

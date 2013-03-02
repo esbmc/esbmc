@@ -45,7 +45,17 @@ endif
 
 # A generic target; potentially not defined by the includer
 
-$(MAINOBJ): $(OBJS) | $(HOSTOBJS)
+MAINOBJ=$(OBJDIR)/$(MAINOBJNAME)
+
+ifdef CROSSCOMPILE
+HOSTOBJ=$(HOSTOBJDIR)/$(MAINOBJNAME)
+$(HOSTOBJ): $(HOSTOBJS)
+	$(HOSTPARTLINKLD) $(HOSTPARTLINKOUT)$@ $^ $(HOSTPARTLINKOPTS)
+else
+HOSTOBJ=
+endif
+
+$(MAINOBJ): $(OBJS) | $(HOSTOBJ)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
