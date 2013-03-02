@@ -41,21 +41,21 @@ $(OBJDIR)/lex.yy.o: lex.yy.cpp  $(OBJDIR)/y.tab.o
 
 ###############################################################################
 
-C2GOTO_DEPS= $(OBJS) ../util/$(OBJDIR)/util.o ../langapi/$(OBJDIR)/langapi.o \
-	     ../big-int/$(OBJDIR)/bigint.o \
-	     ../goto-programs/$(OBJDIR)/goto-programs.o \
-	     ../pointer-analysis/$(OBJDIR)/pointer-analysis.o \
-	     cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
+C2GOTO_DEPS= $(HOSTOBJS) ../util/$(HOSTOBJDIR)/* ../langapi/$(HOSTOBJDIR)/* \
+	     ../big-int/$(HOSTOBJDIR)/* \
+	     ../goto-programs/$(HOSTOBJDIR)/* \
+	     ../pointer-analysis/$(HOSTOBJDIR)/* \
+	     cpp/$(HOSTOBJDIR)/* headers/$(HOSTOBJDIR)/*
 
-$(OBJDIR)/c2goto: c2goto.cpp $(OBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
-	$(FINLINKBIN) $(CXXFLAGS) $^ $(FINLINKOUT) $@ $(C2GOTO_DEPS) $(FINLINKTAIL)
+$(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOTO_DEPS)
+	$(HOSTFINLINKBIN) $(CXXFLAGS) $^ $(HOSTFINLINKOUT) $@ $(C2GOTO_DEPS) $(HOSTFINLINKTAIL)
 
-$(OBJDIR)/clib32.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
+$(OBJDIR)/clib32.o: $(HOSTOBJDIR)/c2goto library/*.c
+	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) $(LDFLAGS) -b binary clib32.goto -o $(OBJDIR)/clib32.o -r
 
-$(OBJDIR)/clib64.o: $(OBJDIR)/c2goto library/*.c
-	./$(OBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
+$(OBJDIR)/clib64.o: $(HOSTOBJDIR)/c2goto library/*.c
+	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
 	$(BLOBGENLD) $(LDFLAGS) -b binary clib64.goto -o $(OBJDIR)/clib64.o -r
 
 $(OBJDIR)/clib.o: $(OBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
