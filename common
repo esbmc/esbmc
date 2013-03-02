@@ -57,7 +57,7 @@ depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
 depend: $(SRCS)
 	@echo "Making dependancies in $(shell basename $(shell pwd))"
-	@truncate -s 0 $(OBJDIR)/.deps
+	@echo -n "" > $(OBJDIR)/.deps
 	@touch $(OBJDIR)/.deps
 	@for src in $(SRCS); do \
 		src1=$${src//\.cpp/}; \
