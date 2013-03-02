@@ -1,5 +1,5 @@
 ifdef TARGET64
-MINGWID=amd64-mingw32msvc
+MINGWID=x86_64-w64-mingw32
 Z3LIBDIR=x64
 else
 MINGWID=i586-mingw32msvc
