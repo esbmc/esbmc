@@ -4,7 +4,7 @@
 
 ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 
-#LINUX=1
+LINUX=1
 #WIN_MINGW32=1
 
 # 32 or 64 bits? If left unset, default to whatever your host machine is.
