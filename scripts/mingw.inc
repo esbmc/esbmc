@@ -44,3 +44,16 @@ FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
 # This doesn't result in an actual static binary, because there's no such thing
 # on windows, just no additional dependancies
 FINLINKTAIL+= -static
+
+HOSTCC=     gcc
+HOSTCXX=    g++
+HOSTDEPCXX= g++
+HOSTLD=     ld
+HOSTAR=     ar
+HOPTBLOBGENLD= ld
+HOSTPARTLINKLD= ld
+HOSTPARTLINKOUT= -o
+HOSTPARTLINKOPTS= -r $(LDFLAGS)
+HOSTFINLINKBIN= $(CXX)
+HOSTFINLINKOUT= -o
+HOSTFINLINKTAIL= $(CXXFLAGS) $(LIBS) -lgmp -ldl -lgcc
