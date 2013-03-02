@@ -1,8 +1,8 @@
 ifdef TARGET64
-MINGWID=x86_64-w64-mingw32
+MINGWID=amd64-mingw32msvc
 Z3LIBDIR=x64
 else
-MINGWID=i686-pc-mingw32
+MINGWID=i586-mingw32msvc
 Z3LIBDIR=lib
 endif
 
@@ -15,20 +15,8 @@ INCLUDES+= -I $(Z3)/include
 LIBS+= $(Z3)/$(Z3LIBDIR)/z3.dll
 endif
 
-MINGWROOTDIR= /usr/$(MINGWID)/sys-root/mingw
+MINGWROOTDIR= /usr/$(MINGWID)
 MINGWBINDIR=$(MINGWROOTDIR)/bin
-
-ifndef ONCYGWIN
-ifdef TARGET64
-# There are no fedora packages for 64 bit mingw, therefore there's no standard
-# location (unless you can show me a distribution that does have such packages).
-# So, if we have this target (linux, 64 bit, mingw) then assume that what we
-# have is a minw32-w64 tarball extracted to /usr/$(MINGWID).
-MINGWROOTDIR=/usr/x86_64-w64-mingw32/x86_64-w64-mingw32
-# Also, by default libstdc++ is in lib. Which is, after all, correct.
-MINGWBINDIR=$(MINGWROOTDIR)/lib
-endif
-endif
 
 CC     = $(MINGWID)-gcc
 CXX    = $(MINGWID)-g++
@@ -44,16 +32,7 @@ DEPCXX = $(CXX)
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
 
-ifndef MSVC_10_HEADERS
-include define_MSVC_10_HEADERS_please
-# It should locate where the C library headers from Visual Studio 10 are.
-endif
-
-ifdef ONCYGWIN
-C2GOTO_INCS=-I$(shell cygpath -w $(MSVC_10_HEADERS)/include | sed s/\\\\/\\\\\\\\/g) -D_MSVC
-else
-C2GOTO_INCS=-I$(MSVC_10_HEADERS)/include -D_MSVC
-endif
+C2GOTO_INCS=-I$(MINGWROOTDIR)/include
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
 FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
