@@ -76,28 +76,6 @@ CLIB64FLAG=--32
 CLIB32FLAG=--32
 endif
 
-ifdef LINUX
-include $(ESBMCDIR)/scripts/linux.inc
-endif
-
-ifdef WIN_MINGW32
-include $(ESBMCDIR)/scripts/mingw.inc
-endif
-
-# Unless someone else has set OBJDIR, default to `pwd`/.objs
-OBJDIR?= .objs
-
-# If we're cross compiling, we need a different hostobjdir.
-ifdef CROSSCOMPILE
-HOSTOBJDIR= .hostobjs
-else
-HOSTOBJDIR= $(OBJDIR)
-endif
-
-# Danger: evaluating expression creates directory :o
-CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
-CREATEOBJDIR2 := $(shell mkdir $(HOSTOBJDIR) 2>/dev/null)
-
 # Extract a sat solver location from {SATDIR64,SATDIR32,HOME}, depending on
 # which mode we're in {64,32} and what the user has defined.
 
@@ -128,3 +106,24 @@ else
 BITWIDTH_STR='32'
 endif
 
+ifdef LINUX
+include $(ESBMCDIR)/scripts/linux.inc
+endif
+
+ifdef WIN_MINGW32
+include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
+# Unless someone else has set OBJDIR, default to `pwd`/.objs
+OBJDIR?= .objs
+
+# If we're cross compiling, we need a different hostobjdir.
+ifdef CROSSCOMPILE
+HOSTOBJDIR= .hostobjs
+else
+HOSTOBJDIR= $(OBJDIR)
+endif
+
+# Danger: evaluating expression creates directory :o
+CREATEOBJDIR := $(shell mkdir $(OBJDIR) 2>/dev/null)
+CREATEOBJDIR2 := $(shell mkdir $(HOSTOBJDIR) 2>/dev/null)
