@@ -45,7 +45,7 @@ endif
 
 # A generic target; potentially not defined by the includer
 
-$(MAINOBJ): $(OBJS)
+$(MAINOBJ): $(OBJS) | $(HOSTOBJS)
 	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
