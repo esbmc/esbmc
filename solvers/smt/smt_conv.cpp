@@ -1579,8 +1579,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
 }
 
 smt_ast *
-smt_convt::mk_fresh(const smt_sort *s __attribute__((unused)),
-                    const std::string &tag __attribute__((unused)))
+smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
 {
   std::string new_name = "smt_conv::" + tag;
   std::stringstream ss;
