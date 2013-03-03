@@ -1230,8 +1230,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const tuple_smt_sort *ts =
     dynamic_cast<const tuple_smt_sort *>(true_val->sort);
-  assert(true_val != NULL &&
-         "Non tuple_smt_sort class in smt_convt::tuple_ite");
+  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_ite");
 
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
