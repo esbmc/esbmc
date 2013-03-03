@@ -33,11 +33,7 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
 #define p(x) (x)
-#else
-#define p(x) _##x
-#endif
 
 extern "C" {
 extern uint8_t p(binary_clib32_goto_start);
