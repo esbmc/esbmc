@@ -244,6 +244,7 @@ public:
   const smt_ast *convert_byte_extract(const expr2tc &expr);
   const smt_ast *convert_byte_update(const expr2tc &expr);
   void assert_expr(const expr2tc &e);
+  const smt_ast *array_create(const expr2tc &expr);
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name,
