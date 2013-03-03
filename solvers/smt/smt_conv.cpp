@@ -684,7 +684,8 @@ smt_convt::convert_ast(const expr2tc &expr)
       a = tuple_equality(args[0], args[1]);
     } else if (is_array_type(eq.side_1->type) &&
                is_array_type(eq.side_2->type)) {
-      if (is_struct_type(to_array_type(eq.side_1->type).subtype)) {
+      if (is_structure_type(to_array_type(eq.side_1->type).subtype) ||
+          is_pointer_type(to_array_type(eq.side_1->type).subtype)) {
         // Array of structs equality.
         a = tuple_array_equality(args[0], args[1]);
       } else {
