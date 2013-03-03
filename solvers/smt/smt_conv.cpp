@@ -807,7 +807,11 @@ smt_convt::convert_sort(const type2tc &type)
     }
   case type2t::code_id:
   case type2t::pointer_id:
-    return mk_struct_sort(pointer_struct);
+    if (!tuple_support) {
+      return new tuple_smt_sort(pointer_struct);
+    } else {
+      return mk_struct_sort(pointer_struct);
+    }
   case type2t::unsignedbv_id:
     is_signed = false;
     /* FALLTHROUGH */
@@ -1854,7 +1858,10 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     obj_num = pointer_logic.back().add_object(expr);
 
   s = convert_sort(pointer_struct);
-  a = mk_smt_symbol(symbol, s);
+  if (!tuple_support)
+    a = new tuple_smt_ast(s, symbol);
+  else
+    a = mk_smt_symbol(symbol, s);
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
