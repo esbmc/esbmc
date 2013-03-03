@@ -918,7 +918,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
     } else if (!tuple_support && is_array_type(expr) &&
                 (is_struct_type(to_array_type(expr->type).subtype) ||
                  is_union_type(to_array_type(expr->type).subtype) ||
-                 is_pointer_type(to_pointer_type(expr->type).subtype))) {
+                 is_pointer_type(to_array_type(expr->type).subtype))) {
       return mk_tuple_array_symbol(expr);
     }
     const symbol2t &sym = to_symbol2t(expr);
