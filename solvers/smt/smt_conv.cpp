@@ -1239,7 +1239,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    if (is_structure_type(ts->thetype)) {
+    if (is_structure_type(*it)) {
       // Recurse.
       const tuple_smt_ast *args[3];
       const smt_sort *sort = convert_sort(*it);
@@ -1250,7 +1250,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
       args[2] =
         static_cast<const tuple_smt_ast *>(tuple_project(false_val, sort, i));
       tuple_ite_rec(args[0], cond, args[1], args[2]);
-    } else if (is_pointer_type(ts->thetype)) {
+    } else if (is_pointer_type(*it)) {
       std::cerr << "XXX pointer equality not implemented yet (tuple_ite)"
                 << std::endl;
       abort();
