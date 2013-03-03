@@ -1342,7 +1342,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_select");
 
-  std::string new_name = "smt_conv::tuple_array_select[]";
+  std::string new_name = "smt_conv::tuple_array_select::";
   std::stringstream ss;
   ss << new_name << fresh_map[new_name]++;
   const tuple_smt_ast *result = new tuple_smt_ast(s, new_name);
