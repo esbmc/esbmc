@@ -202,8 +202,8 @@ public:
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
-  virtual smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                const smt_ast *val);
+  virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
+                                      const smt_ast *val);
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
   virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort);

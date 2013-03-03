@@ -846,7 +846,7 @@ z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field)
   return new z3_smt_ast(mk_tuple_select(za->e, field), s);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::tuple_update(const smt_ast *a, unsigned int field, const smt_ast *val)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);

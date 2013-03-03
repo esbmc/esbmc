@@ -1092,13 +1092,63 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   }
 }
 
-smt_ast *
+const smt_ast *
 smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
 {
+  // Turn a project into an equality with an update.
   const smt_ast *args[2];
-  args[0] = tuple_project(a, v->sort, i);
-  args[1] = v;
-  return mk_func_app(v->sort, SMT_FUNC_EQ, args, 2);
+  bvt eqs;
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+
+  // Create a fresh tuple to store the result in
+  std::string name_prefix = "smt_conv::tuple_update::";
+  std::stringstream ss;
+  ss << name_prefix << fresh_map[name_prefix]++ << ".";
+  std::string name = ss.str();
+  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
+
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_update");
+
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
+  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_update");
+
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+
+  unsigned int j = 0;
+  for (std::vector<type2tc>::const_iterator it = data.members.begin();
+       it != data.members.end(); it++, j++) {
+    if (j == i) {
+      const smt_sort *tmp = convert_sort(*it);
+      const smt_ast *thefield = tuple_project(ta, tmp, j);
+      if (is_structure_type(*it) || is_pointer_type(*it)) {
+        eqs.push_back(mk_lit(tuple_equality(thefield, v)));
+      } else {
+        args[0] = thefield;
+        args[1] = v;
+        eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      }
+    } else {
+      if (is_structure_type(*it) || is_pointer_type(*it)) {
+        std::stringstream ss2;
+        ss2 << name << data.member_names[j] << ".";
+        std::string field_name = ss.str();
+        const smt_sort *tmp = convert_sort(*it);
+        const smt_ast *field1 = tuple_project(ta, tmp, j);
+        const smt_ast *field2 = tuple_project(result, tmp, j);
+        eqs.push_back(mk_lit(tuple_equality(field1, field2)));
+      } else {
+        const smt_sort *tmp = convert_sort(*it);
+        args[0] = tuple_project(ta, tmp, j);
+        args[1] = tuple_project(result, tmp, j);
+        eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      }
+    }
+  }
+
+  assert_lit(land(eqs));
+  return result;
 }
 
 const smt_ast *
