@@ -1410,7 +1410,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   std::string new_name = "smt_conv::tuple_array_select[]";
   std::stringstream ss;
   ss << new_name << fresh_map[new_name]++;
-  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, new_name);
+  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, ss.str());
 
   tuple_array_update_rec(ta, tv, index, result, ts->thetype);
   return result;
