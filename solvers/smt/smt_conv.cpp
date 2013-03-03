@@ -1268,13 +1268,68 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
   }
 }
 
-smt_ast *
-smt_convt::tuple_array_update(const smt_ast *a __attribute__((unused)),
-                              const smt_ast *field __attribute__((unused)),
-                              const smt_ast *val __attribute__((unused)),
-                              const smt_sort *fieldsort __attribute__((unused)))
+const smt_ast *
+smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
+                              const smt_ast *val, const smt_sort *fieldsort)
 {
-  assert(0);
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL &&
+         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
+  const tuple_smt_ast *tv = dynamic_cast<const tuple_smt_ast *>(val);
+  assert(tv != NULL &&
+         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(fieldsort);
+  assert(ts != NULL &&
+         "Non tuple_smt_sort class in smt_convt::tuple_array_update");
+
+  std::string new_name = "smt_conv::tuple_array_select[]";
+  std::stringstream ss;
+  ss << new_name << fresh_map[new_name]++;
+  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, new_name);
+
+  tuple_array_update_rec(ta, tv, index, result, ts->thetype);
+  return result;
+}
+
+void
+smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
+                                  const tuple_smt_ast *tv, const smt_ast *idx,
+                                  const tuple_smt_ast *result,
+                                  const type2tc &type)
+{
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const array_type2t &array_type = to_array_type(type);
+  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+    ? *pointer_type_data
+    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
+       it != struct_type.members.end(); it++, i++) {
+    if (is_structure_type(*it)) {
+      std::cerr << "XXX struct struct array updates unimplemented" << std::endl;
+      abort();
+    } else if (is_pointer_type(*it)) {
+      std::cerr << "XXX pointer tuple arrays updatesunimplemented" << std::endl;
+      abort();
+    } else {
+      std::string arrname = ta->name + struct_type.member_names[i].as_string();
+      std::string valname = tv->name + struct_type.member_names[i].as_string();
+      std::string resname = result->name +
+                            struct_type.member_names[i].as_string();
+      const smt_ast *args[3];
+      const smt_sort *idx_sort = convert_sort(*it);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, idx_sort);
+      args[0] = mk_smt_symbol(arrname, arrsort);
+      args[1] = idx;
+      args[2] = tuple_project(result, idx_sort, i);
+      args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
+      args[1] = mk_smt_symbol(resname, arrsort);
+      const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      literalt l = mk_lit(res);
+      assert_lit(l);
+    }
+  }
 }
 
 smt_ast *
