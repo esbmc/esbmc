@@ -1338,7 +1338,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
   assert(ta != NULL &&
          "Non tuple_smt_ast class in smt_convt::tuple_array_select");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(s);
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_select");
 
