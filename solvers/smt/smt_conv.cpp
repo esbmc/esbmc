@@ -1332,11 +1332,58 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   }
 }
 
-smt_ast *
-smt_convt::tuple_array_equality(const smt_ast *a __attribute__((unused)),
-                                const smt_ast *b __attribute__((unused)))
+const smt_ast *
+smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
 {
-  assert(0);
+
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL &&
+         "Non tuple_smt_ast class in smt_convt::tuple_array_equality");
+  const tuple_smt_ast *tb = dynamic_cast<const tuple_smt_ast *>(b);
+  assert(tb != NULL &&
+         "Non tuple_smt_ast class in smt_convt::tuple_array_equality");
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
+  assert(ts != NULL &&
+         "Non tuple_smt_sort class in smt_convt::tuple_array_equality");
+
+  return tuple_array_equality_rec(ta, tb, ts->thetype);
+}
+
+const smt_ast *
+smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
+                                    const tuple_smt_ast *b, const type2tc &type)
+{
+  bvt eqs;
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const array_type2t &array_type = to_array_type(type);
+  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+    ? *pointer_type_data
+    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
+       it != struct_type.members.end(); it++, i++) {
+    if (is_structure_type(*it)) {
+      std::cerr << "XXX struct struct array eq unimplemented" << std::endl;
+      abort();
+    } else if (is_pointer_type(*it)) {
+      std::cerr << "XXX pointer tuple arrays eq unimplemented" << std::endl;
+      abort();
+    } else {
+      std::string name1 = a->name + struct_type.member_names[i].as_string();
+      std::string name2 = b->name + struct_type.member_names[i].as_string();
+      const smt_ast *args[2];
+      const smt_sort *idx_sort = convert_sort(*it);
+      const smt_sort *dom_sort = mk_sort(SMT_SORT_BV,
+                                         config.ansi_c.int_width, false);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
+      args[0] = mk_smt_symbol(name1, arrsort);
+      args[1] = mk_smt_symbol(name2, arrsort);
+      eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+    }
+  }
+
+  return lit_to_ast(land(eqs));
 }
 
 smt_ast *
