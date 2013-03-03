@@ -735,8 +735,8 @@ smt_convt::convert_ast(const expr2tc &expr)
     const notequal2t &notequal = to_notequal2t(expr);
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
-    if (is_struct_type(notequal.side_1) || is_pointer_type(notequal.side_1)) {
-      a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
+    if (is_structure_type(notequal.side_1) ||is_pointer_type(notequal.side_1)) {
+      a = tuple_equality(args[0], args[1]);
       a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     } else {
       std::cerr << "Unexpected inequailty operands" << std::endl;
