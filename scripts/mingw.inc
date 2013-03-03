@@ -35,6 +35,7 @@ BLOBGENLD= $(LD)
 C2GOTO_INCS=-I/usr/include -I/usr/include/`uname -m`-linux-gnu/
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
+FINLINKBIN= $(CXX)
 FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
 
 # Always add -static to the command line; this causes things like libstdc++ and
