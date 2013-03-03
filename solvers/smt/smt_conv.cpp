@@ -1328,7 +1328,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, idx_sort);
       args[0] = mk_smt_symbol(arrname, arrsort);
       args[1] = idx;
-      args[2] = tuple_project(result, idx_sort, i);
+      args[2] = mk_smt_symbol(valname, idx_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       args[1] = mk_smt_symbol(resname, arrsort);
       const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
