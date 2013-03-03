@@ -5,7 +5,11 @@
  * the symbol varies when compiling for windows, but doesn't when using LD to
  * produce the header blobs. So, hacks: */
 
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
 #define p(x) (x)
+#else
+#define p(x) _##x
+#endif
 
 extern char p(binary_stddef_h_start);
 extern char p(binary_stddef_h_end);

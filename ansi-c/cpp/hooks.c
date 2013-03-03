@@ -15,7 +15,11 @@ struct hooked_header {
  * ansi-c/headers will only ever have one '_' character at the start. So, some
  * hackery is required */
 
+#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
 #define p(x) x
+#else
+#define p(x) _##x
+#endif
 
 struct hooked_header headers[] = {
 { "stddef.h",		&p(binary_stddef_h_start),	&p(binary_stddef_h_end) },
