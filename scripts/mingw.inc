@@ -32,7 +32,7 @@ DEPCXX = $(CXX)
 PARTLINKLD= $(LD)
 BLOBGENLD= $(LD)
 
-C2GOTO_INCS=-I/usr/include
+C2GOTO_INCS=-I/usr/include -I/usr/include/`uname -m`-linux-gnu/
 WINDOWS= 1
 PLATLIBS=-lws2_32 -lkernel32
 FINLINKTAIL= $(LDFLAGS) $(LIBS) $(PLATLIBS) -Wl,--stack,8388608
