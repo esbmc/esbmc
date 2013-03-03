@@ -1275,7 +1275,8 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
 
 const smt_ast *
 smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
-                              const smt_ast *val, const smt_sort *fieldsort)
+                              const smt_ast *val,
+                              const smt_sort *fieldsort __attribute__((unused)))
 {
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
   assert(ta != NULL &&
@@ -1283,7 +1284,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   const tuple_smt_ast *tv = dynamic_cast<const tuple_smt_ast *>(val);
   assert(tv != NULL &&
          "Non tuple_smt_ast class in smt_convt::tuple_array_update");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(fieldsort);
+  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_update");
 
