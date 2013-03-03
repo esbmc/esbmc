@@ -845,7 +845,8 @@ smt_convt::convert_sort(const type2tc &type)
   {
     const array_type2t &arr = to_array_type(type);
 
-    if (!tuple_support && is_struct_type(arr.subtype)) {
+    if (!tuple_support &&
+        (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
       return new tuple_smt_sort(type);
     }
 
