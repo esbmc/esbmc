@@ -834,11 +834,16 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::array_id:
   {
+    const array_type2t &arr = to_array_type(type);
+
+    if (!tuple_support && is_struct_type(arr.subtype)) {
+      return new tuple_smt_sort(type);
+    }
+
     // All arrays are indexed by integerse
     smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
                                 : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
                                           false);
-    const array_type2t &arr = to_array_type(type);
     smt_sort *r = convert_sort(arr.subtype);
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
