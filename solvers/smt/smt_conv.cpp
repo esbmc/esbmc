@@ -1086,7 +1086,10 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   // Cope with recursive structs.
   const type2tc &restype = data.members[i];
   if (is_struct_type(restype) || is_union_type(restype) ||
-      is_pointer_type(restype)) {
+      is_pointer_type(restype) ||
+      (is_array_type(restype) && (
+        is_structure_type(to_array_type(restype).subtype) ||
+        is_pointer_type(to_array_type(restype).subtype))))  {
     sym_name = sym_name + ".";
     return new tuple_smt_ast(s, sym_name);
   } else {
