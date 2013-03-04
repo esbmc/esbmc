@@ -874,13 +874,14 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
 }
 
 const smt_ast *
-z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
+z3_convt::*tuple_array_create(const type2tc &array_type,
+                              const smt_ast **input_args, bool const_array,
+                              const smt_sort *domain)
 {
   z3::expr output;
-  const array_type2t &arrtype = to_array_type(expr->type);
+  const array_type2t &arrtype = to_array_type(array_type);
 
-  if (is_constant_array_of2t(expr)) {
-    const constant_array_of2t &array = to_constant_array_of2t(expr);
+  if (const_array) {
     z3::expr value, index;
     z3::sort array_type;
     std::string tmp, identifier;
@@ -902,7 +903,7 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
 
     size = sz.as_long();
 
-    const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(array.initializer));
+    const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
     value = tmpast->e;
 
     if (is_bool_type(arrtype.subtype)) {
@@ -918,9 +919,6 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
       output = z3::store(output, index, value);
     }
   } else {
-    assert(is_constant_array2t(expr));
-    const constant_array2t &array = to_constant_array2t(expr);
-
     u_int i = 0;
     z3::sort z3_array_type;
     z3::expr int_cte, val_cte;
@@ -934,7 +932,7 @@ z3_convt::tuple_array_create(const expr2tc &expr, const smt_sort *domain)
     i = 0;
     forall_exprs(it, array.datatype_members) {
       int_cte = ctx.esbmc_int_val(i);
-      const z3_smt_ast *tmpast = z3_smt_downcast(convert_ast(*it));
+      const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
       output = z3::store(output, int_cte, tmpast->e);
       ++i;
     }
