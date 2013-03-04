@@ -1700,6 +1700,44 @@ smt_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
       return convert_ast(res);
     }
   } else if (is_sub2t(overflow.operand)) {
+    if (is_signed) {
+      // Same deal as with add. Enumerate the cases.
+      // plus/plus, only failure mode is underflowing:
+      lessthanequal2tc c1(overflow.operand, opers.side_1);
+
+      // pos/neg, could overflow.
+      greaterthan2tc c2(overflow.operand, opers.side_1);
+
+      // neg/pos - already covered by c1
+
+      // neg/neg - impossible to get wrong.
+
+      equality2tc e1(op1neg, false_expr);
+      equality2tc e2(op2neg, false_expr);
+      equality2tc e3(op1neg, true_expr);
+      equality2tc e4(op2neg, true_expr);
+
+      and2tc cond1(e1, e2);
+      and2tc cond3(e3, e2);
+      or2tc dualcond(cond1, cond3);
+      implies2tc f1(dualcond, c1);
+
+      and2tc cond2(e1, e4);
+      implies2tc f2(cond2, c2);
+
+      and2tc f3(e3, e4); // Impossible to be wrong.
+
+      // Combine
+      and2tc f4(f1, f2);
+      and2tc f5(f3, f4);
+      return convert_ast(f5);
+    } else {
+      // Just ensure the result is >= the operands.
+      lessthanequal2tc le1(overflow.operand, opers.side_1);
+      lessthanequal2tc le2(overflow.operand, opers.side_2);
+      and2tc res(le1, le2);
+      return convert_ast(res);
+    }
   } else {
     assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");
   }
