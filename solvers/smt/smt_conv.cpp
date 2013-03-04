@@ -1469,19 +1469,20 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_equality");
 
-  return tuple_array_equality_rec(ta, tb, ts->thetype);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  return tuple_array_equality_rec(ta, tb, array_type.subtype);
 }
 
 const smt_ast *
 smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
-                                    const tuple_smt_ast *b, const type2tc &type)
+                                    const tuple_smt_ast *b,
+                                    const type2tc &subtype)
 {
   bvt eqs;
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const array_type2t &array_type = to_array_type(type);
-  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+  const struct_union_data &struct_type = (is_pointer_type(subtype))
     ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+    : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
