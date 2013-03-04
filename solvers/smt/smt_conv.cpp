@@ -1025,7 +1025,7 @@ smt_convt::tuple_create_rec(const std::string &name,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = types.begin();
        it != types.end(); it++, i++) {
-    if (is_struct_type(*it) || is_union_type(*it)) {
+    if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it)) {
       // Do something recursive
       const struct_union_data &def =
         dynamic_cast<const struct_union_data &>(*(*it).get());
@@ -1033,10 +1033,6 @@ smt_convt::tuple_create_rec(const std::string &name,
       std::string subname = name + type_names[i].as_string() + ".";
       tuple_create_rec(subname, def.members, def.member_names,
                        strct.datatype_members);
-    } else if (is_pointer_type(*it)) {
-      std::cerr << "XXX - tuple_create_rec constant ptr unimplemented"
-                << std::endl;
-      abort();
     } else {
       std::string symname = name + type_names[i].as_string();
       const smt_sort *sort = convert_sort(*it);
