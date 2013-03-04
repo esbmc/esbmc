@@ -248,7 +248,7 @@ public:
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name, const type2tc &structtype,
-                        const expr2tc &baseexpr);
+                        const smt_ast **inputargs);
   void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                      const tuple_smt_ast *true_val,
                      const tuple_smt_ast *false_val);

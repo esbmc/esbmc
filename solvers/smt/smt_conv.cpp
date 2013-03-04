@@ -1002,35 +1002,47 @@ smt_convt::tuple_create(const expr2tc &structdef)
   ss << name_prefix << fresh_map[name_prefix]++ << ".";
   std::string name = ss.str();
 
-  tuple_create_rec(name, structdef->type, structdef);
+  const smt_ast *args[structdef->get_num_sub_exprs()];
+  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
+    args[i] = convert_ast(*structdef->get_sub_expr(i));
+
+  tuple_create_rec(name, structdef->type, args);
 
   return new tuple_smt_ast(convert_sort(structdef->type), name);
 }
 
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
-                            const expr2tc &baseexpr)
+                            const smt_ast **inputargs)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*structtype.get());
+  const struct_union_data &data = (is_pointer_type(structtype))
+    ? *pointer_type_data
+    : dynamic_cast<const struct_union_data &>(*structtype.get());
 
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    const expr2tc *sub_expr_ptr = baseexpr->get_sub_expr(i);
-    assert(sub_expr_ptr != NULL && "null subexpr when constructing tuple");
-    const expr2tc &subexpr = *sub_expr_ptr;
     if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it)) {
       // Do something recursive
       std::string subname = name + data.member_names[i].as_string() + ".";
-      tuple_create_rec(subname, *it, subexpr);
+      // Generate an array of fields to pump in. First, fetch the type. It has
+      // to be something struct based.
+      const struct_union_data &nextdata = (is_pointer_type(*it))
+        ? *pointer_type_data
+        : dynamic_cast<const struct_union_data &>(*(*it).get());
+      const smt_ast *nextargs[nextdata.members.size()];
+      for (unsigned int j = 0; j < nextdata.members.size(); j++)
+        nextargs[j] = tuple_project(inputargs[i],
+                                    convert_sort(nextdata.members[j]), j);
+
+      tuple_create_rec(subname, *it, nextargs);
     } else {
       std::string symname = name + data.member_names[i].as_string();
       const smt_sort *sort = convert_sort(*it);
       const smt_ast *args[2];
       args[0] = mk_smt_symbol(symname, sort);
-      args[1] = convert_ast(subexpr);
+      args[1] = inputargs[i];
       const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       literalt l = mk_lit(eq);
       assert_lit(l);
