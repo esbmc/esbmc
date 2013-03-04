@@ -1633,7 +1633,7 @@ smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
 }
 
 const smt_ast *
-smt_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
+smt_convt::overflow_arith(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
   if (int_encoding)
