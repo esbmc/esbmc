@@ -1402,7 +1402,8 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   ss << new_name << fresh_map[new_name]++;
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, ss.str());
 
-  tuple_array_update_rec(ta, tv, index, result, ts->thetype);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  tuple_array_update_rec(ta, tv, index, result, array_type.subtype);
   return result;
 }
 
@@ -1410,13 +1411,12 @@ void
 smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
                                   const tuple_smt_ast *tv, const smt_ast *idx,
                                   const tuple_smt_ast *result,
-                                  const type2tc &type)
+                                  const type2tc &subtype)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const array_type2t &array_type = to_array_type(type);
-  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+  const struct_union_data &struct_type = (is_pointer_type(subtype))
     ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+    : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
