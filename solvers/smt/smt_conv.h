@@ -211,8 +211,10 @@ public:
   virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
                              const smt_ast *false_val, const smt_sort *sort);
 
-  virtual const smt_ast *tuple_array_create(const expr2tc &arrayof,
-                                      const smt_sort *domain);
+  virtual const smt_ast *tuple_array_create(const type2tc &array_type,
+                                            const smt_ast **input_args,
+                                            bool const_array,
+                                            const smt_sort *domain);
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const smt_ast *field);
   virtual const smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
@@ -248,6 +250,8 @@ public:
   const smt_ast *convert_byte_update(const expr2tc &expr);
   void assert_expr(const expr2tc &e);
   const smt_ast *array_create(const expr2tc &expr);
+  const smt_ast *tuple_array_create_despatch(const expr2tc &expr,
+                                             const smt_sort *domain);
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name, const type2tc &structtype,

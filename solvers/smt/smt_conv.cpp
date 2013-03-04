@@ -486,7 +486,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
-      a = tuple_array_create(expr, domain);
+      a = tuple_array_create_despatch(expr, domain);
     else
       a = array_create(expr);
     break;
@@ -994,6 +994,30 @@ smt_convt::array_create(const expr2tc &expr)
   }
 }
 
+const smt_ast *
+smt_convt::tuple_array_create_despatch(const expr2tc &expr,
+                                       const smt_sort *domain)
+{
+
+  if (is_constant_array_of2t(expr)) {
+    const constant_array_of2t &arr = to_constant_array_of2t(expr);
+    const smt_ast *arg = convert_ast(arr.initializer);
+
+    return tuple_array_create(arr.type, &arg, true, domain);
+  } else {
+    assert(is_constant_array2t(expr));
+    const constant_array2t &arr = to_constant_array2t(expr);
+    const smt_ast *args[arr.datatype_members.size()];
+    unsigned int i = 0;
+    for (std::vector<expr2tc>::const_iterator it = arr.datatype_members.begin();
+         it != arr.datatype_members.end(); it++, i++) {
+      args[i] = convert_ast(*it);
+    }
+
+    return tuple_array_create(arr.type, args, false, domain);
+  }
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
@@ -1263,10 +1287,12 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
 }
 
 const smt_ast *
-smt_convt::tuple_array_create(const expr2tc &expr,
+smt_convt::tuple_array_create(const type2tc &array_type,
+                              const smt_ast **inputargs,
+                              bool const_array,
                               const smt_sort *domain __attribute__((unused)))
 {
-  const smt_sort *sort = convert_sort(expr->type);
+  const smt_sort *sort = convert_sort(array_type);
   std::string new_name = "smt_conv::tuple_array_create::";
   std::stringstream ss;
   ss << new_name << fresh_map[new_name]++;
@@ -1274,7 +1300,7 @@ smt_convt::tuple_array_create(const expr2tc &expr,
 
   // Check size
   const array_type2t &arr_type =
-    static_cast<const array_type2t &>(*expr->type.get());
+    static_cast<const array_type2t &>(*array_type.get());
   if (arr_type.size_is_infinite) {
     // Guarentee nothing, this is modelling only.
     return newsym;
@@ -1288,11 +1314,9 @@ smt_convt::tuple_array_create(const expr2tc &expr,
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
-  if (is_constant_array_of2t(expr)) {
-    const constant_array_of2t &array = to_constant_array_of2t(expr);
-
+  if (const_array) {
     // Repeatedly store things into this.
-    const smt_ast *init = convert_ast(array.initializer);
+    const smt_ast *init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
       const smt_ast *field = (int_encoding)
         ? mk_smt_int(BigInt(i), false)
@@ -1302,16 +1326,12 @@ smt_convt::tuple_array_create(const expr2tc &expr,
 
     return newsym;
   } else {
-    assert(is_constant_array2t(expr));
-    const constant_array2t &array = to_constant_array2t(expr);
-
     // Repeatedly store things into this.
     for (unsigned int i = 0; i < sz; i++) {
       const smt_ast *field = (int_encoding)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      const smt_ast *val = convert_ast(array.datatype_members[i]);
-      newsym = tuple_array_update(newsym, field, val, fieldsort);
+      newsym = tuple_array_update(newsym, field, inputargs[i], fieldsort);
     }
 
     return newsym;
