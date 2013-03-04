@@ -1287,6 +1287,19 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
       args[2] =
         static_cast<const tuple_smt_ast *>(tuple_project(false_val, sort, i));
       tuple_ite_rec(args[0], cond, args[1], args[2]);
+    } else if (is_tuple_array_ast_type(*it)) {
+      // Same deal, but with arrays
+      const tuple_smt_ast *args[3];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] =
+        static_cast<const tuple_smt_ast *>(tuple_project(result, sort, i));
+      args[1] =
+        static_cast<const tuple_smt_ast *>(tuple_project(true_val, sort, i));
+      args[2] =
+        static_cast<const tuple_smt_ast *>(tuple_project(false_val, sort, i));
+      args[1] = static_cast<const tuple_smt_ast*>
+          (tuple_array_ite(cond, args[1], args[2], args[1]->sort));
+      assert_lit(mk_lit(tuple_array_equality(args[0], args[1])));
     } else {
       const smt_ast *args[3], *eqargs[2];
       const smt_sort *sort = convert_sort(*it);
