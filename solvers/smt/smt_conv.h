@@ -248,8 +248,7 @@ public:
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name,
-                        const std::vector<type2tc> &types,
-                        const std::vector<irep_idt> &type_names,
+                        const type2tc &structtype,
                         const std::vector<expr2tc> &fields);
   void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                      const tuple_smt_ast *true_val,
