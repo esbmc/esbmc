@@ -1632,10 +1632,79 @@ smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
   return mk_smt_symbol(ss.str(), s);
 }
 
-smt_ast *
+const smt_ast *
 smt_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
 {
-  assert(0);
+  // If in integer mode, this is completely pointless. Return false.
+  if (int_encoding)
+    return mk_smt_bool(false);
+
+  const overflow2t &overflow = to_overflow2t(expr);
+  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+  constant_int2tc zero(opers.side_1->type, BigInt(0));
+  lessthan2tc op1neg(opers.side_1, zero);
+  lessthan2tc op2neg(opers.side_2, zero);
+
+  // Guess whether we're performing a signed or unsigned comparison.
+  bool is_signed = (is_signedbv_type(to_add2t(overflow.operand).side_1) ||
+                    is_signedbv_type(to_add2t(overflow.operand).side_2));
+
+  if (is_add2t(overflow.operand)) {
+    if (is_signed) {
+      // Three cases; pos/pos, pos/neg, neg/neg, each with their own failure
+      // modes.
+      // First, if both pos, usual constraint.
+      greaterthanequal2tc c1(overflow.operand, zero);
+
+      // If pos/neg, result needs to be in the range posval > x >= negval
+      lessthan2tc foo(overflow.operand, opers.side_1);
+      lessthanequal2tc bar(opers.side_2, overflow.operand);
+      and2tc c2_1(foo, bar);
+
+      // And vice versa for neg/pos
+      lessthan2tc oof(overflow.operand, opers.side_2);
+      lessthanequal2tc rab(opers.side_1, overflow.operand);
+      and2tc c2_2(oof, rab);
+
+      // neg/neg: result should be below 0.
+      lessthan2tc c3(overflow.operand, zero);
+
+      // Finally, encode this into a series of implies that must always be true
+      or2tc ncase1(op1neg, op2neg);
+      not2tc case1(ncase1);
+      implies2tc f1(case1, c1);
+      
+      equality2tc e1(op1neg, false_expr);
+      equality2tc e2(op2neg, true_expr);
+      and2tc case2_1(e1, e2);
+      implies2tc f2(case2_1, c2_1);
+
+      equality2tc e3(op1neg, true_expr);
+      equality2tc e4(op2neg, false_expr);
+      and2tc case2_2(e3, e4);
+      implies2tc f3(case2_2, c2_2);
+
+      and2tc case3(op1neg, op2neg);
+      implies2tc f4(case3, c3);
+
+      // Link them up.
+      and2tc f5(f1, f2);
+      and2tc f6(f3, f4);
+      and2tc f7(f5, f6);
+      return convert_ast(f7);
+    } else {
+      // Just ensure the result is >= both operands.
+      greaterthanequal2tc ge1(overflow.operand, opers.side_1);
+      greaterthanequal2tc ge2(overflow.operand, opers.side_2);
+      and2tc res(ge1, ge2);
+      return convert_ast(res);
+    }
+  } else if (is_sub2t(overflow.operand)) {
+  } else {
+    assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");
+  }
+
+  return NULL;
 }
 
 smt_ast *

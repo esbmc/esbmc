@@ -990,7 +990,7 @@ z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
   return new z3_smt_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::overflow_arith(const expr2tc &expr)
 {
   const overflow2t &overflow = to_overflow2t(expr);
