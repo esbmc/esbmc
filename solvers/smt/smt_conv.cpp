@@ -1691,13 +1691,15 @@ smt_convt::overflow_arith(const expr2tc &expr)
       and2tc f5(f1, f2);
       and2tc f6(f3, f4);
       and2tc f7(f5, f6);
-      return convert_ast(f7);
+      not2tc inv(f7);
+      return convert_ast(inv);
     } else {
       // Just ensure the result is >= both operands.
       greaterthanequal2tc ge1(overflow.operand, opers.side_1);
       greaterthanequal2tc ge2(overflow.operand, opers.side_2);
       and2tc res(ge1, ge2);
-      return convert_ast(res);
+      not2tc inv(res);
+      return convert_ast(inv);
     }
   } else if (is_sub2t(overflow.operand)) {
     if (is_signed) {
@@ -1730,13 +1732,15 @@ smt_convt::overflow_arith(const expr2tc &expr)
       // Combine
       and2tc f4(f1, f2);
       and2tc f5(f3, f4);
-      return convert_ast(f5);
+      not2tc inv(f5);
+      return convert_ast(inv);
     } else {
       // Just ensure the result is >= the operands.
       lessthanequal2tc le1(overflow.operand, opers.side_1);
       lessthanequal2tc le2(overflow.operand, opers.side_2);
       and2tc res(le1, le2);
-      return convert_ast(res);
+      not2tc inv(res);
+      return convert_ast(inv);
     }
   } else {
     assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");
