@@ -1002,16 +1002,14 @@ smt_convt::tuple_create(const expr2tc &structdef)
   ss << name_prefix << fresh_map[name_prefix]++ << ".";
   std::string name = ss.str();
 
-  const constant_struct2t &strct = to_constant_struct2t(structdef);
-
-  tuple_create_rec(name, structdef->type, strct.datatype_members);
+  tuple_create_rec(name, structdef->type, structdef);
 
   return new tuple_smt_ast(convert_sort(structdef->type), name);
 }
 
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
-                            const std::vector<expr2tc> &fields)
+                            const expr2tc &baseexpr)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const struct_union_data &data =
@@ -1020,17 +1018,19 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
+    const expr2tc *sub_expr_ptr = baseexpr->get_sub_expr(i);
+    assert(sub_expr_ptr != NULL && "null subexpr when constructing tuple");
+    const expr2tc &subexpr = *sub_expr_ptr;
     if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it)) {
       // Do something recursive
-      const constant_struct2t &strct = to_constant_struct2t(fields[i]);
       std::string subname = name + data.member_names[i].as_string() + ".";
-      tuple_create_rec(subname, *it, strct.datatype_members);
+      tuple_create_rec(subname, *it, subexpr);
     } else {
       std::string symname = name + data.member_names[i].as_string();
       const smt_sort *sort = convert_sort(*it);
       const smt_ast *args[2];
       args[0] = mk_smt_symbol(symname, sort);
-      args[1] = convert_ast(fields[i]);
+      args[1] = convert_ast(subexpr);
       const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       literalt l = mk_lit(eq);
       assert_lit(l);
