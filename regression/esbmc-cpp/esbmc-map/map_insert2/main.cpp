@@ -23,8 +23,8 @@ int main ()
   for ( it=mymap.begin() ; it != mymap.end(); it++)
   {
     cout << (*it).first << " => " << (*it).second << endl;
-    assert( it->first == chararray[i]);
-    assert( it->second == intarray[i]);
+    assert( (*it).first == chararray[i]);
+    assert( (*it).second == intarray[i]);
     i++;
       }
     
