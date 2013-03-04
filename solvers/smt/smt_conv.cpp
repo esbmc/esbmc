@@ -1175,7 +1175,7 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    if (is_structure_type(*it)) {
+    if (is_structure_type(*it) || is_pointer_type(*it)) {
       // Recurse.
       const smt_ast *args[2];
       const smt_sort *sort = convert_sort(*it);
@@ -1184,10 +1184,6 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       const smt_ast *eq = tuple_equality(args[0], args[1]);
       literalt l = mk_lit(eq);
       lits.push_back(l);
-    } else if (is_pointer_type(*it)) {
-      std::cerr << "XXX pointer equality not implemented yet (tuple_equality)"
-                << std::endl;
-      abort();
     } else {
       const smt_ast *args[2];
       const smt_sort *sort = convert_sort(*it);
