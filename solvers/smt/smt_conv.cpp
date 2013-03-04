@@ -1339,20 +1339,21 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   ss << new_name << fresh_map[new_name]++;
   const tuple_smt_ast *result = new tuple_smt_ast(s, new_name);
 
-  tuple_array_select_rec(ta, ts->thetype, result, field);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  tuple_array_select_rec(ta, array_type.subtype, result, field);
   return result;
 }
 
 void
-smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
+smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
+                                  const type2tc &subtype,
                                   const tuple_smt_ast *result,
                                   const smt_ast *field)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const array_type2t &array_type = to_array_type(type);
-  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
+  const struct_union_data &struct_type = (is_pointer_type(subtype))
     ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+    : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
