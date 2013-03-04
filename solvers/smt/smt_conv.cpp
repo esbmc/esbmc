@@ -1742,7 +1742,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
     assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");
 
     // Zero extend; multiply; Make a decision based on the top half.
-    const smt_ast *args[2], *mulargs[2];
+    const smt_ast *args[3], *mulargs[2];
     unsigned int sz = zero->type->get_width();
     const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
     const smt_sort *normalsort = mk_sort(SMT_SORT_BV, sz, false);
