@@ -113,6 +113,8 @@ public:
   virtual ~tuple_smt_sort() { }
 };
 
+#define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x) || (is_array_type(x) && (is_structure_type(to_array_type(x).subtype) || is_pointer_type(to_array_type(x).subtype))))
+
 class smt_ast {
   // Mostly opaque class for storing whatever data the backend solver feels
   // is appropriate. I orignally thought this should contain useful tracking

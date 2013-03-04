@@ -1023,7 +1023,7 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       // Do something recursive
       std::string subname = name + data.member_names[i].as_string() + ".";
       // Generate an array of fields to pump in. First, fetch the type. It has
@@ -1085,11 +1085,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 
   // Cope with recursive structs.
   const type2tc &restype = data.members[i];
-  if (is_struct_type(restype) || is_union_type(restype) ||
-      is_pointer_type(restype) ||
-      (is_array_type(restype) && (
-        is_structure_type(to_array_type(restype).subtype) ||
-        is_pointer_type(to_array_type(restype).subtype))))  {
+  if (is_tuple_ast_type(restype)) {
     sym_name = sym_name + ".";
     return new tuple_smt_ast(s, sym_name);
   } else {
@@ -1127,7 +1123,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
     if (j == i) {
       const smt_sort *tmp = convert_sort(*it);
       const smt_ast *thefield = tuple_project(result, tmp, j);
-      if (is_structure_type(*it) || is_pointer_type(*it)) {
+      if (is_tuple_ast_type(*it)) {
         eqs.push_back(mk_lit(tuple_equality(thefield, v)));
       } else {
         args[0] = thefield;
@@ -1135,7 +1131,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
         eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       }
     } else {
-      if (is_structure_type(*it) || is_pointer_type(*it)) {
+      if (is_tuple_ast_type(*it)) {
         std::stringstream ss2;
         ss2 << name << data.member_names[j] << ".";
         std::string field_name = ss.str();
@@ -1178,7 +1174,7 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    if (is_structure_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       // Recurse.
       const smt_ast *args[2];
       const smt_sort *sort = convert_sort(*it);
@@ -1240,7 +1236,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = data.members.begin();
        it != data.members.end(); it++, i++) {
-    if (is_structure_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       // Recurse.
       const tuple_smt_ast *args[3];
       const smt_sort *sort = convert_sort(*it);
@@ -1361,7 +1357,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       const smt_sort *sort = convert_sort(*it);
       const tuple_smt_ast *result_field =
         static_cast<const tuple_smt_ast *>(tuple_project(result, sort, i));
@@ -1424,7 +1420,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       const smt_sort *tmp = convert_sort(*it);
       std::string resname = result->name +
                             struct_type.member_names[i].as_string() +
@@ -1490,7 +1486,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it) || is_pointer_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       const smt_sort *tmp = convert_sort(*it);
       std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
@@ -1554,11 +1550,8 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it)) {
+    if (is_tuple_ast_type(*it)) {
       std::cerr << "XXX struct struct array ite unimplemented" << std::endl;
-      abort();
-    } else if (is_pointer_type(*it)) {
-      std::cerr << "XXX pointer tuple arrays ite unimplemented" << std::endl;
       abort();
     } else {
       std::string tname = tv->name + struct_type.member_names[i].as_string();
