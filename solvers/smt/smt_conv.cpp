@@ -1422,8 +1422,19 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
     if (is_structure_type(*it) || is_pointer_type(*it)) {
-      std::cerr << "XXX struct struct array updates unimplemented" << std::endl;
-      abort();
+      const smt_sort *tmp = convert_sort(*it);
+      std::string resname = result->name +
+                            struct_type.member_names[i].as_string() +
+                            ".";
+      std::string srcname = ta->name + struct_type.member_names[i].as_string() +
+                            ".";
+      std::string valname = tv->name + struct_type.member_names[i].as_string() +
+                            ".";
+      const tuple_smt_ast *target = new tuple_smt_ast(tmp, resname);
+      const tuple_smt_ast *src = new tuple_smt_ast(tmp, srcname);
+      const tuple_smt_ast *val = new tuple_smt_ast(tmp, valname);
+
+      tuple_array_update_rec(src, val, idx, target, *it);
     } else {
       std::string arrname = ta->name + struct_type.member_names[i].as_string();
       std::string valname = tv->name + struct_type.member_names[i].as_string();
