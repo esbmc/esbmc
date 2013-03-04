@@ -1117,7 +1117,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 
   // Cope with recursive structs.
   const type2tc &restype = data.members[i];
-  if (is_tuple_ast_type(restype)) {
+  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
     sym_name = sym_name + ".";
     return new tuple_smt_ast(s, sym_name);
   } else {
@@ -1213,6 +1213,14 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       args[0] = tuple_project(a, sort, i);
       args[1] = tuple_project(b, sort, i);
       const smt_ast *eq = tuple_equality(args[0], args[1]);
+      literalt l = mk_lit(eq);
+      lits.push_back(l);
+    } else if (is_tuple_array_ast_type(*it)) {
+      const smt_ast *args[2];
+      const smt_sort *sort = convert_sort(*it);
+      args[0] = tuple_project(a, sort, i);
+      args[1] = tuple_project(b, sort, i);
+      const smt_ast *eq = tuple_array_equality(args[0], args[1]);
       literalt l = mk_lit(eq);
       lits.push_back(l);
     } else {
