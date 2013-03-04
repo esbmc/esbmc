@@ -1729,12 +1729,11 @@ smt_convt::overflow_arith(const expr2tc &expr)
       and2tc cond2(e1, e4);
       implies2tc f2(cond2, c2);
 
-      and2tc f3(e3, e4); // Impossible to be wrong.
+      // No encoding for neg/neg on account of how it's impossible to be wrong
 
       // Combine
-      and2tc f4(f1, f2);
-      and2tc f5(f3, f4);
-      not2tc inv(f5);
+      and2tc f3(f1, f2);
+      not2tc inv(f3);
       return convert_ast(inv);
     } else {
       // Just ensure the result is >= the operands.
