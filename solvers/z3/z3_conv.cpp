@@ -990,6 +990,7 @@ z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
   return new z3_smt_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
 }
 
+#if 0
 const smt_ast *
 z3_convt::overflow_arith(const expr2tc &expr)
 {
@@ -1168,6 +1169,7 @@ z3_convt::overflow_neg(const expr2tc &expr)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new z3_smt_ast(output, s);
 }
+#endif
 
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {

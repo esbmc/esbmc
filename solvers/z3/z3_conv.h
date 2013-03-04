@@ -107,11 +107,11 @@ private:
   virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                                    const smt_ast *false_val,
                                    const smt_sort *sort);
-#endif
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
+#endif
 
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
 
