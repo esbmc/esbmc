@@ -1337,7 +1337,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   std::string new_name = "smt_conv::tuple_array_select::";
   std::stringstream ss;
   ss << new_name << fresh_map[new_name]++;
-  const tuple_smt_ast *result = new tuple_smt_ast(s, new_name);
+  const tuple_smt_ast *result = new tuple_smt_ast(s, ss.str());
 
   const array_type2t &array_type = to_array_type(ts->thetype);
   tuple_array_select_rec(ta, array_type.subtype, result, field);
