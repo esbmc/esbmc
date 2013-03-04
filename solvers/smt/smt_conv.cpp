@@ -1789,9 +1789,69 @@ smt_convt::overflow_arith(const expr2tc &expr)
 }
 
 smt_ast *
-smt_convt::overflow_cast(const expr2tc &expr __attribute__((unused)))
+smt_convt::overflow_cast(const expr2tc &expr)
 {
-  assert(0);
+  const overflow_cast2t &ocast = to_overflow_cast2t(expr);
+  unsigned int width = ocast.operand->type->get_width();
+  unsigned int bits = ocast.bits;
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+
+  if (ocast.bits >= width || ocast.bits == 0) {
+    std::cerr << "SMT conversion: overflow-typecast got wrong number of bits"
+              << std::endl;
+    abort();
+  }
+
+  // Basically: if it's positive in the first place, ensure all the top bits
+  // are zero. If neg, then all the top are 1's /and/ the next bit, so that
+  // it's considered negative in the next interpretation.
+
+  constant_int2tc zero(ocast.operand->type, BigInt(0));
+  lessthan2tc isnegexpr(ocast.operand, zero);
+  const smt_ast *isneg = convert_ast(isnegexpr);
+  const smt_ast *orig_val = convert_ast(ocast.operand);
+
+  // Difference bits
+  unsigned int pos_zero_bits = width - bits;
+  unsigned int neg_one_bits = (width - bits) + 1;
+
+  const smt_sort *pos_zero_bits_sort =
+    mk_sort(SMT_SORT_BV, pos_zero_bits, false);
+  const smt_sort *neg_one_bits_sort =
+    mk_sort(SMT_SORT_BV, neg_one_bits, false);
+
+  const smt_ast *pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
+  const smt_ast *neg_bits = mk_smt_bvint(BigInt((1 << neg_one_bits) - 1),
+                                         false, neg_one_bits);
+
+  const smt_ast *pos_sel = mk_extract(orig_val, width - 1,
+                                      width - pos_zero_bits - 1,
+                                      pos_zero_bits_sort);
+  const smt_ast *neg_sel = mk_extract(orig_val, width - 1,
+                                      width - neg_one_bits - 1,
+                                      neg_one_bits_sort);
+
+  const smt_ast *args[2];
+  args[0] = pos_bits;
+  args[1] = pos_sel;
+  const smt_ast *pos_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  args[0] = neg_bits;
+  args[1] = neg_sel;
+  const smt_ast *neg_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+  // isneg -> neg_eq, !isneg -> pos_eq
+  const smt_ast *notisneg = mk_func_app(boolsort, SMT_FUNC_NOT, &isneg, 1);
+  args[0] = isneg;
+  args[1] = neg_eq;
+  const smt_ast *c1 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
+  args[0] = notisneg;
+  args[1] = pos_eq;
+  const smt_ast *c2 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
+
+  args[0] = c1;
+  args[1] = c2;
+  const smt_ast *nooverflow = mk_func_app(boolsort, SMT_FUNC_AND, args, 2);
+  return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
 smt_ast *
