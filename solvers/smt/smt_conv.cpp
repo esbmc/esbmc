@@ -1061,6 +1061,14 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                                     convert_sort(nextdata.members[j]), j);
 
       tuple_create_rec(subname, *it, nextargs);
+    } else if (is_tuple_array_ast_type(*it)) {
+      // convert_ast will have already, in fact, created a tuple array.
+      // We just need to bind it into this one.
+      std::string subname = name + data.member_names[i].as_string() + ".";
+      const tuple_smt_ast *target =
+        new tuple_smt_ast(convert_sort(*it), subname);
+      const smt_ast *src = inputargs[i];
+      assert_lit(mk_lit(tuple_array_equality(target, src)));
     } else {
       std::string symname = name + data.member_names[i].as_string();
       const smt_sort *sort = convert_sort(*it);
