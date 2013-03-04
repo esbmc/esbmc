@@ -254,7 +254,7 @@ public:
   void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                      const tuple_smt_ast *true_val,
                      const tuple_smt_ast *false_val);
-  void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
+  void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
                               const tuple_smt_ast *result,const smt_ast *field);
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
                               const smt_ast *idx, const tuple_smt_ast *res,
