@@ -1421,11 +1421,8 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it)) {
+    if (is_structure_type(*it) || is_pointer_type(*it)) {
       std::cerr << "XXX struct struct array updates unimplemented" << std::endl;
-      abort();
-    } else if (is_pointer_type(*it)) {
-      std::cerr << "XXX pointer tuple arrays updatesunimplemented" << std::endl;
       abort();
     } else {
       std::string arrname = ta->name + struct_type.member_names[i].as_string();
