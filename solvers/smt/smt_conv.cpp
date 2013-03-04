@@ -1357,7 +1357,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
   unsigned int i = 0;
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
-    if (is_structure_type(*it)) {
+    if (is_structure_type(*it) || is_pointer_type(*it)) {
       const smt_sort *sort = convert_sort(*it);
       const tuple_smt_ast *result_field =
         static_cast<const tuple_smt_ast *>(tuple_project(result, sort, i));
@@ -1365,9 +1365,6 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &type,
         ta->name + struct_type.member_names[i].as_string() + ".";
       const tuple_smt_ast *array_name = new tuple_smt_ast(sort, substruct_name);
       tuple_array_select_rec(array_name, *it, result_field, field);
-    } else if (is_pointer_type(*it)) {
-      std::cerr << "XXX pointer tuple arrays unimplemented" << std::endl;
-      abort();
     } else {
       std::string name = ta->name + struct_type.member_names[i].as_string();
       const smt_ast *args[2];
