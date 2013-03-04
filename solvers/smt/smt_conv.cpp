@@ -1752,11 +1752,30 @@ smt_convt::overflow_arith(const expr2tc &expr)
     const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
     const smt_sort *normalsort = mk_sort(SMT_SORT_BV, sz, false);
     const smt_sort *bigsort = mk_sort(SMT_SORT_BV, sz * 2, false);
-    args[0] = convert_ast(zero); // same size;
-    args[1] = convert_ast(opers.side_1);
-    mulargs[0] = mk_func_app(bigsort, SMT_FUNC_CONCAT, args, 2);
-    args[1] = convert_ast(opers.side_2);
-    mulargs[1] = mk_func_app(bigsort, SMT_FUNC_CONCAT, args, 2);
+
+    // All one bit vector is tricky, might be 64 bits wide for all we know.
+    constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
+                                                 ? 0xFFFFFFFFFFFFFFFFULL
+                                                 : ((1ULL << sz) - 1)));
+    const smt_ast *allonesvector = convert_ast(allonesexpr);
+
+    const smt_ast *arg1_ext, *arg2_ext;
+    if (is_signed) {
+      // sign extend top bits.
+      arg1_ext = convert_ast(opers.side_1);
+      arg1_ext = convert_sign_ext(arg1_ext, bigsort, sz - 1, sz);
+      arg2_ext = convert_ast(opers.side_2);
+      arg2_ext = convert_sign_ext(arg2_ext, bigsort, sz - 1, sz);
+    } else {
+      // Zero extend the top parts
+      arg1_ext = convert_ast(opers.side_1);
+      arg1_ext = convert_zero_ext(arg1_ext, bigsort, sz);
+      arg2_ext = convert_ast(opers.side_2);
+      arg2_ext = convert_zero_ext(arg2_ext, bigsort, sz);
+    }
+
+    mulargs[0] = arg1_ext;
+    mulargs[1] = arg2_ext;
     const smt_ast *result = mk_func_app(bigsort, SMT_FUNC_MUL, mulargs, 2);
 
     // Extract top half.
@@ -1770,11 +1789,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
       args[1] = convert_ast(op2neg);
       const smt_ast *allonescond = mk_func_app(boolsort, SMT_FUNC_XOR, args, 2);
       const smt_ast *zerovector = convert_ast(zero);
-      // All ones is tricky, might be 64 bits wide for all we know.
-      constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
-                                                   ? 0xFFFFFFFFFFFFFFFFULL
-                                                   : ((1ULL << sz) - 1)));
-      const smt_ast *allonesvector = convert_ast(allonesexpr);
+
       args[0] = allonescond;
       args[1] = allonesvector;
       args[2] = zerovector;
