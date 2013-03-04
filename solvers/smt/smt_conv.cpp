@@ -1825,10 +1825,10 @@ smt_convt::overflow_cast(const expr2tc &expr)
                                          false, neg_one_bits);
 
   const smt_ast *pos_sel = mk_extract(orig_val, width - 1,
-                                      width - pos_zero_bits - 1,
+                                      width - pos_zero_bits,
                                       pos_zero_bits_sort);
   const smt_ast *neg_sel = mk_extract(orig_val, width - 1,
-                                      width - neg_one_bits - 1,
+                                      width - neg_one_bits,
                                       neg_one_bits_sort);
 
   const smt_ast *args[2];
