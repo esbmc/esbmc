@@ -1487,8 +1487,12 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
   for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
        it != struct_type.members.end(); it++, i++) {
     if (is_structure_type(*it) || is_pointer_type(*it)) {
-      std::cerr << "XXX struct struct array eq unimplemented" << std::endl;
-      abort();
+      const smt_sort *tmp = convert_sort(*it);
+      std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
+      std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
+      const tuple_smt_ast *new1 = new tuple_smt_ast(tmp, name1);
+      const tuple_smt_ast *new2 = new tuple_smt_ast(tmp, name2);
+      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, *it)));
     } else {
       std::string name1 = a->name + struct_type.member_names[i].as_string();
       std::string name2 = b->name + struct_type.member_names[i].as_string();
