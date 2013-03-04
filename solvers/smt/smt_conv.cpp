@@ -1123,7 +1123,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
        it != data.members.end(); it++, j++) {
     if (j == i) {
       const smt_sort *tmp = convert_sort(*it);
-      const smt_ast *thefield = tuple_project(ta, tmp, j);
+      const smt_ast *thefield = tuple_project(result, tmp, j);
       if (is_structure_type(*it) || is_pointer_type(*it)) {
         eqs.push_back(mk_lit(tuple_equality(thefield, v)));
       } else {
