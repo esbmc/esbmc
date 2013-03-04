@@ -1646,8 +1646,8 @@ smt_convt::overflow_arith(const expr2tc &expr)
   lessthan2tc op2neg(opers.side_2, zero);
 
   // Guess whether we're performing a signed or unsigned comparison.
-  bool is_signed = (is_signedbv_type(to_add2t(overflow.operand).side_1) ||
-                    is_signedbv_type(to_add2t(overflow.operand).side_2));
+  bool is_signed = (is_signedbv_type(opers.side_1) ||
+                    is_signedbv_type(opers.side_2));
 
   if (is_add2t(overflow.operand)) {
     if (is_signed) {
