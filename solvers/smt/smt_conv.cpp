@@ -1801,7 +1801,8 @@ smt_convt::overflow_arith(const expr2tc &expr)
       // It should be zero; if not, overflow
       args[0] = toppart;
       args[1] = convert_ast(zero);
-      return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      return mk_func_app(boolsort, SMT_FUNC_NOT, args, 1);
     }
   }
 
