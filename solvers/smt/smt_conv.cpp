@@ -365,7 +365,9 @@ smt_convt::convert_expr(const expr2tc &expr)
 const smt_ast *
 smt_convt::convert_ast(const expr2tc &expr)
 {
-  const smt_ast *args[4];
+  // Variable length array; constant array's and so forth can have hundreds
+  // of fields.
+  const smt_ast *args[expr->get_num_sub_exprs()];
   const smt_sort *sort;
   const smt_ast *a;
   unsigned int num_args, used_sorts = 0;
