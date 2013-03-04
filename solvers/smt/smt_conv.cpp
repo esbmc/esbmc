@@ -1866,7 +1866,7 @@ smt_convt::overflow_neg(const expr2tc &expr)
   unsigned int width = neg.operand->type->get_width();
 
   constant_int2tc min_int(neg.operand->type, BigInt(1 << (width - 1)));
-  notequal2tc val(neg.operand, min_int);
+  equality2tc val(neg.operand, min_int);
   return convert_ast(val);
 }
 
