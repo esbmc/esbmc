@@ -1854,10 +1854,16 @@ smt_convt::overflow_cast(const expr2tc &expr)
   return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
-smt_ast *
-smt_convt::overflow_neg(const expr2tc &expr __attribute__((unused)))
+const smt_ast *
+smt_convt::overflow_neg(const expr2tc &expr)
 {
-  assert(0);
+  // Single failure mode: MIN_INT can't be neg'd
+  const overflow_neg2t &neg = to_overflow_neg2t(expr);
+  unsigned int width = neg.operand->type->get_width();
+
+  constant_int2tc min_int(neg.operand->type, BigInt(1 << (width - 1)));
+  notequal2tc val(neg.operand, min_int);
+  return convert_ast(val);
 }
 
 const smt_ast *

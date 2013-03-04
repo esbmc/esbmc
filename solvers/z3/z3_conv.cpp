@@ -1142,7 +1142,7 @@ z3_convt::overflow_cast(const expr2tc &expr)
   return new z3_smt_ast(output, s);
 }
 
-smt_ast *
+const smt_ast *
 z3_convt::overflow_neg(const expr2tc &expr)
 {
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
