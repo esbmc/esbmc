@@ -50,6 +50,8 @@ keyword       :{symchars}+
 "error"               { return TOK_KW_ERROR; }
 "immediate-exit"      { return TOK_KW_IMMEXIT; }
 "continued-execution" { return TOK_KW_CONEXECUTION; }
+"memout"              { return TOK_KW_MEMOUT; }
+"incomplete"          { return TOK_KW_INCOMPLETE; }
 
 {lparen}              { return TOK_LPAREN; }
 {rparen}              { return TOK_RPAREN; }
