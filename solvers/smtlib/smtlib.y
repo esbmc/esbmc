@@ -64,3 +64,7 @@ s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
 attribute_value: spec_constant | symbol | TOK_LPAREN sexpr_list TOK_RPAREN
 
 attribute: TOK_KEYWORD | TOK_KEYWORD attribute_value
+
+sort_list: sort | sort_list sort
+
+sort: identifier | TOK_LPAREN identifier sort_list TOK_RPAREN
