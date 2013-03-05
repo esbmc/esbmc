@@ -46,4 +46,13 @@ int smtliberror(const std::string &error);
 
 /* Rules */
 
-response:
+response: s_expr
+
+spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
+               TOK_STRINGLIT
+
+symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
+
+sexpr_list: | s_expr sexpr_list
+
+s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
