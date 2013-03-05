@@ -19,6 +19,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
+#include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
 #include <goto-symex/reachability_tree.h>
@@ -116,6 +117,14 @@ protected:
     z3_convt *z3_conv;
   };
 #endif
+
+  class smtlib_solver : public solver_base {
+  public:
+    smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
+    virtual bool run_solver(symex_target_equationt &equation);
+  protected:
+    smtlib_convt smtlib_conv;
+  };
 
   class output_solver : public solver_base {
   public:

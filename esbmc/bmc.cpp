@@ -629,6 +629,18 @@ bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
 
 #endif
 
+bmct::smtlib_solver::smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
+  : solver_base(bmc), smtlib_conv(bmc.options.get_bool_option("int-encoding"),
+                                  ns, is_cpp)
+{
+}
+
+bool bmct::smtlib_solver::run_solver(symex_target_equationt &equation)
+{
+  bool result = bmct::solver_base::run_solver(equation);
+  return result;
+}
+
 bmct::output_solver::output_solver(bmct &bmc)
   : solver_base(bmc)
 {
