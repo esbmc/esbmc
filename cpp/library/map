@@ -14,7 +14,7 @@
 #include "vector"
 #include "functional"
 
-#define MAP_SIZE 10
+#define MAP_SIZE 15
 
 namespace std{
 
@@ -477,7 +477,7 @@ public:
 	typedef T mapped_type;
 	typedef pair< Key, T> value_type;
 	typedef Compare key_compare;
-	typedef int size_type;
+	typedef unsigned int size_type;
 
 	key_type _key[MAP_SIZE];
 	mapped_type _value[MAP_SIZE];
@@ -485,14 +485,35 @@ public:
 
 	typedef bool (func)(Key, Key);
 
+
+	class value_compare
+	{
+	public:
+		Compare comp;
+		value_compare (Compare c) : comp(c) {}
+		typedef bool result_type;
+		typedef value_type first_argument_type;
+		typedef value_type second_argument_type;
+		bool operator() (const value_type& x, const value_type& y) const
+		{
+			return comp(x.first, y.first);
+		}
+	};
+
 	class iterator {
 	public:
 
 		key_type* it_key;
 		mapped_type* it_value;
+		value_type it_pair;
 		int it_pos;
 
-		iterator(const iterator& x);
+		iterator(const iterator& x){
+			this->it_key = x.it_key;
+			this->it_pos = x.it_pos;
+			this->it_value = x.it_value;
+			this->it_pair = x.it_pair;
+		}
 		iterator(){
 			this->it_pos = -1;
 		}
@@ -500,97 +521,134 @@ public:
 			this->it_key = x.it_key;
 			this->it_pos = x.it_pos;
 			this->it_value = x.it_value;
+			this->it_pair = x.it_pair;
 			return *this;
 		}
 
 		value_type * operator ->();
 
-		value_type & operator *();
+		value_type & operator *(){
+			return this->it_pair;
+		}
 
 		iterator& operator ++(){
 			this->it_pos++;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator ++(int);
+		iterator& operator ++(int){
+			this->it_pos++;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
 
 		iterator& operator --(){
 			this->it_pos--;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator --(int);
+		iterator& operator --(int){
+			this->it_pos--;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
 
-		bool operator == (const iterator& it) const;
-		bool operator !=(const iterator& it) const;
+		bool operator == (const iterator& it) const{
+			if(this->it_pos == it.it_pos)
+				return true;
+			if((this->it_pair.first == it.it_pair.first) && (this->it_pair.second == it.it_pair.second))
+				return true;
+			return false;
+		}
+		bool operator !=(const iterator& it) const{
+			if(this->it_pos != it.it_pos)
+				return true;
+			if((this->it_pair.first != it.it_pair.first) && (this->it_pair.second != it.it_pair.second))
+				return true;
+			return false;
+		}
 	};
 
-	class const_iterator {/*
-	 public:
-	 const_iterator(const const_iterator&);
-	 const_iterator();
-	 const_iterator& operator=(const const_iterator&);
-
-	 //const value_type * operator -> ();
-
-	 //const value_type & operator * ();
-
-	 const_iterator& operator ++ ();
-	 const_iterator& operator ++ (int);
-
-	 const_iterator& operator -- ();
-	 const_iterator& operator -- (int);
-
-	 bool operator == ( const const_iterator&)const;
-	 bool operator != ( const const_iterator&)const;
-	 */
-	};
+	//class const_iterator {};
 
 	class reverse_iterator {
 	public:
-		//reverse_iterator(reverse_iterator);
-		reverse_iterator();
-		//explicit reverse_iterator(iterator);
 
-		//iterator base() const; // explicit
+		key_type* it_key;
+		mapped_type* it_value;
+		value_type it_pair;
+		int it_pos;
 
-		//reverse_iterator& operator=(const reverse_iterator&);
+		reverse_iterator(const reverse_iterator& x){
+			this->it_key = x.it_key;
+			this->it_pos = x.it_pos;
+			this->it_value = x.it_value;
+			this->it_pair = x.it_pair;
+		}
+		reverse_iterator(){
+			this->it_pos = -1;
+		}
+		reverse_iterator& operator=(const reverse_iterator& x){
+			this->it_key = x.it_key;
+			this->it_pos = x.it_pos;
+			this->it_value = x.it_value;
+			this->it_pair = x.it_pair;
+			return *this;
+		}
 
 		value_type * operator ->();
 
-		value_type & operator *();
+		value_type & operator *(){
+			return this->it_pair;
+		}
 
-		reverse_iterator& operator ++();
-		reverse_iterator& operator ++(int);
+		reverse_iterator& operator ++(){
+			this->it_pos++;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
+		reverse_iterator& operator ++(int){
+			this->it_pos++;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
 
-		//reverse_iterator& operator -- ();
-		//reverse_iterator& operator -- (int);
+		reverse_iterator& operator --(){
+			this->it_pos--;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
+		reverse_iterator& operator --(int){
+			this->it_pos--;
+			this->it_pair.first = this->it_key[this->it_pos];
+			this->it_pair.second = this->it_value[this->it_pos];
+			return *this;
+		}
 
-		//bool operator == ( const reverse_iterator&)const;
-		bool operator !=(const reverse_iterator&) const;
+		bool operator == (const reverse_iterator& it) const{
+			if(this->it_pos == it.it_pos)
+				return true;
+			if((this->it_pair.first == it.it_pair.first) && (this->it_pair.second == it.it_pair.second))
+				return true;
+			return false;
+		}
+		bool operator !=(const reverse_iterator& it) const{
+			if(this->it_pos != it.it_pos)
+				return true;
+			if((this->it_pair.first != it.it_pair.first) && (this->it_pair.second != it.it_pair.second))
+				return true;
+			return false;
+		}
 	};
 
-	class const_reverse_iterator {
-		/*public:
-		 const_reverse_iterator(const_reverse_iterator);
-		 const_reverse_iterator();
-		 explicit const_reverse_iterator(const_iterator);
-
-		 const_iterator base() const; // explicit
-
-		 const_reverse_iterator& operator=(const const_reverse_iterator);
-
-		 //const value_type * operator -> ();
-
-		 //const value_type & operator * ();
-
-		 const_reverse_iterator& operator ++ ();
-		 const_reverse_iterator& operator++ (int);
-
-		 const_reverse_iterator& operator -- ();
-		 const_reverse_iterator& operator -- (int);
-
-		 bool operator == ( const const_reverse_iterator&)const;
-		 bool operator != ( const const_reverse_iterator&)const;
-		 */};
+	//class const_reverse_iterator {};
 
 	map(){
 		this->_size = 0;
@@ -638,20 +696,18 @@ public:
 					int j;
 					Key y = x;
 					Key t;
+					T u,v;
 
 					for(j = i; j < s; j++){
 						t = this->_key[j];
 						this->_key[j] = y;
 						y = t;
+						u = this->_value[j];
+						this->_value[j] = v;
+						v = u;
 					}
 					this->_key[j] = y;
-
-					for(j = i; j < s; j++){
-						t = this->_value[j];
-						this->_value[j] = y;
-						y = t;
-					}
-					this->_value[j] = y;
+					this->_value[j] = u;
 
 					this->_size++;
 					//this->_value[i] = T();
@@ -673,25 +729,41 @@ public:
 		it.it_key = this->_key;
 		it.it_value = this->_value;
 		it.it_pos = 0;
+		it.it_pair.first = this->_key[0];
+		it.it_pair.second = this->_value[0];
 		return it;
 	}
-	const_iterator begin() const;
+	//const_iterator begin() const;
 	iterator end(){
 		iterator it;
 		it.it_key = this->_key;
 		it.it_value = this->_value;
 		it.it_pos = this->_size;
+		it.it_pair.first = this->_key[it.it_pos];
+		it.it_pair.second = this->_value[it.it_pos];
 		return it;
 	}
-	const_iterator end() const;
-	reverse_iterator rbegin();
-	const_reverse_iterator rbegin() const;
-	reverse_iterator rend();
-	const_reverse_iterator rend() const;
-
-	size_type count(const key_type& x) const;
-	void erase(iterator position);
-	void erase(iterator first, iterator last);
+	//const_iterator end() const;
+	reverse_iterator rbegin(){
+		reverse_iterator it;
+		it.it_key = this->_key;
+		it.it_value = this->_value;
+		it.it_pos = this->_size-1;
+		it.it_pair.first = this->_key[it.it_pos];
+		it.it_pair.second = this->_value[it.it_pos];
+		return it;
+	}
+	//const_reverse_iterator rbegin() const;
+	reverse_iterator rend(){
+		reverse_iterator it;
+		it.it_key = this->_key;
+		it.it_value = this->_value;
+		it.it_pos = 0;
+		it.it_pair.first = this->_key[0];
+		it.it_pair.second = this->_value[0];
+		return it;
+	}
+	//const_reverse_iterator rend() const;
 
 	mapped_type& at(const Key& x){
 		unsigned int s = this->_size;
@@ -711,20 +783,18 @@ public:
 					int j;
 					Key y = x;
 					Key t;
+					T u,v;
 
 					for(j = i; j < s; j++){
 						t = this->_key[j];
 						this->_key[j] = y;
 						y = t;
+						u = this->_value[j];
+						this->_value[j] = v;
+						v = u;
 					}
 					this->_key[j] = y;
-
-					for(j = i; j < s; j++){
-						t = this->_value[j];
-						this->_value[j] = y;
-						y = t;
-					}
-					this->_value[j] = y;
+					this->_value[j] = u;
 
 					this->_size++;
 					//this->_value[i] = T();
@@ -787,7 +857,303 @@ public:
 		this->at(val.first) = val.second;
 	}
 
-	size_type erase (const key_type& k);
+	pair<iterator,bool> insert ( value_type& val ){
+		unsigned int s = this->_size;
+		pair<iterator,bool> _pair;
+		if(this->_size == 0){
+			this->_key[0] = val.first;
+			this->_size++;
+			//this->_value[0] = T();
+			this->_value[0] = val.second;
+			_pair.first = this->begin();
+			_pair.second = true;
+			return _pair;
+		}else{
+			iterator it = this->begin();
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == val.first){
+					_pair.first = it;
+					_pair.second = false;
+					return _pair;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(val.first,this->_key[i])){
+					int j;
+					Key y = val.first;
+					Key t;
+					T u,v;
+
+					for(j = i; j < s; j++){
+						t = this->_key[j];
+						this->_key[j] = y;
+						y = t;
+						u = this->_value[j];
+						this->_value[j] = v;
+						v = u;
+					}
+					this->_key[j] = y;
+					this->_value[j] = u;
+
+					this->_size++;
+					//this->_value[i] = T();
+					this->_value[i] = val.second;
+					_pair.first = it;
+					_pair.second = true;
+					return _pair;
+				}
+				it++;
+			}
+			this->_size++;
+			this->_key[s] = val.first;
+			//this->_value[s] = T();
+			this->_value[s] = val.second;
+			_pair.first = this->end();
+			_pair.second = true;
+			return _pair;
+		}
+	}
+
+	iterator insert ( iterator position, const value_type& val ){
+		key_type x = val.first;
+		unsigned int s = this->_size;
+		if(this->_size == 0){
+			this->_key[0] = x;
+			this->_size++;
+			//this->_value[0] = T();
+			this->_value[0] = val.second;
+			return this->begin();
+		}else{
+			iterator it = this->begin();
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == x){
+					return it;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(x,this->_key[i])){
+					int j;
+					Key y = x;
+					Key t;
+					T u,v;
+
+					for(j = i; j < s; j++){
+						t = this->_key[j];
+						this->_key[j] = y;
+						y = t;
+						u = this->_value[j];
+						this->_value[j] = v;
+						v = u;
+					}
+					this->_key[j] = y;
+					this->_value[j] = u;
+
+					this->_size++;
+					//this->_value[i] = T();
+					this->_value[i] = val.second;
+					return it;
+				}
+				it++;
+			}
+			this->_size++;
+			this->_key[s] = x;
+			//this->_value[s] = T();
+			this->_value[s] = val.second;
+			return this->end();
+		}
+	}
+
+	void insert ( iterator first, iterator last ){
+		for(iterator it = first; it.it_pos != last.it_pos; it++){
+			this->at(it.it_key[it.it_pos]) = it.it_value[it.it_pos];
+		}
+	}
+
+	size_type erase (const key_type& k){
+		if(this->_size != 0){
+			unsigned int s = this->_size;
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == k){
+					this->_size--;
+					int j;
+					for(j = i; j<s; j++){
+						this->_key[j] = this->_key[j+1];
+						this->_value[j] = this->_value[j+1];
+					}
+					this->_key[j-1] = NULL;
+					this->_value[j-1] = NULL;
+					return this->_size;
+				}
+			}
+		}
+		return this->_size;
+	}
+
+	void erase(iterator position){
+		if(this->_size != 0){
+			unsigned int s = this->_size;
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == position.it_key[position.it_pos]){
+					this->_size--;
+					int j;
+					for(j = i; j<s; j++){
+						this->_key[j] = this->_key[j+1];
+						this->_value[j] = this->_value[j+1];
+					}
+					this->_key[j-1] = NULL;
+					this->_value[j-1] = NULL;
+					return;
+				}
+			}
+		}
+	}
+
+	void erase(iterator first, iterator last){
+		if(this->_size != 0){
+			unsigned int s = this->_size;
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == first.it_key[first.it_pos]){
+					this->_size = this->_size - (last.it_pos - first.it_pos);
+					int j;
+					for(j = i; j<s; j++){
+						this->_key[j] = this->_key[j+last.it_pos];
+						this->_value[j] = this->_value[j+last.it_pos];
+					}
+					this->_key[j-1] = NULL;
+					this->_value[j-1] = NULL;
+					return;
+				}
+			}
+		}
+	}
+
+	size_type count( key_type& x){
+		if(this->_size != 0){
+			int s = this->_size;
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == x){
+					return 1;
+				}
+			}
+		}
+		return 0;
+	}
+
+	iterator find (const key_type& x){
+		unsigned int s = this->_size;
+		iterator it = this->begin();
+		if(this->_size == 0){
+			return it;
+		}else{
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == x){
+					return it;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(x,this->_key[i])){
+					int j;
+					Key y = x;
+					Key t;
+					T u,v;
+
+					for(j = i; j < s; j++){
+						t = this->_key[j];
+						this->_key[j] = y;
+						y = t;
+						u = this->_value[j];
+						this->_value[j] = v;
+						v = u;
+					}
+					this->_key[j] = y;
+					this->_value[j] = u;
+
+					this->_size++;
+					//this->_value[i] = T();
+					this->_value[i] = NULL;
+					return it;
+				}
+				it++;
+			}
+			this->_size++;
+			this->_key[s] = x;
+			//this->_value[s] = T();
+			this->_value[s] = NULL;
+			return this->end();
+		}
+	}
+
+	key_compare key_comp() const{
+		return key_compare();
+	}
+
+	value_compare value_comp() const{
+		return value_compare(Compare());
+	}
+
+	iterator lower_bound (const key_type& x){
+		unsigned int s = this->_size;
+		if(this->_size == 0){
+			return this->end();
+		}else{
+			iterator it = this->begin();
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == x){
+					return it;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(x,this->_key[i])){
+					return this->end();
+				}
+				it++;
+			}
+			return this->end();
+		}
+	}
+
+    iterator upper_bound (const key_type& x){
+		unsigned int s = this->_size;
+		if(this->_size == 0){
+			return this->end();
+		}else{
+			iterator it = this->begin();
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == x){
+					it++;
+					return it;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(x,this->_key[i])){
+					return this->end();
+				}
+				it++;
+			}
+			return this->end();
+		}
+	}
+
+    pair<iterator,iterator> equal_range (const key_type& k){
+		unsigned int s = this->_size;
+		pair< iterator , iterator > _pair;
+		_pair.second = this->upper_bound(k);
+		if(this->_size == 0){
+			_pair.first = this->upper_bound(k);
+			return _pair;
+		}else{
+			iterator it = this->begin();
+			for(int i = 0; i < s; i++){
+				if(this->_key[i] == k){
+					_pair.first = it;
+					return _pair;
+				}
+				//if(x < this->_key[i]){
+				if(key_compare()(k,this->_key[i])){
+					_pair.first = this->upper_bound(k);
+					return _pair;
+				}
+				it++;
+			}
+			_pair.first = this->upper_bound(k);
+			return _pair;
+		}
+	}
 
 #if 0
 	// modifiers:
