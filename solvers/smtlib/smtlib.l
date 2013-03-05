@@ -48,6 +48,8 @@ keyword       :{symchars}+
 "unsupported"         { return TOK_KW_UNSUPPORTED; }
 "success"             { return TOK_KW_SUCCESS; }
 "error"               { return TOK_KW_ERROR; }
+"immediate-exit"      { return TOK_KW_IMMEXIT; }
+"continued-execution" { return TOK_KW_CONEXECUTION; }
 
 {lparen}              { return TOK_LPAREN; }
 {rparen}              { return TOK_RPAREN; }

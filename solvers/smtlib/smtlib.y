@@ -39,6 +39,8 @@ int smtliberror(const std::string &error);
 %token <text> TOK_KW_UNSUPPORTED
 %token <text> TOK_KW_SUCCESS
 %token <text> TOK_KW_ERROR
+%token <text> TOK_KW_IMMEXIT
+%token <text> TOK_KW_CONEXECUTION
 
 /* Start token, for the response */
 %start response
@@ -94,6 +96,8 @@ term: spec_constant | qual_identifier | TOK_LPAREN qual_identifier TOK_RPAREN |
 
 gen_response: TOK_KW_UNSUPPORTED | TOK_KW_SUCCESS |
               TOK_LPAREN TOK_KW_ERROR TOK_STRINGLIT TOK_RPAREN
+
+error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
 
 get_info_response:
 
