@@ -1,6 +1,11 @@
 #include <unistd.h>
 
 #include "smtlib_conv.h"
+#include "y.tab.hpp"
+
+// Dec of external lexer input stream
+extern "C" FILE *smtlibin;
+int smtlibparse(int startval);
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
@@ -56,14 +61,18 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // trigger SIGPIPE or an EOF eventually, which we'll be able to detect
   // and crash upon.
 
+  // Point lexer input at output stream
+  smtlibin = in_stream;
+
   // Fetch solver name and version.
-  char name[128], version[128];
   fprintf(out_stream, "(get-info :name)\n");
   fflush(out_stream);
-  fscanf(in_stream, "(:name \"%127s\")\n", name);
+  unsigned int ret = smtlibparse(TOK_START_INFO);
+  std::cerr << "Ohai, return code was " << ret << std::endl;
+  abort();
+
   fprintf(out_stream, "(get-info :version)\n");
   fflush(out_stream);
-  fscanf(in_stream, "(:nversion \"%127s\")\n", version);
 }
 
 smtlib_convt::~smtlib_convt()
