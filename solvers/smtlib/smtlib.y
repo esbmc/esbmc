@@ -145,7 +145,28 @@ sexpr_list:
            delete $2;
          }
 
-s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
+s_expr: spec_constant
+       | symbol
+         {
+           $$ = new sexpr();
+           $$->token = TOK_SIMPLESYM;
+           $$->data = std::string(*$1);
+           delete $1;
+         }
+       | TOK_KEYWORD
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KEYWORD;
+           $$->data = std::string($1);
+           free($1);
+         }
+       | TOK_LPAREN sexpr_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           delete $2;
+           $$->token = 0;
+         }
 
 attribute_value: spec_constant | symbol | TOK_LPAREN sexpr_list TOK_RPAREN
 
