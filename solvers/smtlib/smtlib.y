@@ -70,10 +70,12 @@ int smtliberror(int startsym, const std::string &error);
 
 /* Types */
 
+%type <text> error_behaviour reason_unknown info_response_arg
 %type <str> symbol
 %type <str_vec> symbol_list_empt numlist
-%type <sexpr_list> sexpr_list
-%type <expr> s_expr spec_constant attribute attribute_value
+%type <sexpr_list> sexpr_list info_response_list
+%type <expr> s_expr spec_constant attribute attribute_value info_response
+%type <expr> get_info_response
 %%
 
 /* Rules */
@@ -244,7 +246,23 @@ status: TOK_KW_SAT | TOK_KW_UNSAT | TOK_KW_UNKNOWN
 
 info_response_arg: error_behaviour | reason_unknown
 
-info_response: attribute | TOK_KEYWORD info_response_arg
+info_response: attribute
+       | TOK_KEYWORD info_response_arg
+         {
+           $$ = new sexpr();
+           struct sexpr *s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($1);
+           free($1);
+           $$->token = 0;
+           $$->sexpr_list.push_front(*s);
+           free(s);
+           s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($2);
+           $$->sexpr_list.push_back(*s);
+           free($2);
+         }
 
 info_response_list: info_response | info_response_list info_response
 
