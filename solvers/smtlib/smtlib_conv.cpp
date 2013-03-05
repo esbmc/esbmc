@@ -51,6 +51,19 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     out_stream = fdopen(outpipe[1], "w");
     in_stream = fdopen(inpipe[0], "r");
   }
+
+  // Execution continues as the parent ESBMC process. Child dying will
+  // trigger SIGPIPE or an EOF eventually, which we'll be able to detect
+  // and crash upon.
+
+  // Fetch solver name and version.
+  char name[128], version[128];
+  fprintf(out_stream, "(get-info :name)\n");
+  fflush(out_stream);
+  fscanf(in_stream, "(:name \"%127s\")\n", name);
+  fprintf(out_stream, "(get-info :version)\n");
+  fflush(out_stream);
+  fscanf(in_stream, "(:nversion \"%127s\")\n", version);
 }
 
 smtlib_convt::~smtlib_convt()
