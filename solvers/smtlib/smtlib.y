@@ -156,7 +156,7 @@ b_value: TOK_KW_TRUE | TOK_KW_FALSE
 
 t_valuation_pair: TOK_LPAREN symbol b_value TOK_RPAREN
 
-t_valuation_pair_empt: | t_valuation_pair | t_valuation_pair_empt t_valuation_pair
+t_valuation_pair_empt: | t_valuation_pair_empt t_valuation_pair
 
 get_assignment_response: TOK_LPAREN t_valuation_pair_empt TOK_RPAREN
 
