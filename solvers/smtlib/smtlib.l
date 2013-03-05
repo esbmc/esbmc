@@ -46,4 +46,15 @@ keyword       :{symchars}+
 "forall"              { return TOK_KW_FORALL; }
 "exists"              { return TOK_KW_EXISTS; }
 
+{lparen}              { return TOK_LPAREN; }
+{rparen}              { return TOK_RPAREN; }
+{numeral}             { smtliblval.text = strdup(yytext); return TOK_NUMERAL; }
+{decimal}             { smtliblval.text = strdup(yytext); return TOK_DECIMAL; }
+{hexnum}              { smtliblval.text = strdup(yytext); return TOK_HEXNUM; }
+{binnum}              { smtliblval.text = strdup(yytext); return TOK_BINNUM; }
+{stringlit}           { smtliblval.text = strdup(yytext); return TOK_STRINGLIT;}
+{simplesym}           { smtliblval.text = strdup(yytext); return TOK_SIMPLESYM;}
+{quotedsym}           { smtliblval.text = strdup(yytext); return TOK_QUOTEDSYM;}
+{keyword}             { smtliblval.text = strdup(yytext); return TOK_KEYWORD;}
+
 %%
