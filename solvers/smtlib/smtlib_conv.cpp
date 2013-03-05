@@ -1,9 +1,32 @@
+#include <unistd.h>
+
 #include "smtlib_conv.h"
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
   : smt_convt(false, int_encoding, _ns, is_cpp, false), options(_opts)
 {
+  // Setup: open a pipe to the smtlib solver. Because C++ is terrible,
+  // there's no standard way of opening a stream from an fd, we can try
+  // a nonportable way in the future if fwrite becomes unenjoyable.
+
+  int inpipe[2], outpipe[2];
+  if (pipe(inpipe) != 0) {
+    std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
+    abort();
+  }
+
+  if (pipe(outpipe) != 0) {
+    std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
+    abort();
+  }
+
+  pid_t pid = fork();
+  if (pid == 0) {
+    abort();
+  } else {
+    abort();
+  }
 }
 
 smtlib_convt::~smtlib_convt()
