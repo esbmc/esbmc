@@ -36,6 +36,7 @@ keyword       :{symchars}+
 %%
 
 %{
+  yy_set_interactive(1);
   if (smtlib_send_start_code != 0) {
     smtlib_send_start_code = 0;
     return startsym;
