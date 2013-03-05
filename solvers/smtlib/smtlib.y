@@ -63,6 +63,8 @@ spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
 
 symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
 
+symbol_list_empt: | symbol | symbol_list_empt symbol
+
 numlist: TOK_NUMERAL | numlist TOK_NUMERAL
 
 identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
@@ -124,7 +126,7 @@ get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 
 /* get_proof_response: we're not going to be doing this */
 
-get_unsat_core_response:
+get_unsat_core_response: TOK_LPAREN symbol_list_empt TOK_RPAREN
 
 get_value_response:
 
