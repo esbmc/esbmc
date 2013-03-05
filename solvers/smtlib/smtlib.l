@@ -23,7 +23,7 @@ escapequote   \\"
 escapeslash   \\\\
 stringlit     "((.|{escapequote}|{escapeslash})*)"
 
-symtext       [~!@%^&*_-+=<>.?/a-zA-Z]
+symtext       [-~!@%^&*_+=<>.?/a-zA-Z]
 symchars      [0-9{symtext}]
 simplesym     {symtext}{symchars}*
 quotedsym     |[^\\]*|
