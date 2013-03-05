@@ -1647,6 +1647,10 @@ smt_convt::overflow_arith(const expr2tc &expr)
   lessthan2tc op1neg(opers.side_1, zero);
   lessthan2tc op2neg(opers.side_2, zero);
 
+  equality2tc op1iszero(opers.side_1, zero);
+  equality2tc op2iszero(opers.side_2, zero);
+  or2tc containszero(op1iszero, op2iszero);
+
   // Guess whether we're performing a signed or unsigned comparison.
   bool is_signed = (is_signedbv_type(opers.side_1) ||
                     is_signedbv_type(opers.side_2));
@@ -1793,7 +1797,13 @@ smt_convt::overflow_arith(const expr2tc &expr)
       args[0] = allonescond;
       args[1] = allonesvector;
       args[2] = zerovector;
+      args[2] = mk_func_app(normalsort, SMT_FUNC_ITE, args, 3);
+
+      // either value being zero means the top must be zero.
+      args[0] = convert_ast(containszero);
+      args[1] = zerovector;
       args[0] = mk_func_app(normalsort, SMT_FUNC_ITE, args, 3);
+
       args[1] = toppart;
       args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       return mk_func_app(boolsort, SMT_FUNC_NOT, args, 1);
