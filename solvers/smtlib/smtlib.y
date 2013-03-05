@@ -70,8 +70,9 @@ int smtliberror(int startsym, const std::string &error);
 /* Rules */
 
 response: TOK_START_GEN gen_response |
-          TOK_START_INFO get_info_response |
-          TOK_START_SAT check_sat_response |
+          TOK_START_INFO get_info_response
+          { yychar = YYEOF; }
+          | TOK_START_SAT check_sat_response |
           TOK_START_ASSERTS get_assertions_response |
           TOK_START_UNSATS get_unsat_core_response |
           TOK_START_VALUE get_value_response |
