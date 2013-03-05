@@ -81,7 +81,7 @@ spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
 
 symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
 
-symbol_list_empt: | symbol | symbol_list_empt symbol
+symbol_list_empt: | symbol_list_empt symbol
 
 numlist: TOK_NUMERAL | numlist TOK_NUMERAL
 
