@@ -53,6 +53,10 @@ spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
 
 symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
 
+numlist: TOK_NUMERAL | numlist TOK_NUMERAL
+
+identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
+
 sexpr_list: | s_expr sexpr_list
 
 s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
