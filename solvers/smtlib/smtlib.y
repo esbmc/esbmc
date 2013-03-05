@@ -65,6 +65,26 @@ attribute_value: spec_constant | symbol | TOK_LPAREN sexpr_list TOK_RPAREN
 
 attribute: TOK_KEYWORD | TOK_KEYWORD attribute_value
 
+attr_list: attribute | attr_list attribute
+
 sort_list: sort | sort_list sort
 
 sort: identifier | TOK_LPAREN identifier sort_list TOK_RPAREN
+
+qual_identifier: identifier | TOK_LPAREN TOK_KW_AS identifier sort TOK_RPAREN
+
+var_binding: TOK_LPAREN symbol term TOK_RPAREN
+
+varbind_list: var_binding | varbind_list var_binding
+
+sorted_var: TOK_LPAREN symbol sort TOK_RPAREN
+
+sortvar_list: sorted_var | sortvar_list sorted_var
+
+term_list: term | term_list term
+
+term: spec_constant | qual_identifier | TOK_LPAREN qual_identifier TOK_RPAREN |
+      TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN |
+      TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
+      TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
+      TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
