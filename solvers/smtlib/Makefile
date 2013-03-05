@@ -6,7 +6,7 @@ all: $(OBJDIR)/.deps $(MAINOBJ)
 SRCS= smtlib_conv.cpp lex.yy.cpp
 
 lex.yy.cpp: scanner.l
-	$(LEX) -olex.yy.cpp scanner.l
+	$(LEX) -Psmtlib -olex.yy.cpp scanner.l
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
