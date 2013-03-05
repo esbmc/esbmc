@@ -122,7 +122,7 @@ check_sat_response: status
 
 get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 
-get_proof_response:
+/* get_proof_response: we're not going to be doing this */
 
 get_unsat_core_response:
 
