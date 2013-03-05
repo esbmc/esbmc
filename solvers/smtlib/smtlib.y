@@ -68,7 +68,7 @@ int smtliberror(int startsym, const std::string &error);
 
 /* Types */
 
-%type <str> spec_constant
+%type <str> spec_constant symbol
 
 %%
 
@@ -90,7 +90,14 @@ spec_constant: TOK_NUMERAL { $$ = new std::string($1); free($1); }
                | TOK_BINNUM { $$ = new std::string($1); free($1); }
                | TOK_STRINGLIT { $$ = new std::string($1); free($1); }
 
-symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
+symbol: TOK_SIMPLESYM { $$ = new std::string($1); free($1); }
+        | TOK_QUOTEDSYM {
+           // Strip off the | characters.
+           std::string tmp($1);
+           free($1);
+           std::string substr = tmp.substr(1, tmp.size() - 2);
+           $$ = new std::string(substr);
+         }
 
 symbol_list_empt: | symbol_list_empt symbol
 
