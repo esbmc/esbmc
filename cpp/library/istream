@@ -75,12 +75,29 @@ namespace std
 
 namespace std
 {
+
+
+  istream& operator>> (istream& is, bool val )
+  {
+    dec(is);
+    if (val == 1) {
+      boolalpha(is);
+    }
+
+    is._gcount=0;
+    return is;
+  }
+
+
   template < typename T >
   istream& operator>> (istream& is, T val )
   {
     is._gcount=0;
     return is;
   }
+
+
+
 
   int istream::get()
   {
