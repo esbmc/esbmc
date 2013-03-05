@@ -130,7 +130,7 @@ reason_unknown: TOK_KW_MEMOUT | TOK_KW_INCOMPLETE
 
 status: TOK_KW_SAT | TOK_KW_UNSAT | TOK_KW_UNKNOWN
 
-info_response_arg: error_behaviour | TOK_STRINGLIT | reason_unknown
+info_response_arg: error_behaviour | reason_unknown
 
 info_response: attribute | TOK_KEYWORD info_response_arg
 
