@@ -11,6 +11,15 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // a nonportable way in the future if fwrite becomes unenjoyable.
 
   int inpipe[2], outpipe[2];
+  std::string cmd;
+
+  cmd = options.get_option("smtlib-solver-prog");
+  if (cmd == "") {
+    std::cerr << "Must specify an smtlib solver program in smtlib mode"
+              << std::endl;
+    abort();
+  }
+
   if (pipe(inpipe) != 0) {
     std::cerr << "Couldn't open a pipe for smtlib solver" << std::endl;
     abort();
@@ -23,6 +32,18 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
   pid_t pid = fork();
   if (pid == 0) {
+    close(outpipe[1]);
+    close(inpipe[0]);
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    dup2(outpipe[0], STDIN_FILENO);
+    dup2(inpipe[1], STDOUT_FILENO);
+    close(outpipe[0]);
+    close(inpipe[1]);
+
+    // Voila
+    execlp(cmd.c_str(), cmd.c_str(), NULL);
+    std::cerr << "Exec of smtlib solver failed" << std::endl;
     abort();
   } else {
     abort();
