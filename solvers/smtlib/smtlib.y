@@ -75,14 +75,17 @@ int smtliberror(int startsym, const std::string &error);
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
-%type <expr> get_info_response
+%type <expr> get_info_response response
 %%
 
 /* Rules */
 
 response: TOK_START_GEN gen_response |
           TOK_START_INFO get_info_response
-          { yychar = YYEOF; }
+          {
+            yychar = YYEOF;
+            $$ = $2;
+          }
           | TOK_START_SAT check_sat_response |
           TOK_START_ASSERTS get_assertions_response |
           TOK_START_UNSATS get_unsat_core_response |
