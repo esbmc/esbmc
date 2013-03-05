@@ -264,7 +264,18 @@ info_response: attribute
            free($2);
          }
 
-info_response_list: info_response | info_response_list info_response
+info_response_list: info_response
+         {
+           $$ = new std::list<struct sexpr>();
+           $$->push_back(*$1);
+           delete $1;
+         }
+       | info_response_list info_response
+         {
+           $$ = $1;
+           $$->push_back(*$2);
+           delete $2;
+         }
 
 get_info_response: TOK_LPAREN info_response_list TOK_RPAREN
 
