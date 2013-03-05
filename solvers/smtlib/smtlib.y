@@ -128,6 +128,6 @@ get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 
 get_unsat_core_response: TOK_LPAREN symbol_list_empt TOK_RPAREN
 
-get_value_response:
+get_value_response: TOK_LPAREN term term TOK_RPAREN
 
 get_assignment_response:
