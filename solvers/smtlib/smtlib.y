@@ -73,7 +73,7 @@ int smtliberror(int startsym, const std::string &error);
 %type <str> symbol
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list
-%type <expr> s_expr spec_constant
+%type <expr> s_expr spec_constant attribute attribute_value
 %%
 
 /* Rules */
@@ -168,9 +168,44 @@ s_expr: spec_constant
            $$->token = 0;
          }
 
-attribute_value: spec_constant | symbol | TOK_LPAREN sexpr_list TOK_RPAREN
+attribute_value: spec_constant
+       | symbol
+         {
+           $$ = new sexpr();
+           $$->data = *$1;
+           delete $1;
+           $$->token = TOK_SIMPLESYM;
+         }
+       | TOK_LPAREN sexpr_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           $$->token = 0;
+           delete $2;
+         }
 
-attribute: TOK_KEYWORD | TOK_KEYWORD attribute_value
+attribute: TOK_KEYWORD
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KEYWORD;
+           $$->data = std::string($1);
+           free($1);
+         }
+       | TOK_KEYWORD attribute_value
+         {
+           struct sexpr *s = new sexpr();
+           s->token = TOK_KEYWORD;
+           s->data = std::string($1);
+           free($1);
+           $$ = new sexpr();
+           $$->sexpr_list.push_front(*s);
+           if ($2->token == 0)
+             $$->sexpr_list = $2->sexpr_list;
+           else
+             $2->sexpr_list.push_back(*$2);
+           delete $2;
+           delete s;
+         }
 
 attr_list: attribute | attr_list attribute
 
