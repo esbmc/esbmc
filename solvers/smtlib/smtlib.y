@@ -93,6 +93,8 @@ sortvar_list: sorted_var | sortvar_list sorted_var
 
 term_list: term | term_list term
 
+term_list_empt: | term | term_list term
+
 term: spec_constant | qual_identifier | TOK_LPAREN qual_identifier TOK_RPAREN |
       TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN |
       TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
@@ -116,9 +118,9 @@ info_response_list: info_response | info_response_list info_response
 
 get_info_response: TOK_LPAREN info_response_list TOK_RPAREN
 
-check_sat_response:
+check_sat_response: status
 
-get_assertions_response:
+get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 
 get_proof_response:
 
