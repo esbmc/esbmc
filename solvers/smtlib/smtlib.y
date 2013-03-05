@@ -70,7 +70,7 @@ int smtliberror(int startsym, const std::string &error);
 /* Types */
 
 %type <str> spec_constant symbol
-%type <str_vec> symbol_list_empt
+%type <str_vec> symbol_list_empt numlist
 %%
 
 /* Rules */
@@ -111,7 +111,18 @@ symbol_list_empt:
            $$ = $1;
          }
 
-numlist: TOK_NUMERAL | numlist TOK_NUMERAL
+numlist: TOK_NUMERAL
+         {
+           $$ = new std::list<std::string>();
+           $$->push_back(std::string($1));
+           free($1);
+         }
+         | numlist TOK_NUMERAL
+         {
+           $$ = $1;
+           $$->push_back(std::string($2));
+           free($2);
+         }
 
 identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
 
