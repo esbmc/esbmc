@@ -28,7 +28,7 @@ escapeslash   \\\\
 stringlit     "((.|{escapequote}|{escapeslash})*)"
 
 symtext       [-~!@%^&*_+=<>.?/a-zA-Z]
-symchars      [0-9{symtext}]
+symchars      [-0-9~!@%^&*_+=<>.?/a-zA-Z]
 simplesym     {symtext}{symchars}*
 quotedsym     \|[^\\]*\|
 keyword       :{symchars}+
