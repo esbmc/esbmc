@@ -60,3 +60,7 @@ identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
 sexpr_list: | s_expr sexpr_list
 
 s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
+
+attribute_value: spec_constant | symbol | TOK_LPAREN sexpr_list TOK_RPAREN
+
+attribute: TOK_KEYWORD | TOK_KEYWORD attribute_value
