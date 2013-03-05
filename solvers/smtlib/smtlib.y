@@ -19,6 +19,7 @@ int smtliberror(int startsym, const std::string &error);
   struct sexpr *expr;
   std::string *str;
   std::list<std::string> *str_vec;
+  std::list<struct sexpr> *sexpr_list;
 };
 
 /* Some tokens */
@@ -71,6 +72,8 @@ int smtliberror(int startsym, const std::string &error);
 
 %type <str> spec_constant symbol
 %type <str_vec> symbol_list_empt numlist
+%type <sexpr_list> sexpr_list
+%type <expr> s_expr
 %%
 
 /* Rules */
@@ -126,7 +129,16 @@ numlist: TOK_NUMERAL
 
 identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
 
-sexpr_list: | sexpr_list s_expr
+sexpr_list:
+         {
+           $$ = new std::list<struct sexpr>();
+         }
+         | sexpr_list s_expr
+         {
+           $$ = $1;
+           $1->push_back(*$2);
+           delete $2;
+         }
 
 s_expr: spec_constant | symbol | TOK_KEYWORD | TOK_LPAREN sexpr_list TOK_RPAREN
 
