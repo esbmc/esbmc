@@ -3,7 +3,10 @@ include $(ESBMCDIR)/config.inc
 MAINOBJ= $(OBJDIR)/smtlib.o
 all: $(OBJDIR)/.deps $(MAINOBJ)
 
-SRCS= smtlib_conv.cpp
+SRCS= smtlib_conv.cpp lex.yy.cpp
+
+lex.yy.cpp: scanner.l
+	$(LEX) -olex.yy.cpp scanner.l
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps

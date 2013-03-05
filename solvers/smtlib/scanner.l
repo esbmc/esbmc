@@ -1,3 +1,6 @@
+%option nounput
+%option noyywrap
+
 %{
 
 // A scanner for lexing smtlib2 responses from SMT solvers
