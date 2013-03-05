@@ -1,1 +1,4 @@
 lex.yy.cpp
+y.tab.cpp
+y.tab.hpp
+y.output
