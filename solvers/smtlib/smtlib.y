@@ -49,6 +49,15 @@ int smtliberror(const std::string &error);
 %token <text> TOK_KW_TRUE
 %token <text> TOK_KW_FALSE
 
+%token <text> TOK_START_GEN
+%token <text> TOK_START_INFO
+%token <text> TOK_START_SAT
+%token <text> TOK_START_ASSERTS
+%token <text> TOK_START_UNSATS
+%token <text> TOK_START_VALUE
+%token <text> TOK_START_ASSIGN
+%token <text> TOK_START_OPTION
+
 /* Start token, for the response */
 %start response
 
@@ -58,7 +67,14 @@ int smtliberror(const std::string &error);
 
 /* Rules */
 
-response: s_expr
+response: TOK_START_GEN gen_response |
+          TOK_START_INFO get_info_response |
+          TOK_START_SAT check_sat_response |
+          TOK_START_ASSERTS get_assertions_response |
+          TOK_START_UNSATS get_unsat_core_response |
+          TOK_START_VALUE get_value_response |
+          TOK_START_ASSIGN get_assignment_response |
+          TOK_START_OPTION get_option_response
 
 spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
                TOK_STRINGLIT
