@@ -517,7 +517,9 @@ bool bmct::run_thread()
           strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if(options.get_bool_option("z3")) {
+    if( options.get_bool_option("smtlib")) {
+      solver = new smtlib_solver(*this, is_cpp, ns, options);
+    } else if( options.get_bool_option("z3")) {
 #ifdef Z3
       if (options.get_bool_option("smt-during-symex")) {
         solver = new z3_runtime_solver(*this, is_cpp, runtime_z3_conv);
