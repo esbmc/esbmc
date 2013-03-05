@@ -30,8 +30,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     abort();
   }
 
-  pid_t pid = fork();
-  if (pid == 0) {
+  solver_proc_pid = fork();
+  if (solver_proc_pid == 0) {
     close(outpipe[1]);
     close(inpipe[0]);
     close(STDIN_FILENO);
@@ -46,7 +46,10 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     std::cerr << "Exec of smtlib solver failed" << std::endl;
     abort();
   } else {
-    abort();
+    close(outpipe[0]);
+    close(inpipe[1]);
+    out_stream = fdopen(outpipe[1], "w");
+    in_stream = fdopen(inpipe[0], "r");
   }
 }
 

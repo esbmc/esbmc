@@ -1,6 +1,8 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 #define _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H
 
+#include <unistd.h>
+
 #include <irep.h>
 #include <solvers/prop/prop_conv.h>
 #include <solvers/smt/smt_conv.h>
@@ -34,6 +36,9 @@ public:
 
   // Members
   const optionst &options;
+  pid_t solver_proc_pid;
+  FILE *out_stream;
+  FILE *in_stream;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
