@@ -5,6 +5,8 @@
 
 // A scanner for lexing smtlib2 responses from SMT solvers
 
+
+#include "y.tab.hpp"
 %}
 
 %{
