@@ -6,6 +6,7 @@
 // Dec of external lexer input stream
 extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
+extern int smtlib_send_start_code;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
@@ -67,6 +68,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // Fetch solver name and version.
   fprintf(out_stream, "(get-info :name)\n");
   fflush(out_stream);
+  smtlib_send_start_code = 1;
   unsigned int ret = smtlibparse(TOK_START_INFO);
   std::cerr << "Ohai, return code was " << ret << std::endl;
   abort();

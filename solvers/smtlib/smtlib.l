@@ -9,6 +9,8 @@
 #include "y.tab.hpp"
 
 #define YY_DECL int smtliblex(int startsym)
+
+int smtlib_send_start_code = 0;
 %}
 
 %{
@@ -34,10 +36,9 @@ keyword       :{symchars}+
 %%
 
 %{
-  if (startsym != 0) {
-    int t = startsym;
-    startsym = 0;
-    return t;
+  if (smtlib_send_start_code != 0) {
+    smtlib_send_start_code = 0;
+    return startsym;
   }
 %}
 
