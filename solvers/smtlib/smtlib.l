@@ -55,6 +55,8 @@ keyword       :{symchars}+
 "sat"                 { return TOK_KW_SAT; }
 "unsat"               { return TOK_KW_UNSAT; }
 "unknown"             { return TOK_KW_UNKNOWN; }
+"true"                { return TOK_KW_TRUE; }
+"false"               { return TOK_KW_FALSE; }
 
 {lparen}              { return TOK_LPAREN; }
 {rparen}              { return TOK_RPAREN; }

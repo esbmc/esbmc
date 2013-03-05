@@ -46,6 +46,8 @@ int smtliberror(const std::string &error);
 %token <text> TOK_KW_SAT
 %token <text> TOK_KW_UNSAT
 %token <text> TOK_KW_UNKNOWN
+%token <text> TOK_KW_TRUE
+%token <text> TOK_KW_FALSE
 
 /* Start token, for the response */
 %start response
@@ -128,6 +130,18 @@ get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 
 get_unsat_core_response: TOK_LPAREN symbol_list_empt TOK_RPAREN
 
-get_value_response: TOK_LPAREN term term TOK_RPAREN
+valuation_pair: TOK_LPAREN term term TOK_RPAREN
 
-get_assignment_response:
+valuation_pair_list: valuation_pair | valuation_pair_list valuation_pair
+
+get_value_response: TOK_LPAREN valuation_pair_list TOK_RPAREN
+
+b_value: TOK_KW_TRUE | TOK_KW_FALSE
+
+t_valuation_pair: TOK_LPAREN symbol b_value TOK_RPAREN
+
+t_valuation_pair_empt: | t_valuation_pair | t_valuation_pair_empt t_valuation_pair
+
+get_assignment_response: TOK_LPAREN t_valuation_pair_empt TOK_RPAREN
+
+get_option_response: attribute_value
