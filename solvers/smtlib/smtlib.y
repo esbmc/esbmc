@@ -15,6 +15,7 @@ int smtliberror(int startsym, const std::string &error);
 /* Values */
 %union {
   const char *text;
+  struct sexpr *expr;
 };
 
 /* Some tokens */

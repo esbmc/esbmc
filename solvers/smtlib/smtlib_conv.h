@@ -3,9 +3,19 @@
 
 #include <unistd.h>
 
-#include <irep.h>
+#include <string>
+#include <list>
+
+#include <irep2.h>
 #include <solvers/prop/prop_conv.h>
 #include <solvers/smt/smt_conv.h>
+
+class sexpr {
+public:
+  unsigned int token; // If zero, then an sexpr list
+  std::list<sexpr> sexpr_list;
+  std::string data; // Text rep of parsed token.
+};
 
 class smtlib_convt : public smt_convt {
 public:
