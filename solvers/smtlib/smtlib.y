@@ -18,6 +18,7 @@ int smtliberror(int startsym, const std::string &error);
   char *text;
   struct sexpr *expr;
   std::string *str;
+  std::list<std::string> *str_vec;
 };
 
 /* Some tokens */
@@ -69,7 +70,7 @@ int smtliberror(int startsym, const std::string &error);
 /* Types */
 
 %type <str> spec_constant symbol
-
+%type <str_vec> symbol_list_empt
 %%
 
 /* Rules */
@@ -99,7 +100,16 @@ symbol: TOK_SIMPLESYM { $$ = new std::string($1); free($1); }
            $$ = new std::string(substr);
          }
 
-symbol_list_empt: | symbol_list_empt symbol
+symbol_list_empt:
+         {
+           $$ = new std::list<std::string>();
+         }
+         | symbol_list_empt symbol
+         {
+           $1->push_back(*$2);
+           delete $2;
+           $$ = $1;
+         }
 
 numlist: TOK_NUMERAL | numlist TOK_NUMERAL
 
