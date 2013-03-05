@@ -1,3 +1,5 @@
+%lex-param { int startsym }
+%parse-param { int startsym }
 %{
   // A parser for smtlib responses
 
@@ -5,8 +7,8 @@
 
 #include "y.tab.hpp"
 
-int smtliblex();
-int smtliberror(const std::string &error);
+int smtliblex(int startsym);
+int smtliberror(int startsym, const std::string &error);
 
 %}
 

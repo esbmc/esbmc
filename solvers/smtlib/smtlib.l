@@ -7,6 +7,8 @@
 
 
 #include "y.tab.hpp"
+
+#define YY_DECL int smtliblex(int startsym)
 %}
 
 %{
@@ -30,6 +32,14 @@ quotedsym     \|[^\\]*\|
 keyword       :{symchars}+
 
 %%
+
+%{
+  if (startsym != 0) {
+    int t = startsym;
+    startsym = 0;
+    return t;
+  }
+%}
 
 %{
   // Keywords -- we don't particularly care about using them when reading.

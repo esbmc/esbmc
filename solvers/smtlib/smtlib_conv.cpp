@@ -169,7 +169,7 @@ smtlib_convt::mk_extract(const smt_ast *a __attribute__((unused)), unsigned int 
 }
 
 int
-smtliberror(const std::string &error)
+smtliberror(int startsym __attribute__((unused)), const std::string &error)
 {
   std::cerr << "SMTLIB response parsing error: \"" << error << "\""
             << std::endl;
