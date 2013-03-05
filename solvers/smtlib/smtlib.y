@@ -70,10 +70,10 @@ int smtliberror(int startsym, const std::string &error);
 
 /* Types */
 
-%type <str> spec_constant symbol
+%type <str> symbol
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list
-%type <expr> s_expr
+%type <expr> s_expr spec_constant
 %%
 
 /* Rules */
@@ -88,11 +88,16 @@ response: TOK_START_GEN gen_response |
           TOK_START_ASSIGN get_assignment_response |
           TOK_START_OPTION get_option_response
 
-spec_constant: TOK_NUMERAL { $$ = new std::string($1); free($1); }
-               | TOK_DECIMAL { $$ = new std::string($1); free($1); }
-               | TOK_HEXNUM { $$ = new std::string($1); free($1); }
-               | TOK_BINNUM { $$ = new std::string($1); free($1); }
-               | TOK_STRINGLIT { $$ = new std::string($1); free($1); }
+spec_constant: TOK_NUMERAL
+{$$ = new sexpr(); $$->token = TOK_NUMERAL;$$->data = std::string($1);free($1);}
+               | TOK_DECIMAL
+{$$ = new sexpr(); $$->token = TOK_DECIMAL;$$->data = std::string($1);free($1);}
+               | TOK_HEXNUM
+{$$ = new sexpr(); $$->token = TOK_HEXNUM;$$->data = std::string($1);free($1);}
+               | TOK_BINNUM
+{$$ = new sexpr(); $$->token = TOK_BINNUM;$$->data = std::string($1);free($1);}
+               | TOK_STRINGLIT
+{$$ = new sexpr(); $$->token = TOK_STRINGLIT; $$->data = std::string($1); free($1);}
 
 symbol: TOK_SIMPLESYM { $$ = new std::string($1); free($1); }
         | TOK_QUOTEDSYM {
