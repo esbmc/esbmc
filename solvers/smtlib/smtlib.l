@@ -45,6 +45,9 @@ keyword       :{symchars}+
 "let"                 { return TOK_KW_LET; }
 "forall"              { return TOK_KW_FORALL; }
 "exists"              { return TOK_KW_EXISTS; }
+"unsupported"         { return TOK_KW_UNSUPPORTED; }
+"success"             { return TOK_KW_SUCCESS; }
+"error"               { return TOK_KW_ERROR; }
 
 {lparen}              { return TOK_LPAREN; }
 {rparen}              { return TOK_RPAREN; }

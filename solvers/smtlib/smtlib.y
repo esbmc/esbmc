@@ -36,6 +36,9 @@ int smtliberror(const std::string &error);
 %token <text> TOK_KW_LET
 %token <text> TOK_KW_FORALL
 %token <text> TOK_KW_EXISTS
+%token <text> TOK_KW_UNSUPPORTED
+%token <text> TOK_KW_SUCCESS
+%token <text> TOK_KW_ERROR
 
 /* Start token, for the response */
 %start response
@@ -88,3 +91,20 @@ term: spec_constant | qual_identifier | TOK_LPAREN qual_identifier TOK_RPAREN |
       TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
       TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
       TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
+
+gen_response: TOK_KW_UNSUPPORTED | TOK_KW_SUCCESS |
+              TOK_LPAREN TOK_KW_ERROR TOK_STRINGLIT TOK_RPAREN
+
+get_info_response:
+
+check_sat_response:
+
+get_assertions_response:
+
+get_proof_response:
+
+get_unsat_core_response:
+
+get_value_response:
+
+get_assignment_response:
