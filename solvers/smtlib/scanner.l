@@ -33,15 +33,15 @@ keyword       :{symchars}+
   // Keywords -- we don't particularly care about using them when reading.
 %}
 
-"par"
-"NUMERAL"
-"DECIMAL"
-"STRING"
-"_"
-"!"
-"as"
-"let"
-"forall"
-"exists"
+"par"                 { return TOK_KW_PAR; }
+"NUMERAL"             { return TOK_KW_NUMERAL; }
+"DECIMAL"             { return TOK_KW_DECIMAL; }
+"STRING"              { return TOK_KW_STRING; }
+"_"                   { return TOK_KW_USCORE; }
+"!"                   { return TOK_KW_EXCL; }
+"as"                  { return TOK_KW_AS; }
+"let"                 { return TOK_KW_LET; }
+"forall"              { return TOK_KW_FORALL; }
+"exists"              { return TOK_KW_EXISTS; }
 
 %%
