@@ -43,6 +43,9 @@ int smtliberror(const std::string &error);
 %token <text> TOK_KW_CONEXECUTION
 %token <text> TOK_KW_MEMOUT
 %token <text> TOK_KW_INCOMPLETE
+%token <text> TOK_KW_SAT
+%token <text> TOK_KW_UNSAT
+%token <text> TOK_KW_UNKNOWN
 
 /* Start token, for the response */
 %start response
@@ -102,6 +105,8 @@ gen_response: TOK_KW_UNSUPPORTED | TOK_KW_SUCCESS |
 error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
 
 reason_unknown: TOK_KW_MEMOUT | TOK_KW_INCOMPLETE
+
+status: TOK_KW_SAT | TOK_KW_UNSAT | TOK_KW_UNKNOWN
 
 get_info_response:
 

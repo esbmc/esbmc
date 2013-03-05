@@ -52,6 +52,9 @@ keyword       :{symchars}+
 "continued-execution" { return TOK_KW_CONEXECUTION; }
 "memout"              { return TOK_KW_MEMOUT; }
 "incomplete"          { return TOK_KW_INCOMPLETE; }
+"sat"                 { return TOK_KW_SAT; }
+"unsat"               { return TOK_KW_UNSAT; }
+"unknown"             { return TOK_KW_UNKNOWN; }
 
 {lparen}              { return TOK_LPAREN; }
 {rparen}              { return TOK_RPAREN; }
