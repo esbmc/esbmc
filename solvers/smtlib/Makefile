@@ -12,7 +12,7 @@ y.tab.cpp: smtlib.y
 	$(YACC) $(YFLAGS) $$flags -psmtlib -d smtlib.y -o y.tab.cpp
 
 clean:
-	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps lex.yy.cpp y.tab.cpp y.tab.hpp y.output
 
 
 STRICTCOMPILE=1
