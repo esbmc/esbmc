@@ -5,8 +5,8 @@ all: $(OBJDIR)/.deps $(MAINOBJ)
 
 SRCS= smtlib_conv.cpp lex.yy.cpp y.tab.cpp
 
-lex.yy.cpp: smtlib.l
-	$(LEX) -Psmtlib -olex.yy.c smtlib.l
+lex.yy.cpp: smtlib.l y.tab.cpp
+	$(LEX) -Psmtlib -olex.yy.cpp smtlib.l
 
 y.tab.cpp: smtlib.y
 	$(YACC) $(YFLAGS) $$flags -psmtlib -d smtlib.y -o y.tab.cpp
