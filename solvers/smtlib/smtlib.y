@@ -23,7 +23,7 @@ int smtliberror(const std::string &error);
 %token <text> TOK_HEXNUM
 %token <text> TOK_BINNUM
 %token <text> TOK_STRINGLIT
-%token <text> TOK_SYMPLESYM
+%token <text> TOK_SIMPLESYM
 %token <text> TOK_QUOTEDSYM
 %token <text> TOK_KEYWORD
 %token <text> TOK_KW_PAR
