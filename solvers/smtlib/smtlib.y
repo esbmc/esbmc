@@ -278,6 +278,12 @@ info_response_list: info_response
          }
 
 get_info_response: TOK_LPAREN info_response_list TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->sexpr_list = *$2;
+           $$->token = 0;
+           delete $2;
+         }
 
 check_sat_response: status
 
