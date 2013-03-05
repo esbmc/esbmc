@@ -629,9 +629,10 @@ bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
 
 #endif
 
-bmct::smtlib_solver::smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
+bmct::smtlib_solver::smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
+                                   const optionst &options)
   : solver_base(bmc), smtlib_conv(bmc.options.get_bool_option("int-encoding"),
-                                  ns, is_cpp)
+                                  ns, is_cpp, options)
 {
 }
 

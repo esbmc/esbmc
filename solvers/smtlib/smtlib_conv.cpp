@@ -1,8 +1,8 @@
 #include "smtlib_conv.h"
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
-                           bool is_cpp)
-  : smt_convt(false, int_encoding, _ns, is_cpp, false)
+                           bool is_cpp, const optionst &_opts)
+  : smt_convt(false, int_encoding, _ns, is_cpp, false), options(_opts)
 {
 }
 

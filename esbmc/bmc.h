@@ -120,7 +120,8 @@ protected:
 
   class smtlib_solver : public solver_base {
   public:
-    smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
+    smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
+                  const optionst &options);
     virtual bool run_solver(symex_target_equationt &equation);
   protected:
     smtlib_convt smtlib_conv;

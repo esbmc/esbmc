@@ -7,7 +7,8 @@
 
 class smtlib_convt : public smt_convt {
 public:
-  smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
+  smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+               const optionst &_options);
   ~smtlib_convt();
 
   virtual resultt dec_solve();
@@ -31,6 +32,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  // Members
+  const optionst &options;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
