@@ -5,7 +5,7 @@
 
 // A scanner for lexing smtlib2 responses from SMT solvers
 
-
+#include <string>
 #include "y.tab.hpp"
 
 #define YY_DECL int smtliblex(int startsym)

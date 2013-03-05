@@ -3,19 +3,21 @@
 %{
   // A parser for smtlib responses
 
+#include <string>
+
 #include "smtlib_conv.h"
 
 #include "y.tab.hpp"
 
 int smtliblex(int startsym);
 int smtliberror(int startsym, const std::string &error);
-
 %}
 
 /* Values */
 %union {
-  const char *text;
+  char *text;
   struct sexpr *expr;
+  std::string *str;
 };
 
 /* Some tokens */
@@ -66,6 +68,8 @@ int smtliberror(int startsym, const std::string &error);
 
 /* Types */
 
+%type <str> spec_constant
+
 %%
 
 /* Rules */
@@ -80,8 +84,11 @@ response: TOK_START_GEN gen_response |
           TOK_START_ASSIGN get_assignment_response |
           TOK_START_OPTION get_option_response
 
-spec_constant: TOK_NUMERAL | TOK_DECIMAL | TOK_HEXNUM | TOK_BINNUM |
-               TOK_STRINGLIT
+spec_constant: TOK_NUMERAL { $$ = new std::string($1); free($1); }
+               | TOK_DECIMAL { $$ = new std::string($1); free($1); }
+               | TOK_HEXNUM { $$ = new std::string($1); free($1); }
+               | TOK_BINNUM { $$ = new std::string($1); free($1); }
+               | TOK_STRINGLIT { $$ = new std::string($1); free($1); }
 
 symbol: TOK_SIMPLESYM | TOK_QUOTEDSYM
 
