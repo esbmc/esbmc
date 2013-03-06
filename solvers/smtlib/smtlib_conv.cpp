@@ -10,6 +10,7 @@ extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
+extern std::string smtlib_text_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
@@ -118,7 +119,47 @@ smtlib_convt::~smtlib_convt()
 prop_convt::resultt
 smtlib_convt::dec_solve()
 {
-  abort();
+  // Set some preliminaries, logic and so forth.
+  // Declare all the symbols + sorts
+  // Emit constraints
+  // check-sat
+
+  // Preliminaries
+  fprintf(out_stream, "(set-info :status unknown)\n");
+  fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+
+  // Declare all symbols
+  std::map<std::string, const smt_sort *>::const_iterator it;
+  for (it = symbol_table.begin(); it != symbol_table.end(); it++) {
+    // Do things
+  }
+
+  // Emit all constraints
+  std::list<const smtlib_smt_ast *>::const_iterator it2;
+  for (it2 = assertion_list.begin(); it2 != assertion_list.end(); it2++) {
+    // Do things
+  }
+
+  fprintf(out_stream, "(check-sat)\n");
+
+  // Flush out command, starting model check
+  fflush(out_stream);
+
+  // And read in the output
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_SAT);
+
+  if (smtlib_text_output == "sat") {
+    return prop_convt::P_SATISFIABLE;
+  } else if (smtlib_text_output == "unsat") {
+    return prop_convt::P_UNSATISFIABLE;
+  } else if (smtlib_text_output == "sat") {
+    return prop_convt::P_ERROR;
+  } else {
+    std::cerr << "Unrecognized check-sat output from smtlib solver \""
+              << smtlib_text_output << "\"" << std::endl;
+    abort();
+  }
 }
 
 expr2tc
