@@ -209,12 +209,14 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 smt_sort *
 smtlib_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
 {
+  std::cerr << "Attempted to make struct type in smtlib conversion" <<std::endl;
   abort();
 }
 
 smt_sort *
 smtlib_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
 {
+  std::cerr << "Attempted to make union type in smtlib conversion" << std::endl;
   abort();
 }
 
