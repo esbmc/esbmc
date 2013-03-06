@@ -28,6 +28,7 @@ enum smt_func_kind {
   SMT_FUNC_HACKS = 0, // indicate the solver /has/ to use the temp expr.
   SMT_FUNC_INVALID = 1, // For conversion lookup table only
   SMT_FUNC_INT = 2,
+  SMT_FUNC_BOOL,
   SMT_FUNC_BVINT,
   SMT_FUNC_REAL,
   SMT_FUNC_SYMBOL,
