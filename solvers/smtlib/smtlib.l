@@ -45,6 +45,7 @@ keyword       :{symchars}+
 
 [\t]+                   { /* discard */ }
 [ ]+                    { /* discard */ }
+[\n]+                    { /* discard */ }
 
 "par"                 { return TOK_KW_PAR; }
 "NUMERAL"             { return TOK_KW_NUMERAL; }
