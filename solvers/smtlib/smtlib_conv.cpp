@@ -1,5 +1,7 @@
 #include <unistd.h>
 
+#include <sstream>
+
 #include "smtlib_conv.h"
 #include "y.tab.hpp"
 
@@ -188,9 +190,18 @@ smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 }
 
 literalt
-smtlib_convt::mk_lit(const smt_ast *s __attribute__((unused)))
+smtlib_convt::mk_lit(const smt_ast *s)
 {
-  abort();
+  const smt_ast *args[2];
+  smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  std::stringstream ss;
+  literalt l = new_variable();
+  ss << "l" << l.get();
+  args[0] = mk_smt_symbol(ss.str(), sort);;
+  args[1] = s;
+  smt_ast *eq = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
+  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(eq));
+  return l;
 }
 
 smt_ast *

@@ -86,6 +86,7 @@ public:
   // Actual solving data
   // The set of symbols and their sorts.
   std::map<std::string, const smt_sort *> symbol_table;
+  std::list<const smtlib_smt_ast *> assertion_list;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
