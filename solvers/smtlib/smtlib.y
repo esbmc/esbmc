@@ -13,6 +13,7 @@ int smtliblex(int startsym);
 int smtliberror(int startsym, const std::string &error);
 
 sexpr *smtlib_output = NULL;
+std::string smtlib_text_output;
 %}
 
 /* Values */
@@ -72,7 +73,8 @@ sexpr *smtlib_output = NULL;
 
 /* Types */
 
-%type <text> error_behaviour reason_unknown info_response_arg
+%type <text> error_behaviour reason_unknown info_response_arg status
+%type <text> check_sat_response
 %type <str> symbol
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list info_response_list
@@ -82,19 +84,25 @@ sexpr *smtlib_output = NULL;
 
 /* Rules */
 
-response: TOK_START_GEN gen_response |
-          TOK_START_INFO get_info_response
+response: TOK_START_GEN gen_response
+          | TOK_START_INFO get_info_response
           {
             yychar = YYEOF;
             $$ = $2;
             smtlib_output = $2;
           }
-          | TOK_START_SAT check_sat_response |
-          TOK_START_ASSERTS get_assertions_response |
-          TOK_START_UNSATS get_unsat_core_response |
-          TOK_START_VALUE get_value_response |
-          TOK_START_ASSIGN get_assignment_response |
-          TOK_START_OPTION get_option_response
+          | TOK_START_SAT check_sat_response
+          {
+            yychar = YYEOF;
+            $$ = NULL;
+            smtlib_text_output = std::string($2);
+            free($2);
+          }
+          | TOK_START_ASSERTS get_assertions_response
+          | TOK_START_UNSATS get_unsat_core_response
+          | TOK_START_VALUE get_value_response
+          | TOK_START_ASSIGN get_assignment_response
+          | TOK_START_OPTION get_option_response
 
 spec_constant: TOK_NUMERAL
 {$$ = new sexpr(); $$->token = TOK_NUMERAL;$$->data = std::string($1);free($1);}
