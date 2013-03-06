@@ -163,27 +163,38 @@ smtlib_convt::mk_lit(const smt_ast *s __attribute__((unused)))
 }
 
 smt_ast *
-smtlib_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
+smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
-  abort();
+  smt_sort *s = mk_sort(SMT_SORT_INT, sign);
+  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_INT);
+  a->intval = theint;
+  return a;
 }
 
 smt_ast *
-smtlib_convt::mk_smt_real(const mp_integer &thereal __attribute__((unused)))
+smtlib_convt::mk_smt_real(const mp_integer &thereal)
 {
-  abort();
+  smt_sort *s = mk_sort(SMT_SORT_REAL);
+  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_REAL);
+  a->intval = thereal;
+  return a;
 }
 
 smt_ast *
-smtlib_convt::mk_smt_bvint(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)), unsigned int w __attribute__((unused)))
+smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  abort();
+  smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_BVINT);
+  a->intval = theint;
+  return a;
 }
 
 smt_ast *
-smtlib_convt::mk_smt_bool(bool val __attribute__((unused)))
+smtlib_convt::mk_smt_bool(bool val)
 {
-  abort();
+  smtlib_smt_ast *a = new smtlib_smt_ast(mk_sort(SMT_SORT_BOOL), SMT_FUNC_BOOL);
+  a->boolval = val;
+  return a;
 }
 
 smt_ast *
