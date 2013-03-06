@@ -16,10 +16,10 @@ int smtliberror(int startsym, const std::string &error);
 /* Values */
 %union {
   char *text;
-  struct sexpr *expr;
+  sexpr *expr;
   std::string *str;
   std::list<std::string> *str_vec;
-  std::list<struct sexpr> *sexpr_list;
+  std::list<sexpr> *sexpr_list;
 };
 
 /* Some tokens */
@@ -141,7 +141,7 @@ identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
 
 sexpr_list:
          {
-           $$ = new std::list<struct sexpr>();
+           $$ = new std::list<sexpr>();
          }
          | sexpr_list s_expr
          {
@@ -198,7 +198,7 @@ attribute: TOK_KEYWORD
          }
        | TOK_KEYWORD attribute_value
          {
-           struct sexpr *s = new sexpr();
+           sexpr *s = new sexpr();
            s->token = TOK_KEYWORD;
            s->data = std::string($1);
            free($1);
@@ -253,7 +253,7 @@ info_response: attribute
        | TOK_KEYWORD info_response_arg
          {
            $$ = new sexpr();
-           struct sexpr *s = new sexpr();
+           sexpr *s = new sexpr();
            s->token = TOK_KEYWORD;
            s->data = std::string($1);
            free($1);
@@ -269,7 +269,7 @@ info_response: attribute
 
 info_response_list: info_response
          {
-           $$ = new std::list<struct sexpr>();
+           $$ = new std::list<sexpr>();
            $$->push_back(*$1);
            delete $1;
          }

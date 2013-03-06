@@ -7,6 +7,7 @@
 
 #include <string>
 #include <list>
+#include "smtlib_conv.h"
 #include "y.tab.hpp"
 
 #define YY_DECL int smtliblex(int startsym)
