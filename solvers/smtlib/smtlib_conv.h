@@ -65,6 +65,10 @@ public:
   FILE *in_stream;
   std::string solver_name;
   std::string solver_version;
+
+  // Actual solving data
+  // The set of symbols and their sorts.
+  std::map<std::string, const smt_sort *> symbol_table;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */

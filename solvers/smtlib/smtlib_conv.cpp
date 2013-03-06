@@ -191,6 +191,7 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_SYMBOL);
   a->symname = name;
+  symbol_table[name] = s;
   return a;
 }
 
