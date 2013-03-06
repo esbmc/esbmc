@@ -10,6 +10,9 @@
 
 #include "intrinsics.h"
 
+#define M_PI 3.14159265358979323846
+#define PREC 1e-20
+
 #ifdef _WIN32
 #undef fabs
 #undef fabsl
@@ -36,7 +39,7 @@ enum
 
 int abs(int i) { return __ESBMC_abs(i); }
 long int labs(long int i) { return __ESBMC_labs(i); }
-double fabs(double d) { return __ESBMC_fabs(d); }
+//double fabs(double d) { return __ESBMC_fabs(d); }
 long double fabsl(long double d) { return __ESBMC_fabsl(d); }
 float fabsf(float f) { return __ESBMC_fabsf(f); }
 int isfinite(double d) { return __ESBMC_isfinite(d); }
@@ -73,4 +76,25 @@ int fegetround() { return __ESBMC_rounding_mode; }
 
 int fesetround(int __rounding_direction) {
   __ESBMC_rounding_mode=__rounding_direction;
+}
+
+double inline fabs(double x) {
+  return (x < 0) ? -x : x;
+}
+
+double cos(double x)
+{
+    double t , s ;
+    int p;
+    p = 0;
+    s = 1.0;
+    t = 1.0;
+    double xsqr = x*x;
+    while(fabs(t/s) > PREC)
+    {
+        p++;
+        t = (-t * xsqr) / (((p<<1) - 1) * (p<<1));
+        s += t;
+    }
+    return s;
 }

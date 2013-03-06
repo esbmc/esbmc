@@ -2227,6 +2227,7 @@ bool Parser::rDeclarator(
         typet array_type("array");
         array_type.add("size").swap(expr);
         array_type.subtype().swap(tl.back());
+        set_location(array_type,ob);
         tl.pop_back();
         d_outer.swap(array_type);
         while(!tl.empty())
