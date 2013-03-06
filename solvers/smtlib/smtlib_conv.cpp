@@ -136,7 +136,7 @@ smtlib_convt::l_get(literalt a __attribute__((unused)))
 const std::string
 smtlib_convt::solver_text()
 {
-  abort();
+  return solver_name + " version " + solver_version;
 }
 
 void
