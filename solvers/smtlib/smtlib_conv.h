@@ -50,6 +50,7 @@ public:
   pid_t solver_proc_pid;
   FILE *out_stream;
   FILE *in_stream;
+  std::string solver_name;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */

@@ -70,12 +70,22 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   fprintf(out_stream, "(get-info :name)\n");
   fflush(out_stream);
   smtlib_send_start_code = 1;
-  unsigned int ret = smtlibparse(TOK_START_INFO);
-  std::cerr << "Ohai, return code was " << ret << std::endl;
-  abort();
+  smtlibparse(TOK_START_INFO);
 
-  fprintf(out_stream, "(get-info :version)\n");
-  fflush(out_stream);
+  // As a result we should have a single entry in a list of sexprs.
+  struct sexpr *sexpr = smtlib_output;
+  assert(sexpr->sexpr_list.size() == 1 &&
+         "More than one sexpr response to get-info name");
+  struct sexpr &s = sexpr->sexpr_list.front();
+
+  // Should have a keyword followed by a string?
+  assert(s.token == 0 && s.sexpr_list.size() == 2 && "Bad solver name format");
+  struct sexpr &keyword = s.sexpr_list.front();
+  struct sexpr &value = s.sexpr_list.back();
+  assert(keyword.token == TOK_KEYWORD && keyword.data == ":name" &&
+         "Bad get-info :name response from solver");
+  assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
+  solver_name = value.data;
 }
 
 smtlib_convt::~smtlib_convt()
