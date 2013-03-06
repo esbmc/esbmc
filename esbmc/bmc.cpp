@@ -636,6 +636,7 @@ bmct::smtlib_solver::smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
   : solver_base(bmc), smtlib_conv(bmc.options.get_bool_option("int-encoding"),
                                   ns, is_cpp, options)
 {
+  conv = &smtlib_conv;
 }
 
 bool bmct::smtlib_solver::run_solver(symex_target_equationt &equation)
