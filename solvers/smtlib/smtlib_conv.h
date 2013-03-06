@@ -29,6 +29,9 @@ public:
   std::string symname;
   BigInt intval;
   bool boolval;
+  int extract_high;
+  int extract_low;
+  const smt_ast *args[4];
 };
 
 class smtlib_convt : public smt_convt {

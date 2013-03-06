@@ -219,10 +219,14 @@ smtlib_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
 }
 
 smt_ast *
-smtlib_convt::mk_extract(const smt_ast *a __attribute__((unused)), unsigned int high __attribute__((unused)), unsigned int low __attribute__((unused)),
-                         const smt_sort *s __attribute__((unused)))
+smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
+                         const smt_sort *s)
 {
-  abort();
+  smtlib_smt_ast *n = new smtlib_smt_ast(s, SMT_FUNC_EXTRACT);
+  n->extract_high = high;
+  n->extract_low = low;
+  n->args[0] = a;
+  return n;
 }
 
 int
