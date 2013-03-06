@@ -530,7 +530,7 @@ future work in Section~\ref{conclusions}.
 
 \begin{figure*}[ht] \centering
 \includegraphics[scale=0.35]{figures/esbmc-arch}
-\caption{ESBMC/ESBMC++ Architecture.}
+\caption{ESBMC/ESBMC++ Architecture (ESBMC-specific components shown dashed).}
 \label{figure:esbmc-arch}
 \end{figure*}
 
@@ -694,8 +694,8 @@ by the following two axioms~\cite{CVC07,Boolector09,Z08}:
 %
 \[
 \begin{array}{l}
-  i=j      \Rightarrow select\left(store\left(a,i,v\right),j\right)=v \\
-  i \neq j \Rightarrow select\left(store\left(a,i,v\right),j\right)=select\left(a,j\right)
+  i=j      \Rightarrow \textit{select}(\textit{store}(a,i,v),j)=v \\
+  i \neq j \Rightarrow \textit{select}(\textit{store}(a,i,v),j)=\textit{select}(a,j)
 \end{array}
 \]
 
@@ -728,24 +728,24 @@ same.
 %------------------------------------------------------
 %
 The tool architecture is shown in Figure~\ref{figure:esbmc-arch}. The first step
-is the source code parser; ESBMC++ takes a C++ source code as input and creates
+is the source code parser; ESBMC++ takes C++ source code as input and creates
 most of the intermediate representation of the program, which will be the base
-for the remaining steps of the program verification. The source code parser is
+for the remaining steps of the program verification. The parser is
 heavily based on the GNU C++ compiler since this allows ESBMC++ to finds most of the
 syntax errors already reported by GCC.
 
 The next step is the C++ type-check; here, additional checks are performed in the IRep
-tree, which include: assignment checks, type-cast checks, pointer initialization checks, function
+tree, which include assignment checks, type-cast checks, pointer initialization checks, function
 call checks as well as template creation and instantiation (which will be explained later).
-In the next programs step, the IRep tree is converted into goto expressions; this conversion
+In the next step, the IRep tree is converted into goto expressions; this conversion
 simplifies the representation of the C++ program (e.g, replacement of \emph{switch} and \emph{while}
-by \emph{if} and \emph{goto} statements), and handles the unrolling of the loops and the
+by \emph{if} and \emph{goto} statements), and handles the unrolling of loops and the
 elimination of recursive functions. In the symbolic execution of the goto programs, the simplified goto program
 is then converted to SSA expressions and assertions are inserted in the resulting SSA
 expressions to check for safety properties related to array out-of-bounds, arithmetic under-
 and over-flow, memory leaks, double frees, and division by zero.
-Additionally, in this step most of the exception handling is carried out, such as \textit{jump} instruction
-from \textit{throw} statements and exception specification for function calls.
+Additionally, in this step most of the exception handling is carried out, such as the insertion of GOTO-instructions for the original
+\textit{throw} statements and exception specification for function calls.
 
 Finally, two set of quantifier-free formulae are created based on the SSA expressions:
 ${\cal C}$ for the constraints and ${\cal P}$ for the properties as
@@ -779,9 +779,9 @@ if there is a violation of a given property, or an ``unsatisfiable'' answer if t
 %%% \subsection{Structure and Model}
 %------------------------------
 
-C++ relies on a collectoin of powerful standard libraries to provide
+C++ relies on a collection of powerful standard libraries to provide
 much of the functionality programmers require. In principle, we could use
-their (available) sources during the verification, but their optimized
+the (available) sources during the verification, but their optimized
 implementations would complicate the VCs unnecessarily. Instead
 we developed a simplified representation of the
 libraries called the C++ Operational Model (COM), which represents the
@@ -821,7 +821,14 @@ the Standard Template Libraries (STL).
 This part is split into
 four categories: \textit{algorithms}, \textit{numeric},
 \textit{containers}, and \textit{iterators}.
-Apart from these categories, the verification of C++ programs with
+In this paper, we focus on the operational model of the
+sequential containers and iterators in the STL,
+%its preconditions and simulation features
+%(e.g., how we store the elements values of the containers),
+and how they are used to
+verify real-world C++ programs.
+
+Apart from the STL handling, the verification of C++ programs with
 templates is essentially split into two steps: template creation
 and template instantiation. To create a template, ESBMC++ finds
 the respective template declaration and creates an internal representation
@@ -832,16 +839,9 @@ with a specified type and creates a new internal representation of the
 class or function with the instantiated type; this new representation
 is not a template anymore. At this point, ESBMC++ keeps track of the
 generic template definition and the respective instantiated class or function.
-Note that, when a new template is instantiated, ESBMC++ first checks whether it was already
-instantiated to avoid creating an existing representation of a previously
+Note that when a new template is instantiated, ESBMC++ first checks whether it was already
+instantiated to avoid creating a duplicate representation of a previously
 instantiated template.
-
-In this paper, we focus on the operational model of the
-sequential containers and iterators in the STL,
-%its preconditions and simulation features
-%(e.g., how we store the elements values of the containers),
-and how they are used to
-verify real-world C++ programs.
 
 
 
@@ -854,19 +854,18 @@ we define a core container language, and extend the translation
 functions $\cal C$ and  $\cal P$ of constraints and properties to this.
 We then use this core language to implement the operational model
 of the containers.
-
+%
 \begin{figure}
 \[\begin{array}{r@{\:\:}r@{\:\:}l}
   T   & ::= &
     t \:|\: \mathit{*It} \:|\: \mathit{*P}
 \\[0.5ex]
    \mathit{It} & ::= &
-     i \:|\: \mathit{It} (+ \:|\: -) \mathit{It}
-       \:|\: \mathit{C.begin} \:|\: \mathit{C.end}
+     i \:|\: \mathit{C.begin} \:|\: \mathit{C.end}
 \\  & | &
      \mathit{C.insert(It, T, N)} \:|\: \mathit{C.insert(It, It, It)}
 \\  & | &
-     \mathit{C.erase(It, It, It)} \:|\: \mathit{C.erase(It)} \:|\: \mathit{C.search(It)}
+     \mathit{C.erase(It)} \:|\: \mathit{C.erase(It, It)} \:|\: \mathit{C.search(It)}
 \\[0.5ex]
    P  & ::= &
      p \:|\: P (+ \:|\: - ) P
@@ -881,7 +880,7 @@ of the containers.
      c \:|\: \mathit{It.source}
   \end{array}
 \]
-  \caption{\label{ccl-fig}Core container syntax}
+  \caption{\label{ccl-fig}Core container syntax.}
 \end{figure}
 
 The container language comprises several syntactic domains, starting with the
@@ -892,15 +891,18 @@ syntax. Here $t$, $i$, $p$, and $c$ are variables of type $T$, $\mathit{It}$,
 $P$, and $C$, respectively.  $n$ is a variable or constant of type
 $\mathit{Int}$.
 %
-$\mathit{*It}$ is the value stored in the position pointed
-by an iterator $\mathit{It}$. Similarly, $\mathit{*P}$ is the value
-stored in the $\mathit{P}$ position of the memory.
+We abuse the notation
+$\mathit{*It}$ to denote the value stored in the underlying container
+at the position pointed to by the iterator $\mathit{It}$; 
+this is an abbreviation for $\mathit{(It.source.array)[It.pos]}$. 
+$\mathit{*P}$ is the value stored in the $\mathit{P}$ position of the memory.
 
-Iterators can be added and subtracted.  $\mathit{C.begin}$ and $\mathit{C.end}$
+%%% Iterators can be added and subtracted.  
+$\mathit{C.begin}$ and $\mathit{C.end}$
 are methods that return iterators which point to the beginning and the ending
-of a container, respectively.  Also, most container operations return an
+of a container, respectively.  Most container operations also return an
 iterator pointing to the new focus element after the operation rather than
-returning an updated container. For example, for vectors $\mathit{C.erase}$
+simply returning an updated container. For example, for vectors $\mathit{C.erase}$
 returns an iterator pointing to the right neighbor of the erased element.
 Note that the only way in the core language to access the resulting container
 is thus via the $\mathit{source}$ field of the returned iterator.
@@ -989,7 +991,7 @@ return the actual and maximum size, respectively of the containter $C$.
 %iterations, capacity, element access, modifiers, and unique
 %members.
 As the container structures differ slightly
-between each other, some of their methods will vary too,
+from each other, some of their methods will vary too,
 changing the internal models as well (e.g., a \textit{list}
 container does not have a reference operator and its elements
 are only reached by iterators).
@@ -1004,23 +1006,17 @@ and the size grows, the capacity is doubled every time
 the size reaches the existing capacity value. Similarly, iterators are modeled using
 two variables: a variable of type \textit{Int} called \emph{pos},
 which contains the index value pointed by the iterator in the container and a
-variable of type $P$ called \emph{source}, which contains the memory address to the first
-element of type $T$ stored in the container. Figure~\ref{figure:stl-iterator} gives
-an overview of our operational model for the STL sequantial container.
+variable of type $P$ called \emph{source}, which 
+points to the underlying container. Figure~\ref{figure:stl-iterator} gives
+an overview of our operational model for the STL sequantial containers.
 
-
-\begin{figure}[ht] \centering
-\includegraphics[scale=0.3]{figures/stl-iterator}
-\caption{Operational model of the STL sequential container.}
-\label{figure:stl-iterator}
-\end{figure}
 
 %The vector container model has the following structure:
 %$C = \{ array, size, capacity\}$,
 %where $array$ is a memory address where the elements are stored in the container,
 %$size$ is the total number of elements in the container, and $capacity$
 %is the total capacity of the vector, which is simulated internally in the model.
-
+%
 %%% The main methods of a vector (and the other sequential containers) have only
 %%% five types of operation: $\mathit{insert\left(It, T, N\right)}$,
 %%% $\mathit{insert\left(It, It, It\right)}$, $\mathit{erase\left(It, It, It\right)}$,
@@ -1031,22 +1027,48 @@ Other methods such as \emph{push\_back()}, \emph{pop\_back()}, \emph{front()},
 \emph{back()}, \emph{push\_front()}, and \emph{pop\_front()} are only
 a simplified variation of those main methods, which are optimized for some containers
 (e.g., popping the last element of a \textit{stack}).
-As part of the single static assignment (SSA) transformation, side-effects on the containers
-are made explicit, so that every operation returns a new container as a result. For example,
-$\mathit{c.insert\left(x,y,z\right)}$ becomes $\mathit{c' = c.insert\left(x,y,z\right)}$.
-The translation function $\cal C$ then describes the constraints relating the ``before''
-and ``after'' versions of this structure.
+As part of the single static assignment (SSA) transformation, 
+side-effects on the iterators and containers
+are made explicit, so that operations return 
+new iterators and containers as result. 
+As an example, consider a container $c$ with the
+method call \textit{c.insert} that returns an iterator result and
+makes use of an iterator $i$ that points to the desired
+(insertion) position; a template value $t$ with the element
+to be inserted and an integer $n$ that denotes the number of times
+the element is to be inserted.
+The statement
+$\mathit{c.insert}(i,t,n);$ (which discards the returned iterator)
+thus becomes $(c',i')=\mathit{c.insert}(i,t,n);$ (where the side effects
+are explicit).
 
-To represent the model, consider a container \textit{con} with a
-method \textit{con.insert}$\rightarrow$\textit{It} that returns an iterator result and
-makes use of an iterator \textit{ipos} that points to the desired
-(insertion) position; a template value \textit{val} with the element
-to be inserted and an integer \textit{qtd} that denotes the amount
-of elements to be inserted.
+\begin{figure}[ht] \centering
+\includegraphics[scale=0.3]{figures/stl-iterator}
+\caption{Operational model of the STL sequential containers.}
+\label{figure:stl-iterator}
+\end{figure}
 
+\vspace*{-1ex}
+
+The translation function $\cal C$ describes the constraints relating 
+the ``before'' and ``after'' versions of the respective model variables.
+In particular, we get:
+%
+\comment{
+\[\begin{array}{ll}
+%\label{eqnarray:transformations}
+\multicolumn{2}{l}{{\cal C}(\mathit{con}'=\mathit{con.insert}(\mathit{ipos}, \mathit{val}, \mathit{qtd}))=}\\
+%\Longrightarrow &
+  &  \mathit{con}'\mathit{.size} = \mathit{con.size} + \mathit{qtd}\\
+  & \wedge \: *\mathit{ipos} = \mathit{val} \\
+  & \ldots \\
+  & \wedge \: *(\mathit{ipos} + \mathit{qtd} - 1) = \mathit{val} \\
+\end{array}\]
+}
+%
 \[\begin{array}{lll}
 \multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.insert}(i, t, n)):=}\\
-  & \multicolumn{2}{l}{\:c'\mathit{.size} = c\mathit{.size}+n}\\
+  & \multicolumn{2}{l}{\wedge\:c'\mathit{.size} = c\mathit{.size}+n}\\
   & \wedge\: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}(\\
   & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, i\textit{.pos}, t),\\
   & & \:\:\:\:\:\:\ldots,\\
@@ -1058,25 +1080,44 @@ of elements to be inserted.
   & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+n}\\
 \end{array}\]
 
-There is another way to represent the insert method.
-It is possible to insert a sequence of elements in the desired
-insertion position, using both iterator or pointer bounds.
-Let $\mathit{it}_0$ be an iterator that marks the first element
-to be inserted, $\mathit{it}_k$ be another iterator that
-points to the first element after the end of the sequence to be inserted
-in the required position, $\mathit{acon}$ be another container whom iterators $\mathit{it}_0$ 
-and $\mathit{it}_k$ are pointing to and let $k$ be the length of the array
-$[\mathit{it}_0\, \mathit{it}_k)$.
-Thus, we have:
+The main effect of the \textit{insert} method is thus captured by the second
+equality that describes the contents of the container array $c'\mathit{.array}$
+after the insertion in terms of update operations to the container array
+$c\mathit{.array}$ before the insertion.
 
+There is another version of the insert method. Here
+it is possible to insert a sequence of elements in the desired
+insertion position, using both iterator (or even pointer) bounds to
+select the sequence from another container.
+Let $i_0$ be an iterator that marks the first element
+to be inserted, $i_k$ be another iterator that
+points to the first element after the end of the sequence to be inserted
+in the required position and let $k$ be the length of the array
+$[i_0\, i_k)$.
+Thus, we have:
+%
+\comment{
+\[\begin{array}{ll}
+%\label{eqnarray:transformations}
+\multicolumn{2}{l}{{\cal C}(\mathit{con.insert}(\mathit{ipos}, \mathit{it}_0, \mathit{it}_k))=}\\
+% \Longrightarrow
+  & \mathit{con}'\mathit{.size} = \mathit{con.size} + k\\
+  & \wedge \: *\mathit{ipos} = *\mathit{it}_0 \\
+  & \ldots \\
+  & \wedge \: *(\mathit{ipos} + k - 1) = *(\mathit{it}_k - 1) \\
+\end{array}\]
+}
+%
 \[\begin{array}{lll}
-\multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.insert}(it_{0}, it_{k})):=}\\
-  & \multicolumn{2}{l}{\:c'\mathit{.size} = c\mathit{.size}+k}\\
+\multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.insert}(i, i_0, i_k)):=}\\
+  & \multicolumn{2}{l}{\wedge\:k = i_k\mathit{.pos}-i_0\mathit{.pos}+1}\\
+  & \multicolumn{2}{l}{\wedge\:a = i_0\mathit{.source.array}}\\
+  & \multicolumn{2}{l}{\wedge\:c'\mathit{.size} = c\mathit{.size}+k}\\
   & \wedge\: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}(\\
-  & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, i\textit{.pos}, \\
-  & & \:\:\:\:\:\:\:\:\:\:\:\:select(acon\textit{.array}, it_{0}\textit{.pos})),\\
+  & & \textit{store}(\ldots(\textit{store}(c.\textit{array},\\
+  & & \:\:\:\:\:\:i\textit{.pos}, \textit{select}(a, i_0\textit{.pos})),\\
   & & \:\:\:\:\:\:\ldots,\\
-  & & \:\:\:\:\:\:i\textit{.pos}+k-1, select(acon\textit{.array}, it_{k}\textit{.pos})), \\
+  & & \:\:\:\:\:\:i\textit{.pos}+k-1, \textit{select}(a, i_k\textit{.pos}-1)),\\
   & & i\textit{.pos}+k, \textit{select}(c\textit{.array}, i\textit{.pos})), \\
   & & \ldots, \\
   & & c\textit{.size}+k-1, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
@@ -1084,8 +1125,17 @@ Thus, we have:
   & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+k}\\
 \end{array}\]
 
-The same model above is valid for pointers $pt_0$ and $pt_k$.
-This kind of insertion (with pointers) does not return an iterator.
+%%%% I don't think this is really complete -- sometimes iterators become
+%%%% invalidated after an update to the container...
+Note that this also implicitly induces the two properties that $[i_0\,
+i_k)$ is non-empty (i.e., that $k>0$ holds) and that $i_0$ and $i_k$ are iterators
+over the same underlying container (i.e., that
+$i_0\mathit{.source.array}=i_k\mathit{.source.array}$ holds), 
+although this container can be
+different from the one we are inserting into.
+
+%%% The same model above is valid for pointers $\mathit{pt}_0$ and $\mathit{pt}_k$.
+%%% This kind of insertion (with pointers) does not return an iterator.
 
 \comment{
 In terms of C++ code, we can represent the insertion method as the code:
@@ -1124,7 +1174,7 @@ C := \left [ \begin{array}{ll}
               \end{array} \right ],  \\
 \end{equation}
 \\
-
+%
 \begin{equation}
 \label{insertion-formula-P}
 P := \left [ \begin{array}{ll}
@@ -1138,44 +1188,50 @@ represents the insertion of a element $value$ in a desired position (in this cas
 
 
 The erase method works similarly to the insert method. It also uses iterator
-positions, integer values and pointers, but it does not use values since the exclusion
+positions, integer values, and pointers, but it does not use values since the exclusion
 is made by a given position, regardless the value. It also returns an iterator position,
 pointing to the position next to the previously erased part of the container.
-The following model shows an \textit{erase} method that deletes a single element:
-
+The following model shows the \textit{erase} method that deletes a single element:
+%
+\comment{
+\[\begin{array}{ll}
+%\label{erase1-model}
+\multicolumn{2}{l}{{\cal C}(\textit{con.erase}(\mathit{ipos})=}\\
+% \Longrightarrow
+  & \mathit{con}'\mathit{.size} = \mathit{con.size} - 1 \wedge \: \mathit{ipos}' = \mathit{ipos} + 1
+\end{array}\]
+}
+%
 \[\begin{array}{lll}
 \multicolumn{3}{l}{{\cal C}((c',i')=c\mathit{.erase}(i)):=}\\
-  &  c'\textit{.array}=&\!\!\!\!\textit{store}(  \\
-  & & \textit{store}(c.\textit{array}, i\textit{.pos}, select(c.array, i.pos+1)) \\
+  & \multicolumn{2}{l}{\wedge\:c'\mathit{.size} = c\mathit{.size}-1}\\
+  & \wedge\: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}(c.\textit{array},\\
+  & & i\textit{.pos}, \textit{select}(c\textit{.array}, i\textit{.pos}+1)), \\
   & & \ldots, \\
   & & c\textit{.size}-2, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
-  & & \wedge\:c'\mathit{.size} = c\mathit{.size}-1\\
   & \multicolumn{2}{l}{\wedge\:i'\textit{.source}=c'}\\
-  & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}+n}\\
+  & \multicolumn{2}{l}{\wedge\:i'\textit{.pos}=i\textit{.pos}}\\
 \end{array}\]
 
-It is also possible to delete a number $k$ of elements from the container by
-marking the bounds with iterators ($it_0$ and $it_k$, considering both pointing to the container $con$).
- It works similarly to the equivalent
-\textit{insert} method:
+Note that this implicitly induces the property that $i$ is an iterator
+over $c$ (i.e., that $i\mathit{.source}=c$ holds).
 
-
-\[\begin{array}{lll}
-\multicolumn{3}{l}{ {\cal C}((c',i')=c\mathit{.erase}(it_0, it_k)):= }\\
-  & \: c'\textit{.array}=&\!\!\!\!\textit{store}(\ldots(\textit{store}) \\
-  & & \textit{store}(\ldots(\textit{store}(c.\textit{array}, it_0\textit{.pos}, \\
-  & & \:\:\:\:\:\:\:\:\:\:select(c.array, it_0.pos+k)),\\
-  & & \:\:\:\:\:\:\ldots,\\
-  & & \:\:\:\:\:\:it_0\textit{.pos}+k-1, \\
-  & & \:\:\:\:\:\:\:\:\:\:select(c.array, it_0.pos+2*k-1)), \\
-  & & it_0\textit{.pos}+k, \textit{select}(c\textit{.array}, it_0\textit{.pos+2*k})), \\
-  & & \ldots, \\
-  & & c\textit{.size}-k-1, \textit{select}(c\textit{.array}, c\textit{.size}-1))\\
+It is also possible to delete a number of elements from the container by
+marking the bounds with iterators. It works similarly to the equivalent
+\textit{insert} method; the details are omitted here.
+\comment{
+\[\begin{array}{ll}
+%\label{erase2-model}
+\multicolumn{2}{l}{{\cal C}(con.erase(ipos, it_0, it_k)=}\\
+%\Longrightarrow
+  & 	con'.size = con.size - k \wedge \: ipos' = it_k
 \end{array}\]
-
+}
 Searches are made in a container by using reference operators
 and a pointing type (pointer or iterator), and return the reference
-value (the element stored itself). It can be considered as values
+value (the element stored itself). 
+\comment{
+It can be considered as values
 $N\{*It\}$, $N\{*P\}$ or $N\{C_n\}$.	The structure of iterators
 is treated differently from other types. The model is the following:
 $It = \{n, addr\}$,
@@ -1183,6 +1239,7 @@ where $n$ is the iterator indexed
 internally in the container and $addr$ is a memory
 address equivalent to $con.array$, where $con$ is the container
 pointed by the iterator.
+}
 
 %---------------------------------------------
 %\subsection{Input/Output Stream Libraries}
@@ -1230,7 +1287,7 @@ software and not that of hardware).}
 \label{inheritance-and-polymorphism}
 %------------------------------------------------
 
-Modeling C++ features like inheritance and polymorphism
+C++ features like inheritance and polymorphism
 makes static analysis difficult to implement.
 In contrast to Java, which only allows single inheritance, where derived classes
 have only one base class, C++ also allows multiple inheritance, where a class
@@ -1249,7 +1306,7 @@ we call this \textit{shared inheritance}.
 
 A formal description to represent
 the relationship between classes can be described by the class hierarchy graph
-(CHG). This graph $\zeta$ is composed of a triple
+(CHG). This graph is represented by a triple
 $\langle \mathit{C}, \prec_{s}, \prec_{r}\rangle$,
 where $\mathit{C}$ is the set of classes,
 $\prec_s \subseteq C \times C$ refers to \textit{shared inheritance} edges,
@@ -1266,8 +1323,10 @@ the opposite relation cannot exist).
 As an example, Figure~\ref{figure:uml_diagram} shows an UML diagram
 that represents the \textit{Shape} class hierarchy that contains multiple inheritance.
 The replicated inheritance in the Rectangle class relation can be formalized by
-$\left\langle C, \emptyset,\left\{ Rectangle, Shape \right\} \right\rangle$ and
-$\left\langle C, \emptyset, \left\{ Rectangle, Display \right\} \right\rangle $.
+$\langle C, \emptyset,
+ \{(\mathit{Rectangle, Shape)}, (\mathit{Rectangle, Display})\}
+\rangle$.
+
 
 Our tool creates an intermediate model for single and multiple inheritance, handling
 replicated and shared inheritance where all classes are converted into structures and all
@@ -1349,8 +1408,11 @@ the \textit{vtable} at verification-time.
 
 In addition, we also support indirect inheritance,
 where a class inherits features from a derived class with one
-or more classes not directly connected. In Figure~\ref{figure:uml_diagram}, we have
-$\left\langle C, \emptyset, \left\{ Square, Rectangle, Shape \right\} \right\rangle$.
+or more classes not directly connected. 
+In Figure~\ref{figure:uml_diagram}, we have
+$\mathit{Square}\leq_{\mathit{sr}}\mathit{Rectangle}$
+and 
+$\mathit{Rectangle}\leq_{\mathit{sr}}\mathit{Shape}$.
 Thus, the \textit{Square} class can access features from the \textit{Shape} class,
 but they are not directly connected. We tackle this problem by
 looking for the features using a depth search from the derived to base classes
@@ -1942,7 +2004,7 @@ and \textit{MO} represents the number of memory-outs.
 \hline
 \end{tabular} }
 \end{center}
-\caption{Results of the comparison between ESBMC v1.20 and LLBMC v2012.2a.}
+\caption{Results of the comparison between ESBMC++ v1.20 and LLBMC v2012.2a.}
 \label{table:results-of-the-comparison-between-ESBMC-and-LLBMC}
 \end{adjustwidth}
 \end{table*}
@@ -1964,7 +2026,7 @@ As we can see in Table~\ref{table:results-of-the-comparison-between-ESBMC-and-LL
 LLBMC times out in 24 programs in the \textit{algorithm} suite and
 runs out of memory in two programs. If we carefully analyze those test cases,
 most of them use iterators, which might be causing the slow down
-in the verification process, which is a situation that also happens in other suites.
+in the verification process; this is a situation that also happens in other suites.
 In the \textit{deque}, \textit{vector}, and \textit{list} suites,
 the slowdowns still happen but with small values. The suite that had the
 most unsuccessful verification results was the \textit{list} suite, and most of the

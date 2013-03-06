@@ -25,15 +25,17 @@ char *strcpy(char *d, const char *s) {
 }
 
 char *strncpy(char *d, const char *s, size_t n) {
-	size_t i;
 
-	for (i = 0; s[i] != '\0' && i < n; i++) {
-		d[i] = s[i];
-	}
-	for (; i < n; i++) {
-		d[i] = '\0';
-	}
+	size_t i=0;
+	char ch;
+	bool end;
 
+	for(end=0; i<n; i++)
+	{
+		ch=end?0:s[i];
+		d[i]=ch;
+		end=end || ch==(char)0;
+	}
 	return d;
 }
 

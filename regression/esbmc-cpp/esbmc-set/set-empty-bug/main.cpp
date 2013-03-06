@@ -6,7 +6,7 @@ using namespace std;
 int main ()
 {
   set<int> myset;
-
+/*
   myset.insert(20);
   myset.insert(30);
   myset.insert(10);
@@ -18,9 +18,9 @@ int main ()
   {
      cout << " " << *myset.begin();
      myset.erase(myset.begin());
-  }
-  assert(myset.begin() == myset.end());
-  assert(myset.size() != 0);
+  } 
+*/
+  assert(!myset.empty());
   cout << endl;
 
   return 0;
