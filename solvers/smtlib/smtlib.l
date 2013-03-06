@@ -25,9 +25,7 @@ numeral       (0|[1-9][0-9]*)
 decimal       {numeral}.0*{numeral}
 hexnum        #x[a-fA-F0-9]+
 binnum        #b[01]+
-escapequote   \\"
-escapeslash   \\\\
-stringlit     "((.|{escapequote}|{escapeslash})*)"
+stringlit     \"((.|\\\\|\\\")*)\"
 
 symtext       [-~!@%^&*_+=<>.?/a-zA-Z]
 symchars      [-0-9~!@%^&*_+=<>.?/a-zA-Z]
@@ -45,9 +43,8 @@ keyword       :{symchars}+
   }
 %}
 
-%{
-  // Keywords -- we don't particularly care about using them when reading.
-%}
+[\t]+                   { /* discard */ }
+[ ]+                    { /* discard */ }
 
 "par"                 { return TOK_KW_PAR; }
 "NUMERAL"             { return TOK_KW_NUMERAL; }
