@@ -205,9 +205,9 @@ attribute: TOK_KEYWORD
            $$ = new sexpr();
            $$->sexpr_list.push_front(*s);
            if ($2->token == 0)
-             $$->sexpr_list = $2->sexpr_list;
+             $$->sexpr_list.push_back(*$2);
            else
-             $2->sexpr_list.push_back(*$2);
+             $$->sexpr_list.push_back(*$2);
            delete $2;
            delete s;
          }
