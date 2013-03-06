@@ -159,7 +159,8 @@ smtlib_convt::dec_solve()
   // Declare all symbols
   std::map<std::string, const smt_sort *>::const_iterator it;
   for (it = symbol_table.begin(); it != symbol_table.end(); it++) {
-    // Do things
+    fprintf(out_stream, "(declare-fun |%s| () %s)\n", it->first.c_str(),
+           sort_to_string(it->second).c_str());
   }
 
   // Emit all constraints
