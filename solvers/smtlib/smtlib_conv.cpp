@@ -116,6 +116,34 @@ smtlib_convt::~smtlib_convt()
 {
 }
 
+std::string
+smtlib_convt::sort_to_string(const smt_sort *s) const
+{
+  const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(s);
+  std::stringstream ss;
+
+  switch (sort->id) {
+  case SMT_SORT_INT:
+    return "Int";
+  case SMT_SORT_REAL:
+    return "Real";
+  case SMT_SORT_BV:
+    ss << "(_ BitVec " << sort->width << ")";
+    return ss.str();
+  case SMT_SORT_ARRAY:
+    ss << "(Array " << sort_to_string(sort->domain) << " "
+                    << sort_to_string(sort->range) << ")";
+    return ss.str();
+  case SMT_SORT_BOOL:
+    return "Bool";
+  case SMT_SORT_STRUCT:
+  case SMT_SORT_UNION:
+  default:
+    std::cerr << "Unexpected sort in smtlib_convt" << std::endl;
+    abort();
+  }
+}
+
 prop_convt::resultt
 smtlib_convt::dec_solve()
 {

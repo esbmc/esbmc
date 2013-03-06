@@ -75,6 +75,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  std::string sort_to_string(const smt_sort *s) const;
+
   // Members
   const optionst &options;
   pid_t solver_proc_pid;
