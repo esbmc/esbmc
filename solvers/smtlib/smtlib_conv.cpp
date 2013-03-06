@@ -86,6 +86,27 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
          "Bad get-info :name response from solver");
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
   solver_name = value.data;
+  delete smtlib_output;
+
+  // Duplicate / boilerplate;
+  fprintf(out_stream, "(get-info :version)\n");
+  fflush(out_stream);
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_INFO);
+
+  sexpr = smtlib_output;
+  assert(sexpr->sexpr_list.size() == 1 &&
+         "More than one sexpr response to get-info version");
+  struct sexpr &v = sexpr->sexpr_list.front();
+
+  assert(v.token == 0 && v.sexpr_list.size() == 2 && "Bad solver version fmt");
+  struct sexpr &kw = v.sexpr_list.front();
+  struct sexpr &val = v.sexpr_list.back();
+  assert(kw.token == TOK_KEYWORD && kw.data == ":version" &&
+         "Bad get-info :version response from solver");
+  assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
+  solver_version = val.data;
+  delete smtlib_output;
 }
 
 smtlib_convt::~smtlib_convt()

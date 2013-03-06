@@ -51,6 +51,7 @@ public:
   FILE *out_stream;
   FILE *in_stream;
   std::string solver_name;
+  std::string solver_version;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
