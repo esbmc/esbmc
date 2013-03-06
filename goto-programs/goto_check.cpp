@@ -655,9 +655,7 @@ void goto_checkt::check_rec(
   {
 	use_boolector=false;
 	options.set_option("z3", true);
-	if (!options.get_bool_option("z3-bv"))
-          options.set_option("int-encoding", true);
-
+	options.set_option("int-encoding", false);
 	if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
   }
