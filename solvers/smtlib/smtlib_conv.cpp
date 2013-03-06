@@ -135,7 +135,9 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
                     << sort_to_string(sort->range) << ")";
     return ss.str();
   case SMT_SORT_BOOL:
-    return "Bool";
+    // Hackity hack: QF_AUFBV doesn't support arrays with bool ranges. So make
+    // bools actually one or zero. Eww.
+    return "(_ BitVec 1)";
   case SMT_SORT_STRUCT:
   case SMT_SORT_UNION:
   default:
