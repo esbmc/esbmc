@@ -19,6 +19,20 @@ public:
 };
 
 class smtlib_smt_sort : public smt_sort {
+public:
+  smtlib_smt_sort(smt_sort_kind k, unsigned int w, bool s)
+    : smt_sort(k), width(w), sign(s) { };
+  smtlib_smt_sort(smt_sort_kind k, unsigned int w)
+    : smt_sort(k), width(w) { }
+  smtlib_smt_sort(smt_sort_kind k)
+    : smt_sort(k) { }
+  smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
+                  const smtlib_smt_sort *rag)
+    : smt_sort(k), domain(dom), range(rag) { }
+  unsigned int width;
+  bool sign;
+  const smtlib_smt_sort *domain;
+  const smtlib_smt_sort *range;
 };
 
 class smtlib_smt_ast : public smt_ast {

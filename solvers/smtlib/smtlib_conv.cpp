@@ -153,7 +153,38 @@ smtlib_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_ki
 smt_sort *
 smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 {
-  abort();
+  va_list ap;
+  smtlib_smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
+  int thebool;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+    thebool = va_arg(ap, int);
+    s = new smtlib_smt_sort(k, thebool);
+    break;
+  case SMT_SORT_REAL:
+    s = new smtlib_smt_sort(k);
+    break;
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    s = new smtlib_smt_sort(k, uint, thebool);
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?
+    range = va_arg(ap, smtlib_smt_sort *);
+    s = new smtlib_smt_sort(k, dom, range);
+    break;
+  case SMT_SORT_BOOL:
+    s = new smtlib_smt_sort(k);
+    break;
+  default:
+    assert(0);
+  }
+
+  return s;
 }
 
 literalt
