@@ -8,7 +8,9 @@ SRCS= smtlib_conv.cpp lex.yy.cpp y.tab.cpp
 lex.yy.cpp: smtlib.l y.tab.cpp
 	$(LEX) -Psmtlib -olex.yy.cpp smtlib.l
 
-y.tab.cpp: smtlib.y
+y.tab.cpp: y.tab.hpp
+
+y.tab.hpp: smtlib.y
 	$(YACC) $(YFLAGS) $$flags -psmtlib -d smtlib.y -o y.tab.cpp
 
 clean:
