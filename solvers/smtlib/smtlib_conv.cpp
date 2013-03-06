@@ -150,10 +150,15 @@ smtlib_convt::assert_lit(const literalt &l)
 }
 
 smt_ast *
-smtlib_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)),
-                          const smt_ast **args __attribute__((unused)), unsigned int numargs __attribute__((unused)))
+smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                          const smt_ast **args, unsigned int numargs)
 {
-  abort();
+  assert(numargs <= 4 && "Too many arguments to smtlib mk_func_app");
+  smtlib_smt_ast *a = new smtlib_smt_ast(s, k);
+  for (unsigned int i = 0; i < 4; i++)
+    a->args[i] = args[i];
+
+  return a;
 }
 
 smt_sort *
