@@ -64,9 +64,9 @@ keyword       :{symchars}+
 "continued-execution" { return TOK_KW_CONEXECUTION; }
 "memout"              { return TOK_KW_MEMOUT; }
 "incomplete"          { return TOK_KW_INCOMPLETE; }
-"sat"                 { return TOK_KW_SAT; }
-"unsat"               { return TOK_KW_UNSAT; }
-"unknown"             { return TOK_KW_UNKNOWN; }
+"sat"                 { smtliblval.text = strdup(yytext); return TOK_KW_SAT; }
+"unsat"               { smtliblval.text = strdup(yytext); return TOK_KW_UNSAT; }
+"unknown"             { smtliblval.text = strdup(yytext);return TOK_KW_UNKNOWN;}
 "true"                { return TOK_KW_TRUE; }
 "false"               { return TOK_KW_FALSE; }
 
