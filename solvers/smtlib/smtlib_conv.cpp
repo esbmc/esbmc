@@ -187,9 +187,11 @@ smtlib_convt::mk_smt_bool(bool val __attribute__((unused)))
 }
 
 smt_ast *
-smtlib_convt::mk_smt_symbol(const std::string &name __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  abort();
+  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_SYMBOL);
+  a->symname = name;
+  return a;
 }
 
 smt_sort *

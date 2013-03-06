@@ -22,6 +22,13 @@ class smtlib_smt_sort : public smt_sort {
 };
 
 class smtlib_smt_ast : public smt_ast {
+public:
+  smtlib_smt_ast(const smt_sort *s, smt_func_kind k) : smt_ast(s), kind(k) { }
+  ~smtlib_smt_ast() { }
+  smt_func_kind kind;
+  std::string symname;
+  BigInt intval;
+  bool boolval;
 };
 
 class smtlib_convt : public smt_convt {
