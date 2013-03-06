@@ -18,6 +18,12 @@ public:
   std::string data; // Text rep of parsed token.
 };
 
+class smtlib_smt_sort : public smt_sort {
+};
+
+class smtlib_smt_ast : public smt_ast {
+};
+
 class smtlib_convt : public smt_convt {
 public:
   smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
