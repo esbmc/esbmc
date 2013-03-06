@@ -140,9 +140,13 @@ smtlib_convt::solver_text()
 }
 
 void
-smtlib_convt::assert_lit(const literalt &l __attribute__((unused)))
+smtlib_convt::assert_lit(const literalt &l)
 {
-  abort();
+  std::stringstream ss;
+  smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  ss << "l" << l.get() << std::endl;
+  smt_ast *lit = mk_smt_symbol(ss.str(), sort);
+  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(lit));
 }
 
 smt_ast *
