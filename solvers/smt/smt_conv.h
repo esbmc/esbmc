@@ -90,6 +90,7 @@ enum smt_func_kind {
   SMT_FUNC_SELECT,
 
   SMT_FUNC_CONCAT,
+  SMT_FUNC_EXTRACT, // Not for going through mk app due to sillyness.
 
   SMT_FUNC_INT2REAL,
   SMT_FUNC_REAL2INT,
