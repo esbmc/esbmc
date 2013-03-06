@@ -7,6 +7,7 @@
 extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
 extern int smtlib_send_start_code;
+extern sexpr *smtlib_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)

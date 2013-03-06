@@ -11,6 +11,8 @@
 
 int smtliblex(int startsym);
 int smtliberror(int startsym, const std::string &error);
+
+sexpr *smtlib_output = NULL;
 %}
 
 /* Values */
@@ -85,6 +87,7 @@ response: TOK_START_GEN gen_response |
           {
             yychar = YYEOF;
             $$ = $2;
+            smtlib_output = $2;
           }
           | TOK_START_SAT check_sat_response |
           TOK_START_ASSERTS get_assertions_response |
