@@ -177,6 +177,13 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     // Just the literal number itself.
     output = integer2string(ast->intval);
     return 0;
+  case SMT_FUNC_BOOL:
+    // Due to hacks, bools are now zero or one.
+    if (ast->boolval)
+      output = "1";
+    else
+      output = "0";
+    return 0;
   case SMT_FUNC_BVINT:
     // Construct a bitvector
     ss << "(_ bv" << integer2string(ast->intval) << " " << sort->width << ")";
@@ -211,6 +218,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
               << std::endl;
     abort();
   case SMT_FUNC_INT:
+  case SMT_FUNC_BOOL:
   case SMT_FUNC_BVINT:
   case SMT_FUNC_REAL:
   case SMT_FUNC_SYMBOL:
