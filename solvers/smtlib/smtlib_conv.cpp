@@ -176,6 +176,17 @@ smtlib_convt::dec_solve()
   // Flush out command, starting model check
   fflush(out_stream);
 
+  // Problem: one of the previous commands may have generated an error. And
+  // we (ideally) want to know whether we're parsing an error or the response
+  // to check-sat when we start parsing. So:
+  char c = fgetc(in_stream);
+  ungetc(c, in_stream);
+  if (c == '(') { // An error has occured, this is the start of it.
+    std::cerr << "Error response from smtlib solver" << std::endl;
+    std::cerr << "(Insert here: error handling)" << std::endl;
+    abort();
+  }
+
   // And read in the output
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_SAT);
