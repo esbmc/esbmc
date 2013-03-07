@@ -121,6 +121,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"symex-ssa-trace",	switc,		""	},
 { 0,    "smtlib-solver-prog",   string,         ""      },
 { 0,    "smtlib",               switc,          ""      },
+{ 0,    "output",               string,         ""      },
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
