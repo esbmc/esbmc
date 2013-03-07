@@ -103,6 +103,13 @@ response: TOK_START_GEN gen_response
           | TOK_START_VALUE get_value_response
           | TOK_START_ASSIGN get_assignment_response
           | TOK_START_OPTION get_option_response
+          | TOK_START_INFO gen_response
+          | TOK_START_SAT gen_response
+          | TOK_START_ASSERTS gen_response
+          | TOK_START_UNSATS gen_response
+          | TOK_START_VALUE gen_response
+          | TOK_START_ASSIGN gen_response
+          | TOK_START_OPTION gen_response
 
 spec_constant: TOK_NUMERAL
 {$$ = new sexpr(); $$->token = TOK_NUMERAL;$$->data = std::string($1);free($1);}
