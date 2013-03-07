@@ -45,6 +45,7 @@ public:
   bool boolval;
   int extract_high;
   int extract_low;
+  unsigned int num_args;
   const smt_ast *args[4];
 };
 

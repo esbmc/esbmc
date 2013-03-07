@@ -238,6 +238,7 @@ smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 {
   assert(numargs <= 4 && "Too many arguments to smtlib mk_func_app");
   smtlib_smt_ast *a = new smtlib_smt_ast(s, k);
+  a->num_args = numargs;
   for (unsigned int i = 0; i < 4; i++)
     a->args[i] = args[i];
 
