@@ -79,7 +79,7 @@ std::string smtlib_text_output;
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
-%type <expr> get_info_response response
+%type <expr> get_info_response response gen_response
 %%
 
 /* Rules */
@@ -103,13 +103,13 @@ response: TOK_START_GEN gen_response
           | TOK_START_VALUE get_value_response
           | TOK_START_ASSIGN get_assignment_response
           | TOK_START_OPTION get_option_response
-          | TOK_START_INFO gen_response
-          | TOK_START_SAT gen_response
-          | TOK_START_ASSERTS gen_response
-          | TOK_START_UNSATS gen_response
-          | TOK_START_VALUE gen_response
-          | TOK_START_ASSIGN gen_response
-          | TOK_START_OPTION gen_response
+          | TOK_START_INFO gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_SAT gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_ASSERTS gen_response {yychar = YYEOF; smtlib_output = $2;}
+          | TOK_START_UNSATS gen_response {yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_VALUE gen_response { yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_ASSIGN gen_response {yychar = YYEOF; smtlib_output = $2; }
+          | TOK_START_OPTION gen_response {yychar = YYEOF; smtlib_output = $2; }
 
 spec_constant: TOK_NUMERAL
 {$$ = new sexpr(); $$->token = TOK_NUMERAL;$$->data = std::string($1);free($1);}
@@ -256,8 +256,23 @@ term: spec_constant | qual_identifier | TOK_LPAREN qual_identifier TOK_RPAREN |
       TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN |
       TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
 
-gen_response: TOK_KW_UNSUPPORTED | TOK_KW_SUCCESS |
-              TOK_LPAREN TOK_KW_ERROR TOK_STRINGLIT TOK_RPAREN
+gen_response: TOK_KW_UNSUPPORTED
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNSUPPORTED;
+         }
+        | TOK_KW_SUCCESS
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_SUCCESS;
+         }
+        | TOK_LPAREN TOK_KW_ERROR TOK_STRINGLIT TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_ERROR;
+           $$->data = std::string($3);
+           free($3);
+         }
 
 error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
 
