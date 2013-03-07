@@ -720,6 +720,7 @@ public:
 			this->_size++;
 			//this->_value[0] = T();
 			this->_value[0] = NULL;
+			this->_key[this->_size+1] = NULL;
 			return this->_value[0];
 		}else{
 			for(int i = 0; i < s; i++){
@@ -747,6 +748,7 @@ public:
 					this->_size++;
 					//this->_value[i] = T();
 					this->_value[i] = NULL;
+					this->_key[this->_size+1] = NULL;
 					return this->_value[i];
 				}
 			}
@@ -754,6 +756,7 @@ public:
 			this->_key[s] = x;
 			//this->_value[s] = T();
 			this->_value[s] = NULL;
+			this->_key[this->_size+1] = NULL;
 			return this->_value[s];
 		}
 	}
@@ -809,6 +812,7 @@ public:
 			this->_size++;
 			//this->_value[0] = T();
 			this->_value[0] = NULL;
+			this->_key[this->_size+1] = NULL;
 			return this->_value[0];
 		}else{
 			for(int i = 0; i < s; i++){
@@ -836,6 +840,7 @@ public:
 					this->_size++;
 					//this->_value[i] = T();
 					this->_value[i] = NULL;
+					this->_key[this->_size+1] = NULL;
 					return this->_value[i];
 				}
 			}
@@ -843,6 +848,7 @@ public:
 			this->_key[s] = x;
 			//this->_value[s] = T();
 			this->_value[s] = NULL;
+			this->_key[this->_size+1] = NULL;
 			return this->_value[s];
 		}
 	}
