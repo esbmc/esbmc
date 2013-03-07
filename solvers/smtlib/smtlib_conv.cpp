@@ -194,7 +194,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
     fprintf(out_stream, " %s", args[i].c_str());
 
   // End func enclosing brace, then operand to let.
-  fprintf(out_stream, "))");
+  fprintf(out_stream, "))\n");
 
   // We end with one additional brace level.
   output = tempname;
@@ -242,7 +242,7 @@ smtlib_convt::dec_solve()
       fputc(')', out_stream);
 
     // Final brace for closing the 'assert'.
-    fputc(')', out_stream);
+    fprintf(out_stream, ")\n");
   }
 
   fprintf(out_stream, "(check-sat)\n");
