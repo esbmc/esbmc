@@ -306,6 +306,9 @@ smtlib_convt::dec_solve()
   // Flush out command, starting model check
   fflush(out_stream);
 
+  // Reset temp symbol name count. XXX incremental?
+  temp_sym_count = 0;
+
   // If we're just outputing to a file, this is where we terminate.
   if (in_stream == NULL)
     return prop_convt::P_SMTLIB;
