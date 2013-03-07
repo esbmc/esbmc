@@ -17,13 +17,31 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   : smt_convt(false, int_encoding, _ns, is_cpp, false), options(_opts)
 {
   temp_sym_count = 1;
+  std::string cmd;
+
+  // We may be being instructed to just output to a file.
+  cmd = options.get_option("output");
+  if (cmd != "") {
+    if (options.get_option("smtlib-solver-prog") != "") {
+      std::cerr << "Can't solve SMTLIB output and write to a file, sorry"
+                << std::endl;
+      abort();
+    }
+
+    // Open a file, do nothing else.
+    out_stream = fopen(cmd.c_str(), "w");
+    in_stream = NULL;
+    solver_name = "Text output";
+    solver_version = "";
+    solver_proc_pid = 0;
+    return;
+  }
 
   // Setup: open a pipe to the smtlib solver. Because C++ is terrible,
   // there's no standard way of opening a stream from an fd, we can try
   // a nonportable way in the future if fwrite becomes unenjoyable.
 
   int inpipe[2], outpipe[2];
-  std::string cmd;
 
   cmd = options.get_option("smtlib-solver-prog");
   if (cmd == "") {
@@ -232,6 +250,10 @@ smtlib_convt::dec_solve()
   // Flush out command, starting model check
   fflush(out_stream);
 
+  // If we're just outputing to a file, this is where we terminate.
+  if (in_stream == NULL)
+    return prop_convt::P_SMTLIB;
+
   // Problem: one of the previous commands may have generated an error. And
   // we (ideally) want to know whether we're parsing an error or the response
   // to check-sat when we start parsing. So:
@@ -275,6 +297,11 @@ smtlib_convt::l_get(literalt a __attribute__((unused)))
 const std::string
 smtlib_convt::solver_text()
 {
+  if (in_stream == NULL) {
+    // Text output
+    return solver_name;
+  }
+
   return solver_name + " version " + solver_version;
 }
 
