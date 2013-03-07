@@ -13,7 +13,6 @@ int smtliblex(int startsym);
 int smtliberror(int startsym, const std::string &error);
 
 sexpr *smtlib_output = NULL;
-std::string smtlib_text_output;
 %}
 
 /* Values */

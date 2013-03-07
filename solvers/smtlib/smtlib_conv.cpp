@@ -10,7 +10,6 @@ extern "C" FILE *smtlibin;
 int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
-extern std::string smtlib_text_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
@@ -313,30 +312,22 @@ smtlib_convt::dec_solve()
   if (in_stream == NULL)
     return prop_convt::P_SMTLIB;
 
-  // Problem: one of the previous commands may have generated an error. And
-  // we (ideally) want to know whether we're parsing an error or the response
-  // to check-sat when we start parsing. So:
-  char c = fgetc(in_stream);
-  ungetc(c, in_stream);
-  if (c == '(') { // An error has occured, this is the start of it.
-    std::cerr << "Error response from smtlib solver" << std::endl;
-    std::cerr << "(Insert here: error handling)" << std::endl;
-    abort();
-  }
-
   // And read in the output
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_SAT);
 
-  if (smtlib_text_output == "sat") {
+  // This should generate on sexpr. See what it is.
+  if (smtlib_output->token == TOK_KW_SAT) {
     return prop_convt::P_SATISFIABLE;
-  } else if (smtlib_text_output == "unsat") {
+  } else if (smtlib_output->token == TOK_KW_UNSAT) {
     return prop_convt::P_UNSATISFIABLE;
-  } else if (smtlib_text_output == "sat") {
+  } else if (smtlib_output->token == TOK_KW_ERROR) {
+    std::cerr << "SMTLIB solver returned error: \"" << smtlib_output->data
+              << "\"" << std::endl;
     return prop_convt::P_ERROR;
   } else {
-    std::cerr << "Unrecognized check-sat output from smtlib solver \""
-              << smtlib_text_output << "\"" << std::endl;
+    std::cerr << "Unrecognized check-sat output from smtlib solver"
+              << std::endl;
     abort();
   }
 }
