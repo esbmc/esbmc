@@ -362,6 +362,7 @@ public:
   std::list<std::map<unsigned, unsigned> > addr_space_data;
 
   static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
+  static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
