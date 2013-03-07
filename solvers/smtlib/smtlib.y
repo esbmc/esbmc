@@ -73,13 +73,12 @@ std::string smtlib_text_output;
 
 /* Types */
 
-%type <text> error_behaviour reason_unknown info_response_arg status
-%type <text> check_sat_response
+%type <text> error_behaviour reason_unknown info_response_arg
 %type <str> symbol
 %type <str_vec> symbol_list_empt numlist
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
-%type <expr> get_info_response response gen_response
+%type <expr> get_info_response response gen_response status check_sat_response
 %%
 
 /* Rules */
@@ -94,9 +93,8 @@ response: TOK_START_GEN gen_response
           | TOK_START_SAT check_sat_response
           {
             yychar = YYEOF;
-            $$ = NULL;
-            smtlib_text_output = std::string($2);
-            free($2);
+            $$ = $2;
+            smtlib_output = $2;
           }
           | TOK_START_ASSERTS get_assertions_response
           | TOK_START_UNSATS get_unsat_core_response
@@ -278,7 +276,24 @@ error_behaviour: TOK_KW_IMMEXIT | TOK_KW_CONEXECUTION
 
 reason_unknown: TOK_KW_MEMOUT | TOK_KW_INCOMPLETE
 
-status: TOK_KW_SAT | TOK_KW_UNSAT | TOK_KW_UNKNOWN
+status: TOK_KW_SAT
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_SAT;
+           free($1);
+         }
+        | TOK_KW_UNSAT
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNSAT;
+           free($1);
+         }
+        | TOK_KW_UNKNOWN
+         {
+           $$ = new sexpr();
+           $$->token = TOK_KW_UNKNOWN;
+           free($1);
+         }
 
 info_response_arg: error_behaviour | reason_unknown
 
