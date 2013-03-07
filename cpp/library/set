@@ -501,9 +501,9 @@ class multiset{
 
 	size_type count(const key_type& x) const{
 		size_type counter = 0;
-		iterator it = begin();
-		while(it != end())
-			if (*it == x) counter++;
+		int i;
+		while(i != _size)
+			if (buf[i] == x) counter++;
 		return counter;
 	}
 
@@ -821,7 +821,7 @@ public:
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		std::sort(buf,buf+_size);
+		sort(buf,buf+_size);
 	}
 	template<class Iterator>
 	explicit set ( Iterator first , Iterator last ){
@@ -866,12 +866,12 @@ public:
 		return buffer;
 	}
 
-//	    const_iterator begin() const{
-//	    	return const_iterator(buf, 0);
-//	    }
-//		const_iterator end() const{
-//			return const_iterator(buf, _size);
-//		}
+	//	    const_iterator begin() const{
+	//	    	return const_iterator(buf, 0);
+	//	    }
+	//		const_iterator end() const{
+	//			return const_iterator(buf, _size);
+	//		}
 
 	reverse_iterator rbegin(){
 		return reverse_iterator(buf, _size - 1);
@@ -956,10 +956,24 @@ public:
 		j = _size + 1;
 		buf[j] = Key();
 	}
+
 	size_type erase(const key_type& x){
-		iterator it = find(x);
-		erase(it);
+		int k;
+		for (k = 0; k != _size; k++)
+			if (buf[k] == x)
+				break;
+		iterator position(buf,k);
+
+		int j;
+		for(int i = position.pos + 1; i < _size ; i++){
+			j = i - 1;
+			buf[j] = buf[i];
+		}
+		_size--;
+		j = _size + 1;
+		buf[j] = Key();
 	}
+
 	void erase(iterator first, iterator last){
 		while (first != last)
 			erase(first++);
@@ -986,56 +1000,50 @@ public:
 	// set operations:
 
 	iterator find(const key_type& x) const {
-		iterator first = (iterator) begin();
-		iterator last = (iterator) end();
-		for (; first != last; first++) {
-			if (*first == x) {
-				*first = x;
-				return first;
-			}
-		}
-		return first;
+		int i;
+		for (i = 0; i != _size; i++)
+			if (buf[i] == x)
+				break;
+		return iterator(buf,i);
+
 	}
 
 	size_type count(const key_type& x) const{
 		size_type counter = 0;
-		iterator it = begin();
-		while(it != end())
-			if (*it == x) counter++;
+		int i = 0;
+		while(i != _size){
+			if (buf[i] == x) counter++;
+			i++;
+		}
 		return counter;
 	}
 
 	iterator lower_bound(const key_type& x) const{
-		return std::lower_bound(begin(), end(), x);
+		iterator first = begin(), last = end();
+		int i;
+		while(first != last)
+		{
+			if(x <= *first) return first;
+			else first++;
+		}
+		return first;
 	}
 
 	iterator upper_bound(const key_type& x) const{
-		return std::upper_bound(begin(), end(), x);
+		iterator first = begin(),last = end();
+		last--;
+		while(first != last)
+		{
+			if(x <= *last) return last;
+			else last--;
+		}
+		return last;
 	}
 
 	pair<iterator,iterator> equal_range(const key_type& x) const{
-		return make_pair(std::upper_bound(begin(), end(), x), std::lower_bound(begin(), end(), x));
+		return make_pair(upper_bound(x), lower_bound(x));
 	}
 
-	//	bool operator == (const set& x) const{
-	//		if (size() != x.size()) return false;
-	//		iterator it1 = begin(), it2 = x.begin();
-	//		while(it1 != end())
-	//			if (it1++ != it2++) return false;
-	//		return true;
-	//	}
-	//
-	//	bool operator != (const set& x) const{
-	//		return !(*this == x);
-	//	}
-	//
-	//	bool operator >= (const set x) const{
-	//		return ((*this == x) || (*this.size() > x.size));
-	//	}
-	//
-	//	bool operator <= (const set& x) const{
-	//		return (*this == x || *this.size() < x.size);
-	//	}
 
 };
 
