@@ -167,10 +167,58 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
 }
 
 unsigned int
+smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
+{
+  std::stringstream ss;
+  const smtlib_smt_sort *sort = static_cast<const smtlib_smt_sort *>(ast->sort);
+
+  switch (ast->kind) {
+  case SMT_FUNC_INT:
+    // Just the literal number itself.
+    output = integer2string(ast->intval);
+    return 0;
+  case SMT_FUNC_BVINT:
+    // Construct a bitvector
+    ss << "(_ bv" << integer2string(ast->intval) << " " << sort->width << ")";
+    output = ss.str();
+    return 0;
+  case SMT_FUNC_REAL:
+    // Give up
+    std::cerr << "Pretty-printing reals not implemented yet for smtlib output"
+              << std::endl;
+    abort();
+  case SMT_FUNC_SYMBOL:
+    // All symbols to be emitted braced within |'s
+    ss << "|" << ast->symname << "|";
+    output = ss.str();
+    return 0;
+  default:
+    std::cerr << "Invalid terminal AST kind" << std::endl;
+    abort();
+  }
+}
+
+unsigned int
 smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 {
   unsigned int brace_level = 0, i;
   std::string args[4];
+
+  switch (ast->kind) {
+  case SMT_FUNC_HACKS:
+  case SMT_FUNC_INVALID:
+    std::cerr << "Invalid SMT function application reached SMTLIB printer"
+              << std::endl;
+    abort();
+  case SMT_FUNC_INT:
+  case SMT_FUNC_BVINT:
+  case SMT_FUNC_REAL:
+  case SMT_FUNC_SYMBOL:
+    return emit_terminal_ast(ast, output);
+  default:
+    break;
+    // Continue.
+  }
 
   for (i = 0; i < ast->num_args; i++)
     brace_level += emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]),

@@ -77,6 +77,7 @@ public:
                               unsigned int low, const smt_sort *s);
 
   std::string sort_to_string(const smt_sort *s) const;
+  unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);
   unsigned int emit_ast(const smtlib_smt_ast *ast, std::string &output);
 
   // Members
