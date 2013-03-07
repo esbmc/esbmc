@@ -525,7 +525,9 @@ public:
 			return *this;
 		}
 
-		value_type * operator ->();
+		value_type * operator ->(){
+			return &(this->it_pair);
+		}
 
 		value_type & operator *(){
 			return this->it_pair;
@@ -582,12 +584,14 @@ public:
 		mapped_type* it_value;
 		value_type it_pair;
 		int it_pos;
+		int* it_size;
 
 		reverse_iterator(const reverse_iterator& x){
 			this->it_key = x.it_key;
 			this->it_pos = x.it_pos;
 			this->it_value = x.it_value;
 			this->it_pair = x.it_pair;
+			this->it_size = x.it_size;
 		}
 		reverse_iterator(){
 			this->it_pos = -1;
@@ -597,36 +601,67 @@ public:
 			this->it_pos = x.it_pos;
 			this->it_value = x.it_value;
 			this->it_pair = x.it_pair;
+			this->it_size = x.it_size;
 			return *this;
 		}
 
-		value_type * operator ->();
+		value_type * operator ->(){
+			return &(this->it_pair);
+		}
 
 		value_type & operator *(){
 			return this->it_pair;
 		}
 
 		reverse_iterator& operator ++(){
-			this->it_pos++;
+			if(this->it_pos == 0){
+				this->it_pos--;
+				this->it_pair.first = NULL;
+				this->it_pair.second = NULL;
+				return *this;
+			}
+			if(this->it_pos == -1){
+				this->it_pos = *(this->it_size) - 1;
+			}else{
+				this->it_pos--;
+			}
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
 		reverse_iterator& operator ++(int){
-			this->it_pos++;
+			if(this->it_pos == 0){
+				this->it_pos--;
+				this->it_pair.first = NULL;
+				this->it_pair.second = NULL;
+				return *this;
+			}
+			if(this->it_pos == -1){
+				this->it_pos = *(this->it_size) - 1;
+			}else{
+				this->it_pos--;
+			}
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
 
 		reverse_iterator& operator --(){
-			this->it_pos--;
+			if(this->it_pos == this->it_size){
+				this->it_pos = 0;
+			}else{
+				this->it_pos++;
+			}
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
 		reverse_iterator& operator --(int){
-			this->it_pos--;
+			if(this->it_pos == this->it_size){
+				this->it_pos = 0;
+			}else{
+				this->it_pos++;
+			}
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
@@ -748,6 +783,7 @@ public:
 		reverse_iterator it;
 		it.it_key = this->_key;
 		it.it_value = this->_value;
+		it.it_size = &(this->_size);
 		it.it_pos = this->_size-1;
 		it.it_pair.first = this->_key[it.it_pos];
 		it.it_pair.second = this->_value[it.it_pos];
@@ -758,9 +794,10 @@ public:
 		reverse_iterator it;
 		it.it_key = this->_key;
 		it.it_value = this->_value;
-		it.it_pos = 0;
-		it.it_pair.first = this->_key[0];
-		it.it_pair.second = this->_value[0];
+		it.it_size = &(this->_size);
+		it.it_pos = -1;
+		it.it_pair.first = NULL;
+		it.it_pair.second = NULL;
 		return it;
 	}
 	//const_reverse_iterator rend() const;
