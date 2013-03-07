@@ -16,6 +16,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
   : smt_convt(false, int_encoding, _ns, is_cpp, false), options(_opts)
 {
+  temp_sym_count = 1;
+
   // Setup: open a pipe to the smtlib solver. Because C++ is terrible,
   // there's no standard way of opening a stream from an fd, we can try
   // a nonportable way in the future if fwrite becomes unenjoyable.
@@ -146,6 +148,40 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
   }
 }
 
+unsigned int
+smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
+{
+  unsigned int brace_level = 0, i;
+  std::string args[4];
+
+  for (i = 0; i < ast->num_args; i++)
+    brace_level += emit_ast(static_cast<const smtlib_smt_ast *>(ast->args[i]),
+                            args[i]);
+
+  // Get a temporary sym name
+  unsigned int tempnum = temp_sym_count++;
+  std::stringstream ss;
+  ss << temp_prefix << tempnum;
+  std::string tempname = ss.str();
+
+  // Emit a let, assigning the result of this AST func to the sym.
+  fprintf(out_stream, "(let (%s (", tempname.c_str());
+
+  // This asts function
+  abort(); // EUNIMPLEMENTED
+
+  // Its operands
+  for (i = 0; i < ast->num_args; i++)
+    fprintf(out_stream, " %s", args[i].c_str());
+
+  // End func enclosing brace, then operand to let.
+  fprintf(out_stream, "))");
+
+  // We end with one additional brace level.
+  output = tempname;
+  return brace_level + 1;
+}
+
 prop_convt::resultt
 smtlib_convt::dec_solve()
 {
@@ -168,7 +204,26 @@ smtlib_convt::dec_solve()
   // Emit all constraints
   std::list<const smtlib_smt_ast *>::const_iterator it2;
   for (it2 = assertion_list.begin(); it2 != assertion_list.end(); it2++) {
-    // Do things
+    // Encode an assertion
+    fprintf(out_stream, "(assert\n");
+
+    // The algorithm: descend through the AST operands, binding values to
+    // temporary symbols, then emit functions on those temporary symbols.
+    // All recursively. The non-trivial bit is tracking how many ending
+    // braces are required.
+    // This is inspired by the output from Z3 that I've seen.
+    std::string output;
+    unsigned int brace_level = emit_ast(*it2, output);
+
+    // Emit the final temporary symbol - this is what gets asserted.
+    fprintf(out_stream, "%s", output.c_str());
+
+    // Emit a ton of end braces.
+    for (unsigned int i = 0; i < brace_level; i++)
+      fputc(')', out_stream);
+
+    // Final brace for closing the 'assert'.
+    fputc(')', out_stream);
   }
 
   fprintf(out_stream, "(check-sat)\n");
@@ -373,3 +428,5 @@ smtliberror(int startsym __attribute__((unused)), const std::string &error)
             << std::endl;
   abort();
 }
+
+const std::string smtlib_convt::temp_prefix = "?x";

@@ -77,6 +77,7 @@ public:
                               unsigned int low, const smt_sort *s);
 
   std::string sort_to_string(const smt_sort *s) const;
+  unsigned int emit_ast(const smtlib_smt_ast *ast, std::string &output);
 
   // Members
   const optionst &options;
@@ -90,6 +91,8 @@ public:
   // The set of symbols and their sorts.
   std::map<std::string, const smt_sort *> symbol_table;
   std::list<const smtlib_smt_ast *> assertion_list;
+  unsigned int temp_sym_count;
+  static const std::string temp_prefix;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_SMTLIB_CONV_H */
