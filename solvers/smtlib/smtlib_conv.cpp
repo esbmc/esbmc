@@ -179,9 +179,9 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
   case SMT_FUNC_BOOL:
     // Due to hacks, bools are now zero or one.
     if (ast->boolval)
-      output = "1";
+      output = "(_ bv1 1)";
     else
-      output = "0";
+      output = "(_ bv0 1)";
     return 0;
   case SMT_FUNC_BVINT:
     // Construct a bitvector
