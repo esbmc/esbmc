@@ -238,7 +238,8 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   std::string tempname = ss.str();
 
   // Emit a let, assigning the result of this AST func to the sym.
-  fprintf(out_stream, "(let (%s (", tempname.c_str());
+  // For some reason let requires a double-braced operand.
+  fprintf(out_stream, "(let ((%s (", tempname.c_str());
 
   // This asts function
   assert((int)ast->kind <= (int)expr2t::end_expr_id);
@@ -248,8 +249,8 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   for (i = 0; i < ast->num_args; i++)
     fprintf(out_stream, " %s", args[i].c_str());
 
-  // End func enclosing brace, then operand to let.
-  fprintf(out_stream, "))\n");
+  // End func enclosing brace, then operand to let (two braces).
+  fprintf(out_stream, ")))\n");
 
   // We end with one additional brace level.
   output = tempname;
