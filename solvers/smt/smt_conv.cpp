@@ -888,7 +888,14 @@ smt_convt::convert_sort(const type2tc &type)
     smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
                                 : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
                                           false);
-    smt_sort *r = convert_sort(arr.subtype);
+
+    // Work around QF_AUFBV demanding arrays of bitvectors.
+    smt_sort *r;
+    if (!int_encoding && is_bool_type(arr.subtype)) {
+      r = mk_sort(SMT_SORT_BV, 1, false);
+    } else {
+      r = convert_sort(arr.subtype);
+    }
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
   case type2t::cpp_name_id:
