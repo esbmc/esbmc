@@ -74,11 +74,11 @@ sexpr *smtlib_output = NULL;
 
 %type <text> error_behaviour reason_unknown info_response_arg
 %type <str> symbol
-%type <str_vec> symbol_list_empt numlist
+%type <str_vec> symbol_list_empt
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
 %type <expr> get_info_response response gen_response status check_sat_response
-%type <expr> get_value_response valuation_pair valuation_pair_list term
+%type <expr> get_value_response valuation_pair valuation_pair_list term numlist
 %type <expr> identifier
 %%
 
@@ -152,14 +152,20 @@ symbol_list_empt:
 
 numlist: TOK_NUMERAL
          {
-           $$ = new std::list<std::string>();
-           $$->push_back(std::string($1));
+           $$ = new sexpr();
+           sexpr tok;
+           tok.token = TOK_NUMERAL;
+           tok.data = std::string($1);
+           $$->sexpr_list.push_back(tok);
            free($1);
          }
          | numlist TOK_NUMERAL
          {
            $$ = $1;
-           $$->push_back(std::string($2));
+           sexpr tok;
+           tok.token = TOK_NUMERAL;
+           tok.data = std::string($2);
+           $$->sexpr_list.push_back(tok);
            free($2);
          }
 
