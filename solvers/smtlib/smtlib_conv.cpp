@@ -368,7 +368,41 @@ smtlib_convt::l_get(literalt a)
     abort();
   }
 
-  abort();
+  if (smtlib_output->token == TOK_KW_ERROR) {
+    std::cerr << "Error from smtlib solver when fetching literal value: \""
+              << smtlib_output->data << "\"" << std::endl;
+    abort();
+  } else if (smtlib_output->token != 0) {
+    std::cerr << "Unrecognized response to get-value from smtlib solver"
+              << std::endl;
+  }
+
+  // First layer: valuation pair list. Should have one item.
+  assert(smtlib_output->sexpr_list.size() == 1 && "Unexpected number of "
+         "responses to get-value from smtlib solver");
+  sexpr &pair = *smtlib_output->sexpr_list.begin();
+  // Should have two entries
+  assert(pair.sexpr_list.size() == 2 && "Valuation pair in smtlib get-value "
+         "output without two operands");
+  std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
+  const sexpr &first = *it++;
+  const sexpr &second = *it++;
+  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
+         "Unexpected valuation variable from smtlib solver");
+
+  // And finally we have our value. It should be true or false.
+  tvt result;
+  if (second.token == TOK_KW_TRUE) {
+    result = tvt(true);
+  } else if (second.token == TOK_KW_FALSE) {
+    result = tvt(false);
+  } else {
+    std::cerr << "Unexpected literal valuation from smtlib solver" << std::endl;
+    abort();
+  }
+
+  delete smtlib_output;
+  return result;
 }
 
 const std::string
