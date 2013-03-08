@@ -357,8 +357,20 @@ term: spec_constant
            delete $6;
          }
        | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
+         {
+           std::cerr << "Not handling forall in smtlib output" << std::endl;
+           abort();
+         }
        | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
+         {
+           std::cerr << "Not handling exists in smtlib output" << std::endl;
+           abort();
+         }
        | TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
+         {
+           std::cerr << "Not handling '!' in smtlib output" << std::endl;
+           abort();
+         }
 
 gen_response: TOK_KW_UNSUPPORTED
          {
