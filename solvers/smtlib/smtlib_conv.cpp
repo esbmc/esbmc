@@ -147,7 +147,7 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_REAL:
     return "Real";
   case SMT_SORT_BV:
-    ss << "(_ BitVec " << sort->width << ")";
+    ss << "Bool";
     return ss.str();
   case SMT_SORT_ARRAY:
     ss << "(Array " << sort_to_string(sort->domain) << " "
@@ -177,11 +177,10 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     output = integer2string(ast->intval);
     return 0;
   case SMT_FUNC_BOOL:
-    // Due to hacks, bools are now zero or one.
     if (ast->boolval)
-      output = "(_ bv1 1)";
+      output = "true";
     else
-      output = "(_ bv0 1)";
+      output = "false";
     return 0;
   case SMT_FUNC_BVINT:
     // Construct a bitvector
