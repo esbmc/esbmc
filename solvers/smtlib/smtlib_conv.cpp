@@ -240,7 +240,13 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 
   // This asts function
   assert((int)ast->kind <= (int)expr2t::end_expr_id);
-  fprintf(out_stream, "%s", smt_func_name_table[ast->kind].c_str());
+  if (ast->kind == SMT_FUNC_EXTRACT) {
+    // Extract is an indexed function
+    fprintf(out_stream, "(_ extract %d %d)", ast->extract_high,
+                                             ast->extract_low);
+  } else {
+    fprintf(out_stream, "%s", smt_func_name_table[ast->kind].c_str());
+  }
 
   // Its operands
   for (i = 0; i < ast->num_args; i++)
