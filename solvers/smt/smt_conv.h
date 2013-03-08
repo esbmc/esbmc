@@ -272,6 +272,7 @@ public:
   void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                            const smt_ast *cond, const type2tc &type,
                            const tuple_smt_ast *res);
+  expr2tc tuple_get(const expr2tc &expr);
 
   // To be called by the subclass when all other construction has occured.
   // It needs to be able to convert a variety of things, which need to be

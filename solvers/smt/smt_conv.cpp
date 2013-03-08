@@ -1669,6 +1669,34 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
   }
 }
 
+expr2tc
+smt_convt::tuple_get(const expr2tc &expr)
+{
+  assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
+  const symbol2t &sym = to_symbol2t(expr);
+  std::string name = sym.get_symbol_name();
+
+  const type2tc &thetype = (is_structure_type(expr->type))
+    ? expr->type : pointer_struct;
+  const struct_union_data &strct =
+    static_cast<const struct_union_data &>(*thetype.get());
+
+  // XXX - what's the correct type to return here.
+  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+
+  // Run through all fields and despatch to 'get' again.
+  unsigned int i = 0;
+  for (std::vector<type2tc>::const_iterator it = strct.members.begin();
+       it != strct.members.end(); it++, i++) {
+    std::stringstream ss;
+    ss << name << "." << strct.member_names[i];
+    symbol2tc sym(*it, ss.str());
+    outstruct.get()->datatype_members.push_back(get(sym));
+  }
+
+  return outstruct;
+}
+
 smt_ast *
 smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
 {

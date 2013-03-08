@@ -339,6 +339,11 @@ smtlib_convt::dec_solve()
 expr2tc
 smtlib_convt::get(const expr2tc &expr)
 {
+
+  // Tuples need to be special cased.
+  if (is_structure_type(expr->type) || is_pointer_type(expr->type))
+    return tuple_get(expr);
+
   // This should always be a symbol.
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
   const symbol2t &sym = to_symbol2t(expr);
