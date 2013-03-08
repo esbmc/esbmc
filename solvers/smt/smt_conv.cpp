@@ -557,21 +557,45 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::index_id:
   {
-    a = tuple_array_select(args[0], sort, args[1]);
+    const array_type2t &arrtype = to_array_type(expr->type);
+    if (is_bool_type(arrtype.subtype)) {
+      // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
+      // XXX sort is wrong
+      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
+      // Quickie bv-to-bool casting.
+      args[0] = a;
+      args[1] = mk_smt_bvint(BigInt(1), false, 1);
+      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
+    } else {
+      a = tuple_array_select(args[0], sort, args[1]);
+    }
     break;
   }
   case expr2t::with_id:
   {
-    // We reach here if we're with'ing a struct, not an array.
+    // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       const with2t &with = to_with2t(expr);
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
       assert(is_array_type(expr->type));
+      const array_type2t &arrtype = to_array_type(expr->type);
       const with2t &with = to_with2t(expr);
-      const smt_sort *sort = convert_sort(with.update_value->type);
-      a = tuple_array_update(args[0], args[1], args[2], sort);
+      if (is_bool_type(arrtype.subtype)) {
+        // If we're using QF_AUFBV, we need to cast (on the fly) booleans to
+        // single bit bv's, because for some reason the logic doesn't support
+        // arrays of bools.
+        typecast2tc cast(get_uint_type(1), with.update_value);
+        args[2] = convert_ast(cast);
+        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+        break;
+      } else {
+        assert(is_structure_type(arrtype.subtype) ||
+               is_pointer_type(arrtype.subtype));
+        const smt_sort *sort = convert_sort(with.update_value->type);
+        a = tuple_array_update(args[0], args[1], args[2], sort);
+      }
     }
     break;
   }
@@ -3065,7 +3089,7 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //addr_of
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_extract
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_update
-{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, SMT_SORT_ARRAY | SMT_SORT_ALLINTS | SMT_SORT_BOOL},  //with
+{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, SMT_SORT_ARRAY | SMT_SORT_ALLINTS },  //with
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
 { SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, SMT_SORT_ARRAY | SMT_SORT_INT | SMT_SORT_BV},  //index
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_str_id
