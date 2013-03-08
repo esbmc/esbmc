@@ -426,6 +426,11 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   const expr_op_convert *cvt = &smt_convert_table[expr->expr_id];
 
+  // Irritating special case: if we're selecting a bool out of an array, and
+  // we're in QF_AUFBV mode, do special handling.
+  if (is_index2t(expr) && is_bool_type(expr->type))
+    goto expr_handle_table;
+
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
       (!int_encoding && cvt->bv_mode_func_signed > SMT_FUNC_INVALID)) {
     assert(cvt->args == num_args);
@@ -451,6 +456,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     abort();
   }
 
+expr_handle_table:
   switch (expr->expr_id) {
   case expr2t::constant_int_id:
   case expr2t::constant_fixedbv_id:
@@ -557,7 +563,8 @@ smt_convt::convert_ast(const expr2tc &expr)
   }
   case expr2t::index_id:
   {
-    const array_type2t &arrtype = to_array_type(expr->type);
+    const index2t &index = to_index2t(expr);
+    const array_type2t &arrtype = to_array_type(index.source_value->type);
     if (is_bool_type(arrtype.subtype)) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
       // XXX sort is wrong
