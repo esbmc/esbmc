@@ -345,6 +345,17 @@ term: spec_constant
            $$ = $2;
          }
        | TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           sexpr tok;
+           tok.token = TOK_KW_LET;
+           $$->sexpr_list.push_back(tok);
+           $$->sexpr_list.push_back(*$4);
+           $$->sexpr_list.push_back(*$6);
+           delete $4;
+           delete $6;
+         }
        | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
        | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
        | TOK_LPAREN TOK_KW_EXCL term attr_list TOK_RPAREN
