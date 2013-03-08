@@ -343,8 +343,31 @@ smtlib_convt::get(const expr2tc &expr __attribute__((unused)))
 }
 
 tvt
-smtlib_convt::l_get(literalt a __attribute__((unused)))
+smtlib_convt::l_get(literalt a)
 {
+  if (a.is_constant()) {
+    if (a.is_true()) {
+      return tvt(true);
+    } else {
+      assert(a.is_false());
+      return tvt(false);
+    }
+  }
+
+  std::stringstream ss;
+  ss << "l" << a.get();
+
+  fprintf(out_stream, "(get-value (%s))\n", ss.str().c_str());
+  fflush(out_stream);
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_VALUE);
+
+  if (smtlib_output->token == TOK_KW_ERROR) {
+    std::cerr << "SMTLIB solver error fetching literal " << ss.str() << ": \""
+              << smtlib_output->data << "\"" << std::endl;
+    abort();
+  }
+
   abort();
 }
 
