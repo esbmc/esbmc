@@ -337,8 +337,27 @@ smtlib_convt::dec_solve()
 }
 
 expr2tc
-smtlib_convt::get(const expr2tc &expr __attribute__((unused)))
+smtlib_convt::get(const expr2tc &expr)
 {
+  // This should always be a symbol.
+  assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
+  const symbol2t &sym = to_symbol2t(expr);
+  std::string name = sym.get_symbol_name();
+
+  fprintf(out_stream, "(get-value (|%s|))\n", name.c_str());
+  fflush(out_stream);
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_VALUE);
+
+  if (smtlib_output->token == TOK_KW_ERROR) {
+    std::cerr << "Error from smtlib solver when fetching literal value: \""
+              << smtlib_output->data << "\"" << std::endl;
+    abort();
+  } else if (smtlib_output->token != 0) {
+    std::cerr << "Unrecognized response to get-value from smtlib solver"
+              << std::endl;
+  }
+
   abort();
 }
 
