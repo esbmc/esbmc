@@ -78,7 +78,7 @@ sexpr *smtlib_output = NULL;
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
 %type <expr> get_info_response response gen_response status check_sat_response
-%type <expr> get_value_response
+%type <expr> get_value_response valuation_pair valuation_pair_list term
 %%
 
 /* Rules */
@@ -354,10 +354,32 @@ get_assertions_response: TOK_LPAREN term_list_empt TOK_RPAREN
 get_unsat_core_response: TOK_LPAREN symbol_list_empt TOK_RPAREN
 
 valuation_pair: TOK_LPAREN term term TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$2);
+           $$->sexpr_list.push_back(*$3);
+           delete $2;
+           delete $3;
+         }
 
-valuation_pair_list: valuation_pair | valuation_pair_list valuation_pair
+valuation_pair_list: valuation_pair
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           $$->sexpr_list.push_back(*$1);
+           delete $1;
+         }
+       | valuation_pair_list valuation_pair
+         {
+           $$->sexpr_list.push_back(*$2);
+           delete $2;
+         }
 
 get_value_response: TOK_LPAREN valuation_pair_list TOK_RPAREN
+         {
+           $$ = $2;
+         }
 
 b_value: TOK_KW_TRUE | TOK_KW_FALSE
 
