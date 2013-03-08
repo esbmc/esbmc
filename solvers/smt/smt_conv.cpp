@@ -3183,7 +3183,7 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "bvxor",
   "bvor",
   "bvand",
-  "implies",
+  "=>",
   "xor",
   "or",
   "and",
