@@ -428,7 +428,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
-  if (is_index2t(expr) && is_bool_type(expr->type))
+  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type))
     goto expr_handle_table;
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
@@ -565,13 +565,15 @@ expr_handle_table:
   {
     const index2t &index = to_index2t(expr);
     const array_type2t &arrtype = to_array_type(index.source_value->type);
-    if (is_bool_type(arrtype.subtype)) {
+    if (!int_encoding && is_bool_type(arrtype.subtype)) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
       // XXX sort is wrong
       a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
       // Quickie bv-to-bool casting.
       args[0] = a;
       args[1] = mk_smt_bvint(BigInt(1), false, 1);
+      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
+    } else if (is_bool_type(arrtype.subtype)) {
       a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
     } else {
       a = tuple_array_select(args[0], sort, args[1]);
@@ -589,12 +591,16 @@ expr_handle_table:
       assert(is_array_type(expr->type));
       const array_type2t &arrtype = to_array_type(expr->type);
       const with2t &with = to_with2t(expr);
-      if (is_bool_type(arrtype.subtype)) {
+      if (!int_encoding && is_bool_type(arrtype.subtype)) {
         // If we're using QF_AUFBV, we need to cast (on the fly) booleans to
         // single bit bv's, because for some reason the logic doesn't support
         // arrays of bools.
         typecast2tc cast(get_uint_type(1), with.update_value);
         args[2] = convert_ast(cast);
+        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+        break;
+      } else if (is_bool_type(arrtype.subtype)) {
+        // Normal operation
         a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
         break;
       } else {
