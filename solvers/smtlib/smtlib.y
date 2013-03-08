@@ -79,6 +79,7 @@ sexpr *smtlib_output = NULL;
 %type <expr> s_expr spec_constant attribute attribute_value info_response
 %type <expr> get_info_response response gen_response status check_sat_response
 %type <expr> get_value_response valuation_pair valuation_pair_list term
+%type <expr> identifier
 %%
 
 /* Rules */
@@ -162,7 +163,25 @@ numlist: TOK_NUMERAL
            free($2);
          }
 
-identifier: symbol | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
+identifier: symbol
+         {
+           $$ = new sexpr();
+           $$->token = TOK_SIMPLESYM;
+           $$->data = *$1;
+           delete $1;
+         }
+       | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
+         {
+           sexpr uscore;
+           $$->token = 0;
+           uscore.token = TOK_KW_USCORE;
+           $$->sexpr_list.push_back(uscore);
+           uscore.token = TOK_SIMPLESYM;
+           uscore.data = *$3;
+           delete $3;
+           $$->sexpr_list.push_back(uscore);
+           // FIXME: numlist.
+         }
 
 sexpr_list:
          {
