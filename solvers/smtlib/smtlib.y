@@ -78,6 +78,7 @@ sexpr *smtlib_output = NULL;
 %type <sexpr_list> sexpr_list info_response_list
 %type <expr> s_expr spec_constant attribute attribute_value info_response
 %type <expr> get_info_response response gen_response status check_sat_response
+%type <expr> get_value_response
 %%
 
 /* Rules */
@@ -98,6 +99,11 @@ response: TOK_START_GEN gen_response
           | TOK_START_ASSERTS get_assertions_response
           | TOK_START_UNSATS get_unsat_core_response
           | TOK_START_VALUE get_value_response
+          {
+            yychar = YYEOF;
+            $$ = $2;
+            smtlib_output = $2;
+          }
           | TOK_START_ASSIGN get_assignment_response
           | TOK_START_OPTION get_option_response
           | TOK_START_INFO gen_response { yychar = YYEOF; smtlib_output = $2; }
@@ -118,6 +124,10 @@ spec_constant: TOK_NUMERAL
 {$$ = new sexpr(); $$->token = TOK_BINNUM;$$->data = std::string($1);free($1);}
                | TOK_STRINGLIT
 {$$ = new sexpr(); $$->token = TOK_STRINGLIT; $$->data = std::string($1); free($1);}
+               | TOK_KW_TRUE
+{$$ = new sexpr(); $$->token = TOK_KW_TRUE; }
+               | TOK_KW_FALSE
+{$$ = new sexpr(); $$->token = TOK_KW_FALSE; }
 
 symbol: TOK_SIMPLESYM { $$ = new std::string($1); free($1); }
         | TOK_QUOTEDSYM {
