@@ -186,7 +186,8 @@ identifier: symbol
            uscore.data = *$3;
            delete $3;
            $$->sexpr_list.push_back(uscore);
-           // FIXME: numlist.
+           $$->sexpr_list.push_back(*$4);
+           delete $4;
          }
 
 sexpr_list:
