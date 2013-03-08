@@ -318,6 +318,9 @@ term_list_empt: | term | term_list term
 term: spec_constant
        | qual_identifier
        | TOK_LPAREN qual_identifier TOK_RPAREN
+         {
+           $$ = $2;
+         }
        | TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN
        | TOK_LPAREN TOK_KW_FORALL TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
        | TOK_LPAREN TOK_KW_EXISTS TOK_LPAREN sortvar_list TOK_RPAREN term TOK_RPAREN
