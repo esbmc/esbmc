@@ -79,7 +79,7 @@ sexpr *smtlib_output = NULL;
 %type <expr> s_expr spec_constant attribute attribute_value info_response
 %type <expr> get_info_response response gen_response status check_sat_response
 %type <expr> get_value_response valuation_pair valuation_pair_list term numlist
-%type <expr> identifier
+%type <expr> identifier qual_identifier sort
 %%
 
 /* Rules */
@@ -269,7 +269,18 @@ sort_list: sort | sort_list sort
 
 sort: identifier | TOK_LPAREN identifier sort_list TOK_RPAREN
 
-qual_identifier: identifier | TOK_LPAREN TOK_KW_AS identifier sort TOK_RPAREN
+qual_identifier: identifier
+       | TOK_LPAREN TOK_KW_AS identifier sort TOK_RPAREN
+         {
+           $$ = new sexpr();
+           $$->token = 0;
+           sexpr tok;
+           tok.token = TOK_KW_AS;
+           $$->sexpr_list.push_back(*$3);
+           $$->sexpr_list.push_back(*$4);
+           delete $3;
+           delete $4;
+         }
 
 var_binding: TOK_LPAREN symbol term TOK_RPAREN
 
