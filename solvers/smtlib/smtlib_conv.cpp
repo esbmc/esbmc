@@ -363,12 +363,6 @@ smtlib_convt::l_get(literalt a)
   smtlibparse(TOK_START_VALUE);
 
   if (smtlib_output->token == TOK_KW_ERROR) {
-    std::cerr << "SMTLIB solver error fetching literal " << ss.str() << ": \""
-              << smtlib_output->data << "\"" << std::endl;
-    abort();
-  }
-
-  if (smtlib_output->token == TOK_KW_ERROR) {
     std::cerr << "Error from smtlib solver when fetching literal value: \""
               << smtlib_output->data << "\"" << std::endl;
     abort();
