@@ -499,6 +499,7 @@ smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
   smtlib_smt_ast *n = new smtlib_smt_ast(s, SMT_FUNC_EXTRACT);
   n->extract_high = high;
   n->extract_low = low;
+  n->num_args = 1;
   n->args[0] = a;
   return n;
 }
