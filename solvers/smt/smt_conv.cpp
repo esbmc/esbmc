@@ -524,7 +524,7 @@ expr_handle_table:
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
       assert(is_bv_type(expr));
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
     }
     break;
   }
