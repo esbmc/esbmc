@@ -363,7 +363,48 @@ smtlib_convt::get(const expr2tc &expr)
               << std::endl;
   }
 
-  abort();
+  // Attempt to read an integer.
+  BigInt m;
+  bool was_integer = true;
+  if (smtlib_output->token == TOK_DECIMAL) {
+    m = string2integer(smtlib_output->data);
+  } else if (smtlib_output->token == TOK_NUMERAL) {
+    std::cerr << "Numeral value for integer symbol from smtlib solver"
+              << std::endl;
+    abort();
+  } else if (smtlib_output->token == TOK_HEXNUM) {
+    std::string data = smtlib_output->data.substr(2);
+    m = string2integer(data, 16);
+  } else if (smtlib_output->token == TOK_BINNUM) {
+    std::string data = smtlib_output->data.substr(2);
+    m = string2integer(data, 2);
+  } else {
+    was_integer = false;
+  }
+
+  // Generate the appropriate expr.
+  expr2tc result;
+  if (is_bv_type(expr->type)) {
+    assert(was_integer && "smtlib solver didn't provide integer response to "
+           "integer get-value");
+    result = constant_int2tc(expr->type, m);
+  } else if (is_fixedbv_type(expr->type)) {
+    assert(!int_encoding && "Can't parse reals right now in smtlib solver "
+           "responses");
+    assert(was_integer && "smtlib solver didn't provide integer/bv response to "
+           "fixedbv get-value");
+    const fixedbv_type2t &fbtype = to_fixedbv_type(expr->type);
+    fixedbv_spect spec(fbtype.width, fbtype.integer_bits);
+    fixedbvt fbt;
+    fbt.spec = spec;
+    fbt.from_integer(m);
+    result = constant_fixedbv2tc(expr->type, fbt);
+  } else {
+    abort();
+  }
+
+  delete smtlib_output;
+  return result;
 }
 
 tvt
