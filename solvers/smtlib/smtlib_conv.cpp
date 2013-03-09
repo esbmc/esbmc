@@ -363,20 +363,33 @@ smtlib_convt::get(const expr2tc &expr)
               << std::endl;
   }
 
+  // Unpack our value from response list.
+  assert(smtlib_output->sexpr_list.size() == 1 && "More than one response to "
+         "get-value from smtlib solver");
+  sexpr &response = *smtlib_output->sexpr_list.begin();
+  // Now we have a valuation pair. First is the symbol
+  assert(response.sexpr_list.size() == 2 && "Expected 2 operands in "
+         "valuation_pair_list from smtlib solver");
+  std::list<sexpr>::iterator it = response.sexpr_list.begin();
+  sexpr &symname = *it++;
+  sexpr &respval = *it++;
+  assert(symname.token == TOK_SIMPLESYM && symname.data == name &&
+         "smtlib solver returned different symbol from get-value");
+
   // Attempt to read an integer.
   BigInt m;
   bool was_integer = true;
-  if (smtlib_output->token == TOK_DECIMAL) {
-    m = string2integer(smtlib_output->data);
-  } else if (smtlib_output->token == TOK_NUMERAL) {
+  if (respval.token == TOK_DECIMAL) {
+    m = string2integer(respval.data);
+  } else if (respval.token == TOK_NUMERAL) {
     std::cerr << "Numeral value for integer symbol from smtlib solver"
               << std::endl;
     abort();
-  } else if (smtlib_output->token == TOK_HEXNUM) {
-    std::string data = smtlib_output->data.substr(2);
+  } else if (respval.token == TOK_HEXNUM) {
+    std::string data = respval.data.substr(2);
     m = string2integer(data, 16);
-  } else if (smtlib_output->token == TOK_BINNUM) {
-    std::string data = smtlib_output->data.substr(2);
+  } else if (respval.token == TOK_BINNUM) {
+    std::string data = respval.data.substr(2);
     m = string2integer(data, 2);
   } else {
     was_integer = false;
