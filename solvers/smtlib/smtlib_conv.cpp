@@ -269,8 +269,8 @@ smtlib_convt::dec_solve()
   // check-sat
 
   // Preliminaries
-  fprintf(out_stream, "(set-info :status unknown)\n");
   fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+  fprintf(out_stream, "(set-info :status unknown)\n");
 
   // Declare all symbols
   std::map<std::string, const smt_sort *>::const_iterator it;
