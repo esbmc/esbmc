@@ -412,6 +412,15 @@ smtlib_convt::get(const expr2tc &expr)
     fbt.spec = spec;
     fbt.from_integer(m);
     result = constant_fixedbv2tc(expr->type, fbt);
+  } else if (is_bool_type(expr->type)) {
+    if (respval.token == TOK_KW_TRUE) {
+      result = constant_bool2tc(true);
+    } else if (respval.token == TOK_KW_FALSE) {
+      result = constant_bool2tc(false);
+    } else {
+      std::cerr << "Unexpected token reading value of boolean symbol from "
+                   "smtlib solver" << std::endl;
+    }
   } else {
     abort();
   }
