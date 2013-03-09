@@ -30,7 +30,7 @@ stringlit     \"((.|\\\\|\\\")*)\"
 symtext       [-~!@%^&*_+=<>.?/a-zA-Z]
 symchars      [-0-9~!@%^&*_+=<>.?/a-zA-Z]
 simplesym     {symtext}{symchars}*
-quotedsym     \|[^\\]*\|
+quotedsym     \|[^\\|]*\|
 keyword       :{symchars}+
 
 %%
