@@ -178,6 +178,7 @@ identifier: symbol
          }
        | TOK_LPAREN TOK_KW_USCORE symbol numlist TOK_RPAREN
          {
+           $$ = new sexpr();
            sexpr uscore;
            $$->token = 0;
            uscore.token = TOK_KW_USCORE;
