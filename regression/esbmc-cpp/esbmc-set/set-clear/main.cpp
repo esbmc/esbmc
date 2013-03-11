@@ -14,7 +14,7 @@ int main ()
 
   cout << "myset contains:";
   for (it=myset.begin(); it!=myset.end(); ++it)
-    cout << " " << *it;
+//    cout << " " << *it;
 
   myset.clear();
   assert(myset.size() == 0);
@@ -28,9 +28,9 @@ int main ()
   it++;
   assert(*it == 2202);
 
-  cout << "\nmyset contains:";
+  //cout << "\nmyset contains:";
   for (it=myset.begin(); it!=myset.end(); ++it)
-    cout << " " << *it;
+  //  cout << " " << *it;
 
   cout << endl;
 

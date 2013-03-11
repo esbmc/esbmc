@@ -12,9 +12,9 @@ int main ()
   assert(myset.size() == 5);
   set<int>::iterator it;
 
-  cout << "myset contains:" << endl;
+//  cout << "myset contains:" << endl;
   for ( it=myset.begin(), i=0 ; it != myset.end(); it++, i++ ){
-    cout << " " << *it;
+  //  cout << " " << *it;
     assert(*it != mySecondInts[i]);
   }
   cout << endl;
