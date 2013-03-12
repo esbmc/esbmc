@@ -12,7 +12,7 @@ int main ()
   rit = myset.rbegin();
   assert(*rit == 78);
   cout << "myset contains:";
-  for ( rit=myset.rbegin() ; rit != myset.rend(); rit++ )
+//  for ( rit=myset.rbegin();rit != myset.rend();rit++ )
     cout << " " << *rit;
 
   cout << endl;
