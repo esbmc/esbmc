@@ -840,6 +840,7 @@ public:
 		for(int i = 0 ; i < x._size ; i++){
 			buf[i] = x.buf[i];
 		}
+		_size = x.size();
 		buf[_size] = 0;
 	}
 
@@ -902,6 +903,12 @@ public:
 		return 9999999999;
 	}
 
+	template<class Iterator>
+	iterator insert(Iterator first, Iterator last){
+		while(first!=last)
+			insert(*first++);
+	}
+
 	// modifiers:
 	pair<iterator,bool> insert(const value_type& x){
 		iterator it = begin();
@@ -938,17 +945,6 @@ public:
 		buf[position.pos] = x;
 		return position;
 	}
-
-	//	template<class Iterator>
-	//	iterator insert(Iterator first, Iterator last){
-	//
-	//	}
-	template<class Iterator>
-	iterator insert(Iterator first, Iterator last){
-		while(first!=last)
-			insert(*first++);
-	}
-
 
 	void erase(iterator position){
 		int j;
