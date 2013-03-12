@@ -848,7 +848,10 @@ public:
 		for(int i = 0 ; i < x._size ; i++){
 			buf[i] = x.buf[i];
 		}
+		_size = x.size();
 		buf[_size] = 0;
+		return *this;
+
 	}
 
 	// iterators:
@@ -912,7 +915,7 @@ public:
 		_size++;
 		i = _size;
 
-		while( i > it.pos - 1){
+		while( rule(it.pos - 1,i)){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -927,7 +930,7 @@ public:
 		_size++;
 		int i = _size;
 		int aux;
-		while( i > position.pos - 1){
+		while( rule(position.pos - 1,i)){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -941,8 +944,9 @@ public:
 	//
 	//	}
 	template<class Iterator>
-	iterator insert(Iterator* first, Iterator* last){
-
+	iterator insert(Iterator first, Iterator last){
+		while(first!=last)
+			insert(*first++);
 	}
 
 
@@ -980,7 +984,8 @@ public:
 	}
 
 	void swap(set& x){
-		set aux(*this);
+		set aux;
+		aux = *this;
 		*this = x;
 		x = aux;
 	}
