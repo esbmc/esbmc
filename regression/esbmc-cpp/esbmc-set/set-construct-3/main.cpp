@@ -14,6 +14,7 @@ struct classcomp {
 int main ()
 {
   set<int> first;                           // empty set of ints
+  set<int>::iterator it;
   
   int myints[]= {10,20,30,40,50};
   set<int> second (myints,myints+5);        // pointers used as iterators

@@ -16,6 +16,7 @@ int main ()
   int myints[]= {10,20,30,40,50};
   set<int> second (myints,myints+5);        // pointers used as iterators
   set<int> fourth (second.begin(), second.end());  // iterator ctor.
+  set<int>::iterator it;
   assert(fourth.size() == 5);
   it = fourth.begin();
   assert(*it == 10);
