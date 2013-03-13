@@ -881,7 +881,7 @@ public:
 		return reverse_iterator(buf, _size - 1);
 	}
 	reverse_iterator rend(){
-		return reverse_iterator(buf, 0);
+		return reverse_iterator(buf, _size);
 	}
 
 	const_reverse_iterator rbegin() const{
@@ -1023,7 +1023,7 @@ public:
 		int first = 0, last = _size;
 		while(first != last)
 		{
-			if(x <= buf[first]) return iterator(buf,first);
+			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
@@ -1034,7 +1034,7 @@ public:
 		last--;
 		while(first != last)
 		{
-			if(x >= buf[last-1]) return iterator(buf,last);
+			if(!rule(x, buf[first])) return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
