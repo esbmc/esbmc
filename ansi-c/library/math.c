@@ -114,8 +114,8 @@ double sin(double x)
 }
 
 
-#define NAN (0.0/0.0)
-#define M_PI 3.141592653589793
+//#define NAN (0.0/0.0)
+//#define M_PI 3.141592653589793
 
 #define M_E     2.71828182845905
 #define M_E2    (M_E * M_E)
