@@ -1,4 +1,4 @@
-#include <stdlib.h>
+#include <math.h>
 #include <stdio.h>
 #include <assert.h>
 
@@ -82,60 +82,18 @@ static double _dbl_inv_fact[] = {
         1.0 / 6402373705728000.0,       // 1 / 18!
 };
 
-double exp1(double x) {
-        int int_part;
-        int invert;
-        double value;
-        double x0;
-        int i;
-        if (x == 0) {
-                return 1;
-        }
-        else if (x < 0) {
-                invert = 1;
-                x = -x;
-        }
-        else {
-                invert = 0;
-        }
-
-        /* extract integer component */
-        int_part = (int) x;
-
-        /* set x to fractional component */
-        x -= (double) int_part;
-
-        /* perform Taylor series approximation with nineteen terms */
-        value = 0.0;
-        x0 = 1.0;
-        for (i = 0; i < 19; i++) {
-                value += x0 * _dbl_inv_fact[i];
-                x0 *= x;
-        }
-
-        /* multiply by exp of the integer component */
-        value *= _expi(int_part);
-
-        if (invert) {
-                return (1.0 / value);
-        }
-        else {
-                return value;
-        }
-}
-
 int main() {
-  printf("%.16f \n", exp1(0.3));
-  printf("%.16f \n", exp1(0.14115125));
-  printf("%.16f \n", exp1(-2.132314121515));
-  printf("%.16f \n", exp1(3.1123441));
-  printf("%.16f \n", exp1(-10.34));
+  printf("%.16f \n", exp(0.3));
+  printf("%.16f \n", exp(0.14115125));
+  printf("%.16f \n", exp(-2.132314121515));
+  printf("%.16f \n", exp(3.1123441));
+  printf("%.16f \n", exp(-10.34));
 
-  assert(fabs(exp1(0.3) - 1.3498588075760032) <= 1e-9 );
-  assert(fabs(exp1(0.14115125) - 1.1515988141337348) <= 1e-9 );
-  assert(fabs(exp1(-2.132314121515) - 0.11856260786488046) <= 1e-10 );
-  assert(fabs(exp1(3.1123441) - 22.4736632187176717) <= 1e-8);
-  assert(fabs(exp1(-10.34) - 3.231432266044366e-05) <= 1e-10);
+  assert(fabs(exp(0.3) - 1.3498588075760032) <= 1e-8 );
+  assert(fabs(exp(0.14115125) - 1.1515988141337348) <= 1e-9 );
+  assert(fabs(exp(-2.132314121515) - 0.11856260786488046) <= 1e-10 );
+  assert(fabs(exp(3.1123441) - 22.4736632187176717) <= 1e-7);
+  assert(fabs(exp(-10.34) - 3.231432266044366e-05) <= 1e-10);
   return 0;
 }
 
