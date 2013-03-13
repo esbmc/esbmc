@@ -16,7 +16,17 @@
 #define M_LN10   2.30258509299404568402
 #define DBL_EPSILON 2.2204460492503131e-16
 
-//#define INFINITY (1.0 / 0.0)
+#define M_E     2.71828182845905
+#define M_E2    (M_E * M_E)
+#define M_E4    (M_E2 * M_E2)
+#define M_E8    (M_E4 * M_E4)
+#define M_E16   (M_E8 * M_E8)
+#define M_E32   (M_E16 * M_E16)
+#define M_E64   (M_E32 * M_E32)
+#define M_E128  (M_E64 * M_E64)
+#define M_E256  (M_E128 * M_E128)
+#define M_E512  (M_E256 * M_E256)
+#define M_E1024 (M_E512 * M_E512)
 
 #ifdef _WIN32
 #undef fabs
@@ -113,21 +123,6 @@ double sin(double x)
    return cos(x-M_PI_2);
 }
 
-
-//#define NAN (0.0/0.0)
-//#define M_PI 3.141592653589793
-
-#define M_E     2.71828182845905
-#define M_E2    (M_E * M_E)
-#define M_E4    (M_E2 * M_E2)
-#define M_E8    (M_E4 * M_E4)
-#define M_E16   (M_E8 * M_E8)
-#define M_E32   (M_E16 * M_E16)
-#define M_E64   (M_E32 * M_E32)
-#define M_E128  (M_E64 * M_E64)
-#define M_E256  (M_E128 * M_E128)
-#define M_E512  (M_E256 * M_E256)
-#define M_E1024 (M_E512 * M_E512)
 
 /*Returns the square root of n. Note that the function */
 /*Babylonian method*/
