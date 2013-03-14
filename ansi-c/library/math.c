@@ -97,6 +97,10 @@ double inline fabs(double x) {
   return (x < 0) ? -x : x;
 }
 
+double fmod(double a, double b) {
+  return a - (b * (int)(a/b));
+}
+
 double cos(double x)
 {
     double t , s ;
@@ -104,10 +108,10 @@ double cos(double x)
     p = 0;
     s = 1.0;
     t = 1.0;
+    x = fmod(x + M_PI, M_PI * 2) - M_PI; // restrict x so that -M_PI < x < M_PI
     double xsqr = x*x;
     double ab = 1;
-    int i = 0;
-    while(ab > PREC)
+    while((ab > PREC) && (p < 15))
     {
         p++;
         t = (-t * xsqr) / (((p<<1) - 1) * (p<<1));
@@ -116,7 +120,6 @@ double cos(double x)
     }
     return s;
 }
-
 
 double sin(double x)
 {
