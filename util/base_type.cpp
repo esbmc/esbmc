@@ -144,8 +144,24 @@ bool base_type_eqt::base_type_eq_rec(
     return base_type_eq_rec(type1, symbol.type);
   }
   
+
   if(type1.id()!=type2.id())
-    return false;
+  {
+	if (type1.is_struct())
+	{
+      const struct_union_typet::componentst &components=
+	    to_struct_union_type(type1).components();
+      if (components.size()==1)
+      {
+        const typet &subtype=components[0].type().subtype();
+        if(base_type_eq_rec(subtype, type2)) return true;
+      }
+      else
+    	return false;
+	}
+	else
+      return false;
+  }
 
   if(type1.id()=="struct" ||
      type1.id()=="class" ||
