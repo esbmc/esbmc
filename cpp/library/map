@@ -494,7 +494,7 @@ public:
 		typedef bool result_type;
 		typedef value_type first_argument_type;
 		typedef value_type second_argument_type;
-		bool operator() (const value_type& x, const value_type& y) const
+		bool operator() ( value_type& x,  value_type& y) const
 		{
 			return comp(x.first, y.first);
 		}
@@ -616,8 +616,8 @@ public:
 		reverse_iterator& operator ++(){
 			if(this->it_pos == 0){
 				this->it_pos--;
-				this->it_pair.first = NULL;
-				this->it_pair.second = NULL;
+				this->it_pair.first = Key();
+				this->it_pair.second = T();
 				return *this;
 			}
 			if(this->it_pos == -1){
@@ -632,8 +632,8 @@ public:
 		reverse_iterator& operator ++(int){
 			if(this->it_pos == 0){
 				this->it_pos--;
-				this->it_pair.first = NULL;
-				this->it_pair.second = NULL;
+				this->it_pair.first = Key();
+				this->it_pair.second = T();
 				return *this;
 			}
 			if(this->it_pos == -1){
@@ -719,8 +719,8 @@ public:
 			this->_key[0] = x;
 			this->_size++;
 			//this->_value[0] = T();
-			this->_value[0] = NULL;
-			this->_key[this->_size+1] = NULL;
+			this->_value[0] = T();
+			this->_key[this->_size+1] = Key();
 			return this->_value[0];
 		}else{
 			for(int i = 0; i < s; i++){
@@ -728,7 +728,7 @@ public:
 					return this->_value[i];
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(x,this->_key[i])){
+				if(key_compare()(( Key& )x,this->_key[i])){
 					int j;
 					Key y = x;
 					Key t;
@@ -747,16 +747,16 @@ public:
 
 					this->_size++;
 					//this->_value[i] = T();
-					this->_value[i] = NULL;
-					this->_key[this->_size+1] = NULL;
+					this->_value[i] = T();
+					this->_key[this->_size+1] = Key();
 					return this->_value[i];
 				}
 			}
 			this->_size++;
 			this->_key[s] = x;
 			//this->_value[s] = T();
-			this->_value[s] = NULL;
-			this->_key[this->_size+1] = NULL;
+			this->_value[s] = T();
+			this->_key[this->_size+1] = Key();
 			return this->_value[s];
 		}
 	}
@@ -799,8 +799,8 @@ public:
 		it.it_value = this->_value;
 		it.it_size = &(this->_size);
 		it.it_pos = -1;
-		it.it_pair.first = NULL;
-		it.it_pair.second = NULL;
+		it.it_pair.first = Key();
+		it.it_pair.second = T();
 		return it;
 	}
 	//const_reverse_iterator rend() const;
@@ -811,8 +811,8 @@ public:
 			this->_key[0] = x;
 			this->_size++;
 			//this->_value[0] = T();
-			this->_value[0] = NULL;
-			this->_key[this->_size+1] = NULL;
+			this->_value[0] = T();
+			this->_key[this->_size+1] = Key();
 			return this->_value[0];
 		}else{
 			for(int i = 0; i < s; i++){
@@ -820,7 +820,7 @@ public:
 					return this->_value[i];
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(x,this->_key[i])){
+				if(key_compare()((Key &)x,this->_key[i])){
 					int j;
 					Key y = x;
 					Key t;
@@ -839,16 +839,16 @@ public:
 
 					this->_size++;
 					//this->_value[i] = T();
-					this->_value[i] = NULL;
-					this->_key[this->_size+1] = NULL;
+					this->_value[i] = T();
+					this->_key[this->_size+1] = Key();
 					return this->_value[i];
 				}
 			}
 			this->_size++;
 			this->_key[s] = x;
 			//this->_value[s] = T();
-			this->_value[s] = NULL;
-			this->_key[this->_size+1] = NULL;
+			this->_value[s] = T();
+			this->_key[this->_size+1] = Key();
 			return this->_value[s];
 		}
 	}
@@ -1021,8 +1021,8 @@ public:
 						this->_key[j] = this->_key[j+1];
 						this->_value[j] = this->_value[j+1];
 					}
-					this->_key[j-1] = NULL;
-					this->_value[j-1] = NULL;
+					this->_key[j-1] = Key();
+					this->_value[j-1] = T();
 					return this->_size;
 				}
 			}
@@ -1041,8 +1041,8 @@ public:
 						this->_key[j] = this->_key[j+1];
 						this->_value[j] = this->_value[j+1];
 					}
-					this->_key[j-1] = NULL;
-					this->_value[j-1] = NULL;
+					this->_key[j-1] = Key();
+					this->_value[j-1] = T();
 					return;
 				}
 			}
@@ -1060,8 +1060,8 @@ public:
 						this->_key[j] = this->_key[j+last.it_pos];
 						this->_value[j] = this->_value[j+last.it_pos];
 					}
-					this->_key[j-1] = NULL;
-					this->_value[j-1] = NULL;
+					this->_key[j-1] = Key();
+					this->_value[j-1] = T();
 					return;
 				}
 			}
@@ -1091,7 +1091,7 @@ public:
 					return it;
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(x,this->_key[i])){
+				if(key_compare()((Key &)x,this->_key[i])){
 					int j;
 					Key y = x;
 					Key t;
@@ -1110,7 +1110,7 @@ public:
 
 					this->_size++;
 					//this->_value[i] = T();
-					this->_value[i] = NULL;
+					this->_value[i] = T();
 					return it;
 				}
 				it++;
@@ -1118,7 +1118,7 @@ public:
 			this->_size++;
 			this->_key[s] = x;
 			//this->_value[s] = T();
-			this->_value[s] = NULL;
+			this->_value[s] = T();
 			return this->end();
 		}
 	}
@@ -1142,7 +1142,7 @@ public:
 					return it;
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(x,this->_key[i])){
+				if(key_compare()((Key&)x,this->_key[i])){
 					return this->end();
 				}
 				it++;
@@ -1163,7 +1163,7 @@ public:
 					return it;
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(x,this->_key[i])){
+				if(key_compare()((Key&)x,this->_key[i])){
 					return this->end();
 				}
 				it++;
@@ -1187,7 +1187,7 @@ public:
 					return _pair;
 				}
 				//if(x < this->_key[i]){
-				if(key_compare()(k,this->_key[i])){
+				if(key_compare()((Key&)k,this->_key[i])){
 					_pair.first = this->upper_bound(k);
 					return _pair;
 				}
@@ -1231,13 +1231,12 @@ public:
 template<class Key, class T, class Compare>
 void swap(map<Key, T, Compare>&, vector<Key, T, Compare>&);
 
-template<class Key, class T, class Compare = less<Key>,
-		class Allocator = allocator<pair<const Key, T> > >
+template<class Key, class T, class Compare = less<Key> >
 class multimap {
 public:
 	typedef Key key_type;
 	typedef T mapped_type;
-	typedef pair<const Key, T> value_type;
+	typedef pair< Key, T> value_type;
 	typedef Compare key_compare;
 	typedef int size_type;
 
@@ -1353,11 +1352,17 @@ public:
 	 bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
 	 const multimap<Key,T,Compare,Allocator>& y );
 	 */
+	explicit multimap (const key_compare& comp = key_compare());
+	template <class InputIterator>
+	  multimap (InputIterator first, InputIterator last,
+	            const key_compare& comp = key_compare());
+	multimap (const multimap& x);
 	size_type count(const key_type& x) const;
-	iterator insert(const value_type& x);
+	iterator insert(const value_type& x);const
 	iterator insert(iterator position, const value_type& x);
 	template<class InputIterator>
 	void insert(InputIterator first, InputIterator last);
+	size_type size();
 	iterator begin();
 	const_iterator begin() const;
 	iterator end();
