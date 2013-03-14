@@ -156,11 +156,8 @@ bool base_type_eqt::base_type_eq_rec(
         const typet &subtype=components[0].type().subtype();
         if(base_type_eq_rec(subtype, type2)) return true;
       }
-      else
-    	return false;
 	}
-	else
-      return false;
+    return false;
   }
 
   if(type1.id()=="struct" ||
