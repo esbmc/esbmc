@@ -12,11 +12,11 @@
 
 #define M_PI     3.14159265358979323846
 #define M_PI_2   1.57079632679489661923132169164      // Pi/2
-#define PREC 1e-15
+#define PREC 1e-16
 #define M_LN10   2.30258509299404568402
 #define DBL_EPSILON 2.2204460492503131e-16
 
-#define M_E     2.71828182845905
+#define M_E      2.71828182845905
 #define M_E2    (M_E * M_E)
 #define M_E4    (M_E2 * M_E2)
 #define M_E8    (M_E4 * M_E4)
@@ -27,6 +27,8 @@
 #define M_E256  (M_E128 * M_E128)
 #define M_E512  (M_E256 * M_E256)
 #define M_E1024 (M_E512 * M_E512)
+
+//#define INFINITY (1.0 / 0.0)
 
 #ifdef _WIN32
 #undef fabs
@@ -103,7 +105,7 @@ double fmod(double a, double b) {
 
 double cos(double x)
 {
-    double t , s ;
+    double t , s;
     int p;
     p = 0;
     s = 1.0;
@@ -126,7 +128,6 @@ double sin(double x)
    return cos(x-M_PI_2);
 }
 
-
 /*Returns the square root of n. Note that the function */
 /*Babylonian method*/
 /*http://www.geeksforgeeks.org/square-root-of-a-perfect-square/*/
@@ -141,7 +142,7 @@ double sqrt(double n)
   double e = 1;
   int i = 0;
 //  while(fabs(x - y) > e)
-  while(i++ < 10) //Change this line to increase precision
+  while(i++ < 15) //Change this line to increase precision
   {
     x = (x + y)/2.0;
     y = n/x;
@@ -272,11 +273,11 @@ double log(double x) {
         }
 
         if (y == 700.0) {
-                return FP_INFINITE;
+//                return FP_INFINITE;
             return (1.0/0.0);
         }
         if (y == -700.0) {
-                return FP_INFINITE;
+//                return FP_INFINITE;
             return (1.0/0.0);
         }
 
