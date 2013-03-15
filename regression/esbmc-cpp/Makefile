@@ -12,6 +12,7 @@ stack := esbmc-stack
 queue := esbmc-queue
 priority_queue := esbmc-priority_queue
 map := esbmc-map
+set := esbmc-map
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
@@ -26,13 +27,13 @@ endif
 llvm: all
 
 # Make them all
-all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map)
+all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)
 
-$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map):
+$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set):
 	$(MAKE) --directory=$@ $(TARGET)
 
 #Make only STL directories
-stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map)
+stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)
 
 # Make each directory
 algorithm: $(algorithm)
@@ -48,5 +49,6 @@ stack: $(stack)
 queue: $(queue) 
 priority_queue: $(priority_queue)
 map: $(map)
+set: $(set)
 # Allow parallel make
-.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue)
+.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(set)
