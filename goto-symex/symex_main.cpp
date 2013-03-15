@@ -29,6 +29,9 @@
 void
 goto_symext::claim(const exprt &claim_expr, const std::string &msg) {
 
+  if (unwinding_recursion_assumption)
+    return ;
+
   total_claims++;
 
   exprt expr = claim_expr;
