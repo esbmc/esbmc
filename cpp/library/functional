@@ -239,7 +239,7 @@ template<class T> struct greater: binary_function<T, T, bool> {
 };
 
 template<class T> struct less: binary_function<T, T, bool> {
-	bool operator()( T& x,  T& y) const {
+	bool operator()(T& x, T& y) const {
 		return x < y;
 	}
 };
