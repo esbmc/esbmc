@@ -818,16 +818,20 @@ public:
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		sort(buf,buf+_size);
+		std::sort(buf,buf+_size,rule);
 	}
+
 	template<class Iterator>
 	explicit set ( Iterator first , Iterator last ){
 		_size = 0;
 		int i = 0;
-		while(first != last)
-			buf[i++] = *first++;
+		while(first != last){
+			buf[i] = *first;
+			i++;
+			first++;
+		}
 		_size = i ;
-		std::sort(buf,buf+_size);
+		std::sort(buf,buf+_size,rule);
 	}
 
 
@@ -1044,9 +1048,7 @@ public:
 		return make_pair(upper_bound(x), lower_bound(x));
 	}
 
-
 };
-
 
 }
 
