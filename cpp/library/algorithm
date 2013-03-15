@@ -299,6 +299,17 @@ bool equal(InIt1 first1, InIt1 last1, InIt2 first2) {
 	return true;
 }
 
+template<class InIt1, class InIt2>
+bool equal(InIt1 first1, InIt1 last1, InIt2 *first2) {
+	while (first1 != last1) {
+		if (!(*first1 == *first2))
+			return false;
+		++first1;
+		++first2;
+	}
+	return true;
+}
+
 template<class InIt1, class InIt2, class Pr>
 bool equal(InIt1 first1, InIt1 last1, InIt2 first2, Pr pred) {
 	while (first1 != last1) {
@@ -858,6 +869,23 @@ template<class RanIt, class Pr>
 void sort(RanIt begin, RanIt end, Pr pred){
 	RanIt i,j;
 	RanIt iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
+template<class RanIt, class Pr>
+void sort(RanIt *begin, RanIt *end, Pr pred){
+	RanIt *i,*j;
+	RanIt *iMin;
 	for (j = begin; j < end-1; j++) {
 		iMin = j;
 		for ( i = j+1; i < end; i++) {
@@ -1633,10 +1661,10 @@ template<class Iterator>
 void maxHeapify(Iterator begin, Iterator end, int pos, int n){
 	int max = 2*pos + 1;
 	if(max < n){
-		if((max+1) < n && (*begin+max) < (*begin+max+1))
+		if((max+1) < n && *(begin+max) < *(begin+max+1))
 			++max;
-		if((*begin+max) > (*begin+pos)){
-			swap((*begin+max), (*begin+pos));
+		if(*(begin+max) > *(begin+pos)){
+			swap(*(begin+max), *(begin+pos));
 			maxHeapify(begin, end, max, n);
 		}
 	}
