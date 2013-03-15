@@ -24,21 +24,18 @@ using namespace std;
 
 namespace std {
 
-template<class T>
-//class less {};
-
-template < class Key, class Compare = less<Key>,
-class Allocator = allocator<Key> >
+template < class Key, class Compare = less<Key>/*,class Allocator = allocator<Key> */>
 class multiset{
+public:
 	Key buf[MAX];
 	size_t _size = 0;
 	Compare rule;
-	class const_iterator;
+
 	// types:
 
 	typedef Key key_type;
 	typedef Key value_type;
-	typedef  pair<Key, Compare> element_type;
+	//typedef  pair<Key, Compare> element_type;
 	typedef Compare key_compare;
 	typedef Compare value_compare;
 
@@ -63,6 +60,7 @@ class multiset{
 		iterator(){
 
 		}
+
 		iterator& operator=(const iterator& i){
 			pos = i.pos;
 			base = i.base;
@@ -102,10 +100,8 @@ class multiset{
 		bool operator == (const iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
+
 		bool operator != (const iterator& it) const{
-			return !((base == it.base)&&(pos == it.pos));
-		}
-		bool operator != (const_iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
@@ -121,7 +117,7 @@ class multiset{
 		int pos;
 		key_type* base;
 
-		const_iterator(const_iterator& i){
+		const_iterator(const const_iterator& i){
 			pos = i.pos;
 			base = i.base;
 		}
@@ -134,7 +130,7 @@ class multiset{
 		const_iterator(){
 
 		}
-		const_iterator& operator=(const_iterator& i){
+		const_iterator& operator=(const const_iterator& i){
 			this->pos = i.pos;
 			this->base = i.base;
 		}
@@ -169,14 +165,14 @@ class multiset{
 			return const_iterator(base, pos - var);
 		}
 
-		bool operator == (const_iterator& it) const{
+		bool operator == (const const_iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
-		bool operator != (const_iterator& it) const{
+		bool operator != (const const_iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
-		bool operator < (const_iterator& it) const{
+		bool operator < (const const_iterator& it) const{
 			return (pos < it.pos);
 		}
 	};
@@ -199,9 +195,10 @@ class multiset{
 		reverse_iterator(){
 
 		}
-		reverse_iterator& operator=(reverse_iterator& i){
-			this->pos = i.pos;
-			this->base = i.base;
+		reverse_iterator& operator=(const reverse_iterator& i){
+			pos = i.pos;
+			base = i.base;
+			return *this;
 		}
 
 		value_type * operator -> (){
@@ -323,16 +320,20 @@ class multiset{
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		std::sort(buf,buf+_size);
+		std::sort(buf,buf+_size,rule);
 	}
+
 	template<class Iterator>
 	explicit multiset ( Iterator first , Iterator last ){
 		_size = 0;
 		int i = 0;
-		while(first != last)
-			buf[i++] = *first++;
+		while(first != last){
+			buf[i] = *first;
+			i++;
+			first++;
+		}
 		_size = i ;
-		std::sort(buf,buf+_size);
+		std::sort(buf,buf+_size,rule);
 	}
 
 
@@ -345,6 +346,7 @@ class multiset{
 		for(int i = 0 ; i < x._size ; i++){
 			buf[i] = x.buf[i];
 		}
+		_size = x.size();
 		buf[_size] = 0;
 	}
 
@@ -353,33 +355,39 @@ class multiset{
 		for(int i = 0 ; i < x._size ; i++){
 			buf[i] = x.buf[i];
 		}
+		_size = x.size();
 		buf[_size] = 0;
+		return *this;
+
 	}
 
 	// iterators:
-	iterator begin()const{
+	iterator begin(){
 		return iterator(buf, 0);
 	}
 
-	iterator end()const{
+	iterator end(){
 		iterator buffer;
 		buffer.base = &buf[0];
 		buffer.pos = _size;
 		return buffer;
 	}
 
-	//    const_iterator begin() const{
-	//    	return const_iterator(buf, 0);
-	//    }
-	//	const_iterator end() const{
-	//		return const_iterator(buf, _size);
-	//	}
+	const_iterator begin() const{
+		return const_iterator(buf, 0);
+	}
+	const_iterator end() const{
+		const_iterator buffer;
+		buffer.base = &buf[0];
+		buffer.pos = _size;
+		return buffer;
+	}
 
 	reverse_iterator rbegin(){
 		return reverse_iterator(buf, _size - 1);
 	}
 	reverse_iterator rend(){
-		return reverse_iterator(buf, 0);
+		return reverse_iterator(buf, _size);
 	}
 
 	const_reverse_iterator rbegin() const{
@@ -401,6 +409,12 @@ class multiset{
 		return 9999999999;
 	}
 
+	template<class Iterator>
+	iterator insert(Iterator first, Iterator last){
+		while(first!=last)
+			insert(*first++);
+	}
+
 	// modifiers:
 	pair<iterator,bool> insert(const value_type& x){
 		iterator it = begin();
@@ -414,7 +428,7 @@ class multiset{
 		_size++;
 		i = _size;
 
-		while( i > it.pos - 1){
+		while( rule(it.pos - 1,i)){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -429,7 +443,7 @@ class multiset{
 		_size++;
 		int i = _size;
 		int aux;
-		while( i > position.pos - 1){
+		while( rule(position.pos - 1,i)){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -437,16 +451,6 @@ class multiset{
 		buf[position.pos] = x;
 		return position;
 	}
-
-	//	template<class Iterator>
-	//	iterator insert(Iterator first, Iterator last){
-	//
-	//	}
-	template<class Iterator>
-	iterator insert(Iterator* first, Iterator* last){
-
-	}
-
 
 	void erase(iterator position){
 		int j;
@@ -458,17 +462,32 @@ class multiset{
 		j = _size + 1;
 		buf[j] = Key();
 	}
+
 	size_type erase(const key_type& x){
-		iterator it = find(x);
-		erase(it);
+		int k;
+		for (k = 0; k != _size; k++)
+			if (buf[k] == x)
+				break;
+		iterator position(buf,k);
+
+		int j;
+		for(int i = position.pos + 1; i < _size ; i++){
+			j = i - 1;
+			buf[j] = buf[i];
+		}
+		_size--;
+		j = _size + 1;
+		buf[j] = Key();
 	}
+
 	void erase(iterator first, iterator last){
 		while (first != last)
 			erase(first++);
 	}
 
 	void swap(multiset& x){
-		multiset aux(*this);
+		multiset aux;
+		aux = *this;
 		*this = x;
 		x = aux;
 	}
@@ -479,48 +498,59 @@ class multiset{
 	// observers:
 
 	key_compare key_comp() const{
-		return key_compare();
+		return rule;
 	}
 
 	value_compare value_comp() const{
-		return value_compare();
+		return rule;
 	}
-	// multiset operations:
+	// set operations:
 
 	iterator find(const key_type& x) const {
-		iterator first = (iterator) begin();
-		iterator last = (iterator) end();
-		for (; first != last; first++) {
-			if (*first == x) {
-				*first = x;
-				return first;
-			}
-		}
-		return first;
+		int i;
+		for (i = 0; i != _size; i++)
+			if (buf[i] == x)
+				break;
+		return iterator(buf,i);
+
 	}
 
 	size_type count(const key_type& x) const{
 		size_type counter = 0;
-		int i;
-		while(i != _size)
+		int i = 0;
+		while(i != _size){
 			if (buf[i] == x) counter++;
+			i++;
+		}
 		return counter;
 	}
 
 	iterator lower_bound(const key_type& x) const{
-		return std::lower_bound(begin(), end(), x);
+		int first = 0, last = _size;
+		while(first != last)
+		{
+			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			else first++;
+		}
+		return iterator(buf,first);
 	}
 
 	iterator upper_bound(const key_type& x) const{
-		return std::upper_bound(begin(), end(), x);
+		int first = 0, last = _size;
+		last--;
+		while(first != last)
+		{
+			if(!rule(x, buf[first])) return iterator(buf,last);
+			else last--;
+		}
+		return iterator(buf,last);
 	}
 
 	pair<iterator,iterator> equal_range(const key_type& x) const{
-		return make_pair(std::upper_bound(begin(), end(), x), std::lower_bound(begin(), end(), x));
+		return make_pair(upper_bound(x), lower_bound(x));
 	}
 
 };
-
 
 template <class Key, class Compare = less<Key> >
 class set {
