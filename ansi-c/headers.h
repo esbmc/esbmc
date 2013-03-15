@@ -5,7 +5,7 @@
  * the symbol varies when compiling for windows, but doesn't when using LD to
  * produce the header blobs. So, hacks: */
 
-#if defined(__MINGW32__)
+#if !defined(_WIN64)
 #define p(x) (x)
 #else
 #define p(x) _##x

@@ -54,7 +54,7 @@ const mode_table_et mode_table[] =
   LANGAPI_HAVE_MODE_END
 };
 
-#if defined(__MINGW32__)
+#if !defined(_WIN64)
 extern "C" uint8_t binary___buildidobj_s_start;
 uint8_t *version_string = &binary___buildidobj_s_start;
 #else

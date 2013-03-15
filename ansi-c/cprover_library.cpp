@@ -33,7 +33,7 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-#if defined(__MINGW32__)
+#if !defined(_WIN64)
 #define p(x) (x)
 #else
 #define p(x) _##x
