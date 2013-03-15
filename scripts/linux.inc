@@ -33,7 +33,9 @@ endif
 ifdef STATICLINK
 FINLINKTAIL+= -static
 # g++ 4.7 on debian completely fails to link static Z3 lib :|
-FINLINKBIN=g++-4.6
+#FINLINKBIN=g++-4.6
+# Compiling static on debian is failing anyway, so don't try to fix it to work.
+FINLINKBIN=g++
 endif
 
 ifdef LINUXCOMPAT
