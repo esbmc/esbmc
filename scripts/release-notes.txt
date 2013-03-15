@@ -1,5 +1,9 @@
 Release Notes of the ESBMC model checker
 
+*** Version 1.21.1
++ Fixed an option-passing failure present in 1.21, that led to K-induction
++ not operating correclty
+
 *** Version 1.21
 + Enhance support for C++ model checking
 + Switch LTL modelling to support checking multiple property truth values.
