@@ -21,5 +21,7 @@ extern char p(binary_pthread_h_start);
 extern char p(binary_pthread_h_end);
 extern char p(binary_pthreadtypes_h_start);
 extern char p(binary_pthreadtypes_h_end);
+extern char p(binary_digitalfilter_h_start);
+extern char p(binary_digitalfilter_h_end);
 
 #undef p
