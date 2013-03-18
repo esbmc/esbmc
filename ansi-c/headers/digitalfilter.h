@@ -27,7 +27,6 @@ extern "C" {
 #define NOWRAP		1
 #define SATURATE	2
 
-#if 1
   /* functions */
   float shiftL(float zIn, float z[], int N);
   int order(int Na, int Nb);
@@ -53,12 +52,11 @@ extern "C" {
   /* overflow checking */
   int overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
 
-    /* limit cycle checking */
-    int limitCycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
+  /* limit cycle checking */
+  int limitCycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
 
   /* timing verification */
   int timing(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
-#endif
 
 #ifdef __cplusplus
 
