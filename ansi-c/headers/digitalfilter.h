@@ -17,14 +17,14 @@ extern "C" {
 
 #endif
 
-/* overflow checking */
-int overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
+/* arithmetic under- and over-flow checking */
+int check_filter_overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
 
 /* limit cycle checking */
-int limitCycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
+int check_filter_limitcycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
 
-/* timing verification */
-int timing(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
+/* timing constraints checking  */
+int check_filter_timing(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize);
 
 #ifdef __cplusplus
 

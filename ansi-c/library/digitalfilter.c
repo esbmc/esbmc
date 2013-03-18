@@ -222,8 +222,8 @@ float iirIItOutFixed(float w[], float x, float a[], float b[], int Na, int Nb, f
 int nondet_int();
 float nondet_float();
 
-/* OVERFLOW CHECKING */
-int overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
+/* arithmetic under- and over-flow checking */
+int check_filter_overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
 {
 	int i;
 
@@ -273,8 +273,8 @@ int overflow(float *a, float *b, int k, int l, int Na, int Nb, float max, float 
 	return 0;
 }
 
-/* LIMIT CYCLE CHECKING */
-int limitCycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
+/* limit cycle checking */
+int check_filter_limitcycle(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
 {
 	int i;
 	int Set_xsize_at_least_two_times_Na = 2*Na;
@@ -356,8 +356,8 @@ int limitCycle(float *a, float *b, int k, int l, int Na, int Nb, float max, floa
 	return 0;
 }
 
-/* TIMING VERIFICATION */
-int timing(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
+/* timing constraints checking */
+int check_filter_timing(float *a, float *b, int k, int l, int Na, int Nb, float max, float min, int xsize)
 {
 	int i;
 
