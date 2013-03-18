@@ -12,7 +12,7 @@ stack := esbmc-stack
 queue := esbmc-queue
 priority_queue := esbmc-priority_queue
 map := esbmc-map
-set := esbmc-map
+set := esbmc-set
 
 # Clean
 ifneq ($(filter clean,$(MAKECMDGOALS)),)
