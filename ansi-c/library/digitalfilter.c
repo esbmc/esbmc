@@ -309,7 +309,7 @@ int check_filter_limitcycle(float *a, float *b, int k, int l, int Na, int Nb, fl
 	float y0[Na];
 
 	yaux[0] = 0;
-	y0[i] = 0;
+	y0[0] = 0;
 	for (i = 1; i<Na; ++i)
 	{
 		yaux[i] = nondet_int() * delta;
