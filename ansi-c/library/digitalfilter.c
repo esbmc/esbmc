@@ -1,5 +1,15 @@
 #include "digitalfilter.h"
 
+#define CLOCK		16000000
+#define CYCLE		1/CLOCK
+#define OVERHEAD	80				//Initialized considering overhead (time for data conditioning, DAC, ADC, etc...)
+#define SAMPLERATE 	48000
+#define DEADLINE 	1/SAMPLERATE
+
+#define WRAP		0
+#define NOWRAP		1
+#define SATURATE	2
+
 /* functions */
 float shiftL(float zIn, float z[], int N)
 {
