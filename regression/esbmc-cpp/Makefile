@@ -30,7 +30,7 @@ llvm: all
 # Make them all
 all: $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap)
 
-$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap):
+$(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap):
 	$(MAKE) --directory=$@ $(TARGET)
 
 #Make only STL directories
@@ -52,7 +52,7 @@ priority_queue: $(priority_queue)
 map: $(map)
 set: $(set)
 multimap: $(multimap)
+
 # Allow parallel make
 
->>>>>>> Upgrading in the Makefile: adding of directory esbmc-map
 .PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(string) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) 
