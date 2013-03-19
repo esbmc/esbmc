@@ -1958,15 +1958,23 @@ void cpp_typecheck_resolvet::guess_template_args(
       cpp_template_args_non_tct template_args;
       resolve_scope(cpp_name, base_name, template_args);
 
-      const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
-      cpp_template_args_non_tct instantiated_args=
-        to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+      cpp_template_args_non_tct instantiated_args;
+      if(desired_type.find("#cpp_type").is_not_nil())
+      {
+        type_exprt type(desired_type);
+        instantiated_args.arguments().push_back(type);
+      }
+      else
+      {
+        const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
+        instantiated_args=
+          to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+      }
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
-
       for(unsigned i=0; i<args.size();++i)
       {
-        resolve_scope(to_cpp_name(args[i].type()),base_name, template_args);
+        resolve_scope(to_cpp_name(args[i].type()),base_name,template_args);
 
         cpp_scopest::id_sett id_set;
         cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
