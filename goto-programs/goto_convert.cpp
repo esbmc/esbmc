@@ -1039,6 +1039,10 @@ void goto_convertt::convert_decl(
     dest.destructive_append(sideeffects);
     // break up into decl and assignment
     copy(tmp, OTHER, dest);
+
+		if (initializer.is_symbol())
+      nondet_vars.insert(std::pair<exprt,exprt>(code.op0(),initializer));
+    
     code_assignt assign(code.op0(), initializer); // initializer is without sideeffect now
     assign.location()=tmp.location();
     copy(assign, ASSIGN, dest);
@@ -1143,7 +1147,8 @@ void goto_convertt::convert_assign(
 			dest.add_instruction(ATOMIC_END);
   }
 
-  //std::cout << "lhs: " << lhs.pretty() << std::endl;
+//  std::cout << "lhs: " << lhs.pretty() << std::endl;
+//  std::cout << "rhs: " << rhs.pretty() << std::endl;
   if (inductive_step)
     get_struct_components(lhs, state);
 }
