@@ -21,7 +21,7 @@ int main ()
   assert(itlow->first == 'b');
   assert(itlow->second == 121);
   assert(itup->first == 'e');
-  assert(itup->second != 44);
+  assert(itup->second == 44);
 
   return 0;
 }
