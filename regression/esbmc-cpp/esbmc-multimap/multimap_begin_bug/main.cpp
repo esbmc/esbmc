@@ -21,7 +21,7 @@ int main ()
   assert((*it).second == 20);
   it++;
   assert((*it).first == 'b');
-  assert((*it).second == 150);
+  assert((*it).second != 150);
 
   // show content:
   for (it=mymultimap.begin(); it!=mymultimap.end(); ++it)
