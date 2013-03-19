@@ -16,7 +16,7 @@ int main ()
  
   it--;
   assert((*it).first == 'b');
-  assert((*it).second == 150);
+  assert((*it).second != 150);
 
   return 0;
 }
