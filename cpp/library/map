@@ -1926,8 +1926,28 @@ public:
 		return 0;
 	}
 
-};
+    bool operator==( multimap& y ){
+    	if(this->_size != y._size)
+    		return false;
+    	for(int i = 0; i < this->_size; i++){
+    		if((this->_key[i] != y._key[i]) || (this->_value[i] != y._value[i]))
+    			return false;
+    	}
+    	return true;
+    }
 
+    bool operator!=( multimap& y ){
+    	if(this->_size != y._size)
+    		return true;
+    	for(int i = 0; i < this->_size; i++){
+    		if((this->_key[i] != y._key[i]) || (this->_value[i] != y._value[i]))
+    			return true;
+    	}
+    	return false;
+    }
+
+};
+#if 0
 template< class Key, class T >
 bool operator==( multimap<Key,T>& x, multimap<Key,T>& y){
 	if(x._size != y._size)
@@ -1949,7 +1969,7 @@ bool operator!=( multimap<Key,T>& x, multimap<Key,T>& y){
 	}
 	return false;
 }
-
+#endif
 }
 
 #endif
