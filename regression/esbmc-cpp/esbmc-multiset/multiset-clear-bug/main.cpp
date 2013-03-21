@@ -11,7 +11,7 @@ int main ()
   myset.insert (100);
   myset.insert (200);
   myset.insert (300);
-
+  assert(0);  
   cout << "myset contains:";
   for (it=myset.begin(); it!=myset.end(); ++it)
     cout << " " << *it;
