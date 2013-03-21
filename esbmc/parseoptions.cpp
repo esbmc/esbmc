@@ -1305,6 +1305,20 @@ bool cbmc_parseoptionst::process_goto_program(
           relink_calls_from_to(it->guard, cond_wait, cond_check);
         }
       }
+    } else {
+      // Redirect pthread join to a non-switching version.
+      irep_idt join("c::pthread_join");
+      irep_idt join_noswitch("c::pthread_join_noswitch");
+      goto_functionst::function_mapt::iterator checkit;
+      checkit = goto_functions.function_map.begin();
+      for (; checkit != goto_functions.function_map.end(); checkit++) {
+        goto_programt::instructionst::iterator it =
+          checkit->second.body.instructions.begin();
+        for (; it != checkit->second.body.instructions.end(); it++) {
+          relink_calls_from_to(it->code, join, join_noswitch);
+          relink_calls_from_to(it->guard, join, join_noswitch);
+        }
+      }
     }
 
     // show it?

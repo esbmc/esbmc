@@ -147,6 +147,34 @@ __ESBMC_hide:
   return 0;
 }
 
+int
+pthread_join_noswitch(pthread_t thread, void **retval)
+{
+__ESBMC_hide:
+  __ESBMC_atomic_begin();
+
+  // Detect whether the target thread has ended or not. If it isn't, mark us as
+  // waiting for its completion. That fact can be used for deadlock detection
+  // elsewhere.
+  bool ended = pthread_thread_ended[thread];
+  if (!ended)
+    join_wait++;
+
+  // Fetch exit code
+  if (retval != NULL)
+    *retval = pthread_end_values[thread];
+
+  __ESBMC_really_atomic_end();
+
+  // Discard any interleavings where the other thread wasn't halted.
+  if (!ended)
+    __ESBMC_assume(false);
+
+  return 0;
+}
+
+
+
 /************************* Mutex manipulation routines ************************/
 
 int
