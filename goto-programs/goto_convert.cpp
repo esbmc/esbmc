@@ -3469,6 +3469,13 @@ DEBUGLOC;
   else
   {
     assert(expr.operands().size()==2);
+
+    nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
+    nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
+    if (result_op0 != nondet_vars.end() && 
+				result_op1 != nondet_vars.end())
+			return ;
+
     assert(expr.op0().type() == expr.op1().type());
 
     exprt new_expr1, new_expr2;
@@ -3559,7 +3566,7 @@ void goto_convertt::convert_ifthenelse(
 	  else
 	    tmp_guard=code.op0();
 
-          remove_sideeffects(tmp_guard, dest);
+    remove_sideeffects(tmp_guard, dest);
 	  if (inductive_step && (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
