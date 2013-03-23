@@ -286,8 +286,6 @@ void goto_convertt::convert(
 
   link_up_type_names((codet&)code, ns);
 
-  //std::cout << "### code.pretty(): " << code.pretty() << std::endl;
-
   if(statement=="block")
     convert_block(code, dest);
   else if(statement=="decl")
@@ -852,13 +850,11 @@ bool goto_convertt::is_expr_in_state(
   const struct_typet &struct_type = to_struct_type(str);
   const struct_typet::componentst &components = struct_type.components();
 
-  //std::cout << expr.pretty() << std::endl;
   for (struct_typet::componentst::const_iterator
      it = components.begin();
      it != components.end();
      it++)
   {
-	//std::cout << "name:" << it->get("name") << std::endl;
     if (it->get("name").compare(expr.get_string("identifier")) == 0)
    	  return true;
   }
@@ -881,14 +877,10 @@ Function: goto_convertt::get_struct_components
 void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
 {
   DEBUGLOC;
-  //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
-  //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
     if (!is_expr_in_state(exp, str))
     {
-      //std::cout << "exp.pretty(): " << exp.pretty() << std::endl;
-      //std::cout << "identifier: " << exp.get_string("identifier") << std::endl;
       unsigned int size = str.components().size();
       str.components().resize(size+1);
       str.components()[size] = (struct_typet::componentt &) exp;
@@ -914,11 +906,8 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   }
   else
   {
-    //std::cout << "exp.operands().size(): " << exp.operands().size() << std::endl;
     forall_operands(it, exp)
     {
-      //std::cout << "exp.id(): " << exp.id() << std::endl;
-      //std::cout << "it->is_code(): " << it->is_code() << std::endl;
       DEBUGLOC;
       get_struct_components(*it, str);
     }
@@ -957,8 +946,6 @@ void goto_convertt::convert_decl(
     throw "decl statement expects symbol as first operand";
   }
 
-  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
-  //std::cout << "op0.pretty(): " << op0.pretty() << std::endl;
   if (inductive_step)
     get_struct_components(op0, state);
 
@@ -995,7 +982,7 @@ void goto_convertt::convert_decl(
       {
         exprt op0 = initializer.op0();
         initializer.swap(op0);
-        //std::cout << "initializer: "<< initializer << std::endl;
+
         if(!code.op1().is_empty())
         {
           exprt function = code.op1();
@@ -1065,7 +1052,6 @@ void goto_convertt::convert_assign(
   const code_assignt &code,
   goto_programt &dest)
 {
-  //std::cout << "code.pretty(): " << code.pretty() << std::endl;
 
   if(code.operands().size()!=2)
   {
@@ -1863,10 +1849,6 @@ void goto_convertt::convert_for(
   dest.destructive_append(tmp_y);
   dest.destructive_append(tmp_z);
 
-  //std::cout << "base_case" << base_case << std::endl;
-  //std::cout << "inductive_step" << inductive_step << std::endl;
-  //std::cout << "k_induction" << k_induction << std::endl;
-
   //do the g label
   if (!is_break() && !is_goto()
 			&& inductive_step)
@@ -2073,7 +2055,6 @@ void goto_convertt::assume_cond(
   const bool &neg,
   goto_programt &dest)
 {
-  //std::cout << "cond.pretty(): " << cond.pretty() << std::endl;
   goto_programt tmp_e;
   goto_programt::targett e=tmp_e.add_instruction(ASSUME);
   exprt result_expr = cond;
@@ -2322,7 +2303,6 @@ void goto_convertt::replace_cond(
   exprt &tmp,
   goto_programt &dest)
 {
-  //std::cout << tmp.pretty() << std::endl;
   //std::cout << tmp.id() << std::endl;
 
   irep_idt exprid = tmp.id();
@@ -2554,7 +2534,7 @@ void goto_convertt::convert_while(
 
   //do the g label
   if (!is_break() && !is_goto()
-			&& (/*base_case ||*/ inductive_step))
+			&& (inductive_step))
     assume_cond(cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
@@ -3292,7 +3272,6 @@ void goto_convertt::get_cs_member(
   bool &found)
 {
   DEBUGLOC;
-  //std::cout << "get_cs_member: " << expr.pretty() << std::endl;
 
   found=false;
   std::string identifier;
@@ -3307,9 +3286,7 @@ void goto_convertt::get_cs_member(
   new_expr.copy_to_operands(lhs_struct);
   new_expr.identifier(expr.get_string("identifier"));
   new_expr.component_name(expr.get_string("identifier"));
-  //std::cout << "expr.get_string(identifier): " << expr.get_string("identifier") << std::endl;
 
-  //std::cout << "new_expr: " << new_expr.pretty() << std::endl;
   assert(!new_expr.get_string("component_name").empty());
 
   const struct_typet &struct_type = to_struct_type(lhs_struct.type());
@@ -3321,9 +3298,6 @@ void goto_convertt::get_cs_member(
        it != components.end();
        it++, i++)
   {
-    //std::cout << "name: " << it->get("name") << std::endl;
-    //std::cout << "component_name: " << new_expr.get_string("component_name") << std::endl;
-    //std::cout << "it->pretty(): " << it->pretty() << std::endl;
     if (it->get("name").compare(new_expr.get_string("component_name")) == 0)
       found=true;
   }
@@ -3355,7 +3329,6 @@ Function: goto_convertt::get_new_expr
 void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
 {
   DEBUGLOC;
-  //std::cout << "get_new_expr: " << expr.pretty() << std::endl;
 
   if (expr.is_symbol())
   {
@@ -3401,8 +3374,6 @@ void goto_convertt::get_new_expr(exprt &expr, exprt &new_expr, bool &found)
 
     new_expr = gen_binary(expr.id().as_string(), expr.type(), operand0, operand1);
 
-    //std::cout << "antes get_new_expr new_expr1.pretty(): " << new_expr1.pretty() << std::endl;
-
     if (new_expr.op0().is_index())
       assert(new_expr.op0().type().id() == expr.op0().op0().type().id());
     else if (new_expr.op0().type()!=new_expr.op1().type())
@@ -3436,7 +3407,6 @@ void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
 DEBUGLOC;
-//  std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
 
   bool found=false;
 
@@ -3454,7 +3424,6 @@ DEBUGLOC;
     if (!new_expr.type().is_bool())
       new_expr.make_typecast(bool_typet());
     expr = new_expr;
-    //std::cout << "replace_ifthenelse expr1: " << expr.pretty() << std::endl;
   }
   else
   {
@@ -3488,7 +3457,6 @@ DEBUGLOC;
       new_expr2.make_typecast(new_expr1.type());
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
-    //std::cout << "replace_ifthenelse expr2: " << expr.pretty() << std::endl;
   }
 }
 
