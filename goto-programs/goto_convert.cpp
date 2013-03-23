@@ -879,7 +879,8 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   DEBUGLOC;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
-		loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+    if (is_while_block())
+		  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
@@ -892,17 +893,17 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   else if (exp.operands().size()==1)
   {
     DEBUGLOC;
-    if (exp.op0().is_symbol())
+    if (exp.op0().is_symbol()) {
       get_struct_components(exp.op0(), str);
-    else if (exp.op0().operands().size()==1)
+    } else if (exp.op0().operands().size()==1)
       get_struct_components(exp.op0().op0(), str);
   }
   else if (exp.operands().size()==2)
   {
     DEBUGLOC;
-    if (exp.op0().is_symbol())
+    if (exp.op0().is_symbol()) {
       get_struct_components(exp.op0(), str);
-    else if (exp.op0().operands().size())
+    } else if (exp.op0().operands().size())
       get_struct_components(exp.op0().op0(), str);
   }
   else
