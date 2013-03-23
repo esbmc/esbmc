@@ -592,11 +592,21 @@ void goto_checkt::check_rec(
           expr.id()=="unary-" ||
           expr.id()=="typecast")
   {
-    if (expr.id()=="typecast")
-   	  options.set_option("int-encoding", false);
+    //if (expr.id()=="typecast")
+   	  //options.set_option("int-encoding", false);
 
-    if(expr.type().id()=="signedbv")
-      overflow_check(expr, guard);
+     if(expr.type().id()=="signedbv")
+     {
+       overflow_check(expr, guard);
+       if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
+       {
+   		   if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
+   			     && !options.get_bool_option("z3-ir"))
+   		   {
+   		     options.set_option("int-encoding", false);
+   		   }
+       }
+    }
     else if(expr.type().id()=="floatbv")
       nan_check(expr, guard);
   }
@@ -665,9 +675,15 @@ void goto_checkt::check_rec(
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", true);
   }
-
-  if (options.get_bool_option("k-induction"))
-    options.set_option("int-encoding", false);
+#if 0
+  if (options.get_bool_option("k-induction")) {
+    if (options.get_bool_option("z3-ir")) {
+      options.set_option("int-encoding", true);
+	  } else {
+      options.set_option("int-encoding", false);
+    }
+  }
+#endif
 }
 
 /*******************************************************************\

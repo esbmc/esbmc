@@ -879,6 +879,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   DEBUGLOC;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
+		loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
@@ -1137,7 +1138,7 @@ void goto_convertt::convert_assign(
     get_struct_components(lhs, state);
 		if (rhs.is_constant() && is_ifthenelse) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
-   }
+    }
   }
 }
 
@@ -2284,6 +2285,23 @@ void goto_convertt::set_expr_to_nondet(
     cache_result = nondet_vars.find(tmp.op0());
     if (cache_result == nondet_vars.end())
       init_nondet_expr(tmp.op0(), dest);
+#if 0
+    else {
+      //declare variables x$ of type uint
+      std::string identifier;
+      identifier = "c::x$"+i2string(state_counter);
+      exprt x_expr = symbol_exprt(identifier, uint_type());
+      get_struct_components(x_expr, state);
+      exprt nondet_expr=side_effect_expr_nondett(uint_type());
+
+      //initialize x=nondet_uint();
+      code_assignt new_assign_nondet(x_expr,nondet_expr);
+      copy(new_assign_nondet, ASSIGN, dest);
+
+      exprt new_expr = gen_binary(exprt::i_gt, bool_typet(), x_expr, tmp.op1());
+			tmp.swap(new_expr);
+		}
+#endif
   }
 }
 
@@ -2448,7 +2466,7 @@ void goto_convertt::convert_while(
     replace_cond(tmp, dest);
 
   array_typet state_vector;
-  const exprt &cond=tmp;//code.op0();
+  const exprt &cond=tmp;
   const locationt &location=code.location();
 
 
@@ -3428,7 +3446,6 @@ DEBUGLOC;
   else
   {
     assert(expr.operands().size()==2);
-
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
     if (result_op0 != nondet_vars.end() && 
@@ -3438,7 +3455,11 @@ DEBUGLOC;
       if (result_op0 != nondet_vars.end() || 
 				  result_op1 != nondet_vars.end())
 			  return ;
-   }
+    }
+
+    loop_varst::const_iterator cache_result = loop_vars.find(expr.op0());
+    if (cache_result == loop_vars.end())
+			 return ;
 
     assert(expr.op0().type() == expr.op1().type());
 

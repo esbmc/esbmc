@@ -391,6 +391,9 @@ protected:
     unsigned int state_counter;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
+
+    typedef std::map<exprt, struct_typet> loop_varst;
+    loop_varst loop_vars;
 };
 
 #endif
