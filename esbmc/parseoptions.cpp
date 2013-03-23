@@ -638,6 +638,8 @@ int cbmc_parseoptionst::doit_k_induction()
       if (!res)
         return 0;
 
+      ++k_step;
+
       forward_condition = false; //disable forward condition
     }
     else
@@ -652,6 +654,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
       if (!res)
         return 0;
+
+      --k_step;
 
       base_case = true; //enable base case
     }
