@@ -3,10 +3,10 @@ int nondet_int();
 int main() {
 
   int x=nondet_int();
-  __CPROVER_assume(x>0);
+  __ESBMC_assume(x>0);
   int y=nondet_int();
-  __CPROVER_assume(y>=0);
-  __CPROVER_assume(y<1);
+  __ESBMC_assume(y>=0);
+  __ESBMC_assume(y<1);
   int z=0;
 
   while(x>0) {
