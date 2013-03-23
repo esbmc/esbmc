@@ -879,7 +879,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   DEBUGLOC;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
-    if (is_while_block())
+    if (is_for_block() || is_while_block())
 		  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
