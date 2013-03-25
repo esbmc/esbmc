@@ -620,6 +620,9 @@ protected:
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
+
+  /** Flag to indicate if we have an unwinding recursion assumption. */
+  bool unwinding_recursion_assumption;
 };
 
 #endif

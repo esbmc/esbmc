@@ -386,6 +386,7 @@ bool bmct::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
+  symex.options.set_option("unwind", options.get_option("unwind"));
   symex.setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))

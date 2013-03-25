@@ -372,6 +372,9 @@ public:
   /** Functions dictate interleavings; perform no exploration.
    *  Used by --directed-interleavings */
   bool directed_interleavings;
+  /** Options that are enabled */
+  optionst options;
+
 protected:
   /** Stack of execution states representing current interleaving.
    *  See reachability_treet algorithm for how this is used. Is initialized
@@ -405,8 +408,6 @@ protected:
   const namespacet &ns;
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
-  /** Options that are enabled */
-  optionst &options;
   /** Message handler reference. */
   message_handlert &message_handler;
 

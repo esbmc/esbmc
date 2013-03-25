@@ -7,25 +7,15 @@ int main ()
 {
   set<int> myset;
   set<int>::key_compare mycomp;
-  set<int>::iterator it;
+  set<int>::iterator it,it2;
   int i,highest;
 
   mycomp = myset.key_comp();
+  it = myset.begin();
+  it2 = myset.begin();
+  
+  assert(mycomp(*it,*it2));
 
-  for (i=0; i<=5; i++) myset.insert(i);
-
-  cout << "myset contains:";
-
-  highest=*myset.rbegin();
-  it=myset.begin();
-  i = 0;
-  do {
- 	 assert(!(!(!(*it == i))));
-	 i++;
-    cout << " " << *it;
-  } while ( mycomp(*it++,highest) );
-
-  cout << endl;
 
   return 0;
 }

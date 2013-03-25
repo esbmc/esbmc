@@ -11,11 +11,7 @@ int main ()
   set<int>::iterator it = myset.end();
   it--;
   assert(*it == 75);
-  cout << "myset contains:";
-  for ( it=myset.begin() ; it != myset.end(); it++ )
-    cout << " " << *it;
 
-  cout << endl;
 
   return 0;
 }

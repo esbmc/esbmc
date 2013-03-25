@@ -3041,13 +3041,16 @@ z3_convt::convert_byte_update(const exprt &expr, Z3_ast &bv)
     if (width_op0 > width_op2)
       bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
     else
-      throw new conv_error("unsupported irep for conver_byte_update", expr);
-  } else if (expr.op0().type().id()=="array")
-    {
+      throw new conv_error("1unsupported irep for conver_byte_update", expr);
+  } else if (expr.op0().type().id()=="array") {
       bv = Z3_mk_store(z3_ctx, tuple, index, value);
-  } else {
-    throw new conv_error("unsupported irep for conver_byte_update", expr);
-  }
+  } else if (expr.op0().type().id()=="fixedbv"){
+      get_type_width(expr.op0().type(), width_op0);
+	    if (width_op0 > width_op2)
+      	bv = Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value);
+  }	else {
+      throw new conv_error("2unsupported irep for conver_byte_update", expr);
+    }
 
   DEBUGLOC;
 }
@@ -3115,7 +3118,7 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
                expr.op0().type().id() == "unsignedbv") {
       Z3_ast tmp;
       tmp = Z3_mk_int2bv(z3_ctx, width, op0);
-
+			
       if (width >= upper)
 	    bv =
 	      Z3_mk_extract(z3_ctx, upper, lower, tmp);
@@ -3218,7 +3221,12 @@ z3_convt::convert_byte_extract(const exprt &expr, Z3_ast &bv)
 	     bv =
 	       Z3_mk_extract(z3_ctx, upper - lower, 0, op0);
     } else {
-      bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+			if (expr.op0().type().id() == "fixedbv") {
+				if (width>w)
+          bv = Z3_mk_extract(z3_ctx, w-1, 0, op0);
+			} else
+        bv = Z3_mk_extract(z3_ctx, upper, lower, op0);
+
     }
 
   DEBUGLOC;

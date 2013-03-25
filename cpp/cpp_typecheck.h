@@ -133,8 +133,8 @@ protected:
   // Templates
   //
   void salvage_default_parameters(
-      const template_typet &old_type,
-      template_typet &new_type);
+    const template_typet &old_type,
+    template_typet &new_type);
 
   void check_template_restrictions(
     const irept &cpp_name,
@@ -148,16 +148,16 @@ protected:
   void convert_template_function_or_member_specialization(
     cpp_declarationt &declaration);
 
-  void convert_template_class_specialization(
+  void convert_class_template_specialization(
     cpp_declarationt &declaration);
 
-  void typecheck_template_class(cpp_declarationt &declaration);
+  void typecheck_class_template(cpp_declarationt &declaration);
 
   void typecheck_function_template(cpp_declarationt &declaration);
 
-  void typecheck_template_member_function(cpp_declarationt &declaration);
+  void typecheck_class_template_member(cpp_declarationt &declaration);
 
-  std::string template_class_identifier(
+  std::string class_template_identifier(
     const irep_idt &base_name,
     const template_typet &template_type,
     const cpp_template_args_non_tct &partial_specialization_args);
@@ -209,7 +209,7 @@ protected:
     const symbolt &template_symbol,
     const cpp_template_args_tct &specialization_template_args,
     const cpp_template_args_tct &full_template_args,
-    const typet &specialization = typet("nil"));
+    const typet &specialization=typet("nil"));
 
   unsigned template_counter;
   unsigned anon_counter;
@@ -353,7 +353,6 @@ protected:
   // determine the scope into which a tag goes
   // (enums, structs, union, classes)
   cpp_scopet &tag_scope(
-    const irep_idt &_elaborated_base_name, // includes template instance
     const irep_idt &_base_name,
     bool has_body,
     bool tag_only_declaration);

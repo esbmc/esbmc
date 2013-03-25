@@ -882,6 +882,23 @@ void sort(RanIt begin, RanIt end, Pr pred){
 	}
 }
 
+template<class RanIt, class Pr>
+void sort(RanIt *begin, RanIt *end, Pr pred){
+	RanIt *i,*j;
+	RanIt *iMin;
+	for (j = begin; j < end-1; j++) {
+		iMin = j;
+		for ( i = j+1; i < end; i++) {
+			if (pred(*i, *iMin)) {
+				iMin = i;
+			}
+		}
+		if ( iMin != j ) {
+			swap(*j, *iMin);
+		}
+	}
+}
+
 template<class BidIt>
 void stable_sort(BidIt begin, BidIt end){
 	BidIt i,j;

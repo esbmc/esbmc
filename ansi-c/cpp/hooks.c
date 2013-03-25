@@ -33,6 +33,9 @@ struct hooked_header headers[] = {
 { "pthread.h",		&p(binary_pthread_h_start),	&p(binary_pthread_h_end)
 },
 /* Pthreads header */
+{ "digitalfilter.h",		&p(binary_digitalfilter_h_start),	&p(binary_digitalfilter_h_end)
+},
+/* digital filter header */
 { "pthreadtypes.h",	&p(binary_pthreadtypes_h_start),&p(binary_pthreadtypes_h_end)
 },
 /*  Additional pthread data header */

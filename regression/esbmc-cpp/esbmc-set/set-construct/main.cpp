@@ -24,7 +24,7 @@ int main ()
   it = second.end();
   it--;
   assert(*it == 50);
-  set<int> third (second);                  // a copy of second
+/*  set<int> third (second);                  // a copy of second
   assert(third.size() == 5);
   it = third.begin();
   assert(*it == 10);
@@ -42,6 +42,6 @@ int main ()
   assert(fifth.size() == 0);
   bool(*fn_pt)(int,int) = fncomp;
   set<int,bool(*)(int,int)> sixth (fn_pt);  // function pointer as Compare
-
+*/
   return 0;
 }

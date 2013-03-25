@@ -16,7 +16,7 @@ int main ()
   mymap.insert ( pair<char,int>('z',200) );
   assert(mymap['z'] == 200);
   ret=mymap.insert (pair<char,int>('z',500) ); 
-  assert(ret.second != false);
+  assert(ret.second == false);
   if (ret.second==false)
   {
     cout << "element 'z' already existed";

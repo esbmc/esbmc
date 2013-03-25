@@ -29,7 +29,7 @@ public:
 
   // Returns the scope as a side-effect as 'current_scope'.
   // Should really return explicitly.
-  void resolve_scope(
+  cpp_scopet &resolve_scope(
     const cpp_namet &cpp_name,
     std::string &base_name,
     cpp_template_args_non_tct &template_args);
@@ -57,7 +57,11 @@ protected:
     const wantt want,
     const cpp_typecheck_fargst &fargs);
 
-  void disambiguate(
+  void disambiguate_functions(
+    resolve_identifierst &identifiers,
+    const cpp_typecheck_fargst &fargs);
+
+  void exact_match_functions(
     resolve_identifierst &identifiers,
     const cpp_typecheck_fargst &fargs);
 
@@ -105,7 +109,7 @@ protected:
     const exprt &template_parameter,
     const exprt &desired_expr);
 
-  bool disambiguate(
+  bool disambiguate_functions(
     const exprt &expr,
     unsigned &args_distance,
     const cpp_typecheck_fargst &fargs);
