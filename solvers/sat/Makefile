@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/satsolvers.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=satsolvers.o
 
 SRCS= cnf.cpp cnf_clause_list.cpp \
 	resolution_proof.cpp satcheck.cpp
@@ -31,3 +31,5 @@ clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/minisat_tmp.o $(OBJDIR)/.deps
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

@@ -74,7 +74,7 @@ public:
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
     contextt &context,
     message_handlert &message_handler);

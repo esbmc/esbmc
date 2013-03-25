@@ -32,6 +32,10 @@ endif
 
 ifdef STATICLINK
 FINLINKTAIL+= -static
+# g++ 4.7 on debian completely fails to link static Z3 lib :|
+#FINLINKBIN=g++-4.6
+# Compiling static on debian is failing anyway, so don't try to fix it to work.
+FINLINKBIN=g++
 endif
 
 ifdef LINUXCOMPAT
@@ -54,3 +58,19 @@ PLATLIBS+= -lgomp -pthread -lrt -lpthread
 endif
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
+
+HOSTCC=     gcc
+HOSTCXX=    g++
+HOSTDEPCXX= g++
+HOSTLD=     ld
+HOSTAR=     ar
+HOPTBLOBGENLD= ld
+HOSTPARTLINKLD= ld
+HOSTPARTLINKOUT= -o
+HOSTPARTLINKOPTS= -r $(LDFLAGS)
+HOSTFINLINKBIN= $(CXX)
+HOSTFINLINKOUT= -o
+HOSTFINLINKTAIL= $(CXXFLAGS) $(LIBS) $(PLATLIBS)
+HOSTCFLAGS=$(CFLAGS)
+HOSTCXXFLAGS=$(CXXFLAGS)
+HOSTLDFLAGS=$(LDFLAGS)

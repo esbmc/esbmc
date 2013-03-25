@@ -15,7 +15,7 @@ struct hooked_header {
  * ansi-c/headers will only ever have one '_' character at the start. So, some
  * hackery is required */
 
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
+#if defined(_WIN32) && !defined(__MINGW64__)
 #define p(x) x
 #else
 #define p(x) _##x

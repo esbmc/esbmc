@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/goto-symex.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME= goto-symex.o
 
 SRCS= symex_target.cpp symex_target_equation.cpp symex_assign.cpp \
       symex_main.cpp goto_trace.cpp build_goto_trace.cpp \
@@ -16,3 +16,5 @@ clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

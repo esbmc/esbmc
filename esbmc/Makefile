@@ -37,7 +37,7 @@ else
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
 	$(ESBMCDIR)/scripts/fetchlibc.sh libc${BITWIDTH_STR}.a .libc${BITWIDTH_STR}.a $(ESBMCDIR)/scripts/gpg-keyring
-	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(CXX) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm -ldl `$(CXX) $(CXXFLAGS) -print-file-name=libgcc.a` `$(CXX) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
+	$(FINLINKBIN) $(FINLINKOUT)$@ $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL) -static -nodefaultlibs `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libstdc++.a` -lm `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libgcc.a` `$(FINLINKBIN) $(CXXFLAGS) -print-file-name=libgcc_eh.a` ./.libc${BITWIDTH_STR}.a
 
 endif
 

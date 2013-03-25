@@ -1375,7 +1375,7 @@ z3_convt::convert_typecast_to_ints(const exprt &expr, Z3_ast &bv)
     	  if (expr.op0().operands().size()) {
     		  if (expr.op0().op0().operands().size()) {
     			bv = Z3_mk_real2int(z3_ctx, args[0]);
-    			return bv;
+                        return;
     		  }
     	  }
 
