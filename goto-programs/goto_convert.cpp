@@ -1140,6 +1140,12 @@ void goto_convertt::convert_assign(
 		if (rhs.is_constant() && is_ifthenelse) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
     }
+		else if ((is_for_block() || is_while_block()) && is_ifthenelse) {
+      nondet_varst::const_iterator cache_result;
+      cache_result = nondet_vars.find(lhs);
+      if (cache_result == nondet_vars.end())
+        init_nondet_expr(lhs, dest);
+		}
   }
 }
 
@@ -2206,6 +2212,7 @@ void goto_convertt::init_nondet_expr(
   exprt nondet_expr=side_effect_expr_nondett(tmp.type());
   code_assignt new_assign_nondet(tmp,nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
+  if (!is_ifthenelse)
   nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
 }
 
