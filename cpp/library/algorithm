@@ -656,8 +656,10 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest) {
 	InIt value = first;
 	dest = first;
 	while (++first != last) {
-		if (!(value == *first))
-			*(++dest) = value = *first;
+		if (!(value == *first)){
+			*(++dest) = value;
+			*value = *first;
+		}
 	}
 	return ++dest;
 }
@@ -683,7 +685,8 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
 	while (++first != last) {
 		if (!pred(*value, *first)){
 			dest++;
-			*dest = *value = *first;
+			*dest = *value;
+			*value = *first;
 		}
 	}
 	return ++dest;
@@ -1158,7 +1161,7 @@ OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest) {
 	InIt2 pilgrim2 = first2;
 	while(pilgrim1 != last1)
 		if(*pilgrim2 < *pilgrim1) *dest++ = *pilgrim2++;
-		else *dest++ = *pilgrim++;
+		else *dest++ = *pilgrim1++;
 	while(pilgrim2 < last2)
 		*dest++ = *pilgrim2++;
 	return dest;

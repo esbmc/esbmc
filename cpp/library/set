@@ -425,7 +425,7 @@ public:
 		_size++;
 		i = _size;
 
-		while( rule(it.pos - 1,i)){
+		while( /*rule(it.pos - 1,i)*/it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -440,7 +440,7 @@ public:
 		_size++;
 		int i = _size;
 		int aux;
-		while( rule(position.pos - 1,i)){
+		while( /*rule(position.pos - 1,i)*/position.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -526,7 +526,7 @@ public:
 		int first = 0, last = _size;
 		while(first != last)
 		{
-			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			if(/*rule(x, buf[first])*/x< buf[first]||(x == buf[first])) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
@@ -537,7 +537,7 @@ public:
 		last--;
 		while(first != last)
 		{
-			if(!rule(x, buf[first])) return iterator(buf,last);
+			if(!/*rule(x, buf[first])*/x< buf[first]) return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
