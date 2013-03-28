@@ -425,7 +425,7 @@ public:
 		_size++;
 		i = _size;
 
-		while( /*rule(it.pos - 1,i)*/it.pos - 1<i){
+		while( it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -440,7 +440,7 @@ public:
 		_size++;
 		int i = _size;
 		int aux;
-		while( /*rule(position.pos - 1,i)*/position.pos - 1<i){
+		while( position.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -526,7 +526,7 @@ public:
 		int first = 0, last = _size;
 		while(first != last)
 		{
-			if(/*rule(x, buf[first])*/x< buf[first]||(x == buf[first])) return iterator(buf,first);
+			if(Compare()(x, buf[first])||(x == buf[first])) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
@@ -537,7 +537,7 @@ public:
 		last--;
 		while(first != last)
 		{
-			if(!/*rule(x, buf[first])*/x< buf[first]) return iterator(buf,last);
+			if(!Compare()(x, buf[first])) return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
@@ -845,7 +845,7 @@ public:
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 	template<class Iterator>
@@ -858,7 +858,7 @@ public:
 			first++;
 		}
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 
@@ -952,8 +952,7 @@ public:
 
 		_size++;
 		i = _size;
-
-		while( rule(it.pos - 1,i)){
+		while(it.pos - 1 < i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -968,7 +967,7 @@ public:
 		_size++;
 		int i = _size;
 		int aux;
-		while( rule(position.pos - 1,i)){
+		while(position.pos - 1 < i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -1023,11 +1022,11 @@ public:
 	// observers:
 
 	key_compare key_comp() const{
-		return rule;
+		return Compare();
 	}
 
 	value_compare value_comp() const{
-		return rule;
+		return Compare();
 	}
 	// set operations:
 
@@ -1052,9 +1051,11 @@ public:
 
 	iterator lower_bound(const key_type& x) const{
 		int first = 0, last = _size;
+		int y;
 		while(first != last)
 		{
-			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			y = buf[first];
+			if(Compare()(x, y)||(x == y)) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
@@ -1063,9 +1064,11 @@ public:
 	iterator upper_bound(const key_type& x) const{
 		int first = 0, last = _size;
 		last--;
+		int y;
 		while(first != last)
 		{
-			if(!rule(x, buf[first])) return iterator(buf,last);
+			y = buf[first];
+			if(!Compare()(x, y)) return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
