@@ -310,8 +310,6 @@ public:
 
 	// construct/copy/destroy:
 	explicit multiset ( const Compare& comp = Compare() ) : _size(0){
-		_size = 0;
-		this->rule = comp;
 	}
 
 	explicit multiset ( Key v1[] , Key* v2 ){
@@ -495,11 +493,11 @@ public:
 	// observers:
 
 	key_compare key_comp() const{
-		return rule;
+		return Compare();
 	}
 
 	value_compare value_comp() const{
-		return rule;
+		return Compare();
 	}
 	// set operations:
 
@@ -526,19 +524,21 @@ public:
 		int first = 0, last = _size;
 		while(first != last)
 		{
-			if(Compare()(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((x< buf[first])||(x == buf[first])) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
 	}
 
 	iterator upper_bound(const key_type& x) const{
-		int first = 0, last = _size;
-		last--;
+		int first = 0, last = _size - 1;
 		while(first != last)
 		{
-			if(!Compare()(x, buf[first])) return iterator(buf,last);
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((buf[last]< x)||(x == buf[last])) return iterator(buf,last+1);
 			else last--;
+
 		}
 		return iterator(buf,last);
 	}

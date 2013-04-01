@@ -7,24 +7,14 @@ int main ()
 {
   multiset<int> myset;
   multiset<int>::value_compare mycomp;
-  multiset<int>::iterator it;
+  multiset<int>::iterator it,it2;
   int i,highest;
 
   mycomp = myset.value_comp();
+  it = myset.begin();
+  it2 = myset.begin();
+  assert(mycomp(*it,*it2));
 
-  for (i=0; i<=5; i++) myset.insert(i);
-
-  cout << "myset contains:";
-
-  highest=*myset.rbegin();
-  assert(highest == 5);
-  it=myset.begin();
-  assert(*it != 0);
-  do {
-    cout << " " << *it;
-  } while ( mycomp(*it++,highest) );
-
-  cout << endl;
 
   return 0;
 }
