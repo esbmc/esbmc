@@ -67,7 +67,7 @@ int main()
 
   map<StringClass, opposite>::iterator it = mapObject.begin();
   assert(it->first == StringClass("y"));
-  assert(it->second == opposite("n"));
+  assert(it->second == opposite("y"));
   assert(mapObject.size() == 1);
 
   return 0;
