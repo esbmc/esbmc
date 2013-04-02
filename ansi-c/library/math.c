@@ -95,7 +95,7 @@ int fesetround(int __rounding_direction) {
   __ESBMC_rounding_mode=__rounding_direction;
 }
 
-double inline fabs(double x) {
+double fabs(double x) {
   return (x < 0) ? -x : x;
 }
 
