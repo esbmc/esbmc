@@ -271,7 +271,7 @@ public:
 		return this->_size;
 	}
 
-	void resize ( size_type sz, T c = 0 ){
+	void resize ( size_type sz, T c = T() ){
 		__ESBMC_assert(sz > 0,
 				"\n  The following method was called, generating an error in container size specification:\n\n  >>> void resize (size_type n, value_type val = value_type());  <<<  \n\n  In the first parameter (n) is specified the container size,\n  therefore, this parameter must be greater than zero.\n");
 		int i;
@@ -371,7 +371,7 @@ public:
 	}
 	void insert(iterator position, vector<T>::iterator n, vector<T>::iterator x){
 		__ESBMC_assert(n != NULL,"The second parameter must be different than NULL.");
-		int tmp;
+		T tmp;
 		while(n!=x){
 			tmp = *n;
 			this->insert(position, tmp );
@@ -413,7 +413,7 @@ public:
 			return position;
 		}
 		node* tmp_ptr = this->head;
-		int i;
+
 		do{
 			tmp_ptr = tmp_ptr->next;
 		}while((tmp_ptr != position.it) && (tmp_ptr != NULL)) ;

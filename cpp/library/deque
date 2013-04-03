@@ -461,7 +461,7 @@ public:
 			return;
 		}
 		while(_size < sz){
-			push_back(int());
+			push_back(T());
 		}
 		verify_capacity();
 		return;

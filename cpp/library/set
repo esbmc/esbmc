@@ -1,6 +1,6 @@
 /*******************************************************************\
 
-Module: 
+Module:
 
 Author: Felipe Rodrigues
 
@@ -881,9 +881,8 @@ public:
 			buf[i] = x.buf[i];
 		}
 		_size = x.size();
-		buf[_size] = 0;
+		buf[_size] = Key();
 		return *this;
-
 	}
 
 	// iterators:
@@ -960,7 +959,6 @@ public:
 
 		buf[it.pos] = x;
 		return make_pair(it, true);
-
 	}
 
 	iterator insert(iterator position, const value_type& x){
