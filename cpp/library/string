@@ -861,156 +861,6 @@ inline string::ostream& operator <<(ostream& o, struct iterator&) {
 inline string::istream& operator >>(istream& is, string) {
 	return is;
 }
-/*
-bool string::operator==(string& b) {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must to be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
-
-bool string::operator==(string& b) const {
-	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
-			"The parameter must to be different than NULL");
-	if (strcmp(this->str, b.str) == 0)
-		return true;
-	else
-		return false;
-}
-
-bool string::operator==(const char* lhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The parameter must to be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, this->str);
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-*/
-bool operator==(string a, string b) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The first parameter must to be different than NULL");
-	__ESBMC_assert(b.str != NULL,
-			"The second parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(b.c_str(), a.c_str());
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool operator==(const char* lhs, string& rhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The first parameter must to be different than NULL");
-	__ESBMC_assert(rhs.str != NULL,
-			"The second parameter must to be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, rhs.c_str());
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-
-bool operator==(string& lhs, const char* rhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
-			"The first parameter must to be different than NULL");
-	__ESBMC_assert(rhs != NULL,
-			"The second parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(lhs.c_str(), (char*) rhs);
-	if (aux == 0) {
-		return true;
-	} else {
-		return false;
-	}
-}
-/*
-bool string::operator!=(string& a) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(a.c_str(), this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool string::operator!=(const string& a) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(a.c_str(), this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool string::operator!=(const char* lhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The parameter must to be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, this->c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-*/
-bool operator!=(string a, string b) {
-	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
-			"The parameter must to be different than NULL");
-	__ESBMC_assert(b.str != NULL,
-				"The parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(a.c_str(), b.c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool operator!=(const char* lhs, string& rhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
-			"The first parameter must to be different than NULL");
-	__ESBMC_assert(rhs.str != NULL,
-			"The second parameter must to be different than NULL");
-	int aux;
-	aux = strcmp((char*) lhs, rhs.c_str());
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
-
-bool operator!=(string& lhs, const char* rhs) {
-	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
-			"The first parameter must to be different than NULL");
-	__ESBMC_assert(rhs != NULL,
-			"The second parameter must to be different than NULL");
-	int aux;
-	aux = strcmp(lhs.c_str(), (char*) rhs);
-	if (aux == 0) {
-		return false;
-	} else {
-		return true;
-	}
-}
 
 bool string::operator>(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
@@ -2590,6 +2440,156 @@ string& operator+(char lhc, char * rhs) {
 }
 string& operator+(char lhc, char rhc) {
 	return string(lhc) + string(rhc);
+}
+/*
+bool string::operator==(string& b) {
+	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
+			"The parameter must to be different than NULL");
+	if (strcmp(this->str, b.str) == 0)
+		return true;
+	else
+		return false;
+}
+
+bool string::operator==(string& b) const {
+	__ESBMC_HIDE: __ESBMC_assert(b.str != NULL,
+			"The parameter must to be different than NULL");
+	if (strcmp(this->str, b.str) == 0)
+		return true;
+	else
+		return false;
+}
+
+bool string::operator==(const char* lhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp((char*) lhs, this->str);
+	if (aux == 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+*/
+bool operator==(string a, string b) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The first parameter must to be different than NULL");
+	__ESBMC_assert(b.str != NULL,
+			"The second parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(b.c_str(), a.c_str());
+	if (aux == 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool operator==(const char* lhs, string& rhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
+			"The first parameter must to be different than NULL");
+	__ESBMC_assert(rhs.str != NULL,
+			"The second parameter must to be different than NULL");
+	int aux;
+	aux = strcmp((char*) lhs, rhs.c_str());
+	if (aux == 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+
+bool operator==(string& lhs, const char* rhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
+			"The first parameter must to be different than NULL");
+	__ESBMC_assert(rhs != NULL,
+			"The second parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(lhs.c_str(), (char*) rhs);
+	if (aux == 0) {
+		return true;
+	} else {
+		return false;
+	}
+}
+/*
+bool string::operator!=(string& a) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(a.c_str(), this->c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+bool string::operator!=(const string& a) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(a.c_str(), this->c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+bool string::operator!=(const char* lhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp((char*) lhs, this->c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+*/
+bool operator!=(string a, string b) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The parameter must to be different than NULL");
+	__ESBMC_assert(b.str != NULL,
+				"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(a.c_str(), b.c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+bool operator!=(const char* lhs, string& rhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
+			"The first parameter must to be different than NULL");
+	__ESBMC_assert(rhs.str != NULL,
+			"The second parameter must to be different than NULL");
+	int aux;
+	aux = strcmp((char*) lhs, rhs.c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
+bool operator!=(string& lhs, const char* rhs) {
+	__ESBMC_HIDE: __ESBMC_assert(lhs.str != NULL,
+			"The first parameter must to be different than NULL");
+	__ESBMC_assert(rhs != NULL,
+			"The second parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(lhs.c_str(), (char*) rhs);
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
 }
 
 istream& getline(istream& is, string& str, char delim);
