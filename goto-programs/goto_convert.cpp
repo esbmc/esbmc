@@ -1054,7 +1054,6 @@ void goto_convertt::convert_assign(
   const code_assignt &code,
   goto_programt &dest)
 {
-
   if(code.operands().size()!=2)
   {
     err_location(code);
@@ -1096,7 +1095,7 @@ void goto_convertt::convert_assign(
     if (rhs.type().is_code())
     {
       convert(to_code(rhs), dest);
-      return ;
+      return;
     }
 
     if(lhs.id()=="typecast")
@@ -1115,37 +1114,36 @@ void goto_convertt::convert_assign(
 
 
     int atomic = 0;
+    if(options.get_bool_option("atomicity-check"))
+    {
+      unsigned int globals = get_expr_number_globals(lhs);
+      atomic = globals;
+      globals += get_expr_number_globals(rhs);
+      if(globals > 0 && (lhs.identifier().as_string().find("tmp$") == std::string::npos))
+        break_globals2assignments(atomic,lhs,rhs, dest,code.location());
+    }
 
-	if(options.get_bool_option("atomicity-check"))
-	{
-		unsigned int globals = get_expr_number_globals(lhs);
-		atomic = globals;
-		globals += get_expr_number_globals(rhs);
-		if(globals > 0 && (lhs.identifier().as_string().find("tmp$") == std::string::npos))
-		  break_globals2assignments(atomic,lhs,rhs, dest,code.location());
-	}
+    code_assignt new_assign(code);
+    new_assign.lhs()=lhs;
+    new_assign.rhs()=rhs;
+    copy(new_assign, ASSIGN, dest);
 
-	code_assignt new_assign(code);
-	new_assign.lhs()=lhs;
-	new_assign.rhs()=rhs;
-	copy(new_assign, ASSIGN, dest);
-
-	if(options.get_bool_option("atomicity-check"))
-		if(atomic == -1)
-			dest.add_instruction(ATOMIC_END);
+    if(options.get_bool_option("atomicity-check"))
+      if(atomic == -1)
+        dest.add_instruction(ATOMIC_END);
   }
 
   if (inductive_step) {
     get_struct_components(lhs, state);
-		if (rhs.is_constant() && is_ifthenelse) {
+    if (rhs.is_constant() && is_ifthenelse) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
     }
-		else if ((is_for_block() || is_while_block()) && is_ifthenelse) {
+    else if ((is_for_block() || is_while_block()) && is_ifthenelse) {
       nondet_varst::const_iterator cache_result;
       cache_result = nondet_vars.find(lhs);
       if (cache_result == nondet_vars.end())
         init_nondet_expr(lhs, dest);
-		}
+    }
   }
 }
 
@@ -3456,11 +3454,11 @@ DEBUGLOC;
     assert(expr.operands().size()==2);
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
-    if (result_op0 != nondet_vars.end() && 
+    if (result_op0 != nondet_vars.end() &&
 				result_op1 != nondet_vars.end())
 			return ;
     else if (expr.op0().is_constant() || expr.op1().is_constant()) {
-      if (result_op0 != nondet_vars.end() || 
+      if (result_op0 != nondet_vars.end() ||
 				  result_op1 != nondet_vars.end())
 			  return ;
     }

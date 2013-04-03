@@ -543,7 +543,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     collect_expr(it->second.type, names);
   }
 
-  // Try to compute their dependancies.
+  // Try to compute their dependencies.
 
   typename_mapt typenames;
 
