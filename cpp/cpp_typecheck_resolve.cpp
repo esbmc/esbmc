@@ -1967,8 +1967,48 @@ void cpp_typecheck_resolvet::guess_template_args(
       else
       {
         const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
-        instantiated_args=
-          to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+        const exprt &template_arguments=
+          static_cast<const exprt&>(s.type.find("#template_arguments"));
+
+        if(template_arguments.is_not_nil())
+        {
+          instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+        }
+        else
+        {
+          // We must look if the parent scope has the template arguments
+          cpp_scopet &scope=cpp_typecheck.cpp_scopes.get_scope(s.name);
+
+          unsigned parent_size=scope.parents_size();
+          while(parent_size)
+          {
+            cpp_scopet &parent=scope.get_parent();
+            s=cpp_typecheck.lookup(parent.identifier);
+
+            template_arguments=
+              static_cast<const exprt&>(s.type.find("#template_arguments"));
+
+            if(template_arguments.is_not_nil())
+            {
+              instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+              break;
+            }
+            else
+            {
+              parent_size=parent.parents_size();
+            }
+          }
+        }
+
+        // Give up
+        if(instantiated_args.is_nil())
+        {
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str
+            << "Can't instantiate `" << template_type
+            << "with:" << desired_type << std::endl;
+          throw 0;
+        }
       }
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
