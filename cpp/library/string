@@ -1111,9 +1111,9 @@ string& string::operator=(string& str) {
 //	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
 	//		"The parameter must to be different than NULL");
 	int i, len;
-	this->_size = str.length();
+	this->_size = str.size();
 	this->str = new char[this->_size + 1];
-	len = str.length();
+	len = str.size();
 	for (i = 0; i < len; i++) {
 		this->str[i] = str.str[i];
 	}
@@ -2477,31 +2477,122 @@ size_t string::rfind( char* s ) const {
 	return -1;
 }
 
-string& operator+(string& lhs, string& rhs) {
-	return lhs += rhs;
+string operator+(string lhs, string rhs) {
+	int totalLength = lhs.size();
+	totalLength += rhs.size();
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	for(i = 0; i < lhs.size(); i++){
+		result.str[i] = lhs.str[i];
+	}
+	for(j = i, k = 0; j < totalLength; j++,k++){
+		result.str[j] = rhs.str[k];
+	}
+	result.str[j] = '\0';
+	result._size = totalLength;
+	return result;
 }
-string& operator+(string& lhs, char * rhs) {
-	return lhs + string(rhs);
+string operator+(string lhs, char* rhs) {
+	int totalLength = lhs.size();
+	totalLength += strlen(rhs);
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	for(i = 0; i < lhs.size(); i++){
+		result.str[i] = lhs.str[i];
+	}
+	for(j = i, k = 0; j < totalLength; j++,k++){
+		result.str[j] = rhs[k];
+	}
+	result.str[j] = '\0';
+	result._size = totalLength;
+	return result;
 }
-string& operator+(string& lhs, char rhc) {
-	return lhs + string(rhc, 1);
+string operator+(string lhs, char rhc) {
+	int totalLength = lhs.size();
+	totalLength += 1;
+	int i;
+	string result;
+	result.str = new char[totalLength + 1];
+	for(i = 0; i < lhs.size(); i++){
+		result.str[i] = lhs.str[i];
+	}
+	result.str[i] = rhc;
+	result.str[i+1] = '\0';
+	result._size = totalLength;
+	return result;
 }
-
-string& operator+(char * lhs, string& rhs) {
-	return string(lhs) + rhs;
+string operator+(char* lhs, string rhs) {
+	int lhsLen = strlen(lhs);
+	int totalLength = lhsLen;
+	totalLength += rhs.size();
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	for(i = 0; i < lhsLen; i++){
+		result.str[i] = lhs[i];
+	}
+	for(j = i, k = 0; j < totalLength; j++,k++){
+		result.str[j] = rhs.str[k];
+	}
+	result.str[j] = '\0';
+	result._size = totalLength;
+	return result;
 }
-string& operator+(char * lhs, char rhc) {
-	return string(lhs) + string(rhc, 1);
+string operator+(char * lhs, char rhc) {
+	int lhsLen = strlen(lhs);
+	int totalLength = lhsLen;
+	totalLength += 1;
+	int i;
+	string result;
+	result.str = new char[totalLength + 1];
+	for(i = 0; i < lhsLen; i++){
+		result.str[i] = lhs[i];
+	}
+	result.str[i] = rhc;
+	result.str[i+1] = '\0';
+	result._size = totalLength;
+	return result;
 }
-
-string& operator+(char lhc, string& rhs) {
-	return string(lhc, 1) + rhs;
+string operator+(char lhc, string rhs) {
+	int totalLength = 1;
+	totalLength += rhs.size();
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	result.str[0] = lhc;
+	for(j = 1, k = 0; j < totalLength; j++,k++){
+		result.str[j] = rhs.str[k];
+	}
+	result.str[j] = '\0';
+	result._size = totalLength;
+	return result;
 }
-string& operator+(char lhc, char * rhs) {
-	return string(lhc, 1) + string(rhs);
+string operator+(char lhc, char * rhs) {
+	int totalLength = 1;
+	totalLength += strlen(rhs);
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	result.str[0] = lhc;
+	for(j = 1, k = 0; j < totalLength; j++,k++){
+		result.str[j] = rhs[k];
+	}
+	result.str[j] = '\0';
+	result._size = totalLength;
+	return result;
 }
-string& operator+(char lhc, char rhc) {
-	return string(lhc) + string(rhc);
+string operator+(char lhc, char rhc) {
+	int totalLength = 2;
+	int i,j,k;
+	string result;
+	result.str = new char[totalLength + 1];
+	result.str[0] = lhc;
+	result.str[1] = rhc;
+	result.str[2] = '\0';
+	result._size = totalLength;
+	return result;
 }
 /*
 bool string::operator==(string& b) {
