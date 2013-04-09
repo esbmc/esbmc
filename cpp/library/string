@@ -2630,6 +2630,8 @@ bool operator==(string a, string b) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(b.str != NULL,
 			"The second parameter must to be different than NULL");
+	if(a._size != b._size)
+		return false;
 	int aux;
 	aux = strcmp(b.c_str(), a.c_str());
 	if (aux == 0) {
@@ -2644,6 +2646,8 @@ bool operator==(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
+	if(strlen(lhs) != rhs._size)
+		return false;
 	int aux;
 	aux = strcmp((char*) lhs, rhs.c_str());
 	if (aux == 0) {
@@ -2658,8 +2662,10 @@ bool operator==(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
+	if(lhs._size != strlen(rhs))
+		return false;
 	int aux;
-	aux = strncmp(lhs.c_str(), (char*) rhs, lhs._size);
+	aux = strcmp(lhs.c_str(), (char*) rhs);
 	if (aux == 0) {
 		return true;
 	} else {
@@ -2708,6 +2714,8 @@ bool operator!=(string a, string b) {
 			"The parameter must to be different than NULL");
 	__ESBMC_assert(b.str != NULL,
 				"The parameter must to be different than NULL");
+	if(a._size != b._size)
+		return true;
 	int aux;
 	aux = strcmp(a.c_str(), b.c_str());
 	if (aux == 0) {
@@ -2722,6 +2730,8 @@ bool operator!=(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
+	if(strlen(lhs) != rhs._size)
+		return true;
 	int aux;
 	aux = strcmp((char*) lhs, rhs.c_str());
 	if (aux == 0) {
@@ -2736,6 +2746,8 @@ bool operator!=(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
+	if(lhs._size != strlen(rhs))
+		return true;
 	int aux;
 	aux = strcmp(lhs.c_str(), (char*) rhs);
 	if (aux == 0) {
