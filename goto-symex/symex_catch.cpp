@@ -343,7 +343,10 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
 
   // We must update the value if it has operands
   if(code.operands().size())
+  {
+    code.op0().set("exception_update",true);
     ns.lookup(target->code.op0().identifier()).value=code.op0();
+  }
 
   if(!options.get_bool_option("extended-try-analysis"))
   {

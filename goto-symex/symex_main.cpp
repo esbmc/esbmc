@@ -182,8 +182,17 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case ASSIGN:
-    if (!cur_state->guard.is_false()) {
+    if (!cur_state->guard.is_false())
+    {
       codet deref_code = instruction.code;
+
+      if(instruction.code.op0().identifier()!=irep_idt())
+      {
+        exprt value=ns.lookup(instruction.code.op0().identifier()).value;
+        if(value.get_bool("exception_update"))
+          deref_code.op1()=value;
+      }
+
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
       assert(deref_code.operands().size() == 2);
@@ -193,6 +202,7 @@ goto_symext::symex_step(reachability_treet & art)
 
       symex_assign(deref_code);
     }
+
     cur_state->source.pc++;
     break;
 
