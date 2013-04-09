@@ -632,6 +632,68 @@ public:
 		it.pos = p.pos;
 		return it;
 	}
+
+	string& insert(iterator p, size_t n, char c)
+	{
+    __ESBMC_assert(p.pos >= 0,
+        "The first parameter must to be greater than zero");
+    __ESBMC_assert(n >= 0,
+        "The second parameter must to be greater than zero");
+    __ESBMC_assert(c != NULL,
+        "The third parameter must to be different than NULL");
+    int pos1 = p.pos;
+    int i;
+    char *s = new char[n + 1];
+    for (i = 0; i < n; i++) {
+      s[i] = c;
+    }
+    int len = this->length(), i, k;
+    int sLen = n;
+    __ESBMC_assert(pos1 < len, "overflow");
+    if (pos1 == (len - 1)) {
+      char* one = new char[len];
+      for (i = 0; i < len; i++) {
+        one[i] = this->str[i];
+      }
+      int totalLen = len + n;
+      this->str = new char[totalLen + 1];
+      this->_size = totalLen;
+      for (i = 0; i < len; i++) {
+        this->str[i] = one[i];
+      }
+      for (; i < totalLen; i++) {
+        this->str[i] = c;
+      }
+      this->str[i] = '\0';
+      return *this;
+    }
+    int lenOne = pos1 + 1;
+    char* one = new char[lenOne];
+    for (i = 0; i < pos1; i++) {
+      one[i] = this->str[i];
+    }
+    int lenTwo = (len - pos1) + 1;
+    char* two = new char[lenTwo];
+    for (k = 0, i = pos1; i < len; i++, k++) {
+      two[k] = this->str[i];
+    }
+    int totalLen = len + n;
+    this->str = new char[totalLen + 1];
+    this->_size = totalLen;
+
+    for (i = 0; i < lenOne - 1; i++) {
+      this->str[i] = one[i];
+    }
+    for (k = 0; k < sLen; k++, i++) {
+      this->str[i] = s[k];
+    }
+    for (k = 0; k < lenTwo - 1; k++, i++) {
+      this->str[i] = two[k];
+    }
+    this->str[i] = '\0';
+    return *this;
+	}
+
 	string& insert(const_iterator p, size_t n, char c) {
 		__ESBMC_assert(p.pos >= 0,
 				"The first parameter must to be greater than zero");
@@ -1240,7 +1302,7 @@ void string::resize(size_t n, char c) {
 	num = this->length();
 	string tmp(this->str);
 	this->_size = n;
-	this->str = new char[n];
+	this->str = new char[n+1];
 	for (i = 0; i < num; i++)
 		this->str[i] = tmp.str[i];
 	for (i = num; i < (this->_size); i++)
@@ -2506,7 +2568,7 @@ bool operator==(string& lhs, const char* rhs) {
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
 	int aux;
-	aux = strcmp(lhs.c_str(), (char*) rhs);
+	aux = strncmp(lhs.c_str(), (char*) rhs, lhs._size);
 	if (aux == 0) {
 		return true;
 	} else {
