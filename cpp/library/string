@@ -432,17 +432,36 @@ public:
 		if ((pos > sLen) || (pos > n))
 		  throw out_of_range();
 
-
+		int totalLength = this->size();
+		totalLength += (n - pos + 1);
+		int i,j,k;
+		string result;
+		result.str = new char[totalLength + 1];
+		for(i = 0; i < this->_size; i++){
+			result.str[i] = this->str[i];
+		}
+		for(j = i, k = pos; j < totalLength; j++,k++){
+			result.str[j] = s[k];
+		}
+		result.str[j] = '\0';
+		this->_size = totalLength;
+		this->str = result.str;
+		return *this;
+/*
 		int rhsLen = n;
-		int totalLen = this->_size + rhsLen;
+		int totalLen = this->_size + (rhsLen - pos);
 		string temp(totalLen);
 		int i, j, k;
 		for (i = 0; i < this->_size; i++)
 			temp[i] = this->str[i];
 		for (j = i, k = pos; j < temp._size; j++, k++)
 			temp.str[j] = s[k];
-		*this = temp;
+		//*this = temp;
+		this->_size = temp._size;
+		this->str = temp.str;
+		//assert(this->_size != 16);
 		return *this;
+		*/
 	}
 	void swap(string& s);
 	void resize(size_t n, char c);
