@@ -30,6 +30,7 @@ struct pair {
 			return true;
 		return false;
 	}
+
 	template<class U, class V>
 	pair(const pair<U, V> &p) :
 			first(p.first), second(p.second) {

@@ -135,6 +135,11 @@ public:
 			this->base = i.base;
 		}
 
+		const_iterator& operator=(const iterator& i){
+			this->pos = i.pos;
+			this->base = i.base;
+		}
+
 		value_type * operator -> (){
 			return &base[pos];
 		}
@@ -168,7 +173,15 @@ public:
 		bool operator == (const const_iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
+		bool operator == (const iterator& it) const{
+			return ((base == it.base)&&(pos == it.pos));
+		}
+
 		bool operator != (const const_iterator& it) const{
+			return !((base == it.base)&&(pos == it.pos));
+		}
+
+		bool operator != (const iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
@@ -413,6 +426,12 @@ public:
 			insert(*first++);
 	}
 
+	template<class Iterator>
+	iterator insert(Iterator *first, Iterator *last){
+		while(first!=last)
+			insert(*first++);
+	}
+
 	// modifiers:
 	iterator insert(const value_type& x){
 		iterator it = begin();
@@ -423,6 +442,7 @@ public:
 		_size++;
 		i = _size;
 
+
 		while( it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
@@ -431,7 +451,6 @@ public:
 
 		buf[it.pos] = x;
 		return it;
-
 	}
 
 	iterator insert(iterator position, const value_type& x){
@@ -481,10 +500,11 @@ public:
 	}
 
 	void swap(multiset& x){
-		multiset aux;
-		aux = *this;
-		*this = x;
-		x = aux;
+//		multiset aux;
+//		aux = *this;
+//		*this = x;
+//		x = aux;
+		std::swap(*this,x);
 	}
 	void clear(){
 		_size = 0;

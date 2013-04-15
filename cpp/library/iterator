@@ -25,6 +25,8 @@ public:
 	typedef Category iterator_category;
 };
 
+template<class charT> struct char_traits;
+
 ///  Marking input iterators.
 class input_iterator_tag { };
 

@@ -608,15 +608,26 @@ public:
 		verify_capacity();
 	}
 
-	void insert(iterator position, iterator first, iterator last){
-		int i = _size;
-		int aux;
-		while(first!=last){
-			insert(position++, *first);
-			first++;
+//	void insert(iterator position, iterator first, iterator last){
+//		int i = _size;
+//		int aux;
+//		while(first!=last){
+//			insert(position++, *first);
+//			first++;
+//		}
+//		verify_capacity();
+//	}
+
+	template<class Iterator1,class Iterator2>
+	void insert(Iterator1 position, Iterator2 first, Iterator2 last){
+			int i = _size;
+			int aux;
+			while(first!=last){
+				insert(position++, *first);
+				first++;
+			}
+			verify_capacity();
 		}
-		verify_capacity();
-	}
 
 	void insert(iterator position, T n[], T* x){
 		int j = 0;
