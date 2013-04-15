@@ -999,18 +999,126 @@ void partial_sort(RanIt first, RanIt mid, RanIt last, Pr pred){
 }
 
 template<class InIt, class RanIt>
-RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2);
+RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2){
+	InIt pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while((*j < *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(*pilgrim1 < *pilgrim2){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while((*j < *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
 
 template<class InIt, class RanIt>
-RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2);
+RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2){
+	InIt *pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while((*j < *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(*pilgrim1 < *pilgrim2){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while((*j < *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
 
 template<class InIt, class RanIt, class Pr>
 RanIt partial_sort_copy(InIt first1, InIt last1, RanIt first2, RanIt last2,
-		Pr pred);
+		Pr pred){
+	InIt pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(pred(*pilgrim1, *pilgrim2)){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while(pred(*j, *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
 
 template<class InIt, class RanIt, class Pr>
 RanIt partial_sort_copy(InIt *first1, InIt *last1, RanIt first2, RanIt last2,
-		Pr pred);
+		Pr pred){
+	InIt *pilgrim1 = first1;
+	RanIt pilgrim2 = first2;
+	while(pilgrim2 < last2)
+		*pilgrim2++ = *pilgrim1++;
+	RanIt i,j;
+	for(i = first2 ; i != last2 ; i++){
+		j = i;
+		while(pred(*j, *(j-1)) && (j != first2)){
+			std::swap(*j, *(j-1));
+			j--;
+		}
+	}
+	pilgrim2--;
+	while(pilgrim1 != last1)
+		if(pred(*pilgrim1 , *pilgrim2)){
+			*pilgrim2 = *pilgrim1;
+			for(i = first2 ; i != last2 ; i++){
+				j = i;
+				while(pred(*j, *(j-1)) && (j != first2)){
+					std::swap(*j, *(j-1));
+					j--;
+				}
+			}
+			pilgrim1++;
+		}
+	return pilgrim2;
+}
 
 template<class RanIt>
 void nth_element(RanIt first, RanIt nth, RanIt last)
@@ -1060,24 +1168,24 @@ void nth_element(RanIt first, RanIt nth, RanIt last, Pr pred){
 template<class FwdIt, class Ty>
 FwdIt lower_bound(FwdIt first, FwdIt last, const Ty& val) {
 #if 0
-	FwdIt it;
-	FwdIt count, step;
-	count = distance(first,last);
-	while (count>0)
-	{
-		it = first; step=count/2; advance (it,step);
-		if (*it<val) // or: if (comp(*it,value)), for the comp version
-		{	first=++it; count-=step+1;}
-		else count=step;
-	}
-	return first;
+FwdIt it;
+FwdIt count, step;
+count = distance(first,last);
+while (count>0)
+{
+	it = first; step=count/2; advance (it,step);
+	if (*it<val) // or: if (comp(*it,value)), for the comp version
+			{	first=++it; count-=step+1;}
+	else count=step;
+}
+return first;
 #endif
-	while(first != last)
-	{
-		if(val <= *first) return first;
-		else first++;
-	}
-	return first;
+while(first != last)
+{
+	if(val <= *first) return first;
+	else first++;
+}
+return first;
 
 }
 
@@ -1165,7 +1273,6 @@ OutIt merge(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, OutIt dest) {
 	while(pilgrim2 < last2)
 		*dest++ = *pilgrim2++;
 	return dest;
-
 }
 
 template<class InIt1, class InIt2, class OutIt>
@@ -1992,39 +2099,39 @@ bool next_permutation(BidIt first, BidIt last, Pr pred){
 template<class BidIt>
 bool prev_permutation(BidIt first, BidIt last){
 	if (first == last)
-			return false;
-		BidIt i = first;
-		++i;
-		if (i == last)
-			return false;
-		i = last;
-		--i;
+		return false;
+	BidIt i = first;
+	++i;
+	if (i == last)
+		return false;
+	i = last;
+	--i;
 
-		for(;;)
+	for(;;)
+	{
+		BidIt ii = i;
+		--i;
+		if (*i < *ii)
 		{
-			BidIt ii = i;
-			--i;
-			if (*i < *ii)
-			{
-				BidIt j = last;
-				while (!(*i < *--j))
-				{}
-				iter_swap(i, j);
-				while ((ii != last) && (ii != --last)){
-					swap(*ii, *last);
-					ii++;
-				}
-				return true;
+			BidIt j = last;
+			while (!(*i < *--j))
+			{}
+			iter_swap(i, j);
+			while ((ii != last) && (ii != --last)){
+				swap(*ii, *last);
+				ii++;
 			}
-			if (i == first)
-			{
-				while ((first != last) && (first != --last)){
-					swap(*first, *last);
-					first++;
-				}
-				return false;
-			}
+			return true;
 		}
+		if (i == first)
+		{
+			while ((first != last) && (first != --last)){
+				swap(*first, *last);
+				first++;
+			}
+			return false;
+		}
+	}
 }
 
 template<class BidIt>
