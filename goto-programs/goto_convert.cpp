@@ -466,6 +466,9 @@ void goto_convertt::convert_catch(
     // grab the ID and add to CATCH instruction
     exception_list.push_back(irept(block.get("exception_id")));
 
+    // Hack for object value passing
+    block.op0().operands().push_back(gen_zero(block.op0().op0().type()));
+
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
     dest.destructive_append(tmp);
