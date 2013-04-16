@@ -106,15 +106,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    if(stack_catch.size())
-    {
-      if(stack_catch.top().has_throw_target)
-      {
-        cur_state->source.pc++;
-        break;
-      }
-    }
-
     exprt tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
