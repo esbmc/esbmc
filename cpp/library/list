@@ -1272,23 +1272,24 @@ public:
 	void assign(size_type n, const value_type& u) {
 		*this = list(n, u);
 	}
-#if 0
+
 	iterator& erase(iterator& position) {
 		this->_size--;
-		for(int i = position._pos; i <  this->_size; i++){
+		for(int i = position.pos; i <  this->_size; i++){
 			this->_list[i] = this->_list[i+1];
 		}
 		this->_list[this->_size] = value_type();
-		position.it = this->_list;
-		position._size--;
+		position.it = &(this->_list[position.pos]);
 		return position;
 	}
 
-	iterator erase(iterator position, iterator last) {
-
+	iterator& erase(iterator& position, iterator& last) {
+		while(position.pos != last.pos){
+			this->erase(position);
+		}
 		return last;
 	}
-#endif
+
 	void swap(list<value_type>& x) {
 		value_type _tmp[LIST_MAX_SIZE];
 		size_type _tmpSize;
@@ -1303,6 +1304,7 @@ public:
 	void clear() {
 		this->~list();
 	}
+
 #if 0
 	void splice(iterator position, list<T>& x) {
 		list<T>::iterator it1 = x.begin();
@@ -1360,64 +1362,35 @@ public:
 			this->_size--;
 		}
 	}
+#endif
 	void remove(const T& value) {
-		if (value == this->head->data) {
-			this->pop_front();
-		} else {
-			if (value == this->tail->data) {
-				this->pop_back();
-			} else {
-				node* tmp_ptr = this->head;
-				int i;
-				do {
-					tmp_ptr = tmp_ptr->next;
-				} while ((tmp_ptr != NULL) && (tmp_ptr->data != value));
-				if (tmp_ptr != NULL) {
-					this->_size--;
-					tmp_ptr->prev->next = tmp_ptr->next;
-					tmp_ptr->next->prev = tmp_ptr->prev;
-				}
+		iterator _itEnd = this->end();
+		for(iterator _it = this->begin(); _it != _itEnd; _it++)
+			if(*_it == value){
+				this->erase(_it);
+				return;
 			}
-		}
 	}
 
 	void remove_if(pred* x) {
 		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
-		node* tmp = this->head;
-		T value;
-		while (tmp != NULL) {
-			value = tmp->data;
-			if (x(value)) {
-				this->_size--;
-				if (tmp->prev != NULL) {
-					tmp->prev->next = tmp->next;
-				}
-				if (tmp->next != NULL) {
-					tmp->next->prev = tmp->prev;
-				}
+		for(iterator _it = this->begin(); _it.pos <= this->_size; _it++)
+			if(x(*_it.it)){
+				this->erase(_it);
 			}
-			tmp = tmp->next;
-		}
 	}
+
 	template<class Predicate>
 	void remove_if(Predicate* pred) {
 		__ESBMC_assert(pred != NULL,
 				"The parameter must be different than NULL.");
-		node* tmp = this->head;
-		while (tmp != NULL) {
-			if (pred(tmp->data)) {
-				this->_size--;
-				if (tmp->prev != NULL) {
-					tmp->prev->next = tmp->next;
-				}
-				if (tmp->next != NULL) {
-					tmp->next->prev = tmp->prev;
-				}
+		for(iterator _it = this->begin(); _it.pos <= this->_size; _it++)
+			if(pred()(*_it.it)){
+				this->erase(_it);
 			}
-			tmp = tmp->next;
-		}
 	}
 
+#if 0
 	void unique() {
 		node* tmp = this->head;
 		if (this->_size != 0) {
