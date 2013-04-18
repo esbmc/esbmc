@@ -1592,42 +1592,9 @@ public:
 	}
 
 	void sort() {
-		list<T> mylist;
-		T menor;
-		node* y;
-		node* z;
-		for (int i = 0; i < this->_size; i++) {
-			y = this->head;
-			menor = y->data;
-			y = y->next;
-			while (y != NULL) {
-				if (y->data < menor) {
-					menor = y->data;
-				}
-				y = y->next;
-			}
-			z = this->head;
-			while (z != NULL) {
-				if (z->data == menor) {
-					if (z->prev != NULL) {
-						z->prev->next = z->next;
-					} else {
-						this->head = z->next;
-					}
-					if (z->next != NULL) {
-						z->next->prev = z->prev;
-					} else {
-						this->tail = z->prev;
-					}
-					break;
-				}
-				z = z->next;
-			}
-			mylist.push_back(menor);
-		}
-		this->head = mylist.head;
-		this->tail = mylist.tail;
+
 	}
+
 #endif
 	void reverse() {
 		/*value_type _tmp[LIST_MAX_SIZE];
