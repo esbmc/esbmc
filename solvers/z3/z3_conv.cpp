@@ -2275,7 +2275,7 @@ z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands",expr);
+      throw new conv_error("Pointer arithmetic with two pointer operands",expr);
       break;
     case 4:
       // Artithmatic operation that has the result type of ptr.
