@@ -19,7 +19,7 @@ int main () {
 
   push_heap (v.begin(),v.end());
   
-  assert(v.front() == 99);
+  assert(v.front() != 99);
   assert(v[1] == 20);
   assert(v[2] == 10);
   assert(v[3] == 5);
