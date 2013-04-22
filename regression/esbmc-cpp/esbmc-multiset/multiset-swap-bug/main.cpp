@@ -5,9 +5,11 @@ using namespace std;
 
 int main ()
 {
-  int myints[]={12,75,10,32,20,25};
+  int myints[]={10,12,75};
+  int myints2[]={20,25,32};
+  
   multiset<int> first (myints,myints+3);     // 10,12,75
-  multiset<int> second (myints+3,myints+6);  // 20,25,32
+  multiset<int> second (myints2,myints2+3);  // 20,25,32
   multiset<int>::iterator it;
 
   assert(first.size() == 3);
@@ -28,10 +30,9 @@ int main ()
   it++;
 
   first.swap(second);
-
   assert(first.size() == 3);
   it = first.begin();
-  assert(*it == 20);
+  assert(*it != 20);
   it++;
   assert(*it != 25);
   it++;

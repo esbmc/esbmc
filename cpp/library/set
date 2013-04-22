@@ -328,10 +328,13 @@ public:
 	explicit multiset ( Key v1[] , Key* v2 ){
 		_size = 0;
 		int i = 0;
-		while(v1 != v2)
-			buf[i++] = *v1++;
+		while(v1 != v2){
+			buf[i] = *v1;
+			i++;
+			v1++;
+		}
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 	template<class Iterator>
@@ -500,11 +503,10 @@ public:
 	}
 
 	void swap(multiset& x){
-//		multiset aux;
-//		aux = *this;
-//		*this = x;
-//		x = aux;
-		std::swap(*this,x);
+		multiset aux;
+		aux = *this;
+		*this = x;
+		x = aux;
 	}
 	void clear(){
 		_size = 0;
