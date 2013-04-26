@@ -2212,8 +2212,41 @@ void
 z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
 {
 
-  if (expr.operands().size() != 2)
-    throw new conv_error("Pointer arithmatic takes two operands", expr);
+  if (expr.operands().size() != 2) {
+    // Try to combine all the integer type operands into one operand, and
+    // retry; if there are more than one pointer operand, give up.
+
+    exprt int_operands(expr);
+    exprt ptr_operand;
+    int_operands.operands().clear();
+    ptr_operand.make_nil();
+
+    // Put all non-pointer operands into 'oper', the pointer opearnd into
+    // ptr_operand.
+    forall_operands(it, expr) {
+      if (!it->type().is_pointer()) {
+        int_operands.operands().push_back(*it);
+      } else {
+        if (!ptr_operand.is_nil()) {
+          throw new conv_error("More than one pointer operand to pointer "
+                               " arithmetic", expr);
+        }
+        ptr_operand = *it;
+      }
+    }
+
+    // Fix up int operands type by taking the type of the first operand. They
+    // must all agree as they were placed into this expression in the first
+    // place.
+    int_operands.type() = int_operands.op0().type();
+
+    // Now try the conversion again with the non-pointer operands combined into
+    // one, and the pointer operand as the other.
+    expr.operands().clear();
+    expr.copy_to_operands(int_operands, ptr_operand);
+    convert_pointer_arith(expr, bv);
+    return;
+  }
 
   // So eight cases; one for each combination of two operands and the return
   // type, being pointer or nonpointer. So with P=pointer, N= notpointer,
@@ -2242,7 +2275,7 @@ z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmatic with two pointer operands",expr);
+      throw new conv_error("Pointer arithmetic with two pointer operands",expr);
       break;
     case 4:
       // Artithmatic operation that has the result type of ptr.
