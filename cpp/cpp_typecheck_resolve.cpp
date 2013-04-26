@@ -1958,15 +1958,63 @@ void cpp_typecheck_resolvet::guess_template_args(
       cpp_template_args_non_tct template_args;
       resolve_scope(cpp_name, base_name, template_args);
 
-      const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
-      cpp_template_args_non_tct instantiated_args=
-        to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+      cpp_template_args_non_tct instantiated_args;
+      if(desired_type.find("#cpp_type").is_not_nil())
+      {
+        type_exprt type(desired_type);
+        instantiated_args.arguments().push_back(type);
+      }
+      else
+      {
+        const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
+        const exprt &template_arguments=
+          static_cast<const exprt&>(s.type.find("#template_arguments"));
+
+        if(template_arguments.is_not_nil())
+        {
+          instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+        }
+        else
+        {
+          // We must look if the parent scope has the template arguments
+          cpp_scopet &scope=cpp_typecheck.cpp_scopes.get_scope(s.name);
+
+          unsigned parent_size=scope.parents_size();
+          while(parent_size)
+          {
+            cpp_scopet &parent=scope.get_parent();
+            s=cpp_typecheck.lookup(parent.identifier);
+
+            template_arguments=
+              static_cast<const exprt&>(s.type.find("#template_arguments"));
+
+            if(template_arguments.is_not_nil())
+            {
+              instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+              break;
+            }
+            else
+            {
+              parent_size=parent.parents_size();
+            }
+          }
+        }
+
+        // Give up
+        if(instantiated_args.is_nil())
+        {
+          cpp_typecheck.err_location(location);
+          cpp_typecheck.str
+            << "Can't instantiate `" << template_type
+            << "with:" << desired_type << std::endl;
+          throw 0;
+        }
+      }
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
-
       for(unsigned i=0; i<args.size();++i)
       {
-        resolve_scope(to_cpp_name(args[i].type()),base_name, template_args);
+        resolve_scope(to_cpp_name(args[i].type()),base_name,template_args);
 
         cpp_scopest::id_sett id_set;
         cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);

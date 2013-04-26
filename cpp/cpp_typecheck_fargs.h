@@ -54,7 +54,6 @@ public:
     operands.erase(operands.begin());
     has_object = false;
   }
-
 };
 
 std::ostream &operator<<(std::ostream &out,

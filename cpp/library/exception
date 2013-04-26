@@ -51,6 +51,7 @@ unexpected_handler set_unexpected(unexpected_handler f) throw ()
 void unexpected()
 {
   unexpected_pf();
+  throw;
 }
 
 // Model for terminate function: calls the current

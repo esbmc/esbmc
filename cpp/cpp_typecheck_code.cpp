@@ -118,47 +118,33 @@ void cpp_typecheckt::typecheck_catch(codet &code)
 {
   codet::operandst &operands=code.operands();
 
-  for(codet::operandst::iterator
-      it=operands.begin();
+  // First operand is always the try block
+  codet::operandst::iterator it=operands.begin();
+  code_blockt &try_block=to_code_block(to_code(*it));
+  typecheck_code(try_block);
+
+  // The following operands are the catchs
+  for(it=++operands.begin();
       it!=operands.end();
       it++)
   {
     code_blockt &block=to_code_block(to_code(*it));
-
-    // Delay catch instatiation to goto-symex
-    if(it!=operands.begin())
-      if(block.has_operands())
-        if(block.op0().has_operands())
-          if(block.op0().op0().has_operands())
-          {
-            irept name=block.op0().op0().op0().find("name");
-            if(block.op0().op0().op0().find("name").get_sub().size())
-            {
-              name.set("catch_decl",true);
-              block.op0().op0().op0().set("name",name);
-            }
-          }
-
     typecheck_code(block);
 
-    // is it a catch block?
-    if(it!=operands.begin())
-    {
-      const code_blockt &code_block=to_code_block(block);
-      assert(code_block.operands().size()>=1);
+    const code_blockt &code_block=to_code_block(block);
+    assert(code_block.operands().size()>=1);
 
-      const codet &first_instruction=to_code(code_block.op0());
-      assert(first_instruction.get_statement()=="decl");
+    const codet &first_instruction=to_code(code_block.op0());
+    assert(first_instruction.get_statement()=="decl");
 
-      // get the declaration
-      const code_declt &code_decl=to_code_decl(first_instruction);
+    // get the declaration
+    const code_declt &code_decl=to_code_decl(first_instruction);
 
-      // get the type
-      const typet &type=code_decl.op0().type();
+    // get the type
+    const typet &type=code_decl.op0().type();
 
-      // annotate exception ID
-      it->set("exception_id", cpp_exception_id(type, *this));
-    }
+    // annotate exception ID
+    it->set("exception_id", cpp_exception_id(type, *this));
   }
 }
 

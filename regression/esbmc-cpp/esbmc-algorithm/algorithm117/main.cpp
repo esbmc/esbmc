@@ -6,20 +6,14 @@
 using namespace std;
 
 int main () {
-  int myints[] = {10,20,30,5,15};
-  vector<int> v(myints,myints+5);
+  int myints[] = {20,15,10,5};
+  vector<int> v(myints,myints+4);
 // 99 20 10 5 15
-  make_heap (v.begin(),v.end());
-  cout << "initial max heap   : " << v.front() << endl;
-
-  pop_heap (v.begin(),v.end()); v.pop_back();
-  cout << "max heap after pop : " << v.front() << endl;
-
   v.push_back(99); 
 
   push_heap (v.begin(),v.end());
   
-  assert(v.front() == 99);
+  assert(v.front() != 99);
   assert(v[1] == 20);
   assert(v[2] == 10);
   assert(v[3] == 5);

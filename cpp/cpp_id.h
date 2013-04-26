@@ -116,8 +116,8 @@ public:
     *this=cpp_idt();
   }
 
-  void print(std::ostream &out, unsigned indent=0) const;
-  void print_fields(std::ostream &out, unsigned indent=0) const;
+  void print(std::ostream &out = std::cout, unsigned indent=0) const;
+  void print_fields(std::ostream &out = std::cout, unsigned indent=0) const;
 
   friend class cpp_scopet;
 

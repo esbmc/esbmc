@@ -1327,7 +1327,7 @@ void cpp_typecheckt::move_member_initializers(
     exprt::operandst::iterator o_it=value.operands().begin();
     forall_irep(it, initializers.get_sub())
     {
-      o_it=value.operands().insert(o_it,(exprt&)*it);
+      o_it=value.operands().insert(o_it, static_cast<const exprt &>(*it));
       o_it++;
     }
   }

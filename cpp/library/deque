@@ -323,12 +323,8 @@ public:
 
 	explicit deque(size_type n): _size(0),  _capacity(1)
 	{
-		for(int i = 0;i < n;i++){
-			if(sizeof(T)==sizeof(int))
-				push_back(0);
-			else
-				push_back(T());
-		}
+		for(int i = 0;i < n;i++)
+		  push_back(T());
 		_capacity = n;
 	}
 
@@ -417,10 +413,7 @@ public:
 	iterator end(){
 		iterator buffer;
 		int n = _size + 1;
-		if(sizeof(int) == sizeof(T))
-			buf[n] = 0;
-		else
-			buf[n] = T();
+		buf[n] = T();
 		buffer.pointer = buf + n;
 		buffer.pos = n;
 		buffer.vec_pos = buf;
@@ -444,10 +437,7 @@ public:
 	const_reverse_iterator rbegin() const;
 	reverse_iterator rend(){
 		reverse_iterator buffer;
-		if (sizeof(int) == sizeof(T))
-			buf[0] = 0;
-		else
-			buf[0] = T();
+		buf[0] = T();
 		buffer.pointer = buf;
 		buffer.pos = 0;
 		buffer.vec_pos = buf;
@@ -471,7 +461,7 @@ public:
 			return;
 		}
 		while(_size < sz){
-			push_back(int());
+			push_back(T());
 		}
 		verify_capacity();
 		return;
@@ -618,15 +608,26 @@ public:
 		verify_capacity();
 	}
 
-	void insert(iterator position, iterator first, iterator last){
-		int i = _size;
-		int aux;
-		while(first!=last){
-			insert(position++, *first);
-			first++;
+//	void insert(iterator position, iterator first, iterator last){
+//		int i = _size;
+//		int aux;
+//		while(first!=last){
+//			insert(position++, *first);
+//			first++;
+//		}
+//		verify_capacity();
+//	}
+
+	template<class Iterator1,class Iterator2>
+	void insert(Iterator1 position, Iterator2 first, Iterator2 last){
+			int i = _size;
+			int aux;
+			while(first!=last){
+				insert(position++, *first);
+				first++;
+			}
+			verify_capacity();
 		}
-		verify_capacity();
-	}
 
 	void insert(iterator position, T n[], T* x){
 		int j = 0;
@@ -707,9 +708,6 @@ private:
 	int _capacity;
 
 	T null_value(){
-		if(sizeof(T) == sizeof(int)){
-			return NULL;
-		}
 		return T();
 	}
 

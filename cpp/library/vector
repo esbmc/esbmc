@@ -322,10 +322,7 @@ namespace std{
       explicit vector(size_type n): _size(0),  _capacity(1)
       {
         for(int i = 0;i < n;i++){
-          if(sizeof(T)==sizeof(int))
-            push_back(0);
-          else
-            push_back(T());
+          push_back(T());
         }
         _capacity = n;
       }
@@ -416,10 +413,7 @@ namespace std{
         assert(_size >= 0);
         iterator buffer;
         int n = _size + 1;
-        if(sizeof(int) == sizeof(T))
-          buf[n] = 0;
-        else
-          buf[n] = T();
+        buf[n] = T();
         buffer.pointer = buf + n;
         buffer.pos = n;
         buffer.vec_pos = buf;
@@ -443,10 +437,7 @@ namespace std{
       const_reverse_iterator rbegin() const;
       reverse_iterator rend(){
         reverse_iterator buffer;
-        if (sizeof(int) == sizeof(T))
-          buf[0] = 0;
-        else
-          buf[0] = T();
+        buf[0] = T();
         buffer.pointer = buf;
         buffer.pos = 0;
         buffer.vec_pos = buf;
@@ -470,7 +461,7 @@ namespace std{
           return;
         }
         while(_size < sz){
-          push_back(int());
+          push_back(T());
         }
         verify_capacity();
         return;
@@ -694,9 +685,6 @@ namespace std{
       int _capacity;
 
       T null_value(){
-        if(sizeof(T) == sizeof(int)){
-          return NULL;
-        }
         return T();
       }
   };

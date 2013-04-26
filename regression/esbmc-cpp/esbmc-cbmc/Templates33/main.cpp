@@ -12,5 +12,6 @@ typedef X<char> Z;
 
 int main()
 {
+  Z a;
   return 0;
 }

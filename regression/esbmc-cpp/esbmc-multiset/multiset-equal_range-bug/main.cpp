@@ -5,10 +5,11 @@ using namespace std;
 
 int main ()
 {
-  multiset<int> myset;
+  int b[5] = {10,20,30,40,50};
+  multiset<int> myset(b,b+5);
   pair<multiset<int>::iterator,multiset<int>::iterator> ret;
 
-  for (int i=1; i<=5; i++) myset.insert(i*10);   // set: 10 20 30 40 50
+//  for (int i=1; i<=5; i++) myset.insert(i*10);   // set: 10 20 30 40 50
   ret = myset.equal_range(30);
   assert(*ret.first == 	30);
   assert(*ret.second !=	40);

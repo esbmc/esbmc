@@ -30,13 +30,13 @@ namespace std
 	    T head=0;
 	    T tail=0;
 	public:
-	  explicit priority_queue ( ):_size(0), head(0), tail(0){}
-	  explicit priority_queue ( T& x, T& y ):_size(0), head(0), tail(0){}
-	  explicit priority_queue ( T* x, T* y ):_size(0), head(0), tail(0){
+	  priority_queue ( ):_size(0), head(0), tail(0){}
+	  priority_queue ( T& x, T& y ):_size(0), head(0), tail(0){}
+	  priority_queue ( T* x, T* y ):_size(0), head(0), tail(0){
 		  for (;x!=y;x++)
 			  this->push(*x);
 	  }
-	  explicit priority_queue ( T x );
+	  priority_queue ( Compare& x ){}
 	  void push ( const T& x ){
 		  int i = 0;
 		  T tmp = x, y;

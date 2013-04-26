@@ -5,12 +5,10 @@ using namespace std;
 
 int main ()
 {
-  multiset<int> myset;
+  int b[9] = {10,20,30,40,50,60,70,80,90};
+  multiset<int> myset(b,b+9);
   multiset<int>::iterator it;
   int i;
-
-  // insert some values:
-  for (int i=1; i<10; i++) myset.insert(i*10);  // 10 20 30 40 50 60 70 80 90
 
   it=myset.begin();
   it++;                                         // "it" points now to 20
@@ -23,12 +21,14 @@ int main ()
 
   it=myset.find (60);
   myset.erase ( it, myset.end() );
+  
+  it = myset.begin();
+  assert(*it==10);
+  it++;
+  assert(*it==30);
+  it++;
+  assert(*it!=50);
 
-  cout << "myset contains:";
-  for (it=myset.begin(), i = 10; it!=myset.end(); ++it, i+=20){
-    cout << " " << *it;
-    assert(*it != i);
-  }
   cout << endl;
 
   return 0;

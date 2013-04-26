@@ -5,15 +5,13 @@ using namespace std;
 
 int main ()
 {
-  multiset<int> myset;
+  int b[5] = {10,20,30,40,50};
+  multiset<int> myset(b,b+5);
   multiset<int>::iterator it;
   int i;
-  assert(myset.size() == 0);
   // set some initial values:
-  for (i=1; i<=5; i++) myset.insert(i*10);    // set: 10 20 30 40 50
+//  for (i=1; i<=5; i++) myset.insert(i*10);    // set: 10 20 30 40 50
   assert(myset.size() == 5);
-  for (i = 10, it = myset.begin(); it != myset.end(); i = i+10, it++)
-    assert(*it == i);
   it=myset.find(20);
   assert(*it == 20);
   myset.erase (it);

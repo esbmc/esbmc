@@ -10,7 +10,7 @@ int main ()
   str1 = 'x';
   str2 = " f(" + str1 + ") " + '=' + ' ' + str1;
 
-  assert(str2 != "f(x) = x");
+  assert(str2 != " f(x) = x");
 
   cout << str2  << endl;
   return 0;

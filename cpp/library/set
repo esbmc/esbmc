@@ -1,6 +1,6 @@
 /*******************************************************************\
 
-Module: 
+Module:
 
 Author: Felipe Rodrigues
 
@@ -53,6 +53,7 @@ public:
 		}
 
 		iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -123,6 +124,7 @@ public:
 		}
 
 		const_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -131,6 +133,11 @@ public:
 
 		}
 		const_iterator& operator=(const const_iterator& i){
+			this->pos = i.pos;
+			this->base = i.base;
+		}
+
+		const_iterator& operator=(const iterator& i){
 			this->pos = i.pos;
 			this->base = i.base;
 		}
@@ -168,7 +175,15 @@ public:
 		bool operator == (const const_iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
+		bool operator == (const iterator& it) const{
+			return ((base == it.base)&&(pos == it.pos));
+		}
+
 		bool operator != (const const_iterator& it) const{
+			return !((base == it.base)&&(pos == it.pos));
+		}
+
+		bool operator != (const iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
@@ -188,6 +203,7 @@ public:
 		}
 
 		reverse_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -254,6 +270,7 @@ public:
 		}
 
 		const_reverse_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -310,21 +327,24 @@ public:
 
 	// construct/copy/destroy:
 	explicit multiset ( const Compare& comp = Compare() ) : _size(0){
-		_size = 0;
-		this->rule = comp;
 	}
 
 	explicit multiset ( Key v1[] , Key* v2 ){
+		__ESBMC_assert(v2 > v1, "Invalid pointer range: the second argument must be greater than the first one");
 		_size = 0;
 		int i = 0;
-		while(v1 != v2)
-			buf[i++] = *v1++;
+		while(v1 != v2){
+			buf[i] = *v1;
+			i++;
+			v1++;
+		}
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 	template<class Iterator>
 	explicit multiset ( Iterator first , Iterator last ){
+		__ESBMC_assert(first < last, "Invalid iterator range: the second argument must be greater than the first one");
 		_size = 0;
 		int i = 0;
 		while(first != last){
@@ -411,6 +431,14 @@ public:
 
 	template<class Iterator>
 	iterator insert(Iterator first, Iterator last){
+		__ESBMC_assert(last > first, "Invalid iterator range: the second argument must be greater than the first one");
+		while(first!=last)
+			insert(*first++);
+	}
+
+	template<class Iterator>
+	iterator insert(Iterator *first, Iterator *last){
+		__ESBMC_assert(last > first, "Invalid pointer range: the second argument must be greater than the first one");
 		while(first!=last)
 			insert(*first++);
 	}
@@ -425,7 +453,8 @@ public:
 		_size++;
 		i = _size;
 
-		while( rule(it.pos - 1,i)){
+
+		while( it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -433,14 +462,13 @@ public:
 
 		buf[it.pos] = x;
 		return it;
-
 	}
 
 	iterator insert(iterator position, const value_type& x){
 		_size++;
 		int i = _size;
 		int aux;
-		while( rule(position.pos - 1,i)){
+		while( position.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -450,6 +478,7 @@ public:
 	}
 
 	void erase(iterator position){
+		__ESBMC_assert( (position.pos >= 0)&&(position.pos < size()&&(position.base != buf)),"Invalid argument: iterator out of range" );
 		int j;
 		for(int i = position.pos + 1; i < _size ; i++){
 			j = i - 1;
@@ -478,6 +507,7 @@ public:
 	}
 
 	void erase(iterator first, iterator last){
+		__ESBMC_assert(first < last, "Invalid iterator range: the second argument must be greater than the first one");
 		while (first != last)
 			erase(first++);
 	}
@@ -495,11 +525,11 @@ public:
 	// observers:
 
 	key_compare key_comp() const{
-		return rule;
+		return Compare();
 	}
 
 	value_compare value_comp() const{
-		return rule;
+		return Compare();
 	}
 	// set operations:
 
@@ -526,19 +556,21 @@ public:
 		int first = 0, last = _size;
 		while(first != last)
 		{
-			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((x< buf[first])||(x == buf[first])) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
 	}
 
 	iterator upper_bound(const key_type& x) const{
-		int first = 0, last = _size;
-		last--;
+		int first = 0, last = _size - 1;
 		while(first != last)
 		{
-			if(!rule(x, buf[first])) return iterator(buf,last);
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((buf[last]< x)||(x == buf[last])) return iterator(buf,last+1);
 			else last--;
+
 		}
 		return iterator(buf,last);
 	}
@@ -578,6 +610,7 @@ public:
 		}
 
 		iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -648,6 +681,7 @@ public:
 		}
 
 		const_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -713,6 +747,7 @@ public:
 		}
 
 		reverse_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -779,6 +814,7 @@ public:
 		}
 
 		const_reverse_iterator(key_type *bbase, int ppos){
+			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
 			base = bbase;
 		}
@@ -840,16 +876,18 @@ public:
 	}
 
 	explicit set ( Key v1[] , Key* v2 ){
+		__ESBMC_assert(v2 > v1, "Invalid pointer range: the second argument must be greater than the first one");
 		_size = 0;
 		int i = 0;
 		while(v1 != v2)
 			buf[i++] = *v1++;
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 	template<class Iterator>
 	explicit set ( Iterator first , Iterator last ){
+		__ESBMC_assert( first< last, "Invalid iterator range: the second argument must be greater than the first one");
 		_size = 0;
 		int i = 0;
 		while(first != last){
@@ -858,7 +896,7 @@ public:
 			first++;
 		}
 		_size = i ;
-		std::sort(buf,buf+_size,rule);
+		std::sort(buf,buf+_size/*,rule*/);
 	}
 
 
@@ -881,9 +919,8 @@ public:
 			buf[i] = x.buf[i];
 		}
 		_size = x.size();
-		buf[_size] = 0;
+		buf[_size] = Key();
 		return *this;
-
 	}
 
 	// iterators:
@@ -936,6 +973,7 @@ public:
 
 	template<class Iterator>
 	iterator insert(Iterator first, Iterator last){
+		__ESBMC_assert(last > first, "Invalid iterator range: the second argument must be greater than the first one");
 		while(first!=last)
 			insert(*first++);
 	}
@@ -952,8 +990,7 @@ public:
 
 		_size++;
 		i = _size;
-
-		while( rule(it.pos - 1,i)){
+		while(it.pos - 1 < i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -961,14 +998,13 @@ public:
 
 		buf[it.pos] = x;
 		return make_pair(it, true);
-
 	}
 
 	iterator insert(iterator position, const value_type& x){
 		_size++;
 		int i = _size;
 		int aux;
-		while( rule(position.pos - 1,i)){
+		while(position.pos - 1 < i){
 			aux = i +1;
 			buf[aux] = buf[i];
 			i--;
@@ -978,6 +1014,7 @@ public:
 	}
 
 	void erase(iterator position){
+		__ESBMC_assert( (position.pos >= 0)&&(position.pos < size()&&(position.base != buf)),"Invalid argument: iterator out of range" );
 		int j;
 		for(int i = position.pos + 1; i < _size ; i++){
 			j = i - 1;
@@ -1006,6 +1043,7 @@ public:
 	}
 
 	void erase(iterator first, iterator last){
+		__ESBMC_assert(first<last, "Invalid iterator range: the second argument must be greater than the first one");
 		while (first != last)
 			erase(first++);
 	}
@@ -1023,11 +1061,11 @@ public:
 	// observers:
 
 	key_compare key_comp() const{
-		return rule;
+		return Compare();
 	}
 
 	value_compare value_comp() const{
-		return rule;
+		return Compare();
 	}
 	// set operations:
 
@@ -1052,9 +1090,11 @@ public:
 
 	iterator lower_bound(const key_type& x) const{
 		int first = 0, last = _size;
+		int y;
 		while(first != last)
 		{
-			if(rule(x, buf[first])||(x == buf[first])) return iterator(buf,first);
+			y = buf[first];
+			if(Compare()(x, y)||(x == y)) return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
@@ -1063,9 +1103,11 @@ public:
 	iterator upper_bound(const key_type& x) const{
 		int first = 0, last = _size;
 		last--;
+		int y;
 		while(first != last)
 		{
-			if(!rule(x, buf[first])) return iterator(buf,last);
+			y = buf[first];
+			if(!Compare()(x, y)) return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
