@@ -177,12 +177,13 @@ goto_symext::symex_step(reachability_treet & art)
     {
       codet deref_code = instruction.code;
 
-      if(instruction.code.op0().identifier()!=irep_idt())
-      {
-        exprt value=ns.lookup(instruction.code.op0().identifier()).value;
-        if(value.get_bool("exception_update"))
-          deref_code.op1()=value;
-      }
+      if(!stack_catch.empty())
+        if(instruction.code.op0().identifier()!=irep_idt())
+        {
+          exprt value=ns.lookup(instruction.code.op0().identifier()).value;
+          if(value.get_bool("exception_update"))
+            deref_code.op1()=value;
+        }
 
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
