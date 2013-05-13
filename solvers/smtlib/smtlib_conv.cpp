@@ -502,7 +502,7 @@ smtlib_convt::assert_lit(const literalt &l)
 {
   std::stringstream ss;
   smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  ss << "l" << l.get() << std::endl;
+  ss << "l" << l.get();
   smt_ast *lit = mk_smt_symbol(ss.str(), sort);
   assertion_list.push_back(static_cast<const smtlib_smt_ast *>(lit));
 }
