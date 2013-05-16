@@ -535,7 +535,7 @@ bool bmct::run_thread()
 
     if (options.get_bool_option("smt"))
       if (interleaving_number !=
-          strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
+          (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
     if(options.get_bool_option("z3")) {
