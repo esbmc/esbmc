@@ -2056,8 +2056,8 @@ public:
   // So, let's pretend that this is private, even though it can't be enforced.
   irep_idt thename;
   renaming_level rlevel;
-  unsigned int level1_num;
-  unsigned int level2_num;
+  unsigned int level1_num; // Function activation record
+  unsigned int level2_num; // SSA variable number
   unsigned int thread_num;
   unsigned int node_num;
 };
