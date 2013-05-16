@@ -101,7 +101,6 @@ yyinput(char *b, int m)
 /* Hack to avoid unneccessary warnings */
 FILE *yyget_in	(void);
 FILE *yyget_out  (void);
-int yyget_leng	(void);
 char *yyget_text  (void);
 void yyset_in (FILE *  in_str );
 void yyset_out (FILE *	out_str );
