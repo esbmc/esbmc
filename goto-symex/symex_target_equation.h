@@ -124,7 +124,8 @@ public:
     }
 
     void output(const namespacet &ns, std::ostream &out) const;
-    void short_output(const namespacet &ns, std::ostream &out) const;
+    void short_output(const namespacet &ns, std::ostream &out,
+                      bool show_ignored = false) const;
   };
   
   unsigned count_ignored_SSA_steps() const
@@ -152,6 +153,8 @@ public:
   }
 
   void output(std::ostream &out) const;
+  void short_output(std::ostream &out,
+                    bool show_ignored = false) const;
   
   void clear()
   {

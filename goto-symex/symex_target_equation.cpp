@@ -187,6 +187,18 @@ void symex_target_equationt::output(std::ostream &out) const
   }
 }
 
+void symex_target_equationt::short_output(std::ostream &out,
+                                          bool show_ignored) const
+{
+  for(SSA_stepst::const_iterator
+      it=SSA_steps.begin();
+      it!=SSA_steps.end();
+      it++)
+  {
+    it->short_output(ns, out, show_ignored);
+  }
+}
+
 void symex_target_equationt::SSA_stept::output(
   const namespacet &ns,
   std::ostream &out) const
@@ -232,10 +244,10 @@ void symex_target_equationt::SSA_stept::output(
 }
 
 void symex_target_equationt::SSA_stept::short_output(
-  const namespacet &ns, std::ostream &out) const
+  const namespacet &ns, std::ostream &out, bool show_ignored) const
 {
 
-  if (is_assignment() || is_assert() || is_assume())
+  if ((is_assignment() || is_assert() || is_assume()) && show_ignored == ignore)
   {
     out <<  from_expr(ns, "", cond) << std::endl;
   }

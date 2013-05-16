@@ -7,6 +7,9 @@
 
 \*******************************************************************/
 
+#include <iostream>
+#include <fstream>
+
 #include <irep2.h>
 #include <migrate.h>
 #include <assert.h>
@@ -14,8 +17,13 @@
 #include <expr_util.h>
 #include <std_expr.h>
 
+#include <langapi/language_ui.h>
+
+#include <solvers/smtlib/smtlib_conv.h>
+
 #include "goto_symex.h"
 #include "symex_target_equation.h"
+#include "slice.h"
 
 void
 goto_symext::symex_goto(const expr2tc &old_guard)
@@ -36,6 +44,37 @@ goto_symext::symex_goto(const expr2tc &old_guard)
                                                  (target);
     equality2tc question(true_expr, new_guard);
     try {
+      std::ofstream bees;
+      bees.open("/tmp/bees");
+      bees << "______________________________________________________"
+        << std::endl;
+      bees << "Solver question:" << question->crc() << std::endl;
+
+      symex_slicet slicer;
+      symex_target_equationt eq = dynamic_cast<const symex_target_equationt&>(*target);
+      slicer.slice_for_symbols(eq, question);
+
+      for(symex_target_equationt::SSA_stepst::const_iterator
+          it=eq.SSA_steps.begin();
+          it!=eq.SSA_steps.end();
+          it++)
+      {
+        if ((it->is_assignment() || it->is_assert() || it->is_assume()) && it->ignore == false) {
+          bees << it->cond->crc() << std::endl;
+        }
+      }
+
+      bees.close();
+
+#if 0
+      //eq.short_output(std::cerr);
+      optionst tmp = options;
+      tmp.set_option("output", "/tmp/bees");
+      smtlib_convt cvt(false, ns, false, tmp);
+      eq.convert(cvt);
+      cvt.dec_solve();
+#endif
+
       tvt res = rte->ask_solver_question(question);
 
       if (res.is_false())
