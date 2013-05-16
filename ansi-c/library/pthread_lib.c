@@ -122,7 +122,7 @@ pthread_self(void)
 }
 
 int
-pthread_join(pthread_t thread, void **retval)
+pthread_join_switch(pthread_t thread, void **retval)
 {
 __ESBMC_hide:
   __ESBMC_atomic_begin();
@@ -189,7 +189,7 @@ __ESBMC_HIDE:
 }
 
 int
-pthread_mutex_lock(pthread_mutex_t *mutex)
+pthread_mutex_lock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   __ESBMC_atomic_begin();
@@ -395,7 +395,7 @@ __ESBMC_HIDE:
 }
 
 int
-pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
+pthread_cond_wait_nocheck(pthread_cond_t *cond, pthread_mutex_t *mutex)
 {
 
   do_pthread_cond_wait(cond, mutex, 0);
