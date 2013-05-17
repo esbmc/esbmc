@@ -297,7 +297,7 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
   } else if (symname == "c::__ESBMC_terminate_thread") {
     intrinsic_terminate_thread(art);
   } else if (symname == "c::__ESBMC_get_thread_state") {
-    intrinsic_get_thread_state(call, art);
+    intrinsic_get_thread_state(func_call, art);
   } else if (symname == "c::__ESBMC_really_atomic_begin") {
     intrinsic_really_atomic_begin(art);
   } else if (symname == "c::__ESBMC_really_atomic_end") {
@@ -307,7 +307,7 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
   } else if (symname == "c::__ESBMC_switch_from_monitor") {
     intrinsic_switch_from_monitor(art);
   } else if (symname == "c::__ESBMC_register_monitor") {
-    intrinsic_register_monitor(call, art);
+    intrinsic_register_monitor(func_call, art);
   } else if (symname == "c::__ESBMC_kill_monitor") {
     intrinsic_kill_monitor(art);
   } else {
