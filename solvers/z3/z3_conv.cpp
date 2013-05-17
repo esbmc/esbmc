@@ -428,7 +428,6 @@ z3_convt::fixed_point(std::string v, unsigned width)
   const int precision = 1000000;
   std::string i, f, b, result;
   double integer, fraction, base;
-  int i_int, f_int;
 
   i = extract_magnitude(v, width);
   f = extract_fraction(v, width);
