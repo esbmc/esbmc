@@ -238,8 +238,6 @@ void goto_convertt::convert(
 {
   const irep_idt &statement=code.get_statement();
 
-  link_up_type_names((codet&)code, ns);
-
   if(statement=="block")
     convert_block(code, dest);
   else if(statement=="decl")
