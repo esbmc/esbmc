@@ -1645,9 +1645,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       const struct_union_data &data_ref =
         dynamic_cast<const struct_union_data &>(*data.source_value->type);
 
-      const struct_typet &struct_type = to_struct_type(expr.op0().type());
-
-      if (struct_type.members.size() == 0) {
+      if (data_ref.members.size() == 0) {
         // Quoting:
         //the expression does not contain any element,
         //so return only an empty struct
