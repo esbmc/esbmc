@@ -637,7 +637,7 @@ reachability_treet::get_ileave_direction_from_scheduling(const expr2tc &expr) co
 //end - H.Savino
 
 bool
-reachability_treet::check_thread_viable(int tid, const expr2tc &expr, bool quiet) const
+reachability_treet::check_thread_viable(unsigned int tid, const expr2tc &expr, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 

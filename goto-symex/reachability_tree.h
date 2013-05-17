@@ -152,7 +152,8 @@ public:
    *  @param quiet If false, will print to stdout why this thread is blocked
    *  @return True if thread is viable; false otherwise.
    */
-  bool check_thread_viable(int tid, const expr2tc &expr, bool quiet) const;
+  bool check_thread_viable(unsigned int tid, const expr2tc &expr,
+                           bool quiet) const;
 
   /**
    *  Analyze context switch point.
