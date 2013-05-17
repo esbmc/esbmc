@@ -32,6 +32,8 @@ public:
     options(opts),
     context(_context),
     ns(_context),
+    symex(funcs, ns, options, new symex_target_equationt(ns), _context,
+          _message_handler),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
@@ -45,6 +47,10 @@ public:
     else
       is_cpp = false;
 
+    ltl_results_seen[ltl_res_bad] = 0;
+    ltl_results_seen[ltl_res_failing] = 0;
+    ltl_results_seen[ltl_res_succeeding] = 0;
+    ltl_results_seen[ltl_res_good] = 0;
 
 #ifdef Z3
     runtime_z3_conv = new z3_convt(opts.get_bool_option("uw-model"),
@@ -72,6 +78,13 @@ public:
   uint _unsat_core;
   uint _number_of_assumptions;
   optionst &options;
+  enum {
+    ltl_res_good,
+    ltl_res_succeeding,
+    ltl_res_failing,
+    ltl_res_bad
+  };
+  int ltl_results_seen[4];
 
   unsigned int interleaving_number;
   unsigned int interleaving_failed;
@@ -150,6 +163,7 @@ protected:
   virtual void error_trace(
     prop_convt &prop_conv, symex_target_equationt &equation);
     bool run_thread();
+    int ltl_run_thread(symex_target_equationt *equation);
 };
 
 #endif

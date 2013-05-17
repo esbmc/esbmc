@@ -168,9 +168,14 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
+    bool base_case=
+      options.get_bool_option("base-case");
+
     if (!options.get_bool_option("no-unwinding-assertions"))
       claim(false_expr,
             "recursion unwinding assertion");
+    else if (base_case)
+			unwinding_recursion_assumption=true;
 
     cur_state->source.pc++;
     return;

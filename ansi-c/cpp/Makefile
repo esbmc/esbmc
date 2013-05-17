@@ -3,6 +3,7 @@ include $(ESBMCDIR)/config.inc
 
 SRCS=cpp.c compat.c hooks.c
 OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
+HOSTOBJS=$(HOSTOBJDIR)/y.tab.o $(HOSTOBJDIR)/lex.cpp.o
 HEADERS=cpp.h
 
 all: $(OBJDIR)/preproc.o
@@ -40,5 +41,8 @@ endif
 
 include $(ESBMCDIR)/common
 
-$(OBJDIR)/preproc.o: $(OBJS)
+$(HOSTOBJDIR)/preproc.o: $(HOSTOBJS)
+	$(HOSTBLOBGENLD) $(HOSTLDFLAGS) $^ -o $@ -r
+
+$(OBJDIR)/preproc.o: $(OBJS) | $(HOSTOBJDIR)/preproc.o
 	$(BLOBGENLD) $(LDFLAGS) $^ -o $@ -r

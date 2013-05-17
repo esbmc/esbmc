@@ -1,0 +1,15 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "QObject"
+
+class QAbstractAnimation : QObject{
+public:
+	QAbstractAnimation(){}
+	~QAbstractAnimation(){}
+};

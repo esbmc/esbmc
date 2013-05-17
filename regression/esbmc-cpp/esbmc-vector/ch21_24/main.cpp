@@ -3,6 +3,7 @@
 // make_heap and sort_heap.
 #include <iostream>
 #include <iterator> //Foi adicionada a biblioteca "iterator".
+#include <string>
 using std::cout;
 using std::endl;
 

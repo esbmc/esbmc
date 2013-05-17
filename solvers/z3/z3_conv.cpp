@@ -1,9 +1,9 @@
 /*******************************************************************
-   Module:
+Module:
 
-   Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
+Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
- \*******************************************************************/
+\*******************************************************************/
 
 #include <assert.h>
 #include <ctype.h>
@@ -24,6 +24,7 @@
 #include <prefix.h>
 #include <fixedbv.h>
 #include <base_type.h>
+#include <iomanip>
 
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
@@ -412,10 +413,19 @@ z3_convt::extract_fraction(std::string v, unsigned width)
   return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
 }
 
+#if 0
+std::string stringify(double x)
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << x;
+  return format_message.str();
+}
+#endif
+
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
-  const int precision = 10000;
+  const int precision = 1000000;
   std::string i, f, b, result;
   double integer, fraction, base;
   int i_int, f_int;
@@ -435,13 +445,12 @@ z3_convt::fixed_point(std::string v, unsigned width)
 
   fraction = fraction * precision;
 
-  i_int = (int)integer;
-  f_int = (int)fraction + 1;
-
-  if (fraction != 0)
-    result = itos(i_int * precision + f_int) + "/" + itos(precision);
-  else
-    result = itos(i_int);
+  if (fraction == 0)
+    result = double2string(integer);
+  else  {
+    int numerator = (integer*precision + fraction);
+    result = itos(numerator) + "/" + double2string(precision); 
+  }
 
   return result;
 }
@@ -1632,6 +1641,40 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 1));
       else
 	output = z3::to_expr(ctx, Z3_mk_bv2int(z3_ctx, output, 0));
+    } else if (is_struct_type(data.source_value)) {
+      const struct_union_data &data_ref =
+        dynamic_cast<const struct_union_data &>(*data.source_value->type);
+
+      const struct_typet &struct_type = to_struct_type(expr.op0().type());
+
+      if (struct_type.members.size() == 0) {
+        // Quoting:
+        //the expression does not contain any element,
+        //so return only an empty struct
+        output = source;
+        return;
+      }
+
+#if 0
+      // Partially converted thing for structs from master (during irep2),
+      // don't bother continue converting because it always seems to throw.
+      unsigned i = 0;
+      z3::expr struct_elem[struct_type.members.size() + 1],
+               struct_elem_inv[struct_type.members.size() + 1];
+
+      forall_types(data_ref.members, it) {
+        if (expr.op0().operands().size()==0) {
+          //the expression does not contain any element,
+          //so return only an empty struct
+          convert_bv(expr.op0(), bv);
+          return ;
+        } else {
+          throw new conv_error("size of the expression operands is unknown");
+        }
+        i++;
+      }
+#endif
+      throw new conv_error("unsupported type for byte_extract");
     } else {
       throw new conv_error("unsupported type for byte_extract");
     }
@@ -1660,6 +1703,23 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       }
 
       source = struct_elem_inv[num_elems];
+    } else if (is_array_type(data.source_value)) {
+      z3::expr idx;
+      convert_bv(data.source_offset, idx);
+      output = select(source, idx);
+    } else if (is_bv_type(data.source_value)) {
+      if (width >= upper)
+        source = z3::to_expr(ctx, Z3_mk_extract(ctx, upper, lower, source));
+      else
+        source = z3::to_expr(ctx, Z3_mk_extract(ctx, upper - lower, 0, source));
+    } else if (is_fixedbv_type(data.source_value)) {
+      if (width > data.type->get_type_width()) {
+        source = z3::to_expr(ctx,
+                  Z3_mk_extract(ctx, data.type->get_type_width()-1, 0, source));
+      } else {
+        source = z3::to_expr(ctx,
+                  Z3_mk_extract(ctx, upper, lower, source));
+      }
     }
 
     unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, source));
@@ -1727,13 +1787,22 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       throw new conv_error("failed to get width of byte_update operand");
 
     if (width_op0 > width_op2)
-      output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
+      output = z3::to_expr(ctx,
+                        Z3_mk_sign_ext(z3_ctx, (Width_op0 - width_op2), value));
     else
-      throw new conv_error("unsupported irep for conver_byte_update");
-  } else {
-    throw new conv_error("unsupported irep for conver_byte_update");
-  }
+      throw new conv_error("1unsupported irep for convert_byte_update");
 
+  } else if (is_array_type(data.source_value)) {
+    output = store(tuple, index, value); // XXX where's index coming from?
+  } else if (is_fixedbv_type(data.source_value)) {
+    width_op0 = data.source_value->type->get_width();
+    if (width_op0 > width_op2)
+      source = z3::to_expr(ctx,
+                        Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
+    } else {
+      throw new conv_error("2unsupported irep for convert_byte_update");
+    }
+  }
 }
 
 void
@@ -1900,7 +1969,8 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     if (from_width == to_integer_bits) {
       ; // No-op, already converted by higher caller
     } else if (from_width > to_integer_bits) {
-      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (from_width - 1), to_integer_bits, output));
+      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (to_integer_bits-1),
+                                              0, output));
     } else {
       assert(from_width < to_integer_bits);
       output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (to_integer_bits - from_width), output));
@@ -1946,10 +2016,8 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
 
       z3::expr ext = z3::to_expr(ctx,
           Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output));
-      z3::expr zero =
-        ctx.esbmc_int_val(0, to_fraction_bits - from_fraction_bits);
-
-      fraction = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, ext, zero));
+      z3::expr fraction = z3::to_expr(ctx,
+        Z3_mk_sign_ext(z3_ctx, (to_fraction_bits - from_fraction_bits), ext));
     }
     output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   } else {
@@ -1973,33 +2041,108 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
                is_fixedbv_type(cast.type))
 	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding && is_fixedbv_type(cast.from) &&
-               is_signedbv_type(cast.type))
-	output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
-      // XXXjmorse - there isn't a case here for if !int_encoding
-
-    } else if (from_width < to_width)      {
+               is_signedbv_type(cast.type)) {
+#if 0
+        // XXX jmorse -- this turned up from master during irep2, very unclear
+        // what the logic is, in that there's a change in behaviour if the
+        // cast operand has operands,
+        if (expr.op0().operands().size()) {
+    	    Z3_ast operands[2], is_less_than_one, is_integer;
+    	    operands[0] = Z3_mk_real2int(z3_ctx, bv);
+    	    operands[1] = convert_number_int(1, 0, true);
+				  is_integer = Z3_mk_is_int(z3_ctx, bv);
+    	    is_less_than_one = Z3_mk_ite(z3_ctx, 
+                Z3_mk_lt(z3_ctx, operands[0], convert_number_int(-1, 0, true)),
+    		              Z3_mk_true(z3_ctx),
+                              Z3_mk_false(z3_ctx));
+            bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, bv), 
+	                           operands[0], 
+                                   Z3_mk_ite(z3_ctx, is_less_than_one, 
+                                             Z3_mk_add(z3_ctx, 2, operands), 
+                                             operands[0]));
+        } else {
+#endif
+	  output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
+#if 0
+        }
+#endif
+      } else if (is_fixedbv_type2t(cast.from) && is_signedbv(cast.type)) {
+        // Non int-mode encoding.
+          z3_expr i, f;
+          i = z3::to_expr(ctx,
+                        Z3_mk_extract(ctx, (to_width - 1), from_width/2, bv));
+          f = z3::to_expr(ctx,
+                        Z3_mk_extract(z3_ctx, (to_width/2 - 1), 0, bv));
+          output = z3::ite(
+               mk_ge(i, ctx.bv_val(0, to_width/2), true), // cond
+               i, // true
+               // false, another ite
+               ite(((-f) == ctx.bv_val(0, to_width/2)), // cond
+                 i, // true
+                 (i + ctx.bv_val(1, to_width/2)) //false
+              ));
+          output = z3::to_expr(ctx, Z3_mk_sign_ext(ctx, (from_width/2),output));
+        }
+        else if (is_fixedbv_type(cast.from) && is_unsignedbv_type(cast.type)) {
+          output = z3::to_expr(ctx,
+                      Z3_mk_extract(ctx, (to_width-1), (from_width/2), output));
+          output = z3::to_expr(ctx,
+                      Z3_mk_zero_ext(ctx, (from_width/2), output));
+        }
+    } else if (from_width < to_width) {
       if (int_encoding &&
-          ((is_fixedbv_type(cast.type) &&
-            is_signedbv_type(cast.from))))
+          ((is_fixedbv_type(cast.type) && is_signedbv_type(cast.from))))
 	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding)
 	; // output = output
       else
-	output = z3::to_expr(ctx, Z3_mk_sign_ext(z3_ctx, (to_width - from_width), output));
-    } else if (from_width > to_width)     {
+	output = z3::to_expr(ctx,
+                       Z3_mk_sign_ext(z3_ctx, (to_width - from_width), output));
+    } else if (from_width > to_width) {
       if (int_encoding &&
-          ((is_signedbv_type(cast.from) &&
-            is_fixedbv_type(cast.type))))
+          ((is_signedbv_type(cast.from) && is_fixedbv_type(cast.type))))
 	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding &&
-               (is_fixedbv_type(cast.from) &&
-                is_signedbv_type(cast.type)))
-	output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
-      else if (int_encoding)
+               (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
+        if (!is_constant_fixedbv2t(cast.from)) {
+          output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
+        } else {
+          // Manual conversion for a fixedbvt
+
+          z3::expr op1, op2, is_less_than_one, is_integer;
+          op1 = z3::to_expr(ctx, Z3_mk_real2int(ctx, output));
+          op1 = ctx.esbmc_int_val(1);
+          is_integer = z3::to_expr(ctx, Z3_mk_is_int(ctx, output));
+          is_less_than_one = ite(mk_lt(op0, ctx.esbmc_int_val(-1), true),
+                                 ctx.bool_val(true),
+                                 ctx.bool_val(false));
+          output = ite(is_integer, op0, ite(
+                                            is_less_than_one,
+                                            op0 + op1,
+                                            op0));
+        }
+      } else if (int_encoding) {
 	; // output = output
-      else {
-	if (!to_width) to_width = config.ansi_c.int_width;
-	output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, (to_width - 1), 0, output));
+      } else if (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type)) {
+        if (!to_width)
+          to_width = config.ansi_c.int_width;
+
+        z3::expr i, f;
+        i = z3::to_expr(ctx,
+            Z3_mk_extract(ctx, (from_width - 1), to_width, output));
+        f = z3::to_expr(ctx,
+            Z3_mk_extract(ctx, (to_width - 1), 0, output));
+
+        output = ite(mk_ge(i,
+                           ctx.esbmc_int_val(0, from_width - to_width),
+                           true),
+                     i,
+                     ite(mk_gt((-f), ctx.esbmc_int_val(0, to_width), true),
+                         i + ctx.esbmc_int_val(1, from_width - to_width),
+                         i)
+          );
+      } else {
+        bv = Z3_mk_extract(z3_ctx, to_width-1, 0, args[0]);
       }
     }
   } else if (is_unsignedbv_type(cast.from)) {

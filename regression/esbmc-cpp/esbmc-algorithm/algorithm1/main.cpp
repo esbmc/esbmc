@@ -2,14 +2,16 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
-void myfunction (int i) {
+void myfunction (int& i) {
+  i++;
   cout << " " << i;
 }
 
 struct myclass {
-  void operator() (int i) {cout << " " << i;}
+  void operator() (int& i) {i--; cout << " " << i;}
 } myobject;
 
 int main () {
@@ -20,10 +22,16 @@ int main () {
 
   cout << "myvector contains:";
   for_each (myvector.begin(), myvector.end(), myfunction);
-
+  assert(myvector[0] == 11);
+  assert(myvector[1] == 21);
+  assert(myvector[2] == 31);
+  
   // or:
   cout << "\nmyvector contains:";
   for_each (myvector.begin(), myvector.end(), myobject);
+  assert(myvector[0] == 10);
+  assert(myvector[1] == 20);
+  assert(myvector[2] == 30);
 
   cout << endl;
 

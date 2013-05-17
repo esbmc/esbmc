@@ -486,10 +486,17 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.mode=cpp_typecheck.current_mode;
 
   // We always insert throw_decl to the begin of the function
-  if(declarator.throw_decl().statement() == "throw_decl")
+  if(declarator.throw_decl().statement()=="throw_decl")
+  {
     symbol.value.operands().insert(
-        symbol.value.operands().begin(),
-        declarator.throw_decl());
+      symbol.value.operands().begin(),
+      declarator.throw_decl());
+
+    // Insert flag to end of constructor
+    // so we know when to remove throw_decl
+    symbol.value.operands().push_back(
+      codet("throw_decl_end"));
+  }
 
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
@@ -507,8 +514,8 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
-                        is_number(symbol.type) &&
-                        symbol.value.id() == "constant");
+                      is_number(symbol.type) &&
+                      symbol.value.id() == "constant");
 
       if(cpp_typecheck.cpp_scopes.current_scope().is_global_scope())
       {
@@ -568,12 +575,6 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       }
     }
   }
-//  if(!is_code && cpp_typecheck.cpp_scopes.current_scope().contains(base_name))
-//  {
-//    std::string error(base_name.c_str());
-//    error = "`" + error + "' already in scope";
-//    throw error.c_str();
-//  }
 
   // put into scope
   cpp_idt &identifier=
@@ -594,7 +595,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(is_code && declarator.type().id()!="template")
       cpp_typecheck.add_function_body(new_symbol);
 
-    if(!is_code)
+    if(!is_code && !declarator.find("name").get_bool("catch_decl"))
       cpp_typecheck.convert_initializer(*new_symbol);
   }
 

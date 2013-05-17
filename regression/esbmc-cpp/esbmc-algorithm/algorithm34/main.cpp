@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -12,6 +13,11 @@ int main () {
   myvector.resize(9);
 
   reverse_copy (myints, myints+9, myvector.begin());
+  assert(myvector[0] == 9);
+  assert(myvector[1] == 8);
+  assert(myvector[2] == 7);
+  assert(myvector[3] == 6);
+  assert(myvector[4] == 5);
 
   // print out content:
   cout << "myvector contains:";

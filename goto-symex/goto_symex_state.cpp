@@ -111,6 +111,8 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
   {
     // Keeping additional with data achieves nothing; no code in ESBMC inspects
     // with chains to extract data from them.
+    // FIXME: actually benchmark this and look at timing results, it may be
+    // important benchmarks (i.e. TACAS) work better with some propagation
     return false;
     with_counter++;
   }
@@ -122,7 +124,6 @@ bool goto_symex_statet::constant_propagation(const expr2tc &expr) const
 
     return true;
   }
-
   else if (is_constant_union2t(expr))
   {
     const expr2tc *e = expr->get_sub_expr(0);
@@ -167,10 +168,8 @@ bool goto_symex_statet::constant_propagation_reference(const expr2tc &expr)const
   {
     return constant_propagation_reference(to_member2t(expr).source_value);
   }
-#if 1
   else if (is_constant_string2t(expr))
     return true;
-#endif
 
   return false;
 }

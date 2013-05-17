@@ -220,6 +220,19 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       it!=arguments.end();
       it++)
   {
+    if(inductive_step)
+    {
+      // Fix for of arguments
+      exprt arg=*it;
+      arg.identifier(arg.find("#identifier").id());
+      arg.id("symbol");
+      arg.remove("#identifier");
+      arg.remove("#base_name");
+      arg.remove("#location");
+
+      get_struct_components(arg, state);
+    }
+
     const irep_idt &identifier=it->get_identifier();
     assert(identifier!="");
     arg_ids.push_back(identifier);

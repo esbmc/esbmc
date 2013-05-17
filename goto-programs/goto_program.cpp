@@ -126,9 +126,9 @@ std::ostream& goto_programt::output_instruction(
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
-      out << "ASSUME ";
+      out << "  ASSUME ";
     else
-      out << "ASSERT ";
+      out << "  ASSERT ";
 
     {
       out << from_expr(ns, identifier, it->guard);
@@ -210,6 +210,24 @@ std::ostream& goto_programt::output_instruction(
       {
         if(i) out << ", ";
         out << ref.exception_list[i];
+      }
+      out << ")";
+    }
+
+    out << std::endl;
+    break;
+
+  case THROW_DECL_END:
+    out << "THROW_DECL_END (";
+
+    {
+      const irept::subt &throw_list=
+        it->code.find("throw_list").get_sub();
+
+      for(unsigned int i=0; i<throw_list.size(); ++i)
+      {
+        if(i) out << ", ";
+        out << throw_list[i].id();
       }
       out << ")";
     }

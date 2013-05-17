@@ -341,11 +341,11 @@ void goto_convertt::do_malloc(
   migrate_expr(assign_expr, t_d_i->code);
   t_d_i->location=location;
 #endif
-
+  
   //the k-induction does not support dynamic memory allocation yet
   if (inductive_step)
   {
-    print_msg_mem_alloc(lhs);
+    print_msg_mem_alloc();
     assert(0);
   }
 }
@@ -491,17 +491,19 @@ void goto_convertt::cpp_new_initializer(
 
   if(initializer.is_not_nil())
   {
-    if(rhs.id()=="cpp_new[]")
+    if(rhs.statement()=="cpp_new[]")
     {
       // build loop
     }
-    else // cpp_new
+    else if(rhs.statement()=="cpp_new")
     {
       exprt deref_new("dereference", rhs.type().subtype());
       deref_new.copy_to_operands(lhs);
       replace_new_object(deref_new, initializer);
       convert(to_code(initializer), dest);
     }
+    else
+      assert(0);
   }
 }
 
@@ -758,7 +760,6 @@ void goto_convertt::do_function_call_symbol(
   }
 
   bool is_assume=identifier==CPROVER_PREFIX "assume";
-
   bool is_assert=identifier=="c::assert";
 
   if(is_assume || is_assert)

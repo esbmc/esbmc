@@ -7,14 +7,23 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 \*******************************************************************/
 
 #include <sstream>
+#include <iomanip>
 
 #include "z3_conv.h"
 
-std::string z3_convt::itos(int i)
+std::string
+z3_convt::double2string(double d) const
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << d;
+  return format_message.str();
+}
+
+std::string
+z3_convt::itos(int i)
 {
   std::stringstream s;
   s << i;
-
   return s.str();
 }
 

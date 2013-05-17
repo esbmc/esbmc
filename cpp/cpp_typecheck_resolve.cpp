@@ -146,14 +146,14 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     }
   }
 
-  disambiguate(identifiers, fargs);
+  disambiguate_functions(identifiers, fargs);
 
   // there should only be one left, or we have failed to disambiguate
   if(identifiers.size()==1)
   {
     // instantiate that one
     exprt e=*identifiers.begin();
-    assert(e.id()=="function_template_instance");
+    assert(e.id()=="template_function_instance");
 
     const symbolt &template_symbol=
       cpp_typecheck.lookup(e.type().get("#template"));
@@ -414,7 +414,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
       else
       {
         // this has to be a method
-        if(identifier.is_method && !fargs.in_use)
+        if(identifier.is_method)
           e = cpp_symbol_expr(cpp_typecheck.lookup(identifier.identifier));
         else
           e.make_nil();
@@ -476,7 +476,7 @@ exprt cpp_typecheck_resolvet::convert_identifier(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::filter
 
 Inputs:
 
@@ -526,7 +526,7 @@ void cpp_typecheck_resolvet::filter(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::exact_match_functions
 
 Inputs:
 
@@ -536,10 +536,50 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::disambiguate(
+void cpp_typecheck_resolvet::exact_match_functions(
   resolve_identifierst &identifiers,
   const cpp_typecheck_fargst &fargs)
 {
+  if(!identifiers.size()) return;
+  if(!fargs.in_use) return;
+
+  resolve_identifierst old_identifiers;
+  old_identifiers.swap(identifiers);
+
+  identifiers.clear();
+
+  // put in the ones that match precisely
+  for(resolve_identifierst::const_iterator
+      it=old_identifiers.begin();
+      it!=old_identifiers.end();
+      it++)
+  {
+    unsigned distance;
+    if(disambiguate_functions(*it, distance, fargs))
+      if(distance<=1)
+        identifiers.push_back(*it);
+  }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::disambiguate_functions
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheck_resolvet::disambiguate_functions(
+  resolve_identifierst &identifiers,
+  const cpp_typecheck_fargst &fargs)
+{
+  if(identifiers.size()<2)
+    return;
+
   resolve_identifierst old_identifiers;
   old_identifiers.swap(identifiers);
 
@@ -553,7 +593,7 @@ void cpp_typecheck_resolvet::disambiguate(
   {
     unsigned args_distance;
 
-    if(disambiguate(*it, args_distance, fargs))
+    if(disambiguate_functions(*it, args_distance, fargs))
     {
       unsigned template_distance=0;
 
@@ -590,8 +630,8 @@ void cpp_typecheck_resolvet::disambiguate(
     // try to further disambiguate functions
 
     for(resolve_identifierst::iterator
-        it1 = identifiers.begin();
-        it1 != identifiers.end();
+        it1=identifiers.begin();
+        it1!=identifiers.end();
         it1++)
     {
       if(it1->type().id()!="code") continue;
@@ -897,6 +937,14 @@ exprt cpp_typecheck_resolvet::do_builtin(
     cpp_typecheck.cpp_scopes.get_root_scope().print(cpp_typecheck.str);
     cpp_typecheck.warning();
   }
+  else if(base_name=="current_scope")
+  {
+    dest=exprt("constant", typet("empty"));
+    cpp_typecheck.str << "Scope in location " << location
+                      << ": "
+                      << original_scope->prefix;
+    cpp_typecheck.warning();
+  }
   else
   {
     cpp_typecheck.err_location(location);
@@ -922,7 +970,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::resolve_scope(
+cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
   const cpp_namet &cpp_name,
   std::string &base_name,
   cpp_template_args_non_tct &template_args)
@@ -930,7 +978,7 @@ void cpp_typecheck_resolvet::resolve_scope(
   assert(cpp_name.id()=="cpp-name");
   assert(!cpp_name.get_sub().empty());
 
-  cpp_scopet &original_scope=cpp_typecheck.cpp_scopes.current_scope();
+  original_scope=&cpp_typecheck.cpp_scopes.current_scope();
   location=cpp_name.location();
 
   irept::subt::const_iterator pos=cpp_name.get_sub().begin();
@@ -945,38 +993,39 @@ void cpp_typecheck_resolvet::resolve_scope(
     recursive=false;
   }
 
-  base_name="";
+  std::string final_base_name="";
   template_args.make_nil();
 
   while(pos!=cpp_name.get_sub().end())
   {
     if(pos->id()=="name")
-      base_name+=pos->get_string("identifier");
+      final_base_name+=pos->get_string("identifier");
     else if(pos->id()=="template_args")
-    {
-      // typecheck the template arguments in the context
-      // of the original scope
-      exprt tmp = static_cast<const exprt&>(*pos);
-      cpp_scopet& backup_scope =
-        cpp_typecheck.cpp_scopes.current_scope();
-      cpp_typecheck.cpp_scopes.go_to(original_scope);
-
-      cpp_typecheck.typecheck_template_args(tmp);
-      already_typechecked(tmp);
-      template_args.swap(tmp);
-      cpp_typecheck.cpp_scopes.go_to(backup_scope);
-    }
+      template_args=to_cpp_template_args_non_tc(*pos);
     else if(pos->id()=="::")
     {
       cpp_scopest::id_sett id_set;
 
       if(template_args.is_not_nil())
       {
-        cpp_typecheck.cpp_scopes.get_ids(base_name,cpp_idt::TEMPLATE, id_set, !recursive);
+        cpp_typecheck.cpp_scopes.get_ids(final_base_name,cpp_idt::TEMPLATE, id_set, !recursive);
+
+        symbolt template_symbol=
+          cpp_typecheck.context.symbols.find((*id_set.begin())->identifier)->second;
+
+        cpp_template_args_tct template_args_tc;
+        template_args_tc=
+          cpp_typecheck.typecheck_template_args(
+            location,
+            template_symbol,
+            template_args);
 
         const symbolt& symb_tmpl=
-          cpp_typecheck.instantiate_template(cpp_name.location(),
-            (*id_set.begin())->identifier, template_args);
+          cpp_typecheck.instantiate_template(
+            cpp_name.location(),
+            template_symbol,
+            template_args_tc,
+            template_args_tc);
 
         cpp_typecheck.cpp_scopes.go_to(
           cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
@@ -984,7 +1033,7 @@ void cpp_typecheck_resolvet::resolve_scope(
       }
       else
       {
-        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, !recursive);
+        cpp_typecheck.cpp_scopes.get_ids(final_base_name, id_set, !recursive);
 
         filter_for_named_scopes(id_set);
 
@@ -992,29 +1041,28 @@ void cpp_typecheck_resolvet::resolve_scope(
         {
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
           cpp_typecheck.err_location(location);
-          cpp_typecheck.str << "scope `" << base_name << "' not found";
+          cpp_typecheck.str << "scope `" << final_base_name << "' not found";
           throw 0;
         }
-        else if(id_set.size()==1)
-        {
-          cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
-        }
-        else
+        else if(id_set.size()>=2)
         {
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
           cpp_typecheck.err_location(location);
           cpp_typecheck.str << "scope `"
-                            << base_name << "' is ambiguous";
+                            << final_base_name << "' is ambiguous";
           throw 0;
         }
+
+        assert(id_set.size()==1);
+        cpp_typecheck.cpp_scopes.go_to(**id_set.begin());
       }
 
       // we start from fresh
-      base_name.clear();
+      final_base_name.clear();
     }
     else if(pos->id()=="operator")
     {
-      base_name+="operator";
+      final_base_name+="operator";
 
       irept::subt::const_iterator next=pos+1;
       assert(next != cpp_name.get_sub().end());
@@ -1031,16 +1079,237 @@ void cpp_typecheck_resolvet::resolve_scope(
         typet op_name;
         op_name.swap(next_ir);
         cpp_typecheck.typecheck_type(op_name);
-        base_name+="("+cpp_type2name(op_name)+")";
+        final_base_name+="("+cpp_type2name(op_name)+")";
         pos++;
       }
 
     }
     else
-      base_name+=pos->id_string();
+      final_base_name+=pos->id_string();
 
     pos++;
   }
+
+  base_name=final_base_name;
+
+  return cpp_typecheck.cpp_scopes.current_scope();
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheck_resolvet::disambiguate_template_classes
+
+Inputs:
+
+Outputs:
+
+Purpose: disambiguate partial specialization
+
+\*******************************************************************/
+
+const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
+  const irep_idt &base_name,
+  const cpp_scopest::id_sett &id_set,
+  const cpp_template_args_non_tct &full_template_args)
+{
+  if(id_set.empty())
+  {
+    cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+    cpp_typecheck.err_location(location);
+    cpp_typecheck.str << "template scope `"
+                      << base_name << "' not found";
+    throw 0;
+  }
+
+  std::set<irep_idt> primary_templates;
+
+  for(cpp_scopest::id_sett::const_iterator
+      it=id_set.begin();
+      it!=id_set.end();
+      it++)
+  {
+    const irep_idt id=(*it)->identifier;
+
+    const symbolt &s=cpp_typecheck.lookup(id);
+    if(!s.type.get_bool("is_template")) continue;
+
+    const cpp_declarationt &cpp_declaration=to_cpp_declaration(s.type);
+    if(!cpp_declaration.is_class_template()) continue;
+
+    irep_idt specialization_of=cpp_declaration.get_specialization_of();
+    if(specialization_of!="")
+      primary_templates.insert(specialization_of);
+    else
+      primary_templates.insert(id);
+  }
+
+  assert(primary_templates.size()!=0);
+
+  if(primary_templates.size()>=2)
+  {
+    cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+    cpp_typecheck.err_location(location);
+    cpp_typecheck.str << "template scope `"
+                      << base_name << "' is ambiguous";
+    throw 0;
+  }
+
+  assert(primary_templates.size()==1);
+
+  const symbolt &primary_template_symbol=
+    cpp_typecheck.lookup(*primary_templates.begin());
+
+  // We typecheck the template arguments in the context
+  // of the original scope!
+  cpp_template_args_tct full_template_args_tc;
+
+  {
+    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+
+    cpp_typecheck.cpp_scopes.go_to(*original_scope);
+
+    // use template type of 'primary template'
+    full_template_args_tc=
+      cpp_typecheck.typecheck_template_args(
+        location,
+        primary_template_symbol,
+        full_template_args);
+    // go back to where we used to be
+  }
+
+  // find any matches
+
+  std::vector<matcht> matches;
+
+  // the baseline
+  matches.push_back(
+    matcht(full_template_args_tc, full_template_args_tc,
+           primary_template_symbol.name));
+
+  for(cpp_scopest::id_sett::const_iterator
+      it=id_set.begin();
+      it!=id_set.end();
+      it++)
+  {
+    const irep_idt id=(*it)->identifier;
+    const symbolt &s=cpp_typecheck.lookup(id);
+
+    irep_idt specialization_of=s.type.get("specialization_of");
+    if(specialization_of=="") continue;
+
+    const cpp_declarationt &cpp_declaration=
+      to_cpp_declaration(s.type);
+
+    const cpp_template_args_non_tct &partial_specialization_args=
+      cpp_declaration.partial_specialization_args();
+
+    // alright, set up template arguments as 'unassigned'
+
+    cpp_saved_template_mapt saved_map(cpp_typecheck.template_map);
+
+    cpp_typecheck.template_map.build_unassigned(
+      cpp_declaration.template_type());
+
+    // iterate over template instance
+    assert(full_template_args_tc.arguments().size()==
+           partial_specialization_args.arguments().size());
+
+    // we need to do this in the right scope
+
+    cpp_scopet *template_scope=
+      static_cast<cpp_scopet *>(
+        cpp_typecheck.cpp_scopes.id_map[id]);
+
+    if(template_scope==NULL)
+    {
+      cpp_typecheck.err_location(location);
+      cpp_typecheck.str << "template identifier: " << id << std::endl;
+      throw "class template instantiation error";
+    }
+
+    // enter the scope of the template
+    cpp_typecheck.cpp_scopes.go_to(*template_scope);
+
+    for(unsigned i=0; i<full_template_args_tc.arguments().size(); i++)
+    {
+      if(full_template_args_tc.arguments()[i].id()=="type")
+        guess_template_args(partial_specialization_args.arguments()[i].type(),
+                            full_template_args_tc.arguments()[i].type());
+      else
+        guess_template_args(partial_specialization_args.arguments()[i],
+                            full_template_args_tc.arguments()[i]);
+    }
+
+    // see if that has worked out
+
+    cpp_template_args_tct guessed_template_args=
+      cpp_typecheck.template_map.build_template_args(
+        cpp_declaration.template_type());
+
+    if(!guessed_template_args.has_unassigned())
+    {
+      // check: we can now typecheck the partial_specialization_args
+
+      cpp_template_args_tct partial_specialization_args_tc=
+        cpp_typecheck.typecheck_template_args(
+          location,
+          primary_template_symbol,
+          partial_specialization_args);
+
+      // if these match the arguments, we have a match
+
+      assert(partial_specialization_args_tc.arguments().size()==
+             full_template_args_tc.arguments().size());
+
+      if(partial_specialization_args_tc==
+         full_template_args_tc)
+      {
+        matches.push_back(matcht(
+          guessed_template_args, full_template_args_tc, id));
+      }
+    }
+  }
+
+  assert(!matches.empty());
+
+  std::sort(matches.begin(), matches.end());
+
+  #if 0
+  for(std::vector<matcht>::const_iterator
+      m_it=matches.begin();
+      m_it!=matches.end();
+      m_it++)
+  {
+    std::cout << "M: " << m_it->cost
+              << " " << m_it->id << std::endl;
+  }
+
+  std::cout << std::endl;
+  #endif
+
+  const matcht &match=*matches.begin();
+
+  const symbolt &choice=
+    cpp_typecheck.lookup(match.id);
+
+  // build instance
+  const symbolt &instance=
+    cpp_typecheck.instantiate_template(
+      location,
+      choice,
+      match.specialization_args,
+      match.full_args);
+
+  if(instance.type.id()!="struct" &&
+     instance.type.id()!="incomplete_struct")
+  {
+    cpp_typecheck.err_location(location);
+    cpp_typecheck.str << "template `"
+                      << base_name << "' is not a class";
+    throw 0;
+  }
+
+  return instance;
 }
 
 /*******************************************************************\
@@ -1143,7 +1412,7 @@ void cpp_typecheck_resolvet::show_identifiers(
         out << "constructor ";
         id="";
       }
-      else if(id_expr.id()=="function_template_instance")
+      else if(id_expr.id()=="template_function_instance")
       {
         out << "symbol ";
       }
@@ -1155,6 +1424,7 @@ void cpp_typecheck_resolvet::show_identifiers(
 
       if(id_expr.type().get_bool("is_template"))
       {
+        out << cpp_typecheck.lookup(to_symbol_expr(id_expr)).base_name;
       }
       else if(id_expr.type().id()=="code")
       {
@@ -1191,7 +1461,14 @@ void cpp_typecheck_resolvet::show_identifiers(
         const symbolt &symbol=cpp_typecheck.lookup(to_symbol_expr(id_expr));
         out << " (" << symbol.location << ")";
       }
-      else if(id_expr.id()=="function_template_instance")
+      else if(id_expr.id()=="member")
+      {
+        const symbolt *symbol;
+        bool found=cpp_typecheck.lookup(id_expr.component_name(),symbol);
+        if(!found)
+          out << " (" << symbol->location << ")";
+      }
+      else if(id_expr.id()=="template_function_instance")
       {
         const symbolt &symbol=cpp_typecheck.lookup(id_expr.type().get("#template"));
         out << " (" << symbol.location << ")";
@@ -1333,6 +1610,7 @@ exprt cpp_typecheck_resolvet::resolve(
   {
     if(!fail_with_exception) return nil_exprt();
 
+    cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
     cpp_typecheck.err_location(location);
     cpp_typecheck.str
       << "symbol `"
@@ -1350,6 +1628,7 @@ exprt cpp_typecheck_resolvet::resolve(
     }
 
     //cpp_typecheck.cpp_scopes.get_root_scope().print(std::cout);
+    cpp_typecheck.cpp_scopes.current_scope().print(std::cout);
     throw 0;
   }
 
@@ -1357,12 +1636,76 @@ exprt cpp_typecheck_resolvet::resolve(
 
   if(template_args.is_not_nil())
   {
-    // methods and functions
-    convert_identifiers(
-      id_set, want, fargs, identifiers);
+    // first figure out if we are doing functions/methods or
+    // classes
+    bool have_classes=false, have_methods=false;
 
-    apply_template_args(
-      identifiers, template_args, fargs);
+    for(cpp_scopest::id_sett::const_iterator
+        it=id_set.begin();
+        it!=id_set.end();
+        it++)
+    {
+      const irep_idt id=(*it)->identifier;
+      const symbolt &s=cpp_typecheck.lookup(id);
+      assert(s.type.get_bool("is_template"));
+      if(to_cpp_declaration(s.type).is_class_template())
+        have_classes=true;
+      else
+        have_methods=true;
+    }
+
+    if(want==BOTH && have_classes && have_methods)
+    {
+      if(!fail_with_exception) return nil_exprt();
+
+      cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
+      cpp_typecheck.err_location(location);
+      cpp_typecheck.str
+        << "template symbol `"
+        << base_name << "' is ambiguous";
+      throw 0;
+    }
+
+    // We're classes
+    if(want==TYPE || have_classes)
+    {
+      // Look for class specialization
+      bool spec=false;
+      for(cpp_scopest::id_sett::const_iterator
+        it=id_set.begin();
+        it!=id_set.end();
+        it++)
+      {
+        const irep_idt id=(*it)->identifier;
+
+        const symbolt &s=cpp_typecheck.lookup(id);
+        if(!s.type.get_bool("is_template")) continue;
+
+        const cpp_declarationt &cpp_declaration=to_cpp_declaration(s.type);
+        if(!cpp_declaration.is_class_template()) continue;
+
+        irep_idt specialization_of=cpp_declaration.get_specialization_of();
+        if(specialization_of!="")
+          spec=true;
+      }
+
+      // Class specialization
+      if(spec)
+      {
+        const symbolt &instance=
+          disambiguate_template_classes(base_name, id_set, template_args);
+        identifiers.push_back(exprt("type", symbol_typet(instance.name)));
+      }
+    }
+
+    if(!identifiers.size())
+    {
+      convert_identifiers(
+        id_set, want, fargs, identifiers);
+
+      apply_template_args(
+        identifiers, template_args, fargs);
+    }
   }
   else
   {
@@ -1374,24 +1717,33 @@ exprt cpp_typecheck_resolvet::resolve(
   if(want==VAR)
     make_constructors(identifiers);
 
-  if(identifiers.size() != 1)
+  if(identifiers.size()!=1)
     filter(identifiers, want);
 
   exprt result;
 
-  // We may need to disambiguate functions,
-  // but don't want templates yet
+  // We disambiguate functions
   resolve_identifierst new_identifiers=identifiers;
   remove_templates(new_identifiers);
 
-  disambiguate(new_identifiers, fargs);
+  // we only want _exact_ matches, without templates!
+  exact_match_functions(new_identifiers, fargs);
 
-  // no matches? Try again with function template guessing.
-  if(new_identifiers.empty() && template_args.is_nil())
+  // no exact matches? Try again with function template guessing.
+  if(new_identifiers.empty())
   {
     new_identifiers=identifiers;
-    guess_function_template_args(new_identifiers, fargs);
+
+    if(template_args.is_nil())
+    {
+      guess_function_template_args(new_identifiers, fargs);
+
+      if(new_identifiers.empty())
+        new_identifiers=identifiers;
+    }
   }
+
+  disambiguate_functions(new_identifiers, fargs);
 
   remove_duplicates(new_identifiers);
 
@@ -1602,10 +1954,48 @@ void cpp_typecheck_resolvet::guess_template_args(
 
     if(cpp_name.has_template_args())
     {
-      // this could be s.th. like my_template<T>, and we need
-      // to match 'T'. Then 'desired_type' has to be a template instance.
+      std::string base_name;
+      cpp_template_args_non_tct template_args;
+      resolve_scope(cpp_name, base_name, template_args);
 
-      // TODO
+      const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
+      cpp_template_args_non_tct instantiated_args=
+        to_cpp_template_args_non_tc(s.type.find("#template_arguments"));
+
+      cpp_template_args_non_tct::argumentst args=template_args.arguments();
+
+      for(unsigned i=0; i<args.size();++i)
+      {
+        resolve_scope(to_cpp_name(args[i].type()),base_name, template_args);
+
+        cpp_scopest::id_sett id_set;
+        cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
+
+        // alright, rummage through these
+        for(cpp_scopest::id_sett::const_iterator
+            it=id_set.begin();
+            it!=id_set.end();
+            it++)
+        {
+          const cpp_idt &id=**it;
+
+          // template argument?
+          if(id.id_class==cpp_idt::TEMPLATE_ARGUMENT)
+          {
+            // see if unassigned
+            typet &t=cpp_typecheck.template_map.type_map[id.identifier];
+
+            if(t.id()=="unassigned")
+            {
+              t=instantiated_args.arguments()[i].type();
+
+              // remove const, volatile (these can be added in the call)
+              t.remove("#constant");
+              t.remove("#volatile");
+            }
+          }
+        }
+      }
     }
     else
     {
@@ -1632,6 +2022,7 @@ void cpp_typecheck_resolvet::guess_template_args(
           {
             // see if unassigned
             typet &t=cpp_typecheck.template_map.type_map[id.identifier];
+
             if(t.id()=="unassigned")
             {
               t=desired_type;
@@ -1721,9 +2112,9 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   const cpp_declarationt &cpp_declaration=
     to_cpp_declaration(tmp);
 
-  // Template classes require explicit template arguments,
+  // Class templates require explicit template arguments,
   // no guessing!
-  if(cpp_declaration.is_template_class())
+  if(cpp_declaration.is_class_template())
     return nil_exprt();
 
   // we need function arguments for guessing
@@ -1805,7 +2196,6 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   }
 
   // see if that has worked out
-
   cpp_template_args_tct template_args=
     cpp_typecheck.template_map.build_template_args(
       cpp_declaration.template_type());
@@ -1827,10 +2217,10 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
 
   // Seems we got an instance for all parameters. Let's return that.
 
-  exprt function_template_instance(
-    "function_template_instance", function_type);
+  exprt template_function_instance(
+    "template_function_instance", function_type);
 
-  return function_template_instance;
+  return template_function_instance;
 }
 
 /*******************************************************************\
@@ -1870,35 +2260,38 @@ void cpp_typecheck_resolvet::apply_template_args(
 
   // We typecheck the template arguments in the context
   // of the original scope!
-//  cpp_template_args_tct template_args_tc;
-//
-//  {
-//    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
-//
-//    cpp_typecheck.cpp_scopes.go_to(*original_scope);
-//
-//    template_args_tc=
-//      cpp_typecheck.typecheck_template_args(
-//        location,
-//        template_symbol,
-//        template_args_non_tc);
-//    // go back to where we used to be
-//  }
+  cpp_template_args_tct template_args_tc;
+
+  {
+    cpp_save_scopet save_scope(cpp_typecheck.cpp_scopes);
+
+    cpp_typecheck.cpp_scopes.go_to(*original_scope);
+
+    template_args_tc=
+      cpp_typecheck.typecheck_template_args(
+        location,
+        template_symbol,
+        template_args_non_tc);
+    // go back to where we used to be
+  }
 
   // We never try 'unassigned' template arguments.
-//  if(template_args_tc.has_unassigned())
-//    assert(false);
+  if(template_args_tc.has_unassigned())
+    assert(false);
 
   // a template is always a declaration
   const cpp_declarationt &cpp_declaration=
     to_cpp_declaration(template_symbol.type);
 
-  // is it a template class or function?
-  if(cpp_declaration.is_template_class())
+  // is it a class template or function template?
+  if(cpp_declaration.is_class_template())
   {
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.identifier(), template_args_non_tc);
+        location,
+        template_symbol,
+        template_args_tc,
+        template_args_tc);
 
     expr=exprt("type", symbol_typet(new_symbol.name));
     expr.location()=location;
@@ -1908,7 +2301,10 @@ void cpp_typecheck_resolvet::apply_template_args(
     // must be a function, maybe method
     const symbolt &new_symbol=
       cpp_typecheck.instantiate_template(
-        location, expr.identifier(), template_args_non_tc);
+        location,
+        template_symbol,
+        template_args_tc,
+        template_args_tc);
 
     // check if it is a method
     const code_typet &code_type=to_code_type(new_symbol.type);
@@ -1945,17 +2341,17 @@ void cpp_typecheck_resolvet::apply_template_args(
 
 /*******************************************************************\
 
-Function: cpp_typecheck_resolvet::disambiguate
+Function: cpp_typecheck_resolvet::disambiguate_functions
 
 Inputs:
 
 Outputs:
-/
+
 Purpose:
 
 \*******************************************************************/
 
-bool cpp_typecheck_resolvet::disambiguate(
+bool cpp_typecheck_resolvet::disambiguate_functions(
   const exprt &expr,
   unsigned &args_distance,
   const cpp_typecheck_fargst &fargs)
@@ -2061,7 +2457,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
         const typet &type=pcomp.type();
         assert(type.id()!="struct");
         if(type.id()=="symbol")
-          identifier = type.identifier();
+          identifier=type.identifier();
         else
           continue;
       }
@@ -2097,13 +2493,13 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     else if(id.id_class==cpp_scopet::TEMPLATE_ARGUMENT)
     {
       // a template argument may be a scope: it could
-      // be instantiated with a class/struct
+      // be instantiated with a class/struct/union/enum
       exprt e=cpp_typecheck.template_map.lookup(id.identifier);
 
       if(e.id()!="type")
         continue; // expressions are definitively not a scope
 
-      if(e.type().id() == "symbol")
+      if(e.type().id()=="symbol")
       {
         symbol_typet type=to_symbol_type(e.type());
 
@@ -2113,9 +2509,14 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
 
           const symbolt &symbol=cpp_typecheck.lookup(identifier);
           assert(symbol.is_type);
+
           if(symbol.type.id()=="symbol")
             type=to_symbol_type(symbol.type);
-          if(symbol.type.id()=="struct")
+          if(symbol.type.id()=="struct"||
+                  symbol.type.id()=="incomplete_struct" ||
+                  symbol.type.id()=="union" ||
+                  symbol.type.id()=="incomplete_union" ||
+                  symbol.type.id()=="c_enum")
           {
             // this is a scope, too!
             cpp_idt &class_id=

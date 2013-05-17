@@ -12,10 +12,9 @@
 
 #include "definitions.h"
 #include "cstring"
-#include "ostream"
-#include "istream"
 #include "cassert"
 #include "iostream"
+#include "stdexcept"
 
 size_t npos;
 
@@ -25,6 +24,8 @@ template<class charT> struct char_traits;
 
 class string {
 public:
+  char *str;
+  int _size;
 
 	class const_iterator;
 	class iterator {
@@ -351,6 +352,7 @@ public:
 	bool operator==(const char* lhs, string& rhs);
 	bool operator==(string& lhs, const char* rhs);
 	bool operator!=(string& a);
+	bool operator!=(const string& a);
 	bool operator!=(const char* lhs);
 	bool operator!=(const char* lhs, string& rhs);
 	bool operator!=(string& lhs, const char* rhs);
@@ -367,10 +369,9 @@ public:
 	bool operator<=(string& a);
 	bool operator<=(const char* lhs);
 	string& operator=(string& str);
-	string& operator=(const string& str);
 	string& operator=(const char* s);
-	string& operator=(char* s);
 	string& operator=(char c);
+    string& operator=(const string& str);
 	string& operator+=(string& s);
 	string& operator +=(const char* s);
 	string& operator+=(char s);
@@ -427,9 +428,10 @@ public:
 		__ESBMC_assert(n <= sLen, "string overflow");
 		__ESBMC_assert(n > 0, "string overflow");
 		__ESBMC_assert(s != NULL,
-				"The parameter must to be different than NULL");
-		if ((pos > sLen) || (n > (sLen - pos)))
-			throw("out_of_range");
+		    "The parameter must to be different than NULL");
+		if ((pos > sLen) || (pos > n))
+		  throw out_of_range();
+
 
 		int rhsLen = n;
 		int totalLen = this->_size + rhsLen;
@@ -450,10 +452,12 @@ public:
 	int size() const;
 	size_t rfind(string& s, size_t pos = npos) const;
 	size_t rfind(const char* s, size_t pos = npos) const;
+	size_t rfind(char* s) const;
 	size_t rfind(char c, size_t pos = npos) const;
 	size_t rfind(const char* s, size_t pos = 0, size_t n) const;
 	size_t find_last_of(const string& s, size_t pos = npos) const;
 	size_t find_last_of(const char* s, size_t pos = npos) const;
+	size_t find_last_of(char* s) const;
 	size_t find_last_of(char c, size_t pos = npos) const;
 	size_t find_first_not_of(const string& s, size_t pos = 0) const;
 	size_t find_first_not_of(const char* s, size_t pos = 0) const;
@@ -783,8 +787,8 @@ public:
 	}
 
 private:
-	char *str;
-	int _size;
+
+
 };
 }
 
@@ -805,6 +809,7 @@ string::string(char *s) {
 
 string::string(const char * s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < strlen(s), "string overflow");
+	__ESBMC_HIDE: __ESBMC_assert( s != NULL, "invalid string");
 	int i;
 	str = new char[n + 1];
 	_size = n;
@@ -815,14 +820,13 @@ string::string(const char * s, size_t n) {
 
 string::string(string& s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
-	int i;
-	str = new char[n + 1];
-	_size = n;
-	if (n > s.length())
-		n = s.length();
-	for (i = 0; i < _size; i++)
-		str[i] = s.str[i];
-	str[i] = '\0';
+	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
+	int i,j;
+	this->str = new char[s._size - n + 1];
+	this->_size = s._size - n;
+	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
+		this->str[j] = s.str[i];
+	str[j] = '\0';
 }
 
 string::string(int len) {
@@ -942,6 +946,18 @@ bool string::operator!=(string& a) {
 	}
 }
 
+bool string::operator!=(const string& a) {
+	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
+			"The parameter must to be different than NULL");
+	int aux;
+	aux = strcmp(a.c_str(), this->c_str());
+	if (aux == 0) {
+		return false;
+	} else {
+		return true;
+	}
+}
+
 bool string::operator!=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
@@ -985,16 +1001,22 @@ bool string::operator!=(string& lhs, const char* rhs) {
 bool string::operator>(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() > a.length())
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
+		if (this->str[i] > a.str[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator>(const char* a) {
 	__ESBMC_HIDE: __ESBMC_assert(a != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() > strlen(a))
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+		if (this->str[i] > a[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1003,8 +1025,11 @@ bool string::operator>(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
-	if (strlen(lhs) > rhs.length())
-		return true;
+	int i;
+	for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++){
+		if (lhs[i] > rhs.str[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1013,26 +1038,33 @@ bool string::operator>(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
-	if (lhs.length() > strlen(rhs))
-		return true;
+	int i;
+	for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++){
+		if (lhs.str[i] > rhs[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator<(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() < a.length()) {
-		return true;
-	} else {
-		return false;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a.str[i] != '\0'); i++){
+		if (this->str[i] < a.str[i])
+			return true;
 	}
+	return false;
 }
 
 bool string::operator<(const char* a) {
 	__ESBMC_HIDE: __ESBMC_assert(a != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() < strlen(a))
-		return true;
+	int i;
+	for (i = 0; (this->str[i] != '\0') && (a[i] != '\0'); i++){
+		if (this->str[i] < a[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1041,8 +1073,11 @@ bool string::operator<(const char* lhs, string& rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs.str != NULL,
 			"The second parameter must to be different than NULL");
-	if (strlen(lhs) < rhs.length())
-		return true;
+	int i;
+	for (i = 0; (lhs[i] != '\0') && (rhs.str[i] != '\0'); i++){
+		if (lhs[i] < rhs.str[i])
+			return true;
+	}
 	return false;
 }
 
@@ -1051,41 +1086,56 @@ bool string::operator<(string& lhs, const char* rhs) {
 			"The first parameter must to be different than NULL");
 	__ESBMC_assert(rhs != NULL,
 			"The second parameter must to be different than NULL");
-	if (lhs.length() < strlen(rhs))
-		return true;
+	int i;
+	for (i = 0; (lhs.str[i] != '\0') && (rhs[i] != '\0'); i++){
+		if (lhs.str[i] < rhs[i])
+			return true;
+	}
 	return false;
 }
 
 bool string::operator >=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() >= a.length())
+	int tmp = strcmp(this->str, a.str);
+	if (tmp > 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator>=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() >= (strlen(lhs)))
+	int tmp = strcmp(this->str, lhs);
+	if (tmp > 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator <=(string& a) {
 	__ESBMC_HIDE: __ESBMC_assert(a.str != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() <= a.length())
+	int tmp = strcmp(this->str, a.str);
+	if (tmp < 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 bool string::operator <=(const char* lhs) {
 	__ESBMC_HIDE: __ESBMC_assert(lhs != NULL,
 			"The parameter must to be different than NULL");
-	if (this->length() <= strlen(lhs))
+	int tmp = strcmp(this->str, lhs);
+	if (tmp < 0 || tmp == 0){
 		return true;
-	return false;
+	}else{
+		return false;
+	}
 }
 
 size_t string::length() const {
@@ -1106,7 +1156,7 @@ char string::at(size_t pos) const {
 			"Error! Invalid access memory area");
 	int i;
 	if (pos > this->length()) {
-		throw("out_of_range");
+		throw out_of_range();
 	} else {
 		return this->str[pos];
 	}
@@ -1118,9 +1168,22 @@ bool string::empty() const {
 	return false;
 }
 
+string& string::operator=(const string& str) {
+    int i, len;
+    this->_size = str.length();
+    this->str = new char[this->_size + 1];
+    len = str.length();
+    for (i = 0; i < len; i++) {
+      this->str[i] = str.str[i];
+    }
+    this->str[i] = '\0';
+    return *this;
+}
+
+
 string& string::operator=(string& str) {
-	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
-			"The parameter must to be different than NULL");
+//	__ESBMC_HIDE: __ESBMC_assert(str.str != NULL,
+	//		"The parameter must to be different than NULL");
 	int i, len;
 	this->_size = str.length();
 	this->str = new char[this->_size + 1];
@@ -1133,14 +1196,6 @@ string& string::operator=(string& str) {
 }
 
 string& string::operator=(const char* s) {
-	__ESBMC_HIDE: __ESBMC_assert(s != NULL,
-			"The parameter must to be different than NULL");
-	this->_size = strlen(s);
-	this->str = new char[this->_size + 1];
-	return string(strcpy(this->c_str(), s));
-}
-
-string& string::operator=(char* s) {
 	__ESBMC_HIDE: __ESBMC_assert(s != NULL,
 			"The parameter must to be different than NULL");
 	this->_size = strlen(s);
@@ -1386,7 +1441,7 @@ size_t string::copy(char* s, size_t n, size_t pos = 0) const {
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
 	size_t aux = n + pos;
 	if (pos > this->size()) {
-		throw("out_of_range");
+		throw out_of_range();
 	}
 	if (s == NULL) {
 		s = new char[n];
@@ -1409,8 +1464,10 @@ string& string::append(string& s) {
 string& string::append(const char* s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n >= 0, "string overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
-	if (n > strlen(s))
-		throw("out_of_range");
+	if(n>1)
+	  if (n > strlen(s))
+	    throw out_of_range();
+
 	int rhsLen = n;
 	int totalLen = this->_size + rhsLen;
 	string temp(totalLen);
@@ -1431,7 +1488,7 @@ string& string::append(string& s, size_t pos, size_t n) {
 	__ESBMC_assert(s.str != NULL,
 			"The parameter must to be different than NULL");
 	if ((pos > s._size) || (n > (s._size - pos)))
-		throw("out_of_range");
+		throw out_of_range();
 
 	int rhsLen = n;
 	int totalLen = this->_size + rhsLen;
@@ -2304,6 +2361,34 @@ size_t string::find_last_of(const char* s, size_t pos = npos) const {
 	}
 }
 
+size_t string::find_last_of(char* s) const {
+	//__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
+			//"overflow");
+	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
+	int pos = npos;
+	size_t i, j;
+
+	int len = this->length();
+	int lim = pos;
+	char* s1 = new char[len + 1];
+	strcpy(s1, this->str);
+
+	int slen = strlen(s);
+	char* s2 = new char[slen + 1];
+	for (i = 0; i < slen; i++) {
+		s2[i] = s[i];
+	}
+	s2[i] = '\0';
+
+	for (i = len; i > 0; i--) {
+		for (j = 0; j < slen; j++) {
+			if (s1[i] == s2[j]) {
+				return i;
+			}
+		}
+	}
+}
+
 size_t string::find_last_of(char c, size_t pos = npos) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
@@ -2403,6 +2488,40 @@ size_t string::rfind(const char* s, size_t pos = 0, size_t n) const {
 size_t string::rfind(const char* s, size_t pos = 0) const {
 	__ESBMC_HIDE: __ESBMC_assert((pos < this->length()) && (pos >= 0),
 			"overflow");
+	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
+	size_t i, j, k;
+	int num = 0;
+	int lim = pos;
+
+	int len = this->length();
+	char* s1 = new char[len + 1];
+	strcpy(s1, this->str);
+
+	int slen = strlen(s);
+	char* s2 = new char[slen + 1];
+	strcpy(s2, s);
+
+	for (i = len - 1; i >= lim; i--) {
+		for (k = i, j = slen - 1; j >= 0; j--) {
+			if (s1[k] != s2[j]) {
+				break;
+			} else {
+				num++;
+				if (num == slen) {
+					return k;
+				}
+				k--;
+			}
+		}
+	}
+	return -1;
+}
+
+size_t string::rfind( char* s ) const {
+	__ESBMC_HIDE:
+	int pos = 0;
+	//__ESBMC_assert((pos < this->length()) && (pos >= 0),
+			//"overflow");
 	__ESBMC_assert(s != NULL, "The parameter must to be different than NULL");
 	size_t i, j, k;
 	int num = 0;

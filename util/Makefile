@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-MAINOBJ = $(OBJDIR)/util.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=util.o
 
 SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       expr.cpp expr_util.cpp i2string.cpp irep.cpp language.cpp \
@@ -34,3 +34,5 @@ clean:
 #	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

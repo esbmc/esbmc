@@ -200,15 +200,25 @@ public:
     declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
-      return_value(),
+      return_value(static_cast<const exprt &>(get_nil_irep()))
+    {
+      level1._thread_id = thread_id;
+    }
+  };
+
+  // Exception Handling
+
+  class exceptiont
+  {
+  public:
+    exceptiont() :
       has_throw_target(false),
       has_throw_decl(false),
-      has_catch(false)
+      throw_target(NULL)
     {
       level1.thread_id = thread_id;
     }
 
-    // exceptions
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
     catch_mapt catch_map;
 
@@ -218,12 +228,11 @@ public:
     typedef std::set<irep_idt> throw_list_sett;
     throw_list_sett throw_list_set;
 
-    bool has_throw_target, has_throw_decl, has_catch;;
+    bool has_throw_target, has_throw_decl;
     goto_programt::targett throw_target;
   };
 
   // Macros
-
   /**
    *  Perform both levels of renaming.
    *  @param symirep Symbol to perform renaming on.

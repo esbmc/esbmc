@@ -1,7 +1,7 @@
 // example on extraction
 #include <iostream>
 #include <cassert>
-
+#include <string>
 using namespace std;
 
 int main () {

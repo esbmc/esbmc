@@ -12,11 +12,11 @@ int main () {
   vector<int>::iterator it;
 
   // set some values:
-  for (int i=1; i<10; i++) myvector.push_back(i);          // 1 2 3 4 5 6 7 8 9
+  for (int i=1; i<6; i++) myvector.push_back(i);          // 1 2 3 4 5 
   
   assert(myvector[2] == 3);
 
-  replace_if (myvector.begin(), myvector.end(), IsOdd, 0); // 0 2 0 4 0 6 0 8 0
+  replace_if (myvector.begin(), myvector.end(), IsOdd, 0); // 0 2 0 4 0
 
   assert(myvector[2] == 3);
   cout << "myvector contains:";
