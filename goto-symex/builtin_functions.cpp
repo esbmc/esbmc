@@ -412,19 +412,19 @@ goto_symext::intrinsic_terminate_thread(reachability_treet &art)
 }
 
 void
-goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art)
+goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art)
 {
   statet &state = art.get_cur_state().get_active_state();
-  exprt threadid = call.arguments()[0];
+  expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
-  if (threadid.id() != "constant") {
+  if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
     std::cerr << std::endl;
     abort();
   }
 
-  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
   // Possibly we should handle this error; but meh.
   assert(art.get_cur_state().threads_state.size() >= tid);
 
@@ -433,9 +433,8 @@ goto_symext::intrinsic_get_thread_state(code_function_callt &call, reachability_
                        ? 1 : 0;
 
   // Reuse threadid
-  constant_exprt flag_expr(unsignedbv_typet(config.ansi_c.int_width));
-  flag_expr.set_value(integer2binary(flags, config.ansi_c.int_width));
-  code_assignt assign(call.lhs(), flag_expr);
+  constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
+  code_assign2tc assign(call.ret, flag_expr);
   symex_assign(assign);
   return;
 }
@@ -477,7 +476,7 @@ goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
 }
 
 void
-goto_symext::intrinsic_register_monitor(code_function_callt &call, reachability_treet &art)
+goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art)
 {
   execution_statet &ex_state = art.get_cur_state();
 
@@ -485,16 +484,16 @@ goto_symext::intrinsic_register_monitor(code_function_callt &call, reachability_
     assert(0 && "Monitor thread ID was already set (__ESBMC_register_monitor)\n");
 
   statet &state = art.get_cur_state().get_active_state();
-  exprt threadid = call.arguments()[0];
+  expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
-  if (threadid.id() != "constant") {
+  if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
     std::cerr << std::endl;
     abort();
   }
 
-  unsigned int tid = binary2integer(threadid.value().as_string(), false).to_long();
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
   assert(art.get_cur_state().threads_state.size() >= tid);
   ex_state.monitor_tid = tid;
   ex_state.tid_is_set = true;
