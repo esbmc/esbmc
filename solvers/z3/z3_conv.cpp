@@ -1711,9 +1711,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       else
         source = z3::to_expr(ctx, Z3_mk_extract(ctx, upper - lower, 0, source));
     } else if (is_fixedbv_type(data.source_value)) {
-      if (width > data.type->get_type_width()) {
+      if (width > data.type->get_width()) {
         source = z3::to_expr(ctx,
-                  Z3_mk_extract(ctx, data.type->get_type_width()-1, 0, source));
+                  Z3_mk_extract(ctx, data.type->get_width()-1, 0, source));
       } else {
         source = z3::to_expr(ctx,
                   Z3_mk_extract(ctx, upper, lower, source));
