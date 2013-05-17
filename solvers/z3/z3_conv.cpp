@@ -2142,7 +2142,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
                          i)
           );
       } else {
-        bv = Z3_mk_extract(z3_ctx, to_width-1, 0, args[0]);
+        output = z3::expr(ctx, Z3_mk_extract(z3_ctx, to_width-1, 0, output));
       }
     }
   } else if (is_unsignedbv_type(cast.from)) {
