@@ -2066,13 +2066,13 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
 #if 0
         }
 #endif
-      } else if (is_fixedbv_type2t(cast.from) && is_signedbv(cast.type)) {
+      } else if (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type)) {
         // Non int-mode encoding.
-          z3_expr i, f;
+        z3::expr i, f;
           i = z3::to_expr(ctx,
-                        Z3_mk_extract(ctx, (to_width - 1), from_width/2, bv));
+                      Z3_mk_extract(ctx, (to_width - 1), from_width/2, output));
           f = z3::to_expr(ctx,
-                        Z3_mk_extract(z3_ctx, (to_width/2 - 1), 0, bv));
+                        Z3_mk_extract(z3_ctx, (to_width/2 - 1), 0, output));
           output = z3::ite(
                mk_ge(i, ctx.bv_val(0, to_width/2), true), // cond
                i, // true
@@ -2109,8 +2109,8 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
         } else {
           // Manual conversion for a fixedbvt
 
-          z3::expr op1, op2, is_less_than_one, is_integer;
-          op1 = z3::to_expr(ctx, Z3_mk_real2int(ctx, output));
+          z3::expr op0, op1, is_less_than_one, is_integer;
+          op0 = z3::to_expr(ctx, Z3_mk_real2int(ctx, output));
           op1 = ctx.esbmc_int_val(1);
           is_integer = z3::to_expr(ctx, Z3_mk_is_int(ctx, output));
           is_less_than_one = ite(mk_lt(op0, ctx.esbmc_int_val(-1), true),
