@@ -200,9 +200,9 @@ public:
     declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep()))
+      return_value(expr2tc())
     {
-      level1._thread_id = thread_id;
+      level1.thread_id = thread_id;
     }
   };
 
@@ -216,7 +216,6 @@ public:
       has_throw_decl(false),
       throw_target(NULL)
     {
-      level1.thread_id = thread_id;
     }
 
     typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
