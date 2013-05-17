@@ -72,8 +72,8 @@ void goto_symext::symex_catch()
         it!=instruction.targets.end();
         it++, i++)
     {
-      exception.catch_map[catch_ref.exception_list[i].id()]=*it;
-      exception.catch_order[catch_ref.exception_list[i].id()]=i;
+      exception.catch_map[catch_ref.exception_list[i]]=*it;
+      exception.catch_order[catch_ref.exception_list[i]]=i;
     }
 
     // Stack it
@@ -99,7 +99,7 @@ Function: goto_symext::symex_throw
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
-  goto_programt::targett catch_insn;
+  const goto_programt::targett *catch_insn;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
@@ -111,13 +111,13 @@ bool goto_symext::symex_throw()
     return true;
 
   // Save the throw
-  last_throw = &instruction;
+  last_throw = const_cast<goto_programt::instructiont*>(&instruction);
 
   // Log
   std::cout << "*** Exception thrown of type "
     << exceptions_thrown.begin()->as_string()
-    << " at file " << instruction.code.location().file()
-    << " line " << instruction.code.location().line() << std::endl;
+    << " at file " << instruction.location.file()
+    << " line " << instruction.location.line() << std::endl;
 
   // We check before iterate over the throw list to save time:
   // If there is no catch, we return an error
@@ -131,7 +131,7 @@ bool goto_symext::symex_throw()
         const std::string &msg="Throwing an exception of type " +
             exceptions_thrown.begin()->as_string() +
             " but there is not catch for it.";
-        claim(false_expr(), msg);
+        claim(false_expr, msg);
         return true;
       }
     }
@@ -181,7 +181,7 @@ bool goto_symext::symex_throw()
       if(new_id_number < old_id_number)
       {
         update_throw_target(except,c_it->second,instruction.code);
-        catch_insn = c_it->second->code;
+        catch_insn = &c_it->second;
         catch_name = c_it->first;
       }
 
@@ -200,8 +200,8 @@ bool goto_symext::symex_throw()
 
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
         {
-          update_throw_target(except,c_it->second); // Make the jump to void*
-          catch_insn = c_it->second->code;
+          update_throw_target(except, c_it->second); // Make the jump to void*
+          catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
       }
@@ -213,7 +213,7 @@ bool goto_symext::symex_throw()
         if(c_it!=except->catch_map.end() && !except->has_throw_target)
         {
           update_throw_target(except,c_it->second);
-          catch_insn = c_it->second->code;
+          catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
       }
@@ -236,8 +236,8 @@ bool goto_symext::symex_throw()
     // Log
     std::cout << "*** Caught by catch("
       << catch_name << ") at file "
-      << catch_insn->location.file()
-      << " line " << catch_insn->location.line() << std::endl;
+      << (*catch_insn)->location.file()
+      << " line " << (*catch_insn)->location.line() << std::endl;
   }
 
   return true;
@@ -271,7 +271,9 @@ bool goto_symext::terminate_handler()
       return false;
 
     // Call the function
-    symex_function_call(to_code_function_call(terminate_function));
+    expr2tc da_funk;
+    migrate_expr(terminate_function, da_funk);
+    symex_function_call(da_funk);
     return true;
   }
 
@@ -312,7 +314,7 @@ bool goto_symext::unexpected_handler()
     dereference(the_call,false);
 
     // We only call it if the user replaced the default one
-    if (to_symbol2t(to_code_function_call2t(the_call).function).identifier ==
+    if (to_symbol2t(to_code_function_call2t(the_call).function).thename ==
         "cpp::std::default_unexpected()")
       return false;
 
@@ -342,7 +344,7 @@ Function: goto_symext::update_throw_target
 \*******************************************************************/
 
 void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, codet code)
+    goto_programt::targett target, const expr2tc &code __attribute__((unused)))
 {
   except->has_throw_target=true;
   except->throw_target=target;
@@ -402,8 +404,6 @@ int goto_symext::handle_throw_decl(goto_symex_statet::exceptiont* except,
           msg+= "\n   - " + std::string((*s_it1).c_str());
 
         claim(false_expr, msg);
-        return;
-        claim(false_exprt(), msg);
         return 0;
       }
       else
