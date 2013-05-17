@@ -372,6 +372,8 @@ public:
   /** Functions dictate interleavings; perform no exploration.
    *  Used by --directed-interleavings */
   bool directed_interleavings;
+  /** Namespace we're operating in */
+  const namespacet &ns;
   /** Options that are enabled */
   optionst options;
 
@@ -404,8 +406,6 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Namespace we're operating in */
-  const namespacet &ns;
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
   /** Message handler reference. */
