@@ -1791,11 +1791,13 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       throw new conv_error("1unsupported irep for convert_byte_update");
 
   } else if (is_array_type(data.source_value)) {
+    z3::expr index;
+    convert_bv(data.source_offset, index);
     output = store(tuple, index, value); // XXX where's index coming from?
   } else if (is_fixedbv_type(data.source_value)) {
     width_op0 = data.source_value->type->get_width();
-    if (width_op0 > width_op2)
-      source = z3::to_expr(ctx,
+    if (width_op0 > width_op2) {
+      output = z3::to_expr(ctx,
                         Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
     } else {
       throw new conv_error("2unsupported irep for convert_byte_update");
