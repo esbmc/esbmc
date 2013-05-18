@@ -569,7 +569,12 @@ void value_sett::get_reference_set_rec(
     {
       expr2tc object = object_numbering[it->first];
       
-      if (is_unknown2t(object)) {
+      // Don't allow a member operation to be applied to either unknown,
+      // a null object, or any typecast thereof. It can propagate all around
+      // the value set, and will cause mayhem when being converted to SMT.
+      if (is_unknown2t(object) || is_null_object2t(object) ||
+          (is_typecast2t(object) &&
+           is_null_object2t(to_typecast2t(object).from))) {
         unknown2tc unknown(memb.type);
         insert(dest, unknown);
       } else {

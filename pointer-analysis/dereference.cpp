@@ -326,6 +326,10 @@ void dereferencet::build_reference_to(
         "pointer dereference",
         "NULL pointer", tmp_guard);
     }
+
+    // Don't build a reference to this. You can't actually access NULL, and the
+    // solver will only get confused.
+    return;
   }
   else if (is_dynamic_object2t(root_object))
   {
