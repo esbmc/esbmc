@@ -2868,7 +2868,9 @@ irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::notype,
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
-irep_typedefs_empty(code_cpp_throw_decl_end, expr2t, esbmct::notype);
+irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data, esbmct::notype,
+              std::vector<irep_idt>, code_cpp_throw_decl_data,
+              &code_cpp_throw_decl_data::exception_list);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4302,9 +4304,9 @@ public:
 class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
 {
 public:
-  code_cpp_throw_decl_end2t()
+  code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
     : code_cpp_throw_decl_end_expr_methods(type_pool.get_empty(),
-                                           code_cpp_throw_decl_end_id) {}
+                                           code_cpp_throw_decl_end_id, exl) { }
   code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref)
     : code_cpp_throw_decl_end_expr_methods(ref) { }
 

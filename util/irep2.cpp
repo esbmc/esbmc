@@ -2729,4 +2729,6 @@ template class esbmct::expr_methods<code_cpp_throw_decl2t,
          code_cpp_throw_decl_data,
     std::vector<irep_idt>, code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>;
-template class esbmct::expr_methods<code_cpp_throw_decl_end2t, expr2t>;
+template class esbmct::expr_methods<code_cpp_throw_decl_end2t,
+    code_cpp_throw_decl_data, std::vector<irep_idt>, code_cpp_throw_decl_data,
+    &code_cpp_throw_decl_data::exception_list>;

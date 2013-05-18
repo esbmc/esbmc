@@ -221,13 +221,14 @@ std::ostream& goto_programt::output_instruction(
     out << "THROW_DECL_END (";
 
     {
-      const irept::subt &throw_list=
-        it->code.find("throw_list").get_sub();
+      const code_cpp_throw_decl_end2t &decl_end =
+        to_code_cpp_throw_decl_end2t(it->code);
 
-      for(unsigned int i=0; i<throw_list.size(); ++i)
+      forall_names(it, decl_end.exception_list)
       {
-        if(i) out << ", ";
-        out << throw_list[i].id();
+        if (it != decl_end.exception_list.begin())
+          out << ", ";
+        out << *it;
       }
       out << ")";
     }
