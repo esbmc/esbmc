@@ -673,7 +673,6 @@ void goto_checkt::check_rec(
   }
   else if (expr.type().id()=="fixedbv")
   {
-	use_boolector=false;
 	options.set_option("z3", true);
 	options.set_option("int-encoding", false);
 	if (!options.get_bool_option("eager"))
@@ -688,7 +687,6 @@ void goto_checkt::check_rec(
 
   if (options.get_bool_option("qf_auflira"))
   {
-	use_boolector=false; //always deactivate boolector
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", true);
   }
