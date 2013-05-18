@@ -321,7 +321,7 @@ void goto_convertt::convert_throw_decl_end(const exprt &expr, goto_programt &des
   // add the THROW_DECL_END instruction to 'dest'
   goto_programt::targett throw_decl_end_instruction=dest.add_instruction();
   throw_decl_end_instruction->make_throw_decl_end();
-  throw_decl_end_instruction->code.set_statement("throw_decl_end");
+  throw_decl_end_instruction->code = code_cpp_throw_decl_end2tc();
   throw_decl_end_instruction->location=expr.location();
 }
 
@@ -952,11 +952,15 @@ void goto_convertt::convert_decl(
               {
                 // Let's create an instruction for bad_cast
 
+                // Convert current exception list to a vector of strings.
+                std::vector<irep_idt> excp_list;
+                forall_irep(it, exception_list.get_sub())
+                  excp_list.push_back(it->id());
+
                 // Add new instruction throw
                 goto_programt::targett t=dest.add_instruction(THROW);
-                t->code=codet("cpp-throw");
+                t->code = code_cpp_throw2tc(expr2tc(), excp_list);
                 t->location=function.location();
-                t->code.set("exception_list", exception_list);
               }
             }
           }
@@ -1461,13 +1465,12 @@ void goto_convertt::convert_cpp_delete(
       assert(0);
   }
 
-  // preserve the call
-  codet delete_statement("cpp_delete");
-  delete_statement.location()=code.location();
-  delete_statement.copy_to_operands(tmp_op);
+  expr2tc tmp_op2;
+  migrate_expr(tmp_op, tmp_op2);
 
+  // preserve the call
   goto_programt::targett t_f=dest.add_instruction(OTHER);
-  t_f->code=delete_statement;
+  t_f->code = code_cpp_delete2tc(tmp_op2);
   t_f->location=code.location();
 
   // now do "delete"
@@ -1475,16 +1478,21 @@ void goto_convertt::convert_cpp_delete(
   valid_expr.copy_to_operands(tmp_op);
 
   // clear alloc bit
+  exprt assign = code_assignt(valid_expr, false_exprt());
+  expr2tc assign2;
+  migrate_expr(assign, assign2);
   goto_programt::targett t_c=dest.add_instruction(ASSIGN);
-  t_c->code=code_assignt(valid_expr, false_exprt());
+  t_c->code = assign2;
   t_c->location=code.location();
 
   exprt deallocated_expr("deallocated_object", bool_typet());
   deallocated_expr.copy_to_operands(tmp_op);
 
   //indicate that memory has been deallocated
+  assign = code_assignt(deallocated_expr, true_exprt());
+  migrate_expr(assign, assign2);
   goto_programt::targett t_d=dest.add_instruction(ASSIGN);
-  t_d->code=code_assignt(deallocated_expr, true_exprt());
+  t_d->code = assign2;
   t_d->location=code.location();
 }
 
