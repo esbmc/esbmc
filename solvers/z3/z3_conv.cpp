@@ -2625,7 +2625,31 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       break;
     case 3:
     case 7:
-      throw new conv_error("Pointer arithmetic with two pointer operands");
+      // The C spec says that we're allowed to subtract two pointers to get
+      // the offset of one from the other. However, they absolutely have to
+      // point at the same data object, or it's undefined operation. XXX XXX
+      // FIXME somewhere else we should have an assertion checking that this
+      // is the case.
+      if (id == expr2t::sub_id) {
+        side2->dump();
+        pointer_offset2tc offs1(get_uint_type(config.ansi_c.int_width), side1);
+        pointer_offset2tc offs2(get_uint_type(config.ansi_c.int_width), side2);
+        sub2tc the_ptr_offs(offs1->type, offs1, offs2);
+        the_ptr_offs->dump();
+        z3::expr ptr_offs_z3;
+        convert_bv(the_ptr_offs, ptr_offs_z3);
+
+        if (ret_is_ptr) {
+          // Update field in tuple.
+          z3::expr the_ptr;
+          convert_bv(side1, the_ptr);
+          output = mk_tuple_update(the_ptr, 1, ptr_offs_z3);
+        } else {
+          output = ptr_offs_z3;
+        }
+      } else {
+        throw new conv_error("Pointer arithmetic with two pointer operands");
+      }
       break;
     case 4:
       // Artithmatic operation that has the result type of ptr.
