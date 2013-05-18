@@ -2015,7 +2015,7 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
 
       z3::expr ext = z3::to_expr(ctx,
           Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output));
-      z3::expr fraction = z3::to_expr(ctx,
+      fraction = z3::to_expr(ctx,
         Z3_mk_sign_ext(z3_ctx, (to_fraction_bits - from_fraction_bits), ext));
     }
     output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
