@@ -62,12 +62,12 @@ public:
     if (options.get_bool_option("smt-during-symex")) {
       symex = new reachability_treet(funcs, ns, options,
                           new runtime_encoded_equationt(ns, *runtime_z3_conv),
-                          _context);
+                          _context, _message_handler);
     } else {
 #endif
       symex = new reachability_treet(funcs, ns, options,
                                      new symex_target_equationt(ns),
-                                     _context);
+                                     _context, _message_handler);
 #ifdef Z3
     }
 #endif
