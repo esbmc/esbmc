@@ -27,13 +27,11 @@ class bmct:public messaget
 {
 public:
   bmct(const goto_functionst &funcs, optionst &opts,
-      contextt &_context, message_handlert &_message_handler):
+      contextt &_context, message_handlert &_message_handler) :
     messaget(_message_handler),
     options(opts),
     context(_context),
     ns(_context),
-    symex(funcs, ns, options, new symex_target_equationt(ns), _context,
-          _message_handler),
     ui(ui_message_handlert::PLAIN)
   {
     _unsat_core=0;
