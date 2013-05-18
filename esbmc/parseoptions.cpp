@@ -865,7 +865,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns)
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns __attribute__((unused)))
 {
   std::map<std::string, std::string> strings;
 
@@ -917,19 +917,22 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
   assert(f_it != goto_functions.function_map.end());
   Forall_goto_program_instructions(p_it, f_it->second.body) {
     if (p_it->type == FUNCTION_CALL) {
-      if (p_it->code.op1().identifier().as_string() != "c::main")
+      const code_function_call2t &func_call =
+        to_code_function_call2t(p_it->code);
+      if (is_symbol2t(func_call.function) &&
+          to_symbol2t(func_call.function).thename == "c::main")
         continue;
 
       // Insert initializers for each monitor expr.
-      std::map<std::string, std::pair<std::set<std::string>, exprt> >
+      std::map<std::string, std::pair<std::set<std::string>, expr2tc> >
         ::const_iterator it;
       for (it = monitors.begin(); it != monitors.end(); it++) {
         goto_programt::instructiont new_insn;
         new_insn.type = ASSIGN;
         std::string prop_name = "c::" + it->first + "_status";
-        exprt cast = typecast_exprt(signedbv_typet(32));
-        cast.op0() = it->second.second;
-        new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
+        typecast2tc cast(get_int_type(32), it->second.second);
+        code_assign2tc assign(symbol2tc(get_int_type(32), prop_name), cast);
+        new_insn.code = assign;
         new_insn.function = p_it->function;
 
         // new_insn location field not set - I believe it gets numbered later.
@@ -1042,7 +1045,7 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    cast2tc hack_cast(get_int_type(32), trig_it->second);
+    typecast2tc hack_cast(get_int_type(32), trig_it->second);
     symbol2tc newsym(get_int_type(32), prop_name);
     new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
