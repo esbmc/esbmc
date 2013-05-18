@@ -169,7 +169,7 @@ void fixedbvt::round(const fixedbv_spect &dest_spec)
 
     // Make a number that's 2^integer_bits
     BigInt aval(2);
-    aval = pow(aval, new_integer_bits);
+    aval = power(aval, new_integer_bits);
     tmp.from_integer(aval);
 
     // Now modulus that up.
