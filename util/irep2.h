@@ -536,6 +536,7 @@ public:
     code_cpp_catch_id,
     code_cpp_throw_id,
     code_cpp_throw_decl_id,
+    code_cpp_throw_decl_end_id,
     end_expr_id
   };
 
@@ -1948,6 +1949,7 @@ class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
 class code_cpp_throw_decl2t;
+class code_cpp_throw_decl_end2t;
 
 // Data definitions.
 
@@ -2866,6 +2868,7 @@ irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::notype,
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
+irep_typedefs_empty(code_cpp_throw_decl_end, expr2t, esbmct::notype);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4296,6 +4299,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
+{
+public:
+  code_cpp_throw_decl_end2t()
+    : code_cpp_throw_decl_end_expr_methods(type_pool.get_empty(),
+                                           code_cpp_throw_decl_end_id) {}
+  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref)
+    : code_cpp_throw_decl_end_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4450,6 +4465,7 @@ expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
 expr_macros(code_cpp_throw_decl);
+expr_macros(code_cpp_throw_decl_end);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
