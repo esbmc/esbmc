@@ -1057,7 +1057,8 @@ z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
     convert_bv(cast, args[1]);
   }
 
-  output = convert(args[0], args[1], !is_signedbv_type(side1));
+  bool is_unsigned = is_unsignedbv_type(side1);
+  output = convert(args[0], args[1], is_unsigned);
 }
 
 void
