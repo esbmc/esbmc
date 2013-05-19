@@ -2041,30 +2041,19 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
 	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding && is_fixedbv_type(cast.from) &&
                is_signedbv_type(cast.type)) {
-#if 0
-        // XXX jmorse -- this turned up from master during irep2, very unclear
-        // what the logic is, in that there's a change in behaviour if the
-        // cast operand has operands,
-        if (expr.op0().operands().size()) {
-    	    Z3_ast operands[2], is_less_than_one, is_integer;
-    	    operands[0] = Z3_mk_real2int(z3_ctx, bv);
-    	    operands[1] = convert_number_int(1, 0, true);
-				  is_integer = Z3_mk_is_int(z3_ctx, bv);
-    	    is_less_than_one = Z3_mk_ite(z3_ctx, 
-                Z3_mk_lt(z3_ctx, operands[0], convert_number_int(-1, 0, true)),
-    		              Z3_mk_true(z3_ctx),
-                              Z3_mk_false(z3_ctx));
-            bv = Z3_mk_ite(z3_ctx, Z3_mk_is_int(z3_ctx, bv), 
-	                           operands[0], 
-                                   Z3_mk_ite(z3_ctx, is_less_than_one, 
-                                             Z3_mk_add(z3_ctx, 2, operands), 
-                                             operands[0]));
+        if (!is_constant_fixedbv2t(cast.from)) {
+          z3::expr op0, op1, is_less_than_one, is_integer;
+          op0 = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
+          op1 = ctx.esbmc_int_val(1);
+          is_integer = z3::to_expr(ctx, Z3_mk_is_int(z3_ctx, output));
+          is_less_than_one = ite(mk_lt(op0, ctx.esbmc_int_val(-1), false),
+                                 ctx.bool_val(true),
+                                 ctx.bool_val(false));
+          output = ite(is_integer, op0,
+                                   ite(is_less_than_one, op0 + op1, op0));
         } else {
-#endif
 	  output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
-#if 0
         }
-#endif
       } else if (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type)) {
         // Non int-mode encoding.
         z3::expr i, f;
