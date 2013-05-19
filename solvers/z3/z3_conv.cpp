@@ -425,6 +425,7 @@ std::string stringify(double x)
 std::string
 z3_convt::fixed_point(std::string v, unsigned width)
 {
+  // XXX FIXME: vastly susceptible to integer overflows
   const int precision = 1000000;
   std::string i, f, b, result;
   double integer, fraction, base;
@@ -447,7 +448,7 @@ z3_convt::fixed_point(std::string v, unsigned width)
   if (fraction == 0)
     result = double2string(integer);
   else  {
-    int numerator = (integer*precision + fraction);
+    long int numerator = (integer*precision + fraction);
     result = itos(numerator) + "/" + double2string(precision); 
   }
 

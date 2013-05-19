@@ -20,7 +20,7 @@ z3_convt::double2string(double d) const
 }
 
 std::string
-z3_convt::itos(int i)
+z3_convt::itos(long int i)
 {
   std::stringstream s;
   s << i;
