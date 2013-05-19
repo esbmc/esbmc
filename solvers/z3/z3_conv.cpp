@@ -2631,11 +2631,9 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       // FIXME somewhere else we should have an assertion checking that this
       // is the case.
       if (id == expr2t::sub_id) {
-        side2->dump();
         pointer_offset2tc offs1(get_uint_type(config.ansi_c.int_width), side1);
         pointer_offset2tc offs2(get_uint_type(config.ansi_c.int_width), side2);
         sub2tc the_ptr_offs(offs1->type, offs1, offs2);
-        the_ptr_offs->dump();
         z3::expr ptr_offs_z3;
         convert_bv(the_ptr_offs, ptr_offs_z3);
 
