@@ -510,7 +510,7 @@ void cpp_typecheckt::default_assignop_value(
   locationt location=declarator.location();
   declarator.make_nil();
 
-  declarator.value().location() = location;
+  declarator.value().location()=location;
   declarator.value().id("code");
   declarator.value().statement("block");
   declarator.value().type()=code_typet();

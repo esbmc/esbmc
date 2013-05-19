@@ -6059,6 +6059,9 @@ bool Parser::rTryStatement(codet &statement)
       declaration.declarators().front().name().get_sub().push_back(name);
     }
 
+    // Flag to delay object initialization
+    declaration.declarators().front().name().set("catch_decl",true);
+
     if(lex->GetToken(cp)!=')')
       return false;
 

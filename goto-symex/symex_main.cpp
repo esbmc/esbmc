@@ -108,16 +108,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    if(stack_catch.size())
-    {
-      if(stack_catch.top().has_throw_target)
-      {
-        cur_state->source.pc++;
-        break;
-      }
-    }
-
-    expr2tc tmp = instruction.guard;
+    expr2tc tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
 
@@ -188,7 +179,18 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
-      expr2tc deref_code = instruction.code;
+      code_assign2tc deref_code = instruction.code;
+
+      if (!stack_catch.empty())
+        if (is_symbol2t(deref_code->target) &&
+            to_symbol2t(deref_code->target).thename != irep_idt())
+        {
+          exprt value =ns.lookup(to_symbol2t(deref_code->target).thename).value;
+          if (value.get_bool("exception_update")) {
+            migrate_expr(value, deref_code.get()->source);
+          }
+        }
+
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
@@ -199,6 +201,7 @@ goto_symext::symex_step(reachability_treet & art)
 
       symex_assign(deref_code);
     }
+
     cur_state->source.pc++;
     break;
 

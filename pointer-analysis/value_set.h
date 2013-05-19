@@ -163,6 +163,12 @@ public:
     get_entry(e.identifier, e.suffix);
   }
 
+  void del_var(const std::string &id, const std::string &suffix)
+  {
+    std::string index = id2string(id) + suffix;
+    values.erase(index);
+  }
+
   entryt &get_entry(const std::string &id, const std::string &suffix)
   {
     return get_entry(entryt(id, suffix));

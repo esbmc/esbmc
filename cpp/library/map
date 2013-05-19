@@ -3,7 +3,7 @@
 
  Author: Felipe Rodrigues
 
- Date: February 2012
+ Date: January 2013
 
  \*******************************************************************/
 
@@ -576,7 +576,7 @@ public:
 		}
 	};
 
-	//class const_iterator {};
+	typedef iterator const_iterator;
 
 	class reverse_iterator {
 	public:
@@ -1340,7 +1340,7 @@ public:
 		}
 	};
 
-	//class const_iterator {};
+	typedef iterator const_iterator;
 
 	class reverse_iterator {
 	public:
@@ -1449,99 +1449,6 @@ public:
 			return false;
 		}
 	};
-
-#if 0
-	class const_iterator {
-	public:
-		const_iterator(const const_iterator&);
-		const_iterator(iterator);
-		const_iterator();
-		const_iterator& operator=(const const_iterator&);
-
-		const value_type * operator ->();
-
-		const value_type & operator *();
-
-		const_iterator& operator ++();
-		const_iterator& operator ++(int);
-
-		const_iterator& operator --();
-		const_iterator& operator --(int);
-
-		bool operator ==(const const_iterator&) const;
-		bool operator !=(const const_iterator&) const;
-	};
-
-	 class reverse_iterator{
-	 public:
-	 reverse_iterator(reverse_iterator);
-	 reverse_iterator();
-	 explicit reverse_iterator(iterator);
-
-	 iterator base() const; // explicit
-
-	 reverse_iterator& operator=(const reverse_iterator&);
-
-	 value_type * operator -> ();
-
-	 value_type & operator * ();
-
-	 reverse_iterator& operator ++ ();
-	 reverse_iterator& operator ++ (int);
-
-	 reverse_iterator& operator -- ();
-	 reverse_iterator& operator -- (int);
-
-	 bool operator == ( const reverse_iterator&)const;
-	 bool operator != ( const reverse_iterator&)const;
-	 };
-
-	 class  const_reverse_iterator {
-	 public:
-	 const_reverse_iterator(const_reverse_iterator);
-	 const_reverse_iterator();
-	 explicit const_reverse_iterator(const_iterator);
-
-	 const_iterator base() const; // explicit
-
-	 const_reverse_iterator& operator=(const const_reverse_iterator);
-
-	 const value_type * operator -> ();
-
-	 const value_type & operator * ();
-
-	 const_reverse_iterator& operator ++ ();
-	 const_reverse_iterator& operator ++ (int);
-
-	 const_reverse_iterator& operator -- ();
-	 const_reverse_iterator& operator -- (int);
-
-	 bool operator == ( const const_reverse_iterator&)const;
-	 bool operator != ( const const_reverse_iterator&)const;
-	 };
-
-	 explicit multimap ( const Compare& comp = Compare(),
-	 const Allocator& = Allocator() );
-	 multimap ( const multimap<Key,T,Compare,Allocator>& x );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator== ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator<  ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator!= ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator>  ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator>= ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-	 template <class Key, class T, class Compare, class Allocator>
-	 bool operator<= ( const multimap<Key,T,Compare,Allocator>& x,
-	 const multimap<Key,T,Compare,Allocator>& y );
-#endif
 
 	explicit multimap(const key_compare& comp = key_compare()){
 		this->_size = 0;
@@ -1715,6 +1622,7 @@ public:
 		it.it_pair.second = this->_value[it.it_pos];
 		return it;
 	}
+
 	reverse_iterator rbegin() {
 		reverse_iterator it;
 		it.it_key = this->_key;

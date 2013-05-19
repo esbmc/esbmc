@@ -11,6 +11,7 @@ int main () {
   vector<int>::iterator it;
 // 30 20 10 5 15
   make_heap (v.begin(),v.end());
+
   cout << "initial max heap   : " << v.front() << endl;
   assert(v.front() == 30);
   assert(v[1] == 20);

@@ -208,6 +208,11 @@ void add_cprover_library(
               dstring("c::pthread_cond_wait_check"));
   symbol_deps.insert(condcheck);
 
+  std::pair<irep_idt,irep_idt>
+    joincheck(dstring("c::pthread_join"),
+              dstring("c::pthread_join_noswitch"));
+  symbol_deps.insert(joincheck);
+
   /* The code just pulled into store_ctx might use other symbols in the C
    * library. So, repeatedly search for new C library symbols that we use but
    * haven't pulled in, then pull them in. We finish when we've made a pass

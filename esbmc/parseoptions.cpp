@@ -1296,36 +1296,6 @@ bool cbmc_parseoptionst::process_goto_program(
       return true;
     }
 
-    // Rename pthread functions depending on whether we're doing deadlock
-    // checking or not.
-    if (options.get_bool_option("deadlock-check")) {
-      goto_functionst::function_mapt::iterator checkit;
-      irep_idt mutex_lock("c::pthread_mutex_lock");
-      irep_idt lock_check("c::pthread_mutex_lock_check");
-
-      checkit = goto_functions.function_map.begin();
-      for (; checkit != goto_functions.function_map.end(); checkit++) {
-        goto_programt::instructionst::iterator it =
-          checkit->second.body.instructions.begin();
-        for (; it != checkit->second.body.instructions.end(); it++) {
-          relink_calls_from_to(it->code, mutex_lock, lock_check);
-          relink_calls_from_to(it->guard, mutex_lock, lock_check);
-        }
-      }
-
-      irep_idt cond_wait("c::pthread_cond_wait");
-      irep_idt cond_check("c::pthread_cond_wait_check");
-      checkit = goto_functions.function_map.begin();
-      for (; checkit != goto_functions.function_map.end(); checkit++) {
-        goto_programt::instructionst::iterator it =
-          checkit->second.body.instructions.begin();
-        for (; it != checkit->second.body.instructions.end(); it++) {
-          relink_calls_from_to(it->code, cond_wait, cond_check);
-          relink_calls_from_to(it->guard, cond_wait, cond_check);
-        }
-      }
-    }
-
     // show it?
     if(cmdline.isset("show-goto-functions"))
     {

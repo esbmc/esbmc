@@ -979,6 +979,13 @@ void value_sett::do_function_call(
     assign(actual_lhs, v_expr, ns, true);
     i++;
   }
+
+  // And now delete the value set dummy args. They're going to end up
+  // accumulating values from each function call that is made, which is a
+  // bad plan. (This as a result of commit f91e3d83, didn't used to do this).
+  for(unsigned i=0; i<arguments.size(); i++) {
+    del_var("value_set::dummy_arg_"+i2string(i), "");
+  }
 }
 
 void value_sett::do_end_function(

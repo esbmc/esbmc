@@ -20,17 +20,10 @@ int main ()
   myset.insert (it,26);                 // no max efficiency inserting
 
   int myints[]= {5,10,15};              // 10 already in set, not inserted
-  myset.insert (myints,myints+3);
-  assert(myset.size() == 12);
+
 
   it = myset.begin();
-  assert(*it == 5);
-  it++;
   assert(*it == 10);
-  it++;
-  assert(*it == 10);
-  it++;
-  assert(*it == 15);
   it++;
   assert(*it == 20);
   it++;

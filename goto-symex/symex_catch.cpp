@@ -308,10 +308,10 @@ bool goto_symext::unexpected_handler()
   // If it do, we must call the unexpected function:
   // It'll call the current function handler
   if(!is_included) {
-    codet unexpected_function=to_code(tmp->value.op0());
     expr2tc the_call;
+    code_function_callt unexpected_function;
+    unexpected_function.function()=symbol_expr(*tmp);
     migrate_expr(unexpected_function, the_call);
-    dereference(the_call,false);
 
     // We only call it if the user replaced the default one
     if (to_symbol2t(to_code_function_call2t(the_call).function).thename ==
@@ -353,7 +353,10 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
 #if 0
   // We must update the value if it has operands
   if(code.operands().size())
+  {
+    code.op0().set("exception_update",true);
     ns.lookup(target->code.op0().identifier()).value=code.op0();
+  }
 
   if(!options.get_bool_option("extended-try-analysis"))
   {

@@ -1861,13 +1861,24 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
 
     if(expr.arguments().size()==0)
     {
-      // create temporary object
-      exprt tmp_object_expr("sideeffect", expr.op0().type());
-      tmp_object_expr.statement("temporary_object");
-      tmp_object_expr.set("#lvalue",true);
-      tmp_object_expr.set("mode", current_mode);
-      tmp_object_expr.location()=expr.location();
-      expr.swap(tmp_object_expr);
+      if(expr.function().type().find("#cpp_type").is_not_nil())
+      {
+        exprt typecast("explicit-typecast");
+        typecast.type().swap(expr.function().type());
+        typecast.location() = expr.location();
+        typecheck_expr_explicit_typecast(typecast);
+        expr.swap(typecast);
+      }
+      else
+      {
+        // create temporary object
+        exprt tmp_object_expr("sideeffect", expr.op0().type());
+        tmp_object_expr.statement("temporary_object");
+        tmp_object_expr.set("#lvalue",true);
+        tmp_object_expr.set("mode", current_mode);
+        tmp_object_expr.location()=expr.location();
+        expr.swap(tmp_object_expr);
+      }
     }
     else if(expr.arguments().size()==1)
     {
