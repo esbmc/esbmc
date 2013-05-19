@@ -2063,7 +2063,7 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
           f = z3::to_expr(ctx,
                         Z3_mk_extract(z3_ctx, (to_width/2 - 1), 0, output));
           output = z3::ite(
-               mk_ge(i, ctx.bv_val(0, to_width/2), true), // cond
+               mk_ge(i, ctx.bv_val(0, to_width/2), false), // cond
                i, // true
                // false, another ite
                ite(((-f) == ctx.bv_val(0, to_width/2)), // cond
