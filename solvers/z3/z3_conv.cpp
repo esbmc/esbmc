@@ -2093,9 +2093,14 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
 	output = z3::to_expr(ctx, Z3_mk_int2real(z3_ctx, output));
       else if (int_encoding &&
                (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
+        // So pre-irep2, this checked whether the first operand of the cast
+        // had any operands? A test that I don't understand.
+        // Commenting this out leads to more tests (01_cbmc_Fixedbv22) passing.
+#if 0
         if (!is_constant_fixedbv2t(cast.from)) {
           output = z3::to_expr(ctx, Z3_mk_real2int(z3_ctx, output));
         } else {
+#endif
           // Manual conversion for a fixedbvt
 
           z3::expr op0, op1, is_less_than_one, is_integer;
@@ -2109,7 +2114,9 @@ z3_convt::convert_typecast_to_ints(const typecast2t &cast, z3::expr &output)
                                             is_less_than_one,
                                             op0 + op1,
                                             op0));
+#if 0
         }
+#endif
       } else if (int_encoding) {
 	; // output = output
       } else if (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type)) {
