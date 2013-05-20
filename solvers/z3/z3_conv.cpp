@@ -2017,10 +2017,12 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     } else   {
       assert(to_fraction_bits > from_fraction_bits);
 
+      // Zero extend at the /bottom/ of this bitvector. We're increasing
+      // precision.
       z3::expr ext = z3::to_expr(ctx,
           Z3_mk_extract(z3_ctx, (from_fraction_bits - 1), 0, output));
-      fraction = z3::to_expr(ctx,
-        Z3_mk_sign_ext(z3_ctx, (to_fraction_bits - from_fraction_bits), ext));
+      z3::expr zeros = ctx.bv_val(0, to_fraction_bits - from_fraction_bits);
+      fraction = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, ext, zeros));
     }
     output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, magnitude, fraction));
   } else {
