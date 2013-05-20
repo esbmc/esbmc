@@ -1985,6 +1985,8 @@ z3_convt::convert_typecast_fixedbv_nonint(const typecast2t &cast,
     output = z3::ite(output, one, zero);
     output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, ctx.esbmc_int_val(0, to_fraction_bits)));
   } else if (is_fixedbv_type(cast.from)) {
+    // FIXME: conversion here for to_int_bits > from_int_bits is factually
+    // broken, run 01_cbmc_Fixedbv8 with --no-simplify.
     z3::expr magnitude, fraction;
 
     const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
