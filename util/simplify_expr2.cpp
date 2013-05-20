@@ -1127,6 +1127,13 @@ typecast2t::do_simplify(bool second) const
       expr2tc cvt;
       migrate_expr(ref, cvt);
       return cvt;
+    } else if (is_fixedbv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f(to_constant_fixedbv2t(from).value);
+      f.round(to_fixedbv_type(migrate_type_back(type)));
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
                 (is_bv_type(from) || is_fixedbv_type(from))) {
       fixedbvt bv;
@@ -1174,6 +1181,8 @@ typecast2t::do_simplify(bool second) const
   } else {
     return expr2tc();
   }
+
+  assert(0 && "Fell through typecast2t::do_simplify");
 }
 
 expr2tc
