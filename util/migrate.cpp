@@ -2178,6 +2178,20 @@ migrate_expr_back(const expr2tc &ref)
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
   }
+  case expr2t::isinf_id:
+  {
+    const isinf2t &ref2 = to_isinf2t(ref);
+    exprt back("isinf", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::isnormal_id:
+  {
+    const isnormal2t &ref2 = to_isnormal2t(ref);
+    exprt back("isnormal", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");
   }
