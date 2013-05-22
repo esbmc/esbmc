@@ -623,7 +623,9 @@ static const char *expr_names[] = {
   "cpp_catch",
   "cpp_throw",
   "cpp_throw_decl",
-  "cpp_throw_decl_end"
+  "cpp_throw_decl_end",
+  "isinf",
+  "isnormal",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2462,6 +2464,10 @@ std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
 std::string code_cpp_throw_decl_end2t::field_names [esbmct::num_type_fields]  =
 { "", "", "", "", ""};
+std::string isinf2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string isnormal2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2732,3 +2738,7 @@ template class esbmct::expr_methods<code_cpp_throw_decl2t,
 template class esbmct::expr_methods<code_cpp_throw_decl_end2t,
     code_cpp_throw_decl_data, std::vector<irep_idt>, code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>;
+template class esbmct::expr_methods<isinf2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<isnormal2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;

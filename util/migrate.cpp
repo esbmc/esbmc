@@ -1195,6 +1195,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
+  } else if (expr.id() == "isinf") {
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = isinf2tc(op);
+  } else if (expr.id() == "isnormal") {
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = isnormal2tc(op);
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");

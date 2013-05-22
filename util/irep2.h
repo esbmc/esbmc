@@ -537,6 +537,8 @@ public:
     code_cpp_throw_id,
     code_cpp_throw_decl_id,
     code_cpp_throw_decl_end_id,
+    isinf_id,
+    isnormal_id,
     end_expr_id
   };
 
@@ -1950,6 +1952,8 @@ class code_cpp_catch2t;
 class code_cpp_throw2t;
 class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
+class isinf2t;
+class isnormal2t;
 
 // Data definitions.
 
@@ -2871,6 +2875,10 @@ irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
 irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
+irep_typedefs(isinf, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(isnormal, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4313,6 +4321,28 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class isinf2t : public isinf_expr_methods
+{
+public:
+  isinf2t(const expr2tc &val)
+    : isinf_expr_methods(type_pool.get_bool(), isinf_id, val) { }
+  isinf2t(const isinf2t &ref)
+    : isinf_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnormal2t : public isnormal_expr_methods
+{
+public:
+  isnormal2t(const expr2tc &val)
+    : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
+  isnormal2t(const isnormal2t &ref)
+    : isnormal_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4468,6 +4498,8 @@ expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
 expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
+expr_macros(isinf);
+expr_macros(isnormal);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast
