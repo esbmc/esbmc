@@ -4408,7 +4408,7 @@ inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
 
 struct irep2_hash
 {
-  size_t operator()(const expr2tc &ref) const { return ref->crc(); }
+  size_t operator()(const expr2tc &ref) const { return ref.crc(); }
 };
 
 struct type2_hash
