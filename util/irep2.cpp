@@ -116,12 +116,14 @@ get_type_id(const type2t &type)
 
 
 type2t::type2t(type_ids id)
-  : type_id(id)
+  : type_id(id),
+    crc_val(0)
 {
 }
 
 type2t::type2t(const type2t &ref)
-  : type_id(ref.type_id)
+  : type_id(ref.type_id),
+    crc_val(ref.crc_val)
 {
 }
 
@@ -342,13 +344,14 @@ struct_union_data::get_component_number(const irep_idt &name) const
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
-  : expr_id(id), type(_type)
+  : expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
   : expr_id(ref.expr_id),
-    type(ref.type)
+    type(ref.type),
+    crc_val(ref.crc_val)
 {
 }
 

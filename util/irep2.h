@@ -239,7 +239,9 @@ public:
   T * get() // never throws
   {
     detach();
-    return boost::shared_ptr<T>::get();
+    T *tmp = boost::shared_ptr<T>::get();
+    tmp->crc_val = 0;
+    return tmp;
   }
 
   void detach(void)
@@ -253,6 +255,17 @@ public:
     const T *foo = boost::shared_ptr<T>::get();
     *this = foo->clone();
     return;
+  }
+
+  uint32_t crc(void) const
+  {
+    const T *foo = boost::shared_ptr<T>::get();
+    if (foo->crc_val != 0)
+      return foo->crc_val;
+
+    uint32_t crc = foo->crc();
+    foo->crc_val = crc;
+    return crc;
   }
 };
 
@@ -417,6 +430,8 @@ public:
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
+
+  mutable uint32_t crc_val;
 };
 
 
@@ -755,13 +770,15 @@ public:
 
   /** Type of this expr. All exprs have a type. */
   type2tc type;
+
+  mutable uint32_t crc_val;
 };
 
 // For boost multi-index hashing,
 inline std::size_t
 hash_value(const expr2tc &expr)
 {
-  return expr->crc();
+  return expr.crc();
 }
 
 /** Fetch string identifier for an expression.
