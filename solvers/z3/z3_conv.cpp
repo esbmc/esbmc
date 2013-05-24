@@ -2242,9 +2242,10 @@ z3_convt::convert_pointer_arith(const exprt &expr, Z3_ast &bv)
 
     // Now try the conversion again with the non-pointer operands combined into
     // one, and the pointer operand as the other.
-    expr.operands().clear();
-    expr.copy_to_operands(int_operands, ptr_operand);
-    convert_pointer_arith(expr, bv);
+    exprt expr2(expr);
+    expr2.operands().clear();
+    expr2.copy_to_operands(int_operands, ptr_operand);
+    convert_pointer_arith(expr2, bv);
     return;
   }
 
