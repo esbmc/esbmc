@@ -93,7 +93,7 @@ bool goto_symext::symex_throw()
   const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
 
   // Handle rethrows
-  if(!handle_rethrow(exceptions_thrown, instruction))
+  if(handle_rethrow(exceptions_thrown, instruction))
     return true;
 
   // Save the throw
@@ -442,10 +442,10 @@ bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
     {
       const std::string &msg="Trying to re-throw without last exception.";
       claim(false_expr, msg);
-      return false;
+      return true;
     }
   }
-  return true;
+  return false;
 }
 
 /*******************************************************************\
