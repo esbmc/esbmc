@@ -85,7 +85,7 @@ Function: goto_symext::symex_throw
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
-  const goto_programt::const_targett *catch_insn;
+  const goto_programt::const_targett *catch_insn = NULL;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
