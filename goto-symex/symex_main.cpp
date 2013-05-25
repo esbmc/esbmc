@@ -249,8 +249,12 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case THROW:
-    if(symex_throw())
+    if (!cur_state->guard.is_false()) {
+      if(symex_throw())
+        cur_state->source.pc++;
+    } else {
       cur_state->source.pc++;
+    }
     break;
 
   case THROW_DECL:

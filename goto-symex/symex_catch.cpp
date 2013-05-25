@@ -217,6 +217,11 @@ bool goto_symext::symex_throw()
       claim(false_expr, msg);
     }
 
+    // Either a fatal assertion failure or a jump to the terminate handler just
+    // got encoded; either way the guard is now false, as we don't proceed any
+    // further along this path.
+    cur_state->guard.make_false();
+
     return false;
   }
 
