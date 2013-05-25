@@ -355,6 +355,16 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
 
     // Now record that value for future reference.
     cur_state->rename(thrown_obj);
+
+    // Target is, as far as I can tell, always a declaration of the variable
+    // that the thrown obj ends up in, and is followed by a (blank) assignment
+    // to it. So point at the next insn.
+    assert(is_code_decl2t(target->code));
+    target++;
+    assert(is_code_assign2t(target->code));
+
+    // Signal assignment code to fetch the thrown object and rewrite the
+    // assignment, assigning the thrown obj to the local variable.
     thrown_obj_map[target] = thrown_obj;
   }
 

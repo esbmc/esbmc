@@ -181,16 +181,11 @@ goto_symext::symex_step(reachability_treet & art)
     if (!cur_state->guard.is_false()) {
       code_assign2tc deref_code = instruction.code;
 
-      if (!stack_catch.empty())
-        if (is_symbol2t(deref_code->target) &&
-            to_symbol2t(deref_code->target).thename != irep_idt())
-        {
-          // XXX jmorse -- this is not fully symbolic.
-          if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
-            deref_code.get()->source = thrown_obj_map[cur_state->source.pc];
-            thrown_obj_map.erase(cur_state->source.pc);
-          }
-        }
+      // XXX jmorse -- this is not fully symbolic.
+      if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
+        deref_code.get()->source = thrown_obj_map[cur_state->source.pc];
+        thrown_obj_map.erase(cur_state->source.pc);
+      }
 
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
