@@ -186,7 +186,8 @@ bool goto_symext::symex_throw()
 
         if(c_it!=except->catch_map.end())
         {
-          update_throw_target(except, c_it->second); // Make the jump to void*
+          // Make the jump to void*
+          update_throw_target(except, c_it->second,instruction.code);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
@@ -198,7 +199,7 @@ bool goto_symext::symex_throw()
 
         if(c_it!=except->catch_map.end())
         {
-          update_throw_target(except,c_it->second);
+          update_throw_target(except,c_it->second,instruction.code);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
         }
