@@ -416,7 +416,7 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::const_targett target, const expr2tc &code = expr2tc());
+    goto_programt::const_targett target, const expr2tc &code);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.

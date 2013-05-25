@@ -342,32 +342,32 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
                                       const expr2tc &code)
 {
 
-  // We must update the value if it has operands
-  if (!is_nil_expr(code))
-  {
-    code_cpp_throw2tc throw_insn(code);
+  // Something is going to catch, therefore we need something to be caught.
+  // Assign that something to a variable and make records so that it's merged
+  // into the right place in the future.
+  assert(!is_nil_expr(code));
+  code_cpp_throw2tc throw_insn(code);
 
-    // Generate a name to assign this to.
-    symbol2tc thrown_obj(throw_insn->operand->type,
-                         irep_idt("symex_throw::thrown_obj"));
-    expr2tc operand(throw_insn->operand);
-    guardt g;
-    symex_assign_symbol(thrown_obj, operand, g);
+  // Generate a name to assign this to.
+  symbol2tc thrown_obj(throw_insn->operand->type,
+                       irep_idt("symex_throw::thrown_obj"));
+  expr2tc operand(throw_insn->operand);
+  guardt g;
+  symex_assign_symbol(thrown_obj, operand, g);
 
-    // Now record that value for future reference.
-    cur_state->rename(thrown_obj);
+  // Now record that value for future reference.
+  cur_state->rename(thrown_obj);
 
-    // Target is, as far as I can tell, always a declaration of the variable
-    // that the thrown obj ends up in, and is followed by a (blank) assignment
-    // to it. So point at the next insn.
-    assert(is_code_decl2t(target->code));
-    target++;
-    assert(is_code_assign2t(target->code));
+  // Target is, as far as I can tell, always a declaration of the variable
+  // that the thrown obj ends up in, and is followed by a (blank) assignment
+  // to it. So point at the next insn.
+  assert(is_code_decl2t(target->code));
+  target++;
+  assert(is_code_assign2t(target->code));
 
-    // Signal assignment code to fetch the thrown object and rewrite the
-    // assignment, assigning the thrown obj to the local variable.
-    thrown_obj_map[target] = thrown_obj;
-  }
+  // Signal assignment code to fetch the thrown object and rewrite the
+  // assignment, assigning the thrown obj to the local variable.
+  thrown_obj_map[target] = thrown_obj;
 
   if(!options.get_bool_option("extended-try-analysis"))
   {
