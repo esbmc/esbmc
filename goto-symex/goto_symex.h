@@ -423,7 +423,7 @@ protected:
    *  if we can't then gives a error.
    */
   bool handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
-    const goto_programt::instructiont instruction);
+    const goto_programt::instructiont &instruction);
 
   /** Check if we can throw an exception:
    *  if we can't then gives a error.

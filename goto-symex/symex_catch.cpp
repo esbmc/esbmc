@@ -420,7 +420,7 @@ Function: goto_symext::handle_rethrow
 \*******************************************************************/
 
 bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
-  const goto_programt::instructiont instruction)
+  const goto_programt::instructiont &instruction)
 {
   // throw without argument, we must rethrow last exception
   if(!exceptions_thrown.size())
