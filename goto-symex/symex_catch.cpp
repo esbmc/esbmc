@@ -201,22 +201,25 @@ bool goto_symext::symex_throw()
           update_throw_target(except,c_it->second);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
-        } else {
-          // No catch for type, void, or ellipsis
-          // Call terminate handler before showing error message
-          if(!terminate_handler())
-          {
-            // An un-caught exception. Error
-            const std::string &msg="Throwing an exception of type " +
-              exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
-            claim(false_expr, msg);
-
-            return false;
-          }
         }
       }
     }
   }
+
+  if (catch_insn == NULL) {
+    // No catch for type, void, or ellipsis
+    // Call terminate handler before showing error message
+    if(!terminate_handler())
+    {
+      // An un-caught exception. Error
+      const std::string &msg="Throwing an exception of type " +
+        exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
+      claim(false_expr, msg);
+    }
+
+    return false;
+  }
+
 
   // Log
   std::cout << "*** Caught by catch("
