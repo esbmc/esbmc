@@ -93,7 +93,7 @@ bool goto_symext::symex_throw()
   const std::vector<irep_idt> exceptions_thrown = throw_ref.exception_list;
 
   // Handle rethrows
-  if(handle_rethrow(exceptions_thrown, instruction))
+  if(handle_rethrow(throw_ref.operand, instruction))
     return true;
 
   // Save the throw
@@ -427,11 +427,11 @@ Function: goto_symext::handle_rethrow
 
 \*******************************************************************/
 
-bool goto_symext::handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
+bool goto_symext::handle_rethrow(const expr2tc &operand,
   const goto_programt::instructiont &instruction)
 {
   // throw without argument, we must rethrow last exception
-  if(!exceptions_thrown.size())
+  if(is_nil_expr(operand))
   {
     if(last_throw != NULL && to_code_cpp_throw2t(last_throw->code).exception_list.size())
     {
