@@ -185,9 +185,10 @@ goto_symext::symex_step(reachability_treet & art)
         if (is_symbol2t(deref_code->target) &&
             to_symbol2t(deref_code->target).thename != irep_idt())
         {
-          exprt value =ns.lookup(to_symbol2t(deref_code->target).thename).value;
-          if (value.get_bool("exception_update")) {
-            migrate_expr(value, deref_code.get()->source);
+          // XXX jmorse -- this is not fully symbolic.
+          if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
+            deref_code.get()->source = thrown_obj_map[cur_state->source.pc];
+            thrown_obj_map.erase(cur_state->source.pc);
           }
         }
 

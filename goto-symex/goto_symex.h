@@ -416,7 +416,7 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, const expr2tc &code = expr2tc());
+    goto_programt::const_targett target, const expr2tc &code = expr2tc());
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
@@ -625,6 +625,12 @@ protected:
 
   /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Map of currently active exception targets, i.e. instructions where an
+   *  exception is going to be merged in in the future. Keys are iterators to
+   *  the instruction catching the object; domain is a symbol that the thrown
+   *  piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
 
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;

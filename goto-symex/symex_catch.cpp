@@ -41,20 +41,6 @@ void goto_symext::symex_catch()
 
     // Increase the program counter
     cur_state->source.pc++;
-
-    if(exception.has_throw_target)
-    {
-      // the next instruction is always a goto
-      const goto_programt::instructiont &tmp=*cur_state->source.pc;
-      goto_programt::instructiont &goto_instruction =
-        const_cast<goto_programt::instructiont &>(tmp);
-
-      // Update target
-      goto_instruction.targets.pop_back();
-      goto_instruction.targets.push_back(exception.throw_target);
-
-      exception.has_throw_target = false;
-    }
   }
   else // The first catch, push it to the stack
   {
@@ -99,7 +85,7 @@ Function: goto_symext::symex_throw
 bool goto_symext::symex_throw()
 {
   irep_idt catch_name = "missing";
-  const goto_programt::targett *catch_insn;
+  const goto_programt::const_targett *catch_insn;
   const goto_programt::instructiont &instruction= *cur_state->source.pc;
 
   // get the list of exceptions thrown
@@ -171,7 +157,7 @@ bool goto_symext::symex_throw()
       c_it=except->catch_map.find(*e_it);
 
     // Do we have a catch for it?
-    if(c_it!=except->catch_map.end() && !except->has_throw_target)
+    if(c_it!=except->catch_map.end())
     {
       // We do!
 
@@ -198,7 +184,7 @@ bool goto_symext::symex_throw()
         // Do we have an void*?
         c_it=except->catch_map.find("void_ptr");
 
-        if(c_it!=except->catch_map.end() && !except->has_throw_target)
+        if(c_it!=except->catch_map.end())
         {
           update_throw_target(except, c_it->second); // Make the jump to void*
           catch_insn = &c_it->second;
@@ -210,35 +196,33 @@ bool goto_symext::symex_throw()
         // Do we have an ellipsis?
         c_it=except->catch_map.find("ellipsis");
 
-        if(c_it!=except->catch_map.end() && !except->has_throw_target)
+        if(c_it!=except->catch_map.end())
         {
           update_throw_target(except,c_it->second);
           catch_insn = &c_it->second;
           catch_name = c_it->first;
+        } else {
+          // No catch for type, void, or ellipsis
+          // Call terminate handler before showing error message
+          if(!terminate_handler())
+          {
+            // An un-caught exception. Error
+            const std::string &msg="Throwing an exception of type " +
+              exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
+            claim(false_expr, msg);
+
+            return false;
+          }
         }
       }
     }
   }
 
-  if(!except->has_throw_target)
-  {
-    // Call terminate handler before showing error message
-    if(!terminate_handler())
-    {
-      // An un-caught exception. Error
-      const std::string &msg="Throwing an exception of type " +
-        exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
-      claim(false_expr, msg);
-    }
-  }
-  else // save last throw for rethrow handling
-  {
-    // Log
-    std::cout << "*** Caught by catch("
-      << catch_name << ") at file "
-      << (*catch_insn)->location.file()
-      << " line " << (*catch_insn)->location.line() << std::endl;
-  }
+  // Log
+  std::cout << "*** Caught by catch("
+    << catch_name << ") at file "
+    << (*catch_insn)->location.file()
+    << " line " << (*catch_insn)->location.line() << std::endl;
 
   return true;
 }
@@ -343,19 +327,27 @@ Function: goto_symext::update_throw_target
 
 \*******************************************************************/
 
-void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, const expr2tc &code __attribute__((unused)))
+void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
+                                      __attribute__((unused)),
+                                      goto_programt::const_targett target,
+                                      const expr2tc &code)
 {
-  except->has_throw_target=true;
-  except->throw_target=target;
 
-  assert(0 && "Catching fails due to irep2 migration; observe type and fixup");
-#if 0
   // We must update the value if it has operands
-  if(code.operands().size())
+  if (!is_nil_expr(code))
   {
-    code.op0().set("exception_update",true);
-    ns.lookup(target->code.op0().identifier()).value=code.op0();
+    code_cpp_throw2tc throw_insn(code);
+
+    // Generate a name to assign this to.
+    symbol2tc thrown_obj(throw_insn->operand->type,
+                         irep_idt("symex_throw::thrown_obj"));
+    expr2tc operand(throw_insn->operand);
+    guardt g;
+    symex_assign_symbol(thrown_obj, operand, g);
+
+    // Now record that value for future reference.
+    cur_state->rename(thrown_obj);
+    thrown_obj_map[target] = thrown_obj;
   }
 
   if(!options.get_bool_option("extended-try-analysis"))
@@ -366,7 +358,6 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
     goto_state_list.push_back(statet::goto_statet(*cur_state));
     cur_state->guard.make_false();
   }
-#endif
 }
 
 /*******************************************************************\
