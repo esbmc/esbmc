@@ -1035,19 +1035,76 @@ z3_convt::convert_smt_expr(const notequal2t &notequal, void *_bv)
 }
 
 void
+z3_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
+                          ast_convert_calltype_new convert, z3::expr &output)
+{
+  // Special handling for pointer comparisons (both ops are pointers; otherwise
+  // it's obviously broken). First perform a test as to whether or not the
+  // pointer locations are greater or lower; and only involve the ptr offset
+  // if the ptr objs are the same.
+  type2tc int_type = get_uint_type(config.ansi_c.int_width);
+
+  pointer_object2tc ptr_obj1(int_type, side1);
+  pointer_offset2tc ptr_offs1(int_type, side1);
+  pointer_object2tc ptr_obj2(int_type, side2);
+  pointer_offset2tc ptr_offs2(int_type, side2);
+
+  // Don't ask
+  std::vector<type2tc> members;
+  std::vector<irep_idt> names;
+  members.push_back(int_type);
+  members.push_back(int_type);
+  names.push_back(irep_idt("start"));
+  names.push_back(irep_idt("end"));
+  type2tc strct(new struct_type2t(members, names,
+                irep_idt("addr_space_tuple")));
+  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
+
+  symbol2tc addrspacesym(addrspace_type, get_cur_addrspace_ident());
+  index2tc obj1_data(strct, addrspacesym, ptr_obj1);
+  index2tc obj2_data(strct, addrspacesym, ptr_obj2);
+
+  member2tc obj1_start(int_type, obj1_data, irep_idt("start"));
+  member2tc obj2_start(int_type, obj2_data, irep_idt("start"));
+
+  z3::expr obj1_start_z3, obj2_start_z3, obj1_offs_z3, obj2_offs_z3;
+  convert_bv(obj1_start, obj1_start_z3);
+  convert_bv(obj2_start, obj2_start_z3);
+  convert_bv(ptr_offs1, obj1_offs_z3);
+  convert_bv(ptr_offs2, obj2_offs_z3);
+
+
+  z3::expr obj_start_rel = convert(obj1_start_z3, obj2_start_z3, true);
+  z3::expr obj_offs_rel = convert(obj1_offs_z3, obj2_offs_z3, true);
+
+  equality2tc is_same_obj_expr(ptr_obj1, ptr_obj2);
+  z3::expr is_same_obj;
+  convert_bv(is_same_obj_expr, is_same_obj);
+
+  output = ite(is_same_obj, obj_offs_rel, obj_start_rel);
+}
+
+void
 z3_convt::convert_rel(const expr2tc &side1, const expr2tc &side2,
                       ast_convert_calltype_new convert, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
+
+  // 6.3.8 defines relation operators on pointers to be comparisons on their
+  // bit representation, with pointers to array/struct/union fields comparing
+  // as you might expect.
+  if (is_pointer_type(side1) && is_pointer_type(side2)) {
+    convert_ptr_cmp(side1, side2, convert, output);
+    return;
+  }
 
   z3::expr args[2];
 
   convert_bv(side1, args[0]);
   convert_bv(side2, args[1]);
 
-  // 6.3.8 defines relation operators on pointers to be comparisons on their
-  // bit representation, with pointers to array/struct/union fields comparing
-  // as you might expect.
+  // Of course, if the user has elected to compare a pointer with an integer
+  // or something, go the slow way.
   if (is_pointer_type(side1)) {
     typecast2tc cast(uint_type2(), side1);
     convert_bv(cast, args[0]);

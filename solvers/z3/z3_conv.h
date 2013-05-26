@@ -87,6 +87,8 @@ private:
 
   typedef z3::expr (*ast_logic_convert)(const z3::expr &a,const z3::expr &b);
 
+  void convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
+                       ast_convert_calltype_new convert, z3::expr &output);
   void convert_rel(const expr2tc &side1, const expr2tc &side2,
                    ast_convert_calltype_new convert, void *_bv);
   void convert_logic_2ops(const expr2tc &side1, const expr2tc &side2,
