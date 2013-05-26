@@ -101,9 +101,21 @@ std::ostream& goto_programt::output_instruction(
     out << std::endl;
     break;
 
-  case RETURN:
-  case OTHER:
   case FUNCTION_CALL:
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", to_code_function_call2t(it->code).function) << std::endl;
+    break;
+
+  case RETURN:
+    {
+    std::string arg = "";
+    const code_return2t &ref = to_code_return2t(it->code);
+    if (!is_nil_expr(ref.operand))
+      arg = from_expr(ns, "", ref.operand);
+    out << "RETURN: " << arg << std::endl;
+    }
+    break;
+
+  case OTHER:
   case ASSIGN:
 
 #if 0
