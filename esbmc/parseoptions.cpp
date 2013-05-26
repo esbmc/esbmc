@@ -1218,7 +1218,7 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    if(!cmdline.isset("inlining"))
+    if(cmdline.isset("inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
