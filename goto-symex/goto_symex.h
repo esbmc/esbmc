@@ -344,9 +344,11 @@ protected:
    *  that we have a list of all variables that are in fact local to this
    *  particular function call.
    *  @param frame_counter The function frame invocation number.
+   *  @param identifier Name of function being invoked. Used to distinguish
+   *                    function variables from inlined variables.
    *  @param goto_function The function we're working upon.
    */
-  void locality(unsigned frame_counter,
+  void locality(unsigned frame_counter, const std::string &identifier,
     const goto_functionst::goto_functiont &goto_function);
 
   /**
