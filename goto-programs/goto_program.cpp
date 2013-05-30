@@ -232,6 +232,7 @@ std::ostream& goto_programt::output_instruction(
   case THROW_DECL_END:
     out << "THROW_DECL_END (";
 
+    if (!is_nil_expr(it->code))
     {
       const code_cpp_throw_decl_end2t &decl_end =
         to_code_cpp_throw_decl_end2t(it->code);
@@ -242,8 +243,9 @@ std::ostream& goto_programt::output_instruction(
           out << ", ";
         out << *it;
       }
-      out << ")";
     }
+
+    out << ")";
 
     out << std::endl;
     break;
