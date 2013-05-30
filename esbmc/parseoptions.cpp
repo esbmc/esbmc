@@ -218,8 +218,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
-  if(cmdline.isset("inlining"))
-    options.set_option("inlining", true);
+  if(cmdline.isset("no-inlining"))
+    options.set_option("no-inlining", true);
 
   if (cmdline.isset("smt-during-symex")) {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -1218,7 +1218,7 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    if(cmdline.isset("inlining"))
+    if (!cmdline.isset("no-inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
@@ -1386,7 +1386,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
-    " --inlining                   inlining function calls\n"
+    " --no-inlining                disable inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
