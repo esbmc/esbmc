@@ -26,6 +26,11 @@ public:
   // The set of functions that have been inlined into this one. Necessary to
   // make symex renaming work.
   std::set<std::string> inlined_funcs;
+  // The set of all variables that are truly local to this function, i.e.
+  // before inlining. Crucially, this is not supposed to be updated after
+  // inlining or other funky modifications to the local variable set, this is
+  // what symex uses to determine variables to rename.
+  typename bodyT::local_variablest local_vars;
 
   bool is_inlined() const
   {
@@ -42,6 +47,7 @@ public:
     type.clear();
     body_available=false;
     inlined_funcs.clear();
+    local_vars.clear();
   }
 
   void swap(goto_function_templatet &other)
@@ -50,6 +56,7 @@ public:
     type.swap(other.type);
     std::swap(body_available, other.body_available);
     inlined_funcs.swap(other.inline_funcs);
+    local_vars.swap(other.local_vars);
   }
 };
 

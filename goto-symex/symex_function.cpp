@@ -236,7 +236,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.calling_location = cur_state->source;
 
   // preserve locality of local variables
-  locality(frame_nr, identifier.as_string(), goto_function);
+  locality(frame_nr, goto_function);
 
   // Preserve locality of inlined function variables. Ugly, because inlining
   // in a model checker is ugly.
@@ -247,7 +247,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     goto_functionst::function_mapt::const_iterator it2 =
       goto_functions.function_map.find(*it);
     assert(it2 != goto_functions.function_map.end());
-    locality(cur_state->function_frame[*it], *it, it2->second);
+    locality(cur_state->function_frame[*it], it2->second);
   }
 
   // assign arguments
@@ -478,36 +478,18 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(unsigned frame_nr, const std::string &identifier,
+goto_symext::locality(unsigned frame_nr,
   const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
-
-  // For all insns...
-  for (goto_programt::instructionst::const_iterator
-       it = goto_function.body.instructions.begin();
-       it != goto_function.body.instructions.end();
-       it++) {
-    // For all local variables...
-    for (std::set<irep_idt>::const_iterator it2 = it->local_variables.begin();
-         it2 != it->local_variables.end(); it2++) {
-      // If this variable belongs to the function we're fixing renaming numbers
-      // for, insert into the local_identifiers set. (Can't check for the prefix
-      // of the variable, because C++ applies another prefix containing template
-      // args, as a form of name mangling).
-      if (it2->as_string().find(identifier) != std::string::npos) {
-        local_identifiers.insert(*it2);
-      }
-    }
-  }
 
   statet::framet &frame = cur_state->top();
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
   for (goto_programt::local_variablest::const_iterator
-       it = local_identifiers.begin();
-       it != local_identifiers.end();
+       it = goto_function.local_vars.begin();
+       it != goto_function.local_vars.end();
        it++)
   {
     // Temporary, for symbol migration,
