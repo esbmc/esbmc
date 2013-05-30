@@ -18,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 // do a full inlining
 void goto_inline(
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const namespacet &ns,
   goto_programt &dest,
   message_handlert &message_handler);
@@ -40,7 +40,7 @@ class goto_inlinet:public message_streamt
 {
 public:
   goto_inlinet(
-    const goto_functionst &_goto_functions,
+    goto_functionst &_goto_functions,
     const namespacet &_ns,
     message_handlert &_message_handler):
     message_streamt(_message_handler),
@@ -64,7 +64,7 @@ public:
   unsigned smallfunc_limit; 
 
 protected:
-  const goto_functionst &goto_functions;
+  goto_functionst &goto_functions;
   const namespacet &ns;
   
   void expand_function_call(
@@ -92,6 +92,11 @@ protected:
   
   typedef hash_set_cont<irep_idt, irep_id_hash> no_body_sett;
   no_body_sett no_body_set;
+
+public:
+  // Set of function names that have been inlined into the function we're
+  // dealing with right now. Fairly hacky, could be improved.
+  std::list<std::string> inlined_funcs;
 };
 
 #endif

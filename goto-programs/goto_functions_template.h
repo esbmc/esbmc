@@ -23,6 +23,10 @@ public:
   code_typet type;
   bool body_available;
 
+  // The set of functions that have been inlined into this one. Necessary to
+  // make symex renaming work.
+  std::list<std::string> inlined_funcs;
+
   bool is_inlined() const
   {
     return type.inlined();
@@ -37,6 +41,7 @@ public:
     body.clear();
     type.clear();
     body_available=false;
+    inlined_funcs.clear();
   }
 
   void swap(goto_function_templatet &other)
@@ -44,6 +49,7 @@ public:
     body.swap(other.body);
     type.swap(other.type);
     std::swap(body_available, other.body_available);
+    inlined_funcs.swap(other.inline_funcs);
   }
 };
 

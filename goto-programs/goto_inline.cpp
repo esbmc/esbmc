@@ -274,7 +274,7 @@ void goto_inlinet::expand_function_call(
     return;
   }
 
-  goto_functionst::function_mapt::const_iterator m_it=
+  goto_functionst::function_mapt::iterator m_it=
     goto_functions.function_map.find(identifier);
 
   if(m_it==goto_functions.function_map.end())
@@ -285,7 +285,7 @@ void goto_inlinet::expand_function_call(
     throw 0;
   }
   
-  const goto_functionst::goto_functiont &f=m_it->second;
+  goto_functionst::goto_functiont &f=m_it->second;
 
   // see if we need to inline this  
   if(!full)
@@ -300,6 +300,9 @@ void goto_inlinet::expand_function_call(
 
   if(f.body_available)
   {
+    inlined_funcs.push_back(identifier.as_string());
+    inlined_funcs.insert(inlined_funcs.begin(), f.inlined_funcs.begin(), f.inlined_funcs.end());
+
     recursion_sett::iterator recursion_it=
       recursion_set.insert(identifier).first;  
   
@@ -522,7 +525,7 @@ Function: goto_inline
 \*******************************************************************/
 
 void goto_inline(
-  const goto_functionst &goto_functions,
+  goto_functionst &goto_functions,
   const namespacet &ns,
   goto_programt &dest,
   message_handlert &message_handler)
@@ -658,9 +661,12 @@ void goto_partial_inline(
     for(goto_functionst::function_mapt::iterator
         it=goto_functions.function_map.begin();
         it!=goto_functions.function_map.end();
-        it++)
+        it++) {
+      goto_inline.inlined_funcs.clear();
       if(it->second.body_available)
         goto_inline.goto_inline_rec(it->second.body, false);
+      it->second.inlined_funcs = goto_inline.inlined_funcs;
+    }
   }
 
   catch(int)
