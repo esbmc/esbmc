@@ -94,14 +94,6 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
-
-  // inline those functions marked as "inlined"
-  if (inlining) {
-    goto_partial_inline(
-      functions,
-      ns,
-      get_message_handler());
-  }
 }
 
 /*******************************************************************\
