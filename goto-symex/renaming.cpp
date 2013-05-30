@@ -186,6 +186,7 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
 #endif
 
   valuet &entry=current_names[name_record(to_symbol2t(lhs_sym))];
+  assert(entry.count <= count);
   entry.count=count;
   entry.node_id = node_id;
 }

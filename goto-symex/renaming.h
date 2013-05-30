@@ -103,7 +103,9 @@ namespace renaming {
     void rename(const expr2tc &symbol, unsigned frame)
     {
       // Given that this is level1, use base symbol.
-      current_names[name_record(to_symbol2t(symbol))]=frame;
+      unsigned &frameno = current_names[name_record(to_symbol2t(symbol))];
+      assert(frameno <= frame);
+      frameno = frame;
     }
 
     virtual void get_original_name(expr2tc &expr) const
