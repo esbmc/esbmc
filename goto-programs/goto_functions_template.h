@@ -25,7 +25,7 @@ public:
 
   // The set of functions that have been inlined into this one. Necessary to
   // make symex renaming work.
-  std::list<std::string> inlined_funcs;
+  std::set<std::string> inlined_funcs;
 
   bool is_inlined() const
   {

@@ -226,7 +226,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   // don't, then execution of the inlined function after it's l2 state has been
   // wiped results in a double assignment to it's SSA variables. Which is
   // bad.
-  for (std::list<std::string>::const_iterator it =
+  for (std::set<std::string>::const_iterator it =
        goto_function.inlined_funcs.begin();
        it != goto_function.inlined_funcs.end();
        it++) {
@@ -240,7 +240,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // Preserve locality of inlined function variables. Ugly, because inlining
   // in a model checker is ugly.
-  for (std::list<std::string>::const_iterator it =
+  for (std::set<std::string>::const_iterator it =
        goto_function.inlined_funcs.begin();
        it != goto_function.inlined_funcs.end();
        it++) {

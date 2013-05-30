@@ -300,8 +300,11 @@ void goto_inlinet::expand_function_call(
 
   if(f.body_available)
   {
-    inlined_funcs.push_back(identifier.as_string());
-    inlined_funcs.insert(inlined_funcs.begin(), f.inlined_funcs.begin(), f.inlined_funcs.end());
+    inlined_funcs.insert(identifier.as_string());
+    for (std::set<std::string>::const_iterator it2 = f.inlined_funcs.begin();
+         it2 != f.inlined_funcs.end(); it2++) {
+      inlined_funcs.insert(*it2);
+    }
 
     recursion_sett::iterator recursion_it=
       recursion_set.insert(identifier).first;  

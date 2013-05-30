@@ -96,7 +96,7 @@ protected:
 public:
   // Set of function names that have been inlined into the function we're
   // dealing with right now. Fairly hacky, could be improved.
-  std::list<std::string> inlined_funcs;
+  std::set<std::string> inlined_funcs;
 };
 
 #endif
