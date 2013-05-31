@@ -650,7 +650,7 @@ expr2t::pretty(unsigned int indent) const
                                                      *this);
   // Dump the type on the end.
   ret += std::string("\n") + indent_str(indent) + "  * type : "
-         + type->pretty(indent + 2);
+         + type->pretty(indent);
   return ret;
 }
 
