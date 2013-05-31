@@ -223,18 +223,6 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   // preserve locality of local variables
   locality(goto_function);
 
-  // Preserve locality of inlined function variables. Ugly, because inlining
-  // in a model checker is ugly.
-  for (std::set<std::string>::const_iterator it =
-       goto_function.inlined_funcs.begin();
-       it != goto_function.inlined_funcs.end();
-       it++) {
-    goto_functionst::function_mapt::const_iterator it2 =
-      goto_functions.function_map.find(*it);
-    assert(it2 != goto_functions.function_map.end());
-    locality(it2->second);
-  }
-
   // assign arguments
   type2tc tmp_type;
   migrate_type(goto_function.type, tmp_type);
@@ -467,13 +455,22 @@ goto_symext::locality(const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 
+  // For all insns...
+  for (goto_programt::instructionst::const_iterator
+       it = goto_function.body.instructions.begin();
+       it != goto_function.body.instructions.end();
+       it++) {
+    local_identifiers.insert(it->local_variables.begin(),
+                             it->local_variables.end());
+  }
+
   statet::framet &frame = cur_state->top();
 
   // For each local variable, set its frame number to frame_nr, ensuring all new
   // references to it look up a new variable.
   for (goto_programt::local_variablest::const_iterator
-       it = goto_function.local_vars.begin();
-       it != goto_function.local_vars.end();
+       it = local_identifiers.begin();
+       it != local_identifiers.end();
        it++)
   {
     // Temporary, for symbol migration,

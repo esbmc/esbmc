@@ -284,8 +284,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
 
   f.body.update();
 
-  f.local_vars = f.body.local_vars;
-
   if(hide(f.body))
     f.type.hide(true);
 }

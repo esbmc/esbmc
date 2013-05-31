@@ -280,9 +280,6 @@ public:
   //! The list of instructions in the goto program
   instructionst instructions;
 
-  // The set of local variables in this function.
-  local_variablest local_vars;
-
   bool has_local_variable(
     class instructiont &instruction,
     const irep_idt &identifier)
@@ -299,8 +296,6 @@ public:
     const_targetst &successors) const;
 
   void compute_incoming_edges();
-
-  void compute_local_vars();
 
   //! Insertion that preserves jumps to "target".
   //! The instruction is destroyed.
@@ -549,20 +544,6 @@ void goto_program_templatet<codeT, guardT>::update()
   compute_incoming_edges();
   compute_target_numbers();
   compute_location_numbers();
-  compute_local_vars();
-}
-
-template <class codeT, class guardT>
-void goto_program_templatet<codeT, guardT>::compute_local_vars()
-{
-  local_vars.clear();
-  for(typename instructionst::const_iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-  {
-    local_vars.insert(it->local_variables.begin(), it->local_variables.end());
-  }
 }
 
 template <class codeT, class guardT>
