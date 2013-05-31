@@ -369,6 +369,16 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   // rely on @ and ! symbols in the string "sadly".
   if (migrate_namespace_lookup->lookup(init, sym) == false) {
     // This is a level0 name.
+
+    // Funkyness: use the global symbol table type. Why? Because various things
+    // out there get parsed in with a partial type, i.e. something where a
+    // function prototype is declared, or perhaps a pointer to an incomplete
+    // type (but that's less of an issue). This then screws up future hash
+    // tables, where symbols can have different types, and thus have different
+    // hashes.
+    // Fix this by ensuring that /all/ symbols with the same name use the type
+    // from the global symbol table.
+    migrate_type(sym->type, type);
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
   }
 
