@@ -687,9 +687,9 @@ void value_sett::assign(
 
     if (is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      // XXXjmorse - was passing rhs as exprt(rhs.id(), type.subtype()),
-      // Which discards much data and is probably invalid.
-      assign(lhs_index, rhs, ns, add_to_sets);
+      // Assign an uknown subtype value to the array's (unknown) index.
+      unknown2tc unknown_field(arr_type.subtype);
+      assign(lhs_index, unknown_field, ns, add_to_sets);
     }
     else
     {
