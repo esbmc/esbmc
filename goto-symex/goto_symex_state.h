@@ -411,9 +411,11 @@ public:
   guardt global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
-  /** Invocation count for each function name. Tracks how many times a function
-   *  has been called, used by l1 renaming as an activation record. */
-  std::map<irep_idt, unsigned> function_frame;
+  /** Counter for how many times a particular variable has been declared:
+   *  becomes the l1 renaming number in renamed variables. Used to be a counter
+   *  for each function invocation, but the existance of decl insns makes l1
+   *  re-naming out of step with function invocations. */
+  std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many loop unwinds we've performed. For each target in the
    *  program that contains a loop, record how many times we've unwound round
    *  it. */

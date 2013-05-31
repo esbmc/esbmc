@@ -218,25 +218,10 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.level1 = cur_state->previous_frame().level1;
   frame.level1.thread_id = cur_state->source.thread_nr;
 
-  // Increment activation record of this function call
-  unsigned &frame_nr = cur_state->function_frame[identifier];
-  frame_nr++;
-
-  // Increment the activation record numbers of inlined functions too. If we
-  // don't, then execution of the inlined function after it's l2 state has been
-  // wiped results in a double assignment to it's SSA variables. Which is
-  // bad.
-  for (std::set<std::string>::const_iterator it =
-       goto_function.inlined_funcs.begin();
-       it != goto_function.inlined_funcs.end();
-       it++) {
-    cur_state->function_frame[*it]++;
-  }
-
   frame.calling_location = cur_state->source;
 
   // preserve locality of local variables
-  locality(frame_nr, goto_function);
+  locality(goto_function);
 
   // Preserve locality of inlined function variables. Ugly, because inlining
   // in a model checker is ugly.
@@ -247,7 +232,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     goto_functionst::function_mapt::const_iterator it2 =
       goto_functions.function_map.find(*it);
     assert(it2 != goto_functions.function_map.end());
-    locality(cur_state->function_frame[*it], it2->second);
+    locality(it2->second);
   }
 
   // assign arguments
@@ -478,8 +463,7 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(unsigned frame_nr,
-  const goto_functionst::goto_functiont &goto_function)
+goto_symext::locality(const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 
@@ -494,7 +478,9 @@ goto_symext::locality(unsigned frame_nr,
   {
     // Temporary, for symbol migration,
     symbol2tc tmp_sym(get_empty_type(), *it);
-    frame.level1.rename(tmp_sym, frame_nr);
+
+    unsigned int &frame_nr = cur_state->variable_instance_nums[*it];
+    frame.level1.rename(tmp_sym, ++frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));
   }

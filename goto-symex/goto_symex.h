@@ -340,14 +340,13 @@ protected:
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
-   *  These names are all the names of local variables, renamed to level 1, so
-   *  that we have a list of all variables that are in fact local to this
-   *  particular function call.
-   *  @param frame_counter The function frame invocation number.
+   *  These names are all the names of local variables, renamed to level 1.
+   *  We also bump up the level 1 renaming number, effectively making all the
+   *  local variables new instances of those variables (which is what entering
+   *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(unsigned frame_counter,
-    const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functionst::goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.

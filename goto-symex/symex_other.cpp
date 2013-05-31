@@ -66,9 +66,9 @@ void goto_symext::symex_other(void)
     while(cur_state->top().declaration_history.find(renaming::level2t::name_record(l1_symbol))!=
           cur_state->top().declaration_history.end())
     {
-      unsigned index = cur_state->top().level1.current_number(identifier);
-      cur_state->top().level1.rename(l1_sym, index+1);
-      l1_symbol.level1_num = index + 1;
+      unsigned &index = cur_state->variable_instance_nums[identifier];
+      cur_state->top().level1.rename(l1_sym, ++index);
+      l1_symbol.level1_num = index;
     }
 
     renaming::level2t::name_record tmp_name(l1_symbol);
