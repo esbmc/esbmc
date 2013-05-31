@@ -771,6 +771,9 @@ bool cbmc_parseoptionst::get_goto_program(
 
       status("Generating GOTO Program");
 
+      // Ahem
+      migrate_namespace_lookup = new namespacet(context);
+
       goto_convert(
         context, options, goto_functions,
         ui_message_handler);

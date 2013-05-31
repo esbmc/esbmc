@@ -3,10 +3,21 @@
 
 #include <stdint.h>
 
+#include <namespace.h>
 #include <config.h>
 #include <simplify_expr.h>
 
 // File for old irep -> new irep conversions.
+
+// Why do we need a namespace you say? Because there are now @ symbols embedded
+// in variable names, so we can't detect the renaming level of a variable
+// effectively. So, perform some hacks, by getting the top level parseoptions
+// code to give us the global namespace, and use that to detect whether the
+// symbol is renamed at all.
+// Why is this a global? Because there are over three hundred call sites to
+// migrate_expr, and it's a huge task to fix them all up to pass a namespace
+// down.
+namespacet *migrate_namespace_lookup = NULL;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 
@@ -349,18 +360,21 @@ convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
 expr2tc
 sym_name_to_symbol(irep_idt init, type2tc type)
 {
+  const symbolt *sym;
   symbol2t::renaming_level target_level;
   unsigned int level1_num, thread_num, node_num, level2_num;
 
   const std::string &thestr = init.as_string();
-  if (thestr.find("@") == std::string::npos) {
+  // If this is an existing symbol name, then we're not renamed at all. Can't
+  // rely on @ and ! symbols in the string "sadly".
+  if (migrate_namespace_lookup->lookup(init, sym) == false) {
     // This is a level0 name.
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
   }
 
   // Renamed to at least level 1,
-  size_t at_pos = thestr.find("@");
-  size_t exm_pos = thestr.find("!");
+  size_t at_pos = thestr.rfind("@");
+  size_t exm_pos = thestr.rfind("!");
 
   size_t and_pos, hash_pos;
   if (thestr.find("#") == std::string::npos) {
