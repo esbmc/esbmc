@@ -1114,28 +1114,26 @@ expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
     std::string basename = base.as_string().substr(endpos+2);
     new_symbol.base_name=base;
 
-    {
-      type2tc lentype, sizetype;
-      typet olentype = build_type(LENGTH);
-      typet osizetype = build_type(SIZE);
-      migrate_type(olentype, lentype);
-      migrate_type(osizetype, sizetype);
-
-      std::vector<expr2tc> operands;
-      operands.push_back(true_expr);
-      operands.push_back(constant_int2tc(lentype, l));
-      operands.push_back(constant_int2tc(sizetype, l+1));
-      constant_struct2tc value(string_struct, operands);
-
-      // initialization
-      goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      exprt new_sym = symbol_expr(new_symbol);
-      expr2tc new_sym2;
-      migrate_expr(new_sym, new_sym2);
-      assignment1->code = code_assign2tc(new_sym2, value);
-    }
-
+    exprt new_sym = symbol_expr(new_symbol);
     context.move(new_symbol);
+
+    type2tc lentype, sizetype;
+    typet olentype = build_type(LENGTH);
+    typet osizetype = build_type(SIZE);
+    migrate_type(olentype, lentype);
+    migrate_type(osizetype, sizetype);
+
+    std::vector<expr2tc> operands;
+    operands.push_back(true_expr);
+    operands.push_back(constant_int2tc(lentype, l));
+    operands.push_back(constant_int2tc(sizetype, l+1));
+    constant_struct2tc value(string_struct, operands);
+
+    // initialization
+    goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
+    expr2tc new_sym2;
+    migrate_expr(new_sym, new_sym2);
+    assignment1->code = code_assign2tc(new_sym2, value);
   }
 
   return symbol2tc(string_struct, identifier);
