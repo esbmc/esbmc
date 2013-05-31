@@ -669,7 +669,7 @@ void value_sett::assign(
     	  }
     	}
 
-        assert(base_type_eq(rhs->type, lhs_type, ns));
+        assert(base_type_eq(rhs->type, lhs_type, ns) || is_subclass_of(lhs_type, rhs->type, ns));
         expr2tc rhs_member = make_member(rhs, name, ns);
         assign(lhs_member, rhs_member, ns, add_to_sets);
       }
