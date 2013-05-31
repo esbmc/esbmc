@@ -503,6 +503,10 @@ bool bmct::run_thread()
            i2string((unsigned long)equation->SSA_steps.size())+
            " assignments");
 
+  if (options.get_bool_option("double-assign-check")) {
+    equation->check_for_duplicate_assigns();
+  }
+
   try
   {
     if(options.get_option("slice-by-trace")!="")
