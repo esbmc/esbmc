@@ -1252,7 +1252,7 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add pointer checks
     pointer_checks(
-      goto_functions, ns, options, value_set_analysis);
+      goto_functions, ns, context, options, value_set_analysis);
 
     // add failed symbols
     add_failed_symbols(context, ns);
