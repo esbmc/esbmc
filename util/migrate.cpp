@@ -404,8 +404,12 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
   std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
 
-  level1_num = atoi(atstr.c_str());
-  thread_num = atoi(exmstr.c_str());
+  char *endatptr, *endexmptr;
+  level1_num = strtol(atstr.c_str(), &endatptr, 10);
+  assert(endatptr != atstr.c_str());
+  thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
+  assert(endexmptr != exmstr.c_str());
+
   if (target_level == symbol2t::level1) {
     return expr2tc(new symbol2t(type, thename, target_level, level1_num,
                                 0, thread_num, 0));
