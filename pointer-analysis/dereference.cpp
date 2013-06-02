@@ -149,9 +149,12 @@ void dereferencet::dereference(
       get_new_name(symbol, ns);
 
       exprt tmp_sym_expr = symbol_expr(symbol);
-      migrate_expr(tmp_sym_expr, value);
 
       new_context.move(symbol);
+
+      // Due to migration hiccups, migration must occur after the symbol
+      // appears in the symbol table.
+      migrate_expr(tmp_sym_expr, value);
     }
   }
 
