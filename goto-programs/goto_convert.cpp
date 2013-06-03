@@ -3551,10 +3551,38 @@ void goto_convertt::convert_ifthenelse(
 		//tmp_guard=assignment.op0();
 		tmp_guard=symbol_expr(new_symbol);
 	  }
+	  else if (code.op0().statement() == "decl-block")
+	  {
+//	    std::cout << "############# code: " << code.pretty() << std::endl;
+
+	    exprt lhs(code.op0().op0().op0());
+	    lhs.location()=code.op0().op0().location();
+//	    std::cout << "lhs.location(): " <<lhs.location() << std::endl;
+//	    std::cout << "### lhs_ifthenelse: " << lhs.pretty() << std::endl;
+	    exprt rhs(code.op0().op0().op1());
+
+	    rhs.type()=code.op0().op0().op1().type();
+
+//	    std::cout << "lhs.pretty(): " << lhs.pretty() << std::endl;
+//	    std::cout << "rhs.pretty(): " << rhs.pretty() << std::endl;
+
+	    codet assignment("assign");
+	    assignment.copy_to_operands(lhs);
+	    assignment.move_to_operands(rhs);
+	    assignment.location()=lhs.location();
+	    //      copy(assignment, ASSIGN, dest);
+	    convert(assignment, dest);
+//	    std::cout << "### assignment.pretty(): " << assignment.pretty() << std::endl;
+//	    std::cout << "### assignment.op0(): " << assignment.op0().pretty() << std::endl;
+	    tmp_guard=assignment.op0();
+
+	    if (!tmp_guard.type().is_bool())
+	      tmp_guard.make_typecast(bool_typet());
+	  }
 	  else
 	    tmp_guard=code.op0();
 
-    remove_sideeffects(tmp_guard, dest);
+	  remove_sideeffects(tmp_guard, dest);
 	  if (inductive_step && (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
@@ -3566,7 +3594,7 @@ void goto_convertt::convert_ifthenelse(
 
 	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 #endif
-  is_ifthenelse=false;
+	  is_ifthenelse=false;
 }
 
 /*******************************************************************\
