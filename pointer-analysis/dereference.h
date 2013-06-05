@@ -102,7 +102,7 @@ private:
              
   static const expr2tc &get_symbol(const expr2tc &object);
   
-  void bounds_check(const class index2t &expr, const guardt &guard);
+  void bounds_check(const index2t &expr, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
 
   bool memory_model(
