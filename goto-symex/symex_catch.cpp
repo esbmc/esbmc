@@ -368,11 +368,22 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
 
   if(!options.get_bool_option("extended-try-analysis"))
   {
-    statet::goto_state_listt &goto_state_list =
-      cur_state->top().goto_state_map[target];
+    // Search backwards through stack frames, looking for the frame that
+    // contains the function containing the target instruction.
+    goto_symex_statet::call_stackt::reverse_iterator i;
+    for (i = cur_state->call_stack.rbegin();
+         i != cur_state->call_stack.rend(); i++) {
+      if (i->function_identifier == target->function) {
+        statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
-    goto_state_list.push_back(statet::goto_statet(*cur_state));
-    cur_state->guard.make_false();
+        goto_state_list.push_back(statet::goto_statet(*cur_state));
+        cur_state->guard.make_false();
+        break;
+      }
+    }
+
+    assert(i != cur_state->call_stack.rend() && "Target instruction in throw "
+           "handler not in any function frame on the stack");
   }
 }
 
