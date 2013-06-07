@@ -436,7 +436,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = sym_name_to_symbol(expr.identifier(), type);
   } else if (expr.id() == "nondet_symbol") {
     migrate_type(expr.type(), type);
-    new_expr_ref = sym_name_to_symbol("nondet$" + expr.identifier().as_string(), type);
+    new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
   } else if (expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
              expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
              expr.type().id() != typet::t_fixedbv && expr.type().id() != typet::t_array) {
