@@ -3637,13 +3637,13 @@ void goto_convertt::generate_conditional_branch(
 
   if(!has_sideeffect(guard))
   {
-	exprt g = guard;
-	if(options.get_bool_option("atomicity-check"))
-	{
-	  unsigned int globals = get_expr_number_globals(g);
-	  if(globals > 0)
-		break_globals2assignments(g, dest,location);
-	}
+    exprt g = guard;
+    if(options.get_bool_option("atomicity-check"))
+    {
+      unsigned int globals = get_expr_number_globals(g);
+      if(globals > 0)
+        break_globals2assignments(g, dest,location);
+    }
     // this is trivial
     goto_programt::targett t=dest.add_instruction();
     t->make_goto(target_true);
