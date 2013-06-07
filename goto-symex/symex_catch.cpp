@@ -216,12 +216,9 @@ bool goto_symext::symex_throw()
       const std::string &msg="Throwing an exception of type " +
         exceptions_thrown.begin()->as_string() + " but there is not catch for it.";
       claim(false_expr, msg);
+      // Ensure no further execution along this path.
+      cur_state->guard.make_false();
     }
-
-    // Either a fatal assertion failure or a jump to the terminate handler just
-    // got encoded; either way the guard is now false, as we don't proceed any
-    // further along this path.
-    cur_state->guard.make_false();
 
     return false;
   }
