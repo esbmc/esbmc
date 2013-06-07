@@ -179,8 +179,10 @@ bool dereferencet::dereference_type_compare(
 
   // Check for C++ subclasses; we can cast derived up to base safely.
   if (is_struct_type(object) && is_struct_type(dereference_type)) {
-    if (is_subclass_of(object->type, dereference_type, ns))
+    if (is_subclass_of(object->type, dereference_type, ns)) {
+      object = typecast2tc(dereference_type, object);
       return true;
+    }
   }
 
   // check for struct prefixes

@@ -2253,11 +2253,27 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
   new_names.reserve(struct_type_to.members.size());
 
   i = 0;
-  forall_types(it, struct_type_to.members) {
-    if (!base_type_eq(struct_type_from.members[i], *it, ns))
-      throw new conv_error("Incompatible struct in cast-to-struct");
 
-    i++;
+  // This all goes to pot when we consider polymorphism, and in particular,
+  // multiple inheritance. So, for normal structs, as usual check that each
+  // field has a compatible type. But for classes, check that either they're
+  // the same class, or the source is a subclass of the target type. If so,
+  // we just select out the common fields, which drops any additional data in
+  // the subclass.
+
+  bool same_format = true;
+  if (is_subclass_of(cast.from->type, cast.type, ns)) {
+    same_format = false; // then we're fine
+  } else if (struct_type_from.name == struct_type_to.name) {
+    ; // Also fine
+  } else {
+    // Check that these two different structs have the same format.
+    forall_types(it, struct_type_to.members) {
+      if (!base_type_eq(struct_type_from.members[i], *it, ns))
+        throw new conv_error("Incompatible struct in cast-to-struct");
+
+      i++;
+    }
   }
 
   z3::sort sort;
@@ -2265,12 +2281,40 @@ z3_convt::convert_typecast_struct(const typecast2t &cast, z3::expr &output)
 
   freshval = ctx.fresh_const(NULL, sort);
 
-  i2 = 0;
-  forall_types(it, struct_type_to.members) {
-    z3::expr formula;
-    formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i2);
-    assert_formula(formula);
-    i2++;
+  if (same_format) {
+    i2 = 0;
+    forall_types(it, struct_type_to.members) {
+      z3::expr formula;
+      formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i2);
+      assert_formula(formula);
+      i2++;
+    }
+  } else {
+    // Due to inheritance, these structs don't have the same format. Therefore
+    // we have to look up source fields by matching the field names between
+    // structs, then using their index numbers construct equalities between
+    // fields in the source value and a fresh value.
+    i2 = 0;
+    forall_names(it, struct_type_to.member_names) {
+      // Linear search, yay :(
+      unsigned int i3 = 0;
+      forall_names(it2, struct_type_from.member_names) {
+        if (*it == *it2)
+          break;
+        i3++;
+      }
+
+      assert(i3 != struct_type_from.member_names.size() &&
+             "Superclass field doesn't exist in subclass during conversion "
+             "cast");
+      // Could assert that the types are the same, however Z3 is going to
+      // complain mightily if we get it wrong.
+
+      z3::expr formula;
+      formula = mk_tuple_select(freshval, i2) == mk_tuple_select(output, i3);
+      assert_formula(formula);
+      i2++;
+    }
   }
 
   output = freshval;
