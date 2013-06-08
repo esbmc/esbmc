@@ -233,9 +233,11 @@ void value_sett::get_value_set_rec(
   else if (is_index2t(expr))
   {
     const index2t &idx = to_index2t(expr);
-    const type2tc &source_type = idx.source_value->type;
 
+#ifndef NDEBUG
+    const type2tc &source_type = idx.source_value->type;
     assert(is_array_type(source_type) || is_string_type(source_type));
+#endif
            
     get_value_set_rec(idx.source_value, dest, "[]"+suffix, original_type, ns);
     
@@ -244,9 +246,11 @@ void value_sett::get_value_set_rec(
   else if (is_member2t(expr))
   {
     const member2t &memb = to_member2t(expr);
-    const type2tc &source_type = memb.source_value->type;
 
+#ifndef NDEBUG
+    const type2tc &source_type = memb.source_value->type;
     assert(is_struct_type(source_type) || is_union_type(source_type));
+#endif
            
     get_value_set_rec(memb.source_value, dest,
                       "." + memb.member.as_string() + suffix,
