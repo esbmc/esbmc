@@ -1042,32 +1042,29 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
     new_symbol.module=symbol.module;
     new_symbol.base_name=id2string(symbol.base_name)+suffix;
 
-    {    
-      std::vector<expr2tc> operands;
-      operands.push_back(false_expr);
-      operands.push_back(obj_array_type.array_size);
-      typet tmptype = build_type(SIZE);
-      type2tc eventmpertype;
-      migrate_type(tmptype, eventmpertype);
-      make_type(operands.back(), eventmpertype);
-      operands.push_back(operands.back());
-      constant_struct2tc value(string_struct, operands);
-      
-      new_symbol.value = migrate_expr_back(value);
-    }
+    std::vector<expr2tc> operands;
+    operands.push_back(false_expr);
+    operands.push_back(obj_array_type.array_size);
+    typet tmptype = build_type(SIZE);
+    type2tc eventmpertype;
+    migrate_type(tmptype, eventmpertype);
+    make_type(operands.back(), eventmpertype);
+    operands.push_back(operands.back());
+    constant_struct2tc value(string_struct, operands);
+
+    new_symbol.value = migrate_expr_back(value);
+
+    exprt new_sym = symbol_expr(new_symbol);
+    expr2tc new_sym2;
+    context.move(new_symbol);
+    migrate_expr(new_sym, new_sym2);
 
     if(symbol.static_lifetime)
     {
       // initialization
       goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      exprt new_sym = symbol_expr(new_symbol);
-      expr2tc new_sym2, new_sym_value;
-      migrate_expr(new_sym, new_sym2);
-      migrate_expr(new_symbol.value, new_sym_value);
-      assignment1->code = code_assign2tc(new_sym2, new_sym_value);
+      assignment1->code = code_assign2tc(new_sym2, value);
     }
-
-    context.move(new_symbol);
   }
 
   const symbolt &str_symbol=ns.lookup(identifier);
