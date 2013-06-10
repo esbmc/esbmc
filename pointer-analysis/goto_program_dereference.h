@@ -90,18 +90,6 @@ void dereference(
   const namespacet &ns,
   value_setst &value_sets);
 
-void remove_pointers(
-  goto_programt &goto_program,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets);
-
-void remove_pointers(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets);
-
 void pointer_checks(
   goto_programt &goto_program,
   const namespacet &ns,

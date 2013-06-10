@@ -353,35 +353,6 @@ void goto_program_dereferencet::pointer_checks(
   dereference_program(goto_functions, true);
 }
 
-void remove_pointers(
-  goto_programt &goto_program,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  namespacet ns(context);
-
-  goto_program_dereferencet
-    goto_program_dereference(ns, context, options, value_sets);
-
-  goto_program_dereference.dereference_program(goto_program);
-}
-
-void remove_pointers(
-  goto_functionst &goto_functions,
-  contextt &context,
-  const optionst &options,
-  value_setst &value_sets)
-{
-  namespacet ns(context);
-
-  goto_program_dereferencet
-    goto_program_dereference(ns, context, options, value_sets);
-
-  Forall_goto_functions(it, goto_functions)
-    goto_program_dereference.dereference_program(it->second.body);
-}
-
 void pointer_checks(
   goto_programt &goto_program,
   const namespacet &ns,
