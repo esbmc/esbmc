@@ -66,15 +66,15 @@ void dereferencet::dereference(
 {
   assert(is_pointer_type(dest));
 
+  // save the dest for later, dest might be destroyed
+  const expr2tc deref_expr(dest);
+
   // Pointers type won't have been resolved; do that now.
   pointer_type2t &dest_type = to_pointer_type(dest.get()->type);
   typet tmp_ptr_subtype = migrate_type_back(dest_type.subtype);
   const typet dereftype = ns.follow(tmp_ptr_subtype);
 
   migrate_type(dereftype, dest_type.subtype);
-
-  // save the dest for later, dest might be destroyed
-  const expr2tc deref_expr(dest);
 
   // type of the object
   const type2tc &type = dest_type.subtype;
@@ -109,7 +109,7 @@ void dereferencet::dereference(
   {
     expr2tc new_value, pointer_guard;
 
-    build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard);
+    build_reference_to(*it, mode, deref_expr, type, new_value, pointer_guard, guard);
 
     if (!is_nil_expr(new_value))
     {
