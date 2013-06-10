@@ -269,7 +269,7 @@ public:
   }
 };
 
-typedef boost::shared_ptr<type2t> type2tc;
+typedef irep_container<type2t> type2tc;
 typedef irep_container<expr2t> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
@@ -427,6 +427,11 @@ public:
    *  @param hash Object to accumulate hash data into.
    */
   virtual void do_crc(hacky_hash &hash) const;
+
+  /** Clone method. Self explanatory.
+   *  @return New container, containing a duplicate of this object.
+   */
+  virtual type2tc clone(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
