@@ -315,8 +315,8 @@ renaming::level2t::get_phi_set(const renaming::level2t &ref) const
     assert(it2 != ref.current_names.end());
     if (it2->second.count != it->second.count) {
       diff_set.insert(it->first);
-      other_set.erase(it->first);
     }
+    other_set.erase(it->first);
   }
 
   diff_set.insert(other_set.begin(), other_set.end());
