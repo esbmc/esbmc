@@ -312,8 +312,11 @@ renaming::level2t::get_phi_set(const renaming::level2t &ref) const
   for (current_namest::const_iterator it = current_names.begin();
        it != current_names.end(); it++) {
     current_namest::const_iterator it2 = ref.current_names.find(it->first);
-    assert(it2 != ref.current_names.end());
-    if (it2->second.count != it->second.count) {
+
+    // it2 is permitted to be end; we might have had a variable decl'd in one
+    // branch of an if, but not the other.
+    if (it2 != ref.current_names.end() &&
+        it2->second.count != it->second.count) {
       diff_set.insert(it->first);
     }
     other_set.erase(it->first);
