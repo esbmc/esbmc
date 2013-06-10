@@ -217,20 +217,15 @@ void
 goto_symext::phi_function(const statet::goto_statet &goto_state)
 {
   // go over all variables to see what changed
-  std::set<renaming::level2t::name_record> variables;
+  renaming::level2t::current_name_set variables;
 
-  goto_state.level2.get_variables(variables);
-  cur_state->level2.get_variables(variables);
+  variables = goto_state.level2.get_phi_set(cur_state->level2);
 
-  for (std::set<renaming::level2t::name_record>::const_iterator
+  for (renaming::level2t::current_name_set::const_iterator
        it = variables.begin();
        it != variables.end();
        it++)
   {
-    if (goto_state.level2.current_number(*it) ==
-        cur_state->level2.current_number(*it))
-      continue;  // not changed
-
     if (it->base_name == guard_identifier_s)
       continue;  // just a guard
 

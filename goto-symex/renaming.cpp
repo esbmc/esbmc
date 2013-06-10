@@ -300,3 +300,26 @@ renaming::level2t::make_assignment(expr2tc &lhs_symbol,
 
   entry.constant = const_value;
 }
+
+renaming::level2t::current_name_set
+renaming::level2t::get_phi_set(const renaming::level2t &ref) const
+{
+  current_name_set diff_set;
+  current_name_set other_set;
+  ref.get_variables(other_set);
+
+  // Go through all variables in both sets and compare their renaming num.
+  for (current_namest::const_iterator it = current_names.begin();
+       it != current_names.end(); it++) {
+    current_namest::const_iterator it2 = ref.current_names.find(it->first);
+    assert(it2 != ref.current_names.end());
+    if (it2->second.count != it->second.count) {
+      diff_set.insert(it->first);
+      other_set.erase(it->first);
+    }
+  }
+
+  diff_set.insert(other_set.begin(), other_set.end());
+
+  return diff_set;
+}

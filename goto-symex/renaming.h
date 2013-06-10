@@ -256,6 +256,17 @@ namespace renaming {
       }
     }
 
+    void get_variables(hash_set_cont<name_record, name_rec_hash> &vars) const
+    {
+      for(current_namest::const_iterator it=current_names.begin();
+          it!=current_names.end();
+          it++)
+      {
+        vars.insert(it->first);
+      }
+    }
+
+
     unsigned current_number(const expr2tc &sym) const;
     unsigned current_number(const name_record &rec) const;
 
@@ -266,8 +277,12 @@ namespace renaming {
     virtual void print(std::ostream &out) const;
     virtual void dump() const;
 
+    typedef hash_set_cont<name_record, name_rec_hash> current_name_set;
+    current_name_set get_phi_set(const renaming::level2t &ref) const;
+
   protected:
-    typedef std::map<const name_record, valuet, name_rec_hash> current_namest;
+    typedef hash_map_cont<const name_record, valuet, name_rec_hash>
+      current_namest;
     current_namest current_names;
     typedef std::map<const expr2tc, crypto_hash> current_state_hashest;
     current_state_hashest current_hashes;
