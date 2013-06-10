@@ -281,6 +281,8 @@ namespace renaming {
     current_name_set get_phi_set(const renaming::level2t &ref) const;
 
   protected:
+    // NB: tried replacing name_record with expr2tc on 09/06/13, testing with
+    // TACAS '13 showed performance was degraded. So, name_record is worthwhile.
     typedef hash_map_cont<const name_record, valuet, name_rec_hash>
       current_namest;
     current_namest current_names;
