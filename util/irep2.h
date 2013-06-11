@@ -14,6 +14,8 @@
 #include <boost/crc.hpp>
 #include <boost/utility/enable_if.hpp>
 #include <boost/fusion/include/equal_to.hpp>
+#include <boost/pool/pool.hpp>
+#include <boost/pool/pool_alloc.hpp>
 
 #include <config.h>
 #include <irep.h>
@@ -192,6 +194,17 @@ public:
   explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
     { }
 
+
+  template<class Y, class D>
+  explicit irep_container(Y *p, D d) : boost::shared_ptr<T>(p, d)
+    { }
+
+  template<class Y, class D>
+  explicit irep_container(const Y *p, D d)
+     : boost::shared_ptr<T>(const_cast<Y *>(p), d)
+    { }
+
+public:
   irep_container(const irep_container &ref)
     : boost::shared_ptr<T>(ref) {}
 
@@ -1005,6 +1018,24 @@ namespace esbmct {
   protected:
     virtual void list_operands(std::list<expr2tc*> &inp);
     virtual expr2t *clone_raw(void) const;
+  public:
+    static boost::fast_pool_allocator<derived> pool;
+
+    void *operator new(size_t s __attribute__((unused))) {
+      return pool.allocate();
+    }
+
+    void operator delete(void* hunk) {
+      pool.deallocate((derived*)hunk);
+    }
+  };
+
+  template <class T> class irep_deleter {
+    public:
+    static void beards(T *p)
+    {
+      delete p;
+    }
   };
 
   /** Template for generating type2t boilerplate methods.
@@ -1105,7 +1136,8 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid, class superclass,class hastype,
+  template <class contained, unsigned int expid, class superclass,
+           class hastype,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
      typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
@@ -1146,7 +1178,8 @@ namespace esbmct {
     something2tc(const type2tc &t,
                  const irep_idt &arg1,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<contained,symbol2t>, arbitary >::type* = NULL)
-          : expr2tc(new contained(t, arg1)) { }
+          : expr2tc(new contained(t, arg1),
+                    &irep_deleter<contained>::beards) { }
 
     const contained &operator*() const
     {
@@ -1173,7 +1206,7 @@ namespace esbmct {
     something2tc(const type2tc &t,
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_not_eq(arbitary,field1_type,expr2t::expr_ids))
-      : expr2tc(new contained(t)) { }
+      : expr2tc(new contained(t), &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1181,7 +1214,7 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1)) { }
+      : expr2tc(new contained(t, arg1), &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1190,7 +1223,8 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2)) { }
+      : expr2tc(new contained(t, arg1, arg2),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1200,7 +1234,8 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3)) { }
+      : expr2tc(new contained(t, arg1, arg2, arg3),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1211,7 +1246,8 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4)) { }
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1223,7 +1259,8 @@ namespace esbmct {
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5)) { }
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
@@ -1235,7 +1272,8 @@ namespace esbmct {
                  const field6_type &arg6,
                  disable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6)) { }
+      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6),
+                &irep_deleter<contained>::beards) { }
 
     // Duplicate set of constructors, but without the type argument.
 
@@ -1244,7 +1282,8 @@ namespace esbmct {
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1)) { }
+      : expr2tc(new contained(arg1),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
@@ -1252,7 +1291,8 @@ namespace esbmct {
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2)) { }
+      : expr2tc(new contained(arg1, arg2),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
@@ -1261,7 +1301,8 @@ namespace esbmct {
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3)) { }
+      : expr2tc(new contained(arg1, arg2, arg3),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
@@ -1271,7 +1312,8 @@ namespace esbmct {
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4)) { }
+      : expr2tc(new contained(arg1, arg2, arg3, arg4)
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
@@ -1282,7 +1324,8 @@ namespace esbmct {
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
                  disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5)) { }
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5),
+                &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
@@ -1293,7 +1336,8 @@ namespace esbmct {
                  const field6_type &arg6,
                  enable_if_eq(arbitary,hastype,notype),
                  disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6)) { }
+      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
+                &irep_deleter<contained>::beards) { }
 
     something2tc(const something2tc<contained, expid, superclass, hastype,
                                     field1_type, field1_class, field1_ptr,
@@ -2647,19 +2691,22 @@ public:
 // exactly the kind of thing that macros are for.
 
 #define irep_typedefs(basename, superclass, type, ...) \
+  typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
                                type, __VA_ARGS__> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
                                __VA_ARGS__ \
-                               > basename##_expr_methods;
+                               > basename##_expr_methods; \
 
 // Special case for some empty ireps,
 
 #define irep_typedefs_empty(basename, superclass, type) \
+  typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
                                type> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
-                               > basename##_expr_methods;
+                               > basename##_expr_methods; \
+  typedef esbmct::irep_deleter<basename##2t> basename##_deleter;
 
 // New rule: anything containing an expr2tc must be first in the template list,
 // everything else afterwards. This is to simplify iterating over subexprs.
