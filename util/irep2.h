@@ -186,15 +186,6 @@ class irep_container : public boost::shared_ptr<T>
 public:
   irep_container() : boost::shared_ptr<T>() {}
 
-  template<class Y>
-  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
-    { }
-
-  template<class Y>
-  explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
-    { }
-
-
   template<class Y, class D>
   explicit irep_container(Y *p, D d) : boost::shared_ptr<T>(p, d)
     { }
@@ -204,7 +195,6 @@ public:
      : boost::shared_ptr<T>(const_cast<Y *>(p), d)
     { }
 
-public:
   irep_container(const irep_container &ref)
     : boost::shared_ptr<T>(ref) {}
 
