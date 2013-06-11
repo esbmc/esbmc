@@ -1124,6 +1124,16 @@ namespace esbmct {
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+
+    static boost::fast_pool_allocator<derived> pool;
+
+    void *operator new(size_t s __attribute__((unused))) {
+      return pool.allocate();
+    }
+
+    void operator delete(void* hunk) {
+      pool.deallocate((derived*)hunk);
+    }
   };
 
   // Meta goo
@@ -1136,7 +1146,7 @@ namespace esbmct {
   //
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
-  template <class contained, unsigned int expid, class superclass,
+  template <class contained, unsigned int expid,
            class hastype,
      typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
      field1_type field1_class::*field1_ptr = &field1_class::expr_id,
@@ -1339,7 +1349,7 @@ namespace esbmct {
       : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
                 &irep_deleter<contained>::beards) { }
 
-    something2tc(const something2tc<contained, expid, superclass, hastype,
+    something2tc(const something2tc<contained, expid, hastype,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
@@ -1827,7 +1837,8 @@ public:
   inline const name##_type2t & to_##name##_type(const type2tc &t) \
     { return dynamic_cast<const name##_type2t &> (*t.get()); } \
   inline name##_type2t & to_##name##_type(type2tc &t) \
-    { return dynamic_cast<name##_type2t &> (*t.get()); }
+    { return dynamic_cast<name##_type2t &> (*t.get()); } \
+  typedef esbmct::something2tc<name##_type2t, type2t::name##_id, esbmct::notype> name##_type2tc;
 
 type_macros(bool);
 type_macros(empty);
@@ -2692,7 +2703,7 @@ public:
 
 #define irep_typedefs(basename, superclass, type, ...) \
   typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id,\
                                type, __VA_ARGS__> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
                                __VA_ARGS__ \
@@ -2702,7 +2713,7 @@ public:
 
 #define irep_typedefs_empty(basename, superclass, type) \
   typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
-  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, superclass,\
+  typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, \
                                type> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods; \
@@ -3754,7 +3765,7 @@ public:
    *         might be changed in the future.
    *  @param ptrobj Item to take pointer to. */
   address_of2t(const type2tc &subtype, const expr2tc &ptrobj)
-    : address_of_expr_methods(type2tc(new pointer_type2t(subtype)),
+    : address_of_expr_methods(pointer_type2tc(subtype),
                               address_of_id, ptrobj) {}
   address_of2t(const address_of2t &ref)
     : address_of_expr_methods(ref) {}
