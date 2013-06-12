@@ -2904,7 +2904,7 @@ irep_typedefs(zero_string, string_ops, esbmct::notype,
               expr2tc, string_ops, &string_ops::string);
 irep_typedefs(zero_length_string, string_ops, esbmct::notype,
               expr2tc, string_ops, &string_ops::string);
-irep_typedefs(isnan, isnan_data, esbmct::takestype,
+irep_typedefs(isnan, isnan_data, esbmct::notype,
               expr2tc, isnan_data, &isnan_data::value);
 irep_typedefs(overflow, overflow_ops, esbmct::notype,
               expr2tc, overflow_ops, &overflow_ops::operand);
