@@ -1323,7 +1323,7 @@ namespace esbmct {
                  const field4_type &arg4,
                  enable_if_notype, disable_if_is_id_type(field4_type),
                  disable_if_not_id_type(field5_type))
-      : base_container(new contained(arg1, arg2, arg3, arg4)
+      : base_container(new contained(arg1, arg2, arg3, arg4),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
