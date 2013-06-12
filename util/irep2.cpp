@@ -732,7 +732,6 @@ constant_string2t::to_array(void) const
 
   unsignedbv_type2tc len_tp(config.ansi_c.int_width);
   constant_int2tc len_val_ref(len_tp, BigInt(contents.size()));
-  expr2tc len_val_ref(len_val);
 
   array_type2tc arr_tp(type, len_val_ref, false);
   constant_array2tc final_val(arr_tp, contents);
@@ -756,18 +755,18 @@ object_descriptor2t::get_root_object(void) const
 
 type_poolt::type_poolt(void)
 {
-  bool_type = type2tc(new bool_type2t());
-  empty_type = type2tc(new empty_type2t());
+  bool_type = bool_type2tc();
+  empty_type = empty_type2tc();
 
   // Create some int types.
-  type2tc ubv8(new unsignedbv_type2t(8));
-  type2tc ubv16(new unsignedbv_type2t(16));
-  type2tc ubv32(new unsignedbv_type2t(32));
-  type2tc ubv64(new unsignedbv_type2t(64));
-  type2tc sbv8(new signedbv_type2t(8));
-  type2tc sbv16(new signedbv_type2t(16));
-  type2tc sbv32(new signedbv_type2t(32));
-  type2tc sbv64(new signedbv_type2t(64));
+  unsignedbv_type2tc ubv8(8);
+  unsignedbv_type2tc ubv16(16);
+  unsignedbv_type2tc ubv32(32);
+  unsignedbv_type2tc ubv64(64);
+  signedbv_type2tc sbv8(8);
+  signedbv_type2tc sbv16(16);
+  signedbv_type2tc sbv32(32);
+  signedbv_type2tc sbv64(64);
 
   unsignedbv_map[unsignedbv_typet(8)] = ubv8;
   unsignedbv_map[unsignedbv_typet(16)] = ubv16;
@@ -1732,7 +1731,7 @@ esbmct::expr_methods<derived, subclass,
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
-  return expr2tc(new_obj);
+  return expr2tc(new_obj, &irep_deleter<derived>::beards);
 }
 
 template <class derived, class subclass,
@@ -2110,7 +2109,7 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 {
   const derived *derived_this = static_cast<const derived*>(this);
   derived *new_obj = new derived(*derived_this);
-  return type2tc(new_obj);
+  return type2tc(new_obj, &irep_deleter<derived>::beards);
 }
 
 template <class derived, class subclass,
@@ -2264,9 +2263,9 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
 }
 
 const expr2tc true_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(true));
+  = constant_bool2tc(true);
 const expr2tc false_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(false));
+  = constant_bool2tc(false);
 
 const constant_int2tc zero_uint __attribute__((init_priority(103)))
   = constant_int2tc(type_pool.get_uint(32), BigInt(0));
