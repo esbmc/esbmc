@@ -17,8 +17,7 @@ public:
   void slice(symex_target_equationt &equation);
 
 protected:
-  typedef hash_set_cont<renaming::level2t::name_record,
-                        renaming::level2t::name_rec_hash> symbol_sett;
+  typedef hash_set_cont<expr2tc, irep2_hash> symbol_sett;
   
   symbol_sett depends;
   
@@ -35,8 +34,11 @@ void symex_slicet::get_symbols(const expr2tc &expr)
     if (!is_nil_expr(*it))
       get_symbols(*it);
 
-  if (is_symbol2t(expr))
-    depends.insert(renaming::level2t::name_record(to_symbol2t(expr)));
+  if (is_symbol2t(expr)) {
+    symbol2tc tmp = expr;
+    tmp.get()->type = get_empty_type();
+    depends.insert((tmp));
+  }
 }
 
 void symex_slicet::slice(symex_target_equationt &equation)
@@ -81,8 +83,9 @@ void symex_slicet::slice_assignment(
 {
   assert(is_symbol2t(SSA_step.lhs));
 
-  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
-              == depends.end())
+  symbol2tc tmp = SSA_step.lhs;
+  tmp.get()->type = get_empty_type();
+  if (depends.find(tmp) == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;
