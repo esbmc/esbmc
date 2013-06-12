@@ -755,8 +755,10 @@ object_descriptor2t::get_root_object(void) const
 
 type_poolt::type_poolt(void)
 {
-  bool_type = bool_type2tc();
-  empty_type = empty_type2tc();
+  bool_type = type2tc(new bool_type2t(),
+                      &esbmct::irep_deleter<bool_type2t>::beards);
+  empty_type = type2tc(new empty_type2t(),
+                      &esbmct::irep_deleter<empty_type2t>::beards);
 
   // Create some int types.
   unsignedbv_type2tc ubv8(8);
