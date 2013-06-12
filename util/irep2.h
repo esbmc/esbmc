@@ -1187,7 +1187,8 @@ namespace esbmct {
                  typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,base_container>,boost::fusion::result_of::equal_to<field2_type,typename base_type::id_type> >, arbitary>::type* = NULL
                  ) : base_container(init)
     {
-      assert(init->id_field == expid);
+      const base_type *ptr = init.get();
+      assert(ptr->*id_field == expid);
     }
 
     // Quick hack for symbol2t: it has a form of constructor where it only takes
