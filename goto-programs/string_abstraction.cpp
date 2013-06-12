@@ -275,7 +275,7 @@ void string_abstractiont::abstract(irep_idt name,
 
     if (is_pointer_type(type) && is_char_type(to_pointer_type(type).subtype))
     {
-      new_args.push_back(type2tc(new pointer_type2t(string_struct)));
+      new_args.push_back(pointer_type2tc(string_struct));
       new_arg_names.push_back(func_type.argument_names[name_idx].as_string() +
                               "\\str");
 
@@ -304,7 +304,7 @@ void string_abstractiont::abstract(irep_idt name,
       is_char_type(to_pointer_type(ret_type).subtype)) {
     code_typet::argumentt new_arg;
 
-    type2tc fintype = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
+    type2tc fintype = pointer_type2tc(pointer_type2tc(string_struct));
     new_args.push_back(fintype);
     new_arg_names.push_back(name.as_string() + "::__strabs::returned_str\\str");
 
@@ -504,8 +504,8 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   goto_programt tmp;
   goto_programt::targett branch, assignment;
 
-  type2tc rtype = type2tc(new pointer_type2t(string_struct));
-  type2tc rtype2 = type2tc(new pointer_type2t(rtype));
+  type2tc rtype = pointer_type2tc(string_struct);
+  type2tc rtype2 = pointer_type2tc(rtype);
   exprt old_ret_sym =
     symbol_exprt(name.as_string() + "::__strabs::returned_str\\str",
                  migrate_type_back(rtype2));
@@ -527,7 +527,7 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   branch->local_variables = it->local_variables;
   dest.destructive_insert(it, tmp);
 
-  type2tc deref_type = type2tc(new pointer_type2t(string_struct));
+  type2tc deref_type = pointer_type2tc(string_struct);
   dereference2tc lhs(deref_type, ret_sym);
   expr2tc rhs = build(ret_val, false);
   assignment = tmp.add_instruction(ASSIGN);
@@ -693,7 +693,7 @@ Function: string_abstractiont::build_unknown
 
 expr2tc string_abstractiont::build_unknown(bool write)
 {
-  type2tc type = type2tc(new pointer_type2t(string_struct));
+  type2tc type = pointer_type2tc(string_struct);
 
   if (write)
     return null_object2tc(type);
@@ -777,7 +777,7 @@ expr2tc string_abstractiont::build_symbol_ptr(const expr2tc &object)
   const symbolt &symbol = ns.lookup(expr_symbol.get_symbol_name());
   irep_idt identifier = symbol.name.as_string() + suffix;
 
-  type2tc type = type2tc(new pointer_type2t(string_struct));
+  type2tc type = pointer_type2tc(string_struct);
 
   if(context.symbols.find(identifier) == context.symbols.end())
   {
@@ -951,9 +951,8 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
     if(context.symbols.find(identifier)==
        context.symbols.end())
     {
-      type2tc new_type = type2tc(new array_type2t(string_struct,
-                                                  arr_type.array_size,
-                                                  arr_type.size_is_infinite));
+      type2tc new_type = array_type2tc(string_struct, arr_type.array_size,
+                                       arr_type.size_is_infinite);
 
       symbolt new_symbol;
       new_symbol.name=identifier;
@@ -1450,12 +1449,12 @@ void string_abstractiont::abstract_function_call(
   if (is_pointer_type(fnc_ret_type) &&
       is_char_type(to_pointer_type(fnc_ret_type).subtype)) {
     if (is_nil_expr(call.ret)) {
-      type2tc null_type = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
+      type2tc null_type = pointer_type2tc(pointer_type2tc(string_struct));
       symbol2tc null(null_type, "NULL");
       new_args.push_back(null);
     } else {
       //XXX jmorse migration guessing; void ptr?
-      type2tc ret_type = type2tc(new pointer_type2t(get_empty_type()));
+      type2tc ret_type = pointer_type2tc(get_empty_type());
       new_args.push_back(address_of2tc(ret_type, build(call.ret, false)));
     }
   }
