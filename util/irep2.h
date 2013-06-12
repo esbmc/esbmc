@@ -2974,7 +2974,7 @@ irep_typedefs(invalid_pointer, pointer_ops, esbmct::notype,
               expr2tc, pointer_ops, &pointer_ops::ptr_obj);
 irep_typedefs(buffer_size, buffer_size_data, esbmct::takestype,
               expr2tc, buffer_size_data, &buffer_size_data::value);
-irep_typedefs(code_asm, code_asm_data, esbmct::notype,
+irep_typedefs(code_asm, code_asm_data, esbmct::takestype,
               irep_idt, code_asm_data, &code_asm_data::value);
 irep_typedefs(code_cpp_del_array, code_expression_data, esbmct::notype,
               expr2tc, code_expression_data, &code_expression_data::operand);
