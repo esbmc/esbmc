@@ -1347,16 +1347,6 @@ namespace esbmct {
                  enable_if_notype, disable_if_is_id_type(field6_type))
       : base_container(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
                 &irep_deleter<contained>::beards) { }
-
-    something2tc(const something2tc<contained, expid, hastype,
-                                    base_type, base_container, id_field,
-                                    field1_type, field1_class, field1_ptr,
-                                    field2_type, field2_class, field2_ptr,
-                                    field3_type, field3_class, field3_ptr,
-                                    field4_type, field4_class, field4_ptr,
-                                    field5_type, field5_class, field5_ptr,
-                                    field6_type, field6_class, field6_ptr> &ref)
-      : base_container(ref) { }
   };
 }; // esbmct
 
