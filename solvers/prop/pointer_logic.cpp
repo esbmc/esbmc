@@ -91,7 +91,7 @@ expr2tc pointer_logict::pointer_expr(
   const pointert &pointer,
   const type2tc &type) const
 {
-  type2tc pointer_type(new pointer_type2t(type2tc(new empty_type2t())));
+  pointer_type2tc pointer_type(type_pool.get_empty());
 
   if(pointer.object==null_object) // NULL?
   {
@@ -145,7 +145,7 @@ expr2tc pointer_logict::object_rec(
     mp_integer index=offset/size;
     mp_integer rest=offset%size;
 
-    type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc inttype = get_uint_type(config.ansi_c.int_width);
     index2tc newindex(arrtype.subtype, src, constant_int2tc(inttype, index));
     
     return object_rec(rest, pointer_type, newindex);
@@ -211,7 +211,7 @@ Function: pointer_logict::pointer_logict
 pointer_logict::pointer_logict()
 {
 
-  type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
+  pointer_type2tc type(type_pool.get_empty());
   symbol2tc sym(type, "NULL");
 
   // add NULL
