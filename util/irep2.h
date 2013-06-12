@@ -1644,8 +1644,9 @@ public:
    *  @param memb_names Vector of names for the members in this struct.
    *  @param name Name of this struct.
    */
-  struct_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
-                irep_idt name)
+  struct_type2t(const std::vector<type2tc> &members,
+                const std::vector<irep_idt> &memb_names,
+                const irep_idt &name)
     : struct_type_methods(struct_id, members, memb_names, name) {}
   struct_type2t(const struct_type2t &ref) : struct_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
@@ -1667,8 +1668,9 @@ public:
    *  @param memb_names Vector of names corresponding to each member of union.
    *  @param name Name of this union
    */
-  union_type2t(std::vector<type2tc> &members, std::vector<irep_idt> memb_names,
-                irep_idt name)
+  union_type2t(const std::vector<type2tc> &members,
+               const std::vector<irep_idt> &memb_names,
+               const irep_idt &name)
     : union_type_methods(union_id, members, memb_names, name) {}
   union_type2t(const union_type2t &ref) : union_type_methods(ref) {}
   virtual unsigned int get_width(void) const;
