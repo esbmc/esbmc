@@ -1056,9 +1056,8 @@ z3_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   members.push_back(int_type);
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  type2tc strct(new struct_type2t(members, names,
-                irep_idt("addr_space_tuple")));
-  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
+  struct_type2tc strct(members, names, irep_idt("addr_space_tuple"));
+  array_type2tc addrspace_type(strct, expr2tc(), true);
 
   symbol2tc addrspacesym(addrspace_type, get_cur_addrspace_ident());
   index2tc obj1_data(strct, addrspacesym, ptr_obj1);
@@ -1301,7 +1300,7 @@ z3_convt::convert_smt_expr(const abs2t &abs, void *_bv)
     zero = constant_fixedbv2tc(sign, bv);
   } else {
     assert(is_bv_type(abs.type));
-    sign = type2tc(new signedbv_type2t(config.ansi_c.int_width));
+    sign = get_int_type(config.ansi_c.int_width);
     zero = zero_uint;
   }
 
@@ -1586,7 +1585,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
       convert_bv(plus, output);
     } else {
       // Strings; convert with slightly different types.
-      type2tc stringtype(new unsignedbv_type2t(8));
+      type2tc stringtype = get_uint_type(8);
       address_of2tc addrof(stringtype, idx.source_value);
       add2tc plus(addrof->type, addrof, idx.index);
       convert_bv(plus, output);
@@ -1602,7 +1601,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
       offs = 0; // Offset is always zero for unions.
     }
 
-    address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
+    address_of2tc addr(pointer_type2tc(memb.source_value->type),
                        memb.source_value);
 
     convert_bv(addr, output);
@@ -2339,7 +2338,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
 
   // First cast it to an unsignedbv
   z3::expr target;
-  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
+  type2tc int_type = get_uint_type(config.ansi_c.int_width);
   typecast2tc cast_to_unsigned(int_type, cast.from);
   convert_bv(cast_to_unsigned, target);
 
@@ -2404,7 +2403,7 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
 void
 z3_convt::convert_typecast_from_ptr(const typecast2t &cast, z3::expr &output)
 {
-  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
+  type2tc int_type = get_uint_type(config.ansi_c.int_width);
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
@@ -2412,14 +2411,13 @@ z3_convt::convert_typecast_from_ptr(const typecast2t &cast, z3::expr &output)
   // Generate type of address space array
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
-  type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+  type2tc inttype = get_uint_type(config.ansi_c.int_width);
   members.push_back(inttype);
   members.push_back(inttype);
   names.push_back(irep_idt("start"));
   names.push_back(irep_idt("end"));
-  type2tc strct(new struct_type2t(members, names,
-                irep_idt("addr_space_tuple")));
-  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
+  struct_type2tc strct(members, names, irep_idt("addr_space_tuple"));
+  array_type2tc addrspace_type(strct, expr2tc(), true);
 
   pointer_object2tc obj_num(inttype, cast.from);
 
@@ -2629,7 +2627,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
   // Cast fixedbv to its integer form.
   if (is_fixedbv_type(ocast.operand)) {
     const fixedbv_type2t &fbvt = to_fixedbv_type(ocast.operand->type);
-    type2tc signedbv(new signedbv_type2t(fbvt.integer_bits));
+    type2tc signedbv = get_int_type(fbvt.integer_bits);
     oper = typecast2tc(signedbv, oper);
   }
 
@@ -2639,7 +2637,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
     // Produce some useful constants
     unsigned int nums_width = (is_signedbv_type(ocast.operand))
                                ? width : width / 2;
-    type2tc signedbv(new signedbv_type2t(nums_width));
+    type2tc signedbv = get_int_type(nums_width);
 
     constant_int2tc result_val = gen_uint(result / 2);
     constant_int2tc two = gen_uint(2);
@@ -2655,7 +2653,7 @@ z3_convt::convert_smt_expr(const overflow_cast2t &ocast, void *_bv)
     greaterthan = greaterthan2tc(oper, lower);
   } else if (is_unsignedbv_type(ocast.operand)) {
     // Create zero and 2^bitwidth,
-    type2tc unsignedbv(new unsignedbv_type2t(width));
+    type2tc unsignedbv = get_uint_type(width);
 
     constant_int2tc zero = zero_uint;
     constant_int2tc the_width = gen_uint(result);
@@ -2784,7 +2782,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       mp_integer type_size = pointer_offset_size(*followed_type);
 
       // Generate nonptr * constant.
-      type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+      type2tc inttype = get_uint_type(config.ansi_c.int_width);
       constant_int2tc constant(get_uint_type(32), type_size);
       expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
 
@@ -2913,7 +2911,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr constraint = output == ptr_val;
     assert_formula(constraint);
 
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc ptr_loc_type = get_uint_type(config.ansi_c.int_width);
 
     std::string start_name = "__ESBMC_ptr_obj_start_" + itos(obj_num);
     std::string end_name = "__ESBMC_ptr_obj_end_" + itos(obj_num);
@@ -2988,8 +2986,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // is initialized for this ptr to false. That way, only pointers created
     // through malloc will be marked dynamic.
 
-    type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
-                                     expr2tc((expr2t*)NULL), true));
+    array_type2tc arrtype(type_pool.get_bool(), expr2tc(), true);
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
     z3::expr allocarray;
     convert_bv(allocarr, allocarray);
