@@ -2908,10 +2908,10 @@ irep_typedefs(isnan, isnan_data, esbmct::notype,
               expr2tc, isnan_data, &isnan_data::value);
 irep_typedefs(overflow, overflow_ops, esbmct::notype,
               expr2tc, overflow_ops, &overflow_ops::operand);
-irep_typedefs(overflow_cast, overflow_cast_data, esbmct::takestype,
+irep_typedefs(overflow_cast, overflow_cast_data, esbmct::notype,
               expr2tc, overflow_ops, &overflow_ops::operand,
               unsigned int, overflow_cast_data, &overflow_cast_data::bits);
-irep_typedefs(overflow_neg, overflow_ops, esbmct::takestype,
+irep_typedefs(overflow_neg, overflow_ops, esbmct::notype,
               expr2tc, overflow_ops, &overflow_ops::operand);
 irep_typedefs_empty(unknown, expr2t, esbmct::takestype);
 irep_typedefs_empty(invalid, expr2t, esbmct::takestype);
