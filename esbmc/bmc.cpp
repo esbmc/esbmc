@@ -509,29 +509,6 @@ bool bmct::run_thread()
 
   try
   {
-    if(options.get_option("slice-by-trace")!="")
-    {
-      symex_slice_by_tracet symex_slice_by_trace;
-      symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation);
-    }
-
-    if(!options.get_bool_option("no-slice"))
-    {
-      slice(*equation);
-    }
-    else
-    {
-      simple_slice(*equation);
-    }
-
-    if (options.get_bool_option("program-only") ||
-        options.get_bool_option("program-too"))
-      show_program(*equation);
-
-    if (options.get_bool_option("program-only"))
-      return false;
-
     {
       std::string msg;
       msg="Generated "+i2string(result->total_claims)+
@@ -557,6 +534,29 @@ bool bmct::run_thread()
       report_success();
       return false;
     }
+
+    if(options.get_option("slice-by-trace")!="")
+    {
+      symex_slice_by_tracet symex_slice_by_trace;
+      symex_slice_by_trace.slice_by_trace
+      (options.get_option("slice-by-trace"), *equation);
+    }
+
+    if(!options.get_bool_option("no-slice"))
+    {
+      slice(*equation);
+    }
+    else
+    {
+      simple_slice(*equation);
+    }
+
+    if (options.get_bool_option("program-only") ||
+        options.get_bool_option("program-too"))
+      show_program(*equation);
+
+    if (options.get_bool_option("program-only"))
+      return false;
 
     if (options.get_bool_option("ltl")) {
       int res = ltl_run_thread(equation);
