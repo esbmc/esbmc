@@ -304,7 +304,8 @@ void string_abstractiont::abstract(irep_idt name,
       is_char_type(to_pointer_type(ret_type).subtype)) {
     code_typet::argumentt new_arg;
 
-    type2tc fintype = pointer_type2tc(pointer_type2tc(string_struct));
+    type2tc string_struct_ptr = pointer_type2tc(string_struct);
+    type2tc fintype = pointer_type2tc(string_struct_ptr);
     new_args.push_back(fintype);
     new_arg_names.push_back(name.as_string() + "::__strabs::returned_str\\str");
 
@@ -1449,7 +1450,8 @@ void string_abstractiont::abstract_function_call(
   if (is_pointer_type(fnc_ret_type) &&
       is_char_type(to_pointer_type(fnc_ret_type).subtype)) {
     if (is_nil_expr(call.ret)) {
-      type2tc null_type = pointer_type2tc(pointer_type2tc(string_struct));
+      type2tc string_struct_ptr = pointer_type2tc(string_struct);
+      type2tc null_type = pointer_type2tc(string_struct_ptr);
       symbol2tc null(null_type, "NULL");
       new_args.push_back(null);
     } else {
