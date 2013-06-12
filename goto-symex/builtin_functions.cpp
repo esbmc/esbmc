@@ -111,8 +111,7 @@ void goto_symext::symex_malloc(
   symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
-                                              expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
 
   pointer_object2tc ptr_obj(int_type2(), lhs);
@@ -191,7 +190,7 @@ void goto_symext::symex_cpp_new(
 
   if(do_array)
   {
-    newtype = type2tc(new array_type2t(renamedtype2, code.size, false));
+    newtype = array_type2tc(renamedtype2, code.size, false);
   }
   else
     newtype = renamedtype2;
@@ -222,8 +221,7 @@ void goto_symext::symex_cpp_new(
   symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
-                                              expr2tc(), true));
+  type2tc sym_type = array_type2tc(get_bool_type(), expr2tc(), true);
   symbol2tc sym(sym_type, "cpp::__ESBMC_is_dynamic");
 
   pointer_object2tc ptr_obj(int_type2(), lhs);

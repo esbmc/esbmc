@@ -260,7 +260,7 @@ void dereferencet::build_reference_to(
   {
     if(!options.get_bool_option("no-pointer-check"))
     {
-      type2tc nullptrtype = type2tc(new pointer_type2t(type));
+      type2tc nullptrtype = pointer_type2tc(type);
       symbol2tc null_ptr(nullptrtype, "NULL");
 
       same_object2tc pointer_guard(deref_expr, null_ptr);
@@ -287,8 +287,7 @@ void dereferencet::build_reference_to(
     {
       // constraint that it actually is a dynamic object
 
-      type2tc arr_type = type2tc(new array_type2t(get_bool_type(),
-                                                  expr2tc(), true));
+      type2tc arr_type = array_type2tc(get_bool_type(), expr2tc(), true);
       const symbolt *sp;
       irep_idt dyn_name = (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
         ? "c::__ESBMC_is_dynamic" : "cpp::__ESBMC_is_dynamic";
@@ -354,7 +353,7 @@ void dereferencet::build_reference_to(
   {
     value = object;
 
-    type2tc ptr_type = type2tc(new pointer_type2t(object->type));
+    type2tc ptr_type = pointer_type2tc(object->type);
     address_of2tc obj_ptr(ptr_type, object);
 
     pointer_guard = same_object2tc(deref_expr, obj_ptr);
@@ -607,7 +606,7 @@ bool dereferencet::memory_model_conversion(
   // cast to float
   if (is_fixedbv_type(to_type))
   {
-    value = expr2tc(new typecast2t(to_type, value));
+    value = typecast2tc(to_type, value);
   }
   else
   {

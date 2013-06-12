@@ -303,8 +303,7 @@ void goto_symext::symex_assign_member(
   // into
   //   a'==a WITH [c:=e]
 
-  type2tc str_type =
-    type2tc(new string_type2t(component_name.as_string().size()));
+  type2tc str_type = string_type2tc(component_name.as_string().size());
   with2tc new_rhs(real_lhs->type, real_lhs,
                        constant_string2tc(str_type, component_name),
                        rhs);
