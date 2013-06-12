@@ -306,6 +306,8 @@ public:
     end_type_id
   };
 
+  typedef type_ids id_type;
+
   /** Symbolic type exception class.
    *  To be thrown when attempting to fetch the width of a symbolic type, such
    *  as empty or code. Caller will have to worry about what to do about that.
@@ -565,6 +567,8 @@ public:
     end_expr_id
   };
 
+  typedef expr_ids id_type;
+
   /** Type for list of constant expr operands */
   typedef std::list<const expr2tc*> expr_operands;
   /** Type for list of non-constant expr operands */
@@ -774,7 +778,7 @@ public:
   virtual expr2tc do_simplify(bool second = false) const;
 
   /** Instance of expr_ids recording tihs exprs type. */
-  const expr_ids expr_id;
+  expr_ids expr_id;
 
   /** Type of this expr. All exprs have a type. */
   type2tc type;
@@ -1137,23 +1141,39 @@ namespace esbmct {
   // We need a class derived from expr2tc that takes the correct set of
   // constructor arguments, which means yet more template goo.
   template <class contained, unsigned int expid,
-           class hastype,
-     typename field1_type = const expr2t::expr_ids, class field1_class = expr2t,
-     field1_type field1_class::*field1_ptr = &field1_class::expr_id,
-     typename field2_type = const expr2t::expr_ids, class field2_class = expr2t,
-     field2_type field2_class::*field2_ptr = &field2_class::expr_id,
-     typename field3_type = const expr2t::expr_ids, class field3_class = expr2t,
-     field3_type field3_class::*field3_ptr = &field3_class::expr_id,
-     typename field4_type = const expr2t::expr_ids, class field4_class = expr2t,
-     field4_type field4_class::*field4_ptr = &field4_class::expr_id,
-     typename field5_type = const expr2t::expr_ids, class field5_class = expr2t,
-     field5_type field5_class::*field5_ptr = &field5_class::expr_id,
-     typename field6_type = const expr2t::expr_ids, class field6_class = expr2t,
-     field6_type field6_class::*field6_ptr = &field6_class::expr_id>
-  class something2tc : public expr2tc {
+            class hastype, class base_type, class base_container,
+            typename base_type::id_type base_type::*id_field,
+     typename field1_type = typename base_type::id_type,
+     class field1_class = base_type,
+     field1_type field1_class::*field1_ptr = id_field,
+     typename field2_type = typename base_type::id_type,
+     class field2_class = base_type,
+     field2_type field2_class::*field2_ptr = id_field,
+     typename field3_type = typename base_type::id_type,
+     class field3_class = base_type,
+     field3_type field3_class::*field3_ptr = id_field,
+     typename field4_type = typename base_type::id_type,
+     class field4_class = base_type,
+     field4_type field4_class::*field4_ptr = id_field,
+     typename field5_type = typename base_type::id_type,
+     class field5_class = base_type,
+     field5_type field5_class::*field5_ptr = id_field,
+     typename field6_type = typename base_type::id_type,
+     class field6_class = base_type,
+     field6_type field6_class::*field6_ptr = id_field>
+  class something2tc : public base_container {
+
+    // huuurrrr
+#define disable_if_is_id_type(ftype) \
+    disable_if_eq(arbitary, ftype, typename base_type::id_type)
+#define disable_if_not_id_type(ftype) \
+    disable_if_not_eq(arbitary, ftype, typename base_type::id_type)
+#define disable_if_notype disable_if_eq(arbitary,hastype,notype)
+#define enable_if_notype enable_if_eq(arbitary,hastype,notype)
+
     public:
     // Blank initialization of a container class -> store NULL
-    something2tc() : expr2tc() { }
+    something2tc() : base_container() { }
 
     // Initialize container from a non-type-committed container. Encode an
     // assertion that the type is what we expect.
@@ -1163,11 +1183,11 @@ namespace esbmct {
     // constructing a new not2t irep. In the face of this ambiguity, pick the
     // latter, and the end user can worry about how to cast up to a not2tc.
     template <class arbitary = ::esbmct::dummy_type_tag>
-    something2tc(const expr2tc &init,
-                 typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,expr2tc>,boost::fusion::result_of::equal_to<field2_type,expr2t::expr_ids> >, arbitary>::type* = NULL
-                 ) : expr2tc(init)
+    something2tc(const base_container &init,
+                 typename boost::lazy_disable_if<boost::mpl::and_<boost::fusion::result_of::equal_to<field1_type,base_container>,boost::fusion::result_of::equal_to<field2_type,typename base_type::id_type> >, arbitary>::type* = NULL
+                 ) : base_container(init)
     {
-      assert(init->expr_id == expid);
+      assert(init->id_field == expid);
     }
 
     // Quick hack for symbol2t: it has a form of constructor where it only takes
@@ -1178,52 +1198,50 @@ namespace esbmct {
     something2tc(const type2tc &t,
                  const irep_idt &arg1,
                  typename boost::lazy_enable_if<boost::fusion::result_of::equal_to<contained,symbol2t>, arbitary >::type* = NULL)
-          : expr2tc(new contained(t, arg1),
+          : base_container(new contained(t, arg1),
                     &irep_deleter<contained>::beards) { }
 
     const contained &operator*() const
     {
-      return static_cast<const contained&>(*expr2tc::get());
+      return static_cast<const contained&>(*base_container::get());
     }
 
     const contained * operator-> () const // never throws
     {
-      return static_cast<const contained*>(expr2tc::operator->());
+      return static_cast<const contained*>(base_container::operator->());
     }
 
     const contained * get() const // never throws
     {
-      return static_cast<const contained*>(expr2tc::get());
+      return static_cast<const contained*>(base_container::get());
     }
 
     contained * get() // never throws
     {
-      detach();
-      return static_cast<contained*>(expr2tc::get());
+      base_container::detach();
+      return static_cast<contained*>(base_container::get());
     }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_not_eq(arbitary,field1_type,expr2t::expr_ids))
-      : expr2tc(new contained(t), &irep_deleter<contained>::beards) { }
+                 disable_if_notype, disable_if_not_id_type(field1_type))
+      : base_container(new contained(t), &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1), &irep_deleter<contained>::beards) { }
+                 disable_if_notype, disable_if_is_id_type(field1_type),
+                 disable_if_not_id_type(field2_type))
+      : base_container(new contained(t, arg1), &irep_deleter<contained>::beards)
+        { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const type2tc &t,
                  const field1_type &arg1,
                  const field2_type &arg2,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2),
+                 disable_if_notype, disable_if_is_id_type(field2_type),
+                 disable_if_not_id_type(field3_type))
+      : base_container(new contained(t, arg1, arg2),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1231,10 +1249,9 @@ namespace esbmct {
                  const field1_type &arg1,
                  const field2_type &arg2,
                  const field3_type &arg3,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3),
+                 disable_if_notype, disable_if_is_id_type(field3_type),
+                 disable_if_not_id_type(field4_type))
+      : base_container(new contained(t, arg1, arg2, arg3),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1243,10 +1260,9 @@ namespace esbmct {
                  const field2_type &arg2,
                  const field3_type &arg3,
                  const field4_type &arg4,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4),
+                 disable_if_notype, disable_if_is_id_type(field4_type),
+                 disable_if_not_id_type(field5_type))
+      : base_container(new contained(t, arg1, arg2, arg3, arg4),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1256,10 +1272,9 @@ namespace esbmct {
                  const field3_type &arg3,
                  const field4_type &arg4,
                  const field5_type &arg5,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5),
+                 disable_if_notype, disable_if_is_id_type(field5_type),
+                 disable_if_not_id_type(field6_type))
+      : base_container(new contained(t, arg1, arg2, arg3, arg4, arg5),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1270,38 +1285,34 @@ namespace esbmct {
                  const field4_type &arg4,
                  const field5_type &arg5,
                  const field6_type &arg6,
-                 disable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6),
+                 disable_if_notype, disable_if_is_id_type(field6_type))
+      : base_container(new contained(t, arg1, arg2, arg3, arg4, arg5, arg6),
                 &irep_deleter<contained>::beards) { }
 
     // Duplicate set of constructors, but without the type argument.
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field1_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field2_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1),
+                 enable_if_notype, disable_if_is_id_type(field1_type),
+                 disable_if_not_id_type(field2_type))
+      : base_container(new contained(arg1),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
                  const field2_type &arg2,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field2_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field3_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2),
+                 enable_if_notype, disable_if_is_id_type(field2_type),
+                 disable_if_not_id_type(field3_type))
+      : base_container(new contained(arg1, arg2),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
     something2tc(const field1_type &arg1,
                  const field2_type &arg2,
                  const field3_type &arg3,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field3_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field4_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3),
+                 enable_if_notype, disable_if_is_id_type(field3_type),
+                 disable_if_not_id_type(field4_type))
+      : base_container(new contained(arg1, arg2, arg3),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1309,10 +1320,9 @@ namespace esbmct {
                  const field2_type &arg2,
                  const field3_type &arg3,
                  const field4_type &arg4,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field4_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field5_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4)
+                 enable_if_notype, disable_if_is_id_type(field4_type),
+                 disable_if_not_id_type(field5_type))
+      : base_container(new contained(arg1, arg2, arg3, arg4)
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1321,10 +1331,9 @@ namespace esbmct {
                  const field3_type &arg3,
                  const field4_type &arg4,
                  const field5_type &arg5,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field5_type,expr2t::expr_ids),
-                 disable_if_not_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5),
+                 enable_if_notype, disable_if_is_id_type(field5_type),
+                 disable_if_not_id_type(field6_type))
+      : base_container(new contained(arg1, arg2, arg3, arg4, arg5),
                 &irep_deleter<contained>::beards) { }
 
     template <class arbitary = ::esbmct::dummy_type_tag>
@@ -1334,19 +1343,19 @@ namespace esbmct {
                  const field4_type &arg4,
                  const field5_type &arg5,
                  const field6_type &arg6,
-                 enable_if_eq(arbitary,hastype,notype),
-                 disable_if_eq(arbitary,field6_type,expr2t::expr_ids))
-      : expr2tc(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
+                 enable_if_notype, disable_if_is_id_type(field6_type))
+      : base_container(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
                 &irep_deleter<contained>::beards) { }
 
     something2tc(const something2tc<contained, expid, hastype,
+                                    base_type, base_container, id_field,
                                     field1_type, field1_class, field1_ptr,
                                     field2_type, field2_class, field2_ptr,
                                     field3_type, field3_class, field3_ptr,
                                     field4_type, field4_class, field4_ptr,
                                     field5_type, field5_class, field5_ptr,
                                     field6_type, field6_class, field6_ptr> &ref)
-      : expr2tc(ref) { }
+      : base_container(ref) { }
   };
 }; // esbmct
 
@@ -1506,49 +1515,73 @@ public:
 
 // Then give them a typedef name
 
-typedef esbmct::type_methods<bool_type2t, type2t> bool_type_methods;
-typedef esbmct::type_methods<empty_type2t, type2t> empty_type_methods;
-typedef esbmct::type_methods<symbol_type2t, symbol_type_data, irep_idt,
-        symbol_type_data, &symbol_type_data::symbol_name> symbol_type_methods;
-typedef esbmct::type_methods<struct_type2t, struct_union_data,
+
+// Generate some "is-this-a-blah" macros, and type conversion macros. This is
+// fine in terms of using/ keywords in syntax, because the preprocessor
+// preprocesses everything out. One more used to C++ templates might raise their
+// eyebrows at using the preprocessor; nuts to you, this works.
+#ifdef NDEBUG
+#define dynamic_cast static_cast
+#endif
+#define type_macros(name, superclass, ...) \
+  inline bool is_##name##_type(const expr2tc &e) \
+    { return e->type->type_id == type2t::name##_id; } \
+  inline bool is_##name##_type(const type2tc &t) \
+    { return t->type_id == type2t::name##_id; } \
+  typedef esbmct::something2tc<name##_type2t, type2t::name##_id, \
+                               esbmct::notype, type2t, type2tc, \
+                               &type2t::type_id, __VA_ARGS__> name##_type2tc; \
+  typedef esbmct::type_methods<name##_type2t, superclass, __VA_ARGS__> \
+    name##_type_methods;
+
+#define type_macros_empt(name, superclass, ...) \
+  inline bool is_##name##_type(const expr2tc &e) \
+    { return e->type->type_id == type2t::name##_id; } \
+  inline bool is_##name##_type(const type2tc &t) \
+    { return t->type_id == type2t::name##_id; } \
+  typedef esbmct::something2tc<name##_type2t, type2t::name##_id, \
+                               esbmct::notype, type2t, type2tc, \
+                               &type2t::type_id> name##_type2tc; \
+  typedef esbmct::type_methods<name##_type2t, superclass> \
+    name##_type_methods;
+
+#ifdef dynamic_cast
+#undef dynamic_cast
+#endif
+
+type_macros_empt(bool, type2t);
+type_macros_empt(empty, type2t);
+type_macros(symbol, symbol_type_data,
+            irep_idt, symbol_type_data, &symbol_type_data::symbol_name);
+type_macros(struct, struct_union_data,
     std::vector<type2tc>, struct_union_data, &struct_union_data::members,
     std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
-    irep_idt, struct_union_data, &struct_union_data::name>
-    struct_type_methods;
-typedef esbmct::type_methods<union_type2t, struct_union_data,
+    irep_idt, struct_union_data, &struct_union_data::name);
+type_macros(union, struct_union_data,
     std::vector<type2tc>, struct_union_data, &struct_union_data::members,
     std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
-    irep_idt, struct_union_data, &struct_union_data::name>
-    union_type_methods;
-typedef esbmct::type_methods<unsignedbv_type2t, bv_data, unsigned int, bv_data,
-    &bv_data::width> unsignedbv_type_methods;
-typedef esbmct::type_methods<signedbv_type2t, bv_data, unsigned int, bv_data,
-    &bv_data::width> signedbv_type_methods;
-typedef esbmct::type_methods<code_type2t, code_data,
+    irep_idt, struct_union_data, &struct_union_data::name);
+type_macros(unsignedbv, bv_data, unsigned int, bv_data, &bv_data::width);
+type_macros(signedbv, bv_data, unsigned int, bv_data, &bv_data::width);
+type_macros(code, code_data,
     std::vector<type2tc>, code_data, &code_data::arguments,
     type2tc, code_data, &code_data::ret_type,
     std::vector<irep_idt>, code_data, &code_data::argument_names,
-    bool, code_data, &code_data::ellipsis>
-    code_type_methods;
-typedef esbmct::type_methods<array_type2t, array_data,
+    bool, code_data, &code_data::ellipsis);
+type_macros(array, array_data,
     type2tc, array_data, &array_data::subtype,
     expr2tc, array_data, &array_data::array_size,
-    bool, array_data, &array_data::size_is_infinite>
-    array_type_methods;
-typedef esbmct::type_methods<pointer_type2t, pointer_data,
-    type2tc, pointer_data, &pointer_data::subtype>
-    pointer_type_methods;
-typedef esbmct::type_methods<fixedbv_type2t, fixedbv_data,
+    bool, array_data, &array_data::size_is_infinite);
+type_macros(pointer, pointer_data,
+    type2tc, pointer_data, &pointer_data::subtype);
+type_macros(fixedbv, fixedbv_data,
     unsigned int, fixedbv_data, &fixedbv_data::width,
-    unsigned int, fixedbv_data, &fixedbv_data::integer_bits>
-    fixedbv_type_methods;
-typedef esbmct::type_methods<string_type2t, string_data,
-    unsigned int, string_data, &string_data::width>
-    string_type_methods;
-typedef esbmct::type_methods<cpp_name_type2t, cpp_name_data,
+    unsigned int, fixedbv_data, &fixedbv_data::integer_bits);
+type_macros(string, string_data,
+    unsigned int, string_data, &string_data::width);
+type_macros(cpp_name, cpp_name_data,
         irep_idt, cpp_name_data, &cpp_name_data::name,
-        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args>
-        cpp_name_type_methods;
+        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args);
 
 /** Boolean type.
  *  Identifies a boolean type. Contains no additional data.
@@ -1812,41 +1845,53 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-// Generate some "is-this-a-blah" macros, and type conversion macros. This is
-// fine in terms of using/ keywords in syntax, because the preprocessor
-// preprocesses everything out. One more used to C++ templates might raise their
-// eyebrows at using the preprocessor; nuts to you, this works.
-#ifdef NDEBUG
-#define dynamic_cast static_cast
-#endif
-#define type_macros(name) \
-  inline bool is_##name##_type(const expr2tc &e) \
-    { return e->type->type_id == type2t::name##_id; } \
-  inline bool is_##name##_type(const type2tc &t) \
-    { return t->type_id == type2t::name##_id; } \
+#undef type_macros
+#undef type_macros_empt
+#define type_macros(name, superclass, ...) \
   inline const name##_type2t & to_##name##_type(const type2tc &t) \
     { return dynamic_cast<const name##_type2t &> (*t.get()); } \
   inline name##_type2t & to_##name##_type(type2tc &t) \
     { return dynamic_cast<name##_type2t &> (*t.get()); } \
-  typedef esbmct::something2tc<name##_type2t, type2t::name##_id, esbmct::notype> name##_type2tc;
 
-type_macros(bool);
-type_macros(empty);
-type_macros(symbol);
-type_macros(struct);
-type_macros(union);
-type_macros(code);
-type_macros(array);
-type_macros(pointer);
-type_macros(unsignedbv);
-type_macros(signedbv);
-type_macros(fixedbv);
-type_macros(string);
-type_macros(cpp_name);
-#undef type_macros
-#ifdef dynamic_cast
-#undef dynamic_cast
-#endif
+#define type_macros_empt(name, superclass, ...) \
+  inline const name##_type2t & to_##name##_type(const type2tc &t) \
+    { return dynamic_cast<const name##_type2t &> (*t.get()); } \
+  inline name##_type2t & to_##name##_type(type2tc &t) \
+    { return dynamic_cast<name##_type2t &> (*t.get()); } \
+
+type_macros_empt(bool, type2t);
+type_macros_empt(empty, type2t);
+type_macros(symbol, symbol_type_data,
+            irep_idt, symbol_type_data, &symbol_type_data::symbol_name);
+type_macros(struct, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name);
+type_macros(union, struct_union_data,
+    std::vector<type2tc>, struct_union_data, &struct_union_data::members,
+    std::vector<irep_idt>, struct_union_data, &struct_union_data::member_names,
+    irep_idt, struct_union_data, &struct_union_data::name);
+type_macros(unsignedbv, bv_data, unsigned int, bv_data, &bv_data::width);
+type_macros(signedbv, bv_data, unsigned int, bv_data, &bv_data::width);
+type_macros(code, code_data,
+    std::vector<type2tc>, code_data, &code_data::arguments,
+    type2tc, code_data, &code_data::ret_type,
+    std::vector<irep_idt>, code_data, &code_data::argument_names,
+    bool, code_data, &code_data::ellipsis);
+type_macros(array, array_data,
+    type2tc, array_data, &array_data::subtype,
+    expr2tc, array_data, &array_data::array_size,
+    bool, array_data, &array_data::size_is_infinite);
+type_macros(pointer, pointer_data,
+    type2tc, pointer_data, &pointer_data::subtype);
+type_macros(fixedbv, fixedbv_data,
+    unsigned int, fixedbv_data, &fixedbv_data::width,
+    unsigned int, fixedbv_data, &fixedbv_data::integer_bits);
+type_macros(string, string_data,
+    unsigned int, string_data, &string_data::width);
+type_macros(cpp_name, cpp_name_data,
+        irep_idt, cpp_name_data, &cpp_name_data::name,
+        std::vector<type2tc>, cpp_name_data, &cpp_name_data::template_args);
 
 /** Test whether type is an integer. */
 inline bool is_bv_type(const type2tc &t) \
@@ -2694,7 +2739,8 @@ public:
 #define irep_typedefs(basename, superclass, type, ...) \
   typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id,\
-                               type, __VA_ARGS__> basename##2tc; \
+                               type, expr2t, expr2tc, &expr2t::expr_id, \
+                               __VA_ARGS__> basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass, \
                                __VA_ARGS__ \
                                > basename##_expr_methods; \
@@ -2704,7 +2750,8 @@ public:
 #define irep_typedefs_empty(basename, superclass, type) \
   typedef esbmct::irep_deleter<basename##2t> basename##_deleter;\
   typedef esbmct::something2tc<basename##2t, expr2t::basename##_id, \
-                               type> basename##2tc; \
+                               type, expr2t, expr2tc, &expr2t::expr_id> \
+                               basename##2tc; \
   typedef esbmct::expr_methods<basename##2t, superclass \
                                > basename##_expr_methods; \
   typedef esbmct::irep_deleter<basename##2t> basename##_deleter;
