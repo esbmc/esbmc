@@ -50,7 +50,7 @@ public:
     }
     else
     {
-      dest = expr2tc(new implies2t(as_expr(), dest));
+      dest = implies2tc(as_expr(), dest);
     }
   }
 

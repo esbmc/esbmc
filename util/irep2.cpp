@@ -723,24 +723,19 @@ constant_string2t::to_array(void) const
   type2tc type = type_pool.get_uint8();
 
   for (i = 0; i < length; i++) {
-    constant_int2t *v = new constant_int2t(type, BigInt(value.as_string()[i]));
-    expr2tc ptr(v);
+    constant_int2tc ptr(type, BigInt(value.as_string()[i]));
     contents.push_back(ptr);
   }
 
   // Null terminator is implied.
-  contents.push_back(expr2tc(new constant_int2t(type, BigInt(0))));
+  contents.push_back(constant_int2tc(type, BigInt(0)));
 
-  unsignedbv_type2t *len_type = new unsignedbv_type2t(config.ansi_c.int_width);
-  type2tc len_tp(len_type);
-  constant_int2t *len_val = new constant_int2t(len_tp, BigInt(contents.size()));
+  unsignedbv_type2tc len_tp(config.ansi_c.int_width);
+  constant_int2tc len_val_ref(len_tp, BigInt(contents.size()));
   expr2tc len_val_ref(len_val);
 
-  array_type2t *arr_type = new array_type2t(type, len_val_ref, false);
-  type2tc arr_tp(arr_type);
-  constant_array2t *a = new constant_array2t(arr_tp, contents);
-
-  expr2tc final_val(a);
+  array_type2tc arr_tp(type, len_val_ref, false);
+  constant_array2tc final_val(arr_tp, contents);
   return final_val;
 }
 
