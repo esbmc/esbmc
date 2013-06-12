@@ -91,7 +91,13 @@ void symex_slicet::slice_assignment(
     SSA_step.ignore=true;
   }
   else
+  {
+    // We depend on this symbol; depend on everything it depends on.
     get_symbols(SSA_step.rhs);
+    // Remove this symbol as we won't be seeing any references to it further
+    // into the history.
+    depends.erase(tmp);
+  }
 }
 
 void slice(symex_target_equationt &equation)
