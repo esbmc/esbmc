@@ -666,13 +666,6 @@ void value_sett::assign(
       }
       else
       {
-        if (is_index2t(rhs)) {
-          if (is_symbol2t(lhs)) {
-            assign(lhs_member, to_index2t(rhs).source_value, ns, add_to_sets);
-            return;
-    	  }
-    	}
-
         assert(base_type_eq(rhs->type, lhs_type, ns) || is_subclass_of(lhs_type, rhs->type, ns));
         expr2tc rhs_member = make_member(rhs, name, ns);
         assign(lhs_member, rhs_member, ns, add_to_sets);
