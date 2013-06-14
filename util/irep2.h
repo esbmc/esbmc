@@ -324,6 +324,9 @@ protected:
   /** Copy constructor */
   type2t(const type2t &ref);
 
+  /** Virtual destructor */
+  virtual ~type2t();
+
 public:
   /** Despatcher for SMT conversion.
    *  Each subclass of type2t overrides this method, and provides a routine
@@ -582,6 +585,8 @@ protected:
   expr2t(const type2tc type, expr_ids id);
   /** Copy constructor */
   expr2t(const expr2t &ref);
+  /** Virtual deconstructor */
+  virtual ~expr2t(void);
 
 public:
   /** Clone method. Self explanatory. */

@@ -127,6 +127,10 @@ type2t::type2t(const type2t &ref)
 {
 }
 
+type2t::~type2t()
+{
+}
+
 bool
 type2t::operator==(const type2t &ref) const
 {
@@ -352,6 +356,10 @@ expr2t::expr2t(const expr2t &ref)
   : expr_id(ref.expr_id),
     type(ref.type),
     crc_val(ref.crc_val)
+{
+}
+
+expr2t::~expr2t()
 {
 }
 
