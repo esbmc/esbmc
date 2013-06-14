@@ -1091,7 +1091,7 @@ void goto_convertt::convert_assign(
         dest.add_instruction(ATOMIC_END);
   }
 
-  if (inductive_step) {
+  if (inductive_step && lhs.type().id() != "empty") {
     get_struct_components(lhs, state);
     if (rhs.is_constant() && is_ifthenelse) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
