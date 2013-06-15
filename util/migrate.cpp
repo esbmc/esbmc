@@ -173,6 +173,24 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == "ellipsis") {
     // Eh? Ellipsis isn't a type. It's a special case.
     new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "incomplete_array") {
+    // Represent as array with null size, and not infinite.
+    // This is inevitably going to lead to trouble.
+    type2tc subtype;
+    migrate_type(type.subtype(), subtype);
+    new_type_ref = array_type2tc(subtype, expr2tc(), false);
+  } else if (type.id() == "incomplete_struct") {
+    std::vector<type2tc> members;
+    std::vector<irep_idt> names;
+    irep_idt name = type.get("tag");
+    assert(name.as_string() != "");
+    new_type_ref = struct_type2tc(members, names, name);
+  } else if (type.id() == "incomplete_union") {
+    std::vector<type2tc> members;
+    std::vector<irep_idt> names;
+    irep_idt name = type.get("tag");
+    assert(name.as_string() != "");
+    new_type_ref = struct_type2tc(members, names, name);
   } else {
     type.dump();
     assert(0);
@@ -222,6 +240,12 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     real_migrate_type(type, new_type_ref);
     // No caching; no reason, just not doing it right now.
   } else if (type.id() == "ellipsis") {
+    real_migrate_type(type, new_type_ref);
+  } else if (type.id() == "incomplete_array") {
+    real_migrate_type(type, new_type_ref);
+  } else if (type.id() == "incomplete_struct") {
+    real_migrate_type(type, new_type_ref);
+  } else if (type.id() == "incomplete_union") {
     real_migrate_type(type, new_type_ref);
   } else {
     type.dump();
@@ -353,9 +377,13 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   unsigned int level1_num, thread_num, node_num, level2_num;
 
   const std::string &thestr = init.as_string();
+
   // If this is an existing symbol name, then we're not renamed at all. Can't
   // rely on @ and ! symbols in the string "sadly".
-  if (migrate_namespace_lookup->lookup(init, sym) == false) {
+  // If there's no namespace configured, we're parsing, and no renaming can
+  // exist at this time.
+  if (migrate_namespace_lookup == NULL ||
+      migrate_namespace_lookup->lookup(init, sym) == false) {
     // This is a level0 name.
 
     // Funkyness: use the global symbol table type. Why? Because various things
