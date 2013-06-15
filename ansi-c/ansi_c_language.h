@@ -13,6 +13,10 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "ansi_c_parse_tree.h"
 
+// Elsewhere:
+void init_scanner_pool();
+void clear_scanner_pool();
+
 class ansi_c_languaget:public languaget
 {
 public:

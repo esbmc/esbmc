@@ -192,6 +192,8 @@ bool ansi_c_languaget::parse(
 {
   // store the path
 
+  init_scanner_pool();
+
   parse_path=path;
 
   // preprocessing
@@ -238,6 +240,8 @@ bool ansi_c_languaget::parse(
 
   // save some memory
   ansi_c_parser.clear();
+
+  clear_scanner_pool();
 
   return result;
 }

@@ -17,6 +17,9 @@
 static int isatty(int) { return 0; }
 #endif
 
+#include <boost/pool/pool.hpp>
+#include <boost/pool/object_pool.hpp>
+
 #include <expr.h>
 #include <arith_tools.h>
 #include <ansi-c/c_types.h>
@@ -33,14 +36,32 @@ static int isatty(int) { return 0; }
 #include "ansi_c_parser.h"
 #include "y.tab.h"
 
+boost::object_pool<exprt> *exprt_pool;
+boost::object_pool<typet> *typet_pool;
+
+void init_scanner_pool()
+{
+  exprt_pool = new boost::object_pool<exprt>();
+  typet_pool = new boost::object_pool<typet>();
+  return;
+}
+
 static void init(exprt **e)
 {
-  *e = new exprt();
+  *e = exprt_pool->construct();
 }
 
 static void init(typet **e)
 {
-  *e = new typet();
+  *e = typet_pool->construct();
+}
+
+void clear_scanner_pool()
+{
+  delete exprt_pool;
+  exprt_pool = NULL;
+  delete typet_pool;
+  typet_pool = NULL;
 }
 
 static void init(exprt **expr, const std::string &id)
