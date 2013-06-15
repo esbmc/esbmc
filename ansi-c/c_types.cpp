@@ -11,18 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_types.h"
 #include "config.h"
 
-/*******************************************************************\
-
-Function: build_float_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet build_float_type(unsigned width)
 {
   if(config.ansi_c.use_fixed_for_float)
@@ -76,19 +64,6 @@ type2tc build_float_type2(unsigned width)
   }
 }
 
-
-/*******************************************************************\
-
-Function: index_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet index_type()
 {
   return signedbv_typet(config.ansi_c.int_width);  
@@ -99,34 +74,10 @@ type2tc index_type2(void)
   return type_pool.get_int(config.ansi_c.int_width);
 }
 
-/*******************************************************************\
-
-Function: enum_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet enum_type()
 {
   return signedbv_typet(config.ansi_c.int_width);  
 }
-
-/*******************************************************************\
-
-Function: int_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet int_type()
 {
@@ -138,18 +89,6 @@ type2tc int_type2()
   return type_pool.get_int(config.ansi_c.int_width);
 }
 
-/*******************************************************************\
-
-Function: uint_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet uint_type()
 {
   return unsignedbv_typet(config.ansi_c.int_width);  
@@ -159,18 +98,6 @@ type2tc uint_type2()
 {
   return type_pool.get_uint(config.ansi_c.int_width);
 }
-
-/*******************************************************************\
-
-Function: long_int_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet long_int_type()
 {
@@ -182,18 +109,6 @@ type2tc long_int_type2()
   return get_int_type(config.ansi_c.long_int_width);  
 }
 
-/*******************************************************************\
-
-Function: long_long_int_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet long_long_int_type()
 {
   return signedbv_typet(config.ansi_c.long_long_int_width);  
@@ -203,18 +118,6 @@ type2tc long_long_int_type2()
 {
   return get_int_type(config.ansi_c.long_long_int_width);  
 }
-
-/*******************************************************************\
-
-Function: long_uint_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet long_uint_type()
 {
@@ -226,18 +129,6 @@ type2tc long_uint_type2()
   return get_uint_type(config.ansi_c.long_int_width);  
 }
 
-/*******************************************************************\
-
-Function: long_long_uint_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet long_long_uint_type()
 {
   return unsignedbv_typet(config.ansi_c.long_long_int_width);  
@@ -247,18 +138,6 @@ type2tc long_long_uint_type2()
 {
   return get_uint_type(config.ansi_c.long_long_int_width);
 }
-
-/*******************************************************************\
-
-Function: char_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet char_type()
 {
@@ -276,18 +155,6 @@ type2tc char_type2()
     return type_pool.get_int(config.ansi_c.char_width);
 }
 
-/*******************************************************************\
-
-Function: float_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet float_type()
 {
   return build_float_type(config.ansi_c.single_width);
@@ -297,18 +164,6 @@ type2tc float_type2()
 {
   return build_float_type2(config.ansi_c.single_width);
 }
-
-/*******************************************************************\
-
-Function: double_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet double_type()
 {
@@ -320,18 +175,6 @@ type2tc double_type2()
   return build_float_type2(config.ansi_c.double_width);
 }
 
-/*******************************************************************\
-
-Function: long_double_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet long_double_type()
 {
   return build_float_type(config.ansi_c.long_double_width);
@@ -342,34 +185,10 @@ type2tc long_double_type2()
   return build_float_type2(config.ansi_c.long_double_width);
 }
 
-/*******************************************************************\
-
-Function: size_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 typet size_type()
 {
   return unsignedbv_typet(config.ansi_c.pointer_width);
 }
-
-/*******************************************************************\
-
-Function: signed_size_type
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 typet signed_size_type()
 {
