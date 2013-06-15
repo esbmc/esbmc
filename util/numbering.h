@@ -132,7 +132,12 @@ public:
     return vec.size();
   }
 
-  const T &operator[](unsigned int i)
+  const T &operator[](unsigned int i) const
+  {
+    return vec[i];
+  }
+
+  T &operator[](unsigned int i)
   {
     return vec[i];
   }
