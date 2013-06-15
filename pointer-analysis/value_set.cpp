@@ -33,6 +33,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 const value_sett::object_map_dt value_sett::object_map_dt::empty;
 object_numberingt value_sett::object_numbering;
+object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(
   const namespacet &ns,
@@ -1129,11 +1130,15 @@ value_sett::dump(const namespacet &ns) const
 void
 value_sett::obj_numbering_ref(unsigned int num)
 {
-  num = num;
+  obj_numbering_refset[num]++;
 }
 
 void
 value_sett::obj_numbering_deref(unsigned int num)
 {
-  num = num;
+  unsigned int refcount = --obj_numbering_refset[num];
+  if (refcount == 0) {
+    object_numbering.erase(num);
+    obj_numbering_refset.erase(num);
+  }
 }

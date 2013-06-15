@@ -64,12 +64,25 @@ public:
       }
     }
 
+    object_map_dt()
+    {
+    }
+
+    object_map_dt(const object_map_dt &ref)
+    {
+      *this = ref;
+      for (obj_map_mapt::const_iterator it = themap.begin();
+           it != themap.end(); it++) {
+        value_sett::obj_numbering_ref(it->first);
+      }
+    }
+
     typedef obj_map_mapt::const_iterator const_iterator;
     typedef obj_map_mapt::iterator iterator;
 
     objectt &operator[](unsigned i)
     {
-      if (themap.find(i) != themap.end())
+      if (themap.find(i) == themap.end())
         value_sett::obj_numbering_ref(i);
       return themap[i];
     }
