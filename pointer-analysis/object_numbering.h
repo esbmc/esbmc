@@ -15,6 +15,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <numbering.h>
 
 typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
-typedef hash_numbering<unsigned, unsigned> object_number_numberingt;
+typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
 
 #endif
