@@ -6,6 +6,6 @@ AM_CXXFLAGS = $(ESBMC_CXXFLAGS) -I$(top_srcdir)
 
 pointerincludedir = $(includedir)/pointer-analysis
 pointerinclude_HEADERS = dereference.h goto_program_dereference.h \
-      object_numbering.h show_value_sets.h value_set.h value_set_analysis.h \
+      show_value_sets.h value_set.h value_set_analysis.h \
       value_set_domain.h value_sets.h
 
