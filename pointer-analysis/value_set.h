@@ -50,10 +50,55 @@ public:
     { return offset_is_set && offset.is_zero(); }
   };
 
-  class object_map_dt:public std::map<unsigned, objectt>
+  typedef std::map<unsigned, objectt> obj_map_mapt;
+  class object_map_dt
   {
+    // If you said this class looks pretty map like, it's because it used to be
+    // a subclass of std::map, which was far too funky for me, thanks.
   public:
+    ~object_map_dt()
+    {
+      for (obj_map_mapt::const_iterator it = themap.begin();
+           it != themap.end(); it++) {
+        value_sett::obj_numbering_deref(it->first);
+      }
+    }
+
+    typedef obj_map_mapt::const_iterator const_iterator;
+    typedef obj_map_mapt::iterator iterator;
+
+    objectt &operator[](unsigned i)
+    {
+      return themap[i];
+    }
+
+    const_iterator find(unsigned i) const
+    {
+      return themap.find(i);
+    }
+
+    iterator find(unsigned i)
+    {
+      return themap.find(i);
+    }
+
+    const_iterator begin() const
+    {
+      return themap.begin();
+    }
+
+    const_iterator end() const
+    {
+      return themap.end();
+    }
+
+    size_t size(void) const
+    {
+      return themap.size();
+    }
+
     const static object_map_dt empty;
+    obj_map_mapt themap;
   };
 
   typedef reference_counting<object_map_dt> object_mapt;
@@ -279,10 +324,13 @@ protected:
     const irep_idt &component_name,
     const namespacet &ns);
 
+  static void obj_numbering_deref(unsigned int num);
+
 public:
 //********************************** Members ***********************************
   unsigned location_number;
   static object_numberingt object_numbering;
+  static object_number_numberingt obj_numbering_ref;
 
   valuest values;
 };
