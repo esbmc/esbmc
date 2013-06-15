@@ -17,8 +17,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 #include <reference_counting.h>
 
-#include "object_numbering.h"
 #include "value_sets.h"
+
+typedef hash_numbering<expr2tc, irep2_hash> object_numberingt;
+typedef hash_numbering<unsigned, std::hash<unsigned> > object_number_numberingt;
 
 class value_sett
 {
