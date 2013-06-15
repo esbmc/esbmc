@@ -551,17 +551,14 @@ void dereferencet::bounds_check(
     arr_size = mul2tc(index_type2(), arr_size, arr_type_2.array_size);
   }
 
-  // Irritating - I don't know what c_implicit_typecast does, and it modifies
-  // tmp_op0 it appears.
-  exprt tmp_op0 = migrate_expr_back(expr.index);
-  exprt tmp_op1 = migrate_expr_back(arr_size);
-  if (c_implicit_typecast(tmp_op0, tmp_op1.type(), ns)) {
+  expr2tc tmp_op0 = expr.index;
+  expr2tc tmp_op1 = arr_size;
+  if (c_implicit_typecast(tmp_op0, tmp_op1->type, ns)) {
     std::cerr << "index address of wrong type in bounds_check" << std::endl;
     abort();
   }
 
-  expr2tc new_index;
-  migrate_expr(tmp_op0, new_index);
+  expr2tc new_index = tmp_op0;
   greaterthanequal2tc gte(new_index, arr_size);
 
   guardt tmp_guard(guard);
