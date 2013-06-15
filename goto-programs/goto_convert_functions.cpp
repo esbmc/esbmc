@@ -396,7 +396,7 @@ goto_convert_functionst::collect_expr(const irept &expr, typename_sett &deps)
   return;
 }
 
-void
+bool
 goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
                                       const irep_idt &sname)
 {
@@ -430,7 +430,7 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
       // where we have this recursive symbol dependancy situation.
       // The workaround to this is to just ignore it, and hope that it doesn't
       // become a problem in the future.
-      return;
+      return false;
     }
 
     const symbolt *sym;
@@ -466,11 +466,11 @@ goto_convert_functionst::rename_types(irept &type, const symbolt &cur_name_sym,
     }
 
     type = type2;
-    return;
+    return true;
   }
 
   rename_exprs(type, cur_name_sym, sname);
-  return;
+  return false;
 }
 
 void
@@ -565,7 +565,8 @@ goto_convert_functionst::thrash_type_symbols(void)
 
   // And now all the types have a fixed form, assault all existing code.
   Forall_symbols(it, context.symbols) {
-    rename_types(it->second.type, it->second, it->first);
+    if (rename_types(it->second.type, it->second, it->first))
+      migrate_type(it->second.type, it->second.type2);
     rename_exprs(it->second.value, it->second, it->first);
   }
 

@@ -32,7 +32,7 @@ public:
   void thrash_type_symbols(void);
   void collect_type(const irept &type, typename_sett &set);
   void collect_expr(const irept &expr, typename_sett &set);
-  void rename_types(irept &type, const symbolt &cur_name_sym,
+  bool rename_types(irept &type, const symbolt &cur_name_sym,
                     const irep_idt &sname);
   void rename_exprs(irept &expr, const symbolt &cur_name_sym,
                     const irep_idt &sname);
