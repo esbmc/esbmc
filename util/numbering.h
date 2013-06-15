@@ -23,14 +23,15 @@ class numbering
 public:
   unsigned number(const T &a)
   {
+    unsigned int num = numbers.size();
     std::pair<typename numberst::const_iterator, bool> result=
       numbers.insert(
       std::pair<T, unsigned>
-      (a, numbers.size()));
+      (a, num));
 
     if(result.second) // inserted?
     {
-      vec.push_back(a);
+      vec[num] = a;
       assert(vec.size()==numbers.size());
     }
     
@@ -61,7 +62,7 @@ public:
 
 protected:
   typedef std::map<T, unsigned> numberst;
-  typedef std::vector<T> vectort;
+  typedef hash_map_cont<unsigned, T, std::hash<unsigned> > vectort;
   numberst numbers;  
   vectort vec;
 };
@@ -72,14 +73,15 @@ class hash_numbering
 public:
   unsigned number(const T &a)
   {
+    unsigned int num = numbers.size();
     std::pair<typename numberst::const_iterator, bool> result=
       numbers.insert(
       std::pair<T, unsigned>
-      (a, numbers.size()));
+      (a, num));
 
     if(result.second) // inserted?
     {
-      vec.push_back(a);
+      vec[num] = a;
       assert(vec.size()==numbers.size());
     }
     
@@ -115,7 +117,7 @@ public:
 
 protected:
   typedef hash_map_cont<T, unsigned, hash_fkt> numberst;
-  typedef std::vector<T> vectort;
+  typedef hash_map_cont<unsigned, T, std::hash<unsigned> > vectort;
   numberst numbers;  
   vectort vec;
 };
