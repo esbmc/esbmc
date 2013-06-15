@@ -10,6 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #define CPROVER_NUMBERING_H
 
 #include <assert.h>
+#include <unistd.h>
 
 #include <map>
 #include <vector>
@@ -17,7 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "hash_cont.h"
 
 template <typename T>
-class numbering:public std::vector<T>
+class numbering
 {
 public:
   unsigned number(const T &a)
@@ -29,8 +30,8 @@ public:
 
     if(result.second) // inserted?
     {
-      std::vector<T>::push_back(a);
-      assert(this->size()==numbers.size());
+      vec.push_back(a);
+      assert(vec.size()==numbers.size());
     }
     
     return (result.first)->second;
@@ -45,15 +46,28 @@ public:
       
     n=it->second;
     return false;
+  }
+
+  void clear()
+  {
+    vec.clear();
+    numbers.clear();
+  }
+
+  size_t size()
+  {
+    return vec.size();
   }
 
 protected:
   typedef std::map<T, unsigned> numberst;
+  typedef std::vector<T> vectort;
   numberst numbers;  
+  vectort vec;
 };
 
 template <typename T, class hash_fkt>
-class hash_numbering:public std::vector<T>
+class hash_numbering
 {
 public:
   unsigned number(const T &a)
@@ -65,8 +79,8 @@ public:
 
     if(result.second) // inserted?
     {
-      std::vector<T>::push_back(a);
-      assert(this->size()==numbers.size());
+      vec.push_back(a);
+      assert(vec.size()==numbers.size());
     }
     
     return (result.first)->second;
@@ -83,9 +97,27 @@ public:
     return false;
   }
 
+  void clear()
+  {
+    vec.clear();
+    numbers.clear();
+  }
+
+  size_t size()
+  {
+    return vec.size();
+  }
+
+  const T &operator[](unsigned int i)
+  {
+    return vec[i];
+  }
+
 protected:
   typedef hash_map_cont<T, unsigned, hash_fkt> numberst;
+  typedef std::vector<T> vectort;
   numberst numbers;  
+  vectort vec;
 };
 
 #endif
