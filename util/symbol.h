@@ -14,11 +14,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "expr.h"
 #include "location.h"
+#include <migrate.h>
 
 class symbolt
 {
 public:
   typet type;
+  type2tc type2; // Duplicate of type, in irep2.
   exprt value;
   locationt location;
   irep_idt name;

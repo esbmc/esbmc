@@ -8,6 +8,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "context.h"
 
+#include <migrate.h>
+
 /*******************************************************************\
 
 Function: contextt::value
@@ -77,6 +79,12 @@ bool contextt::move(symbolt &symbol, symbolt *&new_symbol)
     
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
   symbol_module_map.insert(std::pair<irep_idt, irep_idt>(symbol.module, symbol.name));
+
+  if (symbol.type.id() == "KnR")
+    // huurrr
+    symbol.type2 = type2tc();
+  else
+    migrate_type(symbol.type, symbol.type2);
 
   result.first->second.swap(symbol);
   new_symbol=&result.first->second;
