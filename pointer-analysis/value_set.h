@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <mp_arith.h>
 #include <namespace.h>
 #include <reference_counting.h>
+#include <numbering.h>
 
 #include "value_sets.h"
 
