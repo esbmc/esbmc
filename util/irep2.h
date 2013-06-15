@@ -1352,6 +1352,14 @@ namespace esbmct {
                  enable_if_notype, disable_if_is_id_type(field6_type))
       : base_container(new contained(arg1, arg2, arg3, arg4, arg5, arg6),
                 &irep_deleter<contained>::beards) { }
+
+    something2tc &operator=(const base_container &ref)
+    {
+      const base_type *ptr = ref.get();
+      assert(ptr == NULL || ptr->*id_field == expid);
+      base_container::operator=(ref);
+      return *this;
+    }
   };
 }; // esbmct
 
