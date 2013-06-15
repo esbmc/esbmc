@@ -994,8 +994,8 @@ void string_instrumentationt::do_strerror(
     new_symbol_buf.pretty_name=new_symbol_buf.base_name;
     new_symbol_buf.name="c::"+id2string(new_symbol_buf.base_name);
 
-    context.move(new_symbol_buf);
     context.move(new_symbol_size);
+    context.move(new_symbol_buf);
   }
 
   const symbolt &symbol_size=ns.lookup(identifier_size);
