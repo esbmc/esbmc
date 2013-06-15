@@ -25,6 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <util/type_byte_size.h>
 
 object_numberingt value_sett::object_numbering;
+object_number_numberingt value_sett::obj_numbering_refset;
 
 void value_sett::output(std::ostream &out) const
 {
@@ -1293,6 +1294,22 @@ void
 value_sett::dump() const
 {
   output(std::cout);
+}
+
+void
+value_sett::obj_numbering_ref(unsigned int num)
+{
+  obj_numbering_refset[num]++;
+}
+
+void
+value_sett::obj_numbering_deref(unsigned int num)
+{
+  unsigned int refcount = --obj_numbering_refset[num];
+  if (refcount == 0) {
+    object_numbering.erase(num);
+    obj_numbering_refset.erase(num);
+  }
 }
 
 #ifdef WITH_PYTHON
