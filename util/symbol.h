@@ -71,6 +71,7 @@ public:
     #define SYM_SWAP1(x) x.swap(b.x)
 
     SYM_SWAP1(type);
+    SYM_SWAP1(type2);
     SYM_SWAP1(value);
     SYM_SWAP1(name);
     SYM_SWAP1(pretty_name);
