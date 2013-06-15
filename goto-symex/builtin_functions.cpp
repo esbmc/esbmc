@@ -75,11 +75,11 @@ void goto_symext::symex_malloc(
   symbol.type.dynamic(true);
 
   symbol.mode="C";
+  migrate_type(symbol.type, symbol.type2);
 
   new_context.add(symbol);
 
-  type2tc new_type;
-  migrate_type(symbol.type, new_type);
+  type2tc new_type = symbol.type2;
 
   address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
@@ -90,8 +90,8 @@ void goto_symext::symex_malloc(
   }
   else
   {
-    type2tc subtype;
-    migrate_type(symbol.type.subtype(), subtype);
+    array_type2tc type2 = symbol.type2;
+    type2tc subtype = type2->subtype;
     expr2tc sym = symbol2tc(new_type, symbol.name);
     expr2tc idx_val = zero_uint;
     expr2tc idx = index2tc(subtype, sym, idx_val);

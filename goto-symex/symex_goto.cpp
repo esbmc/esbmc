@@ -236,7 +236,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
       type2tc type;
       typet old_type = symbol.type;
-      migrate_type(symbol.type, type);
+      type = symbol.type2;
 
       expr2tc rhs;
 
