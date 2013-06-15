@@ -43,7 +43,16 @@ Function: contextt::add
 
 bool contextt::add(const symbolt &symbol)
 {
-  if(!symbols.insert(std::pair<irep_idt, symbolt>(symbol.name, symbol)).second)
+  symbolt tmp = symbol;
+
+  if (is_nil_type(symbol.type2)) {
+    if (symbol.type.id() == "KnR")
+      tmp.type2 = type2tc();
+    else
+      migrate_type(tmp.type, tmp.type2);
+  }
+
+  if(!symbols.insert(std::pair<irep_idt, symbolt>(symbol.name, tmp)).second)
     return true;
     
   symbol_base_map.insert(std::pair<irep_idt, irep_idt>(symbol.base_name, symbol.name));
