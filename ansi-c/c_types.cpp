@@ -48,6 +48,35 @@ typet build_float_type(unsigned width)
   }
 }
 
+type2tc build_float_type2(unsigned width)
+{
+  if(config.ansi_c.use_fixed_for_float)
+  {
+    fixedbv_type2tc result(width, width/2);
+    return result;
+  }
+  else
+  {
+    std::cerr << "New intermediate representation doesn't have floatbvs yet, "
+              << "sorry" << std::endl;
+    abort();
+#if 0
+    floatbv_typet result=floatbv_typet();
+    result.set_width(width);
+
+    switch(width)
+    {
+    case 32: result.set_f(23); break;
+    case 64: result.set_f(52); break;
+    default: assert(false);
+    }
+
+    return result;
+#endif
+  }
+}
+
+
 /*******************************************************************\
 
 Function: index_type
@@ -148,6 +177,11 @@ typet long_int_type()
   return signedbv_typet(config.ansi_c.long_int_width);  
 }
 
+type2tc long_int_type2()
+{
+  return get_int_type(config.ansi_c.long_int_width);  
+}
+
 /*******************************************************************\
 
 Function: long_long_int_type
@@ -163,6 +197,11 @@ Function: long_long_int_type
 typet long_long_int_type()
 {
   return signedbv_typet(config.ansi_c.long_long_int_width);  
+}
+
+type2tc long_long_int_type2()
+{
+  return get_int_type(config.ansi_c.long_long_int_width);  
 }
 
 /*******************************************************************\
@@ -182,6 +221,11 @@ typet long_uint_type()
   return unsignedbv_typet(config.ansi_c.long_int_width);  
 }
 
+type2tc long_uint_type2()
+{
+  return get_uint_type(config.ansi_c.long_int_width);  
+}
+
 /*******************************************************************\
 
 Function: long_long_uint_type
@@ -197,6 +241,11 @@ Function: long_long_uint_type
 typet long_long_uint_type()
 {
   return unsignedbv_typet(config.ansi_c.long_long_int_width);  
+}
+
+type2tc long_long_uint_type2()
+{
+  return get_uint_type(config.ansi_c.long_long_int_width);
 }
 
 /*******************************************************************\
@@ -244,6 +293,11 @@ typet float_type()
   return build_float_type(config.ansi_c.single_width);
 }
 
+type2tc float_type2()
+{
+  return build_float_type2(config.ansi_c.single_width);
+}
+
 /*******************************************************************\
 
 Function: double_type
@@ -261,6 +315,11 @@ typet double_type()
   return build_float_type(config.ansi_c.double_width);
 }
 
+type2tc double_type2()
+{
+  return build_float_type2(config.ansi_c.double_width);
+}
+
 /*******************************************************************\
 
 Function: long_double_type
@@ -276,6 +335,11 @@ Function: long_double_type
 typet long_double_type()
 {
   return build_float_type(config.ansi_c.long_double_width);
+}
+
+type2tc long_double_type2()
+{
+  return build_float_type2(config.ansi_c.long_double_width);
 }
 
 /*******************************************************************\
