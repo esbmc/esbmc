@@ -69,6 +69,8 @@ public:
 
     objectt &operator[](unsigned i)
     {
+      if (themap.find(i) != themap.end())
+        value_sett::obj_numbering_ref(i);
       return themap[i];
     }
 
@@ -324,13 +326,14 @@ protected:
     const irep_idt &component_name,
     const namespacet &ns);
 
+  static void obj_numbering_ref(unsigned int num);
   static void obj_numbering_deref(unsigned int num);
 
 public:
 //********************************** Members ***********************************
   unsigned location_number;
   static object_numberingt object_numbering;
-  static object_number_numberingt obj_numbering_ref;
+  static object_number_numberingt obj_numbering_refset;
 
   valuest values;
 };

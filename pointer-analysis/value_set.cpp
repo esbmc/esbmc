@@ -1127,6 +1127,12 @@ value_sett::dump(const namespacet &ns) const
 }
 
 void
+value_sett::obj_numbering_ref(unsigned int num)
+{
+  num = num;
+}
+
+void
 value_sett::obj_numbering_deref(unsigned int num)
 {
   num = num;
