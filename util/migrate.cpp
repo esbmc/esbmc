@@ -372,7 +372,7 @@ convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
 expr2tc
 sym_name_to_symbol(irep_idt init, type2tc type)
 {
-  const symbolt *sym;
+  const symbolt *sym = NULL;
   symbol2t::renaming_level target_level;
   unsigned int level1_num, thread_num, node_num, level2_num;
 
@@ -394,7 +394,8 @@ sym_name_to_symbol(irep_idt init, type2tc type)
     // hashes.
     // Fix this by ensuring that /all/ symbols with the same name use the type
     // from the global symbol table.
-    migrate_type(sym->type, type);
+    if (sym != NULL)
+      migrate_type(sym->type, type);
     return symbol2tc(type, init, symbol2t::level0, 0, 0, 0, 0);
   }
 
