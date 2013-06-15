@@ -224,18 +224,17 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   locality(goto_function);
 
   // assign arguments
-  type2tc tmp_type;
-  migrate_type(goto_function.type, tmp_type);
+  type2tc code_type = goto_function.type2;
 
-  if (to_code_type(tmp_type).arguments.size() != arguments.size() &&
-      !to_code_type(tmp_type).ellipsis) {
+  if (to_code_type(code_type).arguments.size() != arguments.size() &&
+      !to_code_type(code_type).ellipsis) {
     std::cerr << "Function call to \"" << identifier << "\": number of "
               << "arguments doesn't match type definition; some inconsistent "
               << "rewriting occured" << std::endl;
     abort();
   }
 
-  argument_assignments(to_code_type(tmp_type), arguments);
+  argument_assignments(to_code_type(code_type), arguments);
 
   frame.end_of_function = --goto_function.body.instructions.end();
   frame.return_value = call.ret;

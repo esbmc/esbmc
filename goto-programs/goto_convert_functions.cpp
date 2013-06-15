@@ -192,6 +192,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   temporary_counter=0;
 
   f.type=to_code_type(symbol.type);
+  migrate_type(f.type, f.type2);
   f.body_available=symbol.value.is_not_nil();
 
   if(!f.body_available) return;

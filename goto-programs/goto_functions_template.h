@@ -13,6 +13,7 @@ Date: June 2003
 
 #include <iostream>
 
+#include <irep2.h>
 #include <std_types.h>
 
 template <class bodyT>
@@ -21,6 +22,7 @@ class goto_function_templatet
 public:
   bodyT body;
   code_typet type;
+  type2tc type2;
   bool body_available;
 
   // The set of functions that have been inlined into this one. Necessary to
