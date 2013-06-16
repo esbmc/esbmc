@@ -203,7 +203,10 @@ void goto_symext::symex_assign_symbol(
   }
 
   expr2tc orig_name_lhs = lhs;
-  cur_state->get_original_name(orig_name_lhs);
+  expr2tc tmp = cur_state->get_original_name(orig_name_lhs);
+  if (!is_nil_expr(tmp))
+    orig_name_lhs = tmp;
+
   cur_state->rename(rhs);
 
   do_simplify(rhs);

@@ -205,7 +205,9 @@ void goto_symex_statet::assignment(
   {
     // update value sets
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
-    level2.get_original_name(l1_rhs);
+    expr2tc tmp = get_original_name(l1_rhs, symbol2t::level1);
+    if (!is_nil_expr(tmp))
+      l1_rhs = tmp;
 
     value_set.assign(l1_lhs, l1_rhs, ns);
   }
@@ -263,20 +265,39 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   }
 }
 
-void goto_symex_statet::get_original_name(expr2tc &expr) const
+expr2tc
+goto_symex_statet::get_original_name(const expr2tc &expr,
+                                     symbol2t::renaming_level lev) const
 {
+  expr2tc new_expr = expr;
+  bool changed = false;
+  if (lev == symbol2t::level2 || lev == symbol2t::level2_global)
+    return expr2tc();
 
   if (is_nil_expr(expr))
-    return;
+    return expr2tc();
 
-  Forall_operands2(it, idx, expr)
-    get_original_name(*it);
-
-  if (is_symbol2t(expr))
-  {
-    level2.get_original_name(expr);
-    top().level1.get_original_name(expr);
+  forall_operands2(it, idx, new_expr) {
+    expr2tc res = get_original_name(*it, lev);
+    if (!is_nil_expr(res)) {
+      changed = true;
+      *new_expr.get()->get_sub_expr_nc(idx) = res;
+    }
   }
+
+  if (is_symbol2t(new_expr))
+  {
+    changed |= level2.get_original_name(new_expr);
+
+    // Only rename to level0 if requested.
+    if (lev == symbol2t::level0)
+      changed |= top().level1.get_original_name(new_expr);
+  }
+
+  if (changed)
+    return new_expr;
+  else
+    return expr2tc();
 }
 
 void goto_symex_statet::print_stack_trace(unsigned int indent) const

@@ -191,15 +191,13 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
   entry.node_id = node_id;
 }
 
-void renaming::renaming_levelt::get_original_name(expr2tc &expr,
+bool
+renaming::renaming_levelt::get_original_name(expr2tc &expr,
                                             symbol2t::renaming_level lev) const
 {
 
   if (is_nil_expr(expr))
-    return;
-
-  Forall_operands2(it, idx, expr)
-    get_original_name(*it);
+    return false;
 
   if (is_symbol2t(expr))
   {
@@ -210,11 +208,11 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
       lev = symbol2t::level1_global;
     // level1 and level1_global are equivalent.
     else if (lev == symbol2t::level1 && sym.rlevel == symbol2t::level1_global)
-      return;
+      return false;
 
     // Can't rename any lower,
     if (sym.rlevel == symbol2t::level0)
-      return;
+      return false;
 
     // Wipe out some data with default values and set renaming level to whatever
     // was requested.
@@ -224,19 +222,21 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
       sym.rlevel = lev;
       sym.node_num = 0;
       sym.level2_num = 0;
-      return;
+      return true;
     case symbol2t::level0:
       sym.rlevel = lev;
       sym.node_num = 0;
       sym.level2_num = 0;
       sym.thread_num = 0;
       sym.level1_num = 0;
-      return;
+      return true;
     default:
       std::cerr << "get_original_nameing to invalid level " << lev << std::endl;
       abort();
     }
   }
+
+  return false;
 }
 
 void renaming::level1t::print(std::ostream &out) const

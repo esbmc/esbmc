@@ -379,8 +379,12 @@ public:
    *  original c-level identifier for a symbol. This method applies this to
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.
+   *  @param lev The level to rename to.
+   *  @return An un-renamed result expression. May be, in fact, the same expr.
    */
-  void get_original_name(expr2tc &expr) const;
+  expr2tc get_original_name(const expr2tc &expr,
+                            symbol2t::renaming_level lev = symbol2t::level0)
+                            const;
 
   /**
    *  Print stack trace of state to stdout.

@@ -23,7 +23,7 @@ namespace renaming {
   struct renaming_levelt
   {
   public:
-    virtual void get_original_name(expr2tc &expr) const = 0;
+    virtual bool get_original_name(expr2tc &expr) const = 0;
     virtual void rename(expr2tc &expr) const = 0;
     virtual void remove(const expr2tc &symbol)=0;
 
@@ -31,7 +31,7 @@ namespace renaming {
 
     virtual ~renaming_levelt() { }
   protected:
-    void get_original_name(expr2tc &expr, symbol2t::renaming_level lev) const;
+    bool get_original_name(expr2tc &expr, symbol2t::renaming_level lev) const;
   };
 
   // level 1 -- function frames
@@ -108,9 +108,9 @@ namespace renaming {
       frameno = frame;
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    virtual bool get_original_name(expr2tc &expr) const
     {
-      renaming_levelt::get_original_name(expr, symbol2t::level0);
+      return renaming_levelt::get_original_name(expr, symbol2t::level0);
     }
 
     unsigned int current_number(const irep_idt &name) const;
@@ -228,9 +228,9 @@ namespace renaming {
       current_names.erase(rec);
     }
 
-    virtual void get_original_name(expr2tc &expr) const
+    virtual bool get_original_name(expr2tc &expr) const
     {
-      renaming_levelt::get_original_name(expr, symbol2t::level1);
+      return renaming_levelt::get_original_name(expr, symbol2t::level1);
     }
 
     struct valuet
