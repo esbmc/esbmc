@@ -73,8 +73,6 @@ public:
   friend guardt &operator -= (guardt &g1, const guardt &g2);
   friend guardt &operator |= (guardt &g1, const guardt &g2);
 
-  void back_sub(const guardt &g2);
-  
   void swap(guardt &g)
   {
     guard_list.swap(g.guard_list);

@@ -74,20 +74,6 @@ guardt &operator -= (guardt &g1, const guardt &g2)
   return g1;
 }
 
-void
-guardt::back_sub(const guardt &g2)
-{
-  guardt::guard_listt::const_reverse_iterator it2 = g2.guard_list.rbegin();
-
-  while (!guard_list.empty() &&
-         it2 != g2.guard_list.rend() &&
-         guard_list.back()==*it2)
-  {
-    guard_list.pop_back();
-    it2++;
-  }
-}
-
 guardt &operator |= (guardt &g1, const guardt &g2)
 {
   if(g2.is_false()) return g1;
