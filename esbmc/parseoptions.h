@@ -60,6 +60,9 @@ protected:
 
   void preprocessing();
 
+  void strip_unused_syms();
+  void decide_to_symbol_strip();
+
   void add_property_monitors(goto_functionst &goto_functions, namespacet &ns);
   expr2tc calculate_a_property_monitor(std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms);
   void add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors);

@@ -21,6 +21,7 @@ extern "C" {
 #include <sys/sendfile.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <sys/utsname.h>
 }
 #endif
 
@@ -774,6 +775,8 @@ bool cbmc_parseoptionst::get_goto_program(
       // Ahem
       migrate_namespace_lookup = new namespacet(context);
 
+      decide_to_symbol_strip();
+
       goto_convert(
         context, options, goto_functions,
         ui_message_handler);
@@ -1173,6 +1176,105 @@ bool cbmc_parseoptionst::read_goto_binary(
 
   return false;
 }
+
+typedef std::unordered_multimap<irep_idt, irep_idt, dstring_hash, dstring_hash> sym_map_type;
+typedef hash_set_cont<irep_idt, dstring_hash, dstring_hash> used_set_type;
+
+static void get_syms_rec(sym_map_type &map, const irep_idt &src,
+                         const irept &ref)
+{
+  if (ref.is_symbol()) {
+    map.insert(sym_map_type::value_type(src, ref.identifier()));
+  } else {
+    forall_irep(it, ref.get_sub())
+      get_syms_rec(map, src, *it);
+    forall_named_irep(it, ref.get_named_sub())
+      get_syms_rec(map, src, it->second);
+    forall_named_irep(it, ref.get_comments())
+      get_syms_rec(map, src, it->second);
+  }
+  return;
+}
+
+void get_used_set(used_set_type &set, const sym_map_type &map,
+                  const irep_idt &sym)
+{
+  if (set.find(sym) != set.end())
+    return;
+
+  std::pair<sym_map_type::const_iterator, sym_map_type::const_iterator> range;
+  range = map.equal_range(sym);
+
+  for (sym_map_type::const_iterator it = range.first;
+       it != range.second; it++)
+    get_used_set(set, map, it->second);
+
+  return;
+}
+
+void cbmc_parseoptionst::strip_unused_syms(void)
+{
+  // Source symbol -> what it refer to.
+  sym_map_type mapping;
+
+  forall_symbols(it, context.symbols) {
+    get_syms_rec(mapping, it->first, (const irept&)it->second.type);
+    get_syms_rec(mapping, it->first, (const irept&)it->second.value);
+  }
+
+  // Now that we know what depends on what, produce a set of what's actually
+  // _used_ in this input.
+  used_set_type used_set, unused_set;
+  get_used_set(used_set, mapping, irep_idt("c::main"));
+
+  forall_symbols(it, context.symbols)
+    if (used_set.find(it->first) == used_set.end())
+      unused_set.insert(it->first);
+
+  std::stringstream ss;
+  ss << "Deleting " << unused_set.size() << " unreferenced symbols";
+  status(ss.str());
+
+  for (used_set_type::const_iterator it = used_set.begin();
+       it != used_set.end(); it++) {
+    context.symbols.erase(*it);
+    context.symbol_base_map.erase(*it);
+    context.symbol_module_map.erase(*it);
+  }
+
+  return;
+}
+
+void cbmc_parseoptionst::decide_to_symbol_strip()
+{
+  // I can't believe I'm doing this.
+
+  struct utsname plat;
+  uname(&plat);
+  if (strcmp("Linux", plat.sysname) != 0)
+    // Don't try to check resources on other platforms.
+    return;
+
+  if (plat.release[0] == '2')
+    if (atoi(&plat.release[2]) < 32)
+      // Don't check res usage on linux pre-2.6.32.
+      return;
+
+  rusage res_usage;
+  if (getrusage(RUSAGE_SELF, &res_usage) < 0) {
+    perror("Couldn't fetch own resource usage");
+    abort();
+  }
+
+  // Units are KiB,
+  if (res_usage.ru_maxrss > (256 * 1024)) {
+    status("Your input file is huge; deleting unreferenced symbols");
+    strip_unused_syms();
+  }
+
+  return;
+}
+
 
 /*******************************************************************\
 
