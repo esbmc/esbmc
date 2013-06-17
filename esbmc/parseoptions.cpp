@@ -1237,25 +1237,27 @@ bool cbmc_parseoptionst::process_goto_program(
         *get_message_handler(), goto_functions);
     }
 
-    status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
-    value_set_analysis(goto_functions);
+    if (!options.get_bool_option("no-pointer-check") ||
+        cmdline.isset("data-races-check")) {
+      status("Pointer Analysis");
+      value_set_analysis(goto_functions);
 
-    // show it?
-    if(cmdline.isset("show-value-sets"))
-    {
-      show_value_sets(get_ui(), goto_functions, value_set_analysis);
-      return true;
+      // show it?
+      if(cmdline.isset("show-value-sets"))
+      {
+        show_value_sets(get_ui(), goto_functions, value_set_analysis);
+        return true;
+      }
+
+      status("Adding Pointer Checks");
+
+      // add pointer checks
+      pointer_checks(goto_functions, ns, context, options, value_set_analysis);
+
+      // add failed symbols
+      add_failed_symbols(context, ns);
     }
-
-    status("Adding Pointer Checks");
-
-    // add pointer checks
-    pointer_checks(
-      goto_functions, ns, context, options, value_set_analysis);
-
-    // add failed symbols
-    add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
