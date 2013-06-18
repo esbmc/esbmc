@@ -1056,6 +1056,8 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
       new_symbol.value = migrate_expr_back(value);
     }
 
+    context.add(new_symbol);
+
     if(symbol.static_lifetime)
     {
       // initialization
@@ -1066,8 +1068,6 @@ expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
       migrate_expr(new_symbol.value, new_sym_value);
       assignment1->code = code_assign2tc(new_sym2, new_sym_value);
     }
-
-    context.move(new_symbol);
   }
 
   const symbolt &str_symbol=ns.lookup(identifier);
