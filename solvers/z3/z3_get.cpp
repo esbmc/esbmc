@@ -22,6 +22,15 @@
 #include "z3_conv.h"
 
 std::string
+z3_convt::double2string(double d) const
+{
+
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << d;
+  return format_message.str();
+}
+
+std::string
 z3_convt::get_fixed_point(const unsigned width, std::string value) const
 {
   std::string m, f, tmp;
