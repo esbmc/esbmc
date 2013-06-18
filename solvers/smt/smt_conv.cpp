@@ -372,24 +372,12 @@ smt_convt::convert_ast(const expr2tc &expr)
   const smt_ast *a;
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
-  bool make_ptrs_ints = false;
   bool make_ints_reals = false;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
     if (cache_result != smt_cache.end())
       return (cache_result->ast);
-  }
-
-  // Complexity: C section 6.3.8 defines relation operators on pointers to be
-  // comparisons on their bit representation, with pointers to
-  // array/struct/union fields comparing as you might expect. So, pump in
-  // some casts prior to conversion if required.
-  // Optimise this later with some expr id attribute array?
-  if (dynamic_cast<const relation_data *>(expr.get()) != NULL &&
-      !is_equality2t(expr) && !is_notequal2t(expr)) {
-    make_ptrs_ints = true;
-
   }
 
   // Second fail -- comparisons are turning up in 01_cbmc_abs1 that compare
@@ -403,12 +391,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   // Convert /all the arguments/.
   unsigned int i = 0;
   forall_operands2(it, idx, expr) {
-    if (make_ptrs_ints && is_pointer_type(*it)) {
-      typecast2tc cast(get_uint_type(config.ansi_c.pointer_width), *it);
-      args[i] = convert_ast(cast);
-    } else {
-      args[i] = convert_ast(*it);
-    }
+    args[i] = convert_ast(*it);
 
     if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
       args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL,
@@ -798,6 +781,18 @@ expr_handle_table:
       if2tc ite(abs.type, lt, sub, abs.value);
       a = convert_ast(ite);
     }
+    break;
+  }
+  case expr2t::lessthan_id:
+  case expr2t::lessthanequal_id:
+  case expr2t::greaterthan_id:
+  case expr2t::greaterthanequal_id:
+  {
+    // Pointer relation:
+    const expr2tc &side1 = *expr->get_sub_expr(0);
+    const expr2tc &side2 = *expr->get_sub_expr(1);
+    assert(is_pointer_type(side1->type) && is_pointer_type(side2->type));
+    a = convert_ptr_cmp(side1, side2, expr);
     break;
   }
   default:
