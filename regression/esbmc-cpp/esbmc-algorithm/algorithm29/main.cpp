@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -10,6 +11,12 @@ int main () {
   vector<int>::iterator it;
 
   remove_copy (myints,myints+8,myvector.begin(),20); // 10 30 30 10 10 0 0 0
+  
+  assert(myvector[0] == 10);
+  assert(myvector[1] == 30);
+  assert(myvector[2] == 30);
+  assert(myvector[3] == 10);
+  assert(myvector[4] == 10);
 
   cout << "myvector contains:";
   for (it=myvector.begin(); it!=myvector.end(); ++it)

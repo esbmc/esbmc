@@ -51,7 +51,7 @@ class irept
 public:
   typedef std::vector<irept> subt;
   //typedef std::list<irept> subt;
-  
+
   typedef std::map<irep_namet, irept> named_subt;
 
   // Dump contents of irep to stdout. Debugging only.
@@ -108,7 +108,7 @@ public:
 
   inline const irep_idt &id() const
   { return read().data; }
-  
+
   inline const std::string &id_string() const
   { return read().data.as_string(); }
 
@@ -128,13 +128,13 @@ public:
   {
     return get(name).as_string();
   }
-  
+
   const irep_idt &get(const irep_namet &name) const;
   bool get_bool(const irep_namet &name) const;
 
   inline void set(const irep_namet &name, const irep_idt &value)
   { add(name).id(value); }
-  
+
   void set(const irep_namet &name, const long value);
   void set(const irep_namet &name, const irept &irep);
 //public:
@@ -695,7 +695,7 @@ public:
   }
 
   inline void c_sizeof_type(const irept &val) {
-    set(a_c_size_type, val);
+    set(a_c_sizeof_type, val);
   }
 
   inline void dfault(bool val) {
@@ -970,14 +970,14 @@ public:
   inline bool is_unsignedbv() const { return id() == id_unsignedbv; }
 
   friend bool operator==(const irept &i1, const irept &i2);
-   
+
   friend inline bool operator!=(const irept &i1, const irept &i2)
   { return !(i1==i2); }
 
   friend std::ostream& operator<< (std::ostream& out, const irept &irep);
-  
+
   std::string to_string() const;
-  
+
   void swap(irept &irep)
   {
     std::swap(irep.data, data);
@@ -987,25 +987,25 @@ public:
   friend bool ordering(const irept &i1, const irept &i2);
 
   int compare(const irept &i) const;
-  
+
   void clear();
 
   void make_nil() { clear(); id("nil"); }
-  
+
   subt &get_sub() { return write().sub; } // DANGEROUS
   const subt &get_sub() const { return read().sub; }
   named_subt &get_named_sub() { return write().named_sub; } // DANGEROUS
   const named_subt &get_named_sub() const { return read().named_sub; }
   named_subt &get_comments() { return write().comments; } // DANGEROUS
   const named_subt &get_comments() const { return read().comments; }
-  
+
   size_t hash() const;
   size_t full_hash() const;
-  
+
   friend bool full_eq(const irept &a, const irept &b);
-  
+
   std::string pretty(unsigned indent=0) const;
-  
+
 protected:
   static bool is_comment(const irep_namet &name)
   { return !name.empty() && name[0]=='#'; }
@@ -1034,7 +1034,7 @@ public:
   static const irep_idt a_lvalue, a_reference, a_static_lifetime, a_theorem;
   static const irep_idt a_cmt_unsigned, a_user_provided, a_cmt_volatile;
   static const irep_idt a_zero_initializer, a_restricted, a_flavor;
-  static const irep_idt a_cmt_active, a_code, a_component, a_c_size_type;
+  static const irep_idt a_cmt_active, a_code, a_component, a_c_sizeof_type;
   static const irep_idt a_end_location, a_guard, a_label, a_lhs, a_location;
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
@@ -1066,7 +1066,7 @@ public:
       named_sub.clear();
       comments.clear();
     }
-    
+
     void swap(dt &d)
     {
       d.data.swap(data);
@@ -1074,7 +1074,7 @@ public:
       d.named_sub.swap(named_sub);
       d.comments.swap(comments);
     }
-    
+
     #ifdef SHARING
     dt():ref_count(1)
     {
@@ -1085,13 +1085,13 @@ public:
     }
     #endif
   };
-  
+
 protected:
   #ifdef SHARING
   dt *data;
-  
-  void remove_ref(dt *old_data);  
-  
+
+  void remove_ref(dt *old_data);
+
   const dt &read() const;
 
   inline dt &write()
@@ -1099,11 +1099,11 @@ protected:
     detatch();
     return *data;
   }
-  
+
   void detatch();
   #else
   dt data;
-  
+
   inline const dt &read() const
   {
     return data;
@@ -1141,7 +1141,7 @@ struct irep_full_hash
 
 struct irep_full_eq
 {
-  bool operator()(const irept &i1, const irept &i2) const 
+  bool operator()(const irept &i1, const irept &i2) const
   {
     return full_eq(i1, i2);
   }

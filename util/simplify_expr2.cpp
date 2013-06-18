@@ -67,6 +67,11 @@ static void
 to_fixedbv(const expr2tc &op, fixedbvt &bv)
 {
 
+  // XXX XXX XXX -- this would appear to be broken in a couple of cases.
+  // Take a look at the typecast cvt code -- where we're taking the target
+  // type, fetching the fixedbv spec from that, and constructing from there.
+  // Which turns out not to break test cases like 01_cbmc_Fixedbv8
+
   switch (op->expr_id) {
   case expr2t::constant_int_id:
     bv.spec = fixedbv_spect(128, 64); // XXX
@@ -1114,6 +1119,21 @@ typecast2t::do_simplify(bool second) const
       } else {
         return true_expr;
       }
+    } else if (is_bv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f;
+      f.spec = to_fixedbv_type(migrate_type_back(type)); // Dodgy.
+      f.from_integer(to_constant_int2t(from).constant_value);
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
+    } else if (is_fixedbv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f(to_constant_fixedbv2t(from).value);
+      f.round(to_fixedbv_type(migrate_type_back(type)));
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
                 (is_bv_type(from) || is_fixedbv_type(from))) {
       fixedbvt bv;
@@ -1161,6 +1181,8 @@ typecast2t::do_simplify(bool second) const
   } else {
     return expr2tc();
   }
+
+  assert(0 && "Fell through typecast2t::do_simplify");
 }
 
 expr2tc

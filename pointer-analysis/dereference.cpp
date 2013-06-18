@@ -149,70 +149,16 @@ void dereferencet::dereference(
       get_new_name(symbol, ns);
 
       exprt tmp_sym_expr = symbol_expr(symbol);
-      migrate_expr(tmp_sym_expr, value);
 
       new_context.move(symbol);
+
+      // Due to migration hiccups, migration must occur after the symbol
+      // appears in the symbol table.
+      migrate_expr(tmp_sym_expr, value);
     }
   }
 
   dest = value;
-}
-
-static std::string
-reformat_class_name(const std::string &from)
-{
-
-  size_t pos = from.rfind(':');
-  std::string classname;
-  if (pos == std::string::npos) {
-    classname = "cpp::struct." + from;
-  } else {
-    pos++;
-    classname = "cpp::" + from.substr(0, pos) + "struct." + from.substr(pos);
-  }
-
-  return classname;
-}
-
-static bool
-is_subclass_of_rec(const std::string &from_name, const std::string &to_name,
-                   const namespacet &ns)
-{
-
-  const symbolt *symbol = NULL;
-  if (!ns.lookup(from_name, symbol)) {
-    // look at the list of bases; see if the struct we're dereferencing to
-    // is a base of this object. Is currently old-irep.
-    forall_irep(it, symbol->type.find("bases").get_sub()) {
-      const typet &base_type = (const typet&)*it;
-      assert(base_type.id() == "base");
-      assert(base_type.type().id() == "struct");
-      const std::string &basename = base_type.type().name().as_string();
-
-      // Is this a C++ class?
-
-      if (basename == to_name) {
-        // Success
-        return true;
-      } else if (is_subclass_of_rec(basename, to_name, ns)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
-}
-
-static bool
-is_subclass_of(const struct_type2t &from_type, const struct_type2t &to_type,
-               const namespacet &ns)
-{
-
-  // Irritatingly, namespace prefixes in the struct name get flipped to the
-  // following:
-  std::string from_name = reformat_class_name(from_type.name.as_string());
-  std::string to_name = reformat_class_name(to_type.name.as_string());
-  return is_subclass_of_rec(from_name, to_name, ns);
 }
 
 bool dereferencet::dereference_type_compare(
@@ -233,10 +179,10 @@ bool dereferencet::dereference_type_compare(
 
   // Check for C++ subclasses; we can cast derived up to base safely.
   if (is_struct_type(object) && is_struct_type(dereference_type)) {
-    const struct_type2t &from_type = to_struct_type(object->type);
-    const struct_type2t &to_type = to_struct_type(dereference_type);
-    if (is_subclass_of(from_type, to_type, ns))
+    if (is_subclass_of(object->type, dereference_type, ns)) {
+      object = typecast2tc(dereference_type, object);
       return true;
+    }
   }
 
   // check for struct prefixes
@@ -326,6 +272,10 @@ void dereferencet::build_reference_to(
         "pointer dereference",
         "NULL pointer", tmp_guard);
     }
+
+    // Don't build a reference to this. You can't actually access NULL, and the
+    // solver will only get confused.
+    return;
   }
   else if (is_dynamic_object2t(root_object))
   {

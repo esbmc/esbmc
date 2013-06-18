@@ -38,10 +38,10 @@ goto_convert_functionst::goto_convert_functionst(
   goto_convertt(_context, _options, _message_handler),
   functions(_functions)
 {
-	if (options.get_bool_option("inlining"))
-	  inlining=true;
-	else
+	if (options.get_bool_option("no-inlining"))
 	  inlining=false;
+	else
+	  inlining=true;
 }
 
 /*******************************************************************\
@@ -94,14 +94,6 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
-
-  // inline those functions marked as "inlined"
-  if (!inlining) {
-    goto_partial_inline(
-      functions,
-      ns,
-      get_message_handler());
-  }
 }
 
 /*******************************************************************\
@@ -220,6 +212,19 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       it!=arguments.end();
       it++)
   {
+    if(inductive_step)
+    {
+      // Fix for of arguments
+      exprt arg=*it;
+      arg.identifier(arg.find("#identifier").id());
+      arg.id("symbol");
+      arg.remove("#identifier");
+      arg.remove("#base_name");
+      arg.remove("#location");
+
+      get_struct_components(arg, state);
+    }
+
     const irep_idt &identifier=it->get_identifier();
     assert(identifier!="");
     arg_ids.push_back(identifier);
@@ -534,7 +539,7 @@ goto_convert_functionst::thrash_type_symbols(void)
     collect_expr(it->second.type, names);
   }
 
-  // Try to compute their dependancies.
+  // Try to compute their dependencies.
 
   typename_mapt typenames;
 

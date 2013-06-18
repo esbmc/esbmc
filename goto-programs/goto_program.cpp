@@ -101,9 +101,21 @@ std::ostream& goto_programt::output_instruction(
     out << std::endl;
     break;
 
-  case RETURN:
-  case OTHER:
   case FUNCTION_CALL:
+    out << "FUNCTION_CALL:  " << from_expr(ns, "", to_code_function_call2t(it->code).function) << std::endl;
+    break;
+
+  case RETURN:
+    {
+    std::string arg = "";
+    const code_return2t &ref = to_code_return2t(it->code);
+    if (!is_nil_expr(ref.operand))
+      arg = from_expr(ns, "", ref.operand);
+    out << "RETURN: " << arg << std::endl;
+    }
+    break;
+
+  case OTHER:
   case ASSIGN:
 
 #if 0
@@ -126,9 +138,9 @@ std::ostream& goto_programt::output_instruction(
   case ASSUME:
   case ASSERT:
     if(it->is_assume())
-      out << "ASSUME ";
+      out << "  ASSUME ";
     else
-      out << "ASSERT ";
+      out << "  ASSERT ";
 
     {
       out << from_expr(ns, identifier, it->guard);
@@ -213,6 +225,27 @@ std::ostream& goto_programt::output_instruction(
       }
       out << ")";
     }
+
+    out << std::endl;
+    break;
+
+  case THROW_DECL_END:
+    out << "THROW_DECL_END (";
+
+    if (!is_nil_expr(it->code))
+    {
+      const code_cpp_throw_decl_end2t &decl_end =
+        to_code_cpp_throw_decl_end2t(it->code);
+
+      forall_names(it, decl_end.exception_list)
+      {
+        if (it != decl_end.exception_list.begin())
+          out << ", ";
+        out << *it;
+      }
+    }
+
+    out << ")";
 
     out << std::endl;
     break;

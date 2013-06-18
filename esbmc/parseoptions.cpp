@@ -210,8 +210,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
-  if(cmdline.isset("inlining"))
-    options.set_option("inlining", true);
+  if(cmdline.isset("no-inlining"))
+    options.set_option("no-inlining", true);
 
   if (cmdline.isset("smt-during-symex")) {
     std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
@@ -236,7 +236,7 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("no-div-by-zero-check", true);
     options.set_option("no-pointer-check", true);
     options.set_option("no-unwinding-assertions", true);
-    options.set_option("partial-loops", true);
+    //options.set_option("partial-loops", true);
   }
 
   if(cmdline.isset("forward-condition") ||
@@ -763,6 +763,9 @@ bool cbmc_parseoptionst::get_goto_program(
 
       status("Generating GOTO Program");
 
+      // Ahem
+      migrate_namespace_lookup = new namespacet(context);
+
       goto_convert(
         context, options, goto_functions,
         ui_message_handler);
@@ -857,7 +860,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns __attribute__((unused)))
 {
   std::map<std::string, std::string> strings;
 
@@ -899,6 +902,39 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions)
     goto_programt &prog = func.body;
     Forall_goto_program_instructions(p_it, prog) {
       add_monitor_exprs(p_it, prog.instructions, monitors);
+    }
+  }
+
+  // Find main function; find first function call; insert updates to each
+  // property expression. This makes sure that there isn't inconsistent
+  // initialization of each monitor boolean.
+  goto_functionst::function_mapt::iterator f_it = goto_functions.function_map.find("main");
+  assert(f_it != goto_functions.function_map.end());
+  Forall_goto_program_instructions(p_it, f_it->second.body) {
+    if (p_it->type == FUNCTION_CALL) {
+      const code_function_call2t &func_call =
+        to_code_function_call2t(p_it->code);
+      if (is_symbol2t(func_call.function) &&
+          to_symbol2t(func_call.function).thename == "c::main")
+        continue;
+
+      // Insert initializers for each monitor expr.
+      std::map<std::string, std::pair<std::set<std::string>, expr2tc> >
+        ::const_iterator it;
+      for (it = monitors.begin(); it != monitors.end(); it++) {
+        goto_programt::instructiont new_insn;
+        new_insn.type = ASSIGN;
+        std::string prop_name = "c::" + it->first + "_status";
+        typecast2tc cast(get_int_type(32), it->second.second);
+        code_assign2tc assign(symbol2tc(get_int_type(32), prop_name), cast);
+        new_insn.code = assign;
+        new_insn.function = p_it->function;
+
+        // new_insn location field not set - I believe it gets numbered later.
+        f_it->second.body.instructions.insert(p_it, new_insn);
+      }
+
+      break;
     }
   }
 
@@ -1004,34 +1040,24 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    symbol2tc sym(get_bool_type(), prop_name);
-    new_insn.code = code_assign2tc(sym, trig_it->second);
+    typecast2tc hack_cast(get_int_type(32), trig_it->second);
+    symbol2tc newsym(get_int_type(32), prop_name);
+    new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
     insn_list.insert(insn, new_insn);
   }
 
-  type2tc uint32 = get_uint_type(32);
-  new_insn.type = ASSIGN;
+  new_insn.type = FUNCTION_CALL;
+  symbol2tc func_sym(get_empty_type(), "c::__ESBMC_switch_to_monitor");
+  std::vector<expr2tc> args;
+  new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
-  symbol2tc ltlsym(uint32, "c::_ltl2ba_transition_count");
-  add2tc e(uint32, ltlsym, one_uint);
-
-  new_insn.code = code_assign2tc(ltlsym, e);
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
   new_insn.function = insn->function;
-  insn_list.insert(insn, new_insn);
-
-  new_insn.type = FUNCTION_CALL;
-  new_insn.function = insn->function;
-  type2tc blank_code_type = type2tc(new code_type2t(std::vector<type2tc>(),
-                                    type2tc(), std::vector<irep_idt>(), false));
-  new_insn.code = code_function_call2tc(expr2tc(),
-                                 symbol2tc(blank_code_type, "c::__ESBMC_yield"),
-                                 std::vector<expr2tc>());
   insn_list.insert(insn, new_insn);
 
   return;
@@ -1187,7 +1213,7 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    if(!cmdline.isset("inlining"))
+    if (!cmdline.isset("no-inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
@@ -1218,13 +1244,13 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add pointer checks
     pointer_checks(
-      goto_functions, ns, options, value_set_analysis);
+      goto_functions, ns, context, options, value_set_analysis);
 
     // add failed symbols
     add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
-    add_property_monitors(goto_functions);
+    add_property_monitors(goto_functions, ns);
 
     // recalculate numbers, etc.
     goto_functions.update();
@@ -1263,36 +1289,6 @@ bool cbmc_parseoptionst::process_goto_program(
     {
       print_ileave_points(ns, goto_functions);
       return true;
-    }
-
-    // Rename pthread functions depending on whether we're doing deadlock
-    // checking or not.
-    if (options.get_bool_option("deadlock-check")) {
-      goto_functionst::function_mapt::iterator checkit;
-      irep_idt mutex_lock("c::pthread_mutex_lock");
-      irep_idt lock_check("c::pthread_mutex_lock_check");
-
-      checkit = goto_functions.function_map.begin();
-      for (; checkit != goto_functions.function_map.end(); checkit++) {
-        goto_programt::instructionst::iterator it =
-          checkit->second.body.instructions.begin();
-        for (; it != checkit->second.body.instructions.end(); it++) {
-          relink_calls_from_to(it->code, mutex_lock, lock_check);
-          relink_calls_from_to(it->guard, mutex_lock, lock_check);
-        }
-      }
-
-      irep_idt cond_wait("c::pthread_cond_wait");
-      irep_idt cond_check("c::pthread_cond_wait_check");
-      checkit = goto_functions.function_map.begin();
-      for (; checkit != goto_functions.function_map.end(); checkit++) {
-        goto_programt::instructionst::iterator it =
-          checkit->second.body.instructions.begin();
-        for (; it != checkit->second.body.instructions.end(); it++) {
-          relink_calls_from_to(it->code, cond_wait, cond_check);
-          relink_calls_from_to(it->guard, cond_wait, cond_check);
-        }
-      }
     }
 
     // show it?
@@ -1385,7 +1381,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
-    " --inlining                   inlining function calls\n"
+    " --no-inlining                disable inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1399,8 +1395,9 @@ void cbmc_parseoptionst::help()
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
-    " --version                    show current ESBMC version and exit\n\n"
     " --show-goto-functions        show goto program\n"
+    " --extended-try-analysis      check all the try block, even when an exception is throw\n"
+    " --version                    show current ESBMC version and exit\n\n"
     " --- BMC options ---------------------------------------------------------------\n\n"
     " --function name              set main function name\n"
     " --claim nr                   only check specific claim\n"

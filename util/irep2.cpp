@@ -70,9 +70,9 @@ template <class T>
 std::string
 pretty_print_func(unsigned int indent, std::string ident, T obj)
 {
-  list_of_memberst memb = obj.tostring(indent);
+  list_of_memberst memb = obj.tostring(indent+2);
 
-  std::string indentstr = indent_str(indent + 2);
+  std::string indentstr = indent_str(indent);
   std::string exprstr = ident;
 
   for (list_of_memberst::const_iterator it = memb.begin(); it != memb.end();
@@ -114,12 +114,14 @@ get_type_id(const type2t &type)
 
 
 type2t::type2t(type_ids id)
-  : type_id(id)
+  : type_id(id),
+    crc_val(0)
 {
 }
 
 type2t::type2t(const type2t &ref)
-  : type_id(ref.type_id)
+  : type_id(ref.type_id),
+    crc_val(ref.crc_val)
 {
 }
 
@@ -340,13 +342,14 @@ struct_union_data::get_component_number(const irep_idt &name) const
 /*************************** Base expr2t definitions **************************/
 
 expr2t::expr2t(const type2tc _type, expr_ids id)
-  : expr_id(id), type(_type)
+  : expr_id(id), type(_type), crc_val(0)
 {
 }
 
 expr2t::expr2t(const expr2t &ref)
   : expr_id(ref.expr_id),
-    type(ref.type)
+    type(ref.type),
+    crc_val(ref.crc_val)
 {
 }
 
@@ -616,7 +619,10 @@ static const char *expr_names[] = {
   "cpp_delete",
   "cpp_catch",
   "cpp_throw",
-  "cpp_throw_decl"
+  "cpp_throw_decl",
+  "cpp_throw_decl_end",
+  "isinf",
+  "isnormal",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -638,7 +644,7 @@ expr2t::pretty(unsigned int indent) const
                                                      *this);
   // Dump the type on the end.
   ret += std::string("\n") + indent_str(indent) + "  * type : "
-         + type->pretty(indent + 2);
+         + type->pretty(indent+2);
   return ret;
 }
 
@@ -2410,6 +2416,12 @@ std::string code_cpp_throw2t::field_names [esbmct::num_type_fields]  =
 { "operand", "exception_list", "", "", ""};
 std::string code_cpp_throw_decl2t::field_names [esbmct::num_type_fields]  =
 { "exception_list", "", "", "", ""};
+std::string code_cpp_throw_decl_end2t::field_names [esbmct::num_type_fields]  =
+{ "", "", "", "", ""};
+std::string isinf2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
+std::string isnormal2t::field_names [esbmct::num_type_fields]  =
+{ "value", "", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2677,3 +2689,10 @@ template class esbmct::expr_methods<code_cpp_throw_decl2t,
          code_cpp_throw_decl_data,
     std::vector<irep_idt>, code_cpp_throw_decl_data,
     &code_cpp_throw_decl_data::exception_list>;
+template class esbmct::expr_methods<code_cpp_throw_decl_end2t,
+    code_cpp_throw_decl_data, std::vector<irep_idt>, code_cpp_throw_decl_data,
+    &code_cpp_throw_decl_data::exception_list>;
+template class esbmct::expr_methods<isinf2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<isnormal2t,
+    arith_1op, expr2tc, arith_1op, &arith_1op::value>;

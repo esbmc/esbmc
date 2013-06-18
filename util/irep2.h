@@ -238,7 +238,9 @@ public:
   T * get() // never throws
   {
     detach();
-    return boost::shared_ptr<T>::get();
+    T *tmp = boost::shared_ptr<T>::get();
+    tmp->crc_val = 0;
+    return tmp;
   }
 
   void detach(void)
@@ -252,6 +254,17 @@ public:
     const T *foo = boost::shared_ptr<T>::get();
     *this = foo->clone();
     return;
+  }
+
+  uint32_t crc(void) const
+  {
+    const T *foo = boost::shared_ptr<T>::get();
+    if (foo->crc_val != 0)
+      return foo->crc_val;
+
+    uint32_t crc = foo->crc();
+    foo->crc_val = crc;
+    return crc;
   }
 };
 
@@ -403,6 +416,8 @@ public:
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
+
+  mutable uint32_t crc_val;
 };
 
 
@@ -522,6 +537,9 @@ public:
     code_cpp_catch_id,
     code_cpp_throw_id,
     code_cpp_throw_decl_id,
+    code_cpp_throw_decl_end_id,
+    isinf_id,
+    isnormal_id,
     end_expr_id
   };
 
@@ -721,13 +739,15 @@ public:
 
   /** Type of this expr. All exprs have a type. */
   type2tc type;
+
+  mutable uint32_t crc_val;
 };
 
 // For boost multi-index hashing,
 inline std::size_t
 hash_value(const expr2tc &expr)
 {
-  return expr->crc();
+  return expr.crc();
 }
 
 /** Fetch string identifier for an expression.
@@ -1914,6 +1934,9 @@ class code_cpp_delete2t;
 class code_cpp_catch2t;
 class code_cpp_throw2t;
 class code_cpp_throw_decl2t;
+class code_cpp_throw_decl_end2t;
+class isinf2t;
+class isnormal2t;
 
 // Data definitions.
 
@@ -2022,8 +2045,8 @@ public:
   // So, let's pretend that this is private, even though it can't be enforced.
   irep_idt thename;
   renaming_level rlevel;
-  unsigned int level1_num;
-  unsigned int level2_num;
+  unsigned int level1_num; // Function activation record
+  unsigned int level2_num; // SSA variable number
   unsigned int thread_num;
   unsigned int node_num;
 };
@@ -2832,6 +2855,13 @@ irep_typedefs(code_cpp_throw, code_cpp_throw_data, esbmct::notype,
 irep_typedefs(code_cpp_throw_decl, code_cpp_throw_decl_data, esbmct::notype,
               std::vector<irep_idt>, code_cpp_throw_decl_data,
               &code_cpp_throw_decl_data::exception_list);
+irep_typedefs(code_cpp_throw_decl_end, code_cpp_throw_decl_data, esbmct::notype,
+              std::vector<irep_idt>, code_cpp_throw_decl_data,
+              &code_cpp_throw_decl_data::exception_list);
+irep_typedefs(isinf, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(isnormal, arith_1op, esbmct::notype,
+              expr2tc, arith_1op, &arith_1op::value);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4262,6 +4292,40 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class code_cpp_throw_decl_end2t : public code_cpp_throw_decl_end_expr_methods
+{
+public:
+  code_cpp_throw_decl_end2t(const std::vector<irep_idt> &exl)
+    : code_cpp_throw_decl_end_expr_methods(type_pool.get_empty(),
+                                           code_cpp_throw_decl_end_id, exl) { }
+  code_cpp_throw_decl_end2t(const code_cpp_throw_decl_end2t &ref)
+    : code_cpp_throw_decl_end_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isinf2t : public isinf_expr_methods
+{
+public:
+  isinf2t(const expr2tc &val)
+    : isinf_expr_methods(type_pool.get_bool(), isinf_id, val) { }
+  isinf2t(const isinf2t &ref)
+    : isinf_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class isnormal2t : public isnormal_expr_methods
+{
+public:
+  isnormal2t(const expr2tc &val)
+    : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
+  isnormal2t(const isnormal2t &ref)
+    : isnormal_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4310,7 +4374,7 @@ inline std::ostream& operator<<(std::ostream &out, const expr2tc& a)
 
 struct irep2_hash
 {
-  size_t operator()(const expr2tc &ref) const { return ref->crc(); }
+  size_t operator()(const expr2tc &ref) const { return ref.crc(); }
 };
 
 struct type2_hash
@@ -4416,6 +4480,9 @@ expr_macros(code_cpp_delete);
 expr_macros(code_cpp_catch);
 expr_macros(code_cpp_throw);
 expr_macros(code_cpp_throw_decl);
+expr_macros(code_cpp_throw_decl_end);
+expr_macros(isinf);
+expr_macros(isnormal);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast

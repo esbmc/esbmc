@@ -236,16 +236,14 @@ void template_mapt::build(
   if(instance.size()<template_parameters.size())
   {
     // check for default parameters
-    for(unsigned i = instance.size();
-        i < template_parameters.size();
+    for(unsigned i=instance.size();
+        i<template_parameters.size();
         i++)
     {
-      const exprt &param=template_parameters[i];
+      const template_parametert &param=template_parameters[i];
 
-      exprt value = static_cast<const exprt &>(param.find("#default"));
-
-      if(value.is_not_nil())
-        instance.push_back(value);
+      if(param.has_default_parameter())
+        instance.push_back(param.default_parameter());
       else
         break;
     }

@@ -5,7 +5,7 @@
 #include "parseoptions.h"
 
 const struct opt_templ esbmc_options[] = {
-{ 0,	"inlining",		switc,		""	},
+{ 0,	"no-inlining",		switc,		""	},
 { 0,	"program-only",		switc,		""	},
 { 0,	"program-too",		switc,		""	},
 { 0,	"function",		string,		""	},
@@ -97,6 +97,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"memlimit",		string,		""	},
 { 0,	"state-hashing",	switc,		""	},
 { 0,	"symex-trace",		switc,		""	},
+{ 0,  "extended-try-analysis",    switc,    ""  },
+{ 0,	"core-size",		number,		""	},
 { 0,	"smtlib-ileave-num",	number,		""	},
 { 0,	"direct-interleavings",	switc,		""	},
 { 0,	"show-ileave-points",	switc,		""	},
@@ -118,10 +120,12 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"smt-during-symex",	switc,		""	},
 { 0,	"smt-thread-guard",	switc,		""	},
 { 0,	"smt-symex-guard",	switc,		""	},
+{ 0,	"ltl",			switc,		""	},
 { 0,	"symex-ssa-trace",	switc,		""	},
 { 0,    "smtlib-solver-prog",   string,         ""      },
 { 0,    "smtlib",               switc,          ""      },
 { 0,    "output",               string,         ""      },
+{ 0,	"double-assign-check",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

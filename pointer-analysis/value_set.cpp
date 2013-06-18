@@ -569,7 +569,12 @@ void value_sett::get_reference_set_rec(
     {
       expr2tc object = object_numbering[it->first];
       
-      if (is_unknown2t(object)) {
+      // Don't allow a member operation to be applied to either unknown,
+      // a null object, or any typecast thereof. It can propagate all around
+      // the value set, and will cause mayhem when being converted to SMT.
+      if (is_unknown2t(object) || is_null_object2t(object) ||
+          (is_typecast2t(object) &&
+           is_null_object2t(to_typecast2t(object).from))) {
         unknown2tc unknown(memb.type);
         insert(dest, unknown);
       } else {
@@ -627,11 +632,15 @@ void value_sett::assign(
   
   if (is_struct_type(lhs_type) || is_union_type(lhs_type))
   {
-    const std::vector<type2tc> &members = (is_struct_type(lhs_type))
-      ? to_struct_type(lhs_type).members : to_union_type(lhs_type).members;
-    const std::vector<irep_idt> &member_names = (is_struct_type(lhs_type))
-      ? to_struct_type(lhs_type).member_names
-      : to_union_type(lhs_type).member_names;
+    // Assign the values of all members of the rhs thing to the lhs. It's
+    // sort-of-valid for the right hand side to be a superclass of the subclass,
+    // in which case there are some fields not common between them, so we
+    // iterate over the superclasses members.
+    const std::vector<type2tc> &members = (is_struct_type(rhs->type))
+      ? to_struct_type(rhs->type).members : to_union_type(rhs->type).members;
+    const std::vector<irep_idt> &member_names = (is_struct_type(rhs->type))
+      ? to_struct_type(rhs->type).member_names
+      : to_union_type(rhs->type).member_names;
     
     unsigned int i = 0;
     for (std::vector<type2tc>::const_iterator c_it = members.begin();
@@ -657,14 +666,7 @@ void value_sett::assign(
       }
       else
       {
-        if (is_index2t(rhs)) {
-          if (is_symbol2t(lhs)) {
-            assign(lhs_member, to_index2t(rhs).source_value, ns, add_to_sets);
-            return;
-    	  }
-    	}
-
-        assert(base_type_eq(rhs->type, lhs_type, ns));
+        assert(base_type_eq(rhs->type, lhs_type, ns) || is_subclass_of(lhs_type, rhs->type, ns));
         expr2tc rhs_member = make_member(rhs, name, ns);
         assign(lhs_member, rhs_member, ns, add_to_sets);
       }
@@ -678,9 +680,9 @@ void value_sett::assign(
 
     if (is_unknown2t(rhs) || is_invalid2t(rhs))
     {
-      // XXXjmorse - was passing rhs as exprt(rhs.id(), type.subtype()),
-      // Which discards much data and is probably invalid.
-      assign(lhs_index, rhs, ns, add_to_sets);
+      // Assign an uknown subtype value to the array's (unknown) index.
+      unknown2tc unknown_field(arr_type.subtype);
+      assign(lhs_index, unknown_field, ns, add_to_sets);
     }
     else
     {
@@ -973,6 +975,13 @@ void value_sett::do_function_call(
     symbol2tc actual_lhs(*it2, identifier);
     assign(actual_lhs, v_expr, ns, true);
     i++;
+  }
+
+  // And now delete the value set dummy args. They're going to end up
+  // accumulating values from each function call that is made, which is a
+  // bad plan. (This as a result of commit f91e3d83, didn't used to do this).
+  for(unsigned i=0; i<arguments.size(); i++) {
+    del_var("value_set::dummy_arg_"+i2string(i), "");
   }
 }
 

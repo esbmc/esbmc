@@ -37,7 +37,8 @@ typedef enum { NO_INSTRUCTION_TYPE=0,
                FUNCTION_CALL=16,// call a function
                THROW=17,        // throw an exception
                CATCH=18,        // catch an exception
-               THROW_DECL=19    // list of throws that a function can throw
+               THROW_DECL=19,   // list of throws that a function can throw
+               THROW_DECL_END=20// end of throw declaration
              }
   goto_program_instruction_typet;
 
@@ -134,6 +135,7 @@ public:
     inline void make_throw() { clear(THROW); }
     inline void make_catch() { clear(CATCH); }
     inline void make_throw_decl() { clear(THROW_DECL); }
+    inline void make_throw_decl_end() { clear(THROW_DECL_END); }
     inline void make_assertion(const guardT &g) { clear(ASSERT); guard=g; }
     inline void make_assumption(const guardT &g) { clear(ASSUME); guard=g; }
     inline void make_assignment() { clear(ASSIGN); }

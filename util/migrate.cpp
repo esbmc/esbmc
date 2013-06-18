@@ -3,10 +3,21 @@
 
 #include <stdint.h>
 
+#include <namespace.h>
 #include <config.h>
 #include <simplify_expr.h>
 
 // File for old irep -> new irep conversions.
+
+// Why do we need a namespace you say? Because there are now @ symbols embedded
+// in variable names, so we can't detect the renaming level of a variable
+// effectively. So, perform some hacks, by getting the top level parseoptions
+// code to give us the global namespace, and use that to detect whether the
+// symbol is renamed at all.
+// Why is this a global? Because there are over three hundred call sites to
+// migrate_expr, and it's a huge task to fix them all up to pass a namespace
+// down.
+namespacet *migrate_namespace_lookup = NULL;
 
 static std::map<irep_idt, BigInt> bin2int_map_signed, bin2int_map_unsigned;
 
@@ -349,18 +360,38 @@ convert_operand_pair(const exprt expr, expr2tc &arg1, expr2tc &arg2)
 expr2tc
 sym_name_to_symbol(irep_idt init, type2tc type)
 {
+  const symbolt *sym;
   symbol2t::renaming_level target_level;
   unsigned int level1_num, thread_num, node_num, level2_num;
 
   const std::string &thestr = init.as_string();
-  if (thestr.find("@") == std::string::npos) {
+  // If this is an existing symbol name, then we're not renamed at all. Can't
+  // rely on @ and ! symbols in the string "sadly".
+  if (migrate_namespace_lookup->lookup(init, sym) == false) {
     // This is a level0 name.
+
+    // Funkyness: use the global symbol table type. Why? Because various things
+    // out there get parsed in with a partial type, i.e. something where a
+    // function prototype is declared, or perhaps a pointer to an incomplete
+    // type (but that's less of an issue). This then screws up future hash
+    // tables, where symbols can have different types, and thus have different
+    // hashes.
+    // Fix this by ensuring that /all/ symbols with the same name use the type
+    // from the global symbol table.
+    migrate_type(sym->type, type);
+    return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
+  } else if (init.as_string().compare(0, 3, "cs$") == 0 ||
+             init.as_string().compare(0, 8, "kindice$") == 0 ||
+             init.as_string().compare(0, 2, "s$") == 0 ||
+             init.as_string().compare(0, 5, "c::i$") == 0) {
+    // This is part of k-induction, where the type is slowly accumulated over
+    // time, and the symbol never makes its way into the symbol table :|
     return expr2tc(new symbol2t(type, init, symbol2t::level0, 0, 0, 0, 0));
   }
 
   // Renamed to at least level 1,
-  size_t at_pos = thestr.find("@");
-  size_t exm_pos = thestr.find("!");
+  size_t at_pos = thestr.rfind("@");
+  size_t exm_pos = thestr.rfind("!");
 
   size_t and_pos, hash_pos;
   if (thestr.find("#") == std::string::npos) {
@@ -380,8 +411,12 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
   std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
 
-  level1_num = atoi(atstr.c_str());
-  thread_num = atoi(exmstr.c_str());
+  char *endatptr, *endexmptr;
+  level1_num = strtol(atstr.c_str(), &endatptr, 10);
+  assert(endatptr != atstr.c_str());
+  thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
+  assert(endexmptr != exmstr.c_str());
+
   if (target_level == symbol2t::level1) {
     return expr2tc(new symbol2t(type, thename, target_level, level1_num,
                                 0, thread_num, 0));
@@ -408,7 +443,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     new_expr_ref = sym_name_to_symbol(expr.identifier(), type);
   } else if (expr.id() == "nondet_symbol") {
     migrate_type(expr.type(), type);
-    new_expr_ref = sym_name_to_symbol("nondet$" + expr.identifier().as_string(), type);
+    new_expr_ref = symbol2tc(type, "nondet$" + expr.identifier().as_string());
   } else if (expr.id() == irept::id_constant && expr.type().id() != typet::t_pointer &&
              expr.type().id() != typet::t_bool && expr.type().id() != "c_enum" &&
              expr.type().id() != typet::t_fixedbv && expr.type().id() != typet::t_array) {
@@ -1195,6 +1230,14 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     }
 
     new_expr_ref = expr2tc(new code_cpp_throw_decl2t(expr_list));
+  } else if (expr.id() == "isinf") {
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = isinf2tc(op);
+  } else if (expr.id() == "isnormal") {
+    expr2tc op;
+    migrate_expr(expr.op0(), op);
+    new_expr_ref = isnormal2tc(op);
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2169,6 +2212,20 @@ migrate_expr_back(const expr2tc &ref)
 
     codeexpr.copy_to_operands(migrate_expr_back(ref2.operand));
     return codeexpr;
+  }
+  case expr2t::isinf_id:
+  {
+    const isinf2t &ref2 = to_isinf2t(ref);
+    exprt back("isinf", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::isnormal_id:
+  {
+    const isnormal2t &ref2 = to_isnormal2t(ref);
+    exprt back("isnormal", bool_typet());
+    back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
   }
   default:
     assert(0 && "Unrecognized expr in migrate_expr_back");

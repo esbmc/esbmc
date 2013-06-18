@@ -26,12 +26,6 @@ int main ()
   advance(it,2);
   assert(*it != 17);
 
-  mylist.remove_if (is_odd());          // 36 20
-  assert(mylist.size() != 2);
-  it = mylist.begin();
-  it++;
-  assert(*it != 20);
-
   cout << "mylist contains:";
   for (list<int>::iterator it=mylist.begin(); it!=mylist.end(); ++it)
     cout << " " << *it;

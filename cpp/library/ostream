@@ -8,183 +8,101 @@
 
 namespace std
 {
-class ostream: virtual public ios
-{
-	typedef int streampos;
-	typedef int streamoff;
-public:
-	ostream();
-	explicit ostream (streambuf * sb);
-	ostream(int _id): id(_id){
-		_filesize = nondet_uint();
-		_filepos = 0;
-	}
-	ostream(const ostream&); // disabled
+  class ostream: virtual public ios
+  {
+    typedef int streampos;
+    typedef int streamoff;
+    public:
+    explicit ostream (streambuf * sb);
+    ostream() {
+      _filesize = nondet_uint();
+      _filepos = 0;
+    }
 
-	virtual ~ostream(){}
+    virtual ~ostream(){}
 
-	int id;
-	streamsize width ( ) const;
-	streamsize width ( streamsize wide );
-	void fill(char c);
-	void precision(int p);
-	void put(char c);
-//	void write(char str[], size_t n);
-	ostream& write ( const char* s , streamsize n );
-	streampos tellp ( ); //model
-	ostream& seekp ( streampos pos ); //model
-	ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
-	ostream& flush ( );
-	ios_base::fmtflags flags ( ) const;
-	ios_base::fmtflags flags ( ios_base::fmtflags fmtfl );
+    streamsize width ( ) const;
+    streamsize width ( streamsize wide );
+    void fill(char c);
+    void precision(int p);
+    void put(char c);
+    //	void write(char str[], size_t n);
+    ostream& write ( const char* s , streamsize n );
+    streampos tellp ( ); //model
+    ostream& seekp ( streampos pos ); //model
+    ostream& seekp ( streamoff off, ios_base::seekdir dir ); //model
+    ostream& flush ( );
+    ios_base::fmtflags flags ( ) const;
+    ios_base::fmtflags flags ( ios_base::fmtflags fmtfl );
 
-	class sentry {
-		public:
-		  explicit sentry ( ostream& os );
-		  ~sentry();
-		  operator bool() const;
-		private:
-		  sentry (const sentry&);             // not defined
-		  sentry& operator= (const sentry& ); // not defined
-	};
-	ostream& operator=(const ostream&); // disabled
-	static streamsize _filesize;
-	static ios::streampos _filepos;
-};
-//ios::streampos ostream::_filepos = 0;
+    class sentry {
+      public:
+        explicit sentry ( ostream& os );
+        ~sentry();
+        operator bool() const;
+      private:
+        sentry (const sentry&);             // not defined
+        sentry& operator= (const sentry& ); // not defined
+    };
+    ostream& operator=(const ostream&); // disabled
+    static streamsize _filesize;
+    static ios::streampos _filepos;
+  };
+  //ios::streampos ostream::_filepos = 0;
 
-}
-
-namespace esbmc
-{
-	void esbmc_print_cstr(int o, const char* cstr){}
-	void esbmc_print_char(int o, char c){}
-	void esbmc_print_int(int o, int i){}
-	void esbmc_print_double(int o, double d){}
-	void esbmc_print_unsigned(int o, unsigned i){}
-	void esbmc_print_bool(int o, bool b){}
-	void esbmc_print_long_long(int o, long long i){}
-	void esbmc_print_unsigned_long_long(int o, unsigned long long i){}
-
-}
-
-namespace std{
-
-
-
-ostream& operator<< (ostream& out, bool val) {
-	return out;
-}
-ostream& operator<< (ostream& out, short val) {
-	return out;
-}
-ostream& operator<< (ostream& out, unsigned short val) {
-	return out;
-}
-ostream& operator<< (ostream& out, int val) {
-	return out;
-}
-ostream& operator<< (ostream& out, unsigned int val) {
-	return out;
-}
-
-ostream& operator<< (ostream& out, float val) {
-	return out;
-}
-ostream& operator<< (ostream& out, double val) {
-	return out;
-}
-ostream& operator<< (ostream& out, long long val) {
-	return out;
-}
-
-
-ostream& operator<< (ostream& out, streambuf* sb);
-
-ostream& operator<< (ostream& out, ostream& ( *pf )(ostream&)) {
-	return pf(out);
-}
-ostream& operator<< (ostream& out, ios& ( *pf )(ios&)) {
-	pf(out);
-	return out;
-}
-ostream& operator<< (ostream& out, ios_base& ( *pf )(ios_base&)){
-	pf(out);
-	return out;
-}
-
-
-ostream& operator<< (ostream& out, char c ) {
-	return out;
-}
-
-ostream& operator<< (ostream& out, unsigned char c ) {
-	return out;
-}
-
-ostream& operator<< (ostream& out, const char* s ) {
-//	esbmc::esbmc_print_cstr(out.id,s);
-	return out;
-}
-
-ostream& operator<< (ostream& out, const unsigned char* s ) {
-	return out;
-}
-
-
-template < typename T >
-inline ostream& operator<< ( ostream& o, T i )
-{
-	return o;
-}
+  template < typename T >
+  inline ostream& operator<< ( ostream& o, T i )
+  {
+    return o;
+  }
 
 }
 
 namespace std
 {
-	void ostream::fill(char c)
-	{
-//		setfill(c);
-	}
+  void ostream::fill(char c)
+  {
+    //		setfill(c);
+  }
 
-	void ostream::precision(int p)
-	{
-//		setprecision(p);
-	}
+  void ostream::precision(int p)
+  {
+    //		setprecision(p);
+  }
 
-	void ostream::put(char c)
-	{
-	}
+  void ostream::put(char c)
+  {
+  }
 
-	//	void ostream::write(char str[], size_t n)
-	ostream& ostream::write ( const char* s , streamsize n )
-	{
-		_filepos = n;
-		return *this;
-	}
+  //	void ostream::write(char str[], size_t n)
+  ostream& ostream::write ( const char* s , streamsize n )
+  {
+    _filepos = n;
+    return *this;
+  }
 
-	ostream& ostream::seekp ( ios::streampos pos ) {
-		//__ESBMC_assert (pos<=_filesize, "Invalid stream position");
-		_filepos = pos;
-		return *this;
-	}
-	ostream& ostream::seekp ( ios::streamoff off, ios_base::seekdir dir ) {
-		if (dir==ios::beg) {_filepos=off;}
-		if (dir==ios::cur) {_filepos+=off;}
-		if (dir==ios::end) {_filepos=_filesize-off;}
-		return *this;
-	}
-	ios::streampos ostream::tellp ( ) {
-		__ESBMC_assert (_filepos>=0, "Invalid stream position");
-		return _filepos;
-	}
+  ostream& ostream::seekp ( ios::streampos pos ) {
+    //__ESBMC_assert (pos<=_filesize, "Invalid stream position");
+    _filepos = pos;
+    return *this;
+  }
+  ostream& ostream::seekp ( ios::streamoff off, ios_base::seekdir dir ) {
+    if (dir==ios::beg) {_filepos=off;}
+    if (dir==ios::cur) {_filepos+=off;}
+    if (dir==ios::end) {_filepos=_filesize-off;}
+    return *this;
+  }
+  ios::streampos ostream::tellp ( ) {
+    __ESBMC_assert (_filepos>=0, "Invalid stream position");
+    return _filepos;
+  }
 }
 
 namespace std {
-	//Output manipulators
-	ostream& endl ( ostream& os ) { return os; }
-	ostream& ends ( ostream& os ) {  }
-	ostream& flush ( ostream& os );
+  //Output manipulators
+  ostream& endl ( ostream& os ) { return os; }
+  ostream& ends ( ostream& os ) {  }
+  ostream& flush ( ostream& os );
 }
 
 #endif

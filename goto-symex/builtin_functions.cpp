@@ -410,3 +410,98 @@ goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   // end and the switcher to be invoked.
   return;
 }
+
+void
+goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  expr2tc threadid = call.operands[0];
+  state.level2.rename(threadid);
+
+  if (!is_constant_int2t(threadid)) {
+    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  // Possibly we should handle this error; but meh.
+  assert(art.get_cur_state().threads_state.size() >= tid);
+
+  // Thread state is simply whether the thread is ended or not.
+  unsigned int flags = (art.get_cur_state().threads_state[tid].thread_ended)
+                       ? 1 : 0;
+
+  // Reuse threadid
+  constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
+  code_assign2tc assign(call.ret, flag_expr);
+  symex_assign(assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
+{
+
+  art.get_cur_state().increment_active_atomic_number();
+  return;
+}
+
+void
+goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
+{
+
+  art.get_cur_state().decrement_active_atomic_number();
+  return;
+}
+
+void
+goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+
+  // Don't do this if we're in the initialization function.
+  if (cur_state->source.pc->function == "main")
+    return;
+
+  ex_state.switch_to_monitor();
+  return;
+}
+
+void
+goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+  ex_state.switch_away_from_monitor();
+}
+
+void
+goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+
+  if (ex_state.tid_is_set)
+    assert(0 && "Monitor thread ID was already set (__ESBMC_register_monitor)\n");
+
+  statet &state = art.get_cur_state().get_active_state();
+  expr2tc threadid = call.operands[0];
+  state.level2.rename(threadid);
+
+  if (!is_constant_int2t(threadid)) {
+    std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  assert(art.get_cur_state().threads_state.size() >= tid);
+  ex_state.monitor_tid = tid;
+  ex_state.tid_is_set = true;
+}
+
+void
+goto_symext::intrinsic_kill_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+  ex_state.kill_monitor_thread();
+}

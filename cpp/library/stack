@@ -11,6 +11,9 @@ Date: September 2012
 #ifndef STL_STACK
 #define STL_STACK
 
+#include "deque"
+#include "vector"
+
 namespace std
 {
   #define STACK_CAPACITY 20
@@ -22,6 +25,8 @@ namespace std
     public:
     stack():_top(0){}
     stack ( const Container& ctnr = Container() ):_top(0){}
+    stack ( std::deque<int> ctnr ):_top(ctnr.size()){}
+    stack ( std::vector<int> ctnr ):_top(ctnr.size()){}
 
     void inc_top ( )
     {

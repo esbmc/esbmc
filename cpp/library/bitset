@@ -54,7 +54,7 @@ public:
 	bitset<N>& reset();
 	bitset<N>& reset(size_t pos);
 	bool operator[](size_t pos) const;
-	bool& operator[](size_t pos);
+	reference operator[](size_t pos);
 	bitset<N>& set();
 	bitset<N>& set(size_t pos, bool val = true);
 	size_t count();

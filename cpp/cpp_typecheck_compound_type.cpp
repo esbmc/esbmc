@@ -22,7 +22,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 /*******************************************************************\
 
-Function: cpp_typecheckt::compound_identifier
+Function: cpp_typecheckt::has_const
 
 Inputs:
 
@@ -32,29 +32,99 @@ Purpose:
 
 \*******************************************************************/
 
-irep_idt cpp_typecheckt::compound_identifier(
-                                             const irep_idt &identifier,
-                                             const irep_idt &base_name,
-                                             bool has_body)
+bool cpp_typecheckt::has_const(const typet &type)
 {
-  if(!has_body)
+  if(type.id()=="const")
+    return true;
+  else if(type.id()=="merged_type")
   {
-    // check if we have it already
+    forall_subtypes(it, type)
+      if(has_const(*it)) return true;
 
-    cpp_scopet::id_sett id_set;
-    cpp_scopes.current_scope().recursive_lookup(base_name, id_set);
-
-    for(cpp_scopet::id_sett::const_iterator it=id_set.begin();
-        it!=id_set.end();
-        it++)
-    if((*it)->is_class())
-      return (*it)->identifier;
+    return false;
   }
+  else
+    return false;
+}
 
-  return
-  cpp_identifier_prefix(current_mode)+"::"+
-  cpp_scopes.current_scope().prefix+
-  "struct"+"."+id2string(identifier);
+/*******************************************************************\
+
+Function: cpp_typecheckt::has_volatile
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+bool cpp_typecheckt::has_volatile(const typet &type)
+{
+  if(type.id()=="volatile")
+    return true;
+  else if(type.id()=="merged_type")
+  {
+    forall_subtypes(it, type)
+      if(has_volatile(*it)) return true;
+
+    return false;
+  }
+  else
+    return false;
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::tag_scope
+
+Inputs:
+
+Outputs:
+
+Purpose:
+
+\*******************************************************************/
+
+cpp_scopet &cpp_typecheckt::tag_scope(
+  const irep_idt &base_name,
+  bool has_body,
+  bool tag_only_declaration)
+{
+  // The scope of a compound identifier is difficult,
+  // and is different from C.
+  //
+  // For instance:
+  // class A { class B {} }   --> A::B
+  // class A { class B; }     --> A::B
+  // class A { class B *p; }  --> ::B
+  // class B { }; class A { class B *p; } --> ::B
+  // class B { }; class A { class B; class B *p; } --> A::B
+
+  // If there is a body, or it's a tag-only declaration,
+  // it's always in the current scope, even if we already have
+  // it in an upwards scope.
+
+  if(has_body || tag_only_declaration)
+    return cpp_scopes.current_scope();
+
+  // No body. Not a tag-only-declaration.
+  // Check if we have it already. If so, take it.
+
+  // we should only look for tags, but we don't
+  cpp_scopet::id_sett id_set;
+  cpp_scopes.current_scope().recursive_lookup(base_name, id_set);
+
+  for(cpp_scopet::id_sett::const_iterator it=id_set.begin();
+      it!=id_set.end();
+      it++)
+    if((*it)->is_class())
+      return static_cast<cpp_scopet &>((*it)->get_parent());
+
+  // Tags without body that we don't have already
+  // and that are not a tag-only declaration go into
+  // the global scope of the namespace.
+  return cpp_scopes.current_scope();
 }
 
 /*******************************************************************\
@@ -80,30 +150,41 @@ void cpp_typecheckt::typecheck_compound_type(
   type.remove("#volatile");
   type.remove("#restricted");
 
-  // replace by type symbol
-
-  cpp_namet &cpp_name=static_cast<cpp_namet &>(type.add("tag"));
-  bool has_body=type.body().is_not_nil();
-
+  // get the tag name
+  bool anonymous=type.find("tag").is_nil();
   std::string identifier, base_name;
-  cpp_name.convert(identifier, base_name);
-
-  if(identifier!=base_name)
-  {
-    err_location(cpp_name.location());
-    throw "no namespaces allowed here";
-  }
-
-  bool anonymous=base_name.empty();
+  cpp_scopet *dest_scope=NULL;
+  bool has_body=type.body().is_not_nil();
+  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
 
   if(anonymous)
   {
-    base_name=identifier="#anon"+i2string(anon_counter++);
+    base_name=identifier=
+      "#anon_"+type.id_string()+i2string(anon_counter++);
     type.set("#is_anonymous",true);
+    // anonymous structs always go into the current scope
+    dest_scope=&cpp_scopes.current_scope();
+  }
+  else
+  {
+    const cpp_namet &cpp_name=
+      to_cpp_name(type.find("tag"));
+
+    cpp_name.convert(identifier, base_name);
+
+    if(identifier!=base_name)
+    {
+      err_location(cpp_name.location());
+      throw "no namespaces allowed in compound names";
+    }
+
+    dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
   }
 
   const irep_idt symbol_name=
-  std::string(compound_identifier(identifier, base_name, has_body).c_str());
+    cpp_identifier_prefix(current_mode)+"::"+
+    dest_scope->prefix+
+    "tag."+identifier;
 
   // check if we have it already
 
@@ -126,7 +207,7 @@ void cpp_typecheckt::typecheck_compound_type(
       }
       else
       {
-        err_location(cpp_name.location());
+        err_location(type.location());
         str << "error: struct symbol `" << base_name
             << "' declared previously" << std::endl;
         str << "location of previous definition: "
@@ -143,7 +224,7 @@ void cpp_typecheckt::typecheck_compound_type(
     symbol.name=symbol_name;
     symbol.base_name=base_name;
     symbol.value.make_nil();
-    symbol.location=cpp_name.location();
+    symbol.location=type.location();
     symbol.mode=current_mode;
     symbol.module=module;
     symbol.type.swap(type);
@@ -158,7 +239,7 @@ void cpp_typecheckt::typecheck_compound_type(
     if(context.move(symbol, new_symbol))
       throw "cpp_typecheckt::typecheck_compound_type: context.move() failed";
 
-    // put into scope
+    // put into dest_scope
     cpp_idt &id=cpp_scopes.put_into_scope(*new_symbol);
 
     id.id_class=cpp_idt::CLASS;
@@ -226,10 +307,10 @@ void cpp_typecheckt::typecheck_compound_declarator(
   typet final_type=
     declarator.merge_type(declaration.type());
 
+  typecheck_type(final_type);
+
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
-
-  typecheck_type(final_type);
 
   std::string full_name, base_name;
   cpp_name.convert(full_name, base_name);
@@ -331,8 +412,9 @@ void cpp_typecheckt::typecheck_compound_declarator(
   if(declaration.member_spec().is_explicit())
     component.set("is_explicit", true);
 
-  typet &method_qualifier=
-    (typet &)declarator.add("method_qualifier");
+  // either blank, const, volatile, or const volatile
+  const typet &method_qualifier=
+     static_cast<const typet &>(declarator.add("method_qualifier"));
 
   if(is_static)
   {
@@ -359,8 +441,11 @@ void cpp_typecheckt::typecheck_compound_declarator(
       id2string(
         function_identifier(static_cast<const typet &>(component.type())));
 
-    if(method_qualifier.id()=="const")
-      virtual_name += "$const";
+    if(has_const(method_qualifier))
+      virtual_name+="$const";
+
+    if(has_volatile(method_qualifier))
+      virtual_name+="$virtual";
 
     if(component.type().get("return_type") == "destructor")
       virtual_name= "@dtor";
@@ -611,7 +696,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     if(context.move(static_symbol, new_symbol))
     {
       err_location(cpp_name.location());
-	str << "redeclaration of symbol `"
+      str << "redeclaration of symbol `"
 	    << static_symbol.base_name.as_string()
 	    << "'";
       throw 0;
@@ -646,6 +731,7 @@ void cpp_typecheckt::typecheck_compound_declarator(
     }
   }
 
+  // array members must have fixed size
   check_array_types(component.type());
 
   put_compound_into_scope(component);
@@ -661,9 +747,10 @@ Inputs:
 
 Outputs:
 
-Purpose:
+Purpose: check that an array has fixed size
 
 \*******************************************************************/
+
 void cpp_typecheckt::check_array_types(typet &type)
 {
   if(type.id()=="array")
@@ -1029,12 +1116,18 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         exprt &throw_decl = (exprt&) declaration.op0().add("throw_decl");
 
         // We always insert throw_decl to the begin of the function
-        if(throw_decl.statement() == "throw_decl")
+        if(throw_decl.statement()=="throw_decl")
         {
           value.operands().insert(
               value.operands().begin(),
               throw_decl);
-          throw_decl.clear();
+
+          // Insert flag to end of constructor
+          // so we know when to remove throw_decl
+          value.operands().push_back(codet("throw_decl_end"));
+
+          // Clear throw_decl
+          value.remove("throw_decl");
         }
       }
     }
@@ -1234,7 +1327,7 @@ void cpp_typecheckt::move_member_initializers(
     exprt::operandst::iterator o_it=value.operands().begin();
     forall_irep(it, initializers.get_sub())
     {
-      o_it=value.operands().insert(o_it,(exprt&)*it);
+      o_it=value.operands().insert(o_it, static_cast<const exprt &>(*it));
       o_it++;
     }
   }
@@ -1256,7 +1349,7 @@ void cpp_typecheckt::typecheck_member_function(
   const irep_idt &compound_symbol,
   struct_typet::componentt &component,
   irept &initializers,
-  typet &method_qualifier,
+  const typet &method_qualifier,
   exprt &value)
 {
   symbolt symbol;
@@ -1265,7 +1358,7 @@ void cpp_typecheckt::typecheck_member_function(
 
   if(component.get_bool("is_static"))
   {
-    if(method_qualifier.id()!="")
+	if(method_qualifier.id()!=irep_idt())
     {
       err_location(component);
       throw "method is static -- no qualifiers allowed";
@@ -1351,7 +1444,7 @@ Purpose:
 void cpp_typecheckt::adjust_method_type(
   const irep_idt &compound_symbol,
   typet &type,
-  typet &method_type)
+  const typet &method_qualifier)
 {
   irept &arguments=type.add("arguments");
 
@@ -1366,16 +1459,11 @@ void cpp_typecheckt::adjust_method_type(
   argument.cmt_identifier("this");
   argument.cmt_base_name("this");
 
-  if(method_type.id()=="" || method_type.is_nil())
-  {
-  }
-  else if(method_type.id()=="const")
+  if(has_const(method_qualifier))
     argument.type().subtype().cmt_constant(true);
-  else
-  {
-    err_location(method_type);
-    throw "invalid method qualifier";
-  }
+
+  if(has_volatile(method_qualifier))
+    argument.type().subtype().cmt_volatile(true);
 }
 
 /*******************************************************************\

@@ -29,7 +29,7 @@ public:
 
   // Returns the scope as a side-effect as 'current_scope'.
   // Should really return explicitly.
-  void resolve_scope(
+  cpp_scopet &resolve_scope(
     const cpp_namet &cpp_name,
     std::string &base_name,
     cpp_template_args_non_tct &template_args);
@@ -57,13 +57,22 @@ protected:
     const wantt want,
     const cpp_typecheck_fargst &fargs);
 
-  void disambiguate(
+  void disambiguate_functions(
+    resolve_identifierst &identifiers,
+    const cpp_typecheck_fargst &fargs);
+
+  void exact_match_functions(
     resolve_identifierst &identifiers,
     const cpp_typecheck_fargst &fargs);
 
   void filter(
     resolve_identifierst &identifiers,
     const wantt want);
+
+  const symbolt &disambiguate_template_classes(
+    const irep_idt &base_name,
+    const cpp_scopest::id_sett &id_set,
+    const cpp_template_args_non_tct &template_args);
 
   void make_constructors(
     resolve_identifierst &identifiers);
@@ -100,7 +109,7 @@ protected:
     const exprt &template_parameter,
     const exprt &desired_expr);
 
-  bool disambiguate(
+  bool disambiguate_functions(
     const exprt &expr,
     unsigned &args_distance,
     const cpp_typecheck_fargst &fargs);
@@ -121,6 +130,28 @@ protected:
 
   void filter_for_named_scopes(cpp_scopest::id_sett &id_set);
   void filter_for_namespaces(cpp_scopest::id_sett &id_set);
+
+  struct matcht
+  {
+    unsigned cost;
+    cpp_template_args_tct specialization_args;
+    cpp_template_args_tct full_args;
+    irep_idt id;
+    matcht(cpp_template_args_tct _s_args,
+           cpp_template_args_tct _f_args,
+           irep_idt _id):
+      cost(_s_args.arguments().size()),
+           specialization_args(_s_args),
+           full_args(_f_args),
+           id(_id)
+    {
+    }
+  };
+
+  inline friend bool operator < (const matcht &m1, const matcht &m2)
+  {
+    return m1.cost<m2.cost;
+  }
 
   #ifdef CPP_SYSTEMC_EXTENSION
   exprt do_builtin_sc_uint_extension(

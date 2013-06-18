@@ -20,6 +20,7 @@
 #include <list>
 #include <algorithm>
 #include <std_expr.h>
+#include <message.h>
 
 #include "symex_target.h"
 #include "goto_symex_state.h"
@@ -71,13 +72,15 @@ class execution_statet : public goto_symext
    *  @param context Context we'll be working in.
    *  @param l2init Initial level2t state (blank).
    *  @param options Options we're going to operate with.
+   *  @param message_handler Message object to collect errors/warnings
    */
   execution_statet(const goto_functionst &goto_functions, const namespacet &ns,
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
                    ex_state_level2t *l2init,
-                   const optionst &options);
+                   const optionst &options,
+                   message_handlert &message_handler);
 
   /**
    *  Default copy constructor.
@@ -442,6 +445,26 @@ class execution_statet : public goto_symext
    */
   void print_stack_traces(unsigned int indent = 0) const;
 
+  /** Switch to registered monitor thread.
+   *  Switches the currently executing thread to the monitor thread that's been
+   *  previously registered. This does not result in the context switch counter
+   *  being incremented. Stores which thread ID we switched from for a future
+   *  switch back. */
+  void switch_to_monitor(void);
+
+  /** Switch away from registered monitor thread.
+   *  Switches away from the registered monitor thread, to whatever thread
+   *  caused switch_to_monitor to be called in the past
+   *  @see switch_to_monitor
+   */
+  void switch_away_from_monitor(void);
+
+  /** Makr registered monitor thread as ended. Designed to be used by ltl2ba
+   *  produced code when the monitor is to be ended. */
+  void kill_monitor_thread(void);
+
+  void init_property_monitors(void);
+
   public:
 
   /** Pointer to reachability_treet that owns this ex_state */
@@ -495,6 +518,31 @@ class execution_statet : public goto_symext
    *  interleaved after a GOTO will be composed with this guard, rather than
    *  the guard from any of the branches of the GOTO itself. */
   expr2tc pre_goto_guard;
+  /** TID of monitor thread, for monitor intrinsics. */
+  unsigned int monitor_tid;
+  /** Whether monitor_tid is set. */
+  bool tid_is_set;
+  /** TID of thread that switched to monitor */
+  unsigned int monitor_from_tid;
+  /** Whether monitor_from_tid is set */
+  bool mon_from_tid;
+  /** Are we performing LTL monitor checking? */
+  bool check_ltl;
+  /** Have we warned of an ended monitor thread already?. */
+  bool mon_thread_warning;
+  /** List of monitored properties. */
+  std::map<std::string, exprt> property_monitor_strings;
+  /** Message handler object */
+  message_handlert &message_handler;
+  /** Minimum number of threads to exist to consider a context switch.
+   *  In certain special cases, such as LTL checking, various pieces of
+   *  code and information are bunged into seperate threads which aren't
+   *  necessarily scheduled. In these cases we don't want to consider
+   *  cswitches, because even though they're not taken, they'll heavily
+   *  inflate memory size.
+   *  So, instead of considering context switches where more than one thread
+   *  exists, compare the number of threads against this threshold. */
+  unsigned int thread_cswitch_threshold;
 
   protected:
   /** Number of context switches performed by this ex_state */
@@ -528,12 +576,13 @@ class dfs_execution_statet : public execution_statet
                    reachability_treet *art,
                    symex_targett *_target,
                    contextt &context,
-                   const optionst &options)
+                   const optionst &options,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
                          options.get_bool_option("state-hashing")
                              ? new state_hashing_level2t(*this)
                              : new ex_state_level2t(*this),
-                             options)
+                             options, _message_handler)
   {
   };
 
@@ -559,9 +608,10 @@ class schedule_execution_statet : public execution_statet
                    contextt &context,
                    const optionst &options,
                    unsigned int *ptotal_claims,
-                   unsigned int *premaining_claims)
+                   unsigned int *premaining_claims,
+                   message_handlert &_message_handler)
       : execution_statet(goto_functions, ns, art, _target, context,
-                         new ex_state_level2t(*this), options)
+                         new ex_state_level2t(*this), options, _message_handler)
   {
     this->ptotal_claims = ptotal_claims;
     this->premaining_claims = premaining_claims;

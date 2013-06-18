@@ -183,7 +183,7 @@ ios_base::ios_base()
 }
 
 ios_base::fmtflags ios_base::flags() const {
-	return __flags;
+	return (bool)__flags;
 }
 
 ios_base::fmtflags ios_base::flags ( ios_base::fmtflags fmtfl ) {
@@ -233,6 +233,8 @@ void ios::setstate(ios::iostate state)
 bool ios::operator ! ( ) const
 {	return this->fail();}
 
+
+
 ios::operator void * ( ) const {
 	if (this->fail()) return 0;
 	else return const_cast<ios*>(this);
@@ -273,9 +275,10 @@ namespace std
 
 //Independent flags (switch on):
 ios_base& boolalpha ( ios_base& str ) {
-	str.setf(__boolalpha);
+  str.setf(__boolalpha);
 	return str;
 }
+
 ios_base& showbase ( ios_base& str ) {
 	str.setf(__showbase);
 	return str;

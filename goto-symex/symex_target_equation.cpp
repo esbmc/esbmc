@@ -271,6 +271,36 @@ std::ostream &operator<<(
   return out;
 }
 
+void
+symex_target_equationt::check_for_duplicate_assigns() const
+{
+  std::map<std::string, unsigned int> countmap;
+  unsigned int i = 0;
+
+  for (SSA_stepst::const_iterator it = SSA_steps.begin();
+      it != SSA_steps.end(); it++) {
+    i++;
+    if (!it->is_assignment())
+      continue;
+
+    const equality2t &ref = to_equality2t(it->cond);
+    const symbol2t &sym = to_symbol2t(ref.side_1);
+    countmap[sym.get_symbol_name()]++;
+  }
+
+  for (std::map<std::string, unsigned int>::const_iterator it =countmap.begin();
+       it != countmap.end(); it++) {
+    if (it->second != 1) {
+      std::cerr << "Symbol \"" << it->first << "\" appears " << it->second
+                << " times" << std::endl;
+    }
+  }
+
+  std::cerr << "Checked " << i << " insns" << std::endl;
+
+  return;
+}
+
 runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
                                                      prop_convt &_conv)
   : symex_target_equationt(_ns),

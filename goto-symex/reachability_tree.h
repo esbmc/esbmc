@@ -14,6 +14,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <set>
 #include <map>
 #include <options.h>
+#include <message.h>
 #include "goto_symex.h"
 #include "execution_state.h"
 #include "symex_target_equation.h"
@@ -68,13 +69,15 @@ public:
    *  @param ns Namespace to operate in
    *  @param target Target to listen in on assigns/asserts/assumes. Is cloned.
    *  @param context Context to operate in.
+   *  @param message_handler Message object for symex errors/warnings/info
    */
   reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
-    contextt &context);
+    contextt &context,
+    message_handlert &message_handler);
 
   /**
    *  Default destructor.
@@ -149,7 +152,8 @@ public:
    *  @param quiet If false, will print to stdout why this thread is blocked
    *  @return True if thread is viable; false otherwise.
    */
-  bool check_thread_viable(int tid, const expr2tc &expr, bool quiet) const;
+  bool check_thread_viable(unsigned int tid, const expr2tc &expr,
+                           bool quiet) const;
 
   /**
    *  Analyze context switch point.
@@ -369,6 +373,11 @@ public:
   /** Functions dictate interleavings; perform no exploration.
    *  Used by --directed-interleavings */
   bool directed_interleavings;
+  /** Namespace we're operating in */
+  const namespacet &ns;
+  /** Options that are enabled */
+  optionst options;
+
 protected:
   /** Stack of execution states representing current interleaving.
    *  See reachability_treet algorithm for how this is used. Is initialized
@@ -398,12 +407,10 @@ protected:
   unsigned int next_thread_id;
   /** Whether partial-order-reduction is enabled */
   bool por;
-  /** Namespace we're operating in */
-  const namespacet &ns;
   /** Set of state hashes we've discovered */
   std::set<crypto_hash>hit_hashes;
-  /** Options that are enabled */
-  const optionst &options;
+  /** Message handler reference. */
+  message_handlert &message_handler;
 
   friend class execution_statet;
 };

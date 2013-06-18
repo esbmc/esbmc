@@ -1,0 +1,18 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: November 2012
+
+\*******************************************************************/
+
+#include "../QtCore/QObject"
+#include "QLayout"
+
+class QWidget : public QObject {
+public:
+void	setLayout ( QLayout * layout ){}
+void	setLayout ( void * layout ){}
+void	show (){}
+};

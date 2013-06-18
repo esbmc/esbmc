@@ -43,6 +43,10 @@ void cpp_typecheckt::typecheck_code(codet &code)
     code.type()=typet("code");
     typecheck_throw_decl(code);
   }
+  else if(statement=="throw_decl_end")
+  {
+    // Ignore
+  }
   else if(statement=="member_initializer")
   {
     code.type()=typet("code");
@@ -114,53 +118,117 @@ void cpp_typecheckt::typecheck_catch(codet &code)
 {
   codet::operandst &operands=code.operands();
 
-  for(codet::operandst::iterator
-      it=operands.begin();
+  // First operand is always the try block
+  codet::operandst::iterator it=operands.begin();
+  code_blockt &try_block=to_code_block(to_code(*it));
+  typecheck_code(try_block);
+
+  // The following operands are the catchs
+  for(it=++operands.begin();
       it!=operands.end();
       it++)
   {
     code_blockt &block=to_code_block(to_code(*it));
-
-    // Hack to fix dereference bug. This is probably not the right
-    // thing to do but works
-    if(block.has_operands())
-    {
-      if(block.op0().has_operands())
-      {
-        if(block.op0().op0().has_operands())
-        {
-          typet &catch_type = block.op0().op0().op0().type();
-
-          if(catch_type.get_bool("#reference"))
-          {
-            typet catch_type_nil("nil");
-            block.op0().op0().op0().type().swap(catch_type_nil);
-          }
-        }
-      }
-    }
-
     typecheck_code(block);
 
-    // is it a catch block?
-    if(it!=operands.begin())
-    {
-      const code_blockt &code_block=to_code_block(block);
-      assert(code_block.operands().size()>=1);
+    const code_blockt &code_block=to_code_block(block);
+    assert(code_block.operands().size()>=1);
 
-      const codet &first_instruction=to_code(code_block.op0());
-      assert(first_instruction.get_statement()=="decl");
+    const codet &first_instruction=to_code(code_block.op0());
+    assert(first_instruction.get_statement()=="decl");
 
-      // get the declaration
-      const code_declt &code_decl=to_code_decl(first_instruction);
+    // get the declaration
+    const code_declt &code_decl=to_code_decl(first_instruction);
 
-      // get the type
-      const typet &type=code_decl.op0().type();
+    // get the type
+    const typet &type=code_decl.op0().type();
 
-      // annotate exception ID
-      it->set("exception_id", cpp_exception_id(type, *this));
-    }
+    // annotate exception ID
+    it->set("exception_id", cpp_exception_id(type, *this));
   }
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_ifthenelse
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_ifthenelse(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // if(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+    typecheck_code(to_code(code.op1()));
+
+    if(code.operands().size()==3 &&
+       !code.op2().is_nil())
+      typecheck_code(to_code(code.op2()));
+  }
+  else
+    c_typecheck_baset::typecheck_ifthenelse(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_while
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_while(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // while(void *p=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_while(code);
+}
+
+/*******************************************************************\
+
+Function: cpp_typecheckt::typecheck_switch
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void cpp_typecheckt::typecheck_switch(codet &code)
+{
+  // In addition to the C syntax, C++ also allows a declaration
+  // as condition. E.g.,
+  // switch(int i=...) ...
+
+  if(code.op0().id()=="code")
+  {
+    typecheck_code(to_code(code.op0()));
+  }
+  else
+    c_typecheck_baset::typecheck_switch(code);
 }
 
 /*******************************************************************\
@@ -422,7 +490,7 @@ void cpp_typecheckt::typecheck_decl(codet &code)
       if(symbol.value.id()=="code")
         new_code.copy_to_operands(symbol.value);
     }
-    else
+    else if(!declarator.find("name").get_bool("catch_decl"))
     {
       exprt object_expr=cpp_symbol_expr(symbol);
 

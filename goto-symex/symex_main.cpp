@@ -31,6 +31,9 @@
 void
 goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
 
+  if (unwinding_recursion_assumption)
+    return ;
+
   total_claims++;
 
   expr2tc new_expr = claim_expr;
@@ -95,22 +98,6 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case END_FUNCTION:
-
-    // We must check if we can access right frame
-    if(cur_state->call_stack.size()>2)
-    {
-      // Get the correct frame
-      goto_symex_statet::call_stackt::reverse_iterator
-        s_it=cur_state->call_stack.rbegin();
-      ++s_it;
-
-      // Clear the allowed exceptions, we're not on the function anymore
-      (*s_it).throw_list_set.clear();
-
-      // We don't have throw_decl anymore too
-      (*s_it).has_throw_decl = false;
-    }
-
     symex_end_of_function();
 
     // Potentially skip to run another function ptr target; if not,
@@ -121,19 +108,7 @@ goto_symext::symex_step(reachability_treet & art)
 
   case GOTO:
   {
-    if(cur_state->call_stack.size())
-    {
-      goto_symex_statet::call_stackt::reverse_iterator
-        s_it=cur_state->call_stack.rbegin();
-
-      if((*s_it).has_throw_target)
-      {
-        cur_state->source.pc++;
-        break;
-      }
-    }
-
-    expr2tc tmp = instruction.guard;
+    expr2tc tmp(instruction.guard);
     replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
 
@@ -204,7 +179,14 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSIGN:
     if (!cur_state->guard.is_false()) {
-      expr2tc deref_code = instruction.code;
+      code_assign2tc deref_code = instruction.code;
+
+      // XXX jmorse -- this is not fully symbolic.
+      if (thrown_obj_map.find(cur_state->source.pc) != thrown_obj_map.end()) {
+        deref_code.get()->source = thrown_obj_map[cur_state->source.pc];
+        thrown_obj_map.erase(cur_state->source.pc);
+      }
+
       replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
@@ -215,6 +197,7 @@ goto_symext::symex_step(reachability_treet & art)
 
       symex_assign(deref_code);
     }
+
     cur_state->source.pc++;
     break;
 
@@ -244,7 +227,7 @@ goto_symext::symex_step(reachability_treet & art)
       }
 
       symex_function_call(deref_code);
-    } else   {
+    } else {
       cur_state->source.pc++;
     }
     break;
@@ -261,12 +244,30 @@ goto_symext::symex_step(reachability_treet & art)
     break;
 
   case THROW:
-    symex_throw();
-    cur_state->source.pc++;
+    if (!cur_state->guard.is_false()) {
+      if(symex_throw())
+        cur_state->source.pc++;
+    } else {
+      cur_state->source.pc++;
+    }
     break;
 
   case THROW_DECL:
     symex_throw_decl();
+    cur_state->source.pc++;
+    break;
+
+  case THROW_DECL_END:
+    // When we reach THROW_DECL_END, we must clear any throw_decl
+    if(stack_catch.size())
+    {
+      // Get to the correct try (always the last one)
+      goto_symex_statet::exceptiont* except=&stack_catch.top();
+
+      except->has_throw_decl=false;
+      except->throw_list_set.clear();
+    }
+
     cur_state->source.pc++;
     break;
 
@@ -298,6 +299,20 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
     intrinsic_spawn_thread(func_call, art);
   } else if (symname == "c::__ESBMC_terminate_thread") {
     intrinsic_terminate_thread(art);
+  } else if (symname == "c::__ESBMC_get_thread_state") {
+    intrinsic_get_thread_state(func_call, art);
+  } else if (symname == "c::__ESBMC_really_atomic_begin") {
+    intrinsic_really_atomic_begin(art);
+  } else if (symname == "c::__ESBMC_really_atomic_end") {
+    intrinsic_really_atomic_end(art);
+  } else if (symname == "c::__ESBMC_switch_to_monitor") {
+    intrinsic_switch_to_monitor(art);
+  } else if (symname == "c::__ESBMC_switch_from_monitor") {
+    intrinsic_switch_from_monitor(art);
+  } else if (symname == "c::__ESBMC_register_monitor") {
+    intrinsic_register_monitor(func_call, art);
+  } else if (symname == "c::__ESBMC_kill_monitor") {
+    intrinsic_kill_monitor(art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
     std::cerr << std::endl << "The name in question: " << symname << std::endl;

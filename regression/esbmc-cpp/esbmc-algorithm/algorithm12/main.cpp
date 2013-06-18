@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 bool mypredicate (int i, int j) {
@@ -16,6 +17,9 @@ int main () {
 
   // using default comparison:
   it = search_n (myvector.begin(), myvector.end(), 2, 30);
+  assert(*it++ == 30);
+  assert(*it == 30);
+   cout << *it << endl;
   
   return 0;
 }

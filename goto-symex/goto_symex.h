@@ -12,6 +12,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <irep2.h>
 
 #include <map>
+#include <stack>
 #include <std_types.h>
 #include <i2string.h>
 #include <hash_cont.h>
@@ -339,14 +340,13 @@ protected:
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
-   *  These names are all the names of local variables, renamed to level 1, so
-   *  that we have a list of all variables that are in fact local to this
-   *  particular function call.
-   *  @param frame_counter The function frame invocation number.
+   *  These names are all the names of local variables, renamed to level 1.
+   *  We also bump up the level 1 renaming number, effectively making all the
+   *  local variables new instances of those variables (which is what entering
+   *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(unsigned frame_counter,
-    const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functionst::goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
@@ -389,9 +389,23 @@ protected:
                               reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
+  /** Perform get_thead_state... defunct. */
+  void intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_begin(reachability_treet &art);
+  /** Really atomic start/end - atomic blocks that just disable ileaves. */
+  void intrinsic_really_atomic_end(reachability_treet &art);
+  /** Context switch to the monitor thread. */
+  void intrinsic_switch_to_monitor(reachability_treet &art);
+  /** Context switch from the monitor thread. */
+  void intrinsic_switch_from_monitor(reachability_treet &art);
+  /** Register which thread is the monitor thread. */
+  void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
+  /** Terminate the monitor thread */
+  void intrinsic_kill_monitor(reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
-  void symex_throw();
+  bool symex_throw();
 
   /** Register exception handler on stack. */
   void symex_catch();
@@ -400,21 +414,31 @@ protected:
   void symex_throw_decl();
 
   /** Update throw target. */
-  void update_throw_target(goto_symex_statet::framet* frame,
-    goto_symex_statet::framet::catch_mapt::const_iterator c_it);
+  void update_throw_target(goto_symex_statet::exceptiont* except,
+    goto_programt::const_targett target, const expr2tc &code);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
    *  if we can't then gives a error.
    */
-  bool handle_rethrow(const std::vector<irep_idt> &exceptions_thrown,
-    const goto_programt::instructiont instruction);
+  bool handle_rethrow(const expr2tc &operand,
+    const goto_programt::instructiont &instruction);
 
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
    */
-  void handle_throw_decl(goto_symex_statet::framet* frame,
+  int handle_throw_decl(goto_symex_statet::exceptiont* frame,
     const irep_idt &id);
+
+  /**
+   * Call terminate function handler when needed.
+   */
+  bool terminate_handler();
+
+  /**
+   * Call unexpected function handler when needed.
+   */
+  bool unexpected_handler();
 
   /**
    *  Replace ireps regarding dynamic allocations with code.
@@ -589,8 +613,29 @@ protected:
    *  program execution has finished */
   std::list<allocated_obj> dynamic_memory;
 
-  // exception
+  /* Exception Handling.
+   * This will stack the try-catch blocks, so we always know which catch
+   * we should jump.
+   */
+  typedef std::stack<goto_symex_statet::exceptiont> stack_catcht;
+
+  /** Stack of try-catch blocks. */
+  stack_catcht stack_catch;
+
+  /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
+
+  /** Map of currently active exception targets, i.e. instructions where an
+   *  exception is going to be merged in in the future. Keys are iterators to
+   *  the instruction catching the object; domain is a symbol that the thrown
+   *  piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
+
+  /** Flag to indicate if we are go into the unexpected flow. */
+  bool inside_unexpected;
+
+  /** Flag to indicate if we have an unwinding recursion assumption. */
+  bool unwinding_recursion_assumption;
 };
 
 #endif

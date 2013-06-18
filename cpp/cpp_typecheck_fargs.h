@@ -56,4 +56,7 @@ public:
   }
 };
 
+std::ostream &operator<<(std::ostream &out,
+  const cpp_typecheck_fargst &fargs);
+
 #endif

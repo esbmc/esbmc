@@ -15,7 +15,7 @@ struct hooked_header {
  * ansi-c/headers will only ever have one '_' character at the start. So, some
  * hackery is required */
 
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
+#if defined(_WIN32) && !defined(__MINGW64__)
 #define p(x) x
 #else
 #define p(x) _##x
@@ -33,6 +33,9 @@ struct hooked_header headers[] = {
 { "pthread.h",		&p(binary_pthread_h_start),	&p(binary_pthread_h_end)
 },
 /* Pthreads header */
+{ "digitalfilter.h",		&p(binary_digitalfilter_h_start),	&p(binary_digitalfilter_h_end)
+},
+/* digital filter header */
 { "pthreadtypes.h",	&p(binary_pthreadtypes_h_start),&p(binary_pthreadtypes_h_end)
 },
 /*  Additional pthread data header */

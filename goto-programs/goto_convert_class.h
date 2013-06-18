@@ -41,14 +41,15 @@ public:
     goto_stmt=false;
     break_stmt=false;
     is_thread=false;
+    is_ifthenelse=false;
     for_block=false;
     while_block=false;
     state_counter=1;
     k_induction=false;
     inductive_step=
-    options.get_bool_option("inductive-step");
+      options.get_bool_option("inductive-step");
     base_case=
-    options.get_bool_option("base-case");
+      options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -191,6 +192,7 @@ protected:
   //
   void convert_catch(const codet &code,goto_programt &dest);
   void convert_throw_decl(const exprt &expr, goto_programt &dest);
+  void convert_throw_decl_end(const exprt &expr, goto_programt &dest);
 
   //
   // k-induction conversion
@@ -224,7 +226,8 @@ protected:
   void print_msg(const exprt &tmp);
   void replace_infinite_loop(exprt &tmp, goto_programt &dest);
   void disable_k_induction(void);
-  void print_msg_mem_alloc(const exprt &tmp);
+  void print_msg_mem_alloc(void);
+  void set_expr_to_nondet(exprt &tmp, goto_programt &dest);
 
   //
   // gotos
@@ -377,14 +380,19 @@ protected:
   void do_array_set     (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
   void do_printf        (const exprt &lhs, const exprt &rhs, const exprt::operandst &arguments, goto_programt &dest);
 
+  protected:
+    bool k_induction, inductive_step, base_case;
+    struct_typet state;
+
   private:
     bool is_thread, for_block, break_stmt,
-	 goto_stmt, while_block;
+         goto_stmt, while_block, is_ifthenelse;
     unsigned int state_counter;
-    struct_typet state;
-    bool k_induction, inductive_step, base_case;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
+
+    typedef std::map<exprt, struct_typet> loop_varst;
+    loop_varst loop_vars;
 };
 
 #endif

@@ -1,0 +1,24 @@
+/*******************************************************************\
+
+
+Author: Felipe Rodrigues
+
+
+\*******************************************************************/
+
+#include "../../fstream"
+
+bool fexists(const char* filename){
+	std::ifstream file(filename);
+	return file.is_open();
+}
+
+class QPixmap
+{
+public:
+	QPixmap (){}
+	QPixmap ( int width, int height ){}
+	QPixmap ( const char * xpm ){
+		__ESBMC_assert(fexists(xpm),"invalid file");
+	}
+};

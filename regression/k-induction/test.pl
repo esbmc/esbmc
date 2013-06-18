@@ -156,7 +156,7 @@ foreach my $test (@tests) {
 
   if($failed) {
     $failures++;
-    print "  [FAILED]\n";
+    print "  [FAILED]";
     $xmloutput = $xmloutput . ">\n";
     $xmloutput = $xmloutput . "  <failure message=\"Test regexes \'@resultrexps\' failed\" type=\"nodescript failure\">\n";
 
@@ -174,9 +174,11 @@ foreach my $test (@tests) {
 
     $xmloutput = $xmloutput . "</failure>\n</testcase>";
   } else {
-    print "  [OK]\n";
+    print "  [OK]";
     $xmloutput = $xmloutput . "/>\n";
   }
+
+  printf(" (%.2f seconds)\n", $elapsed);
 }
 print "\n";
 

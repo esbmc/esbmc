@@ -27,7 +27,6 @@ public:
   {
     return static_cast<const locationt &>(find("#location"));
   }
-
   bool is_static()   const { return get("storage")=="static"; }
   bool is_extern()   const { return get("storage")=="extern"; }
   bool is_auto()     const { return get("storage")=="auto"; }

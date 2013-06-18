@@ -75,7 +75,7 @@ Function: namespacet::lookup
 
 bool namespacet::lookup(
   const irep_idt &name,
-  const symbolt *&symbol) const  
+  const symbolt *&symbol) const
 {
   symbolst::const_iterator it;
 

@@ -156,6 +156,8 @@ public:
   void short_output(std::ostream &out,
                     bool show_ignored = false) const;
   
+  void check_for_duplicate_assigns() const;
+
   void clear()
   {
     SSA_steps.clear();

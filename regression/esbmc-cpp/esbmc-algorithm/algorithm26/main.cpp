@@ -2,6 +2,7 @@
 #include <iostream>
 #include <algorithm>
 #include <vector>
+#include <cassert>
 using namespace std;
 
 int current(0);
@@ -12,9 +13,9 @@ int main () {
 
   generate_n (myarray, 9, UniqueNumber);
 
-  cout << "myarray contains:";
-  for (int i=0; i<9; ++i)
-    cout << " " << myarray[i];
+//  cout << "myarray contains:";
+  for (int i=0; i<9; ++i) assert(myarray[i] == i+1);
+//    cout << " " << myarray[i];
 
   cout << endl;
   return 0;

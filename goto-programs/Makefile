@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/goto-programs.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=goto-programs.o
 
 SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp goto_check.cpp goto_inline.cpp \
@@ -19,3 +19,5 @@ clean:
 	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)

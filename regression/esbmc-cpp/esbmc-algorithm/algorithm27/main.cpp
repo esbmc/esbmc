@@ -1,6 +1,7 @@
 // remove algorithm example
 #include <iostream>
 #include <algorithm>
+#include <cassert>
 using namespace std;
 
 int main () {
@@ -12,6 +13,11 @@ int main () {
 
   pend = remove (pbegin, pend, 20);              // 10 30 30 10 10 ?  ?  ?
                                                  // ^              ^
+  assert(myints[0] == 10);
+  assert(myints[1] == 30);
+  assert(myints[2] == 30);
+  assert(myints[3] == 10);
+  assert(myints[4] == 10);
   cout << "range contains:";
   for (int* p=pbegin; p!=pend; ++p)
     cout << " " << *p;
