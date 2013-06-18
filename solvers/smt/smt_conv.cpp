@@ -791,8 +791,22 @@ expr_handle_table:
     // Pointer relation:
     const expr2tc &side1 = *expr->get_sub_expr(0);
     const expr2tc &side2 = *expr->get_sub_expr(1);
-    assert(is_pointer_type(side1->type) && is_pointer_type(side2->type));
-    a = convert_ptr_cmp(side1, side2, expr);
+    if (is_pointer_type(side1->type) && is_pointer_type(side2->type)) {
+      a = convert_ptr_cmp(side1, side2, expr);
+    } else {
+      // One operand isn't a pointer; go the slow way, with typecasts.
+      type2tc inttype = get_uint_type(config.ansi_c.pointer_width);
+      expr2tc cast1 = (is_pointer_type(side1))
+        ? typecast2tc(inttype, side1)
+        : side1;
+      expr2tc cast2 = (is_pointer_type(side2))
+        ? typecast2tc(inttype, side2)
+        : side2;
+      expr2tc new_expr = expr;
+      *new_expr.get()->get_sub_expr_nc(0) = cast1;
+      *new_expr.get()->get_sub_expr_nc(1) = cast2;
+      a = convert_ast(new_expr);
+    }
     break;
   }
   default:
