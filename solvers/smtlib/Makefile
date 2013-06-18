@@ -1,7 +1,7 @@
+all: realall
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
-MAINOBJ= $(OBJDIR)/smtlib.o
-all: $(OBJDIR)/.deps $(MAINOBJ)
+MAINOBJNAME=smtlib.o
 
 SRCS= smtlib_conv.cpp lex.yy.cpp y.tab.cpp
 
@@ -20,3 +20,5 @@ clean:
 STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
+
+realall: $(OBJDIR)/.deps $(MAINOBJ)
