@@ -840,6 +840,14 @@ z3_convt::tuple_create(const expr2tc &structdef)
 }
 
 smt_ast *
+z3_convt::tuple_fresh(const smt_sort *s)
+{
+  const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
+  z3::expr output = ctx.fresh_const(NULL, zs->s);
+  return new z3_smt_ast(output, zs);
+}
+
+smt_ast *
 z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);

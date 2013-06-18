@@ -1090,6 +1090,19 @@ smt_convt::tuple_create(const expr2tc &structdef)
   return new tuple_smt_ast(convert_sort(structdef->type), name);
 }
 
+smt_ast *
+smt_convt::tuple_fresh(const smt_sort *s)
+{
+  std::string name_prefix = "smt_conv::tuple_fresh::";
+  std::stringstream ss;
+  ss << name_prefix << fresh_map[name_prefix]++ << ".";
+  std::string name = ss.str();
+
+  smt_ast *a = mk_smt_symbol(name, s);
+  a = a;
+  return new tuple_smt_ast(s, name);
+}
+
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                             const smt_ast **inputargs)
@@ -3112,7 +3125,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   }
 
   smt_sort *fresh_sort = convert_sort(cast.type);
-  smt_ast *fresh = mk_fresh(fresh_sort, struct_type_to.name.as_string());
+  smt_ast *fresh = tuple_fresh(fresh_sort);
   const smt_ast *src_ast = convert_ast(cast.from);
   smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
