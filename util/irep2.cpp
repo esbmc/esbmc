@@ -1392,10 +1392,13 @@ do_type_crc(const BigInt &theint, hacky_hash &hash)
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
-    if (theint.is_zero())
+    if (theint.is_zero()) {
       hash.ingest((uint8_t)0);
-    else
-      hash.ingest(buffer, theint.get_len());
+    } else {
+      // Annoyance: BigInt dumps this in reverse order.
+      unsigned int num_bytes = theint.get_len();
+      hash.ingest(&buffer[255-num_bytes], num_bytes);
+    }
   } else {
     // bigint is too large to fit in that static buffer. This is insane; but
     // rather than wasting time heap allocing we'll just skip recording data,
@@ -1409,7 +1412,7 @@ static inline __attribute__((always_inline)) void
 do_type_crc(const fixedbvt &theval, hacky_hash &hash)
 {
 
-  do_type_crc(theval.to_integer(), hash);
+  do_type_crc(theval.get_value(), hash);
   return;
 }
 
