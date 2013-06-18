@@ -3138,7 +3138,11 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       smt_sort *this_sort = convert_sort(*it);
       args[0] = tuple_project(src_ast, this_sort, i2);
       args[1] = tuple_project(fresh, this_sort, i2);
-      smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      const smt_ast *eq;
+      if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it))
+        eq = tuple_equality(args[0], args[1]);
+      else
+        eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       assert_lit(mk_lit(eq));
       i2++;
     }
@@ -3164,10 +3168,17 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       // complain mightily if we get it wrong.
 
       const smt_ast *args[2];
-      smt_sort *this_sort = convert_sort(struct_type_from.members[i3]);
+      const type2tc &thetype = struct_type_from.members[i3];
+      smt_sort *this_sort = convert_sort(thetype);
       args[0] = tuple_project(src_ast, this_sort, i3);
       args[1] = tuple_project(fresh, this_sort, i2);
-      smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+      const smt_ast *eq;
+      if (is_struct_type(thetype) || is_union_type(thetype) ||
+          is_pointer_type(thetype))
+        eq = tuple_equality(args[0], args[1]);
+      else
+        eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       assert_lit(mk_lit(eq));
       i2++;
     }
