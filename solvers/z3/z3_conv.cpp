@@ -732,10 +732,10 @@ z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
 }
 
 smt_ast *
-z3_convt::mk_smt_real(const mp_integer &theval)
+z3_convt::mk_smt_real(const std::string &str)
 {
   smt_sort *s = mk_sort(SMT_SORT_REAL);
-  return new z3_smt_ast(ctx.real_val(theval.to_int64()), s);
+  return new z3_smt_ast(ctx.real_val(str.c_str()), s);
 }
 
 smt_ast *

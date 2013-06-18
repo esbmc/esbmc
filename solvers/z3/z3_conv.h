@@ -75,7 +75,7 @@ private:
   virtual literalt mk_lit(const smt_ast *s);
 
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
-  virtual smt_ast *mk_smt_real(const mp_integer &theint);
+  virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
   virtual smt_ast *mk_smt_bool(bool val);

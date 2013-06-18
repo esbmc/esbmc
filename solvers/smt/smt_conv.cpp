@@ -1,7 +1,9 @@
 #include <sstream>
 #include <set>
+#include <iomanip>
 
 #include <base_type.h>
+#include <arith_tools.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
@@ -18,6 +20,22 @@ static std::string
 extract_fraction(std::string v, unsigned width)
 {
     return integer2string(binary2integer(v.substr(width / 2, width), false), 10);
+}
+
+static std::string
+double2string(double d)
+{
+  std::ostringstream format_message;
+  format_message << std::setprecision(12) << d;
+  return format_message.str();
+}
+
+static std::string
+itos(int64_t i)
+{
+  std::stringstream ss;
+  ss << i;
+  return ss.str();
 }
 
 static unsigned int
@@ -921,6 +939,38 @@ smt_convt::convert_sort(const type2tc &type)
   }
 }
 
+static std::string
+fixed_point(std::string v, unsigned width)
+{
+  const int precision = 1000000;
+  std::string i, f, b, result;
+  double integer, fraction, base;
+
+  i = extract_magnitude(v, width);
+  f = extract_fraction(v, width);
+  b = integer2string(power(2, width / 2), 10);
+
+  integer = atof(i.c_str());
+  fraction = atof(f.c_str());
+  base = (atof(b.c_str()));
+
+  fraction = (fraction / base);
+
+  if (fraction < 0)
+    fraction = -fraction;
+
+   fraction = fraction * precision;
+
+  if (fraction == 0)
+    result = double2string(integer);
+  else  {
+    int64_t numerator = (integer*precision + fraction);
+    result = itos(numerator) + "/" + double2string(precision);
+  }
+
+  return result;
+}
+
 smt_ast *
 smt_convt::convert_terminal(const expr2tc &expr)
 {
@@ -939,7 +989,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
   {
     const constant_fixedbv2t &thereal = to_constant_fixedbv2t(expr);
     if (int_encoding) {
-      return mk_smt_real(thereal.value.to_integer());
+      std::string val = thereal.value.to_expr().value().as_string();
+      std::string result = fixed_point(val, thereal.value.spec.width);
+      return mk_smt_real(result);
     } else {
       assert(thereal.type->get_width() <= 64 && "Converting fixedbv constant to"
              " SMT, too large to fit into a uint64_t");
@@ -2953,8 +3005,8 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         one = mk_smt_bvint(BigInt(1), false, width);
       }
     } else if (is_fixedbv_type(cast.type)) {
-      zero = mk_smt_real(BigInt(0));
-      one = mk_smt_real(BigInt(1));
+      zero = mk_smt_real("0");
+      one = mk_smt_real("1");
     } else {
       std::cerr << "Unexpected type in typecast of bool" << std::endl;
       abort();

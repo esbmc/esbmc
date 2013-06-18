@@ -187,7 +187,7 @@ public:
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
-  virtual smt_ast *mk_smt_real(const mp_integer &thereal) = 0;
+  virtual smt_ast *mk_smt_real(const std::string &str) = 0;
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
   virtual smt_ast *mk_smt_bool(bool val) = 0;

@@ -190,9 +190,9 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     return 0;
   case SMT_FUNC_REAL:
     // Give up
-    std::cerr << "Pretty-printing reals not implemented yet for smtlib output"
-              << std::endl;
-    abort();
+    ss << ast->realval;
+    output == ss.str();
+    return 0;
   case SMT_FUNC_SYMBOL:
     // All symbols to be emitted braced within |'s
     ss << "|" << ast->symname << "|";
@@ -585,11 +585,11 @@ smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
 }
 
 smt_ast *
-smtlib_convt::mk_smt_real(const mp_integer &thereal)
+smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sort *s = mk_sort(SMT_SORT_REAL);
   smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_REAL);
-  a->intval = thereal;
+  a->realval = str;
   return a;
 }
 
