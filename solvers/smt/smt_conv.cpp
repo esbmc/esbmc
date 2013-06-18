@@ -2787,6 +2787,8 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
     return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
   } else if (is_fixedbv_type(cast.from)) {
+    // FIXME: conversion here for to_int_bits > from_int_bits is factually
+    // broken, run 01_cbmc_Fixedbv8 with --no-simplify
     const smt_ast *magnitude, *fraction;
 
     const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
