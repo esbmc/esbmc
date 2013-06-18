@@ -951,8 +951,8 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       m = extract_magnitude(theval, bitwidth);
       f = extract_fraction(theval, bitwidth);
-      magnitude = atoi(m.c_str());
-      fraction = atoi(f.c_str());
+      magnitude = strtoll(m.c_str(), NULL, 10);
+      fraction = strtoll(f.c_str(), NULL, 10);
 
       magnitude <<= (bitwidth / 2);
       fin = magnitude | fraction;
