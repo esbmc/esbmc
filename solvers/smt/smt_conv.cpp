@@ -3087,27 +3087,80 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   new_names.reserve(struct_type_to.members.size());
 
   i = 0;
-  forall_types(it, struct_type_to.members) {
-    if (!base_type_eq(struct_type_from.members[i], *it, ns)) {
-      std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
-      abort();
+  // This all goes to pot when we consider polymorphism, and in particular,
+  // multiple inheritance. So, for normal structs, as usual check that each
+  // field has a compatible type. But for classes, check that either they're
+  // the same class, or the source is a subclass of the target type. If so,
+  // we just select out the common fields, which drops any additional data in
+  // the subclass.
+
+  bool same_format = true;
+  if (is_subclass_of(cast.from->type, cast.type, ns)) {
+    same_format = false; // then we're fine
+  } else if (struct_type_from.name == struct_type_to.name) {
+    ; // Also fine
+  } else {
+    // Check that these two different structs have the same format.
+    forall_types(it, struct_type_to.members) {
+      if (!base_type_eq(struct_type_from.members[i], *it, ns)) {
+        std::cerr << "Incompatible struct in cast-to-struct" << std::endl;
+        abort();
+      }
+
+      i++;
     }
-
-    i++;
   }
 
-  // Abuse the constant_struct2tc concept.
-  std::vector<expr2tc> membs;
+  smt_sort *fresh_sort = convert_sort(cast.type);
+  smt_ast *fresh = mk_fresh(fresh_sort, struct_type_to.name.as_string());
+  const smt_ast *src_ast = convert_ast(cast.from);
+  smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
-  i2 = 0;
-  forall_types(it, struct_type_to.members) {
-    member2tc tmp(*it, cast.from, struct_type_to.member_names[i2]);
-    membs.push_back(tmp);
-    i2++;
-  }
+  if (same_format) {
+    // Alas, Z3 considers field names as being part of the type, so we can't
+    // just consider the source expression to be the casted expression.
+    i2 = 0;
+    forall_types(it, struct_type_to.members) {
+      const smt_ast *args[2];
+      smt_sort *this_sort = convert_sort(*it);
+      args[0] = tuple_project(src_ast, this_sort, i2);
+      args[1] = tuple_project(fresh, this_sort, i2);
+      smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      assert_lit(mk_lit(eq));
+      i2++;
+    }
+  } else {
+    // Due to inheritance, these structs don't have the same format. Therefore
+    // we have to look up source fields by matching the field names between
+    // structs, then using their index numbers construct equalities between
+    // fields in the source value and a fresh value.
+    i2 = 0;
+    forall_names(it, struct_type_to.member_names) {
+      // Linear search, yay :(
+      unsigned int i3 = 0;
+      forall_names(it2, struct_type_from.member_names) {
+        if (*it == *it2)
+          break;
+        i3++;
+      }
 
-  constant_struct2tc newstruct(cast.type, membs);
-  return convert_ast(newstruct);
+      assert(i3 != struct_type_from.member_names.size() &&
+             "Superclass field doesn't exist in subclass during conversion "
+             "cast");
+      // Could assert that the types are the same, however Z3 is going to
+      // complain mightily if we get it wrong.
+
+      const smt_ast *args[2];
+      smt_sort *this_sort = convert_sort(struct_type_from.members[i3]);
+      args[0] = tuple_project(src_ast, this_sort, i3);
+      args[1] = tuple_project(fresh, this_sort, i2);
+      smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      assert_lit(mk_lit(eq));
+      i2++;
+    }
+   }
+
+  return fresh;
 }
 
 const smt_ast *
