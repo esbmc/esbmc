@@ -796,10 +796,10 @@ expr_handle_table:
     } else {
       // One operand isn't a pointer; go the slow way, with typecasts.
       type2tc inttype = get_uint_type(config.ansi_c.pointer_width);
-      expr2tc cast1 = (is_pointer_type(side1))
+      expr2tc cast1 = (!is_unsignedbv_type(side1))
         ? typecast2tc(inttype, side1)
         : side1;
-      expr2tc cast2 = (is_pointer_type(side2))
+      expr2tc cast2 = (!is_unsignedbv_type(side2))
         ? typecast2tc(inttype, side2)
         : side2;
       expr2tc new_expr = expr;
