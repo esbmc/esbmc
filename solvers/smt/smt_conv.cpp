@@ -2155,6 +2155,55 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   abort();
 }
 
+const smt_ast *
+smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
+                           const expr2tc &templ_expr)
+{
+  // Special handling for pointer comparisons (both ops are pointers; otherwise
+  // it's obviously broken). First perform a test as to whether or not the
+  // pointer locations are greater or lower; and only involve the ptr offset
+  // if the ptr objs are the same.
+  type2tc int_type = get_uint_type(config.ansi_c.int_width);
+
+  pointer_object2tc ptr_obj1(int_type, side1);
+  pointer_offset2tc ptr_offs1(int_type, side1);
+  pointer_object2tc ptr_obj2(int_type, side2);
+  pointer_offset2tc ptr_offs2(int_type, side2);
+
+  // Don't ask
+  std::vector<type2tc> members;
+  std::vector<irep_idt> names;
+  members.push_back(int_type);
+  members.push_back(int_type);
+  names.push_back(irep_idt("start"));
+  names.push_back(irep_idt("end"));
+  type2tc strct(new struct_type2t(members, names,
+                irep_idt("addr_space_tuple")));
+  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
+
+  symbol2tc addrspacesym(addrspace_type, get_cur_addrspace_ident());
+  index2tc obj1_data(strct, addrspacesym, ptr_obj1);
+  index2tc obj2_data(strct, addrspacesym, ptr_obj2);
+
+  member2tc obj1_start(int_type, obj1_data, irep_idt("start"));
+  member2tc obj2_start(int_type, obj2_data, irep_idt("start"));
+
+  expr2tc start_expr = templ_expr, offs_expr = templ_expr;
+
+  // To ensure we can do this in an operation independant way, we're going to
+  // clone the original comparison expression, and replace its operands with
+  // new values. Works whatever the expr is, so long as it has two operands.
+  *start_expr.get()->get_sub_expr_nc(0) = obj1_start;
+  *start_expr.get()->get_sub_expr_nc(1) = obj2_start;
+  *offs_expr.get()->get_sub_expr_nc(0) = ptr_offs1;
+  *offs_expr.get()->get_sub_expr_nc(1) = ptr_offs2;
+
+  // Those are now boolean type'd relations.
+  equality2tc is_same_obj_expr(ptr_obj1, ptr_obj2);
+
+  if2tc res(offs_expr->type, is_same_obj_expr, offs_expr, start_expr);
+  return convert_ast(res);
+}
 
 const smt_ast *
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)

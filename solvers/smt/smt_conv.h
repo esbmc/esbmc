@@ -239,6 +239,8 @@ public:
   smt_ast *convert_terminal(const expr2tc &expr);
   const smt_ast *convert_ast(const expr2tc &expr);
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  const smt_ast *convert_ptr_cmp(const expr2tc &expr, const expr2tc &expr2,
+                                 const expr2tc &templ_expr);
   const smt_ast *convert_addr_of(const expr2tc &expr);
   const smt_ast *convert_member(const expr2tc &expr, const smt_ast *src);
   const smt_ast *convert_identifier_pointer(const expr2tc &expr,
