@@ -3281,10 +3281,8 @@ smt_convt::convert_typecast(const expr2tc &expr)
 const smt_ast *
 smt_convt::round_real_to_int(const smt_ast *a)
 {
-  // Pain: the SMT real2int semantics just truncates any fraction part.
-  // Which while useful, isn't how C does rounding. Therefore add or
-  // subtract 0.5 as appropriate: any value from 0.5-1.499 becomes the
-  // range 1.0-1.999, so truncates to 1. Invert for negative numbers.
+  // SMT truncates downwards; however C truncates towards zero, which is not
+  // the same. (Technically, it's also platform dependant).
   const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
   const smt_sort *intsort = mk_sort(SMT_SORT_INT);
   const smt_ast *args[3];
@@ -3292,20 +3290,18 @@ smt_convt::round_real_to_int(const smt_ast *a)
   args[1] = mk_smt_real("0");
   const smt_ast *is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
 
-  // Make an add and a sub.
-  const smt_ast *point_five = mk_smt_real("0.5");
-  args[1] = point_five;
-  const smt_ast *add_five = mk_func_app(realsort, SMT_FUNC_ADD, args, 2);
-  const smt_ast *sub_five = mk_func_app(realsort, SMT_FUNC_SUB, args, 2);
+  // The actual conversion
+  const smt_ast *as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, args, 2);
 
-  // Cast them.
-  add_five = mk_func_app(intsort, SMT_FUNC_REAL2INT, &add_five, 1);
-  sub_five = mk_func_app(intsort, SMT_FUNC_REAL2INT, &sub_five, 1);
+  const smt_ast *one = mk_smt_int(BigInt(1), false);
+  args[0] = one;
+  args[1] = as_int;
+  const smt_ast *plus_one = mk_func_app(intsort, SMT_FUNC_ADD, args, 2);
 
   // Switch on whether it's > or < 0.
   args[0] = is_lt_zero;
-  args[1] = add_five;
-  args[2] = sub_five;
+  args[1] = plus_one;
+  args[2] = as_int;
   return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
 }
 
