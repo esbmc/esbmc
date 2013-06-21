@@ -246,6 +246,25 @@ void cpp_typecheckt::typecheck_switch(codet &code)
   if(code.op0().id()=="code")
   {
     typecheck_code(to_code(code.op0()));
+
+    // this needs to be promoted
+    implicit_typecast_arithmetic(code.op0());
+
+    // save & set flags
+
+    bool old_case_is_allowed(case_is_allowed);
+    bool old_break_is_allowed(break_is_allowed);
+    typet old_switch_op_type(switch_op_type);
+
+    switch_op_type=code.op0().op0().op0().type();
+    break_is_allowed=case_is_allowed=true;
+
+    typecheck_code(to_code(code.op1()));
+
+    // restore flags
+    case_is_allowed=old_case_is_allowed;
+    break_is_allowed=old_break_is_allowed;
+    switch_op_type=old_switch_op_type;
   }
   else
     c_typecheck_baset::typecheck_switch(code);
