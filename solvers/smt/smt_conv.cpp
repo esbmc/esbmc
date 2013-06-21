@@ -2058,8 +2058,7 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
   const smt_ast *f = mk_smt_bool(false);
 
   if (int_encoding) {
-    const smt_sort *tmpsort = mk_sort(SMT_SORT_INT, false);
-    args[0] = mk_func_app(tmpsort, SMT_FUNC_REAL2INT, &operand, 1);
+    args[0] = round_real_to_int(operand);
     args[1] = mk_smt_int(BigInt(0), false);
     args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2);
     args[1] = t;
@@ -2924,31 +2923,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
       } else if (int_encoding && is_fixedbv_type(cast.from) &&
                is_signedbv_type(cast.type)) {
-        // Pain: the SMT real2int semantics just truncates any fraction part.
-        // Which while useful, isn't how C does rounding. Therefore add or
-        // subtract 0.5 as appropriate: any value from 0.5-1.499 becomes the
-        // range 1.0-1.999, so truncates to 1. Invert for negative numbers.
-        const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
-        const smt_ast *args[3];
-        args[0] = a;
-        args[1] = mk_smt_real("0");
-        const smt_ast *is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
-
-        // Make an add and a sub.
-        const smt_ast *point_five = mk_smt_real("0.5");
-        args[1] = point_five;
-        const smt_ast *add_five = mk_func_app(realsort, SMT_FUNC_ADD, args, 2);
-        const smt_ast *sub_five = mk_func_app(realsort, SMT_FUNC_SUB, args, 2);
-
-        // Cast them.
-        add_five = mk_func_app(s, SMT_FUNC_REAL2INT, &add_five, 1);
-        sub_five = mk_func_app(s, SMT_FUNC_REAL2INT, &sub_five, 1);
-
-        // Switch on whether it's > or < 0.
-        args[0] = is_lt_zero;
-        args[1] = add_five;
-        args[2] = sub_five;
-        return mk_func_app(s, SMT_FUNC_ITE, args, 3);
+        return round_real_to_int(a);
       } else if (int_encoding && is_unsignedbv_type(cast.from) &&
                  is_signedbv_type(cast.type)) {
         // Unsigned -> Signed. Seeing how integer mode is an approximation,
@@ -2988,7 +2963,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         return mk_func_app(s, SMT_FUNC_INT2REAL, &a, 1);
       } else if (int_encoding &&
                 (is_fixedbv_type(cast.from) && is_signedbv_type(cast.type))) {
-        return mk_func_app(s, SMT_FUNC_REAL2INT, &a, 1);
+        return round_real_to_int(a);
       } else if (int_encoding) {
         return a; // output = output
       } else {
@@ -3297,6 +3272,37 @@ smt_convt::convert_typecast(const expr2tc &expr)
   // XXXjmorse -- what about all other types, eh?
   std::cerr << "Typecast for unexpected type" << std::endl;
   abort();
+}
+
+const smt_ast *
+smt_convt::round_real_to_int(const smt_ast *a)
+{
+  // Pain: the SMT real2int semantics just truncates any fraction part.
+  // Which while useful, isn't how C does rounding. Therefore add or
+  // subtract 0.5 as appropriate: any value from 0.5-1.499 becomes the
+  // range 1.0-1.999, so truncates to 1. Invert for negative numbers.
+  const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
+  const smt_sort *intsort = mk_sort(SMT_SORT_INT);
+  const smt_ast *args[3];
+  args[0] = a;
+  args[1] = mk_smt_real("0");
+  const smt_ast *is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
+
+  // Make an add and a sub.
+  const smt_ast *point_five = mk_smt_real("0.5");
+  args[1] = point_five;
+  const smt_ast *add_five = mk_func_app(realsort, SMT_FUNC_ADD, args, 2);
+  const smt_ast *sub_five = mk_func_app(realsort, SMT_FUNC_SUB, args, 2);
+
+  // Cast them.
+  add_five = mk_func_app(intsort, SMT_FUNC_REAL2INT, &add_five, 1);
+  sub_five = mk_func_app(intsort, SMT_FUNC_REAL2INT, &sub_five, 1);
+
+  // Switch on whether it's > or < 0.
+  args[0] = is_lt_zero;
+  args[1] = add_five;
+  args[2] = sub_five;
+  return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
 }
 
 const smt_convt::expr_op_convert
