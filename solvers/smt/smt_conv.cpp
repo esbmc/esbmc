@@ -1977,6 +1977,10 @@ smt_convt::overflow_arith(const expr2tc &expr)
 smt_ast *
 smt_convt::overflow_cast(const expr2tc &expr)
 {
+  // If in integer mode, this is completely pointless. Return false.
+  if (int_encoding)
+    return mk_smt_bool(false);
+
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int width = ocast.operand->type->get_width();
   unsigned int bits = ocast.bits;
@@ -2043,6 +2047,10 @@ smt_convt::overflow_cast(const expr2tc &expr)
 const smt_ast *
 smt_convt::overflow_neg(const expr2tc &expr)
 {
+  // If in integer mode, this is completely pointless. Return false.
+  if (int_encoding)
+    return mk_smt_bool(false);
+
   // Single failure mode: MIN_INT can't be neg'd
   const overflow_neg2t &neg = to_overflow_neg2t(expr);
   unsigned int width = neg.operand->type->get_width();
