@@ -3358,6 +3358,9 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   // relations though, as that's going to lead to bitblasting. So instead,
   // detect source sign from the top bit, and which side of .5 we're on from the
   // top bit of the fraction part.
+  // But wait! Negative numbers have their fraction /added/ to them, so -11.5
+  // would be stored as -12 and 0.5. That means we have to reverse our logic
+  // for negative numbers.
   const smt_ast *args[3];
   unsigned int frac_width = fromwidth / 2;
 
@@ -3380,8 +3383,8 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   //       ---------------------------------------------------
   //           0                0           |      base
   //           0                1           |     base+1
-  //           1                0           |      base
-  //           1                1           |     base-1
+  //           1                0           |     base+1 (see func comment)
+  //           1                1           |      base
 
   args[0] = true_bit;
   args[1] = topbit;
@@ -3391,20 +3394,19 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
 
   // Generate the outcome values. No concern to signness.
   const smt_ast *baseval = mk_extract(a, fromwidth-1, frac_width, halfwidth);
-  baseval = convert_sign_ext(baseval, tosort, frac_width-1, towidth);
+  baseval = convert_sign_ext(baseval, tosort, frac_width-1, frac_width);
   const smt_ast *one_towidth = mk_smt_bvint(BigInt(1), true, towidth);
   args[0] = baseval;
   args[1] = one_towidth;
   const smt_ast *base_add_one = mk_func_app(tosort, SMT_FUNC_ADD, args, 2);
-  const smt_ast *base_sub_one = mk_func_app(tosort, SMT_FUNC_SUB, args, 2);
 
   // And switch on it.
   args[0] = above_pointfive;
   args[1] = base_add_one;
   args[2] = baseval;
   const smt_ast *is_not_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
-  args[1] = base_sub_one;
-  args[2] = baseval;
+  args[1] = baseval;
+  args[2] = base_add_one;
   const smt_ast *is_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 
   args[0] = is_neg;
