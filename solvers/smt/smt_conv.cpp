@@ -2320,7 +2320,29 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       break;
     case 3:
     case 7:
-      assert(0 && "Pointer arithmetic with two pointer operands");
+      // The C spec says that we're allowed to subtract two pointers to get
+      // the offset of one from the other. However, they absolutely have to
+      // point at the same data object, or it's undefined operation. XXX XXX
+      // FIXME somewhere else we should have an assertion checking that this
+      // is the case.
+      if (expr->expr_id == expr2t::sub_id) {
+        pointer_offset2tc offs1(get_uint_type(config.ansi_c.int_width), side1);
+        pointer_offset2tc offs2(get_uint_type(config.ansi_c.int_width), side2);
+        sub2tc the_ptr_offs(offs1->type, offs1, offs2);
+        const smt_ast *ptr_offs_ast = convert_ast(the_ptr_offs);
+
+        if (ret_is_ptr) {
+          // Update field in tuple.
+          const smt_ast *the_ptr = convert_ast(side1);
+          return tuple_update(the_ptr, 1, ptr_offs_ast);
+        } else {
+          return ptr_offs_ast;
+        }
+      } else {
+        std::cerr << "Pointer arithmetic with two pointer operands"
+                  << std::endl;
+        abort();
+      }
       break;
     case 4:
       // Artithmetic operation that has the result type of ptr.
