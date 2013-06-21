@@ -3326,15 +3326,10 @@ const smt_ast *
 smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
                                 unsigned int towidth)
 {
-  // Perform standard C rounding goo -- as in round_real_to_int, we add a half
-  // to the number then truncate. Try to avoid doing it via additions or
-  // relations though, as that's going to lead to bitblasting. So instead,
-  // detect source sign from the top bit, and which side of .5 we're on from the
-  // top bit of the fraction part.
-  // But wait! Negative numbers have their fraction /added/ to them, so -11.5
-  // would be stored as -12 and 0.5. That means for negative numbers, if the
-  // fraction is up to and including 0.5, we keep the integer part. If it's
-  // above, we round down by adding one.
+  // Perform C rounding: just truncate towards zero. Annoyingly, this isn't
+  // that simple for negative numbers, because they're represented as a negative
+  // integer _plus_ a positive fraction. So we need to round up if there's a
+  // nonzero fraction, and not if there's not.
   const smt_ast *args[3];
   unsigned int frac_width = fromwidth / 2;
 
@@ -3342,60 +3337,47 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
   const smt_sort *halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
   const smt_sort *tosort = mk_sort(SMT_SORT_BV, towidth, false);
-
-  // Constants
-  const smt_ast *true_bit = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   // Determine whether the source is signed from its topmost bit.
-  const smt_ast *topbit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
+  const smt_ast *is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
+  const smt_ast *true_bit = mk_smt_bvint(BigInt(1), false, 1);
 
-  // Fetch bit indicating which side of .5 we are.
-  const smt_ast *top_frac_bit = mk_extract(a, frac_width-1, frac_width-1, bit);
+  // Also collect data for dealing with the magnitude.
+  const smt_ast *magnitude = mk_extract(a, fromwidth-1, frac_width, halfwidth);
+  const smt_ast *intvalue = convert_sign_ext(magnitude, tosort, frac_width,
+                                             frac_width);
 
-  // So, we have a base number, and need to decide whether to round up or down.
-  // For negative numbers, pointfive includes pointfive, wheras for positive
-  // it doesn't.
-  //        is_neg          pointfive       |     result
-  //       ---------------------------------------------------
-  //           0                0           |      base
-  //           0                1           |     base+1
-  //           1                0           |     base+1 (see func comment)
-  //           1                1           |      base
+  // Data for inspecting fraction part
+  const smt_ast *frac_part = mk_extract(a, frac_width-1, 0, bit);
+  const smt_ast *zero = mk_smt_bvint(BigInt(0), false, frac_width);
+  args[0] = frac_part;
+  args[1] = zero;
+  const smt_ast *is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+  // So, we have a base number (the magnitude), and need to decide whether to
+  // round up or down. If it's positive, round down towards zero. If it's neg
+  // and the fraction is zero, leave it, otherwise round towards zero.
+
+  // We may need a value + 1.
+  args[0] = intvalue;
+  args[1] = mk_smt_bvint(BigInt(1), false, towidth);
+  const smt_ast *intvalue_plus_one =
+    mk_func_app(tosort, SMT_FUNC_BVADD, args, 2);
+
+  args[0] = is_zero_frac;
+  args[1] = intvalue;
+  args[2] = intvalue_plus_one;
+  const smt_ast *neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 
   args[0] = true_bit;
-  args[1] = topbit;
+  args[1] = is_neg_bit;
   const smt_ast *is_neg = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
-  args[1] = top_frac_bit;
-  const smt_ast *above_pointfive = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
 
-  const smt_ast *fracbits = mk_extract(a, frac_width-1, 0, bit);
-  uint64_t thebit = 1 << (frac_width -1);
-  const smt_ast *half = mk_smt_bvint(BigInt(thebit), false, frac_width);
-  args[0] = fracbits;
-  args[1] = half;
-  const smt_ast *lte_pointfive = mk_func_app(halfwidth, SMT_FUNC_LTE, args, 2);
-
-  // Generate the outcome values. No concern to signness.
-  const smt_ast *baseval = mk_extract(a, fromwidth-1, frac_width, halfwidth);
-  baseval = convert_sign_ext(baseval, tosort, frac_width-1, frac_width);
-  const smt_ast *one_towidth = mk_smt_bvint(BigInt(1), true, towidth);
-  args[0] = baseval;
-  args[1] = one_towidth;
-  const smt_ast *base_add_one = mk_func_app(tosort, SMT_FUNC_ADD, args, 2);
-
-  // And switch on it.
-  args[0] = above_pointfive;
-  args[1] = base_add_one;
-  args[2] = baseval;
-  const smt_ast *is_not_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
-  args[0] = lte_pointfive;
-  args[2] = base_add_one;
-  args[1] = baseval;
-  const smt_ast *is_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
-
+  // final switch
   args[0] = is_neg;
-  args[1] = is_neg_val;
-  args[2] = is_not_neg_val;
+  args[1] = neg_val;
+  args[2] = intvalue;
   return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 }
 
