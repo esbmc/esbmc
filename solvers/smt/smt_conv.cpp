@@ -3319,8 +3319,9 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   // detect source sign from the top bit, and which side of .5 we're on from the
   // top bit of the fraction part.
   // But wait! Negative numbers have their fraction /added/ to them, so -11.5
-  // would be stored as -12 and 0.5. That means we have to reverse our logic
-  // for negative numbers.
+  // would be stored as -12 and 0.5. That means for negative numbers, if the
+  // fraction is up to and including 0.5, we keep the integer part. If it's
+  // above, we round down by adding one.
   const smt_ast *args[3];
   unsigned int frac_width = fromwidth / 2;
 
@@ -3339,7 +3340,9 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   const smt_ast *top_frac_bit = mk_extract(a, frac_width-1, frac_width-1, bit);
 
   // So, we have a base number, and need to decide whether to round up or down.
-  //        is_neg       above_pointfive    |     result
+  // For negative numbers, pointfive includes pointfive, wheras for positive
+  // it doesn't.
+  //        is_neg          pointfive       |     result
   //       ---------------------------------------------------
   //           0                0           |      base
   //           0                1           |     base+1
@@ -3351,6 +3354,13 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   const smt_ast *is_neg = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
   args[1] = top_frac_bit;
   const smt_ast *above_pointfive = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
+
+  const smt_ast *fracbits = mk_extract(a, frac_width-1, 0, bit);
+  uint64_t thebit = 1 << (frac_width -1);
+  const smt_ast *half = mk_smt_bvint(BigInt(thebit), false, frac_width);
+  args[0] = fracbits;
+  args[1] = half;
+  const smt_ast *lte_pointfive = mk_func_app(halfwidth, SMT_FUNC_LTE, args, 2);
 
   // Generate the outcome values. No concern to signness.
   const smt_ast *baseval = mk_extract(a, fromwidth-1, frac_width, halfwidth);
@@ -3365,8 +3375,9 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   args[1] = base_add_one;
   args[2] = baseval;
   const smt_ast *is_not_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
-  args[1] = baseval;
+  args[0] = lte_pointfive;
   args[2] = base_add_one;
+  args[1] = baseval;
   const smt_ast *is_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 
   args[0] = is_neg;
