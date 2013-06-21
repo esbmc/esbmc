@@ -3282,9 +3282,12 @@ const smt_ast *
 smt_convt::round_real_to_int(const smt_ast *a)
 {
   // SMT truncates downwards; however C truncates towards zero, which is not
-  // the same. (Technically, it's also platform dependant).
+  // the same. (Technically, it's also platform dependant). To get around this,
+  // add one to the result in all circumstances, except where the value was
+  // already an integer.
   const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
   const smt_sort *intsort = mk_sort(SMT_SORT_INT);
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const smt_ast *args[3];
   args[0] = a;
   args[1] = mk_smt_real("0");
@@ -3298,9 +3301,14 @@ smt_convt::round_real_to_int(const smt_ast *a)
   args[1] = as_int;
   const smt_ast *plus_one = mk_func_app(intsort, SMT_FUNC_ADD, args, 2);
 
+  // If it's an integer, just keep it's untruncated value.
+  args[0] = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
+  args[1] = as_int;
+  args[2] = plus_one;
+  args[1] = mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
+
   // Switch on whether it's > or < 0.
   args[0] = is_lt_zero;
-  args[1] = plus_one;
   args[2] = as_int;
   return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
 }
@@ -3535,5 +3543,6 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "extract",
   "int2real",
   "real2int",
-  "pow"
+  "pow",
+  "is_int"
 };

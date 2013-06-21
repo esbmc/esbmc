@@ -704,6 +704,8 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args,
     return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_real2int(ctx, asts[0]->e)), s);
   case SMT_FUNC_INT2REAL:
     return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_int2real(ctx, asts[0]->e)), s);
+  case SMT_FUNC_IS_INT:
+    return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_is_int(ctx, asts[0]->e)), s);
   case SMT_FUNC_POW:
         return new z3_smt_ast(z3::to_expr(ctx, Z3_mk_power(ctx, asts[0]->e,                                                       asts[1]->e)), s);
   case SMT_FUNC_HACKS:
