@@ -3349,6 +3349,70 @@ smt_convt::round_real_to_int(const smt_ast *a)
   return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
 }
 
+const smt_ast *
+smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
+                                unsigned int towidth)
+{
+  // Perform standard C rounding goo -- as in round_real_to_int, we add a half
+  // to the number then truncate. Try to avoid doing it via additions or
+  // relations though, as that's going to lead to bitblasting. So instead,
+  // detect source sign from the top bit, and which side of .5 we're on from the
+  // top bit of the fraction part.
+  const smt_ast *args[3];
+  unsigned int frac_width = fromwidth / 2;
+
+  // Sorts
+  const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
+  const smt_sort *halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
+  const smt_sort *tosort = mk_sort(SMT_SORT_BV, towidth, false);
+
+  // Constants
+  const smt_ast *true_bit = mk_smt_bvint(BigInt(1), false, 1);
+
+  // Determine whether the source is signed from its topmost bit.
+  const smt_ast *topbit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
+
+  // Fetch bit indicating which side of .5 we are.
+  const smt_ast *top_frac_bit = mk_extract(a, frac_width-1, frac_width-1, bit);
+
+  // So, we have a base number, and need to decide whether to round up or down.
+  //        is_neg       above_pointfive    |     result
+  //       ---------------------------------------------------
+  //           0                0           |      base
+  //           0                1           |     base+1
+  //           1                0           |      base
+  //           1                1           |     base-1
+
+  args[0] = true_bit;
+  args[1] = topbit;
+  const smt_ast *is_neg = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
+  args[1] = top_frac_bit;
+  const smt_ast *above_pointfive = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
+
+  // Generate the outcome values. No concern to signness.
+  const smt_ast *baseval = mk_extract(a, fromwidth-1, frac_width, halfwidth);
+  baseval = convert_sign_ext(baseval, tosort, frac_width-1, towidth);
+  const smt_ast *one_towidth = mk_smt_bvint(BigInt(1), true, towidth);
+  args[0] = baseval;
+  args[1] = one_towidth;
+  const smt_ast *base_add_one = mk_func_app(tosort, SMT_FUNC_ADD, args, 2);
+  const smt_ast *base_sub_one = mk_func_app(tosort, SMT_FUNC_SUB, args, 2);
+
+  // And switch on it.
+  args[0] = above_pointfive;
+  args[1] = base_add_one;
+  args[2] = baseval;
+  const smt_ast *is_not_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+  args[1] = base_sub_one;
+  args[2] = baseval;
+  const smt_ast *is_neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+
+  args[0] = is_neg;
+  args[1] = is_neg_val;
+  args[2] = is_not_neg_val;
+  return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int

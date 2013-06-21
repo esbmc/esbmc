@@ -293,6 +293,8 @@ public:
   const smt_ast *convert_typecast_struct(const typecast2t &cast);
   const smt_ast *convert_typecast(const expr2tc &expr);
   const smt_ast *round_real_to_int(const smt_ast *a);
+  const smt_ast *round_fixedbv_to_int(const smt_ast *a, unsigned int width,
+                                      unsigned int towidth);
 
   // Types
 
