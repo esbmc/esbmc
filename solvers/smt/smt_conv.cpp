@@ -2982,7 +2982,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         unsigned int hlen = from_width / 2;
         const smt_sort *hwidth = mk_sort(SMT_SORT_BV, hlen, false);
         const smt_sort *tobvsort = mk_sort(SMT_SORT_BV, to_width, false);
-        const smt_ast *ext = mk_extract(a, hlen-1, 0, hwidth);
+        const smt_ast *ext = mk_extract(a, from_width - 1, hlen, hwidth);
         return convert_zero_ext(ext, tobvsort, to_width - hlen);
       } else if ((is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from))
             || (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from))) {
