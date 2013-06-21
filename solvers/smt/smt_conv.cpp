@@ -322,6 +322,15 @@ smt_convt::limplies(literalt a, literalt b)
 const smt_ast *
 smt_convt::lit_to_ast(const literalt &l)
 {
+  if (l.var_no() == literalt::const_var_no()) {
+    // Then don't turn this into a literal, turn it into a bool.
+    if (l.sign()) {
+      return mk_smt_bool(true);
+    } else {
+      return mk_smt_bool(false);
+    }
+  }
+
   std::stringstream ss;
   ss << "l" << l.var_no();
   std::string name = ss.str();
