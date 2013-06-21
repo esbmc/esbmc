@@ -2850,12 +2850,12 @@ void goto_convertt::convert_switch(
     exprt guard_expr;
     case_guard(argument, case_ops, guard_expr);
 
-	if(options.get_bool_option("atomicity-check"))
-	{
+    if(options.get_bool_option("atomicity-check"))
+    {
       unsigned int globals = get_expr_number_globals(guard_expr);
       if(globals > 0)
-    	break_globals2assignments(guard_expr, tmp_cases,code.location());
-	}
+        break_globals2assignments(guard_expr, tmp_cases,code.location());
+    }
 
     goto_programt::targett x=tmp_cases.add_instruction();
     x->make_goto(it->first);
