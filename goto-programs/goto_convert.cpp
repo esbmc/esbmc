@@ -2509,29 +2509,29 @@ void goto_convertt::convert_while(
   z->make_skip();
 
   if (code.has_operands())
-	  if (code.op0().statement() == "decl-block")
-	  {
-	    if (!code.op0().op0().op0().is_nil() &&
-	        !code.op0().op0().op1().is_nil())
-	    {
-	      exprt *lhs=&code.op0().op0().op0(),
-	          *rhs=&code.op0().op0().op1();
-	      if(rhs->id()=="sideeffect" &&
-	          (rhs->statement()=="cpp_new" ||
-	              rhs->statement()=="cpp_new[]"))
-	      {
-	        remove_sideeffects(*rhs, dest);
-	        Forall_operands(it, *lhs)
-	          remove_sideeffects(*it, dest);
-	        code.op0() = code.op0().op0().op0();
-	        if (!code.op0().type().is_bool())
-	          code.op0().make_typecast(bool_typet());
+    if (code.op0().statement() == "decl-block")
+    {
+      if (!code.op0().op0().op0().is_nil() &&
+          !code.op0().op0().op1().is_nil())
+      {
+        exprt *lhs=&code.op0().op0().op0(),
+            *rhs=&code.op0().op0().op1();
+        if(rhs->id()=="sideeffect" &&
+            (rhs->statement()=="cpp_new" ||
+                rhs->statement()=="cpp_new[]"))
+        {
+          remove_sideeffects(*rhs, dest);
+          Forall_operands(it, *lhs)
+            remove_sideeffects(*it, dest);
+          code.op0() = code.op0().op0().op0();
+          if (!code.op0().type().is_bool())
+            code.op0().make_typecast(bool_typet());
 
-	        do_cpp_new(*lhs, *rhs, dest);
-	        cond = code.op0();
-	      }
-	    }
-	  }
+          do_cpp_new(*lhs, *rhs, dest);
+          cond = code.op0();
+        }
+      }
+    }
 
   goto_programt tmp_branch;
   generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
@@ -2808,6 +2808,25 @@ void goto_convertt::convert_switch(
     err_location(code);
     throw "switch takes at least two operands";
   }
+  //switch declaration for C++x11
+  if (code.op0().statement() == "decl-block")
+    if (code.has_operands())
+      if (!code.op0().op0().op0().is_nil() &&
+          !code.op0().op0().op1().is_nil())
+      {
+        exprt lhs(code.op0().op0().op0());
+        lhs.location()=code.op0().op0().location();
+        exprt rhs(code.op0().op0().op1());
+
+        rhs.type()=code.op0().op0().op1().type();
+
+        code.op0() = code.op0().op0().op0();
+        codet assignment("assign");
+        assignment.copy_to_operands(lhs);
+        assignment.move_to_operands(rhs);
+        assignment.location()=lhs.location();
+        convert(assignment, dest);
+      }
 
   exprt argument=code.op0();
 
@@ -3573,7 +3592,6 @@ void goto_convertt::convert_ifthenelse(
 		assignment.location() = code.op0().find_location();
 		copy(assignment, ASSIGN, dest);
 
-		//tmp_guard=assignment.op0();
 		tmp_guard=symbol_expr(new_symbol);
 	  }
 	  else if (code.op0().statement() == "decl-block")
