@@ -2941,8 +2941,52 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
         lessthan2tc lt(cast.from, zero);
         if2tc ite(cast.type, lt, add, cast.from);
         return convert_ast(ite);
-      } else if (!int_encoding) {
-        // Just return the bit representation. It's fffiiiiiiinnneeee.
+      } else if (!int_encoding && is_fixedbv_type(cast.from) &&
+                 is_signedbv_type(cast.type)) {
+        unsigned int frac_width = from_width / 2;
+        const smt_ast *mag = mk_extract(a, from_width-1, frac_width, s);
+        const smt_ast *frac = mk_extract(a, frac_width-1, 0, s);
+
+        const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+        const smt_sort *hwidth = mk_sort(SMT_SORT_BV, frac_width, true);
+        const smt_ast *zero = mk_smt_bvint(BigInt(0), false, from_width/2);
+        const smt_ast *one = mk_smt_bvint(BigInt(1), false, from_width/2);
+
+        const smt_ast *args[3];
+        args[0] = mag;
+        args[1] = zero;
+        const smt_ast *is_mag_pos =
+          mk_func_app(hwidth, SMT_FUNC_BVSGTE, args, 2);
+
+        args[0] = mk_func_app(boolsort, SMT_FUNC_BVNEG, &frac, 1);
+        args[1] = zero;
+        const smt_ast *negfrac_is_zero =
+          mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+        args[0] = mag;
+        args[1] = one;
+        const smt_ast *mag_plus_one =
+          mk_func_app(hwidth, SMT_FUNC_BVADD, args, 2);
+
+        args[0] = negfrac_is_zero;
+        args[1] = mag;
+        args[2] = mag_plus_one;
+        args[2] = mk_func_app(hwidth, SMT_FUNC_ITE, args, 3);
+        //
+        args[0] = is_mag_pos;
+        args[1] = mag;
+        const smt_ast *res = mk_func_app(hwidth, SMT_FUNC_ITE, args, 3);
+        return convert_sign_ext(res, hwidth, frac_width, to_width - frac_width);
+      } else if (!int_encoding && is_fixedbv_type(cast.from) &&
+                 is_unsignedbv_type(cast.type)) {
+        unsigned int hlen = from_width / 2;
+        const smt_sort *hwidth = mk_sort(SMT_SORT_BV, hlen, false);
+        const smt_sort *tobvsort = mk_sort(SMT_SORT_BV, to_width, false);
+        const smt_ast *ext = mk_extract(a, hlen-1, 0, hwidth);
+        return convert_zero_ext(ext, tobvsort, to_width - hlen);
+      } else if ((is_signedbv_type(cast.type) && is_unsignedbv_type(cast.from))
+            || (is_unsignedbv_type(cast.type) && is_signedbv_type(cast.from))) {
+        // Operands have differing signs (and same width). Just return.
         return convert_ast(cast.from);
       } else {
         std::cerr << "Unrecognized equal-width int typecast format" <<std::endl;
