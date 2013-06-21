@@ -2829,7 +2829,7 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     } else if (from_width > to_integer_bits) {
       const smt_sort *tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
                                     false);
-      args[0] = mk_extract(a, (from_width - 1), to_integer_bits, tmp);
+      args[0] = mk_extract(a, to_integer_bits-1, 0, tmp);
     } else {
       assert(from_width < to_integer_bits);
       const smt_sort *tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
