@@ -427,7 +427,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
     used_sorts |= args[i]->sort->id;
     i++;
-    if (is_signedbv_type(*it))
+    if (is_signedbv_type(*it) || is_fixedbv_type(*it))
       seen_signed_operand = true;
   }
   num_args = i;
