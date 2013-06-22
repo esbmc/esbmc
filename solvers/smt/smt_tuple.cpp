@@ -2,6 +2,55 @@
 
 #include "smt_conv.h"
 
+// So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
+// tuples, but we've been pretending that it does by using Z3 almost
+// exclusively (which does support tuples). So, we have to find some way of
+// supporting:
+//
+//  1) Tuples
+//  2) Arrays of tuples
+//  3) Arrays of tuples containing arrays
+//
+// 1: In all circumstances we're either creating, projecting, or updating,
+//    a set of variables that are logically grouped together as a tuple. We
+//    can generally just handle that by linking up a tuple to the actual
+//    variable that we want. To do this, we create a set of symbols /underneath/
+//    the symbol we're dealing with, corresponding to the field name. So a tuple
+//    with fields a, b, and c, with the symbol name "faces" would create:
+//
+//      c::main::1::faces.a
+//      c::main::1::faces.b
+//      c::main::1::faces.c
+//
+//    As variables with the appropriate type. Project / update redirects
+//    expressions to deal with those symbols. Equality is similar.
+//
+//    It gets more complicated with ite's though, as you can't
+//    nondeterministically switch between symbol prefixes like that. So instead
+//    we create a fresh new symbol, and create an ite for each member of the
+//    tuple, binding it into the new fresh symbol if it's enabling condition
+//    is true.
+//
+//    The basic design feature here is that in all cases where we have something
+//    of tuple type, the AST is actually a deterministic symbol that we hang
+//    additional bits of name off as appropriate.
+//
+//  2: For arrays of tuples, we do almost exactly as above, but all the new
+//     variables that are used are in fact arrays of values. Then when we
+//     perform an array operation, we either select the relevant values out into
+//     a fresh tuple, or decompose a tuple into a series of updates to make.
+//
+//  3: Tuples of arrays of tuples are currently unimplemented. But it's likely
+//     that we'll end up following 2: above, but extending the domain of the
+//     array to contain the outer and inner array index. Ugly but works
+//     (inspiration came from the internet / stackoverflow, reading other
+//     peoples work where they've done this).
+//
+// All these things could probably be made more efficient by rewriting the
+// expressions that are being converted, so that we can for example discard
+// any un-necessary equalities or assertions. However, in the meantime, this
+// slower approach works.
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
