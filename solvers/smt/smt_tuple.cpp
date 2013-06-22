@@ -669,9 +669,23 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
 
   unsigned int i = 0;
   forall_types(it, struct_type.members) {
-    if (is_tuple_ast_type(*it)) {
-      std::cerr << "XXX struct struct array ite unimplemented" << std::endl;
-      abort();
+    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
+      const smt_sort *tmp = convert_sort(*it);
+      std::string resname = res->name +
+                            struct_type.member_names[i].as_string() +
+                            ".";
+      std::string truename= tv->name + struct_type.member_names[i].as_string() +
+                            ".";
+      std::string falsename=fv->name + struct_type.member_names[i].as_string() +
+                            ".";
+      const tuple_smt_ast *resval = new tuple_smt_ast(tmp, resname);
+      const tuple_smt_ast *trueval = new tuple_smt_ast(tmp, truename);
+      const tuple_smt_ast *falseval = new tuple_smt_ast(tmp, falsename);
+
+      if (is_tuple_ast_type(*it))
+        tuple_ite_rec(resval, cond, trueval, falseval);
+      else
+        tuple_array_ite_rec(trueval, falseval, cond, *it, resval);
     } else {
       std::string tname = tv->name + struct_type.member_names[i].as_string();
       std::string fname = fv->name + struct_type.member_names[i].as_string();
