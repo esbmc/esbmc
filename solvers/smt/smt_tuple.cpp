@@ -646,3 +646,86 @@ smt_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
+const smt_ast *
+smt_convt::array_create(const expr2tc &expr)
+{
+  const smt_ast *args[3];
+  const smt_sort *sort = convert_sort(expr->type);
+  std::string new_name = "smt_conv::array_create::";
+  std::stringstream ss;
+  ss << new_name << fresh_map[new_name]++;
+  const smt_ast *newsym = mk_smt_symbol(ss.str(), sort);
+
+  // Check size
+  const array_type2t &arr_type =
+    static_cast<const array_type2t &>(*expr->type.get());
+  if (arr_type.size_is_infinite) {
+    // Guarentee nothing, this is modelling only.
+    return newsym;
+  } else if (!is_constant_int2t(arr_type.array_size)) {
+    std::cerr << "Non-constant sized array of type constant_array_of2t"
+              << std::endl;
+    abort();
+  }
+
+  const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  uint64_t sz = thesize.constant_value.to_ulong();
+
+  if (is_constant_array_of2t(expr)) {
+    const constant_array_of2t &array = to_constant_array_of2t(expr);
+
+    // Repeatedly store things into this.
+    const smt_ast *init = convert_ast(array.initializer);
+    for (unsigned int i = 0; i < sz; i++) {
+      const smt_ast *field = (int_encoding)
+        ? mk_smt_int(BigInt(i), false)
+        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
+      args[0] = newsym;
+      args[1] = field;
+      args[2] = init;
+      newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+    }
+
+    return newsym;
+  } else {
+    assert(is_constant_array2t(expr));
+    const constant_array2t &array = to_constant_array2t(expr);
+
+    // Repeatedly store things into this.
+    for (unsigned int i = 0; i < sz; i++) {
+      const smt_ast *field = (int_encoding)
+        ? mk_smt_int(BigInt(i), false)
+        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
+      args[0] = newsym;
+      args[1] = field;
+      args[2] = convert_ast(array.datatype_members[i]);
+      newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+    }
+
+    return newsym;
+  }
+}
+
+const smt_ast *
+smt_convt::tuple_array_create_despatch(const expr2tc &expr,
+                                       const smt_sort *domain)
+{
+
+  if (is_constant_array_of2t(expr)) {
+    const constant_array_of2t &arr = to_constant_array_of2t(expr);
+    const smt_ast *arg = convert_ast(arr.initializer);
+
+    return tuple_array_create(arr.type, &arg, true, domain);
+  } else {
+    assert(is_constant_array2t(expr));
+    const constant_array2t &arr = to_constant_array2t(expr);
+    const smt_ast *args[arr.datatype_members.size()];
+    unsigned int i = 0;
+    for (std::vector<expr2tc>::const_iterator it = arr.datatype_members.begin();
+         it != arr.datatype_members.end(); it++, i++) {
+      args[i] = convert_ast(*it);
+    }
+
+    return tuple_array_create(arr.type, args, false, domain);
+  }
+}
