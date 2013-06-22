@@ -112,33 +112,21 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const struct_union_data &data = get_type_def(structtype);
 
-  unsigned int i = 0, j;
+  unsigned int i = 0;
   forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it)) {
-      // This is a tuple too; Fetch the definition of it, extract all its
-      // members by using tuple_project, and recurse doing the same thing.
-      // XXX - could we just tuple_equality this?
-      std::string subname = name + data.member_names[i].as_string() + ".";
-      const struct_union_data &nextdata = get_type_def(*it);
-      const smt_ast *nextargs[nextdata.members.size()];
-
-      // Project all members
-      j = 0;
-      forall_types(it2, nextdata.members) {
-        nextargs[j] = tuple_project(inputargs[i], convert_sort(*it2), j);
-        j++;
-      }
-
-      // And recurse.
-      tuple_create_rec(subname, *it, nextargs);
-    } else if (is_tuple_array_ast_type(*it)) {
-      // convert_ast will have already, in fact, created a tuple array.
-      // We just need to bind it into this one.
+    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
+      // This is a complicated field, but when the ast for this tuple / array
+      // was converted, we already created an appropriate tuple_smt_ast, so we
+      // just need to equality it into the tuple with the passed in name.
       std::string subname = name + data.member_names[i].as_string() + ".";
       const tuple_smt_ast *target =
         new tuple_smt_ast(convert_sort(*it), subname);
       const smt_ast *src = inputargs[i];
-      assert_lit(mk_lit(tuple_array_equality(target, src)));
+
+      if (is_tuple_ast_type(*it))
+        assert_lit(mk_lit(tuple_equality(target, src)));
+      else
+        assert_lit(mk_lit(tuple_array_equality(target, src)));
     } else {
       // This is a normal field -- take the value from the inputargs array,
       // compute the members name, and then make an equality.
