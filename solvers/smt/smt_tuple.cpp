@@ -70,6 +70,8 @@ to_tuple_sort(const smt_sort *a)
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
+  // From a vector of expressions, create a tuple representation by creating
+  // a fresh name and assigning members into it.
   std::string name = mk_fresh_name("tuple_create::");
 
   const smt_ast *args[structdef->get_num_sub_exprs()];
@@ -104,25 +106,30 @@ void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                             const smt_ast **inputargs)
 {
+  // Iterate over the members of a struct; if a member is a struct itself,
+  // recurse, otherwise compute the name of the field and assign in the value
+  // of that field.
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const struct_union_data &data = get_type_def(structtype);
 
   unsigned int i = 0, j;
   forall_types(it, data.members) {
     if (is_tuple_ast_type(*it)) {
-      // Do something recursive
+      // This is a tuple too; Fetch the definition of it, extract all its
+      // members by using tuple_project, and recurse doing the same thing.
+      // XXX - could we just tuple_equality this?
       std::string subname = name + data.member_names[i].as_string() + ".";
-      // Generate an array of fields to pump in. First, fetch the type. It has
-      // to be something struct based.
       const struct_union_data &nextdata = get_type_def(*it);
       const smt_ast *nextargs[nextdata.members.size()];
 
+      // Project all members
       j = 0;
       forall_types(it2, nextdata.members) {
         nextargs[j] = tuple_project(inputargs[i], convert_sort(*it2), j);
         j++;
       }
 
+      // And recurse.
       tuple_create_rec(subname, *it, nextargs);
     } else if (is_tuple_array_ast_type(*it)) {
       // convert_ast will have already, in fact, created a tuple array.
@@ -133,6 +140,8 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       const smt_ast *src = inputargs[i];
       assert_lit(mk_lit(tuple_array_equality(target, src)));
     } else {
+      // This is a normal field -- take the value from the inputargs array,
+      // compute the members name, and then make an equality.
       std::string symname = name + data.member_names[i].as_string();
       const smt_sort *sort = convert_sort(*it);
       const smt_ast *args[2];
@@ -148,6 +157,9 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
 smt_ast *
 smt_convt::mk_tuple_symbol(const expr2tc &expr)
 {
+  // Assuming this is a symbol, convert it to being an ast with tuple type.
+  // That's done by creating the prefix for the names of all the contained
+  // variables, and storing it.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + ".";
   const smt_sort *sort = convert_sort(sym.type);
@@ -157,6 +169,7 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
 smt_ast *
 smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
 {
+  // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   const smt_sort *sort = convert_sort(sym.type);
@@ -166,6 +179,11 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
 smt_ast *
 smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 {
+  // Create an AST representing the i'th field of the tuple a. This means we
+  // have to open up the (tuple symbol) a, tack on the field name to the end
+  // of that name, and then return that. It now names the variable that contains
+  // the value of that field. If it's actually another tuple, we instead return
+  // a new tuple_smt_ast containing its name.
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
   const struct_union_data &data =
@@ -178,9 +196,12 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   // Cope with recursive structs.
   const type2tc &restype = data.members[i];
   if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
+    // This is a struct within a struct, so just generate the name prefix of
+    // the internal struct being projected.
     sym_name = sym_name + ".";
     return new tuple_smt_ast(s, sym_name);
   } else {
+    // This is a normal variable, so create a normal symbol of its name.
     return mk_smt_symbol(sym_name, s);
   }
 }
