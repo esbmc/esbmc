@@ -33,7 +33,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
-    init_addr_space_array();
+    smt_post_init();
     return;
   }
 
@@ -131,7 +131,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   solver_version = val.data;
   delete smtlib_output;
 
-  init_addr_space_array();
+  smt_post_init();
 }
 
 smtlib_convt::~smtlib_convt()

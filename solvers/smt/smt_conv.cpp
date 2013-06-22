@@ -121,6 +121,12 @@ smt_convt::~smt_convt(void)
 }
 
 void
+smt_convt::smt_post_init(void)
+{
+  init_addr_space_array();
+}
+
+void
 smt_convt::push_ctx(void)
 {
   addr_space_data.push_back(addr_space_data.back());

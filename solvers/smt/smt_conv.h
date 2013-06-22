@@ -165,6 +165,7 @@ public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
             bool is_cpp, bool tuple_support);
   ~smt_convt();
+  void smt_post_init(void); // smt init stuff that calls into subclass.
 
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
@@ -278,9 +279,6 @@ public:
                            const tuple_smt_ast *res);
   expr2tc tuple_get(const expr2tc &expr);
 
-  // To be called by the subclass when all other construction has occured.
-  // It needs to be able to convert a variety of things, which need to be
-  // available.
   void init_addr_space_array(void);
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
   std::string get_cur_addrspace_ident(void);

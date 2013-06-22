@@ -74,10 +74,9 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
-  smt_convt::init_addr_space_array();
+  smt_post_init();
   z3_convt::init_addr_space_array();
 }
-
 
 z3_convt::~z3_convt()
 {
