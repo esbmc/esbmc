@@ -1062,13 +1062,19 @@ smt_convt::convert_terminal(const expr2tc &expr)
   }
 }
 
-smt_ast *
-smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
+std::string
+smt_convt::mk_fresh_name(const std::string &tag)
 {
   std::string new_name = "smt_conv::" + tag;
   std::stringstream ss;
   ss << new_name << fresh_map[new_name]++;
-  return mk_smt_symbol(ss.str(), s);
+  return ss.str();
+}
+
+smt_ast *
+smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
+{
+  return mk_smt_symbol(mk_fresh_name(tag), s);
 }
 
 const smt_ast *

@@ -235,6 +235,7 @@ public:
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
+  std::string mk_fresh_name(const std::string &tag);
 
   // Internal foo
 

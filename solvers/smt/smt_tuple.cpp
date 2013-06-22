@@ -3,10 +3,7 @@
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
-  std::string name_prefix = "smt_conv::tuple_create::";
-  std::stringstream ss;
-  ss << name_prefix << fresh_map[name_prefix]++ << ".";
-  std::string name = ss.str();
+  std::string name = mk_fresh_name("tuple_create::");
 
   const smt_ast *args[structdef->get_num_sub_exprs()];
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
@@ -20,10 +17,7 @@ smt_convt::tuple_create(const expr2tc &structdef)
 smt_ast *
 smt_convt::tuple_fresh(const smt_sort *s)
 {
-  std::string name_prefix = "smt_conv::tuple_fresh::";
-  std::stringstream ss;
-  ss << name_prefix << fresh_map[name_prefix]++ << ".";
-  std::string name = ss.str();
+  std::string name = mk_fresh_name("tuple_fresh::");
 
   smt_ast *a = mk_smt_symbol(name, s);
   a = a;
@@ -129,10 +123,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   // Create a fresh tuple to store the result in
-  std::string name_prefix = "smt_conv::tuple_update::";
-  std::stringstream ss;
-  ss << name_prefix << fresh_map[name_prefix]++ << ".";
-  std::string name = ss.str();
+  std::string name = mk_fresh_name("tuple_update::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
@@ -161,7 +152,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
       if (is_tuple_ast_type(*it)) {
         std::stringstream ss2;
         ss2 << name << data.member_names[j] << ".";
-        std::string field_name = ss.str();
+        std::string field_name = name;
         const smt_sort *tmp = convert_sort(*it);
         const smt_ast *field1 = tuple_project(ta, tmp, j);
         const smt_ast *field2 = tuple_project(result, tmp, j);
@@ -244,10 +235,7 @@ smt_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
   assert(falseast != NULL && "Non tuple_smt_ast class in smt_convt::tuple_ite");
 
   // Create a fresh tuple to store the result in
-  std::string name_prefix = "smt_conv::tuple_ite::";
-  std::stringstream ss;
-  ss << name_prefix << fresh_map[name_prefix]++ << ".";
-  std::string name = ss.str();
+  std::string name = mk_fresh_name("tuple_ite::");
   const tuple_smt_ast *result = new tuple_smt_ast(sort, name);
 
   tuple_ite_rec(result, cond, trueast, falseast);
@@ -317,10 +305,8 @@ smt_convt::tuple_array_create(const type2tc &array_type,
                               const smt_sort *domain __attribute__((unused)))
 {
   const smt_sort *sort = convert_sort(array_type);
-  std::string new_name = "smt_conv::tuple_array_create::";
-  std::stringstream ss;
-  ss << new_name << fresh_map[new_name]++;
-  const smt_ast *newsym = new tuple_smt_ast(sort, ss.str());
+  std::string name = mk_fresh_name("tuple_array_create::");
+  const smt_ast *newsym = new tuple_smt_ast(sort, name);
 
   // Check size
   const array_type2t &arr_type =
@@ -377,10 +363,8 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_select");
 
-  std::string new_name = "smt_conv::tuple_array_select::";
-  std::stringstream ss;
-  ss << new_name << fresh_map[new_name]++;
-  const tuple_smt_ast *result = new tuple_smt_ast(s, ss.str());
+  std::string name = mk_fresh_name("tuple_array_select::");
+  const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
   tuple_array_select_rec(ta, array_type.subtype, result, field);
@@ -440,10 +424,8 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_update");
 
-  std::string new_name = "smt_conv::tuple_array_select[]";
-  std::stringstream ss;
-  ss << new_name << fresh_map[new_name]++;
-  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, ss.str());
+  std::string name = mk_fresh_name("tuple_array_select[]::");
+  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
   tuple_array_update_rec(ta, tv, index, result, array_type.subtype);
@@ -569,10 +551,8 @@ smt_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
   assert(ts != NULL &&
          "Non tuple_smt_sort class in smt_convt::tuple_array_update");
 
-  std::string new_name = "smt_conv::tuple_array_ite[]";
-  std::stringstream ss;
-  ss << new_name << fresh_map[new_name]++;
-  const tuple_smt_ast *result = new tuple_smt_ast(tv->sort, new_name);
+  std::string name = mk_fresh_name("tuple_array_ite[]::");
+  const tuple_smt_ast *result = new tuple_smt_ast(tv->sort, name);
 
   tuple_array_ite_rec(tv, fv, cond, ts->thetype, result);
   return result;
@@ -649,10 +629,8 @@ smt_convt::array_create(const expr2tc &expr)
 {
   const smt_ast *args[3];
   const smt_sort *sort = convert_sort(expr->type);
-  std::string new_name = "smt_conv::array_create::";
-  std::stringstream ss;
-  ss << new_name << fresh_map[new_name]++;
-  const smt_ast *newsym = mk_smt_symbol(ss.str(), sort);
+  std::string name = mk_fresh_name("array_create::");
+  const smt_ast *newsym = mk_smt_symbol(name, sort);
 
   // Check size
   const array_type2t &arr_type =
