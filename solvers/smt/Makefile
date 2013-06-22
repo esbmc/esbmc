@@ -3,7 +3,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=smt.o
 
-SRCS= smt_conv.cpp smt_tuple.cpp
+SRCS= smt_conv.cpp smt_tuple.cpp smt_overflow.cpp
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
