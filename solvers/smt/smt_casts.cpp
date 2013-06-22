@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include <base_type.h>
 
 #include "smt_conv.h"
