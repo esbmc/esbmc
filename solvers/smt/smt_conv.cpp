@@ -124,8 +124,6 @@ smt_convt::~smt_convt(void)
 void
 smt_convt::smt_post_init(void)
 {
-  init_addr_space_array();
-
   if (int_encoding) {
     machine_int_sort = mk_sort(SMT_SORT_INT, false);
     machine_uint_sort = machine_int_sort;
@@ -133,6 +131,8 @@ smt_convt::smt_post_init(void)
     machine_int_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, true);
     machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
   }
+
+  init_addr_space_array();
 }
 
 void
