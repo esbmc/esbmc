@@ -1243,7 +1243,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       }
   }
 
-  assert(0 && "Fell through convert_pointer_logic");
+  std::cerr << "Fell through convert_pointer_logic" << std::endl;
+  abort();
 }
 
 const smt_ast *
