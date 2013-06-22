@@ -354,6 +354,8 @@ public:
   std::list<pointer_logict> pointer_logic;
   type2tc pointer_struct;
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
+  type2tc machine_int;
+  type2tc machine_uint;
   bool caching;
   bool int_encoding;
   uint64_t no_variables;

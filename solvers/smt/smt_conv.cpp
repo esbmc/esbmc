@@ -101,6 +101,9 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 
   addr_space_data.push_back(std::map<unsigned, unsigned>());
 
+  machine_int = type2tc(new signedbv_type2t(config.ansi_c.int_width));
+  machine_uint = type2tc(new unsignedbv_type2t(config.ansi_c.int_width));
+
   // Pick a modelling array to shoehorn initialization data into. Because
   // we don't yet have complete data for whether pointers are dynamic or not,
   // this is the one modelling array that absolutely _has_ to be initialized
