@@ -525,7 +525,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   const tuple_smt_ast *tv = to_tuple_ast(val);
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
 
-  std::string name = mk_fresh_name("tuple_array_select[]::");
+  std::string name = mk_fresh_name("tuple_array_update[]::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
