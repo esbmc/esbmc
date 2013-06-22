@@ -1,3 +1,5 @@
+#include <sstream>
+
 #include "smt_conv.h"
 
 smt_ast *
