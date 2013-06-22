@@ -209,7 +209,9 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 const smt_ast *
 smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
 {
-  // Turn a project into an equality with an update.
+  // Take the tuple_smt_ast a and update the ith field with the value v. As
+  // ever, we do this by creating a new tuple. The non-ith values are just
+  // assigned into the new tuple, and the ith member is replaced with v.
   const smt_ast *args[2];
   bvt eqs;
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
@@ -217,18 +219,21 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
   // Create a fresh tuple to store the result in
   std::string name = mk_fresh_name("tuple_update::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
-
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
+  // Iterate over all members, deciding what to do with them.
   unsigned int j = 0;
   forall_types(it, data.members) {
     if (j == i) {
+      // This is the updated field -- generate the name of its variable with
+      // tuple project and assign it in.
       const smt_sort *tmp = convert_sort(*it);
       const smt_ast *thefield = tuple_project(result, tmp, j);
       if (is_tuple_ast_type(*it)) {
+        // If it's of tuple type though, we need to generate a tuple equality.
         eqs.push_back(mk_lit(tuple_equality(thefield, v)));
       } else {
         args[0] = thefield;
@@ -236,7 +241,10 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
         eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       }
     } else {
+      // This is not an updated field; extract the member out of the input
+      // tuple (a) and assign it into the fresh tuple.
       if (is_tuple_ast_type(*it)) {
+        // A tuple equality is required for tuples.
         std::stringstream ss2;
         ss2 << name << data.member_names[j] << ".";
         std::string field_name = name;
@@ -255,6 +263,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
     j++;
   }
 
+  // Assert all the equalities we just generated.
   assert_lit(land(eqs));
   return result;
 }
@@ -262,6 +271,9 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
 const smt_ast *
 smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 {
+  // We have two tuple_smt_asts and need to create a boolean ast representing
+  // their equality: iterate over all their members, compute an equality for
+  // each of them, and then combine that into a final ast.
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
@@ -283,6 +295,7 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       literalt l = mk_lit(eq);
       lits.push_back(l);
     } else if (is_tuple_array_ast_type(*it)) {
+      // Also a special case
       const smt_sort *sort = convert_sort(*it);
       const smt_ast *side1 = tuple_project(a, sort, i);
       const smt_ast *side2 = tuple_project(b, sort, i);
@@ -290,6 +303,8 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       literalt l = mk_lit(eq);
       lits.push_back(l);
     } else {
+      // This is a normal piece of data, project it to get a normal smt symbol
+      // and encode an equality between the two values.
       const smt_ast *args[2];
       const smt_sort *sort = convert_sort(*it);
       args[0] = tuple_project(a, sort, i);
@@ -302,6 +317,7 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
     i++;
   }
 
+  // Create an ast representing the fact that all the members are equal.
   literalt l = land(lits);
   return lit_to_ast(l);
 }
@@ -310,7 +326,9 @@ const smt_ast *
 smt_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                      const smt_ast *false_val, const smt_sort *sort)
 {
-  // Encode as an ite of each element.
+  // Prepare to create an ite between our arguments; the heavy lifting is done
+  // by tuple_ite_rec, here we generate a new name for these things to be stored
+  // into, then pass everything down to tuple_ite_rec.
   const tuple_smt_ast *trueast = to_tuple_ast(true_val);
   const tuple_smt_ast *falseast = to_tuple_ast(false_val);
 
@@ -327,6 +345,11 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                          const tuple_smt_ast *true_val,
                          const tuple_smt_ast *false_val)
 {
+  // So - we need to generate an ite between true_val and false_val, that gets
+  // switched on based on cond, and store the output into result. Do this by
+  // projecting each member out of our arguments and computing another ite
+  // over each member. Note that we always make assertions here, because the
+  // ite is always true, we don't return anything.
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const tuple_smt_sort *ts = to_tuple_sort(true_val->sort);
   const struct_union_data &data =
@@ -354,6 +377,8 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
         to_tuple_ast(tuple_array_ite(cond, args[1], args[2], args[1]->sort));
       assert_lit(mk_lit(tuple_array_equality(args[0], args[1])));
     } else {
+      // Normal field: create symbols for the member in each of the arguments,
+      // then create an ite between them, and assert it.
       const smt_ast *args[3], *eqargs[2];
       const smt_sort *sort = convert_sort(*it);
       args[0] = cond;
@@ -374,6 +399,10 @@ smt_convt::tuple_array_create(const type2tc &array_type,
                               bool const_array,
                               const smt_sort *domain __attribute__((unused)))
 {
+  // Create a tuple array from a constant representation. This means that
+  // either we have an array_of or a constant_array. Handle this by creating
+  // a fresh tuple array symbol, then repeatedly updating it with tuples at each
+  // index. Ignore infinite arrays, they're "not for you".
   const smt_sort *sort = convert_sort(array_type);
   std::string name = mk_fresh_name("tuple_array_create::");
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
