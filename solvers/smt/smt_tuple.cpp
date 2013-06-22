@@ -84,9 +84,8 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
     ? *pointer_type_data
     : dynamic_cast<const struct_union_data &>(*structtype.get());
 
-  unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = data.members.begin();
-       it != data.members.end(); it++, i++) {
+  unsigned int i = 0, j;
+  forall_types(it, data.members) {
     if (is_tuple_ast_type(*it)) {
       // Do something recursive
       std::string subname = name + data.member_names[i].as_string() + ".";
@@ -96,9 +95,12 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
         ? *pointer_type_data
         : dynamic_cast<const struct_union_data &>(*(*it).get());
       const smt_ast *nextargs[nextdata.members.size()];
-      for (unsigned int j = 0; j < nextdata.members.size(); j++)
-        nextargs[j] = tuple_project(inputargs[i],
-                                    convert_sort(nextdata.members[j]), j);
+
+      j = 0;
+      forall_types(it2, nextdata.members) {
+        nextargs[j] = tuple_project(inputargs[i], convert_sort(*it2), j);
+        j++;
+      }
 
       tuple_create_rec(subname, *it, nextargs);
     } else if (is_tuple_array_ast_type(*it)) {
@@ -119,6 +121,8 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       literalt l = mk_lit(eq);
       assert_lit(l);
     }
+
+    i++;
   }
 }
 
@@ -187,8 +191,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
   unsigned int j = 0;
-  for (std::vector<type2tc>::const_iterator it = data.members.begin();
-       it != data.members.end(); it++, j++) {
+  forall_types(it, data.members) {
     if (j == i) {
       const smt_sort *tmp = convert_sort(*it);
       const smt_ast *thefield = tuple_project(result, tmp, j);
@@ -215,6 +218,8 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
         eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       }
     }
+
+    j++;
   }
 
   assert_lit(land(eqs));
@@ -241,8 +246,7 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = data.members.begin();
-       it != data.members.end(); it++, i++) {
+  forall_types(it, data.members) {
     if (is_tuple_ast_type(*it)) {
       // Recurse.
       const smt_ast *args[2];
@@ -269,6 +273,8 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       literalt l = mk_lit(eq);
       lits.push_back(l);
     }
+
+    i++;
   }
 
   literalt l = land(lits);
@@ -308,8 +314,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = data.members.begin();
-       it != data.members.end(); it++, i++) {
+  forall_types(it, data.members) {
     if (is_tuple_ast_type(*it)) {
       // Recurse.
       const tuple_smt_ast *args[3];
@@ -346,6 +351,8 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
       literalt l = mk_lit(eq);
       assert_lit(l);
     }
+
+    i++;
   }
 }
 
@@ -434,8 +441,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
     : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
-       it != struct_type.members.end(); it++, i++) {
+  forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       const smt_sort *sort = convert_sort(*it);
       const tuple_smt_ast *result_field =
@@ -457,6 +463,8 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       literalt l = mk_lit(res);
       assert_lit(l);
     }
+
+    i++;
   }
 }
 
@@ -495,8 +503,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
     : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
-       it != struct_type.members.end(); it++, i++) {
+  forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       const smt_sort *tmp = convert_sort(*it);
       std::string resname = result->name +
@@ -528,6 +535,8 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       literalt l = mk_lit(res);
       assert_lit(l);
     }
+
+    i++;
   }
 }
 
@@ -561,8 +570,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
     : static_cast<const struct_union_data &>(*subtype.get());
 
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
-       it != struct_type.members.end(); it++, i++) {
+  forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       const smt_sort *tmp = convert_sort(*it);
       std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
@@ -581,6 +589,8 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       args[1] = mk_smt_symbol(name2, arrsort);
       eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
+
+    i++;
   }
 
   return lit_to_ast(land(eqs));
@@ -622,8 +632,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
     : static_cast<const struct_union_data &>(*array_type.subtype.get());
 
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = struct_type.members.begin();
-       it != struct_type.members.end(); it++, i++) {
+  forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       std::cerr << "XXX struct struct array ite unimplemented" << std::endl;
       abort();
@@ -644,6 +653,8 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
       literalt l = mk_lit(args[0]);
       assert_lit(l);
     }
+
+    i++;
   }
 }
 
@@ -664,12 +675,12 @@ smt_convt::tuple_get(const expr2tc &expr)
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
-  for (std::vector<type2tc>::const_iterator it = strct.members.begin();
-       it != strct.members.end(); it++, i++) {
+  forall_types(it, strct.members) {
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
     symbol2tc sym(*it, ss.str());
     outstruct.get()->datatype_members.push_back(get(sym));
+    i++;
   }
 
   return outstruct;
@@ -748,9 +759,9 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr,
     const constant_array2t &arr = to_constant_array2t(expr);
     const smt_ast *args[arr.datatype_members.size()];
     unsigned int i = 0;
-    for (std::vector<expr2tc>::const_iterator it = arr.datatype_members.begin();
-         it != arr.datatype_members.end(); it++, i++) {
+    forall_exprs(it, arr.datatype_members) {
       args[i] = convert_ast(*it);
+      i++;
     }
 
     return tuple_array_create(arr.type, args, false, domain);
