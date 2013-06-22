@@ -274,21 +274,18 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
   forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it)) {
+    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
       // Recurse.
       const smt_sort *sort = convert_sort(*it);
       const smt_ast *side1 = tuple_project(a, sort, i);
       const smt_ast *side2 = tuple_project(b, sort, i);
-      const smt_ast *eq = tuple_equality(side1, side2);
-      literalt l = mk_lit(eq);
-      lits.push_back(l);
-    } else if (is_tuple_array_ast_type(*it)) {
-      // Also a special case
-      const smt_sort *sort = convert_sort(*it);
-      const smt_ast *side1 = tuple_project(a, sort, i);
-      const smt_ast *side2 = tuple_project(b, sort, i);
-      const smt_ast *eq = tuple_array_equality(side1, side2);
-      literalt l = mk_lit(eq);
+
+      literalt l;
+      if (is_tuple_ast_type(*it))
+        l = mk_lit(tuple_equality(side1, side2));
+      else
+        l = mk_lit(tuple_array_equality(side1, side2));
+
       lits.push_back(l);
     } else {
       // This is a normal piece of data, project it to get a normal smt symbol
@@ -346,24 +343,20 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
   forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it)) {
+    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
       // Recurse.
       const tuple_smt_ast *args[3];
       const smt_sort *sort = convert_sort(*it);
       args[0] = to_tuple_ast(tuple_project(result, sort, i));
       args[1] = to_tuple_ast(tuple_project(true_val, sort, i));
       args[2] = to_tuple_ast(tuple_project(false_val, sort, i));
-      tuple_ite_rec(args[0], cond, args[1], args[2]);
-    } else if (is_tuple_array_ast_type(*it)) {
-      // Same deal, but with arrays
-      const tuple_smt_ast *args[3];
-      const smt_sort *sort = convert_sort(*it);
-      args[0] = to_tuple_ast(tuple_project(result, sort, i));
-      args[1] = to_tuple_ast(tuple_project(true_val, sort, i));
-      args[2] = to_tuple_ast(tuple_project(false_val, sort, i));
-      args[1] =
-        to_tuple_ast(tuple_array_ite(cond, args[1], args[2], args[1]->sort));
-      assert_lit(mk_lit(tuple_array_equality(args[0], args[1])));
+
+      if (is_tuple_ast_type(*it)) {
+        tuple_ite_rec(args[0], cond, args[1], args[2]);
+      } else {
+        const tuple_smt_sort *tsort = to_tuple_sort(args[1]->sort);
+        tuple_array_ite_rec(args[1], args[2], cond, tsort->thetype, args[0]);
+      }
     } else {
       // Normal field: create symbols for the member in each of the arguments,
       // then create an ite between them, and assert it.
