@@ -379,8 +379,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
 
   // Check size
-  const array_type2t &arr_type =
-    static_cast<const array_type2t &>(*array_type.get());
+  const array_type2t &arr_type = to_array_type(array_type);
   if (arr_type.size_is_infinite) {
     // Guarentee nothing, this is modelling only.
     return newsym;
