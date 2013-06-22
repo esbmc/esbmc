@@ -739,7 +739,7 @@ expr2tc string_abstractiont::build(
   if (what==LENGTH || what==SIZE)
   {
     // adjust for offset
-    pointer_offset2tc ptr_offs(uint_type2(), pointer);
+    pointer_offset2tc ptr_offs(pointer_type2(), pointer);
     result = sub(result, ptr_offs);
   }
 

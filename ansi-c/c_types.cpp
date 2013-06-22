@@ -311,3 +311,13 @@ typet signed_size_type()
 {
   return signedbv_typet(config.ansi_c.pointer_width);
 }
+
+typet pointer_type()
+{
+  return unsignedbv_typet(config.ansi_c.pointer_width);
+}
+
+type2tc pointer_type2()
+{
+  return type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
+}

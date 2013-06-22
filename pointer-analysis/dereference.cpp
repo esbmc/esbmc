@@ -318,7 +318,7 @@ void dereferencet::build_reference_to(
       {
         {
           // check lower bound
-          pointer_offset2tc obj_offset(index_type2(), deref_expr);
+          pointer_offset2tc obj_offset(pointer_type2(), deref_expr);
           lessthan2tc lt(obj_offset, zero_int);
 
           guardt tmp_guard(guard);
@@ -334,7 +334,7 @@ void dereferencet::build_reference_to(
           //nec: ex37.c
           dynamic_size2tc size_expr(deref_expr);
 
-          expr2tc obj_offs = pointer_offset2tc(index_type2(), deref_expr);
+          expr2tc obj_offs = pointer_offset2tc(pointer_type2(), deref_expr);
           obj_offs = typecast2tc(int_type2(), obj_offs);
           lessthanequal2tc lte(size_expr, obj_offs);
 
@@ -370,11 +370,11 @@ void dereferencet::build_reference_to(
       offset = o.offset;
     else
     {
-      pointer_offset2tc ptr_offs(index_type2(), deref_expr);
-      pointer_offset2tc base(index_type2(), obj_ptr);
+      pointer_offset2tc ptr_offs(pointer_type2(), deref_expr);
+      pointer_offset2tc base(pointer_type2(), obj_ptr);
 
       // need to subtract base address
-      offset = sub2tc(index_type2(), ptr_offs, base);
+      offset = sub2tc(pointer_type2(), ptr_offs, base);
     }
 
     // See whether or not we need to munge the object into the desired type;

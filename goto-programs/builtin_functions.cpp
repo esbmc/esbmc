@@ -302,12 +302,12 @@ void goto_convertt::do_malloc(
   exprt neg_deallocated_expr=gen_not(deallocated_expr);
 #endif
 
-  exprt pointer_offset_expr("pointer_offset", int_type());
+  exprt pointer_offset_expr("pointer_offset", pointer_type());
   pointer_offset_expr.location()=location;
   pointer_offset_expr.copy_to_operands(lhs_pointer);
 
   equality_exprt offset_is_zero_expr(
-    pointer_offset_expr, gen_zero(int_type()));
+    pointer_offset_expr, gen_zero(pointer_type()));
 
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
@@ -418,11 +418,11 @@ void goto_convertt::do_cpp_new(
   exprt neg_deallocated_expr=gen_not(deallocated_expr);
 #endif
 
-  exprt pointer_offset_expr("pointer_offset", int_type());
+  exprt pointer_offset_expr("pointer_offset", pointer_type());
   pointer_offset_expr.copy_to_operands(lhs);
 
   equality_exprt offset_is_zero_expr(
-    pointer_offset_expr, gen_zero(int_type()));
+    pointer_offset_expr, gen_zero(pointer_type()));
 
   // first assume that it's available and that it's a dynamic object
   goto_programt::targett t_a=dest.add_instruction(ASSUME);
