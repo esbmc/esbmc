@@ -8,7 +8,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   // it's obviously broken). First perform a test as to whether or not the
   // pointer locations are greater or lower; and only involve the ptr offset
   // if the ptr objs are the same.
-  type2tc int_type = get_uint_type(config.ansi_c.int_width);
+  type2tc int_type = machine_uint;
 
   pointer_object2tc ptr_obj1(int_type, side1);
   pointer_offset2tc ptr_offs1(int_type, side1);
@@ -78,8 +78,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       // FIXME somewhere else we should have an assertion checking that this
       // is the case.
       if (expr->expr_id == expr2t::sub_id) {
-        pointer_offset2tc offs1(get_uint_type(config.ansi_c.int_width), side1);
-        pointer_offset2tc offs2(get_uint_type(config.ansi_c.int_width), side2);
+        pointer_offset2tc offs1(machine_uint, side1);
+        pointer_offset2tc offs2(machine_uint, side2);
         sub2tc the_ptr_offs(offs1->type, offs1, offs2);
         const smt_ast *ptr_offs_ast = convert_ast(the_ptr_offs);
 
@@ -126,7 +126,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       mp_integer type_size = pointer_offset_size(*followed_type);
 
       // Generate nonptr * constant.
-      type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
+      type2tc inttype = machine_uint;
       constant_int2tc constant(get_uint_type(32), type_size);
       expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
 
@@ -197,7 +197,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     literalt l = mk_lit(constraint);
     assert_lit(l);
 
-    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    type2tc ptr_loc_type = machine_uint;
 
     std::stringstream sse1, sse2;
     sse1 << "__ESBMC_ptr_obj_start_" << obj_num;
@@ -268,8 +268,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     type2tc arrtype(new array_type2t(type2tc(new bool_type2t()),
                                      expr2tc((expr2t*)NULL), true));
     symbol2tc allocarr(arrtype, dyn_info_arr_name);
-    constant_int2tc objid(get_uint_type(config.ansi_c.int_width),
-                          BigInt(obj_num));
+    constant_int2tc objid(machine_uint, BigInt(obj_num));
     index2tc idx(get_bool_type(), allocarr, objid);
     equality2tc dyn_eq(idx, false_expr);
     assert_expr(dyn_eq);
@@ -281,7 +280,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 void
 smt_convt::finalize_pointer_chain(unsigned int objnum)
 {
-  type2tc inttype = get_uint_type(config.ansi_c.int_width);
+  type2tc inttype = machine_uint;
   unsigned int num_ptrs = addr_space_data.back().size();
   if (num_ptrs == 0)
     return;
@@ -355,7 +354,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     const smt_ast *a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
-    constant_int2tc offset(get_int_type(config.ansi_c.int_width), BigInt(offs));
+    constant_int2tc offset(machine_int, BigInt(offs));
     const smt_ast *o = convert_ast(offset);
     return tuple_update(a, 1, o);
   } else if (is_symbol2t(obj.ptr_obj)) {

@@ -542,8 +542,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       std::string name2 = b->name + struct_type.member_names[i].as_string();
       const smt_ast *args[2];
       const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *dom_sort = mk_sort(SMT_SORT_BV,
-                                         config.ansi_c.int_width, false);
+      const smt_sort *dom_sort = machine_int_sort;
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
       args[0] = mk_smt_symbol(name1, arrsort);
       args[1] = mk_smt_symbol(name2, arrsort);
@@ -603,8 +602,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
       std::string rname = res->name + struct_type.member_names[i].as_string();
       const smt_ast *args[3];
       const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *dom_sort = mk_sort(SMT_SORT_BV,
-                                         config.ansi_c.int_width, false);
+      const smt_sort *dom_sort = machine_int_sort;
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
       args[0] = cond;
       args[1] = mk_smt_symbol(tname, arrsort);

@@ -259,7 +259,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   // is expensive, but here we are.
 
   // First cast it to an unsignedbv
-  type2tc int_type = get_uint_type(config.ansi_c.int_width);
+  type2tc int_type = machine_uint;
   typecast2tc cast_to_unsigned(int_type, cast.from);
   expr2tc target = cast_to_unsigned;
 
@@ -335,7 +335,7 @@ const smt_ast *
 smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
 
-  type2tc int_type(new unsignedbv_type2t(config.ansi_c.int_width));
+  type2tc int_type = machine_uint;
 
   // The plan: index the object id -> address-space array and pick out the
   // start address, then add it to any additional pointer offset.
