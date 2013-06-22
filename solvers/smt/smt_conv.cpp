@@ -103,6 +103,7 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 
   machine_int = type2tc(new signedbv_type2t(config.ansi_c.int_width));
   machine_uint = type2tc(new unsignedbv_type2t(config.ansi_c.int_width));
+  machine_ptr = type2tc(new unsignedbv_type2t(config.ansi_c.pointer_width));
 
   // Pick a modelling array to shoehorn initialization data into. Because
   // we don't yet have complete data for whether pointers are dynamic or not,
@@ -835,7 +836,7 @@ expr_handle_table:
       a = convert_ptr_cmp(side1, side2, expr);
     } else {
       // One operand isn't a pointer; go the slow way, with typecasts.
-      type2tc inttype = get_uint_type(config.ansi_c.pointer_width);
+      type2tc inttype = machine_ptr;
       expr2tc cast1 = (!is_unsignedbv_type(side1))
         ? typecast2tc(inttype, side1)
         : side1;

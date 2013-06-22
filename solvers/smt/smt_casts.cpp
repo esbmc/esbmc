@@ -11,8 +11,8 @@ smt_convt::convert_typecast_bool(const typecast2t &cast)
     return convert_ast(neq);
   } else if (is_pointer_type(cast.from)) {
     // Convert to two casts.
-    typecast2tc to_int(get_uint_type(config.ansi_c.pointer_width), cast.from);
-    constant_int2tc zero(get_uint_type(config.ansi_c.pointer_width), BigInt(0));
+    typecast2tc to_int(machine_ptr, cast.from);
+    constant_int2tc zero(machine_ptr, BigInt(0));
     equality2tc as_bool(zero, to_int);
     return convert_ast(as_bool);
   } else {

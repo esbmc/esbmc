@@ -396,7 +396,7 @@ smt_convt::init_addr_space_array(void)
 {
   addr_space_sym_num.back() = 1;
 
-  type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+  type2tc ptr_int_type = machine_ptr;
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
   equality2tc obj0_start_eq(obj0_start, zero_uint);
@@ -464,7 +464,7 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
 {
   std::stringstream ss, ss2;
   std::string str, new_str;
-  type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+  type2tc ptr_int_type = machine_ptr;
 
   ss << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back()++;
   symbol2tc oldname(addr_space_arr_type, ss.str());
