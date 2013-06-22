@@ -1614,20 +1614,9 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   pointer_object2tc ptr_obj2(int_type, side2);
   pointer_offset2tc ptr_offs2(int_type, side2);
 
-  // Don't ask
-  std::vector<type2tc> members;
-  std::vector<irep_idt> names;
-  members.push_back(int_type);
-  members.push_back(int_type);
-  names.push_back(irep_idt("start"));
-  names.push_back(irep_idt("end"));
-  type2tc strct(new struct_type2t(members, names,
-                irep_idt("addr_space_tuple")));
-  type2tc addrspace_type(new array_type2t(strct, expr2tc((expr2t*)NULL), true));
-
-  symbol2tc addrspacesym(addrspace_type, get_cur_addrspace_ident());
-  index2tc obj1_data(strct, addrspacesym, ptr_obj1);
-  index2tc obj2_data(strct, addrspacesym, ptr_obj2);
+  symbol2tc addrspacesym(addr_space_arr_type, get_cur_addrspace_ident());
+  index2tc obj1_data(addr_space_type, addrspacesym, ptr_obj1);
+  index2tc obj2_data(addr_space_type, addrspacesym, ptr_obj2);
 
   member2tc obj1_start(int_type, obj1_data, irep_idt("start"));
   member2tc obj2_start(int_type, obj2_data, irep_idt("start"));
