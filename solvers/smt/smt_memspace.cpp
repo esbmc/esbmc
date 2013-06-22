@@ -10,7 +10,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   // it's obviously broken). First perform a test as to whether or not the
   // pointer locations are greater or lower; and only involve the ptr offset
   // if the ptr objs are the same.
-  type2tc int_type = machine_uint;
+  type2tc int_type = machine_ptr;
 
   pointer_object2tc ptr_obj1(int_type, side1);
   pointer_offset2tc ptr_offs1(int_type, side1);
@@ -80,8 +80,8 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       // FIXME somewhere else we should have an assertion checking that this
       // is the case.
       if (expr->expr_id == expr2t::sub_id) {
-        pointer_offset2tc offs1(machine_uint, side1);
-        pointer_offset2tc offs2(machine_uint, side2);
+        pointer_offset2tc offs1(machine_ptr, side1);
+        pointer_offset2tc offs2(machine_ptr, side2);
         sub2tc the_ptr_offs(offs1->type, offs1, offs2);
         const smt_ast *ptr_offs_ast = convert_ast(the_ptr_offs);
 
@@ -130,8 +130,12 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       mp_integer type_size = pointer_offset_size(*followed_type);
 
       // Generate nonptr * constant.
-      type2tc inttype = machine_uint;
-      constant_int2tc constant(get_uint_type(32), type_size);
+      type2tc inttype = machine_ptr;
+      constant_int2tc constant(inttype, type_size);
+      // Why oh why do I need to do this here?
+      if (non_ptr_op->type->get_width() < config.ansi_c.pointer_width)
+        non_ptr_op = typecast2tc(machine_ptr, non_ptr_op);
+
       expr2tc mul = mul2tc(inttype, non_ptr_op, constant);
 
       // Add or sub that value
@@ -193,15 +197,15 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
     std::vector<expr2tc> membs;
-    membs.push_back(gen_uint(obj_num));
-    membs.push_back(zero_uint);
+    membs.push_back(constant_int2tc(machine_ptr, BigInt(obj_num)));
+    membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
     constant_struct2tc ptr_val_s(pointer_struct, membs);
     const smt_ast *ptr_val = tuple_create(ptr_val_s);
     const smt_ast *constraint = tuple_equality(a, ptr_val);
     literalt l = mk_lit(constraint);
     assert_lit(l);
 
-    type2tc ptr_loc_type = machine_uint;
+    type2tc ptr_loc_type = machine_ptr;
 
     std::stringstream sse1, sse2;
     sse1 << "__ESBMC_ptr_obj_start_" << obj_num;
@@ -401,18 +405,21 @@ smt_convt::init_addr_space_array(void)
   addr_space_sym_num.back() = 1;
 
   type2tc ptr_int_type = machine_ptr;
+  constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
+  constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
+  constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
+
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");
-  equality2tc obj0_start_eq(obj0_start, zero_uint);
-  equality2tc obj0_end_eq(obj0_start, zero_uint);
+  equality2tc obj0_start_eq(obj0_start, zero_ptr_int);
+  equality2tc obj0_end_eq(obj0_start, zero_ptr_int);
 
   assert_expr(obj0_start_eq);
   assert_expr(obj0_end_eq);
 
   symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
   symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_end_1");
-  constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
-  equality2tc obj1_start_eq(obj1_start, one_uint);
+  equality2tc obj1_start_eq(obj1_start, one_ptr_int);
   equality2tc obj1_end_eq(obj1_end, obj1_end_const);
 
   assert_expr(obj1_start_eq);
@@ -443,12 +450,12 @@ smt_convt::init_addr_space_array(void)
   symbol2tc invalid_ptr(pointer_struct, "INVALID");
 
   membs.clear();
-  membs.push_back(zero_uint);
-  membs.push_back(zero_uint);
+  membs.push_back(zero_ptr_int);
+  membs.push_back(zero_ptr_int);
   constant_struct2tc null_ptr_tuple(pointer_struct, membs);
   membs.clear();
-  membs.push_back(one_uint);
-  membs.push_back(zero_uint);
+  membs.push_back(one_ptr_int);
+  membs.push_back(zero_ptr_int);
   constant_struct2tc invalid_ptr_tuple(pointer_struct, membs);
 
   equality2tc zero_eq(zero_ptr, null_ptr_tuple);
