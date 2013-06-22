@@ -51,7 +51,7 @@
 // any un-necessary equalities or assertions. However, in the meantime, this
 // slower approach works.
 
-static inline const tuple_smt_ast *
+__attribute__((always_inline)) static inline const tuple_smt_ast *
 to_tuple_ast(const smt_ast *a)
 {
   const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
@@ -59,7 +59,7 @@ to_tuple_ast(const smt_ast *a)
   return ta;
 }
 
-static inline const tuple_smt_sort *
+__attribute__((always_inline)) static inline const tuple_smt_sort *
 to_tuple_sort(const smt_sort *a)
 {
   const tuple_smt_sort *ta = dynamic_cast<const tuple_smt_sort *>(a);
