@@ -138,9 +138,7 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       const smt_ast *args[2];
       args[0] = mk_smt_symbol(symname, sort);
       args[1] = inputargs[i];
-      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      literalt l = mk_lit(eq);
-      assert_lit(l);
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
 
     i++;
@@ -342,9 +340,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
       args[2] = tuple_project(false_val, sort, i);
       eqargs[0] = mk_func_app(sort, SMT_FUNC_ITE, args, 3);
       eqargs[1] = tuple_project(result, sort, i);
-      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, eqargs, 2);
-      literalt l = mk_lit(eq);
-      assert_lit(l);
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, eqargs, 2)));
     }
 
     i++;
@@ -448,9 +444,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       args[1] = field;
       args[0] = mk_func_app(field_sort, SMT_FUNC_SELECT, args, 2);
       args[1] = tuple_project(result, field_sort, i);
-      const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      literalt l = mk_lit(res);
-      assert_lit(l);
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
 
     i++;
@@ -512,9 +506,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       args[2] = mk_smt_symbol(valname, idx_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       args[1] = mk_smt_symbol(resname, arrsort);
-      const smt_ast *res = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      literalt l = mk_lit(res);
-      assert_lit(l);
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
 
     i++;
@@ -614,9 +606,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
       args[2] = mk_smt_symbol(fname, arrsort);
       args[0] = mk_func_app(idx_sort, SMT_FUNC_ITE, args, 3);
       args[1] = mk_smt_symbol(rname, arrsort);
-      args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      literalt l = mk_lit(args[0]);
-      assert_lit(l);
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
 
     i++;
