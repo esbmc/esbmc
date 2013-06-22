@@ -75,14 +75,21 @@ smt_convt::tuple_fresh(const smt_sort *s)
   return new tuple_smt_ast(s, name);
 }
 
+const struct_union_data &
+smt_convt::get_type_def(const type2tc &type)
+{
+
+  return (is_pointer_type(type))
+        ? *pointer_type_data
+        : dynamic_cast<const struct_union_data &>(*type.get());
+}
+
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                             const smt_ast **inputargs)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &data = (is_pointer_type(structtype))
-    ? *pointer_type_data
-    : dynamic_cast<const struct_union_data &>(*structtype.get());
+  const struct_union_data &data = get_type_def(structtype);
 
   unsigned int i = 0, j;
   forall_types(it, data.members) {
@@ -91,9 +98,7 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       std::string subname = name + data.member_names[i].as_string() + ".";
       // Generate an array of fields to pump in. First, fetch the type. It has
       // to be something struct based.
-      const struct_union_data &nextdata = (is_pointer_type(*it))
-        ? *pointer_type_data
-        : dynamic_cast<const struct_union_data &>(*(*it).get());
+      const struct_union_data &nextdata = get_type_def(*it);
       const smt_ast *nextargs[nextdata.members.size()];
 
       j = 0;
@@ -436,9 +441,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
                                   const smt_ast *field)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &struct_type = (is_pointer_type(subtype))
-    ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*subtype.get());
+  const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
   forall_types(it, struct_type.members) {
@@ -498,9 +501,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
                                   const type2tc &subtype)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &struct_type = (is_pointer_type(subtype))
-    ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*subtype.get());
+  const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
   forall_types(it, struct_type.members) {
@@ -565,9 +566,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
 {
   bvt eqs;
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &struct_type = (is_pointer_type(subtype))
-    ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*subtype.get());
+  const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
   forall_types(it, struct_type.members) {
@@ -627,9 +626,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
 
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const array_type2t &array_type = to_array_type(type);
-  const struct_union_data &struct_type = (is_pointer_type(array_type.subtype))
-    ? *pointer_type_data
-    : static_cast<const struct_union_data &>(*array_type.subtype.get());
+  const struct_union_data &struct_type = get_type_def(array_type.subtype);
 
   unsigned int i = 0;
   forall_types(it, struct_type.members) {

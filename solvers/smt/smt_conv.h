@@ -296,6 +296,8 @@ public:
   const smt_ast *round_fixedbv_to_int(const smt_ast *a, unsigned int width,
                                       unsigned int towidth);
 
+  const struct_union_data &get_type_def(const type2tc &type);
+
   // Types
 
   // Types for union map.
