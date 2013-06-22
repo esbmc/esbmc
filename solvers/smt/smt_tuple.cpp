@@ -51,6 +51,22 @@
 // any un-necessary equalities or assertions. However, in the meantime, this
 // slower approach works.
 
+static inline const tuple_smt_ast *
+to_tuple_ast(const smt_ast *a)
+{
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  assert(ta != NULL && "Tuple AST mismatch");
+  return ta;
+}
+
+static inline const tuple_smt_sort *
+to_tuple_sort(const smt_sort *a)
+{
+  const tuple_smt_sort *ta = dynamic_cast<const tuple_smt_sort *>(a);
+  assert(ta != NULL && "Tuple AST mismatch");
+  return ta;
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
@@ -152,11 +168,8 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
 smt_ast *
 smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 {
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_project");
-
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
-  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_project");
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -186,12 +199,8 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
   std::string name = mk_fresh_name("tuple_update::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_update");
-
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
-  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_update");
-
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -235,14 +244,8 @@ const smt_ast *
 smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  const tuple_smt_ast *tb = dynamic_cast<const tuple_smt_ast *>(b);
-  assert(ta != NULL && "Non tuple_smt_ast class in smt_convt::tuple_equality");
-  assert(tb != NULL && "Non tuple_smt_ast class in smt_convt::tuple_equality");
-
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
-  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_equality");
-
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -291,10 +294,8 @@ smt_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
                      const smt_ast *false_val, const smt_sort *sort)
 {
   // Encode as an ite of each element.
-  const tuple_smt_ast *trueast = dynamic_cast<const tuple_smt_ast *>(true_val);
-  const tuple_smt_ast *falseast = dynamic_cast<const tuple_smt_ast*>(false_val);
-  assert(trueast != NULL && "Non tuple_smt_ast class in smt_convt::tuple_ite");
-  assert(falseast != NULL && "Non tuple_smt_ast class in smt_convt::tuple_ite");
+  const tuple_smt_ast *trueast = to_tuple_ast(true_val);
+  const tuple_smt_ast *falseast = to_tuple_ast(false_val);
 
   // Create a fresh tuple to store the result in
   std::string name = mk_fresh_name("tuple_ite::");
@@ -310,10 +311,7 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
                          const tuple_smt_ast *false_val)
 {
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const tuple_smt_sort *ts =
-    dynamic_cast<const tuple_smt_sort *>(true_val->sort);
-  assert(ts != NULL && "Non tuple_smt_sort class in smt_convt::tuple_ite");
-
+  const tuple_smt_sort *ts = to_tuple_sort(true_val->sort);
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -419,12 +417,8 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   // to support selecting array fields. In the future we can arrange something
   // whereby tuple operations are aware of this array situation and don't
   // have to take this inefficient approach.
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  assert(ta != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_select");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
-  assert(ts != NULL &&
-         "Non tuple_smt_sort class in smt_convt::tuple_array_select");
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   std::string name = mk_fresh_name("tuple_array_select::");
   const tuple_smt_ast *result = new tuple_smt_ast(s, name);
@@ -476,15 +470,9 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
                               const smt_ast *val,
                               const smt_sort *fieldsort __attribute__((unused)))
 {
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  assert(ta != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
-  const tuple_smt_ast *tv = dynamic_cast<const tuple_smt_ast *>(val);
-  assert(tv != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(ta->sort);
-  assert(ts != NULL &&
-         "Non tuple_smt_sort class in smt_convt::tuple_array_update");
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_ast *tv = to_tuple_ast(val);
+  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
 
   std::string name = mk_fresh_name("tuple_array_select[]::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
@@ -545,15 +533,9 @@ const smt_ast *
 smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
 {
 
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
-  assert(ta != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_equality");
-  const tuple_smt_ast *tb = dynamic_cast<const tuple_smt_ast *>(b);
-  assert(tb != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_equality");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(a->sort);
-  assert(ts != NULL &&
-         "Non tuple_smt_sort class in smt_convt::tuple_array_equality");
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_ast *tb = to_tuple_ast(b);
+  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
   return tuple_array_equality_rec(ta, tb, array_type.subtype);
@@ -601,15 +583,9 @@ smt_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                            const smt_sort *sort __attribute__((unused)))
 {
 
-  const tuple_smt_ast *tv = dynamic_cast<const tuple_smt_ast *>(trueval);
-  assert(tv != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
-  const tuple_smt_ast *fv = dynamic_cast<const tuple_smt_ast *>(false_val);
-  assert(fv != NULL &&
-         "Non tuple_smt_ast class in smt_convt::tuple_array_update");
-  const tuple_smt_sort *ts = dynamic_cast<const tuple_smt_sort *>(tv->sort);
-  assert(ts != NULL &&
-         "Non tuple_smt_sort class in smt_convt::tuple_array_update");
+  const tuple_smt_ast *tv = to_tuple_ast(trueval);
+  const tuple_smt_ast *fv = to_tuple_ast(false_val);
+  const tuple_smt_sort *ts = to_tuple_sort(tv->sort);
 
   std::string name = mk_fresh_name("tuple_array_ite[]::");
   const tuple_smt_ast *result = new tuple_smt_ast(tv->sort, name);
