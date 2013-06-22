@@ -954,7 +954,8 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::symbol_id:
   case type2t::empty_id:
   default:
-    assert(0 && "Unexpected type ID reached SMT conversion");
+    std::cerr << "Unexpected type ID reached SMT conversion" << std::endl;
+    abort();
   }
 }
 

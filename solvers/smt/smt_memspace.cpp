@@ -99,7 +99,9 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
     case 4:
       // Artithmetic operation that has the result type of ptr.
       // Should have been handled at a higher level
-      assert(0 && "Non-pointer op being interpreted as pointer without cast");
+      std::cerr << "Non-pointer op being interpreted as pointer without cast"
+                << std::endl;
+      abort();
       break;
     case 1:
     case 2:

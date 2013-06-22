@@ -16,7 +16,8 @@ smt_convt::convert_typecast_bool(const typecast2t &cast)
     equality2tc as_bool(zero, to_int);
     return convert_ast(as_bool);
   } else {
-    assert(0 && "Unimplemented bool typecast");
+    std::cerr << "Unimplemented bool typecast" << std::endl;
+    abort();
   }
 }
 
