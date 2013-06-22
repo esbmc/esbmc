@@ -354,6 +354,8 @@ public:
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
   type2tc machine_int;
   type2tc machine_uint;
+  const smt_sort *machine_int_sort;
+  const smt_sort *machine_uint_sort;
   bool caching;
   bool int_encoding;
   uint64_t no_variables;

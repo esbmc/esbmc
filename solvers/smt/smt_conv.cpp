@@ -124,6 +124,14 @@ void
 smt_convt::smt_post_init(void)
 {
   init_addr_space_array();
+
+  if (int_encoding) {
+    machine_int_sort = mk_sort(SMT_SORT_INT, false);
+    machine_uint_sort = machine_int_sort;
+  } else {
+    machine_int_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, true);
+    machine_uint_sort = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+  }
 }
 
 void
@@ -505,11 +513,7 @@ expr_handle_table:
       break;
     }
 
-    const smt_sort *domain;
-    if (int_encoding)
-      domain = mk_sort(SMT_SORT_INT, false);
-    else
-      domain = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+    const smt_sort *domain = machine_int_sort;
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
@@ -918,9 +922,7 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::string_id:
   {
-    smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
-                                          !config.ansi_c.char_is_unsigned);
+    const smt_sort *d = machine_int_sort;
     smt_sort *r = (int_encoding)? mk_sort(SMT_SORT_INT)
                                 : mk_sort(SMT_SORT_BV, 8,
                                           !config.ansi_c.char_is_unsigned);
@@ -936,9 +938,7 @@ smt_convt::convert_sort(const type2tc &type)
     }
 
     // All arrays are indexed by integerse
-    smt_sort *d = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, config.ansi_c.int_width,
-                                          false);
+    const smt_sort *d = machine_int_sort;
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
