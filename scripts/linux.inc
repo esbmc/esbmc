@@ -11,6 +11,7 @@ endif
 
 ifdef USE_SOLVER_METASMT
 CXXFLAGS+= -DMETASMT
+METASMT=1
 # XXX libs situation?
 endif
 
