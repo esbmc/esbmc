@@ -161,6 +161,11 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     sym_lookup.insert(mast, a, name);
   }
   case SMT_SORT_BOOL:
+  {
+    metaSMT::logic::predicate p = metaSMT::logic::new_variable();
+    metasmt_smt_ast *mast = new metasmt_smt_ast(p, s);
+    sym_lookup.insert(mast, p, name);
+  }
   default:
     std::cerr << "Unrecognized smt sort in metasmt mk_symbol" << std::endl;
     abort();
