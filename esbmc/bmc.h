@@ -151,16 +151,6 @@ protected:
   };
 #endif
 
-  class output_solver : public solver_base {
-  public:
-    output_solver(bmct &bmc);
-    ~output_solver();
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    virtual bool write_output() = 0;
-    std::ostream *out_file;
-  };
-
   virtual prop_convt::resultt
     run_decision_procedure(prop_convt &prop_conv,
                            symex_target_equationt &equation);
