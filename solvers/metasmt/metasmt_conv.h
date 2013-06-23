@@ -15,6 +15,18 @@
 typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 // Which defines our solvertype as being a Z3 solver.
 
+class metasmt_smt_sort : public smt_sort {
+public:
+  // Only three kinds of sorts supported: bools, bv's and arrays. Only
+  // additional desireable information is the width.
+  metasmt_smt_sort(smt_sort_kind i, unsigned int _width = 0)
+    : smt_sort(i), width(_width)
+  { }
+  virtual ~metasmt_smt_sort() { }
+  unsigned int width; // bv width
+  unsigned int arrdom_width, arrrange_width; // arr sort widths
+};
+
 // copy+paste directly from the metaSMT documentation:
 struct Lookup {
   typedef std::unordered_map<unsigned, std::string, std::hash<unsigned> >symmap;
@@ -30,18 +42,6 @@ struct Lookup {
   void insert(metaSMT::logic::predicate p, std::string const &name) {
     map_.insert(std::make_pair(boost::proto::value(p).id, name));
   }
-};
-
-class metasmt_smt_sort : public smt_sort {
-public:
-  // Only three kinds of sorts supported: bools, bv's and arrays. Only
-  // additional desireable information is the width.
-  metasmt_smt_sort(smt_sort_kind i, unsigned int _width = 0)
-    : smt_sort(i), width(_width)
-  { }
-  virtual ~metasmt_smt_sort() { }
-  unsigned int width; // bv width
-  unsigned int arrdom_width, arrrange_width; // arr sort widths
 };
 
 class metasmt_convt : public smt_convt
