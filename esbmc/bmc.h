@@ -19,6 +19,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
+#ifdef METASMT
+#include <solvers/metasmt/metasmt_conv.h>
+#endif
 #include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
 #include <goto-symex/symex_target_equation.h>
@@ -137,6 +140,17 @@ protected:
   protected:
     smtlib_convt smtlib_conv;
   };
+
+#ifdef METASMT
+  class metasmt_solver : public solver_base {
+  public:
+    metasmt_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
+                   const optionst &options);
+    virtual bool run_solver(symex_target_equationt &equation);
+  protected:
+    metasmt_convt smtlib_conv;
+  };
+#endif
 
   class output_solver : public solver_base {
   public:

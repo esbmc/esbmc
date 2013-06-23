@@ -15,6 +15,11 @@ INCLUDES+= -I $(Z3)/include
 LIBS+= $(Z3)/$(Z3LIBDIR)/z3.dll
 endif
 
+ifdef USE_SOLVER_METASMT
+CXXFLAGS+= -DMETASMT
+# XXX libs situation?
+endif
+
 MINGWROOTDIR= /usr/$(MINGWID)
 MINGWBINDIR=$(MINGWROOTDIR)/bin
 
