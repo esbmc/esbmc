@@ -130,7 +130,35 @@ metasmt_convt::mk_smt_bool(bool val)
 smt_ast *
 metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  abort();
+  // It seems metaSMT makes us generate our own symbol table. Which is annoying.
+  // More annoying is that it seems to be a one way process, in which some kind
+  // of AST node id is stored, and you can't convert it back to the array, bv
+  // or predicate that it originally was.
+  // So, keep a secondary symbol table.
+
+  // First: is this already in the symbol table?
+  smt_ast *ast = sym_lookup(name);
+  if (ast != NULL)
+    // Yes, return that piece of AST. This means that, as an opposite to what
+    // Z3 does, we get the free variable associated with the name.
+    return ast;
+
+  // Nope; generate an appropriate ast.
+  const metasmt_smt_sort *ms = metasmt_sort_downcast(s);
+  switch (s->id) {
+  case SMT_SORT_BV:
+  {
+    metaSMT::logic::QF_BV::bitvector b =
+      metaSMT::logic::QF_BV::new_bitvector(ms->width);
+    metasmt_smt_ast *mast = new metasmt_smt_ast(b, s);
+    sym_lookup.insert(mast, b, name);
+  }
+  case SMT_SORT_ARRAY:
+  case SMT_SORT_BOOL:
+  default:
+    std::cerr << "Unrecognized smt sort in metasmt mk_symbol" << std::endl;
+    abort();
+  }
 }
 
 smt_sort *
