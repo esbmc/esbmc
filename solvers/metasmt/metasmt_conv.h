@@ -17,9 +17,10 @@ typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 
 // copy+paste directly from the metaSMT documentation:
 struct Lookup {
-  std::map<unsigned, std::string> &map_;
+  typedef std::unordered_map<unsigned, std::string, std::hash<unsigned> >symmap;
+  symmap &map_;
 
-  Lookup(std::map<unsigned, std::string> &map)
+  Lookup(symmap &map)
     : map_(map) {}
 
   std::string operator()(unsigned id) {
@@ -75,7 +76,7 @@ public:
 
   // Members
   solvertype ctx;
-  std::map<unsigned, std::string> symbols;
+  Lookup::symmap symbols;
   Lookup sym_lookup;
 };
 
