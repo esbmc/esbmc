@@ -1,9 +1,10 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
-OBJS= prop/$(OBJDIR)/propobj.o smt/$(OBJDIR)/smt.o smtlib/$(OBJDIR)/smtlib.o
+OBJS= prop/$(OBJDIR)/propobj.o smt/$(OBJDIR)/smt.o smtlib/$(OBJDIR)/smtlib.o \
+      metasmt/$(OBJDIR)/meta_smt_all.o
 
-DIRS= prop smt smtlib
+DIRS= prop smt smtlib metasmt
 
 ###############################################################################
 
