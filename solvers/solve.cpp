@@ -2,7 +2,10 @@
 
 #include <solvers/z3/z3_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
-#include <solvers/metasmt/metasmt_conv.h>
+
+// For the purpose of vastly reducing build times:
+prop_convt *
+create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
 
 prop_convt *
 create_solver_factory(const std::string &solver_name, bool is_cpp,
@@ -25,7 +28,7 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
               << "ESBMC" << std::endl;
     abort();
 #else
-    return new metasmt_convt(int_encoding, is_cpp, ns);
+    return create_new_metasmt_solver(int_encoding, is_cpp, ns);
 #endif
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
