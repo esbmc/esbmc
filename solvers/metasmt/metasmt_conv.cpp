@@ -14,9 +14,7 @@ metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
   : smt_convt(false, int_encoding, ns, is_cpp, false), ctx()
 {
 
-  metaSMT::assertion(this->ctx, metaSMT::logic::True);
-  std::cerr << "lololol" << metaSMT::solve(this->ctx) << std::endl;
-  abort();
+  smt_post_init();
 }
 
 metasmt_convt::~metasmt_convt()
