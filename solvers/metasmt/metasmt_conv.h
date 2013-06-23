@@ -15,6 +15,22 @@
 typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 // Which defines our solvertype as being a Z3 solver.
 
+// copy+paste directly from the metaSMT documentation:
+struct Lookup {
+  std::map<unsigned, std::string> &map_;
+
+  Lookup(std::map<unsigned, std::string> &map)
+    : map_(map) {}
+
+  std::string operator()(unsigned id) {
+    return map_[id];
+  }
+
+  void insert(metaSMT::logic::predicate p, std::string const &name) {
+    map_.insert(std::make_pair(boost::proto::value(p).id, name));
+  }
+};
+
 class metasmt_smt_sort : public smt_sort {
 public:
   // Only three kinds of sorts supported: bools, bv's and arrays. Only
@@ -59,6 +75,8 @@ public:
 
   // Members
   solvertype ctx;
+  std::map<unsigned, std::string> symbols;
+  Lookup sym_lookup;
 };
 
 #endif
