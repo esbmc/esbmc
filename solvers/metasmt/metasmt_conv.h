@@ -17,6 +17,7 @@ typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 
 class metasmt_smt_sort : public smt_sort {
 public:
+#define metasmt_sort_downcast(x) static_cast<const metasmt_smt_sort*>(x)
   // Only three kinds of sorts supported: bools, bv's and arrays. Only
   // additional desireable information is the width.
   metasmt_smt_sort(smt_sort_kind i, unsigned int _width = 0)
@@ -67,9 +68,27 @@ struct Lookup {
     return map_[id];
   }
 
-  void insert(metaSMT::logic::predicate p, std::string const &name) {
-    map_.insert(std::make_pair(boost::proto::value(p).id, name));
+  metasmt_smt_ast *operator()(const std::string &str) {
+    astmap::const_iterator it = astmap_.find(str);
+    if (it == astmap_.end())
+      return NULL;
+
+    return it->second;
   }
+
+  void insert(metasmt_smt_ast *ast, metaSMT::logic::predicate p,
+              std::string const &name) {
+    map_.insert(std::make_pair(boost::proto::value(p).id, name));
+    astmap_.insert(std::make_pair(name, ast));
+  }
+
+  void insert(metasmt_smt_ast *ast, metaSMT::logic::QF_BV::bitvector b,
+              std::string const &name) {
+    map_.insert(std::make_pair(boost::proto::value(b).id, name));
+    astmap_.insert(std::make_pair(name, ast));
+  }
+
+
 };
 
 class metasmt_convt : public smt_convt
