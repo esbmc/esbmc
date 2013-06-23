@@ -3,6 +3,19 @@
 
 #include <solvers/smt/smt_conv.h>
 
+#include <metaSMT/DirectSolver_Context.hpp>
+#include <metaSMT/frontend/Logic.hpp>
+#include <metaSMT/API/Assertion.hpp>
+#include <metaSMT/Instantiate.hpp>
+#include <metaSMT/backend/Z3_Backend.hpp>
+
+
+// Crazyness: the desired solver is selected by some template meta programming.
+// Therefore we have to statically know what solver we want to be using. To do
+// that, we use the following war-def
+typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
+// Which defines our solvertype as being a Z3 solver.
+
 class metasmt_convt : public smt_convt
 {
 public:
@@ -16,7 +29,6 @@ public:
 
   virtual tvt l_get(literalt a);
   virtual const std::string solver_text();
-
 
   virtual void assert_lit(const literalt &l);
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
@@ -33,6 +45,9 @@ public:
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
+
+  // Members
+  solvertype ctx;
 };
 
 #endif

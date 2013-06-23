@@ -2,12 +2,6 @@
 
 #include <solvers/prop/prop_conv.h>
 
-#include <metaSMT/DirectSolver_Context.hpp>
-#include <metaSMT/frontend/Logic.hpp>
-#include <metaSMT/API/Assertion.hpp>
-#include <metaSMT/Instantiate.hpp>
-#include <metaSMT/backend/Z3_Backend.hpp>
-
 // To avoid having to build metaSMT into multiple files,
 prop_convt *
 create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
@@ -15,16 +9,13 @@ create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
   return new metasmt_convt(int_encoding, is_cpp, ns);
 }
 
-typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
-solvertype ctx;
-
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
-  : smt_convt(false, int_encoding, ns, is_cpp, false)
+  : smt_convt(false, int_encoding, ns, is_cpp, false), ctx()
 {
 
-  metaSMT::assertion(ctx, metaSMT::logic::False);
-  std::cerr << "lololol" << metaSMT::solve(ctx) << std::endl;
+  metaSMT::assertion(this->ctx, metaSMT::logic::True);
+  std::cerr << "lololol" << metaSMT::solve(this->ctx) << std::endl;
   abort();
 }
 
