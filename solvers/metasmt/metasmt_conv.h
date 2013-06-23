@@ -6,7 +6,6 @@
 #include <metaSMT/DirectSolver_Context.hpp>
 #include <metaSMT/frontend/Logic.hpp>
 #include <metaSMT/API/Assertion.hpp>
-#include <metaSMT/Instantiate.hpp>
 #include <metaSMT/backend/Z3_Backend.hpp>
 
 // Crazyness: the desired solver is selected by some template meta programming.
