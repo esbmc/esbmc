@@ -55,10 +55,13 @@ public:
 // copy+paste directly from the metaSMT documentation:
 struct Lookup {
   typedef std::unordered_map<unsigned, std::string, std::hash<unsigned> >symmap;
+  typedef std::unordered_map<std::string, metasmt_smt_ast*,
+                             std::hash<std::string> > astmap;
   symmap &map_;
+  astmap &astmap_;
 
-  Lookup(symmap &map)
-    : map_(map) {}
+  Lookup(symmap &map, astmap &a)
+    : map_(map), astmap_(a) {}
 
   std::string operator()(unsigned id) {
     return map_[id];
@@ -102,6 +105,7 @@ public:
   // Members
   solvertype ctx;
   Lookup::symmap symbols;
+  Lookup::astmap astsyms;
   Lookup sym_lookup;
 };
 
