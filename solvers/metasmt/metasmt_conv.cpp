@@ -68,7 +68,32 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 smt_sort *
 metasmt_convt::mk_sort(const smt_sort_kind k, ...)
 {
-  abort();
+  va_list ap;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_BV:
+  {
+    unsigned long u = va_arg(ap, unsigned long);
+    return new metasmt_smt_sort(k, u);
+  }
+  case SMT_SORT_ARRAY:
+  {
+    unsigned long d = va_arg(ap, unsigned long);
+    unsigned long r = va_arg(ap, unsigned long);
+    metasmt_smt_sort *s = new metasmt_smt_sort(k);
+    s->arrdom_width = d;
+    s->arrrange_width = r;
+    return s;
+  }
+  case SMT_SORT_BOOL:
+    return new metasmt_smt_sort(k);
+  case SMT_SORT_INT:
+  case SMT_SORT_REAL:
+  default:
+    std::cerr << "SMT SORT type " << k << " is unsupported by metasmt"
+              << std::endl;
+  }
 }
 
 literalt
