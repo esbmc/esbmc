@@ -1,3 +1,6 @@
+#ifndef _ESBMC_SOLVERS_SOLVE_H_
+#define _ESBMC_SOLVERS_SOLVE_H_
+
 #include <string>
 
 #include <config.h>
@@ -8,3 +11,5 @@
 prop_convt *create_solver_factory(const std::string &solver_name, bool is_cpp,
                                   bool int_encoding, const namespacet &ns,
                                   const optionst &options);
+
+#endif

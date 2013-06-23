@@ -1,3 +1,6 @@
+#ifndef _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
+#define _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
+
 #include <solvers/smt/smt_conv.h>
 
 class metasmt_convt : public smt_convt
@@ -31,3 +34,5 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 };
+
+#endif
