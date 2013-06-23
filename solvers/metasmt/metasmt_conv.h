@@ -29,6 +29,7 @@ public:
 
 class metasmt_smt_ast : public smt_ast {
 public:
+#define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
   metasmt_smt_ast(metaSMT::logic::Array::array &_a, const smt_sort *_s)
     : smt_ast(_s), a(_a)
   {
