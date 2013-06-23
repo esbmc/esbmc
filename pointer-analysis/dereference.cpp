@@ -423,6 +423,13 @@ void dereferencet::build_reference_to(
       {
         // So; we're working on an index, which might be wrapped in a typecast.
         // Update the offset; then encode a bounds check.
+
+        // Type police: that offset will be 64 bits on a 64 bit system, but the
+        // array domain is going to be 32 bits (alas, I can't coerce it to be
+        // anything else right now). So cast it down in that case.
+        if (config.ansi_c.pointer_width != config.ansi_c.int_width)
+          offset = typecast2tc(index_type2(), offset);
+
         if (is_typecast2t(value)) {
           typecast2t &cast = to_typecast2t(value);
           index2t &idx = to_index2t(cast.from);
