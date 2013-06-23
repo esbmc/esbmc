@@ -144,11 +144,10 @@ protected:
 #ifdef METASMT
   class metasmt_solver : public solver_base {
   public:
-    metasmt_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
-                   const optionst &options);
+    metasmt_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
     virtual bool run_solver(symex_target_equationt &equation);
   protected:
-    metasmt_convt smtlib_conv;
+    metasmt_convt metasmt_conv;
   };
 #endif
 

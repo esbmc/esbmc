@@ -562,6 +562,12 @@ bool bmct::run_thread()
 #else
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
+    } else if (options.get_bool_option("metasmt")) {
+#ifdef METASMT
+      solver = new metasmt_solver(*this, is_cpp, ns);
+#else
+      throw "This version of ESBMC was not compiled with metaSMT support";
+#endif
     } else {
       // If we have Z3, default to Z3. Otherwise, user needs to explicitly
       // select an SMT solver
@@ -833,6 +839,24 @@ bmct::output_solver::output_solver(bmct &bmc)
 
   return;
 }
+
+
+#ifdef METASMT
+bmct::metasmt_solver::metasmt_solver(bmct &bmc, bool is_cpp,
+                                     const namespacet &ns)
+  : solver_base(bmc), metasmt_conv(bmc.options.get_bool_option("int-encoding"),
+                              is_cpp, ns)
+{
+  conv = &metasmt_conv;
+}
+
+bool bmct::metasmt_solver::run_solver(symex_target_equationt &equation)
+{
+  bool result = bmct::solver_base::run_solver(equation);
+  return result;
+}
+
+#endif
 
 bmct::output_solver::~output_solver()
 {

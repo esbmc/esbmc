@@ -1,5 +1,7 @@
 #include "metasmt_conv.h"
 
+#include <solvers/prop/prop_conv.h>
+
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
   : smt_convt(false, int_encoding, ns, is_cpp, false)
@@ -16,7 +18,7 @@ metasmt_convt::set_to(const expr2tc &expr, bool value)
   abort();
 }
 
-resultt
+prop_convt::resultt
 metasmt_convt::dec_solve()
 {
   abort();
@@ -103,7 +105,7 @@ metasmt_convt::mk_struct_sort(const type2tc &type)
 }
 
 smt_sort *
-metasmt_convt::mk_union_sort(const type2tc &type);
+metasmt_convt::mk_union_sort(const type2tc &type)
 {
   abort();
 }
