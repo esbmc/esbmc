@@ -152,6 +152,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
       metaSMT::logic::QF_BV::new_bitvector(ms->width);
     metasmt_smt_ast *mast = new metasmt_smt_ast(b, s);
     sym_lookup.insert(mast, b, name);
+    break;
   }
   case SMT_SORT_ARRAY:
   {
@@ -159,12 +160,14 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
       metaSMT::logic::Array::new_array(ms->arrrange_width, ms->arrdom_width);
     metasmt_smt_ast *mast = new metasmt_smt_ast(a, s);
     sym_lookup.insert(mast, a, name);
+    break;
   }
   case SMT_SORT_BOOL:
   {
     metaSMT::logic::predicate p = metaSMT::logic::new_variable();
     metasmt_smt_ast *mast = new metasmt_smt_ast(p, s);
     sym_lookup.insert(mast, p, name);
+    break;
   }
   default:
     std::cerr << "Unrecognized smt sort in metasmt mk_symbol" << std::endl;
