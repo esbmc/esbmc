@@ -665,34 +665,6 @@ void goto_checkt::check_rec(
           options.set_option("int-encoding", false);
 	}
   }
-  else if (expr.id() == "struct" || expr.id() == "union"
-		    || expr.type().id()=="pointer" || expr.id()=="member" ||
-		    (expr.type().is_array() && expr.type().subtype().is_array()))
-  {
-	options.set_option("z3", true); //activate Z3 for solving the VCs
-  }
-  else if (expr.type().id()=="fixedbv")
-  {
-	options.set_option("z3", true);
-
-  if (!options.get_bool_option("z3-ir"))
-    options.set_option("int-encoding", false);
-
-  if (!options.get_bool_option("eager"))
-	  options.set_option("no-assume-guarantee", false);
-  }
-
-  if (options.get_bool_option("qf_aufbv"))
-  {
-    options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
-    options.set_option("int-encoding", false);
-  }
-
-  if (options.get_bool_option("qf_auflira"))
-  {
-    options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
-    options.set_option("int-encoding", true);
-  }
 #if 0
   if (options.get_bool_option("k-induction")) {
     if (options.get_bool_option("z3-ir")) {

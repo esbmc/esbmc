@@ -163,13 +163,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
-  if (!options.get_bool_option("z3"))
-  {
-    // If no solver options given, default to z3 bv encoding
-    options.set_option("z3", true);
-    options.set_option("int-encoding", false);
-  }
-
   if(cmdline.isset("qf_aufbv"))
   {
 	options.set_option("qf_aufbv", true);
