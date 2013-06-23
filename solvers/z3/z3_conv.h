@@ -28,7 +28,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 
-#include "z3++.h"
+#include "z3pp.h"
 
 typedef unsigned int uint;
 
