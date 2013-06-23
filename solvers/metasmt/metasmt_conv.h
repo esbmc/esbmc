@@ -88,7 +88,11 @@ struct Lookup {
     astmap_.insert(std::make_pair(name, ast));
   }
 
-
+  void insert(metasmt_smt_ast *ast, metaSMT::logic::Array::array a,
+              std::string const &name) {
+    map_.insert(std::make_pair(boost::proto::value(a).id, name));
+    astmap_.insert(std::make_pair(name, ast));
+  }
 };
 
 class metasmt_convt : public smt_convt
