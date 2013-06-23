@@ -27,6 +27,30 @@ public:
   unsigned int arrdom_width, arrrange_width; // arr sort widths
 };
 
+class metasmt_smt_ast : public smt_ast {
+public:
+  metasmt_smt_ast(metaSMT::logic::Array::array &_a, const smt_sort *_s)
+    : smt_ast(_s), a(_a)
+  {
+  }
+
+  metasmt_smt_ast(metaSMT::logic::predicate &_p, const smt_sort *_s)
+    : smt_ast(_s), p(_p)
+  {
+  }
+
+  metasmt_smt_ast(metaSMT::logic::QF_BV::bitvector &_b, const smt_sort *_s)
+    : smt_ast(_s), b(_b)
+  {
+  }
+
+  virtual ~metasmt_smt_ast(void) { }
+
+  metaSMT::logic::Array::array a;
+  metaSMT::logic::predicate p;
+  metaSMT::logic::QF_BV::bitvector b;
+};
+
 // copy+paste directly from the metaSMT documentation:
 struct Lookup {
   typedef std::unordered_map<unsigned, std::string, std::hash<unsigned> >symmap;
