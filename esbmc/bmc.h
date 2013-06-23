@@ -15,12 +15,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 #include <options.h>
 
+#include <solvers/solve.h>
 #include <solvers/prop/prop_conv.h>
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
-#endif
-#ifdef METASMT
-#include <solvers/metasmt/metasmt_conv.h>
 #endif
 #include <solvers/smtlib/smtlib_conv.h>
 #include <langapi/language_ui.h>
@@ -101,61 +99,12 @@ protected:
   // use gui format
   language_uit::uit ui;
 
-  class solver_base {
-  public:
-    virtual bool run_solver(symex_target_equationt &equation);
-    virtual ~solver_base() {}
-
-  protected:
-    solver_base(bmct &_bmc) : bmc(_bmc)
-    { }
-
-    prop_convt *conv;
-    bmct &bmc;
-  };
-
-#ifdef Z3
-  class z3_solver : public solver_base {
-  public:
-    z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    z3_convt z3_conv;
-  };
-
-  class z3_runtime_solver : public solver_base {
-  public:
-    z3_runtime_solver(bmct &bmc, bool is_cpp, z3_convt *conv);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    z3_convt *z3_conv;
-  };
-#endif
-
-  class smtlib_solver : public solver_base {
-  public:
-    smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
-                  const optionst &options);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    smtlib_convt smtlib_conv;
-  };
-
-#ifdef METASMT
-  class metasmt_solver : public solver_base {
-  public:
-    metasmt_solver(bmct &bmc, bool is_cpp, const namespacet &ns);
-    virtual bool run_solver(symex_target_equationt &equation);
-  protected:
-    metasmt_convt metasmt_conv;
-  };
-#endif
-
   virtual prop_convt::resultt
     run_decision_procedure(prop_convt &prop_conv,
                            symex_target_equationt &equation);
 
   virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
+  virtual bool run_solver(symex_target_equationt &equation, prop_convt *solver);
   virtual void show_vcc(symex_target_equationt &equation);
   virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
   virtual void show_program(symex_target_equationt &equation);

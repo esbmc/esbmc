@@ -446,7 +446,7 @@ bool bmct::run(void)
 bool bmct::run_thread()
 {
   goto_symext::symex_resultt *result;
-  solver_base *solver;
+  prop_convt *solver;
   symex_target_equationt *equation;
   bool ret;
 
@@ -550,35 +550,33 @@ bool bmct::run_thread()
           (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if( options.get_bool_option("smtlib")) {
-      solver = new smtlib_solver(*this, is_cpp, ns, options);
-    } else if( options.get_bool_option("z3")) {
-#ifdef Z3
-      if (options.get_bool_option("smt-during-symex")) {
-        solver = new z3_runtime_solver(*this, is_cpp, runtime_z3_conv);
-      } else {
-        solver = new z3_solver(*this, is_cpp, ns);
-      }
-#else
-      throw "This version of ESBMC was not compiled with Z3 support";
-#endif
-    } else if (options.get_bool_option("metasmt")) {
-#ifdef METASMT
-      solver = new metasmt_solver(*this, is_cpp, ns);
-#else
-      throw "This version of ESBMC was not compiled with metaSMT support";
-#endif
-    } else {
-      // If we have Z3, default to Z3. Otherwise, user needs to explicitly
-      // select an SMT solver
-#ifdef Z3
-      solver = new z3_solver(*this, is_cpp, ns);
-#else
-      throw "Please specify a SAT/SMT solver to use";
-#endif
+    // Work out what solver to use.
+    int use_z3 = (options.get_bool_option("z3")) ? 1 : 0;
+    int use_smtlib = (options.get_bool_option("smtlib")) ? 1 : 0;
+    int use_metasmt = (options.get_bool_option("metasmt")) ? 1 : 0;
+    int total = use_z3 + use_smtlib + use_metasmt;
+    std::string solvername;
+
+    if (total > 1) {
+      std::cerr << "More than one solver specified; please pick one and specify"
+                   " only that on the command line" << std::endl;
+      abort();
+    } else if (total == 0) {
+      std::cerr << "Defaulting to using solver Z3" << std::endl;
+      solvername = "z3";
+    } else if (use_z3) {
+      solvername = "z3";
+    } else if (use_smtlib) {
+      solvername = "smtlib";
+    } else if (use_metasmt) {
+      solvername = "metasmt";
     }
 
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory(solvername, is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+
+    ret = run_solver(*equation, solver);
     delete solver;
     return ret;
   }
@@ -599,7 +597,7 @@ bool bmct::run_thread()
 int
 bmct::ltl_run_thread(symex_target_equationt *equation)
 {
-  solver_base *solver;
+  prop_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
 #ifndef Z3
@@ -626,8 +624,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_BAD" << std::endl;
@@ -663,8 +663,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_FAILING" << std::endl;
@@ -700,8 +702,10 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this, is_cpp, ns);
-    ret = solver->run_solver(*equation);
+    solver = create_solver_factory("z3", is_cpp,
+                                   options.get_bool_option("int-encoding"),
+                                   ns, options);
+    ret = run_solver(*equation, solver);
     delete solver;
     if (ret) {
       std::cout << "Found trace satisfying LTL_SUCCEEDING" << std::endl;
@@ -725,35 +729,35 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 #endif
 }
 
-bool bmct::solver_base::run_solver(symex_target_equationt &equation)
+bool bmct::run_solver(symex_target_equationt &equation, prop_convt *solver)
 {
-  switch(bmc.run_decision_procedure(*conv, equation))
+  switch(run_decision_procedure(*solver, equation))
   {
     case prop_convt::P_UNSATISFIABLE:
-      if(!bmc.options.get_bool_option("base-case"))
-        bmc.report_success();
+      if(!options.get_bool_option("base-case"))
+        report_success();
       else
-        bmc.status("No bug has been found in the base case");
+        status("No bug has been found in the base case");
       return false;
 
     case prop_convt::P_SATISFIABLE:
-      if (bmc.options.get_bool_option("inductive-step") &&
-    		  bmc.options.get_bool_option("show-counter-example"))
+      if (options.get_bool_option("inductive-step") &&
+    		  options.get_bool_option("show-counter-example"))
       {
-        bmc.error_trace(*conv, equation);
-   	    bmc.report_failure();
+        error_trace(*solver, equation);
+   	    report_failure();
    	    return false;
       }
-      else if(!bmc.options.get_bool_option("inductive-step")
-    		  && !bmc.options.get_bool_option("forward-condition"))
+      else if(!options.get_bool_option("inductive-step")
+    		  && !options.get_bool_option("forward-condition"))
       {
-        bmc.error_trace(*conv, equation);
-   	    bmc.report_failure();
+        error_trace(*solver, equation);
+   	    report_failure();
       }
-      else if (bmc.options.get_bool_option("forward-condition"))
-        bmc.status("The forward condition is unable to prove the property");
+      else if (options.get_bool_option("forward-condition"))
+        status("The forward condition is unable to prove the property");
       else
-        bmc.status("The inductive step is unable to prove the property");
+        status("The inductive step is unable to prove the property");
 
       return true;
 
@@ -764,71 +768,10 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
     return true;
 
   default:
-    bmc.error("decision procedure failed");
+    error("decision procedure failed");
     return true;
   }
 }
-
-#ifdef Z3
-bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
-  : solver_base(bmc), z3_conv(bmc.options.get_bool_option("int-encoding"),
-                              is_cpp, ns)
-{
-  conv = &z3_conv;
-}
-
-bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-
-bmct::z3_runtime_solver::z3_runtime_solver(bmct &bmc,
-                                           bool is_cpp __attribute__((unused)),
-                                           z3_convt *c)
-  : solver_base(bmc), z3_conv(c)
-{
-  conv = c;
-}
-
-bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-
-#endif
-
-bmct::smtlib_solver::smtlib_solver(bmct &bmc, bool is_cpp, const namespacet &ns,
-                                   const optionst &options)
-  : solver_base(bmc), smtlib_conv(bmc.options.get_bool_option("int-encoding"),
-                                  ns, is_cpp, options)
-{
-  conv = &smtlib_conv;
-}
-
-bool bmct::smtlib_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-
-#ifdef METASMT
-bmct::metasmt_solver::metasmt_solver(bmct &bmc, bool is_cpp,
-                                     const namespacet &ns)
-  : solver_base(bmc), metasmt_conv(bmc.options.get_bool_option("int-encoding"),
-                              is_cpp, ns)
-{
-  conv = &metasmt_conv;
-}
-
-bool bmct::metasmt_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-
-#endif
 
 void bmct::write_checkpoint(void)
 {
