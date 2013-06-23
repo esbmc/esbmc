@@ -13,7 +13,8 @@ MAINOBJNAME=meta_smt_all.o
 
 SRCS= metasmt_conv.cpp
 
-clean: -rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
+clean:
+	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
 # Can't strictcompile on account of warnings from metaSMT.
 #STRICTCOMPILE=1
