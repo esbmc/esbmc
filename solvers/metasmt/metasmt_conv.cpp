@@ -3,6 +3,7 @@
 #include <solvers/prop/prop_conv.h>
 
 #include <metaSMT/DirectSolver_Context.hpp>
+#include <metaSMT/frontend/Logic.hpp>
 #include <metaSMT/API/Assertion.hpp>
 #include <metaSMT/Instantiate.hpp>
 #include <metaSMT/backend/Z3_Backend.hpp>
@@ -14,6 +15,10 @@ metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
   : smt_convt(false, int_encoding, ns, is_cpp, false)
 {
+
+  metaSMT::assertion(ctx, metaSMT::logic::False);
+  std::cerr << "lololol" << metaSMT::solve(ctx) << std::endl;
+  abort();
 }
 
 metasmt_convt::~metasmt_convt()
