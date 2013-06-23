@@ -12,7 +12,7 @@ endif
 ifdef USE_SOLVER_METASMT
 CXXFLAGS+= -DMETASMT
 METASMT=1
-# XXX libs situation?
+METASMT_SOLVER_LIBS+= -L $(METASMT_PATH)/src/lib -lmetaSMT
 endif
 
 ifdef USE_SOLVER_BOOLECTOR
@@ -61,7 +61,7 @@ else
 PLATLIBS+= -lgomp -pthread -lrt -lpthread
 endif
 
-SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
+SOLVER_LIBS+=$(Z3_SOLVER_LIBS) $(METASMT_SOLVER_LIBS)
 
 HOSTCC=     gcc
 HOSTCXX=    g++
