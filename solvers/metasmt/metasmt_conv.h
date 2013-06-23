@@ -9,12 +9,23 @@
 #include <metaSMT/Instantiate.hpp>
 #include <metaSMT/backend/Z3_Backend.hpp>
 
-
 // Crazyness: the desired solver is selected by some template meta programming.
 // Therefore we have to statically know what solver we want to be using. To do
 // that, we use the following war-def
 typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 // Which defines our solvertype as being a Z3 solver.
+
+class metasmt_smt_sort : public smt_sort {
+public:
+  // Only three kinds of sorts supported: bools, bv's and arrays. Only
+  // additional desireable information is the width.
+  metasmt_smt_sort(smt_sort_kind i, unsigned int _width = 0)
+    : smt_sort(i), width(_width)
+  { }
+  virtual ~metasmt_smt_sort() { }
+  unsigned int width; // bv width
+  unsigned int arrdom_width, arrrange_width; // arr sort widths
+};
 
 class metasmt_convt : public smt_convt
 {
