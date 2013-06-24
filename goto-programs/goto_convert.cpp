@@ -467,7 +467,7 @@ void goto_convertt::convert_catch(
     exception_list.push_back(irept(block.get("exception_id")));
 
     // Hack for object value passing
-    block.op0().operands().push_back(gen_zero(block.op0().op0().type()));
+    const_cast<exprt&>(block.op0()).operands().push_back(gen_zero(block.op0().op0().type()));
 
     convert(block, tmp);
     catch_push_instruction->targets.push_back(tmp.instructions.begin());
@@ -2019,7 +2019,7 @@ void goto_convertt::assign_state_vector(
   goto_programt &dest)
 {
     //set the type of the state vector
-    state_vector.subtype() = state;
+    const_cast<typet&>(state_vector.subtype()) = state;
 
     std::string identifier;
     identifier = "kindice$"+i2string(state_counter);

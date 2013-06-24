@@ -384,7 +384,8 @@ void get_metada_from_llvm(
   char line[it->pc->location.get_line().as_string().length()];
   strcpy(line,it->pc->location.get_line().c_str());
   if (it->rhs.type().is_struct()) {
-	  const struct_typet struct_type = to_struct_type(it->original_lhs.type());
+	  struct_typet &struct_type =
+            const_cast<struct_typet &>(to_struct_type(it->original_lhs.type()));
 	  struct_typet::componentst components = struct_type.components();
 
 	  std::string ident = it->original_lhs.identifier().as_string();

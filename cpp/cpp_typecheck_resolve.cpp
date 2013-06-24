@@ -1983,14 +1983,14 @@ void cpp_typecheck_resolvet::guess_template_args(
           while(parent_size)
           {
             cpp_scopet &parent=scope.get_parent();
-            s=cpp_typecheck.lookup(parent.identifier);
+            const symbolt &s2 = cpp_typecheck.lookup(parent.identifier);
 
-            template_arguments=
-              static_cast<const exprt&>(s.type.find("#template_arguments"));
+            const exprt &template_arguments2=
+              static_cast<const exprt&>(s2.type.find("#template_arguments"));
 
-            if(template_arguments.is_not_nil())
+            if(template_arguments2.is_not_nil())
             {
-              instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+              instantiated_args=to_cpp_template_args_non_tc(template_arguments2);
               break;
             }
             else

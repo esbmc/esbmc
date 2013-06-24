@@ -52,6 +52,7 @@ public:
   class object_map_dt:public std::map<unsigned, objectt>
   {
   public:
+    object_map_dt() : std::map<unsigned, objectt>() { }
     const static object_map_dt empty;
   };
 
@@ -175,6 +176,12 @@ public:
   void add_var(const entryt &e)
   {
     get_entry(e.identifier, e.suffix);
+  }
+
+  void del_var(const std::string &id, const std::string &suffix)
+  {
+    std::string index = id2string(id) + suffix;
+    values.erase(index);
   }
 
   entryt &get_entry(const idt &id, const std::string &suffix)

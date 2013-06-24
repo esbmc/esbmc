@@ -267,6 +267,56 @@ symex-ssa-trace & Print SSA instructions as they are encoded. For debugging.\\
 \hline
 \end{longtable}
 
+\section{Building}
+
+A number of things are required for ESBMC to build. The first of these is a
+C++ compiler and the associated headers and libraries. This is fundementally
+an operating system dependant operation, but it tends to be well documented
+on the internet of how to get started. Linux machines tend to have both gcc
+and clang available, cygwin on Windows has gcc, the supported environment for
+Macs is clang, I believe.
+
+Once you have a C++ compiler, you require some libraries to build into it.
+Currently the primary solver for ESBMC is Z3, for which Microsoft ship
+precompiled binaries for Windows, Mac and Linux. Other solvers such as Minisat
+and Boolector are available, but you might end up building those yourself.
+
+After downloading some solving libraries, create a `SAT' directory anywhere
+(say, \~/sat) and extract the libraries into it. Within that directory,
+subdirectories should be named after the solver they contain --- the z3 dir
+should contain a copy of Z3, for example. Within each solver directory, the
+usual project layout is expected, i.e. directories named bin, lib, include,
+and so forth.
+
+Once you've installed solvers into these directories, add the environmental
+variable \texttt{SATDIR64} or \texttt{SATDIR32} to your environment, pointing
+at the SAT directory where the solvers are installed. (Chose 32 or 64 according
+to what flavour of library you installed).
+
+Finally, if you're planning on compiling the irep2 stuff right now, you need
+to also install the \texttt{boost} libraries. These are package managed on
+linux, in cygwin on windows, in macports on mac.
+
+You're now ready to build: check out ESBMC over git:
+
+\begin{quote}
+\texttt{git clone git@github.com:jmorse/esbmc.git}
+\end{quote}
+
+For which you'll have to have a github account that can access ESBMC, and an
+ssh key that can access your github account. See the github documentation for
+more details.
+
+Then, navigate into the ESBMC directory, and type make. Compilation
+commands and errors will scroll by; if everything goes to plan, you'll end up
+with a binary called 'esbmc' in the 'esbmc' directory of ESBMC. Rejoice.
+
+If you only installed Z3 into the SAT directory, you'll run into errors
+complaining that the other solvers don't exist. Open the file
+\texttt{config.inc} in the top level directory of the ESBMC project, and
+comment out the lines ``USE\_SOLVER\_\$\{x\}'', where \$\{x\} is the name of
+a solver you haven't installed.
+
 \section{Top level procedures}
 
 Entry to the process starts (more or less) in the \url{doit} method of the

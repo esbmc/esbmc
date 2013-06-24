@@ -41,7 +41,8 @@ void goto_symext::symex_catch()
     if(exception.has_throw_target)
     {
       // the next instruction is always a goto
-      const goto_programt::instructiont &goto_instruction=*cur_state->source.pc;
+      goto_programt::instructiont &goto_instruction =
+        const_cast<goto_programt::instructiont&>(*cur_state->source.pc);
 
       // Update target
       goto_instruction.targets.pop_back();
@@ -104,7 +105,7 @@ bool goto_symext::symex_throw()
     return true;
 
   // Save the throw
-  last_throw = &instruction;
+  last_throw = const_cast<goto_programt::instructiont*>(&instruction);
 
   // Log
   std::cout << "*** Exception thrown of type "
@@ -345,7 +346,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except,
   if(code.operands().size())
   {
     code.op0().set("exception_update",true);
-    ns.lookup(target->code.op0().identifier()).value=code.op0();
+    const_cast<exprt&>(ns.lookup(target->code.op0().identifier()).value)=code.op0();
   }
 
   if(!options.get_bool_option("extended-try-analysis"))
@@ -429,7 +430,7 @@ bool goto_symext::handle_rethrow(irept::subt exceptions_thrown,
       irept::subt::const_iterator e_it=last_throw->code.find("exception_list").get_sub().begin();
 
       // update current state exception list
-      instruction.code.find("exception_list").get_sub().push_back((*e_it));
+      const_cast<irept::subt&>(instruction.code.find("exception_list").get_sub()).push_back((*e_it));
 
       return true;
     }

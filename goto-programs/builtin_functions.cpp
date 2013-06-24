@@ -375,7 +375,7 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(uint_type());
 
     remove_sideeffects(alloc_size, dest);
-    rhs.size_irep() = alloc_size;
+    const_cast<irept&>(rhs.size_irep()) = alloc_size;
   }
   else
     alloc_size=from_integer(1, uint_type());
