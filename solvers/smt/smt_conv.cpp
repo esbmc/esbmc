@@ -1158,8 +1158,14 @@ smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
   const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
 
   const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
-  const smt_ast *f = mk_smt_bvint(BigInt(0xFFFFFFFFFFFFFFFFULL), false,
-                                  topwidth);
+
+  // Calculate the exact value; SMTLIB text parsers don't like taking an
+  // over-full integer literal.
+  uint64_t big = 0xFFFFFFFFFFFFFFFFULL;
+  unsigned int num_topbits = 64 - topwidth;
+  big >>= num_topbits;
+  BigInt big_int(big);
+  const smt_ast *f = mk_smt_bvint(big_int, false, topwidth);
 
   args[0] = t;
   args[1] = z;
