@@ -747,6 +747,9 @@ smt_convt::array_create(const expr2tc &expr)
 
     // Repeatedly store things into this.
     const smt_ast *init = convert_ast(array.initializer);
+    if (is_bool_type(array.initializer) && !int_encoding && no_bools_in_arrays)
+      init = make_bool_bit(init);
+
     for (unsigned int i = 0; i < sz; i++) {
       const smt_ast *field = (int_encoding)
         ? mk_smt_int(BigInt(i), false)
@@ -770,6 +773,11 @@ smt_convt::array_create(const expr2tc &expr)
       args[0] = newsym;
       args[1] = field;
       args[2] = convert_ast(array.datatype_members[i]);
+
+      if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+          no_bools_in_arrays)
+        args[2] = make_bool_bit(args[2]);
+
       newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
     }
 
