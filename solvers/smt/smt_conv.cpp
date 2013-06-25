@@ -1288,32 +1288,29 @@ const smt_ast *
 smt_convt::make_bool_bit(const smt_ast *a)
 {
 
-  if (a->sort->id == SMT_SORT_BOOL) {
-    const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-    const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
-    const smt_ast *args[3];
-    args[0] = a;
-    args[1] = one;
-    args[2] = zero;
-    return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
-  } else {
-    return a;
-  }
+  assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
+         "smt_convt::make_bool_bit");
+  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *args[3];
+  args[0] = a;
+  args[1] = one;
+  args[2] = zero;
+  return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
 }
 
 const smt_ast *
 smt_convt::make_bit_bool(const smt_ast *a)
 {
 
-  if (a->sort->id == SMT_SORT_BV) {
-    const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-    const smt_ast *args[2];
-    args[0] = a;
-    args[1] = one;
-    return mk_func_app(one->sort, SMT_FUNC_EQ, args, 2);
-  } else {
-    return a;
-  }
+  assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
+         "smt_convt::make_bit_bool");
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *args[2];
+  args[0] = a;
+  args[1] = one;
+  return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
 const smt_convt::expr_op_convert
