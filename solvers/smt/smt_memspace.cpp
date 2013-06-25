@@ -411,7 +411,10 @@ smt_convt::init_addr_space_array(void)
 
   symbol2tc obj1_start(ptr_int_type, "__ESBMC_ptr_obj_start_1");
   symbol2tc obj1_end(ptr_int_type, "__ESBMC_ptr_obj_end_1");
-  constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
+  BigInt allones((config.ansi_c.pointer_width == 32)
+                  ? 0xFFFFFFFF
+                  : 0xFFFFFFFFFFFFFFFFULL);
+  constant_int2tc obj1_end_const(ptr_int_type, allones);
   equality2tc obj1_start_eq(obj1_start, one_uint);
   equality2tc obj1_end_eq(obj1_end, obj1_end_const);
 
