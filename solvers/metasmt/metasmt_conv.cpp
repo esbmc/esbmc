@@ -61,9 +61,29 @@ metasmt_convt::assert_lit(const literalt &l)
 
 smt_ast *
 metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                           const smt_ast **args, unsigned int numargs)
+                           const smt_ast **_args, unsigned int numargs)
 {
-  abort();
+  const metasmt_smt_ast *args[4];
+  result_type result;
+  unsigned int i;
+
+  assert(numargs < 4 && "Too many arguments to metasmt_convt::mk_func_app");
+  for (i = 0; i < numargs; i++)
+    args[i] = metasmt_ast_downcast(_args[i]);
+
+  switch (k) {
+  case SMT_FUNC_NOT:
+  {
+    predtags::not_tag tag;
+    result = ctx(tag, args[0]->restype);
+  }
+  default:
+    std::cerr << "Unsupported SMT function " << k << " in metasmt conv"
+              << std::endl;
+    abort();
+  }
+
+  return new metasmt_smt_ast(result, s);
 }
 
 smt_sort *

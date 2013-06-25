@@ -16,6 +16,10 @@ typedef metaSMT::solver::Z3_Backend solvertype;
 
 typedef metaSMT::solver::Z3_Backend::result_type result_type;
 
+namespace predtags = metaSMT::logic::tag;
+namespace bvtags = metaSMT::logic::QF_BV::tag;
+namespace arraytags = metaSMT::logic::Array::tag;
+
 class metasmt_smt_sort : public smt_sort {
 public:
 #define metasmt_sort_downcast(x) static_cast<const metasmt_smt_sort*>(x)
