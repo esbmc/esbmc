@@ -298,6 +298,9 @@ public:
 
   const struct_union_data &get_type_def(const type2tc &type);
 
+  const smt_ast *maybe_make_bool_bit(const smt_ast *a);
+  const smt_ast *maybe_make_bit_bool(const smt_ast *a, const smt_sort *src);
+
   // Types
 
   // Types for union map.

@@ -1285,6 +1285,38 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 }
 
+const smt_ast *
+smt_convt::maybe_make_bool_bit(const smt_ast *a)
+{
+
+  if (a->sort->id == SMT_SORT_BOOL) {
+    const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+    const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 0);
+    const smt_ast *args[3];
+    args[0] = a;
+    args[1] = one;
+    args[2] = zero;
+    return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
+  } else {
+    return a;
+  }
+}
+
+const smt_ast *
+smt_convt::maybe_make_bit_bool(const smt_ast *a, const smt_sort *srcsort)
+{
+
+  if (a->sort->id == SMT_SORT_BV && srcsort->id == SMT_SORT_BOOL) {
+    const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+    const smt_ast *args[2];
+    args[0] = a;
+    args[1] = one;
+    return mk_func_app(one->sort, SMT_FUNC_EQ, args, 2);
+  } else {
+    return a;
+  }
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
