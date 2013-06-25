@@ -30,26 +30,15 @@ public:
 class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
-  metasmt_smt_ast(metaSMT::logic::Array::array &_a, const smt_sort *_s)
-    : smt_ast(_s), a(_a)
-  {
-  }
-
-  metasmt_smt_ast(metaSMT::logic::predicate &_p, const smt_sort *_s)
-    : smt_ast(_s), p(_p)
-  {
-  }
-
-  metasmt_smt_ast(metaSMT::logic::QF_BV::bitvector &_b, const smt_sort *_s)
-    : smt_ast(_s), b(_b)
+  metasmt_smt_ast(metaSMT::solver::Z3_Backend::result_type r,
+                  const smt_sort *_s)
+    : smt_ast(_s), restype(r)
   {
   }
 
   virtual ~metasmt_smt_ast(void) { }
 
-  metaSMT::logic::Array::array a;
-  metaSMT::logic::predicate p;
-  metaSMT::logic::QF_BV::bitvector b;
+  metaSMT::solver::Z3_Backend::result_type restype;
 };
 
 // copy+paste directly from the metaSMT documentation:
