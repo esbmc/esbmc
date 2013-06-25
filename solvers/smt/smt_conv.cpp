@@ -1290,7 +1290,7 @@ smt_convt::make_bool_bit(const smt_ast *a)
 
   if (a->sort->id == SMT_SORT_BOOL) {
     const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-    const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 0);
+    const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
     const smt_ast *args[3];
     args[0] = a;
     args[1] = one;
