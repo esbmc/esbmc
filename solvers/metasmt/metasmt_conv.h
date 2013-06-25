@@ -14,6 +14,8 @@
 typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
 // Which defines our solvertype as being a Z3 solver.
 
+typedef metaSMT::solver::Z3_Backend::result_type result_type;
+
 class metasmt_smt_sort : public smt_sort {
 public:
 #define metasmt_sort_downcast(x) static_cast<const metasmt_smt_sort*>(x)
@@ -30,15 +32,14 @@ public:
 class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
-  metasmt_smt_ast(metaSMT::solver::Z3_Backend::result_type r,
-                  const smt_sort *_s)
+  metasmt_smt_ast(result_type r, const smt_sort *_s)
     : smt_ast(_s), restype(r)
   {
   }
 
   virtual ~metasmt_smt_ast(void) { }
 
-  metaSMT::solver::Z3_Backend::result_type restype;
+  result_type restype;
 };
 
 // copy+paste directly from the metaSMT documentation:
