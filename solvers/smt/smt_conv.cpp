@@ -592,8 +592,8 @@ expr_handle_table:
     const array_type2t &arrtype = to_array_type(index.source_value->type);
     if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-      // XXX sort is wrong
-      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
+      const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
+      a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
       a = make_bit_bool(a);
     } else if (is_tuple_array_ast_type(index.source_value->type)) {
       a = tuple_array_select(args[0], sort, args[1]);
