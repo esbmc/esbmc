@@ -76,16 +76,19 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   {
     predtags::not_tag tag;
     result = ctx(tag, args[0]->restype);
+    break;
   }
   case SMT_FUNC_BVNEG:
   {
     bvtags::bvneg_tag tag;
     result = ctx(tag, args[0]->restype);
+    break;
   }
   case SMT_FUNC_ITE:
   {
     predtags::nand_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
+    break;
   }
   case SMT_FUNC_EQ:
   {
@@ -93,166 +96,202 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     if (args[0]->sort->id == SMT_SORT_BV) {
       bvtags::bvcomp_tag tag;
       result = ctx(tag, args[0]->restype, args[1]->restype);
+    } else if (args[0]->sort->id == SMT_SORT_BOOL) {
+      predtags::equal_tag tag;
+      result = ctx(tag, args[0]->restype, args[1]->restype);
     } else {
+      // Conceptually, array equalities shouldn't happen.
       std::cerr << "SMT equality not implemented in metasmt for sort "
                 << args[0]->sort->id << std::endl;
       abort();
     }
+    break;
   }
   case SMT_FUNC_SELECT:
   {
     arraytags::select_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_STORE:
   {
     arraytags::store_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
+    break;
   }
   case SMT_FUNC_BVAND:
   {
     bvtags::bvand_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVNAND:
   {
     bvtags::bvnand_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVOR:
   {
     bvtags::bvor_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVXOR:
   {
     bvtags::bvxor_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVNOR:
   {
     bvtags::bvnor_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVNXOR:
   {
     bvtags::bvxnor_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSUB:
   {
     bvtags::bvsub_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVADD:
   {
     bvtags::bvadd_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVMUL:
   {
     bvtags::bvmul_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSLTE:
   {
     bvtags::bvsle_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSLT:
   {
     bvtags::bvslt_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSGTE:
   {
     bvtags::bvsge_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSGT:
   {
     bvtags::bvsgt_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVULTE:
   {
     bvtags::bvule_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVULT:
   {
     bvtags::bvult_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVUGTE:
   {
     bvtags::bvuge_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVUGT:
   {
     bvtags::bvugt_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_IMPLIES:
   {
     predtags::implies_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_XOR:
   {
     predtags::xor_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_AND:
   {
     predtags::and_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_OR:
   {
     predtags::or_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_CONCAT:
   {
     bvtags::concat_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVUDIV:
   {
     bvtags::bvudiv_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSDIV:
   {
     bvtags::bvsdiv_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVUMOD:
   {
     bvtags::bvurem_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSMOD:
   {
     bvtags::bvsrem_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVLSHR:
   {
     bvtags::bvshr_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVASHR:
   {
     bvtags::bvashr_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   case SMT_FUNC_BVSHL:
   {
     bvtags::bvshl_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
   }
   default:
     std::cerr << "Unsupported SMT function " << k << " in metasmt conv"
