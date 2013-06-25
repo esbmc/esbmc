@@ -118,7 +118,16 @@ metasmt_convt::mk_smt_real(const std::string &str)
 smt_ast *
 metasmt_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  abort();
+
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+
+  result_type r;
+  if (sign)
+    r = ctx(metaSMT::logic::QF_BV::bvsint(theint.to_long(), w));
+  else
+    r = ctx(metaSMT::logic::QF_BV::bvuint(theint.to_ulong(), w));
+
+  return new metasmt_smt_ast(r, s);
 }
 
 smt_ast *
