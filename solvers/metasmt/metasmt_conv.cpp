@@ -122,10 +122,17 @@ metasmt_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
 
   result_type r;
-  if (sign)
-    r = ctx(metaSMT::logic::QF_BV::bvsint(theint.to_long(), w));
-  else
-    r = ctx(metaSMT::logic::QF_BV::bvuint(theint.to_ulong(), w));
+  if (sign) {
+    metaSMT::solver::bvtags::bvsint_tag lolwat;
+    boost::tuple<long, unsigned long> bees(theint.to_long(), w);
+    boost::any face(bees);
+    r = (static_cast<metaSMT::solver::Z3_Backend&>(ctx))(lolwat, face);
+  } else {
+    metaSMT::solver::bvtags::bvuint_tag lolwat;
+    boost::tuple<unsigned long, unsigned long> bees(theint.to_long(), w);
+    boost::any face(bees);
+    r = (static_cast<metaSMT::solver::Z3_Backend&>(ctx))(lolwat, face);
+  }
 
   return new metasmt_smt_ast(r, s);
 }
