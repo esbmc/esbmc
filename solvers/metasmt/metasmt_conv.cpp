@@ -167,11 +167,10 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     metaSMT::logic::QF_BV::tag::var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.width = ms->width;
-    boost::any bees;
     result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
-    break;
+    return mast;
   }
   case SMT_SORT_ARRAY:
   {
@@ -182,7 +181,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
-    break;
+    return mast;
   }
   case SMT_SORT_BOOL:
   {
@@ -191,7 +190,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
-    break;
+    return mast;
   }
   default:
     std::cerr << "Unrecognized smt sort in metasmt mk_symbol" << std::endl;
