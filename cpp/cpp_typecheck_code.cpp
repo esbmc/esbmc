@@ -179,6 +179,21 @@ void cpp_typecheckt::typecheck_ifthenelse(codet &code)
     c_typecheck_baset::typecheck_ifthenelse(code);
 }
 
+
+void cpp_typecheckt::recursive_cpp_name(exprt &code)
+{
+	if (code.id() == "cpp-name")
+	{
+		typecheck_expr_cpp_name(code, cpp_typecheck_fargst());
+	}
+//	else if (code.has_operands() && ((code.id() == "code") || (code.id() == "=")))
+	else if (code.has_operands())
+	{
+		Forall_operands(it, code)
+		    recursive_cpp_name(*it);
+	}
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::typecheck_while
@@ -196,10 +211,15 @@ void cpp_typecheckt::typecheck_while(codet &code)
   // In addition to the C syntax, C++ also allows a declaration
   // as condition. E.g.,
   // while(void *p=...) ...
-
   if(code.op0().id()=="code")
   {
     typecheck_code(to_code(code.op0()));
+    if(code.operands().size()>=2 &&
+        !code.op1().is_nil())
+    {
+      typecheck_code(to_code(code.op1().op0()));
+      recursive_cpp_name(code.op1());
+    }
   }
   else
     c_typecheck_baset::typecheck_while(code);
@@ -226,6 +246,25 @@ void cpp_typecheckt::typecheck_switch(codet &code)
   if(code.op0().id()=="code")
   {
     typecheck_code(to_code(code.op0()));
+
+    // this needs to be promoted
+    implicit_typecast_arithmetic(code.op0());
+
+    // save & set flags
+
+    bool old_case_is_allowed(case_is_allowed);
+    bool old_break_is_allowed(break_is_allowed);
+    typet old_switch_op_type(switch_op_type);
+
+    switch_op_type=code.op0().op0().op0().type();
+    break_is_allowed=case_is_allowed=true;
+
+    typecheck_code(to_code(code.op1()));
+
+    // restore flags
+    case_is_allowed=old_case_is_allowed;
+    break_is_allowed=old_break_is_allowed;
+    switch_op_type=old_switch_op_type;
   }
   else
     c_typecheck_baset::typecheck_switch(code);
