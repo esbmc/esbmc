@@ -456,7 +456,8 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
-  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type))
+  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
+      no_bools_in_arrays)
     goto expr_handle_table;
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
@@ -589,49 +590,41 @@ expr_handle_table:
   {
     const index2t &index = to_index2t(expr);
     const array_type2t &arrtype = to_array_type(index.source_value->type);
-    if (!int_encoding && is_bool_type(arrtype.subtype)) {
+    if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
       // XXX sort is wrong
       a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
-      // Quickie bv-to-bool casting.
-      args[0] = a;
-      args[1] = mk_smt_bvint(BigInt(1), false, 1);
-      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
-    } else if (is_bool_type(arrtype.subtype)) {
-      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
-    } else {
+      a = make_bit_bool(a);
+    } else if (is_tuple_array_ast_type(index.source_value->type)) {
       a = tuple_array_select(args[0], sort, args[1]);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
     }
     break;
   }
   case expr2t::with_id:
   {
+    const with2t &with = to_with2t(expr);
+
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
-      const with2t &with = to_with2t(expr);
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
       assert(is_array_type(expr->type));
       const array_type2t &arrtype = to_array_type(expr->type);
-      const with2t &with = to_with2t(expr);
-      if (!int_encoding && is_bool_type(arrtype.subtype)) {
-        // If we're using QF_AUFBV, we need to cast (on the fly) booleans to
-        // single bit bv's, because for some reason the logic doesn't support
-        // arrays of bools.
-        typecast2tc cast(get_uint_type(1), with.update_value);
-        args[2] = convert_ast(cast);
+      if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+        args[2] = make_bool_bit(args[2]);
         a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
         break;
-      } else if (is_bool_type(arrtype.subtype)) {
-        // Normal operation
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-        break;
-      } else {
+      } else if (is_tuple_array_ast_type(with.type)) {
         assert(is_structure_type(arrtype.subtype) ||
                is_pointer_type(arrtype.subtype));
         const smt_sort *sort = convert_sort(with.update_value->type);
         a = tuple_array_update(args[0], args[1], args[2], sort);
+      } else {
+        // Normal operation
+        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
       }
     }
     break;
@@ -943,7 +936,7 @@ smt_convt::convert_sort(const type2tc &type)
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
-    if (!int_encoding && is_bool_type(arr.subtype)) {
+    if (!int_encoding && is_bool_type(arr.subtype) && no_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {
       r = convert_sort(arr.subtype);
@@ -1286,10 +1279,10 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
 }
 
 const smt_ast *
-smt_convt::maybe_make_bool_bit(const smt_ast *a)
+smt_convt::make_bool_bit(const smt_ast *a)
 {
 
-  if (a->sort->id == SMT_SORT_BOOL && no_bools_in_arrays) {
+  if (a->sort->id == SMT_SORT_BOOL) {
     const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
     const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 0);
     const smt_ast *args[3];
@@ -1303,11 +1296,10 @@ smt_convt::maybe_make_bool_bit(const smt_ast *a)
 }
 
 const smt_ast *
-smt_convt::maybe_make_bit_bool(const smt_ast *a, const smt_sort *srcsort)
+smt_convt::make_bit_bool(const smt_ast *a)
 {
 
-  if (a->sort->id == SMT_SORT_BV && srcsort->id == SMT_SORT_BOOL
-      && no_bools_in_arrays) {
+  if (a->sort->id == SMT_SORT_BV) {
     const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
     const smt_ast *args[2];
     args[0] = a;
