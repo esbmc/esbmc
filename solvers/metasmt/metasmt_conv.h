@@ -65,21 +65,8 @@ struct Lookup {
     return it->second;
   }
 
-  void insert(metasmt_smt_ast *ast, metaSMT::logic::predicate p,
-              std::string const &name) {
-    map_.insert(std::make_pair(boost::proto::value(p).id, name));
-    astmap_.insert(std::make_pair(name, ast));
-  }
-
-  void insert(metasmt_smt_ast *ast, metaSMT::logic::QF_BV::bitvector b,
-              std::string const &name) {
-    map_.insert(std::make_pair(boost::proto::value(b).id, name));
-    astmap_.insert(std::make_pair(name, ast));
-  }
-
-  void insert(metasmt_smt_ast *ast, metaSMT::logic::Array::array a,
-              std::string const &name) {
-    map_.insert(std::make_pair(boost::proto::value(a).id, name));
+  void insert(metasmt_smt_ast *ast, unsigned int id, std::string const &name) {
+    map_.insert(std::make_pair(id, name));
     astmap_.insert(std::make_pair(name, ast));
   }
 };

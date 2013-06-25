@@ -164,28 +164,33 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   switch (s->id) {
   case SMT_SORT_BV:
   {
-    metaSMT::logic::QF_BV::bitvector b =
-      metaSMT::logic::QF_BV::new_bitvector(ms->width);
-    result_type res = ctx(b);
+    metaSMT::logic::QF_BV::tag::var_tag tag;
+    tag.id = metaSMT::impl::new_var_id();
+    tag.width = ms->width;
+    boost::any bees;
+    result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
-    sym_lookup.insert(mast, b, name);
+    sym_lookup.insert(mast, tag.id, name);
     break;
   }
   case SMT_SORT_ARRAY:
   {
-    metaSMT::logic::Array::array a =
-      metaSMT::logic::Array::new_array(ms->arrrange_width, ms->arrdom_width);
-    result_type res = ctx(a);
+    metaSMT::logic::Array::tag::array_var_tag tag;
+    tag.id = metaSMT::impl::new_var_id();
+    tag.elem_width = ms->arrrange_width;
+    tag.index_width = ms->arrdom_width;;
+    result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
-    sym_lookup.insert(mast, a, name);
+    sym_lookup.insert(mast, tag.id, name);
     break;
   }
   case SMT_SORT_BOOL:
   {
-    metaSMT::logic::predicate p = metaSMT::logic::new_variable();
-    result_type res = ctx(p);
+    metaSMT::logic::tag::var_tag tag;
+    tag.id = metaSMT::impl::new_var_id();
+    result_type res = ctx(tag);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
-    sym_lookup.insert(mast, p, name);
+    sym_lookup.insert(mast, tag.id, name);
     break;
   }
   default:
