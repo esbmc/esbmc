@@ -77,6 +77,23 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     predtags::not_tag tag;
     result = ctx(tag, args[0]->restype);
   }
+  case SMT_FUNC_ITE:
+  {
+    predtags::nand_tag tag;
+    result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
+  }
+  case SMT_FUNC_EQ:
+  {
+    // Pain: if it's a bv, do a bv comp. Otherwise, wave hands in the air.
+    if (args[0]->sort->id == SMT_SORT_BV) {
+      bvtags::bvcomp_tag tag;
+      result = ctx(tag, args[0]->restype, args[1]->restype);
+    } else {
+      std::cerr << "SMT equality not implemented in metasmt for sort "
+                << args[0]->sort->id << std::endl;
+      abort();
+    }
+  }
   default:
     std::cerr << "Unsupported SMT function " << k << " in metasmt conv"
               << std::endl;
