@@ -133,7 +133,14 @@ metasmt_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 smt_ast *
 metasmt_convt::mk_smt_bool(bool val)
 {
-  abort();
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  result_type r;
+  if (val)
+    r = ctx(metaSMT::logic::True);
+  else
+    r = ctx(metaSMT::logic::False);
+
+  return new metasmt_smt_ast(r, s);
 }
 
 smt_ast *
