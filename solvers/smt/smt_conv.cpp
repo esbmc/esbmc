@@ -64,9 +64,9 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support)
+                     bool is_cpp, bool _tuple_support, bool _nobools)
   : caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support)
+    tuple_support(_tuple_support), no_bools_in_arrays(_nobools)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -1289,7 +1289,7 @@ const smt_ast *
 smt_convt::maybe_make_bool_bit(const smt_ast *a)
 {
 
-  if (a->sort->id == SMT_SORT_BOOL) {
+  if (a->sort->id == SMT_SORT_BOOL && no_bools_in_arrays) {
     const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
     const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 0);
     const smt_ast *args[3];
@@ -1306,7 +1306,8 @@ const smt_ast *
 smt_convt::maybe_make_bit_bool(const smt_ast *a, const smt_sort *srcsort)
 {
 
-  if (a->sort->id == SMT_SORT_BV && srcsort->id == SMT_SORT_BOOL) {
+  if (a->sort->id == SMT_SORT_BV && srcsort->id == SMT_SORT_BOOL
+      && no_bools_in_arrays) {
     const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
     const smt_ast *args[2];
     args[0] = a;

@@ -13,7 +13,7 @@ extern sexpr *smtlib_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
-  : smt_convt(false, int_encoding, _ns, is_cpp, false), options(_opts)
+  : smt_convt(false, int_encoding, _ns, is_cpp, false, true), options(_opts)
 {
   temp_sym_count = 1;
   std::string cmd;
