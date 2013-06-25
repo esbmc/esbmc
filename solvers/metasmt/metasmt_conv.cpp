@@ -126,12 +126,12 @@ metasmt_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
     metaSMT::solver::bvtags::bvsint_tag lolwat;
     boost::tuple<long, unsigned long> bees(theint.to_long(), w);
     boost::any face(bees);
-    r = (static_cast<metaSMT::solver::Z3_Backend&>(ctx))(lolwat, face);
+    r = ctx(lolwat, face);
   } else {
     metaSMT::solver::bvtags::bvuint_tag lolwat;
     boost::tuple<unsigned long, unsigned long> bees(theint.to_long(), w);
     boost::any face(bees);
-    r = (static_cast<metaSMT::solver::Z3_Backend&>(ctx))(lolwat, face);
+    r = ctx(lolwat, face);
   }
 
   return new metasmt_smt_ast(r, s);
@@ -142,10 +142,15 @@ metasmt_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   result_type r;
-  if (val)
-    r = ctx(metaSMT::logic::True);
-  else
-    r = ctx(metaSMT::logic::False);
+  if (val) {
+    metaSMT::logic::tag::true_tag tag;
+    boost::any none;
+    r = ctx(tag, none);
+  } else {
+    metaSMT::logic::tag::false_tag tag;
+    boost::any none;
+    r = ctx(tag, none);
+  }
 
   return new metasmt_smt_ast(r, s);
 }
@@ -174,7 +179,8 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     metaSMT::logic::QF_BV::tag::var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.width = ms->width;
-    result_type res = ctx(tag);
+    boost::any none;
+    result_type res = ctx(tag, none);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
@@ -185,7 +191,8 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     tag.id = metaSMT::impl::new_var_id();
     tag.elem_width = ms->arrrange_width;
     tag.index_width = ms->arrdom_width;;
-    result_type res = ctx(tag);
+    boost::any none;
+    result_type res = ctx(tag, none);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
@@ -194,7 +201,8 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   {
     metaSMT::logic::tag::var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
-    result_type res = ctx(tag);
+    boost::any none;
+    result_type res = ctx(tag, none);
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
     sym_lookup.insert(mast, tag.id, name);
     return mast;

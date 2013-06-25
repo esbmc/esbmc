@@ -11,7 +11,7 @@
 // Crazyness: the desired solver is selected by some template meta programming.
 // Therefore we have to statically know what solver we want to be using. To do
 // that, we use the following war-def
-typedef metaSMT::DirectSolver_Context< metaSMT::solver::Z3_Backend > solvertype;
+typedef metaSMT::solver::Z3_Backend solvertype;
 // Which defines our solvertype as being a Z3 solver.
 
 typedef metaSMT::solver::Z3_Backend::result_type result_type;
