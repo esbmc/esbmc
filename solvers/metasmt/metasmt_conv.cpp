@@ -56,7 +56,10 @@ metasmt_convt::solver_text()
 void
 metasmt_convt::assert_lit(const literalt &l)
 {
-  abort();
+  std::stringstream ss;
+  ss << "l" << l.var_no();
+  metasmt_smt_ast *ast = sym_lookup(ss.str());
+  ctx.assertion(ast->restype);
 }
 
 smt_ast *
@@ -336,7 +339,17 @@ metasmt_convt::mk_sort(const smt_sort_kind k, ...)
 literalt
 metasmt_convt::mk_lit(const smt_ast *s)
 {
-  abort();
+  literalt l = new_variable();
+  std::stringstream ss;
+  ss << "l" << l.var_no();
+  std::string str = ss.str();
+  const metasmt_smt_ast *ma = metasmt_ast_downcast(mk_smt_symbol(str, s->sort));
+  const metasmt_smt_ast *ms = metasmt_ast_downcast(s);
+
+  predtags::equal_tag tag;
+  result_type result = ctx(tag, ma->restype, ms->restype);
+  ctx.assertion(result);
+  return l;
 }
 
 smt_ast *
