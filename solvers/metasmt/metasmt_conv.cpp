@@ -101,7 +101,7 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_ITE:
   {
-    predtags::nand_tag tag;
+    predtags::ite_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
     break;
   }
