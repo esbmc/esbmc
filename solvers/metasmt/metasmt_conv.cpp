@@ -163,6 +163,12 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
     break;
   }
+  case SMT_FUNC_BVNOT:
+  {
+    bvtags::bvnot_tag tag;
+    result = ctx(tag, args[0]->restype);
+    break;
+  }
   case SMT_FUNC_BVAND:
   {
     bvtags::bvand_tag tag;
