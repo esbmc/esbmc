@@ -931,8 +931,30 @@ smt_convt::convert_sort(const type2tc &type)
       return new tuple_smt_sort(type);
     }
 
-    // All arrays are indexed by integerse
-    const smt_sort *d = machine_int_sort;
+    // Index arrays by the smallest integer required to represent its size.
+    // Unless it's either infinite or dynamic in size, in which case use the
+    // machine int size.
+    const smt_sort *d;
+    if (is_constant_int2t(arr.array_size)) {
+      constant_int2tc thesize = arr.array_size;
+      unsigned long sz = thesize->constant_value.to_ulong();
+      uint64_t domwidth = 2;
+      unsigned int dombits = 1;
+
+      // Shift domwidth up until it's either larger or equal to sz, or we risk
+      // overflowing.
+      while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
+        domwidth <<= 1;
+        dombits++;
+      }
+
+      if (domwidth == 0x8000000000000000ULL)
+        dombits = 64;
+
+      d = mk_sort(SMT_SORT_BV, dombits, false);
+    } else {
+      d = machine_int_sort;
+    }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
