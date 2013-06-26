@@ -483,7 +483,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       const smt_sort *field_sort = convert_sort(*it);
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, field->sort,field_sort);
       args[0] = mk_smt_symbol(name, arrsort);
-      args[1] = field;
+      args[1] = fix_array_idx(field, arrsort);
       args[0] = mk_func_app(field_sort, SMT_FUNC_SELECT, args, 2);
       args[1] = tuple_project(result, field_sort, i);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
@@ -554,7 +554,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, idx_sort);
       // Take the source array variable and update it into an ast.
       args[0] = mk_smt_symbol(arrname, arrsort);
-      args[1] = idx;
+      args[1] = fix_array_idx(idx, arrsort);
       args[2] = mk_smt_symbol(valname, idx_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       // Now assign that ast into the result tuple array.
@@ -755,7 +755,7 @@ smt_convt::array_create(const expr2tc &expr)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
       args[0] = newsym;
-      args[1] = field;
+      args[1] = fix_array_idx(field, newsym->sort);
       args[2] = init;
       newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
     }
@@ -771,7 +771,7 @@ smt_convt::array_create(const expr2tc &expr)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
       args[0] = newsym;
-      args[1] = field;
+      args[1] = fix_array_idx(field, newsym->sort);
       args[2] = convert_ast(array.datatype_members[i]);
 
       if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&

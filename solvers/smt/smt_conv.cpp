@@ -589,6 +589,9 @@ expr_handle_table:
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
+
+    args[1] = fix_array_idx(args[1], args[0]->sort);
+
     const array_type2t &arrtype = to_array_type(index.source_value->type);
     if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
@@ -605,6 +608,9 @@ expr_handle_table:
   case expr2t::with_id:
   {
     const with2t &with = to_with2t(expr);
+
+    // Potentially fix up the index.
+    args[1] = fix_array_idx(args[1], args[0]->sort);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
@@ -1412,9 +1418,9 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //addr_of
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_extract
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_update
-{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, SMT_SORT_ARRAY | SMT_SORT_ALLINTS },  //with
+{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, 0},  //with
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
-{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, SMT_SORT_ARRAY | SMT_SORT_INT | SMT_SORT_BV},  //index
+{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, 0},  //index
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_str_id
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_len_str
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //isnan
