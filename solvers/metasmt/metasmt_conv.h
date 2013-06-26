@@ -37,13 +37,19 @@ class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
   metasmt_smt_ast(result_type r, const smt_sort *_s)
-    : smt_ast(_s), restype(r)
+    : smt_ast(_s), restype(r), symname("")
+  {
+  }
+
+  metasmt_smt_ast(result_type r, const smt_sort *_s, const std::string &s)
+    : smt_ast(_s), restype(r), symname(s)
   {
   }
 
   virtual ~metasmt_smt_ast(void) { }
 
   result_type restype;
+  std::string symname; // Only if this was produced from mk_smt_symbol.
 };
 
 // copy+paste directly from the metaSMT documentation:

@@ -103,10 +103,33 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
       predtags::equal_tag tag;
       result = ctx(tag, args[0]->restype, args[1]->restype);
     } else {
-      // Conceptually, array equalities shouldn't happen.
-      std::cerr << "SMT equality not implemented in metasmt for sort "
-                << args[0]->sort->id << std::endl;
-      abort();
+      // Conceptually, array equalities shouldn't happen. But wait: symbol
+      // assignments!
+      if (args[0]->symname == "" && args[1]->symname == "") {
+        std::cerr << "SMT equality not implemented in metasmt for sort "
+                  << args[0]->sort->id << std::endl;
+        abort();
+      }
+
+      // Instead of making an equality, store the rhs into the symbol table.
+      // However we're not guarenteed that arg[1] is the rhs - so look for the
+      // symbol. If both are symbols, fall back to args[0] being lhs.
+      const metasmt_smt_ast *lhs = args[0];
+      const metasmt_smt_ast *rhs = args[1];
+      if (args[1]->symname != "") {
+        lhs = args[1];
+        rhs = args[0];
+      }
+      if (args[0]->symname != "") {
+        lhs = args[0];
+        rhs = args[1];
+      }
+
+      astsyms[lhs->symname] = rhs;
+      // Return a true value, because that assignment is always true.
+      metaSMT::logic::tag::true_tag tag;
+      boost::any none;
+      result = ctx(tag, none);
     }
     break;
   }
@@ -431,7 +454,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     tag.width = ms->width;
     boost::any none;
     result_type res = ctx(tag, none);
-    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
+    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s, name);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
   }
@@ -443,7 +466,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     tag.index_width = ms->arrdom_width;;
     boost::any none;
     result_type res = ctx(tag, none);
-    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
+    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s, name);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
   }
@@ -453,7 +476,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     tag.id = metaSMT::impl::new_var_id();
     boost::any none;
     result_type res = ctx(tag, none);
-    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s);
+    metasmt_smt_ast *mast = new metasmt_smt_ast(res, s, name);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
   }
