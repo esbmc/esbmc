@@ -1,0 +1,42 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index eb397eb..78e6083 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -14,12 +14,15 @@ set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/Modules )
+ 
+ set(Boost_NO_BOOST_CMAKE true)
+ set(Boost_NO_SYSTEM_PATHS true)
+-set(Boost_ADDITIONAL_VERSIONS "1.50.0")
+-find_package(Boost COMPONENTS iostreams thread system python)
+-
+-if(NOT ${Boost_FOUND})
+-  message(FATAL_ERROR "Boost could not be found.")
+-endif()
++#set(Boost_ADDITIONAL_VERSIONS "1.50.0")
++find_package(Boost 1.49 COMPONENTS iostreams thread system python)
++
++#if(NOT ${Boost_FOUND})
++#  message(FATAL_ERROR "Boost could not be found.")
++#endif()
++#include_directories("/usr/include/");
++set(Boost_INCLUDE_DIRS "/usr/include")
++list(APPEND metaSMT_LIBS "-lboost_iostreams")
+ 
+ set_package_info(Boost "Portable C++ libraries")
+ include_directories(${Boost_INCLUDE_DIRS})
+diff --git a/src/metaSMT/backend/Z3_Backend.hpp b/src/metaSMT/backend/Z3_Backend.hpp
+index cbbf572..6a4c697 100644
+--- a/src/metaSMT/backend/Z3_Backend.hpp
++++ b/src/metaSMT/backend/Z3_Backend.hpp
+@@ -435,9 +435,8 @@ namespace metaSMT {
+                               result_type const &b) {
+         result_type bit1 = (*this)(bvtags::bit1_tag(), boost::any());
+         result_type bit0 = (*this)(bvtags::bit0_tag(), boost::any());
+-        return z3::to_expr(ctx_,
+-          Z3_mk_ite(ctx_, Z3_mk_eq(ctx_, z3::expr(a), z3::expr(b)),
+-                    z3::expr(bit1), z3::expr(bit0)));
++	// jmorse: huuurrrrrrr
++        return z3::to_expr(ctx_, Z3_mk_eq(ctx_, z3::expr(a), z3::expr(b)));
+       }
+ 
+       result_type operator() (bvtags::extract_tag const &,
