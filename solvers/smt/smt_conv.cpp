@@ -945,8 +945,13 @@ smt_convt::convert_sort(const type2tc &type)
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size.
-    unsigned long dombits = calculate_array_domain_width(arr);
-    const smt_sort *d = mk_sort(SMT_SORT_BV, dombits, false);
+    const smt_sort *d;
+    if (!int_encoding) {
+      unsigned long dombits = calculate_array_domain_width(arr);
+      d = mk_sort(SMT_SORT_BV, dombits, false);
+    } else {
+      d = mk_sort(SMT_SORT_INT);
+    }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
