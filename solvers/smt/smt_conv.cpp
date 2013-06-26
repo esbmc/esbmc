@@ -544,7 +544,7 @@ expr_handle_table:
       const smt_sort *s2 = convert_sort(mul.side_2->type);
       args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
       assert(is_bv_type(expr));
