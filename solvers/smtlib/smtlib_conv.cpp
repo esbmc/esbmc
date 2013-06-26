@@ -278,6 +278,11 @@ smtlib_convt::dec_solve()
   // Declare all symbols
   std::map<std::string, const smt_sort *>::const_iterator it;
   for (it = symbol_table.begin(); it != symbol_table.end(); it++) {
+    // Struct / union symbols may have been created over the course of this
+    // conversion, but we don't actually use them, so don't print them.
+    if (it->second->id == SMT_SORT_STRUCT || it->second->id == SMT_SORT_UNION)
+      continue;
+
     fprintf(out_stream, "(declare-fun |%s| () %s)\n", it->first.c_str(),
            sort_to_string(it->second).c_str());
   }
