@@ -285,9 +285,11 @@ public:
                               const tuple_smt_ast *result,const smt_ast *field);
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
                               const smt_ast *idx, const tuple_smt_ast *res,
+                              const smt_sort *idx_sort,
                               const type2tc &subtype);
   const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
                                            const tuple_smt_ast *b,
+                                           const smt_sort *idx_sort,
                                            const type2tc &subtype);
   void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                            const smt_ast *cond, const type2tc &type,
