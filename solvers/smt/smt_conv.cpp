@@ -515,7 +515,13 @@ expr_handle_table:
       break;
     }
 
-    const smt_sort *domain = machine_int_sort;
+    // Domain sort may be mesed with:
+    const smt_sort *domain;
+    if (int_encoding) {
+      domain = machine_int_sort;
+    } else {
+      domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+    }
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
