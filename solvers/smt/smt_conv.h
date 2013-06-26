@@ -104,6 +104,7 @@ public:
   smt_sort_kind id;
   smt_sort(smt_sort_kind i) : id(i) { }
   virtual ~smt_sort() { }
+  virtual unsigned long get_domain_width(void) const = 0;
 };
 
 class tuple_smt_sort : public smt_sort
@@ -114,6 +115,10 @@ public:
   {
   }
   virtual ~tuple_smt_sort() { }
+  virtual unsigned long get_domain_width(void) const {
+    std::cerr << "Tuple array sort is not an array" << std::endl;
+    abort();
+  }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
