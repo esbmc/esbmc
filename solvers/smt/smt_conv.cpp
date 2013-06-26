@@ -615,14 +615,13 @@ expr_handle_table:
   {
     const with2t &with = to_with2t(expr);
 
-    // Potentially fix up the index.
-    args[1] = fix_array_idx(args[1], args[0]->sort);
-
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
+      args[1] = fix_array_idx(args[1], args[0]->sort);
+
       assert(is_array_type(expr->type));
       const array_type2t &arrtype = to_array_type(expr->type);
       if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
