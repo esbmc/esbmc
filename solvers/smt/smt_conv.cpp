@@ -1335,6 +1335,21 @@ smt_convt::make_bit_bool(const smt_ast *a)
   return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
+const smt_ast *
+smt_convt::fix_array_idx(const smt_ast *idx, const smt_sort *arrsort)
+{
+  if (int_encoding)
+    return idx;
+
+  unsigned int domain_width = arrsort->get_domain_width();
+  if (domain_width == config.ansi_c.int_width)
+    return idx;
+
+  // Otherwise, we need to extract the lower bits out of this.
+  const smt_sort *domsort = mk_sort(SMT_SORT_BV, domain_width, false);
+  return mk_extract(idx, domain_width-1, 0, domsort);
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int

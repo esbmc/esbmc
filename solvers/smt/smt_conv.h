@@ -306,6 +306,8 @@ public:
   const smt_ast *make_bool_bit(const smt_ast *a);
   const smt_ast *make_bit_bool(const smt_ast *a);
 
+  const smt_ast *fix_array_idx(const smt_ast *idx, const smt_sort *array_type);
+
   // Types
 
   // Types for union map.
