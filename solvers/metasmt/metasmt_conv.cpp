@@ -53,7 +53,9 @@ metasmt_convt::get(const expr2tc &expr)
 tvt
 metasmt_convt::l_get(literalt a)
 {
-  abort();
+  // Right now, forget it, let's just go for outcome correctness before result
+  // fetching.
+  return tvt(tvt::TV_FALSE);
 }
 
 const std::string
