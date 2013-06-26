@@ -145,6 +145,12 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     }
     break;
   }
+  case SMT_FUNC_NOTEQ:
+  {
+    predtags::nequal_tag tag;
+    result = ctx(tag, args[0]->restype, args[1]->restype);
+    break;
+  }
   case SMT_FUNC_SELECT:
   {
     arraytags::select_tag tag;
