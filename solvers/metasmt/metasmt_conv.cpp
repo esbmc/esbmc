@@ -319,11 +319,12 @@ metasmt_convt::mk_sort(const smt_sort_kind k, ...)
   }
   case SMT_SORT_ARRAY:
   {
-    unsigned long d = va_arg(ap, unsigned long);
-    unsigned long r = va_arg(ap, unsigned long);
+    metasmt_smt_sort *dom = va_arg(ap, metasmt_smt_sort *); // Consider constness?
+    metasmt_smt_sort *range = va_arg(ap, metasmt_smt_sort *);
     metasmt_smt_sort *s = new metasmt_smt_sort(k);
-    s->arrdom_width = d;
-    s->arrrange_width = r;
+    assert(dom->id == SMT_SORT_BV && range->id == SMT_SORT_BV);
+    s->arrdom_width = dom->width;
+    s->arrrange_width = range->width;
     return s;
   }
   case SMT_SORT_BOOL:
