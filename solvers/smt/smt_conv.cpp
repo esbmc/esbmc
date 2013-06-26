@@ -592,6 +592,12 @@ expr_handle_table:
 
     args[1] = fix_array_idx(args[1], args[0]->sort);
 
+    // Firstly, if it's a string, shortcircuit.
+    if (is_string_type(index.source_value)) {
+      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
+      break;
+    }
+
     const array_type2t &arrtype = to_array_type(index.source_value->type);
     if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
       // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
