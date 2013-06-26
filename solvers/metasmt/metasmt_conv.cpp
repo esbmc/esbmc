@@ -25,7 +25,12 @@ metasmt_convt::~metasmt_convt()
 void
 metasmt_convt::set_to(const expr2tc &expr, bool value)
 {
-  abort();
+  metasmt_smt_ast *val = mk_smt_bool(value);
+  metasmt_smt_ast *expval = convert_ast(expr);
+
+  predtags::equal_tag tag;
+  result_type result = ctx(tag, val->restype, expval->restype);
+  ctx.assertion(result);
 }
 
 prop_convt::resultt
