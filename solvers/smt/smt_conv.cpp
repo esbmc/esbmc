@@ -928,33 +928,14 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (!tuple_support &&
         (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
-      return new tuple_smt_sort(type);
+      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
     }
 
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size.
-    const smt_sort *d;
-    if (is_constant_int2t(arr.array_size)) {
-      constant_int2tc thesize = arr.array_size;
-      unsigned long sz = thesize->constant_value.to_ulong();
-      uint64_t domwidth = 2;
-      unsigned int dombits = 1;
-
-      // Shift domwidth up until it's either larger or equal to sz, or we risk
-      // overflowing.
-      while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
-        domwidth <<= 1;
-        dombits++;
-      }
-
-      if (domwidth == 0x8000000000000000ULL)
-        dombits = 64;
-
-      d = mk_sort(SMT_SORT_BV, dombits, false);
-    } else {
-      d = machine_int_sort;
-    }
+    unsigned long dombits = calculate_array_domain_width(arr);
+    const smt_sort *d = mk_sort(SMT_SORT_BV, dombits, false);
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
@@ -1348,6 +1329,34 @@ smt_convt::fix_array_idx(const smt_ast *idx, const smt_sort *arrsort)
   // Otherwise, we need to extract the lower bits out of this.
   const smt_sort *domsort = mk_sort(SMT_SORT_BV, domain_width, false);
   return mk_extract(idx, domain_width-1, 0, domsort);
+}
+
+unsigned long
+smt_convt::calculate_array_domain_width(const array_type2t &arr)
+{
+  // Index arrays by the smallest integer required to represent its size.
+  // Unless it's either infinite or dynamic in size, in which case use the
+  // machine int size.
+  if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
+    constant_int2tc thesize = arr.array_size;
+    unsigned long sz = thesize->constant_value.to_ulong();
+    uint64_t domwidth = 2;
+    unsigned int dombits = 1;
+
+    // Shift domwidth up until it's either larger or equal to sz, or we risk
+    // overflowing.
+    while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
+      domwidth <<= 1;
+      dombits++;
+    }
+
+    if (domwidth == 0x8000000000000000ULL)
+      dombits = 64;
+
+    return dombits;
+  } else {
+    return config.ansi_c.int_width;
+  }
 }
 
 const smt_convt::expr_op_convert

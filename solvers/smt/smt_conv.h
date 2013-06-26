@@ -111,13 +111,22 @@ class tuple_smt_sort : public smt_sort
 {
 public:
   const type2tc thetype;
-  tuple_smt_sort(const type2tc &type) : smt_sort(SMT_SORT_STRUCT), thetype(type)
+  unsigned long domain_width;
+
+  tuple_smt_sort(const type2tc &type)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(0)
   {
   }
+
+  tuple_smt_sort(const type2tc &type, unsigned long dom_width)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(dom_width)
+  {
+  }
+
   virtual ~tuple_smt_sort() { }
+
   virtual unsigned long get_domain_width(void) const {
-    std::cerr << "Tuple array sort is not an array" << std::endl;
-    abort();
+    return domain_width;
   }
 };
 
@@ -307,6 +316,7 @@ public:
   const smt_ast *make_bit_bool(const smt_ast *a);
 
   const smt_ast *fix_array_idx(const smt_ast *idx, const smt_sort *array_type);
+  unsigned long calculate_array_domain_width(const array_type2t &arr);
 
   // Types
 
