@@ -505,8 +505,13 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return mast;
   }
   default:
-    std::cerr << "Unrecognized smt sort in metasmt mk_symbol" << std::endl;
-    abort();
+  {
+    // Whatever; this is a struct/union that's being used by the tuple code to
+    // represent a symbol or something. It'd not actually going to be used.
+    // In the future, we can probably stop that happening.
+    result_type res;
+    return new metasmt_smt_ast(res, s, name);
+  }
   }
 }
 
