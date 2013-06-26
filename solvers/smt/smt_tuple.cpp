@@ -550,12 +550,12 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       std::string resname = result->name +
                             struct_type.member_names[i].as_string();
       const smt_ast *args[3];
-      const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, idx_sort);
+      const smt_sort *elem_sort = convert_sort(*it);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, elem_sort);
       // Take the source array variable and update it into an ast.
       args[0] = mk_smt_symbol(arrname, arrsort);
       args[1] = fix_array_idx(idx, arrsort);
-      args[2] = mk_smt_symbol(valname, idx_sort);
+      args[2] = mk_smt_symbol(valname, elem_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       // Now assign that ast into the result tuple array.
       args[1] = mk_smt_symbol(resname, arrsort);
