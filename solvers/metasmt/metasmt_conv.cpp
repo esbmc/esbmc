@@ -507,5 +507,8 @@ smt_ast *
 metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
                           unsigned int low, const smt_sort *s)
 {
-  abort();
+  bvtags::extract_tag tag;
+  const metasmt_smt_ast *ma = metasmt_ast_downcast(a);
+  result_type res = ctx(tag, high, low, ma->restype);
+  return new metasmt_smt_ast(res, s);
 }
