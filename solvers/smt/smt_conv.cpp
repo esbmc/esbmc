@@ -951,13 +951,7 @@ smt_convt::convert_sort(const type2tc &type)
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size.
-    const smt_sort *d;
-    if (!int_encoding) {
-      unsigned long dombits = calculate_array_domain_width(arr);
-      d = mk_sort(SMT_SORT_BV, dombits, false);
-    } else {
-      d = mk_sort(SMT_SORT_INT);
-    }
+    const smt_sort *d = make_array_domain_sort(arr);
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
@@ -1379,6 +1373,16 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   } else {
     return config.ansi_c.int_width;
   }
+}
+
+const smt_sort *
+smt_convt::make_array_domain_sort(const array_type2t &arr)
+{
+
+  if (int_encoding)
+    return mk_sort(SMT_SORT_INT);
+  else
+    return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
 }
 
 const smt_convt::expr_op_convert
