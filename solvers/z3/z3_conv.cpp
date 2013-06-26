@@ -887,34 +887,35 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
 }
 
 const smt_ast *
-z3_convt::*tuple_array_create(const type2tc &array_type,
+z3_convt::tuple_array_create(const type2tc &arr_type,
                               const smt_ast **input_args, bool const_array,
                               const smt_sort *domain)
 {
   z3::expr output;
-  const array_type2t &arrtype = to_array_type(array_type);
+  const array_type2t &arrtype = to_array_type(arr_type);
+
+  const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
+
+  assert(is_constant_int2t(arrtype.array_size) &&
+         "array_of sizes should be constant");
+
+  int64_t size;
+  size = sz.as_long();
 
   if (const_array) {
     z3::expr value, index;
     z3::sort array_type;
     std::string tmp, identifier;
-    int64_t size;
     u_int j;
 
-    const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
-
-    convert_type(array.type, array_type);
+    array_type = z3_sort_downcast(convert_sort(arr_type))->s;
+    z3::sort domsort = z3_sort_downcast(domain)->s;
 
     if (arrtype.size_is_infinite) {
       // Don't attempt to do anything with this. The user is on their own.
       output = ctx.fresh_const(NULL, array_type);
       goto out;
     }
-
-    assert(is_constant_int2t(arrtype.array_size) &&
-           "array_of sizes should be constant");
-
-    size = sz.as_long();
 
     const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
     value = tmpast->e;
@@ -925,10 +926,10 @@ z3_convt::*tuple_array_create(const type2tc &array_type,
 
     output = ctx.fresh_const(NULL, array_type);
 
-    //update array
+    // update array -- sort size of array domain might be funky though.
     for (j = 0; j < size; j++)
     {
-      index = ctx.esbmc_int_val(j);
+      index = ctx.num_val(j, domsort);
       output = z3::store(output, index, value);
     }
   } else {
@@ -937,17 +938,15 @@ z3_convt::*tuple_array_create(const type2tc &array_type,
     z3::expr int_cte, val_cte;
     z3::sort elem_type;
 
-    convert_type(arrtype.subtype, elem_type);
+    elem_type = z3_sort_downcast(convert_sort(arrtype.subtype))->s;
     z3_array_type = ctx.array_sort(ctx.esbmc_int_sort(), elem_type);
 
     output = ctx.fresh_const(NULL, z3_array_type);
 
-    i = 0;
-    forall_exprs(it, array.datatype_members) {
+    for (i = 0; i < size; i++) {
       int_cte = ctx.esbmc_int_val(i);
       const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
       output = z3::store(output, int_cte, tmpast->e);
-      ++i;
     }
   }
 
@@ -968,7 +967,8 @@ z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
 
 smt_ast *
 z3_convt::tuple_array_update(const smt_ast *a, const smt_ast *field,
-                             const smt_ast *val, const smt_sort *s)
+                             const smt_ast *val,
+                             const smt_sort *s __attribute__((unused)))
 {
   Z3_ast ast = Z3_mk_store(z3_ctx, z3_smt_downcast(a)->e,
                           z3_smt_downcast(field)->e, z3_smt_downcast(val)->e);
