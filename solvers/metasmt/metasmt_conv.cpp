@@ -36,7 +36,12 @@ metasmt_convt::set_to(const expr2tc &expr, bool value)
 prop_convt::resultt
 metasmt_convt::dec_solve()
 {
-  abort();
+  bool res = ctx.solve();
+  if (res) {
+    return prop_convt::P_SATISFIABLE;
+  } else {
+    return prop_convt::P_UNSATISFIABLE;
+  }
 }
 
 expr2tc
