@@ -46,4 +46,26 @@ class inductive_step_thread : public kinduction_thread
     virtual void run();
 };
 
+class safe_queues
+{
+  public:
+    static safe_queues *get_instance();
+
+    pthread_mutex_t _bcMutex;
+    pthread_mutex_t _fcMutex;
+    pthread_mutex_t _isMutex;
+
+  private:
+    safe_queues();
+    ~safe_queues();
+
+    short bc_queue[50];
+    short fc_queue[50];
+    short is_queue[50];
+
+    static safe_queues* instance;
+
+    safe_queues(safe_queues const &);
+    void operator=(safe_queues const &);
+};
 #endif /* K_INDUCTION_PARALLEL_H_ */

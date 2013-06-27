@@ -46,3 +46,26 @@ void inductive_step_thread::run()
 {
 
 }
+
+/* class safe_queues */
+safe_queues *safe_queues::instance=NULL;
+
+safe_queues *safe_queues::get_instance()
+{
+  if(!instance)
+    instance=new safe_queues;
+  return instance;
+}
+
+safe_queues::safe_queues()
+  : _bcMutex(PTHREAD_MUTEX_INITIALIZER),
+    _fcMutex(PTHREAD_MUTEX_INITIALIZER),
+    _isMutex(PTHREAD_MUTEX_INITIALIZER)
+{
+  for(unsigned i=0; i<50; ++i)
+  {
+    bc_queue[i]=-1;
+    fc_queue[i]=-1;
+    is_queue[i]=-1;
+  }
+}
