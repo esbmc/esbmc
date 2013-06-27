@@ -1451,11 +1451,11 @@ smt_convt::handle_select_chain(const expr2tc &expr, const smt_ast **base)
   const expr2tc *idx_ptrs[how_many_selects];
   const type2tc *arr_types[how_many_selects];
   idx = expr;
-  idx_ptrs[0] = &idx->index;
-  arr_types[0] = &idx->source_value->type;
-  for (i = 1; i < how_many_selects; i++, idx = idx->source_value) {
+  for (i = 0; i < how_many_selects; i++) {
     idx_ptrs[i] = &idx->index;
     arr_types[i] = &idx->source_value->type;
+    if (i != how_many_selects - 1)
+      idx = idx->source_value;
   }
 
   const smt_ast *idxes[how_many_selects];
