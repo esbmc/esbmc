@@ -1436,43 +1436,40 @@ smt_convt::handle_select_chain(const expr2tc &expr, const smt_ast **base)
   // So, extract all the indexes, and concat them, with the first (lowest)
   // index at the top, then descending.
 
-  unsigned int how_many_selects = 1, i;
+  std::vector<index2tc> indexes;
   index2tc idx = expr;
+  indexes.push_back(idx);
   while (is_index2t(idx->source_value)) {
-    how_many_selects++;
     idx = idx->source_value;
+    indexes.push_back(idx);
   }
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
   *base = convert_ast(idx->source_value);
 
-  assert(how_many_selects < 64 && "Suspiciously large number of array selects");
-  const expr2tc *idx_ptrs[how_many_selects];
-  const type2tc *arr_types[how_many_selects];
-  idx = expr;
-  for (i = 0; i < how_many_selects; i++) {
-    idx_ptrs[i] = &idx->index;
-    arr_types[i] = &idx->source_value->type;
-    if (i != how_many_selects - 1)
-      idx = idx->source_value;
-  }
-
-  const smt_ast *idxes[how_many_selects];
-  unsigned int domsizes[how_many_selects];
-  for (i = 0; i < how_many_selects; i++) {
-    idxes[i] = convert_ast(*idx_ptrs[i]);
-    domsizes[i] = calculate_array_domain_width(to_array_type(*arr_types[i]));
+  std::vector<const smt_ast*> idxes;
+  std::vector<unsigned> domsizes;
+  idxes.reserve(indexes.size());
+  domsizes.reserve(indexes.size());
+  unsigned int i = 0;
+  for (std::vector<index2tc>::const_iterator it = indexes.begin();
+       it != indexes.end(); it++) {
+    idxes[i] = convert_ast((*it)->index);
+    domsizes[i] =
+      calculate_array_domain_width(to_array_type((*it)->source_value->type));
     if (domsizes[i] != config.ansi_c.int_width) {
       const smt_sort *domsort = mk_sort(SMT_SORT_BV, domsizes[i], false);
       idxes[i] = mk_extract(idxes[i], domsizes[i]-1, 0, domsort);
     }
+
+    i++;
   }
 
   // Now, concatenate them.
   const smt_ast *concat = idxes[0];
   unsigned long bvsize = domsizes[0];
-  for (i = 1; i < how_many_selects; i++) {
+  for (i = 1; i < indexes.size(); i++) {
     bvsize += domsizes[i];
     const smt_sort *bvsort = mk_sort(SMT_SORT_BV, bvsize, false);
     const smt_ast *args[2];
