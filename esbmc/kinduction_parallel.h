@@ -17,32 +17,32 @@
 class kinduction_thread : public Thread
 {
   public:
-    kinduction_thread(bmct bmc, goto_functionst goto_functions);
+    kinduction_thread(bmct &bmc, goto_functionst &goto_functions);
 
   protected:
     unsigned int k;
-    bmct _bmc;
-    goto_functionst _goto_functions;
+    bmct &_bmc;
+    goto_functionst &_goto_functions;
 };
 
 class base_case_thread : public kinduction_thread
 {
   public:
-    base_case_thread(bmct bmc, goto_functionst goto_functions);
+    base_case_thread(bmct &bmc, goto_functionst &goto_functions);
     virtual void run();
 };
 
 class forward_condition_thread : public kinduction_thread
 {
   public:
-    forward_condition_thread(bmct bmc, goto_functionst goto_functions);
+    forward_condition_thread(bmct &bmc, goto_functionst &goto_functions);
     virtual void run();
 };
 
 class inductive_step_thread : public kinduction_thread
 {
   public:
-    inductive_step_thread(bmct bmc, goto_functionst goto_functions);
+    inductive_step_thread(bmct &bmc, goto_functionst &goto_functions);
     virtual void run();
 };
 
