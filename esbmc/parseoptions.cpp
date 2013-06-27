@@ -618,7 +618,7 @@ int cbmc_parseoptionst::doit_k_induction()
       res = do_bmc(bmc_base_case, goto_functions_base_case);
 
       if(k_step >= 1 && res)
-        return 0;
+        return res;
 
       ++k_step;
 
@@ -636,7 +636,7 @@ int cbmc_parseoptionst::doit_k_induction()
       res = do_bmc(bmc_forward_condition, goto_functions_forward_condition);
 
       if (!res)
-        return 0;
+        return res;
 
       forward_condition = false; //disable forward condition
     }
@@ -651,7 +651,7 @@ int cbmc_parseoptionst::doit_k_induction()
       res = do_bmc(bmc_inductive_step, goto_functions_inductive_step);
 
       if (!res)
-        return 0;
+        return res;
 
       base_case = true; //enable base case
     }
