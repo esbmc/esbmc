@@ -597,7 +597,7 @@ expr_handle_table:
     const index2t &index = to_index2t(expr);
 
     if (is_index2t(index.source_value)) {
-      args[1] = handle_select_chain(expr);
+      args[1] = handle_select_chain(expr, &args[0]);
     } else {
       args[1] = fix_array_idx(args[1], args[0]->sort);
     }
@@ -1429,7 +1429,7 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
 }
 
 const smt_ast *
-smt_convt::handle_select_chain(const expr2tc &expr)
+smt_convt::handle_select_chain(const expr2tc &expr, const smt_ast **base)
 {
   // So: some series of index exprs will occur here, with some symbol or
   // other expression at the bottom that's actually some symbol, or whatever.
@@ -1442,6 +1442,10 @@ smt_convt::handle_select_chain(const expr2tc &expr)
     how_many_selects++;
     idx = idx->source_value;
   }
+
+  // Give the caller the base array object / thing. So that it can actually
+  // select out of the right piece of data.
+  *base = convert_ast(idx->source_value);
 
   assert(how_many_selects < 64 && "Suspiciously large number of array selects");
   const expr2tc *idx_ptrs[how_many_selects];
