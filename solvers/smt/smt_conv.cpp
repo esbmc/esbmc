@@ -1463,8 +1463,10 @@ smt_convt::handle_select_chain(const expr2tc &expr, const smt_ast **base)
   for (i = 0; i < how_many_selects; i++) {
     idxes[i] = convert_ast(*idx_ptrs[i]);
     domsizes[i] = calculate_array_domain_width(to_array_type(*arr_types[i]));
-    const smt_sort *arrsort = convert_sort(*arr_types[i]);
-    idxes[i] = fix_array_idx(idxes[i], arrsort);
+    if (domsizes[i] != config.ansi_c.int_width) {
+      const smt_sort *domsort = mk_sort(SMT_SORT_BV, domsizes[i], false);
+      idxes[i] = mk_extract(idxes[i], domsizes[i]-1, 0, domsort);
+    }
   }
 
   // Now, concatenate them.
