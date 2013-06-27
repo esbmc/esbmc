@@ -154,10 +154,15 @@ public:
 
   class z3_smt_sort : public smt_sort {
   public:
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, bool is_s = false) : smt_sort(i), s(_s), is_signed(is_s) { }
+  #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, bool is_s = false) : smt_sort(i), s(_s), is_signed(is_s), array_dom_width(0) { }
     virtual ~z3_smt_sort() { }
+    virtual unsigned long get_domain_width(void) const {
+      return array_dom_width;
+    }
     z3::sort s;
     bool is_signed;
+    unsigned int array_dom_width;
   };
 
   //  Must be first member; that way it's the last to be destroyed.

@@ -483,7 +483,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       const smt_sort *field_sort = convert_sort(*it);
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, field->sort,field_sort);
       args[0] = mk_smt_symbol(name, arrsort);
-      args[1] = field;
+      args[1] = fix_array_idx(field, arrsort);
       args[0] = mk_func_app(field_sort, SMT_FUNC_SELECT, args, 2);
       args[1] = tuple_project(result, field_sort, i);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
@@ -509,8 +509,11 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   std::string name = mk_fresh_name("tuple_array_update[]::");
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
+  const array_type2t &arrtype = to_array_type(ts->thetype);
+  const smt_sort *idx_sort = make_array_domain_sort(arrtype);
+
   const array_type2t &array_type = to_array_type(ts->thetype);
-  tuple_array_update_rec(ta, tv, index, result, array_type.subtype);
+  tuple_array_update_rec(ta, tv, index, result, idx_sort, array_type.subtype);
   return result;
 }
 
@@ -518,6 +521,7 @@ void
 smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
                                   const tuple_smt_ast *tv, const smt_ast *idx,
                                   const tuple_smt_ast *result,
+                                  const smt_sort *idx_sort,
                                   const type2tc &subtype)
 {
   // Implementation of tuple array update: for each member take its array
@@ -542,7 +546,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       const tuple_smt_ast *src = new tuple_smt_ast(tmp, srcname);
       const tuple_smt_ast *val = new tuple_smt_ast(tmp, valname);
 
-      tuple_array_update_rec(src, val, idx, target, *it);
+      tuple_array_update_rec(src, val, idx, target, idx_sort, *it);
     } else {
       // Normal value; name, update, assign.
       std::string arrname = ta->name + struct_type.member_names[i].as_string();
@@ -550,12 +554,12 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       std::string resname = result->name +
                             struct_type.member_names[i].as_string();
       const smt_ast *args[3];
-      const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx->sort, idx_sort);
+      const smt_sort *elem_sort = convert_sort(*it);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx_sort, elem_sort);
       // Take the source array variable and update it into an ast.
       args[0] = mk_smt_symbol(arrname, arrsort);
-      args[1] = idx;
-      args[2] = mk_smt_symbol(valname, idx_sort);
+      args[1] = fix_array_idx(idx, arrsort);
+      args[2] = mk_smt_symbol(valname, elem_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       // Now assign that ast into the result tuple array.
       args[1] = mk_smt_symbol(resname, arrsort);
@@ -576,12 +580,14 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
-  return tuple_array_equality_rec(ta, tb, array_type.subtype);
+  const smt_sort *idx_sort = make_array_domain_sort(array_type);
+  return tuple_array_equality_rec(ta, tb, idx_sort, array_type.subtype);
 }
 
 const smt_ast *
 smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
                                     const tuple_smt_ast *b,
+                                    const smt_sort *idx_sort,
                                     const type2tc &subtype)
 {
   // Same as tuple equality rec, but with arrays instead of their normal types.
@@ -598,15 +604,14 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
       const tuple_smt_ast *new1 = new tuple_smt_ast(tmp, name1);
       const tuple_smt_ast *new2 = new tuple_smt_ast(tmp, name2);
-      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, *it)));
+      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, idx_sort,*it)));
     } else {
       // Normal equality between members (which are in fact arrays).
       std::string name1 = a->name + struct_type.member_names[i].as_string();
       std::string name2 = b->name + struct_type.member_names[i].as_string();
       const smt_ast *args[2];
-      const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *dom_sort = machine_int_sort;
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
+      const smt_sort *elem_sort = convert_sort(*it);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx_sort, elem_sort);
       args[0] = mk_smt_symbol(name1, arrsort);
       args[1] = mk_smt_symbol(name2, arrsort);
       eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
@@ -747,12 +752,15 @@ smt_convt::array_create(const expr2tc &expr)
 
     // Repeatedly store things into this.
     const smt_ast *init = convert_ast(array.initializer);
+    if (is_bool_type(array.initializer) && !int_encoding && no_bools_in_arrays)
+      init = make_bool_bit(init);
+
     for (unsigned int i = 0; i < sz; i++) {
       const smt_ast *field = (int_encoding)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
       args[0] = newsym;
-      args[1] = field;
+      args[1] = fix_array_idx(field, newsym->sort);
       args[2] = init;
       newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
     }
@@ -768,8 +776,13 @@ smt_convt::array_create(const expr2tc &expr)
         ? mk_smt_int(BigInt(i), false)
         : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
       args[0] = newsym;
-      args[1] = field;
+      args[1] = fix_array_idx(field, newsym->sort);
       args[2] = convert_ast(array.datatype_members[i]);
+
+      if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+          no_bools_in_arrays)
+        args[2] = make_bool_bit(args[2]);
+
       newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
     }
 

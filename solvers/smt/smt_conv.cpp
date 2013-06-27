@@ -64,9 +64,9 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support)
+                     bool is_cpp, bool _tuple_support, bool _nobools)
   : caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support)
+    tuple_support(_tuple_support), no_bools_in_arrays(_nobools)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -456,7 +456,8 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
-  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type))
+  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
+      no_bools_in_arrays)
     goto expr_handle_table;
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
@@ -514,7 +515,13 @@ expr_handle_table:
       break;
     }
 
-    const smt_sort *domain = machine_int_sort;
+    // Domain sort may be mesed with:
+    const smt_sort *domain;
+    if (int_encoding) {
+      domain = machine_int_sort;
+    } else {
+      domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+    }
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
@@ -588,50 +595,53 @@ expr_handle_table:
   case expr2t::index_id:
   {
     const index2t &index = to_index2t(expr);
-    const array_type2t &arrtype = to_array_type(index.source_value->type);
-    if (!int_encoding && is_bool_type(arrtype.subtype)) {
-      // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-      // XXX sort is wrong
+
+    args[1] = fix_array_idx(args[1], args[0]->sort);
+
+    // Firstly, if it's a string, shortcircuit.
+    if (is_string_type(index.source_value)) {
       a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
-      // Quickie bv-to-bool casting.
-      args[0] = a;
-      args[1] = mk_smt_bvint(BigInt(1), false, 1);
-      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
-    } else if (is_bool_type(arrtype.subtype)) {
-      a = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
-    } else {
+      break;
+    }
+
+    const array_type2t &arrtype = to_array_type(index.source_value->type);
+    if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
+      // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
+      const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
+      a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
+      a = make_bit_bool(a);
+    } else if (is_tuple_array_ast_type(index.source_value->type)) {
       a = tuple_array_select(args[0], sort, args[1]);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
     }
     break;
   }
   case expr2t::with_id:
   {
+    const with2t &with = to_with2t(expr);
+
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
-      const with2t &with = to_with2t(expr);
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
+      args[1] = fix_array_idx(args[1], args[0]->sort);
+
       assert(is_array_type(expr->type));
       const array_type2t &arrtype = to_array_type(expr->type);
-      const with2t &with = to_with2t(expr);
-      if (!int_encoding && is_bool_type(arrtype.subtype)) {
-        // If we're using QF_AUFBV, we need to cast (on the fly) booleans to
-        // single bit bv's, because for some reason the logic doesn't support
-        // arrays of bools.
-        typecast2tc cast(get_uint_type(1), with.update_value);
-        args[2] = convert_ast(cast);
+      if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+        args[2] = make_bool_bit(args[2]);
         a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
         break;
-      } else if (is_bool_type(arrtype.subtype)) {
-        // Normal operation
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-        break;
-      } else {
+      } else if (is_tuple_array_ast_type(with.type)) {
         assert(is_structure_type(arrtype.subtype) ||
                is_pointer_type(arrtype.subtype));
         const smt_sort *sort = convert_sort(with.update_value->type);
         a = tuple_array_update(args[0], args[1], args[2], sort);
+      } else {
+        // Normal operation
+        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
       }
     }
     break;
@@ -935,15 +945,17 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (!tuple_support &&
         (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
-      return new tuple_smt_sort(type);
+      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
     }
 
-    // All arrays are indexed by integerse
-    const smt_sort *d = machine_int_sort;
+    // Index arrays by the smallest integer required to represent its size.
+    // Unless it's either infinite or dynamic in size, in which case use the
+    // machine int size.
+    const smt_sort *d = make_array_domain_sort(arr);
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
-    if (!int_encoding && is_bool_type(arr.subtype)) {
+    if (!int_encoding && is_bool_type(arr.subtype) && no_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {
       r = convert_sort(arr.subtype);
@@ -1165,8 +1177,14 @@ smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
   const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
 
   const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
-  const smt_ast *f = mk_smt_bvint(BigInt(0xFFFFFFFFFFFFFFFFULL), false,
-                                  topwidth);
+
+  // Calculate the exact value; SMTLIB text parsers don't like taking an
+  // over-full integer literal.
+  uint64_t big = 0xFFFFFFFFFFFFFFFFULL;
+  unsigned int num_topbits = 64 - topwidth;
+  big >>= num_topbits;
+  BigInt big_int(big);
+  const smt_ast *f = mk_smt_bvint(big_int, false, topwidth);
 
   args[0] = t;
   args[1] = z;
@@ -1285,6 +1303,88 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 }
 
+const smt_ast *
+smt_convt::make_bool_bit(const smt_ast *a)
+{
+
+  assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
+         "smt_convt::make_bool_bit");
+  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *args[3];
+  args[0] = a;
+  args[1] = one;
+  args[2] = zero;
+  return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
+}
+
+const smt_ast *
+smt_convt::make_bit_bool(const smt_ast *a)
+{
+
+  assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
+         "smt_convt::make_bit_bool");
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *args[2];
+  args[0] = a;
+  args[1] = one;
+  return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+}
+
+const smt_ast *
+smt_convt::fix_array_idx(const smt_ast *idx, const smt_sort *arrsort)
+{
+  if (int_encoding)
+    return idx;
+
+  unsigned int domain_width = arrsort->get_domain_width();
+  if (domain_width == config.ansi_c.int_width)
+    return idx;
+
+  // Otherwise, we need to extract the lower bits out of this.
+  const smt_sort *domsort = mk_sort(SMT_SORT_BV, domain_width, false);
+  return mk_extract(idx, domain_width-1, 0, domsort);
+}
+
+unsigned long
+smt_convt::calculate_array_domain_width(const array_type2t &arr)
+{
+  // Index arrays by the smallest integer required to represent its size.
+  // Unless it's either infinite or dynamic in size, in which case use the
+  // machine int size.
+  if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
+    constant_int2tc thesize = arr.array_size;
+    unsigned long sz = thesize->constant_value.to_ulong();
+    uint64_t domwidth = 2;
+    unsigned int dombits = 1;
+
+    // Shift domwidth up until it's either larger or equal to sz, or we risk
+    // overflowing.
+    while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
+      domwidth <<= 1;
+      dombits++;
+    }
+
+    if (domwidth == 0x8000000000000000ULL)
+      dombits = 64;
+
+    return dombits;
+  } else {
+    return config.ansi_c.int_width;
+  }
+}
+
+const smt_sort *
+smt_convt::make_array_domain_sort(const array_type2t &arr)
+{
+
+  if (int_encoding)
+    return mk_sort(SMT_SORT_INT);
+  else
+    return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+}
+
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const int
@@ -1338,9 +1438,9 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //addr_of
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_extract
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_update
-{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, SMT_SORT_ARRAY | SMT_SORT_ALLINTS },  //with
+{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, 0},  //with
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
-{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, SMT_SORT_ARRAY | SMT_SORT_INT | SMT_SORT_BV},  //index
+{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, 0},  //index
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_str_id
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_len_str
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //isnan

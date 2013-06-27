@@ -11,7 +11,7 @@ create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
-  : smt_convt(false, int_encoding, ns, is_cpp, false), ctx(), symbols(),
+  : smt_convt(false, int_encoding, ns, is_cpp, false, true), ctx(), symbols(),
     astsyms(), sym_lookup(symbols, astsyms)
 {
 

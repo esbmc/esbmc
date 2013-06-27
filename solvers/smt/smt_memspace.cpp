@@ -407,7 +407,10 @@ smt_convt::init_addr_space_array(void)
   type2tc ptr_int_type = machine_ptr;
   constant_int2tc zero_ptr_int(ptr_int_type, BigInt(0));
   constant_int2tc one_ptr_int(ptr_int_type, BigInt(1));
-  constant_int2tc obj1_end_const(ptr_int_type, BigInt(0xFFFFFFFFFFFFFFFFULL));
+  BigInt allones((config.ansi_c.pointer_width == 32)
+                  ? 0xFFFFFFFF
+                  : 0xFFFFFFFFFFFFFFFFULL);
+  constant_int2tc obj1_end_const(ptr_int_type, allones);
 
   symbol2tc obj0_start(ptr_int_type, "__ESBMC_ptr_obj_start_0");
   symbol2tc obj0_end(ptr_int_type, "__ESBMC_ptr_obj_end_0");

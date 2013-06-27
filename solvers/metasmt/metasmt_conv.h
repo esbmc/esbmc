@@ -31,6 +31,9 @@ public:
   virtual ~metasmt_smt_sort() { }
   unsigned int width; // bv width
   unsigned int arrdom_width, arrrange_width; // arr sort widths
+  virtual unsigned long get_domain_width(void) const {
+    return arrdom_width;
+  }
 };
 
 class metasmt_smt_ast : public smt_ast {

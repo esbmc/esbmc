@@ -104,16 +104,30 @@ public:
   smt_sort_kind id;
   smt_sort(smt_sort_kind i) : id(i) { }
   virtual ~smt_sort() { }
+  virtual unsigned long get_domain_width(void) const = 0;
 };
 
 class tuple_smt_sort : public smt_sort
 {
 public:
   const type2tc thetype;
-  tuple_smt_sort(const type2tc &type) : smt_sort(SMT_SORT_STRUCT), thetype(type)
+  unsigned long domain_width;
+
+  tuple_smt_sort(const type2tc &type)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(0)
   {
   }
+
+  tuple_smt_sort(const type2tc &type, unsigned long dom_width)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(dom_width)
+  {
+  }
+
   virtual ~tuple_smt_sort() { }
+
+  virtual unsigned long get_domain_width(void) const {
+    return domain_width;
+  }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -163,7 +177,7 @@ class smt_convt: public prop_convt
 {
 public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool tuple_support);
+            bool is_cpp, bool tuple_support, bool no_bools_in_arrays);
   ~smt_convt();
   void smt_post_init(void); // smt init stuff that calls into subclass.
 
@@ -271,9 +285,11 @@ public:
                               const tuple_smt_ast *result,const smt_ast *field);
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
                               const smt_ast *idx, const tuple_smt_ast *res,
+                              const smt_sort *idx_sort,
                               const type2tc &subtype);
   const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
                                            const tuple_smt_ast *b,
+                                           const smt_sort *idx_sort,
                                            const type2tc &subtype);
   void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                            const smt_ast *cond, const type2tc &type,
@@ -297,6 +313,13 @@ public:
                                       unsigned int towidth);
 
   const struct_union_data &get_type_def(const type2tc &type);
+
+  const smt_ast *make_bool_bit(const smt_ast *a);
+  const smt_ast *make_bit_bool(const smt_ast *a);
+
+  const smt_ast *fix_array_idx(const smt_ast *idx, const smt_sort *array_type);
+  unsigned long calculate_array_domain_width(const array_type2t &arr);
+  const smt_sort *make_array_domain_sort(const array_type2t &arr);
 
   // Types
 
@@ -365,6 +388,7 @@ public:
   uint64_t no_variables;
   const namespacet &ns;
   bool tuple_support;
+  bool no_bools_in_arrays;
   std::string dyn_info_arr_name;
 
   std::map<std::string, unsigned int> fresh_map;
