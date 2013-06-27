@@ -1429,7 +1429,7 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
 }
 
 const smt_ast *
-smt_convt::handle_select_chain(const expr2tc &expr __attribute__((unused)))
+smt_convt::handle_select_chain(const expr2tc &expr)
 {
   // So: some series of index exprs will occur here, with some symbol or
   // other expression at the bottom that's actually some symbol, or whatever.
