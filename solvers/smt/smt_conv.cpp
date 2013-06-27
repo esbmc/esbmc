@@ -596,7 +596,11 @@ expr_handle_table:
   {
     const index2t &index = to_index2t(expr);
 
-    args[1] = fix_array_idx(args[1], args[0]->sort);
+    if (is_index2t(index.source_value)) {
+      args[1] = handle_select_chain(expr);
+    } else {
+      args[1] = fix_array_idx(args[1], args[0]->sort);
+    }
 
     // Firstly, if it's a string, shortcircuit.
     if (is_string_type(index.source_value)) {
@@ -626,6 +630,11 @@ expr_handle_table:
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
+      if (is_with2t(with.source_value)) {
+        a = handle_store_chain(expr);
+        break;
+      }
+
       args[1] = fix_array_idx(args[1], args[0]->sort);
 
       assert(is_array_type(expr->type));
@@ -1383,6 +1392,62 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
     return mk_sort(SMT_SORT_INT);
   else
     return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+}
+
+const smt_ast *
+smt_convt::handle_select_chain(const expr2tc &expr __attribute__((unused)))
+{
+  // So: some series of index exprs will occur here, with some symbol or
+  // other expression at the bottom that's actually some symbol, or whatever.
+  // So, extract all the indexes, and concat them, with the first (lowest)
+  // index at the top, then descending.
+
+  unsigned int how_many_selects = 1, i;
+  index2tc idx = expr;
+  while (is_index2t(idx->source_value)) {
+    how_many_selects++;
+    idx = idx->source_value;
+  }
+
+  assert(how_many_selects < 64 && "Suspiciously large number of array selects");
+  const expr2tc *idx_ptrs[how_many_selects];
+  const type2tc *arr_types[how_many_selects];
+  idx = expr;
+  idx_ptrs[0] = &idx->index;
+  arr_types[0] = &idx->source_value->type;
+  for (i = 1; i < how_many_selects; i++, idx = idx->source_value) {
+    idx_ptrs[i] = &idx->index;
+    arr_types[i] = &idx->source_value->type;
+  }
+
+  const smt_ast *idxes[how_many_selects];
+  unsigned int domsizes[how_many_selects];
+  for (i = 0; i < how_many_selects; i++) {
+    idxes[i] = convert_ast(*idx_ptrs[i]);
+    domsizes[i] = calculate_array_domain_width(to_array_type(*arr_types[i]));
+    const smt_sort *arrsort = convert_sort(*arr_types[i]);
+    idxes[i] = fix_array_idx(idxes[i], arrsort);
+  }
+
+  // Now, concatenate them.
+  const smt_ast *concat = idxes[0];
+  unsigned long bvsize = domsizes[0];
+  for (i = 1; i < how_many_selects; i++) {
+    bvsize += domsizes[i];
+    const smt_sort *bvsort = mk_sort(SMT_SORT_BV, bvsize, false);
+    const smt_ast *args[2];
+    args[0] = idxes[i];
+    args[1] = concat;
+    concat = mk_func_app(bvsort, SMT_FUNC_CONCAT, args, 2);
+  }
+
+  return concat;
+}
+
+const smt_ast *
+smt_convt::handle_store_chain(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
 }
 
 const smt_convt::expr_op_convert

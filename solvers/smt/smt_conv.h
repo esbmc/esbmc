@@ -321,6 +321,9 @@ public:
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
 
+  const smt_ast *handle_select_chain(const expr2tc &expr);
+  const smt_ast *handle_store_chain(const expr2tc &expr);
+
   // Types
 
   // Types for union map.
