@@ -20,24 +20,24 @@ class kinduction_thread : public Thread
     unsigned int k;
 };
 
-class base_case : public kinduction_thread
+class base_case_thread : public kinduction_thread
 {
   public:
-    base_case();
+    base_case_thread();
     virtual void run();
 };
 
-class forward_condition : public kinduction_thread
+class forward_condition_thread : public kinduction_thread
 {
   public:
-    forward_condition();
+    forward_condition_thread();
     virtual void run();
 };
 
-class inductive_step : public kinduction_thread
+class inductive_step_thread : public kinduction_thread
 {
   public:
-    inductive_step();
+    inductive_step_thread();
     virtual void run();
 };
 

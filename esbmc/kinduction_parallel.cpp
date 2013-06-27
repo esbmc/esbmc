@@ -14,39 +14,39 @@ kinduction_thread::kinduction_thread()
 
 /* Base case class implementation */
 
-base_case::base_case()
+base_case_thread::base_case_thread()
   : kinduction_thread()
 {
 
 }
 
-void base_case::run()
+void base_case_thread::run()
 {
 
 }
 
 /* Forward condition class implementation */
 
-forward_condition::forward_condition()
+forward_condition_thread::forward_condition_thread()
   : kinduction_thread()
 {
 
 }
 
-void forward_condition::run()
+void forward_condition_thread::run()
 {
 
 }
 
 /* Inductive step class implementation */
 
-inductive_step::inductive_step()
+inductive_step_thread::inductive_step_thread()
   : kinduction_thread()
 {
 
 }
 
-void inductive_step::run()
+void inductive_step_thread::run()
 {
 
 }
