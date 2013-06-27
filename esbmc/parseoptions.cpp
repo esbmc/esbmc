@@ -599,7 +599,13 @@ int cbmc_parseoptionst::doit_k_induction()
   set_verbosity(bmc_inductive_step);
 
   // do actual BMC
-  bool res;
+  bool res=0;
+
+  if(cmdline.isset("parallel-k-induction"))
+  {
+
+    return res;
+  }
 
   do {
     std::cout << std::endl << "*** K-Induction Loop Iteration ";
