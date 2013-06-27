@@ -55,6 +55,8 @@ extern "C" {
 #include "bmc.h"
 #include "version.h"
 
+#include "kinduction_parallel.h"
+
 // jmorse - could be somewhere better
 
 #ifndef _WIN32
@@ -603,6 +605,17 @@ int cbmc_parseoptionst::doit_k_induction()
 
   if(cmdline.isset("parallel-k-induction"))
   {
+    // First, create the threads
+    base_case_thread bc(bmc_base_case, goto_functions_base_case);
+    forward_condition_thread fc(bmc_forward_condition, goto_functions_forward_condition);
+    inductive_step_thread is(bmc_inductive_step, goto_functions_inductive_step);
+
+    // Start the threads
+    bc.run();
+    fc.run();
+    is.run();
+
+    // We should wait to see if some result is found
 
     return res;
   }
