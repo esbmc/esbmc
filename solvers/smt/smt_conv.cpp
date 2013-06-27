@@ -959,15 +959,21 @@ smt_convt::convert_sort(const type2tc &type)
 
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
-    // machine int size.
+    // machine int size. Also, faff about if it's an array of arrays, extending
+    // the domain.
     const smt_sort *d = make_array_domain_sort(arr);
+
+    // Determine the range if we have arrays of arrays.
+    type2tc range = arr.subtype;
+    while (is_array_type(range))
+      range = to_array_type(range).subtype;
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
-    if (!int_encoding && is_bool_type(arr.subtype) && no_bools_in_arrays) {
+    if (!int_encoding && is_bool_type(range) && no_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {
-      r = convert_sort(arr.subtype);
+      r = convert_sort(range);
     }
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
@@ -1388,10 +1394,38 @@ const smt_sort *
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
 
-  if (int_encoding)
-    return mk_sort(SMT_SORT_INT);
-  else
-    return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+  // Start special casing if this is an array of arrays.
+  if (!is_array_type(arr.subtype)) {
+    // Normal array, work out what the domain sort is.
+    if (int_encoding)
+      return mk_sort(SMT_SORT_INT);
+    else
+      return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+  } else {
+    // This is an array of arrays -- we're going to convert this into a single
+    // array that has an extended domain. Work out that width. Firstly, how
+    // many levels of array do we have?
+
+    unsigned int how_many_arrays = 1;
+    type2tc subarr = arr.subtype;
+    while (is_array_type(subarr)) {
+      how_many_arrays++;
+      subarr = to_array_type(subarr).subtype;
+    }
+
+    assert(how_many_arrays < 64 && "Suspiciously large number of array "
+                                   "dimensions");
+    unsigned int domwidth;
+    unsigned int i;
+    domwidth = calculate_array_domain_width(arr);
+    subarr = arr.subtype;
+    for (i = 1; i < how_many_arrays; i++) {
+      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
+      subarr = arr.subtype;
+    }
+
+    return mk_sort(SMT_SORT_BV, domwidth, false);
+  }
 }
 
 const smt_ast *
