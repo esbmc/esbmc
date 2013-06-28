@@ -594,31 +594,7 @@ expr_handle_table:
   }
   case expr2t::index_id:
   {
-    const index2t &index = to_index2t(expr);
-
-    if (is_index2t(index.source_value)) {
-      args[1] = handle_select_chain(expr, &args[0]);
-    } else {
-      args[1] = fix_array_idx(args[1], args[0]->sort);
-    }
-
-    // Firstly, if it's a string, shortcircuit.
-    if (is_string_type(index.source_value)) {
-      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
-      break;
-    }
-
-    const array_type2t &arrtype = to_array_type(index.source_value->type);
-    if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
-      // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-      const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
-      a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
-      a = make_bit_bool(a);
-    } else if (is_tuple_array_ast_type(index.source_value->type)) {
-      a = tuple_array_select(args[0], sort, args[1]);
-    } else {
-      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
-    }
+    a = convert_array_index(expr, args[0], args[1], sort);
     break;
   }
   case expr2t::with_id:
@@ -630,28 +606,7 @@ expr_handle_table:
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
-      if (is_array_type(with.type) &&
-          is_array_type(to_array_type(with.type).subtype)) {
-        args[1] = handle_store_chain(expr, &args[0]);
-      } else {
-        args[1] = fix_array_idx(args[1], args[0]->sort);
-      }
-
-      assert(is_array_type(expr->type));
-      const array_type2t &arrtype = to_array_type(expr->type);
-      if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
-        args[2] = make_bool_bit(args[2]);
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-        break;
-      } else if (is_tuple_array_ast_type(with.type)) {
-        assert(is_structure_type(arrtype.subtype) ||
-               is_pointer_type(arrtype.subtype));
-        const smt_sort *sort = convert_sort(with.update_value->type);
-        a = tuple_array_update(args[0], args[1], args[2], sort);
-      } else {
-        // Normal operation
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-      }
+      a = convert_array_store(expr, args[0], args[1], args[2], sort);
     }
     break;
   }
@@ -1533,6 +1488,76 @@ smt_convt::handle_store_chain(const expr2tc &expr, const smt_ast **base)
   }
 
   return concat;
+}
+
+const smt_ast *
+smt_convt::convert_array_index(const expr2tc &expr, const smt_ast *array,
+                               const smt_ast *idx, const smt_sort *ressort)
+{
+  const index2t &index = to_index2t(expr);
+  const smt_ast *a;
+  const smt_ast *args[2];
+  args[0] = array;
+  args[1] = idx;
+
+  if (is_index2t(index.source_value)) {
+    args[1] = handle_select_chain(expr, &args[0]);
+  } else {
+    args[1] = fix_array_idx(args[1], args[0]->sort);
+  }
+
+  // Firstly, if it's a string, shortcircuit.
+  if (is_string_type(index.source_value)) {
+    return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+  }
+
+  const array_type2t &arrtype = to_array_type(index.source_value->type);
+  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
+    // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
+    const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
+    a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
+    a = make_bit_bool(a);
+  } else if (is_tuple_array_ast_type(index.source_value->type)) {
+    a = tuple_array_select(args[0], ressort, args[1]);
+  } else {
+    a = mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+  }
+
+  return a;
+}
+
+const smt_ast *
+smt_convt::convert_array_store(const expr2tc &expr, const smt_ast *array,
+                               const smt_ast *idx, const smt_ast *value,
+                               const smt_sort *ressort)
+{
+  const with2t &with = to_with2t(expr);
+  const smt_ast *args[3];
+  args[0] = array;
+  args[1] = idx;
+  args[2] = value;
+
+  if (is_array_type(with.type) &&
+      is_array_type(to_array_type(with.type).subtype)) {
+    args[1] = handle_store_chain(expr, &args[0]);
+  } else {
+    args[1] = fix_array_idx(args[1], args[0]->sort);
+  }
+
+  assert(is_array_type(expr->type));
+  const array_type2t &arrtype = to_array_type(expr->type);
+  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+    args[2] = make_bool_bit(args[2]);
+    return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
+  } else if (is_tuple_array_ast_type(with.type)) {
+    assert(is_structure_type(arrtype.subtype) ||
+           is_pointer_type(arrtype.subtype));
+    const smt_sort *sort = convert_sort(with.update_value->type);
+    return tuple_array_update(args[0], args[1], args[2], sort);
+  } else {
+    // Normal operation
+    return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
+  }
 }
 
 const smt_convt::expr_op_convert

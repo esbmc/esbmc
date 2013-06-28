@@ -251,6 +251,17 @@ public:
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
   std::string mk_fresh_name(const std::string &tag);
 
+  virtual const smt_ast *convert_array_index(const expr2tc &expr,
+                                             const smt_ast *array,
+                                             const smt_ast *idx,
+                                             const smt_sort *ressort);
+  virtual const smt_ast *convert_array_store(const expr2tc &expr,
+                                             const smt_ast *array,
+                                             const smt_ast *idx,
+                                             const smt_ast *value,
+                                             const smt_sort *ressort);
+
+
   // Internal foo
 
   smt_sort *convert_sort(const type2tc &type);
