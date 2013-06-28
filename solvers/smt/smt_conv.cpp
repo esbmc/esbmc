@@ -1325,7 +1325,7 @@ smt_convt::make_bool_bit(const smt_ast *a)
   assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
          "smt_convt::make_bool_bit");
   const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-  const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *zero = mk_smt_bvint(BigInt(0), false, 1);
   const smt_ast *args[3];
   args[0] = a;
   args[1] = one;
