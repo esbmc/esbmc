@@ -113,11 +113,10 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_EQ:
   {
-    // Pain: if it's a bv, do a bv comp. Otherwise, wave hands in the air.
-    if (args[0]->sort->id == SMT_SORT_BV) {
-      bvtags::bvcomp_tag tag;
-      result = ctx(tag, args[0]->restype, args[1]->restype);
-    } else if (args[0]->sort->id == SMT_SORT_BOOL) {
+    // Confusion: there's a bvcomp_tag, which I thought was for comparing bvs,
+    // but it turns out it's a comparison that results in a bv bit. Using
+    // equal_tag appears to work for bvs and bools, and results in a bool.
+    if (args[0]->sort->id == SMT_SORT_BOOL || args[0]->sort->id == SMT_SORT_BV){
       predtags::equal_tag tag;
       result = ctx(tag, args[0]->restype, args[1]->restype);
     } else {
