@@ -337,7 +337,9 @@ public:
                               std::vector<unsigned int> &out_widths);
   const smt_ast *concatonate_indexes(const std::vector<expr2tc> &fields,
                                      const std::vector<unsigned int> &widths);
-  const smt_ast *handle_store_chain(const expr2tc &expr, const smt_ast **base);
+  void decompose_store_chain(const expr2tc &expr, const smt_ast **base,
+                              std::vector<expr2tc> &output,
+                              std::vector<unsigned int> &out_widths);
 
   // Types
 
