@@ -332,7 +332,11 @@ public:
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
 
-  const smt_ast *handle_select_chain(const expr2tc &expr, const smt_ast **base);
+  void decompose_select_chain(const expr2tc &expr, const smt_ast **base,
+                              std::vector<expr2tc> &output,
+                              std::vector<unsigned int> &out_widths);
+  const smt_ast *concatonate_indexes(const std::vector<expr2tc> &fields,
+                                     const std::vector<unsigned int> &widths);
   const smt_ast *handle_store_chain(const expr2tc &expr, const smt_ast **base);
 
   // Types
