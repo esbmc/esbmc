@@ -146,7 +146,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
 
     mulargs[0] = arg1_ext;
     mulargs[1] = arg2_ext;
-    const smt_ast *result = mk_func_app(bigsort, SMT_FUNC_MUL, mulargs, 2);
+    const smt_ast *result = mk_func_app(bigsort, SMT_FUNC_BVMUL, mulargs, 2);
 
     // Extract top half.
     const smt_ast *toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
