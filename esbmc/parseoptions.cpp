@@ -616,6 +616,9 @@ int cbmc_parseoptionst::doit_k_induction()
     is.start();
 
     // We should wait to see if some result is found
+    pthread_mutex_lock(&main_mutex);
+    pthread_cond_wait(&main_cond, &main_mutex);
+    pthread_mutex_unlock(&main_mutex);
 
     return res;
   }

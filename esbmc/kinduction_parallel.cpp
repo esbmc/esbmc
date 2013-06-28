@@ -7,6 +7,9 @@
 
 #include "kinduction_parallel.h"
 
+pthread_mutex_t main_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t main_cond = PTHREAD_COND_INITIALIZER;
+
 /* Base case class implementation */
 
 base_case_thread::base_case_thread(bmct &bmc,

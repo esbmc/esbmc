@@ -13,12 +13,16 @@
 #include <goto-programs/goto_functions.h>
 #include "bmc.h"
 
+extern pthread_mutex_t main_mutex;
+extern pthread_cond_t main_cond;
+
 class base_case_thread : public Thread
 {
   public:
     base_case_thread(bmct &bmc,
         goto_functionst &goto_functions);
 
+  protected:
     virtual void run();
 
   private:
@@ -33,6 +37,7 @@ class forward_condition_thread : public Thread
     forward_condition_thread(bmct &bmc,
         goto_functionst &goto_functions);
 
+  protected:
     virtual void run();
 
   private:
@@ -47,6 +52,7 @@ class inductive_step_thread : public Thread
     inductive_step_thread(bmct &bmc,
         goto_functionst &goto_functions);
 
+  protected:
     virtual void run();
 
   private:
