@@ -51,9 +51,9 @@ class safe_queues
   public:
     static safe_queues *get_instance();
 
-    pthread_mutex_t _bcMutex;
-    pthread_mutex_t _fcMutex;
-    pthread_mutex_t _isMutex;
+    void update_bc_queue(unsigned int k, int res);
+    void update_fc_queue(unsigned int k, int res);
+    void update_is_queue(unsigned int k, int res);
 
   private:
     safe_queues();
@@ -62,6 +62,10 @@ class safe_queues
     short bc_queue[50];
     short fc_queue[50];
     short is_queue[50];
+
+    pthread_mutex_t _bcMutex;
+    pthread_mutex_t _fcMutex;
+    pthread_mutex_t _isMutex;
 
     static safe_queues* instance;
 
