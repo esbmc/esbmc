@@ -15,6 +15,12 @@ metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
     astsyms(), sym_lookup(symbols, astsyms)
 {
 
+  if (int_encoding) {
+    std::cerr << "MetaSMT only supports QF_AUFBV logic, cannot make integer "
+                 "mode solver" << std::endl;
+    abort();
+  }
+
   smt_post_init();
 }
 
