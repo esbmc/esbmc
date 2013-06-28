@@ -1399,9 +1399,11 @@ smt_convt::decompose_select_chain(const expr2tc &expr, const smt_ast **base,
                                   to_array_type(idx->source_value->type)));
   while (is_index2t(idx->source_value)) {
     idx = idx->source_value;
-    output.push_back(idx);
     out_widths.push_back(calculate_array_domain_width(
                                     to_array_type(idx->source_value->type)));
+    typecast2tc t(type2tc(new unsignedbv_type2t(out_widths.back())), idx);
+    expr2tc tmp = t->simplify();
+    output.push_back((is_nil_expr(tmp)) ? t : tmp);
   }
 
   // Give the caller the base array object / thing. So that it can actually
@@ -1448,9 +1450,11 @@ smt_convt::decompose_store_chain(const expr2tc &expr, const smt_ast **base,
                                    to_array_type(with->source_value->type)));
   while (is_with2t(with->source_value)) {
     with = with->source_value;
-    output.push_back(with);
     domsizes.push_back(calculate_array_domain_width(
                                      to_array_type(with->source_value->type)));
+    typecast2tc t(type2tc(new unsignedbv_type2t(domsizes.back())), with);
+    expr2tc tmp = t->simplify();
+    output.push_back((is_nil_expr(tmp)) ? t : tmp);
   }
 
   // Give the caller the base array object / thing. So that it can actually
