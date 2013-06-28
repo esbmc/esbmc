@@ -49,6 +49,14 @@ void base_case_thread::run()
   do
   {
     res=_bmc.run(_goto_functions);
+
+    // If the base case is false, the property is false
+    if(!res)
+    {
+      finalize_multithread();
+      return;
+    }
+
     safe_queues::get_instance()->update_bc_queue(_k,res);
 
     _bmc.options.set_option("unwind", i2string(++_k));
