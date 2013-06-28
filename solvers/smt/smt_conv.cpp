@@ -630,7 +630,8 @@ expr_handle_table:
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(args[0], idx, args[2]);
     } else {
-      if (is_with2t(with.source_value)) {
+      if (is_array_type(with.type) &&
+          is_array_type(to_array_type(with.type).subtype)) {
         args[1] = handle_store_chain(expr, &args[0]);
       } else {
         args[1] = fix_array_idx(args[1], args[0]->sort);
