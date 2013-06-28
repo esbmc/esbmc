@@ -15,10 +15,12 @@ pthread_cond_t main_cond = PTHREAD_COND_INITIALIZER;
 base_case_thread::base_case_thread(bmct &bmc,
     goto_functionst &goto_functions)
   : Thread(),
-    _k(0),
+    _k(1),
     _bmc(bmc),
     _goto_functions(goto_functions)
-{ }
+{
+  _bmc.options.set_option("unwind", i2string(_k));
+}
 
 void base_case_thread::run()
 {
@@ -29,6 +31,8 @@ void base_case_thread::run()
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_bc_queue(_k,res);
+
+    _bmc.options.set_option("unwind", i2string(++_k));
   }
 }
 
@@ -37,10 +41,13 @@ void base_case_thread::run()
 forward_condition_thread::forward_condition_thread(bmct &bmc,
     goto_functionst &goto_functions)
   : Thread(),
-    _k(0),
+    _k(2),
     _bmc(bmc),
     _goto_functions(goto_functions)
-{ }
+{
+  _bmc.options.set_option("unwind", i2string(_k));
+}
+
 
 void forward_condition_thread::run()
 {
@@ -51,6 +58,8 @@ void forward_condition_thread::run()
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_fc_queue(_k,res);
+
+    _bmc.options.set_option("unwind", i2string(++_k));
   }
 }
 
@@ -59,10 +68,13 @@ void forward_condition_thread::run()
 inductive_step_thread::inductive_step_thread(bmct &bmc,
     goto_functionst &goto_functions)
   : Thread(),
-    _k(0),
+    _k(2),
     _bmc(bmc),
     _goto_functions(goto_functions)
-{ }
+{
+  _bmc.options.set_option("unwind", i2string(_k));
+}
+
 
 void inductive_step_thread::run()
 {
@@ -73,6 +85,8 @@ void inductive_step_thread::run()
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_is_queue(_k,res);
+
+    _bmc.options.set_option("unwind", i2string(++_k));
   }
 }
 
