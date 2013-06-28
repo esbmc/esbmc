@@ -611,9 +611,9 @@ int cbmc_parseoptionst::doit_k_induction()
     inductive_step_thread is(bmc_inductive_step, goto_functions_inductive_step);
 
     // Start the threads
-    bc.run();
-    fc.run();
-    is.run();
+    bc.start();
+    fc.start();
+    is.start();
 
     // We should wait to see if some result is found
 
