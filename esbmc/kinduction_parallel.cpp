@@ -7,17 +7,14 @@
 
 #include "kinduction_parallel.h"
 
-kinduction_thread::kinduction_thread(bmct &bmc, goto_functionst &goto_functions)
-  : Thread(),
-    k(0),
-    _bmc(bmc),
-    _goto_functions(goto_functions)
-{ }
-
 /* Base case class implementation */
 
-base_case_thread::base_case_thread(bmct &bmc, goto_functionst &goto_functions)
-  : kinduction_thread(bmc, goto_functions)
+base_case_thread::base_case_thread(bmct &bmc,
+    goto_functionst &goto_functions)
+  : Thread(),
+    _k(0),
+    _bmc(bmc),
+    _goto_functions(goto_functions)
 { }
 
 void base_case_thread::run()
@@ -25,17 +22,21 @@ void base_case_thread::run()
   bool res=0;
 
   // We will do BMC for each k, until 50
-  while(k<=50)
+  while(_k<=50)
   {
     res=_bmc.run(_goto_functions);
-    safe_queues::get_instance()->update_bc_queue(k,res);
+    safe_queues::get_instance()->update_bc_queue(_k,res);
   }
 }
 
 /* Forward condition class implementation */
 
-forward_condition_thread::forward_condition_thread(bmct &bmc, goto_functionst &goto_functions)
-  : kinduction_thread(bmc, goto_functions)
+forward_condition_thread::forward_condition_thread(bmct &bmc,
+    goto_functionst &goto_functions)
+  : Thread(),
+    _k(0),
+    _bmc(bmc),
+    _goto_functions(goto_functions)
 { }
 
 void forward_condition_thread::run()
@@ -43,17 +44,21 @@ void forward_condition_thread::run()
   bool res=0;
 
   // We will do BMC for each k, until 50
-  while(k<=50)
+  while(_k<=50)
   {
     res=_bmc.run(_goto_functions);
-    safe_queues::get_instance()->update_fc_queue(k,res);
+    safe_queues::get_instance()->update_fc_queue(_k,res);
   }
 }
 
 /* Inductive step class implementation */
 
-inductive_step_thread::inductive_step_thread(bmct &bmc, goto_functionst &goto_functions)
-  : kinduction_thread(bmc, goto_functions)
+inductive_step_thread::inductive_step_thread(bmct &bmc,
+    goto_functionst &goto_functions)
+  : Thread(),
+    _k(0),
+    _bmc(bmc),
+    _goto_functions(goto_functions)
 { }
 
 void inductive_step_thread::run()
@@ -61,10 +66,10 @@ void inductive_step_thread::run()
   bool res=0;
 
   // We will do BMC for each k, until 50
-  while(k<=50)
+  while(_k<=50)
   {
     res=_bmc.run(_goto_functions);
-    safe_queues::get_instance()->update_is_queue(k,res);
+    safe_queues::get_instance()->update_is_queue(_k,res);
   }
 }
 

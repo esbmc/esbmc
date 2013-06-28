@@ -13,37 +13,46 @@
 #include <goto-programs/goto_functions.h>
 #include "bmc.h"
 
-// This will be the base class for k induction threads
-class kinduction_thread : public Thread
+class base_case_thread : public Thread
 {
   public:
-    kinduction_thread(bmct &bmc, goto_functionst &goto_functions);
+    base_case_thread(bmct &bmc,
+        goto_functionst &goto_functions);
 
-  protected:
-    unsigned int k;
+    virtual void run();
+
+  private:
+    unsigned int _k;
     bmct &_bmc;
     goto_functionst &_goto_functions;
 };
 
-class base_case_thread : public kinduction_thread
+class forward_condition_thread : public Thread
 {
   public:
-    base_case_thread(bmct &bmc, goto_functionst &goto_functions);
+    forward_condition_thread(bmct &bmc,
+        goto_functionst &goto_functions);
+
     virtual void run();
+
+  private:
+    unsigned int _k;
+    bmct &_bmc;
+    goto_functionst &_goto_functions;
 };
 
-class forward_condition_thread : public kinduction_thread
+class inductive_step_thread : public Thread
 {
   public:
-    forward_condition_thread(bmct &bmc, goto_functionst &goto_functions);
-    virtual void run();
-};
+    inductive_step_thread(bmct &bmc,
+        goto_functionst &goto_functions);
 
-class inductive_step_thread : public kinduction_thread
-{
-  public:
-    inductive_step_thread(bmct &bmc, goto_functionst &goto_functions);
     virtual void run();
+
+  private:
+    unsigned int _k;
+    bmct &_bmc;
+    goto_functionst &_goto_functions;
 };
 
 class safe_queues
