@@ -25,10 +25,23 @@ index eb397eb..78e6083 100644
  set_package_info(Boost "Portable C++ libraries")
  include_directories(${Boost_INCLUDE_DIRS})
 diff --git a/src/metaSMT/backend/Z3_Backend.hpp b/src/metaSMT/backend/Z3_Backend.hpp
-index cbbf572..6a4c697 100644
+index cbbf572..5b40005 100644
 --- a/src/metaSMT/backend/Z3_Backend.hpp
 +++ b/src/metaSMT/backend/Z3_Backend.hpp
-@@ -435,9 +435,8 @@ namespace metaSMT {
+@@ -131,7 +131,11 @@ namespace metaSMT {
+       Z3_Backend()
+         : solver_(ctx_)
+         , assumption_( (*this)(predtags::true_tag(), boost::any()) )
+-      {}
++      {
++		ctx_.set("MODEL", true);
++		ctx_.set("RELEVANCY", 0);
++		ctx_.set("SOLVER", true);
++      }
+ 
+       ~Z3_Backend()
+       {}
+@@ -435,9 +439,8 @@ namespace metaSMT {
                                result_type const &b) {
          result_type bit1 = (*this)(bvtags::bit1_tag(), boost::any());
          result_type bit0 = (*this)(bvtags::bit0_tag(), boost::any());
