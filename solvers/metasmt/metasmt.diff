@@ -41,15 +41,3 @@ index cbbf572..5b40005 100644
  
        ~Z3_Backend()
        {}
-@@ -435,9 +439,8 @@ namespace metaSMT {
-                               result_type const &b) {
-         result_type bit1 = (*this)(bvtags::bit1_tag(), boost::any());
-         result_type bit0 = (*this)(bvtags::bit0_tag(), boost::any());
--        return z3::to_expr(ctx_,
--          Z3_mk_ite(ctx_, Z3_mk_eq(ctx_, z3::expr(a), z3::expr(b)),
--                    z3::expr(bit1), z3::expr(bit0)));
-+	// jmorse: huuurrrrrrr
-+        return z3::to_expr(ctx_, Z3_mk_eq(ctx_, z3::expr(a), z3::expr(b)));
-       }
- 
-       result_type operator() (bvtags::extract_tag const &,
