@@ -639,7 +639,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
       res = do_bmc(bmc_base_case, goto_functions_base_case);
 
-      if(k_step >= 1 && res)
+      if(res)
         return res;
 
       ++k_step;
