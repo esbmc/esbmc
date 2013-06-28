@@ -631,11 +631,10 @@ expr_handle_table:
       a = tuple_update(args[0], idx, args[2]);
     } else {
       if (is_with2t(with.source_value)) {
-        a = handle_store_chain(expr);
-        break;
+        args[1] = handle_store_chain(expr, &args[0]);
+      } else {
+        args[1] = fix_array_idx(args[1], args[0]->sort);
       }
-
-      args[1] = fix_array_idx(args[1], args[0]->sort);
 
       assert(is_array_type(expr->type));
       const array_type2t &arrtype = to_array_type(expr->type);
@@ -1482,9 +1481,57 @@ smt_convt::handle_select_chain(const expr2tc &expr, const smt_ast **base)
 }
 
 const smt_ast *
-smt_convt::handle_store_chain(const expr2tc &expr __attribute__((unused)))
+smt_convt::handle_store_chain(const expr2tc &expr, const smt_ast **base)
 {
-  abort();
+  // Just like handle_select_chain, we have some kind of multidimensional
+  // array, which we're representing as a single array with an extended domain,
+  // and using different segments of the domain to represent different
+  // dimensions of it. Concat all of the indexs into one index; also give the
+  // caller the base object that this is being applied to.
+
+  std::vector<with2tc> withs;
+  with2tc with = expr;
+  withs.push_back(with);
+  while (is_with2t(with->source_value)) {
+    with = with->source_value;
+    withs.push_back(with);
+  }
+
+  // Give the caller the base array object / thing. So that it can actually
+  // update the right piece of data.
+  *base = convert_ast(with->source_value);
+
+  std::vector<const smt_ast*> idxes;
+  std::vector<unsigned> domsizes;
+  idxes.reserve(withs.size());
+  domsizes.reserve(withs.size());
+  unsigned int i = 0;
+  for (std::vector<with2tc>::const_iterator it = withs.begin();
+       it != withs.end(); it++) {
+    idxes[i] = convert_ast((*it)->update_field);
+    domsizes[i] =
+      calculate_array_domain_width(to_array_type((*it)->source_value->type));
+    if (domsizes[i] != config.ansi_c.int_width) {
+      const smt_sort *domsort = mk_sort(SMT_SORT_BV, domsizes[i], false);
+      idxes[i] = mk_extract(idxes[i], domsizes[i]-1, 0, domsort);
+    }
+
+    i++;
+  }
+
+  // Now, concatenate them.
+  const smt_ast *concat = idxes[0];
+  unsigned long bvsize = domsizes[0];
+  for (i = 1; i < withs.size(); i++) {
+    bvsize += domsizes[i];
+    const smt_sort *bvsort = mk_sort(SMT_SORT_BV, bvsize, false);
+    const smt_ast *args[2];
+    args[0] = idxes[i];
+    args[1] = concat;
+    concat = mk_func_app(bvsort, SMT_FUNC_CONCAT, args, 2);
+  }
+
+  return concat;
 }
 
 const smt_convt::expr_op_convert
