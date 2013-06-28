@@ -10,6 +10,11 @@
 pthread_mutex_t main_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t main_cond = PTHREAD_COND_INITIALIZER;
 
+pthread_mutex_t solution_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t solution_cond = PTHREAD_COND_INITIALIZER;
+
+bool solution_found=false;
+
 /* Base case class implementation */
 
 base_case_thread::base_case_thread(bmct &bmc,
@@ -25,15 +30,21 @@ base_case_thread::base_case_thread(bmct &bmc,
 void base_case_thread::run()
 {
   bool res=0;
+  bool found_solution=false;
 
   // We will do BMC for each k, until 50
-  while(_k<=50)
+  do
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_bc_queue(_k,res);
 
     _bmc.options.set_option("unwind", i2string(++_k));
-  }
+
+    pthread_mutex_lock(&solution_mutex);
+    found_solution=solution_found;
+    pthread_mutex_unlock(&solution_mutex);
+
+  } while(_k<=50 && found_solution);
 }
 
 /* Forward condition class implementation */
@@ -52,15 +63,21 @@ forward_condition_thread::forward_condition_thread(bmct &bmc,
 void forward_condition_thread::run()
 {
   bool res=0;
+  bool found_solution=false;
 
   // We will do BMC for each k, until 50
-  while(_k<=50)
+  do
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_fc_queue(_k,res);
 
     _bmc.options.set_option("unwind", i2string(++_k));
-  }
+
+    pthread_mutex_lock(&solution_mutex);
+    found_solution=solution_found;
+    pthread_mutex_unlock(&solution_mutex);
+
+  } while(_k<=50 && found_solution);
 }
 
 /* Inductive step class implementation */
@@ -79,15 +96,21 @@ inductive_step_thread::inductive_step_thread(bmct &bmc,
 void inductive_step_thread::run()
 {
   bool res=0;
+  bool found_solution=false;
 
   // We will do BMC for each k, until 50
-  while(_k<=50)
+  do
   {
     res=_bmc.run(_goto_functions);
     safe_queues::get_instance()->update_is_queue(_k,res);
 
     _bmc.options.set_option("unwind", i2string(++_k));
-  }
+
+    pthread_mutex_lock(&solution_mutex);
+    found_solution=solution_found;
+    pthread_mutex_unlock(&solution_mutex);
+
+  } while(_k<=50 && found_solution);
 }
 
 /* class safe_queues */
