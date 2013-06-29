@@ -1456,16 +1456,12 @@ smt_convt::decompose_store_chain(const expr2tc &expr, const smt_ast **base,
   // caller the base object that this is being applied to.
 
   with2tc with = expr;
-  output.push_back(with);
-  domsizes.push_back(calculate_array_domain_width(
-                                   to_array_type(with->source_value->type)));
+  output.push_back(twiddle_index_width(with->update_field, with->type));
+  domsizes.push_back(output.back()->type->get_width());
   while (is_with2t(with->source_value)) {
     with = with->source_value;
-    domsizes.push_back(calculate_array_domain_width(
-                                     to_array_type(with->source_value->type)));
-    typecast2tc t(type2tc(new unsignedbv_type2t(domsizes.back())), with);
-    expr2tc tmp = t->simplify();
-    output.push_back((is_nil_expr(tmp)) ? t : tmp);
+    output.push_back(twiddle_index_width(with->update_field, with->type));
+    domsizes.push_back(output.back()->type->get_width());
   }
 
   // Give the caller the base array object / thing. So that it can actually
