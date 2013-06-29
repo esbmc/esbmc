@@ -1318,6 +1318,25 @@ smt_convt::fix_array_idx(const smt_ast *idx, const smt_sort *arrsort)
 }
 
 unsigned long
+smt_convt::size_to_bit_width(unsigned long sz)
+{
+  uint64_t domwidth = 2;
+  unsigned int dombits = 1;
+
+  // Shift domwidth up until it's either larger or equal to sz, or we risk
+  // overflowing.
+  while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
+    domwidth <<= 1;
+    dombits++;
+  }
+
+  if (domwidth == 0x8000000000000000ULL)
+    dombits = 64;
+
+  return dombits;
+}
+
+unsigned long
 smt_convt::calculate_array_domain_width(const array_type2t &arr)
 {
   // Index arrays by the smallest integer required to represent its size.
@@ -1325,21 +1344,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   // machine int size.
   if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
     constant_int2tc thesize = arr.array_size;
-    unsigned long sz = thesize->constant_value.to_ulong();
-    uint64_t domwidth = 2;
-    unsigned int dombits = 1;
-
-    // Shift domwidth up until it's either larger or equal to sz, or we risk
-    // overflowing.
-    while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
-      domwidth <<= 1;
-      dombits++;
-    }
-
-    if (domwidth == 0x8000000000000000ULL)
-      dombits = 64;
-
-    return dombits;
+    return size_to_bit_width(thesize->constant_value.to_ulong());
   } else {
     return config.ansi_c.int_width;
   }

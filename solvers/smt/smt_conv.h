@@ -329,6 +329,7 @@ public:
   const smt_ast *make_bit_bool(const smt_ast *a);
 
   const smt_ast *fix_array_idx(const smt_ast *idx, const smt_sort *array_type);
+  unsigned long size_to_bit_width(unsigned long sz);
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
   expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
