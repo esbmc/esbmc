@@ -1527,7 +1527,8 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_ast *array,
   args[2] = value;
 
   if (is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype)) {
+      is_array_type(to_array_type(with.type).subtype) &&
+      is_with2t(with.source_value)) {
     std::vector<expr2tc> indexes;
     std::vector<unsigned int> idx_widths;
     decompose_store_chain(expr, &args[0], indexes, idx_widths);
