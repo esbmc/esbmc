@@ -1428,9 +1428,11 @@ smt_convt::concatonate_indexes(const std::vector<expr2tc> &fields,
   assert(fields.size() >= 1);
 
   const smt_ast *concat = convert_ast(fields[0]);
-  unsigned long bvsize = out_widths[0], i = 0;
-  std::vector<expr2tc>::const_iterator it;
-  for (it = fields.begin(); it != fields.end(); it++, i++) {
+  unsigned long bvsize = out_widths[0];
+  unsigned long i = 1;
+  std::vector<expr2tc>::const_iterator it = fields.begin();
+  it++;
+  for (; it != fields.end(); it++, i++) {
     bvsize += out_widths[i];
     const smt_sort *bvsort = mk_sort(SMT_SORT_BV, bvsize, false);
     const smt_ast *args[2];
