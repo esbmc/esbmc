@@ -727,17 +727,15 @@ smt_convt::array_create(const expr2tc &expr)
   // don't need funky handling, but we need to create a fresh new symbol and
   // repeatedly store the desired data into it, to create an SMT array
   // representing the expression we're converting.
-  const smt_ast *args[3];
-  const smt_sort *sort = convert_sort(expr->type);
   std::string name = mk_fresh_name("array_create::");
-  const smt_ast *newsym = mk_smt_symbol(name, sort);
+  expr2tc newsym = symbol2tc(expr->type, name);
 
   // Check size
   const array_type2t &arr_type =
     static_cast<const array_type2t &>(*expr->type.get());
   if (arr_type.size_is_infinite) {
     // Guarentee nothing, this is modelling only.
-    return newsym;
+    return convert_ast(newsym);
   } else if (!is_constant_int2t(arr_type.array_size)) {
     std::cerr << "Non-constant sized array of type constant_array_of2t"
               << std::endl;
@@ -751,42 +749,38 @@ smt_convt::array_create(const expr2tc &expr)
     const constant_array_of2t &array = to_constant_array_of2t(expr);
 
     // Repeatedly store things into this.
-    const smt_ast *init = convert_ast(array.initializer);
+    expr2tc init = array.initializer;
     if (is_bool_type(array.initializer) && !int_encoding && no_bools_in_arrays)
-      init = make_bool_bit(init);
+      init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
 
     for (unsigned int i = 0; i < sz; i++) {
-      const smt_ast *field = (int_encoding)
-        ? mk_smt_int(BigInt(i), false)
-        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      args[0] = newsym;
-      args[1] = fix_array_idx(field, newsym->sort);
-      args[2] = init;
-      newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+      constant_int2tc field(
+                        type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
+                        BigInt(i));
+      newsym = with2tc(newsym->type, newsym, field, init);
     }
 
-    return newsym;
+    return convert_ast(newsym);
   } else {
     assert(is_constant_array2t(expr));
     const constant_array2t &array = to_constant_array2t(expr);
 
     // Repeatedly store things into this.
     for (unsigned int i = 0; i < sz; i++) {
-      const smt_ast *field = (int_encoding)
-        ? mk_smt_int(BigInt(i), false)
-        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      args[0] = newsym;
-      args[1] = fix_array_idx(field, newsym->sort);
-      args[2] = convert_ast(array.datatype_members[i]);
+      constant_int2tc field(
+                        type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
+                        BigInt(i));
+      expr2tc init = array.datatype_members[i];
 
       if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
           no_bools_in_arrays)
-        args[2] = make_bool_bit(args[2]);
+        init = typecast2tc(type2tc(new unsignedbv_type2t(1)),
+                           array.datatype_members[i]);
 
-      newsym = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+      newsym = with2tc(newsym->type, newsym, field, init);
     }
 
-    return newsym;
+    return convert_ast(newsym);
   }
 }
 
