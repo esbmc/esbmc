@@ -1383,6 +1383,19 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
   }
 }
 
+expr2tc
+smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
+{
+  const array_type2t &arrtype = to_array_type(type);
+  unsigned int width = calculate_array_domain_width(arrtype);
+  typecast2tc t(type2tc(new unsignedbv_type2t(width)), expr);
+  expr2tc tmp = t->simplify();
+  if (is_nil_expr(tmp))
+    return t;
+  else
+    return tmp;
+}
+
 void
 smt_convt::decompose_select_chain(const expr2tc &expr, const smt_ast **base,
                                   std::vector<expr2tc> &output,
@@ -1394,16 +1407,12 @@ smt_convt::decompose_select_chain(const expr2tc &expr, const smt_ast **base,
   // index at the top, then descending.
 
   index2tc idx = expr;
-  output.push_back(idx);
-  out_widths.push_back(calculate_array_domain_width(
-                                  to_array_type(idx->source_value->type)));
+  output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
+  out_widths.push_back(output.back()->type->get_width());
   while (is_index2t(idx->source_value)) {
     idx = idx->source_value;
-    out_widths.push_back(calculate_array_domain_width(
-                                    to_array_type(idx->source_value->type)));
-    typecast2tc t(type2tc(new unsignedbv_type2t(out_widths.back())), idx);
-    expr2tc tmp = t->simplify();
-    output.push_back((is_nil_expr(tmp)) ? t : tmp);
+    output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
+    out_widths.push_back(output.back()->type->get_width());
   }
 
   // Give the caller the base array object / thing. So that it can actually
