@@ -1564,15 +1564,16 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_ast *array,
 type2tc
 smt_convt::flatten_array_type(const type2tc &type)
 {
-  const array_type2t &arr_type = to_array_type(type);
-  unsigned long arrbits = calculate_array_domain_width(arr_type);
-  uint64_t arr_size = 1ULL << arrbits;
+  unsigned long arrbits = 0;
 
   type2tc type_rec = type;
-  while (is_array_type(type_rec))
+  while (is_array_type(type_rec)) {
+    arrbits += calculate_array_domain_width(to_array_type(type_rec));
     type_rec = to_array_type(type_rec).subtype;
+  }
 
   // type_rec is now the base type.
+  uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
 }
