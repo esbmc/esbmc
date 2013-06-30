@@ -485,11 +485,9 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       type2tc this_arr_type(new array_type2t(*it, arr_width, false));
       const smt_ast *args[2];
       const smt_sort *field_sort = convert_sort(*it);
-      const smt_sort *arrsort = convert_sort(this_arr_type);
-      args[0] = mk_smt_symbol(name, arrsort);
+      symbol2tc array_sym(this_arr_type, name);
       expr2tc tmpidx = fix_array_idx(field, this_arr_type);
-      args[1] = convert_ast(tmpidx);
-      args[0] = mk_func_app(field_sort, SMT_FUNC_SELECT, args, 2);
+      args[0] = mk_select(array_sym, tmpidx, field_sort);
       args[1] = tuple_project(result, field_sort, i);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
@@ -560,14 +558,12 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
                             struct_type.member_names[i].as_string();
       type2tc this_arr_type(new array_type2t(*it, arr_width, false));
       const smt_ast *args[3];
-      const smt_sort *elem_sort = convert_sort(*it);
       const smt_sort *arrsort = convert_sort(this_arr_type);
       // Take the source array variable and update it into an ast.
-      args[0] = mk_smt_symbol(arrname, arrsort);
+      symbol2tc arrsym(this_arr_type, arrname);
       expr2tc tmp_idx = fix_array_idx(idx, this_arr_type);
-      args[1] = convert_ast(tmp_idx);
-      args[2] = mk_smt_symbol(valname, elem_sort);
-      args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
+      symbol2tc valsym(*it, valname);
+      args[0] = mk_store(arrsym, tmp_idx, valsym, arrsort);
       // Now assign that ast into the result tuple array.
       args[1] = mk_smt_symbol(resname, arrsort);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
