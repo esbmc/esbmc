@@ -40,12 +40,17 @@ class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
   metasmt_smt_ast(result_type r, const smt_sort *_s)
-    : smt_ast(_s), restype(r), symname("")
+    : smt_ast(_s), restype(r), symname(""), array_fields()
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s, const std::string &s)
-    : smt_ast(_s), restype(r), symname(s)
+    : smt_ast(_s), restype(r), symname(s), array_fields()
+  {
+  }
+
+  metasmt_smt_ast(const smt_sort *_s, const std::vector<const smt_ast *> &a)
+    : smt_ast(_s), restype(), symname(""), array_fields(a)
   {
   }
 
@@ -53,6 +58,10 @@ public:
 
   result_type restype;
   std::string symname; // Only if this was produced from mk_smt_symbol.
+
+  // If an array type, contains the set of array values. Identified by their
+  // indexes.
+  std::vector<const smt_ast *> array_fields;
 };
 
 // copy+paste directly from the metaSMT documentation:
