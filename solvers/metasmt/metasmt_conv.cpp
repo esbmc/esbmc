@@ -107,6 +107,9 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_ITE:
   {
+    if (s->id == SMT_SORT_ARRAY)
+      return array_ite(args[0], args[1], args [2], metasmt_sort_downcast(s));
+
     predtags::ite_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
     break;
@@ -725,4 +728,13 @@ metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
   mast->array_values.push_front(
       metasmt_smt_ast::unbounded_list_type::value_type(real_idx, real_val));
   return mast;
+}
+
+const metasmt_smt_ast *
+metasmt_convt::array_ite(const metasmt_smt_ast *cond,
+                         const metasmt_smt_ast *true_arr,
+                         const metasmt_smt_ast *false_arr,
+                         const metasmt_smt_sort *thesort)
+{
+  abort();
 }
