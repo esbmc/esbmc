@@ -580,6 +580,7 @@ const smt_ast *
 metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
                          const smt_sort *ressort)
 {
+  assert(ressort->id != SMT_SORT_ARRAY);
   metasmt_smt_ast *ma = convert_ast(array);
 
   if (ma->is_unbounded_array())

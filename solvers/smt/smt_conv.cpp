@@ -437,7 +437,7 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   unsigned int i = 0;
 
-  if (is_constant_array2t(expr) || is_with2t(expr))
+  if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr))
     // Nope; needs special handling
     goto nocvt;
   special_cases = false;
@@ -1585,6 +1585,7 @@ const smt_ast *
 smt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
                      const smt_sort *ressort)
 {
+  assert(ressort->id != SMT_SORT_ARRAY);
   const smt_ast *args[2];
   args[0] = convert_ast(array);
   args[1] = convert_ast(idx);
