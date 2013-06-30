@@ -543,3 +543,17 @@ metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
   result_type res = ctx(tag, foo, bar, ma->restype);
   return new metasmt_smt_ast(res, s);
 }
+
+const smt_ast *
+metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
+                         const smt_sort *ressort)
+{
+  abort();
+}
+
+const smt_ast *
+metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
+                        const expr2tc &value, const smt_sort *ressort)
+{
+  abort();
+}

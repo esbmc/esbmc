@@ -114,6 +114,12 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
+                                   const smt_sort *ressort);
+  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
+                                  const expr2tc &value,
+                                  const smt_sort *ressort);
+
   // Members
   solvertype ctx;
   Lookup::symmap symbols;
