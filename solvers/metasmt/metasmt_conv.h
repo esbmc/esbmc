@@ -39,6 +39,11 @@ public:
 class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
+  metasmt_smt_ast(const smt_sort *_s)
+    : smt_ast(_s), restype(), symname(""), array_fields()
+  {
+  }
+
   metasmt_smt_ast(result_type r, const smt_sort *_s)
     : smt_ast(_s), restype(r), symname(""), array_fields()
   {
@@ -128,6 +133,8 @@ public:
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
                                   const expr2tc &value,
                                   const smt_sort *ressort);
+
+  const metasmt_smt_ast *fresh_array(const metasmt_smt_sort *ms);
 
   // Members
   solvertype ctx;

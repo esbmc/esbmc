@@ -489,6 +489,8 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   }
   case SMT_SORT_ARRAY:
   {
+    if (bitblast_arrays)
+      return fresh_array(ms);
     metaSMT::logic::Array::tag::array_var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.elem_width = ms->arrrange_width;
@@ -542,6 +544,27 @@ metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
   const metasmt_smt_ast *ma = metasmt_ast_downcast(a);
   result_type res = ctx(tag, foo, bar, ma->restype);
   return new metasmt_smt_ast(res, s);
+}
+
+const metasmt_smt_ast *
+metasmt_convt::fresh_array(const metasmt_smt_sort *ms)
+{
+  // No solver representation for this.
+  unsigned long domain_width = ms->get_domain_width();
+  unsigned long array_size = 1UL << domain_width;
+  const smt_sort *range_sort = mk_sort(SMT_SORT_BV, ms->arrrange_width, false);
+
+  metasmt_smt_ast *mast = new metasmt_smt_ast(ms);
+  mast->array_fields.reserve(array_size);
+
+  // Populate that array with a bunch of fresh bvs of the correct sort.
+  unsigned long i;
+  for (i = 0; i < array_size; i++) {
+    const smt_ast *a = mk_fresh(range_sort, "metasmt_fresh_array::");
+    mast->array_fields[i] = a;
+  }
+
+  return mast;
 }
 
 const smt_ast *
