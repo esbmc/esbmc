@@ -909,11 +909,11 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::string_id:
   {
-    const smt_sort *d = machine_int_sort;
-    smt_sort *r = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, 8,
-                                          !config.ansi_c.char_is_unsigned);
-    return mk_sort(SMT_SORT_ARRAY, d, r);
+    const string_type2t &str_type = to_string_type(type);
+    constant_int2tc width(get_uint_type(config.ansi_c.int_width),
+                          BigInt(str_type.width));
+    type2tc new_type(new array_type2t(get_uint8_type(), width, false));
+    return convert_sort(new_type);
   }
   case type2t::array_id:
   {
