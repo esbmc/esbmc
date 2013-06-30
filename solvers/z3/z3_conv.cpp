@@ -578,7 +578,8 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args,
+z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                      const smt_ast * const *args,
                       unsigned int numargs)
 {
   const z3_smt_ast *asts[4];

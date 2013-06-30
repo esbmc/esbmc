@@ -199,7 +199,8 @@ public:
   virtual const smt_ast *lit_to_ast(const literalt &l);
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs) = 0;
+                               const smt_ast * const *args,
+                               unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;

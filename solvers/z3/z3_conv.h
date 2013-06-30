@@ -70,7 +70,8 @@ private:
 
   // SMT-abstraction migration:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs);
+                               const smt_ast * const *args,
+                               unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
 

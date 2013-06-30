@@ -82,7 +82,7 @@ metasmt_convt::assert_lit(const literalt &l)
 
 smt_ast *
 metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                           const smt_ast **_args, unsigned int numargs)
+                           const smt_ast * const *_args, unsigned int numargs)
 {
   const metasmt_smt_ast *args[4];
   result_type result;
