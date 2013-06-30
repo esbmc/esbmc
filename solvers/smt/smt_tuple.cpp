@@ -785,23 +785,16 @@ smt_convt::convert_array_of(const expr2tc &expr)
   // be nested). In that case, flatten to a single array of whatever's at the
   // bottom of the array_of.
   if (is_array_type(arrtype.subtype)) {
-    expr2tc rec_arr_of = expr;
-    do {
-      const constant_array_of2t &cur_arrof = to_constant_array_of2t(rec_arr_of);
-      const array_type2t &this_arr_type = to_array_type(cur_arrof.type);
-      assert(is_constant_int2t(this_arr_type.array_size) && "Constant array_of "
-             "must be an array of known size");
-      unsigned long cursz =
-          to_constant_int2t(this_arr_type.array_size).constant_value.to_ulong();
-      array_size += size_to_bit_width(cursz);
+    type2tc flat_type = flatten_array_type(expr->type);
+    const array_type2t &arrtype2 = to_array_type(flat_type);
+    const constant_int2t &intref = to_constant_int2t(arrtype2.array_size);
+    array_size = size_to_bit_width(intref.constant_value.to_ulong());
 
-      if (is_constant_array_of2t(cur_arrof.initializer))
-        rec_arr_of = cur_arrof.initializer;
-      else
-        break;
-    } while (true);
+    expr2tc rec_expr = expr;
+    while (is_constant_array_of2t(rec_expr))
+      rec_expr = to_constant_array_of2t(rec_expr).initializer;
 
-    base_init = to_constant_array_of2t(rec_arr_of).initializer;
+    base_init = rec_expr;
   } else {
     base_init = arrof.initializer;
     unsigned long cursz =
