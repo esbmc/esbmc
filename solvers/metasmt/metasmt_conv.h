@@ -178,6 +178,12 @@ public:
                                              const metasmt_smt_ast *true_arr,
                                              const metasmt_smt_ast *false_arr,
                                              const metasmt_smt_sort *thesort);
+  const metasmt_smt_ast *make_conditional_unbounded_ite_join(
+            const metasmt_smt_ast *base,
+            const smt_ast *cond,
+            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator start,
+            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end);
+
 
 
   // Members

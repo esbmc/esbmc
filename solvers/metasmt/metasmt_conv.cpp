@@ -756,10 +756,49 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
 }
 
 const metasmt_smt_ast *
+metasmt_convt::make_conditional_unbounded_ite_join(const metasmt_smt_ast *base,
+            const smt_ast *condition,
+            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator start,
+            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end)
+{
+  abort();
+}
+
+
+const metasmt_smt_ast *
 metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
                                    const metasmt_smt_ast *true_arr,
                                    const metasmt_smt_ast *false_arr,
                                    const metasmt_smt_sort *thesort)
 {
-  abort();
+  // Ok, we have two lists of values. They're _guarenteed_ to be from the
+  // same array (array ite's can only occur in phis). So, discover the common
+  // tail of assignments that the lists posess. Then make conditional stores
+  // of the remaining values into a new array.
+  metasmt_smt_ast::unbounded_list_type common_tail;
+
+  metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it, it2;
+  it = true_arr->array_values.rbegin();
+  it2 = false_arr->array_values.rbegin();
+  for (; it != true_arr->array_values.rend(); it++, it2++) {
+    if (it->first == it2->first) {
+      common_tail.push_back(*it);
+    } else {
+      break;
+    }
+  }
+
+  // Generate the base array.
+  metasmt_smt_ast *base = new metasmt_smt_ast(true_arr->sort, common_tail);
+
+  // Iterate over each set of other values, selecting the old and updated
+  // element, then generating an ITE based on the input condition.
+  base = make_conditional_unbounded_ite_join(base, cond, it,
+                                             true_arr->array_values.rend());
+  const smt_ast *inverted_cond =
+    mk_func_app(cond->sort, SMT_FUNC_NOT, &cond, 1);
+  base = make_conditional_unbounded_ite_join(base, inverted_cond, it2,
+                                             false_arr->array_values.rend());
+
+  return base;
 }
