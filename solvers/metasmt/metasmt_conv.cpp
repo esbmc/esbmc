@@ -659,7 +659,7 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   // Oh dear. We need to update /all the fields/ :(
   const smt_ast *real_idx = convert_ast(idx);
   const smt_ast *real_value = convert_ast(value);
-  const smt_ast *iteargs[2], *idxargs[2], *impargs[2], *accuml_props[2];
+  const smt_ast *iteargs[3], *idxargs[2], *impargs[2], *accuml_props[2];
   unsigned long dom_width = mast->sort->get_domain_width();
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
