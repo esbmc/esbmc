@@ -301,6 +301,7 @@ public:
                                            const type2tc &subtype);
   void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                            const smt_ast *cond, const type2tc &type,
+                           const smt_sort *dom_sort,
                            const tuple_smt_ast *res);
   expr2tc tuple_get(const expr2tc &expr);
 

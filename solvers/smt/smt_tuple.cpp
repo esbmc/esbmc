@@ -357,7 +357,10 @@ smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
         tuple_ite_rec(args[0], cond, args[1], args[2]);
       } else {
         const tuple_smt_sort *tsort = to_tuple_sort(args[1]->sort);
-        tuple_array_ite_rec(args[1], args[2], cond, tsort->thetype, args[0]);
+        const array_type2t &array_type = to_array_type(*it);
+        const smt_sort *dom_sort = make_array_domain_sort(array_type);
+        tuple_array_ite_rec(args[1], args[2], cond, tsort->thetype, dom_sort,
+                            args[0]);
       }
     } else {
       // Normal field: create symbols for the member in each of the arguments,
@@ -639,13 +642,16 @@ smt_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
   std::string name = mk_fresh_name("tuple_array_ite[]::");
   const tuple_smt_ast *result = new tuple_smt_ast(tv->sort, name);
 
-  tuple_array_ite_rec(tv, fv, cond, ts->thetype, result);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  const smt_sort *dom_sort = make_array_domain_sort(array_type);
+  tuple_array_ite_rec(tv, fv, cond, ts->thetype, dom_sort, result);
   return result;
 }
 
 void
 smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                                const smt_ast *cond, const type2tc &type,
+                               const smt_sort *dom_sort,
                                const tuple_smt_ast *res)
 {
   // Almost the same as tuple_ite, but with array types. Iterate over each
@@ -670,17 +676,22 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
       const tuple_smt_ast *trueval = new tuple_smt_ast(tmp, truename);
       const tuple_smt_ast *falseval = new tuple_smt_ast(tmp, falsename);
 
-      if (is_tuple_ast_type(*it))
-        tuple_ite_rec(resval, cond, trueval, falseval);
-      else
-        tuple_array_ite_rec(trueval, falseval, cond, *it, resval);
+      if (is_tuple_ast_type(*it)) {
+        // Create an array type for this -- because it's contained in an array,
+        // at the underlying level it's an array.
+        type2tc tmp_arr_type(new array_type2t(*it, array_type.array_size,
+                                              array_type.size_is_infinite));
+        tuple_array_ite_rec(trueval, falseval, cond, tmp_arr_type,
+                            dom_sort, resval);
+      } else {
+        tuple_array_ite_rec(trueval, falseval, cond, *it, dom_sort, resval);
+      }
     } else {
       std::string tname = tv->name + struct_type.member_names[i].as_string();
       std::string fname = fv->name + struct_type.member_names[i].as_string();
       std::string rname = res->name + struct_type.member_names[i].as_string();
       const smt_ast *args[3];
       const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *dom_sort = machine_int_sort;
       const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
       args[0] = cond;
       args[1] = mk_smt_symbol(tname, arrsort);
