@@ -707,9 +707,21 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
 }
 
 const smt_ast *
-metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *array,
+metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
                                   const expr2tc &idx, const expr2tc &value,
                                   const smt_sort *ressort)
 {
-  abort();
+  // Actually super simple: we have no way of working out whether an older
+  // assignment has expired (at least, not if there's any nondeterminism
+  // anywyere), so don't bother, and just push this on the top.
+  // We could optimise by looking at the topmost bunch of indexes and seeing
+  // whether they match what we want, without any nondeterminism occurring,
+  // but that's for another time.
+  metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_values);
+  const smt_ast *real_idx = convert_ast(idx);
+  const smt_ast *real_val = convert_ast(value);
+
+  mast->array_values.push_front(
+      metasmt_smt_ast::unbounded_list_type::value_type(real_idx, real_val));
+  return mast;
 }

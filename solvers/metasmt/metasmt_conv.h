@@ -62,7 +62,7 @@ public:
   {
   }
 
-  metasmt_smt_ast(const smt_sort *_s, unbounded_list_type &a)
+  metasmt_smt_ast(const smt_sort *_s, const unbounded_list_type &a)
     : smt_ast(_s), restype(), symname(""), array_fields(), array_values(a)
   {
   }
