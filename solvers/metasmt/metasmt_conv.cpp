@@ -567,7 +567,7 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
   unsigned long i;
   for (i = 0; i < array_size; i++) {
     const smt_ast *a = mk_fresh(range_sort, "metasmt_fresh_array::");
-    mast->array_fields[i] = a;
+    mast->array_fields.push_back(a);
   }
 
   return mast;
