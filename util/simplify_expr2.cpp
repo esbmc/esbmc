@@ -1469,3 +1469,28 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
 
   return expr2tc();
 }
+
+expr2tc
+concat2t::do_simplify(bool second __attribute__((unused))) const
+{
+  uint64_t accuml = 0, totalbits = 0;
+
+  for (std::vector<expr2tc>::const_iterator it = data_items.begin();
+       it != data_items.end(); it++) {
+    if (is_constant_int2t(*it)) {
+      const constant_int2t &intval = to_constant_int2t(*it);
+      unsigned int this_bit_width = intval.type->get_width();
+      accuml <<= this_bit_width;
+      totalbits += this_bit_width;
+      accuml |= intval.constant_value.to_ulong();
+    } else {
+      return expr2tc();
+    }
+  }
+
+  if (totalbits > 64)
+    return expr2tc();
+
+  // Successfully simplified; just turn into another number.
+  return constant_int2tc(get_uint_type(totalbits), BigInt(accuml));
+}
