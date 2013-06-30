@@ -1504,10 +1504,7 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
     a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
     a = make_bit_bool(a);
   } else if (is_tuple_array_ast_type(index.source_value->type)) {
-    std::cerr << "I'm covered in bees" << std::endl;
-    abort();
-    expr2tc tmp_idx;
-    a = tuple_array_select(args[0], ressort, tmp_idx);
+    a = tuple_array_select(args[0], ressort, newidx);
   } else {
     a = mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
   }
@@ -1548,10 +1545,7 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     assert(is_structure_type(arrtype.subtype) ||
            is_pointer_type(arrtype.subtype));
     const smt_sort *sort = convert_sort(with.update_value->type);
-    std::cerr << "I'm covered in bees" << std::endl;
-    abort();
-    expr2tc tmp_idx;
-    return tuple_array_update(args[0], tmp_idx, args[2], sort);
+    return tuple_array_update(args[0], newidx, args[2], sort);
   } else {
     // Normal operation
     return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
