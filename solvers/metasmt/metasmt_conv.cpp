@@ -667,11 +667,37 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
 }
 
 const smt_ast *
-metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *array,
+metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
                                    const expr2tc &idx,
                                    const smt_sort *ressort)
 {
-  abort();
+
+  // Heavily echoing mk_select,
+  const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
+  const smt_ast *real_idx = convert_ast(idx);
+  const smt_ast *args[2], *idxargs[2], *impargs[2], *accuml_props[2];
+  unsigned long dom_width = ma->sort->get_domain_width();
+  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+
+  args[0] = fresh;
+  idxargs[0] = real_idx;
+  accuml_props[0] = mk_smt_bool(false);
+
+  for (metasmt_smt_ast::unbounded_list_type::const_iterator it =
+       ma->array_values.begin(); it != ma->array_values.end(); it++) {
+    idxargs[1] = it->first;
+    const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
+    args[1] = it->second;
+    const smt_ast *val_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2);
+
+    impargs[0] = idx_eq;
+    impargs[1] = val_eq;
+
+    accuml_props[1] = mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2);
+    accuml_props[0] = mk_func_app(bool_sort, SMT_FUNC_OR, accuml_props, 2);
+  }
+
+  return accuml_props[0];
 }
 
 const smt_ast *
