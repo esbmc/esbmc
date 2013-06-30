@@ -686,34 +686,25 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
   // Heavily echoing mk_select,
   const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
   const smt_ast *real_idx = convert_ast(idx);
-  const smt_ast *args[2], *idxargs[2], *impargs[2];
+  const smt_ast *idxargs[2], *impargs[2], *iteargs[3];
   unsigned long dom_width = ma->sort->get_domain_width();
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
-  args[0] = fresh;
   idxargs[0] = real_idx;
+  iteargs[2] = fresh;
 
-  for (metasmt_smt_ast::unbounded_list_type::const_iterator it =
-       ma->array_values.begin(); it != ma->array_values.end(); it++) {
+  // Make one gigantic ITE, from the back upwards.
+  for (metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it =
+       ma->array_values.rbegin(); it != ma->array_values.rend(); it++) {
     idxargs[1] = it->first;
     const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
-    args[1] = it->second;
-    const smt_ast *val_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2);
+    iteargs[0] = idx_eq;
+    iteargs[1] = it->second;
 
-    impargs[0] = idx_eq;
-    impargs[1] = val_eq;
-
-    const metasmt_smt_ast *imp =
-      metasmt_ast_downcast(mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs,2));
-
-    // So, we may very well be accessing an index not previously set. Which
-    // is incorrect, but we have to represent it some way. Do this by asserting
-    // each implies, so if it /is/ that index, then this equality is true.
-    // XXX XXX XXX -- double assigns over time won't work.
-    ctx.assertion(imp->restype);
+    iteargs[2] = mk_func_app(bool_sort, SMT_FUNC_ITE, iteargs, 3);
   }
 
-  return fresh;
+  return iteargs[2];
 }
 
 const smt_ast *
