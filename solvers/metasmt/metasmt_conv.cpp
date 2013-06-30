@@ -736,5 +736,21 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
                          const metasmt_smt_ast *false_arr,
                          const metasmt_smt_sort *thesort)
 {
-  abort();
+
+  // For each element, make an ite.
+  assert(true_arr->array_fields.size() != 0 &&
+         true_arr->array_fields.size() == false_arr->array_fields.size());
+  metasmt_smt_ast *mast = new metasmt_smt_ast(thesort);
+  const smt_ast *args[3];
+  args[0] = cond;
+  unsigned long i;
+  for (i = 0; i < true_arr->array_fields.size(); i++) {
+    // One ite pls.
+    args[1] = true_arr->array_fields[i];
+    args[2] = false_arr->array_fields[i];
+    const smt_ast *res = mk_func_app(args[1]->sort, SMT_FUNC_ITE, args, 3);
+    mast->array_fields.push_back(metasmt_ast_downcast(res));
+  }
+
+  return mast;
 }
