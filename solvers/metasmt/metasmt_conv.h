@@ -39,23 +39,31 @@ public:
 class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
+  typedef std::list<std::pair<const smt_ast *, const smt_ast *> >
+    unbounded_list_type;
+
   metasmt_smt_ast(const smt_sort *_s)
-    : smt_ast(_s), restype(), symname(""), array_fields()
+    : smt_ast(_s), restype(), symname(""), array_fields(), array_values()
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s)
-    : smt_ast(_s), restype(r), symname(""), array_fields()
+    : smt_ast(_s), restype(r), symname(""), array_fields(), array_values()
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s, const std::string &s)
-    : smt_ast(_s), restype(r), symname(s), array_fields()
+    : smt_ast(_s), restype(r), symname(s), array_fields(), array_values()
   {
   }
 
   metasmt_smt_ast(const smt_sort *_s, const std::vector<const smt_ast *> &a)
-    : smt_ast(_s), restype(), symname(""), array_fields(a)
+    : smt_ast(_s), restype(), symname(""), array_fields(a), array_values()
+  {
+  }
+
+  metasmt_smt_ast(const smt_sort *_s, unbounded_list_type &a)
+    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(a)
   {
   }
 
@@ -80,6 +88,10 @@ public:
   // If an array type, contains the set of array values. Identified by their
   // indexes.
   std::vector<const smt_ast *> array_fields;
+
+  // Alternately, for unbounded arrays, what we want is a list of historical
+  // assignments, and their corresponding values.
+  unbounded_list_type array_values;
 };
 
 // copy+paste directly from the metaSMT documentation:
