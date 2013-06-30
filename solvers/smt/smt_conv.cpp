@@ -453,8 +453,9 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_signedbv_type(*it) || is_fixedbv_type(*it))
       seen_signed_operand = true;
   }
-  num_args = i;
 nocvt:
+
+  num_args = i;
 
   sort = convert_sort(expr->type);
 
