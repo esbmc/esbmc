@@ -817,10 +817,10 @@ smt_convt::convert_array_of(const expr2tc &expr)
 
   // We now an initializer, and a size of array to build. So:
   std::vector<expr2tc> array_of_inits;
-  for (unsigned long i = 0; i < (1UL << array_size); i++)
+  for (unsigned long i = 0; i < (1ULL << array_size); i++)
     array_of_inits.push_back(base_init);
 
-  constant_int2tc real_arr_size(index_type2(), BigInt(1UL << array_size));
+  constant_int2tc real_arr_size(index_type2(), BigInt(1ULL << array_size));
   type2tc newtype(new array_type2t(base_init->type, real_arr_size, false));
 
   expr2tc res(new constant_array2t(newtype, array_of_inits));
