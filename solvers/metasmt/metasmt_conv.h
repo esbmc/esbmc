@@ -159,6 +159,14 @@ public:
                                   const expr2tc &value,
                                   const smt_sort *ressort);
 
+  const smt_ast *mk_unbounded_select(const metasmt_smt_ast *array,
+                                     const expr2tc &idx,
+                                     const smt_sort *ressort);
+  const smt_ast *mk_unbounded_store(const metasmt_smt_ast *array,
+                                    const expr2tc &idx,
+                                    const expr2tc &value,
+                                    const smt_sort *ressort);
+
   const metasmt_smt_ast *fresh_array(const metasmt_smt_sort *ms);
 
   // Members

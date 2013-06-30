@@ -574,6 +574,9 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
   metasmt_smt_ast *ma = convert_ast(array);
   assert(ma->array_fields.size() != 0);
 
+  if (ma->is_unbounded_array())
+    return mk_unbounded_select(ma, idx, ressort);
+
   // If this is a constant index, simple. If not, not.
   if (is_constant_int2t(idx)) {
     const constant_int2t &intref = to_constant_int2t(idx);
@@ -621,6 +624,9 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   metasmt_smt_ast *ma = convert_ast(array);
   assert(ma->array_fields.size() != 0);
 
+  if (ma->is_unbounded_array())
+    return mk_unbounded_store(ma, idx, value, ressort);
+
   metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_fields);
 
   // If this is a constant index, simple. If not, not.
@@ -658,4 +664,20 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   }
 
   return mast;
+}
+
+const smt_ast *
+metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *array,
+                                   const expr2tc &idx,
+                                   const smt_sort *ressort)
+{
+  abort();
+}
+
+const smt_ast *
+metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *array,
+                                  const expr2tc &idx, const expr2tc &value,
+                                  const smt_sort *ressort)
+{
+  abort();
 }
