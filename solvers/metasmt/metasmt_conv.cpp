@@ -555,6 +555,10 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms)
   const smt_sort *range_sort = mk_sort(SMT_SORT_BV, ms->arrrange_width, false);
 
   metasmt_smt_ast *mast = new metasmt_smt_ast(ms);
+  if (mast->is_unbounded_array())
+    // Don't attempt to initialize.
+    return mast;
+
   mast->array_fields.reserve(array_size);
 
   // Populate that array with a bunch of fresh bvs of the correct sort.
