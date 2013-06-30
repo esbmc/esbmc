@@ -605,7 +605,7 @@ expr_handle_table:
   }
   case expr2t::index_id:
   {
-    a = convert_array_index(expr, args[0], args[1], sort);
+    a = convert_array_index(expr, sort);
     break;
   }
   case expr2t::with_id:
@@ -1414,7 +1414,7 @@ smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
 }
 
 void
-smt_convt::decompose_select_chain(const expr2tc &expr, const smt_ast **base,
+smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base,
                                   std::vector<expr2tc> &output,
                                   std::vector<unsigned int> &out_widths)
 {
@@ -1434,7 +1434,7 @@ smt_convt::decompose_select_chain(const expr2tc &expr, const smt_ast **base,
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
-  *base = convert_ast(idx->source_value);
+  base = idx->source_value;
   return;
 }
 
@@ -1462,7 +1462,7 @@ smt_convt::concatonate_indexes(const std::vector<expr2tc> &fields,
 }
 
 void
-smt_convt::decompose_store_chain(const expr2tc &expr, const smt_ast **base,
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base,
                                  std::vector<expr2tc> &output,
                                  std::vector<unsigned int> &domsizes)
 {
@@ -1486,28 +1486,29 @@ smt_convt::decompose_store_chain(const expr2tc &expr, const smt_ast **base,
   std::reverse(domsizes.begin(), domsizes.end());
 
   // Give the caller the actual value we're updating with.
-  *base = convert_ast(with->update_value);
+  base = with->update_value;
   return;
 }
 
 const smt_ast *
-smt_convt::convert_array_index(const expr2tc &expr, const smt_ast *array,
-                               const smt_ast *idx, const smt_sort *ressort)
+smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
 {
   const index2t &index = to_index2t(expr);
   const smt_ast *a;
   const smt_ast *args[2];
-  args[0] = array;
-  args[1] = idx;
+  expr2tc src_value = index.source_value;
 
   if (is_index2t(index.source_value)) {
     std::vector<expr2tc> indexes;
     std::vector<unsigned int> widths;
-    decompose_select_chain(expr, &args[0], indexes, widths);
+    decompose_select_chain(expr, src_value, indexes, widths);
     args[1] = concatonate_indexes(indexes, widths);
   } else {
-    args[1] = fix_array_idx(args[1], args[0]->sort);
+    args[1] = convert_ast(index.index);
+    args[1] = fix_array_idx(args[1], convert_sort(index.source_value->type));
   }
+
+  args[0] = convert_ast(src_value);
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
@@ -1534,6 +1535,7 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
 {
   const with2t &with = to_with2t(expr);
   const smt_ast *args[3];
+  expr2tc update_val = with.update_value;
 
   args[0] = convert_ast(with.source_value);
   if (is_array_type(with.type) &&
@@ -1541,12 +1543,13 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
       is_with2t(with.update_value)) {
     std::vector<expr2tc> indexes;
     std::vector<unsigned int> idx_widths;
-    decompose_store_chain(expr, &args[2], indexes, idx_widths);
+    decompose_store_chain(expr, update_val, indexes, idx_widths);
     args[1] = concatonate_indexes(indexes, idx_widths);
   } else {
-    args[2] = convert_ast(with.update_value);
     args[1] = fix_array_idx(convert_ast(with.update_field), ressort);
   }
+
+  args[2] = convert_ast(update_val);
 
   assert(is_array_type(expr->type));
   const array_type2t &arrtype = to_array_type(expr->type);

@@ -252,8 +252,6 @@ public:
   std::string mk_fresh_name(const std::string &tag);
 
   virtual const smt_ast *convert_array_index(const expr2tc &expr,
-                                             const smt_ast *array,
-                                             const smt_ast *idx,
                                              const smt_sort *ressort);
   virtual const smt_ast *convert_array_store(const expr2tc &expr,
                                              const smt_sort *ressort);
@@ -334,12 +332,12 @@ public:
   const smt_ast *convert_array_of(const expr2tc &expr);
   type2tc flatten_array_type(const type2tc &type);
 
-  void decompose_select_chain(const expr2tc &expr, const smt_ast **base,
+  void decompose_select_chain(const expr2tc &expr, expr2tc &base,
                               std::vector<expr2tc> &output,
                               std::vector<unsigned int> &out_widths);
   const smt_ast *concatonate_indexes(const std::vector<expr2tc> &fields,
                                      const std::vector<unsigned int> &widths);
-  void decompose_store_chain(const expr2tc &expr, const smt_ast **base,
+  void decompose_store_chain(const expr2tc &expr, expr2tc &base,
                               std::vector<expr2tc> &output,
                               std::vector<unsigned int> &out_widths);
 
