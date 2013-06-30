@@ -604,13 +604,12 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
   // everything.
   const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_select::");
   const smt_ast *real_idx = convert_ast(idx);
-  const smt_ast *args[2], *idxargs[2], *impargs[2], *accuml_props[2];
+  const smt_ast *args[2], *idxargs[2], *impargs[2];
   unsigned long dom_width = ma->sort->get_domain_width();
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
   args[0] = fresh;
   idxargs[0] = real_idx;
-  accuml_props[0] = mk_smt_bool(false);
 
   for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
     idxargs[1] = mk_smt_bvint(BigInt(i), false, dom_width);
@@ -621,12 +620,9 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
     impargs[0] = idx_eq;
     impargs[1] = val_eq;
 
-    accuml_props[1] = mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2);
-    accuml_props[0] = mk_func_app(bool_sort, SMT_FUNC_OR, accuml_props, 2);
+    const smt_ast *res = mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2);
+    ctx.assertion(metasmt_ast_downcast(res)->restype);
   }
-
-  metasmt_smt_ast *a = metasmt_ast_downcast(accuml_props[0]);
-  ctx.assertion(a->restype);
 
   return fresh;
 }
