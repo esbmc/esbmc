@@ -614,7 +614,10 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
     accuml_props[0] = mk_func_app(bool_sort, SMT_FUNC_OR, accuml_props, 2);
   }
 
-  return accuml_props[0];
+  metasmt_smt_ast *a = metasmt_ast_downcast(accuml_props[0]);
+  ctx.assertion(a->restype);
+
+  return fresh;
 }
 
 const smt_ast *
@@ -697,7 +700,10 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
     accuml_props[0] = mk_func_app(bool_sort, SMT_FUNC_OR, accuml_props, 2);
   }
 
-  return accuml_props[0];
+  metasmt_smt_ast *a = metasmt_ast_downcast(accuml_props[0]);
+  ctx.assertion(a->restype);
+
+  return fresh;
 }
 
 const smt_ast *
