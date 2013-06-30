@@ -571,7 +571,47 @@ const smt_ast *
 metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
                          const smt_sort *ressort)
 {
-  abort();
+  metasmt_smt_ast *ma = convert_ast(array);
+  assert(ma->array_fields.size() != 0);
+
+  // If this is a constant index, simple. If not, not.
+  if (is_constant_int2t(idx)) {
+    const constant_int2t &intref = to_constant_int2t(idx);
+    unsigned long intval = intref.constant_value.to_ulong();
+    if (intval > ma->array_fields.size())
+      // Return a fresh value.
+      return mk_fresh(ressort, "metasmt_mk_select_badidx::");
+
+    // Otherwise,
+    return ma->array_fields[intval];
+  }
+
+  // What we have here is a nondeterministic index. Alas, compare with
+  // everything.
+  const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_select::");
+  const smt_ast *real_idx = convert_ast(idx);
+  const smt_ast *args[2], *idxargs[2], *impargs[2], *accuml_props[2];
+  unsigned long dom_width = ma->sort->get_domain_width();
+  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+
+  args[0] = fresh;
+  idxargs[0] = real_idx;
+  accuml_props[0] = mk_smt_bool(false);
+
+  for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
+    idxargs[1] = mk_smt_bvint(BigInt(i), false, dom_width);
+    const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
+    args[1] = ma->array_fields[i];
+    const smt_ast *val_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2);
+
+    impargs[0] = idx_eq;
+    impargs[1] = val_eq;
+
+    accuml_props[1] = mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2);
+    accuml_props[0] = mk_func_app(bool_sort, SMT_FUNC_OR, accuml_props, 2);
+  }
+
+  return accuml_props[0];
 }
 
 const smt_ast *
