@@ -1596,9 +1596,10 @@ smt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
                     const expr2tc &value, const smt_sort *ressort)
 {
   const smt_ast *args[3];
+
   args[0] = convert_ast(array);
   args[1] = convert_ast(idx);
-  args[1] = convert_ast(value);
+  args[2] = convert_ast(value);
   return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
 }
 
