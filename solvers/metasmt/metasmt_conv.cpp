@@ -490,7 +490,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_ARRAY:
   {
     if (bitblast_arrays)
-      return fresh_array(ms);
+      return fresh_array(ms, name);
     metaSMT::logic::Array::tag::array_var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.elem_width = ms->arrrange_width;
@@ -547,7 +547,7 @@ metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
 }
 
 const metasmt_smt_ast *
-metasmt_convt::fresh_array(const metasmt_smt_sort *ms)
+metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
 {
   // No solver representation for this.
   unsigned long domain_width = ms->get_domain_width();
@@ -555,6 +555,8 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms)
   const smt_sort *range_sort = mk_sort(SMT_SORT_BV, ms->arrrange_width, false);
 
   metasmt_smt_ast *mast = new metasmt_smt_ast(ms);
+  mast->symname = name;
+  sym_lookup.insert(mast, 0, name); // yolo
   if (mast->is_unbounded_array())
     // Don't attempt to initialize.
     return mast;

@@ -167,7 +167,8 @@ public:
                                     const expr2tc &value,
                                     const smt_sort *ressort);
 
-  const metasmt_smt_ast *fresh_array(const metasmt_smt_sort *ms);
+  const metasmt_smt_ast *fresh_array(const metasmt_smt_sort *ms,
+                                     const std::string &name);
 
   // Members
   solvertype ctx;
