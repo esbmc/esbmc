@@ -173,6 +173,11 @@ public:
                                    const metasmt_smt_ast *true_arr,
                                    const metasmt_smt_ast *false_arr,
                                    const metasmt_smt_sort *thesort);
+  const metasmt_smt_ast *unbounded_array_ite(const metasmt_smt_ast *cond,
+                                             const metasmt_smt_ast *true_arr,
+                                             const metasmt_smt_ast *false_arr,
+                                             const metasmt_smt_sort *thesort);
+
 
   // Members
   solvertype ctx;

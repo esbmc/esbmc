@@ -737,6 +737,9 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
                          const metasmt_smt_sort *thesort)
 {
 
+  if (true_arr->is_unbounded_array())
+    return unbounded_array_ite(cond, true_arr, false_arr, thesort);
+
   // For each element, make an ite.
   assert(true_arr->array_fields.size() != 0 &&
          true_arr->array_fields.size() == false_arr->array_fields.size());
@@ -753,4 +756,13 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
   }
 
   return mast;
+}
+
+const metasmt_smt_ast *
+metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
+                                   const metasmt_smt_ast *true_arr,
+                                   const metasmt_smt_ast *false_arr,
+                                   const metasmt_smt_sort *thesort)
+{
+  abort();
 }
