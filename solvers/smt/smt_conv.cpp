@@ -419,6 +419,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ints_reals = false;
+  bool special_cases = true;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -436,9 +437,10 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   unsigned int i = 0;
 
-  if (is_constant_array2t(expr))
+  if (is_constant_array2t(expr) || is_with2t(expr))
     // Nope; needs special handling
     goto nocvt;
+  special_cases = false;
 
   // Convert /all the arguments/.
   forall_operands2(it, idx, expr) {
@@ -464,8 +466,9 @@ nocvt:
 
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
-  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
-      no_bools_in_arrays)
+  if ((!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
+       no_bools_in_arrays) ||
+       special_cases)
     goto expr_handle_table;
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
@@ -612,9 +615,10 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(args[0], idx, args[2]);
+      a = tuple_update(convert_ast(with.source_value), idx,
+                                   convert_ast(with.update_value));
     } else {
-      a = convert_array_store(expr, args[0], args[1], args[2], sort);
+      a = convert_array_store(expr, sort);
     }
     break;
   }
@@ -1471,16 +1475,18 @@ smt_convt::decompose_store_chain(const expr2tc &expr, const smt_ast **base,
   with2tc with = expr;
   output.push_back(twiddle_index_width(with->update_field, with->type));
   domsizes.push_back(output.back()->type->get_width());
-  while (is_with2t(with->source_value)) {
-    with = with->source_value;
+  while (is_with2t(with->update_value)) {
+    with = with->update_value;
     output.push_back(twiddle_index_width(with->update_field, with->type));
     domsizes.push_back(output.back()->type->get_width());
   }
 
-  // Give the caller the base array object / thing. So that it can actually
-  // update the right piece of data.
-  *base = convert_ast(with->source_value);
+  // With's are in reverse order to indexes; so swap around.
+  std::reverse(output.begin(), output.end());
+  std::reverse(domsizes.begin(), domsizes.end());
 
+  // Give the caller the actual value we're updating with.
+  *base = convert_ast(with->update_value);
   return;
 }
 
@@ -1524,25 +1530,22 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_ast *array,
 }
 
 const smt_ast *
-smt_convt::convert_array_store(const expr2tc &expr, const smt_ast *array,
-                               const smt_ast *idx, const smt_ast *value,
-                               const smt_sort *ressort)
+smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
 {
   const with2t &with = to_with2t(expr);
   const smt_ast *args[3];
-  args[0] = array;
-  args[1] = idx;
-  args[2] = value;
 
+  args[0] = convert_ast(with.source_value);
   if (is_array_type(with.type) &&
       is_array_type(to_array_type(with.type).subtype) &&
-      is_with2t(with.source_value)) {
+      is_with2t(with.update_value)) {
     std::vector<expr2tc> indexes;
     std::vector<unsigned int> idx_widths;
-    decompose_store_chain(expr, &args[0], indexes, idx_widths);
+    decompose_store_chain(expr, &args[2], indexes, idx_widths);
     args[1] = concatonate_indexes(indexes, idx_widths);
   } else {
-    args[1] = fix_array_idx(args[1], args[0]->sort);
+    args[2] = convert_ast(with.update_value);
+    args[1] = fix_array_idx(convert_ast(with.update_field), ressort);
   }
 
   assert(is_array_type(expr->type));

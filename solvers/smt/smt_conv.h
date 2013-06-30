@@ -256,9 +256,6 @@ public:
                                              const smt_ast *idx,
                                              const smt_sort *ressort);
   virtual const smt_ast *convert_array_store(const expr2tc &expr,
-                                             const smt_ast *array,
-                                             const smt_ast *idx,
-                                             const smt_ast *value,
                                              const smt_sort *ressort);
 
 
