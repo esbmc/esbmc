@@ -1,5 +1,7 @@
 #include <sstream>
 
+#include <ansi-c/c_types.h>
+
 #include "smt_conv.h"
 
 // So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
@@ -723,6 +725,9 @@ smt_convt::tuple_get(const expr2tc &expr)
 const smt_ast *
 smt_convt::array_create(const expr2tc &expr)
 {
+  if (is_constant_array_of2t(expr))
+    return convert_array_of(expr);
+
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
   // repeatedly store the desired data into it, to create an SMT array
@@ -745,43 +750,75 @@ smt_convt::array_create(const expr2tc &expr)
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
-  if (is_constant_array_of2t(expr)) {
-    const constant_array_of2t &array = to_constant_array_of2t(expr);
+  assert(is_constant_array2t(expr));
+  const constant_array2t &array = to_constant_array2t(expr);
 
-    // Repeatedly store things into this.
-    expr2tc init = array.initializer;
-    if (is_bool_type(array.initializer) && !int_encoding && no_bools_in_arrays)
-      init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
+  // Repeatedly store things into this.
+  for (unsigned int i = 0; i < sz; i++) {
+    constant_int2tc field(
+                      type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
+                      BigInt(i));
+    expr2tc init = array.datatype_members[i];
 
-    for (unsigned int i = 0; i < sz; i++) {
-      constant_int2tc field(
-                        type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
-                        BigInt(i));
-      newsym = with2tc(newsym->type, newsym, field, init);
-    }
+    if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+        no_bools_in_arrays)
+      init = typecast2tc(type2tc(new unsignedbv_type2t(1)),
+                         array.datatype_members[i]);
 
-    return convert_ast(newsym);
-  } else {
-    assert(is_constant_array2t(expr));
-    const constant_array2t &array = to_constant_array2t(expr);
-
-    // Repeatedly store things into this.
-    for (unsigned int i = 0; i < sz; i++) {
-      constant_int2tc field(
-                        type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
-                        BigInt(i));
-      expr2tc init = array.datatype_members[i];
-
-      if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
-          no_bools_in_arrays)
-        init = typecast2tc(type2tc(new unsignedbv_type2t(1)),
-                           array.datatype_members[i]);
-
-      newsym = with2tc(newsym->type, newsym, field, init);
-    }
-
-    return convert_ast(newsym);
+    newsym = with2tc(newsym->type, newsym, field, init);
   }
+
+  return convert_ast(newsym);
+}
+
+const smt_ast *
+smt_convt::convert_array_of(const expr2tc &expr)
+{
+  const constant_array_of2t &arrof = to_constant_array_of2t(expr);
+  const array_type2t &arrtype = to_array_type(arrof.type);
+  expr2tc base_init;
+  unsigned long array_size = 0;
+
+  // So: we have an array_of, that we have to convert into a bunch of stores.
+  // However, it might be a nested array. If that's the case, then we're
+  // guarenteed to have another array_of in the initializer (which in turn might
+  // be nested). In that case, flatten to a single array of whatever's at the
+  // bottom of the array_of.
+  if (is_array_type(arrtype.subtype)) {
+    expr2tc rec_arr_of = expr;
+    do {
+      const constant_array_of2t &cur_arrof = to_constant_array_of2t(rec_arr_of);
+      const array_type2t &this_arr_type = to_array_type(cur_arrof.type);
+      assert(is_constant_int2t(this_arr_type.array_size) && "Constant array_of "
+             "must be an array of known size");
+      unsigned long cursz =
+          to_constant_int2t(this_arr_type.array_size).constant_value.to_ulong();
+      array_size += size_to_bit_width(cursz);
+
+      if (is_constant_array_of2t(cur_arrof.initializer))
+        rec_arr_of = cur_arrof.initializer;
+      else
+        break;
+    } while (true);
+
+    base_init = to_constant_array_of2t(rec_arr_of).initializer;
+  } else {
+    base_init = arrof.initializer;
+    unsigned long cursz =
+        to_constant_int2t(arrtype.array_size).constant_value.to_ulong();
+    array_size = size_to_bit_width(cursz);
+  }
+
+  // We now an initializer, and a size of array to build. So:
+  std::vector<expr2tc> array_of_inits;
+  for (unsigned long i = 0; i < (1UL << array_size); i++)
+    array_of_inits.push_back(base_init);
+
+  constant_int2tc real_arr_size(index_type2(), BigInt(1UL << array_size));
+  type2tc newtype(new array_type2t(base_init->type, real_arr_size, false));
+
+  expr2tc res(new constant_array2t(newtype, array_of_inits));
+  return convert_ast(res);
 }
 
 const smt_ast *

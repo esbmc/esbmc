@@ -333,6 +333,7 @@ public:
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
   expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
+  const smt_ast *convert_array_of(const expr2tc &expr);
 
   void decompose_select_chain(const expr2tc &expr, const smt_ast **base,
                               std::vector<expr2tc> &output,

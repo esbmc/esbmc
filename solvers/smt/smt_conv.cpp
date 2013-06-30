@@ -433,8 +433,13 @@ smt_convt::convert_ast(const expr2tc &expr)
     make_ints_reals = true;
   }
 
-  // Convert /all the arguments/.
   unsigned int i = 0;
+
+  if (is_constant_array2t(expr))
+    // Nope; needs special handling
+    goto nocvt;
+
+  // Convert /all the arguments/.
   forall_operands2(it, idx, expr) {
     args[i] = convert_ast(*it);
 
@@ -449,6 +454,7 @@ smt_convt::convert_ast(const expr2tc &expr)
       seen_signed_operand = true;
   }
   num_args = i;
+nocvt:
 
   sort = convert_sort(expr->type);
 
