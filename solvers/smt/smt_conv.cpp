@@ -1413,58 +1413,35 @@ smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
     return tmp;
 }
 
-void
-smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base,
-                                  std::vector<expr2tc> &output,
-                                  std::vector<unsigned int> &out_widths)
+expr2tc
+smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
 {
   // So: some series of index exprs will occur here, with some symbol or
   // other expression at the bottom that's actually some symbol, or whatever.
   // So, extract all the indexes, and concat them, with the first (lowest)
   // index at the top, then descending.
 
+  unsigned long accuml_size = 0;
+  std::vector<expr2tc> output;
   index2tc idx = expr;
   output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
-  out_widths.push_back(output.back()->type->get_width());
+  accuml_size += output.back()->type->get_width();
   while (is_index2t(idx->source_value)) {
     idx = idx->source_value;
     output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
-    out_widths.push_back(output.back()->type->get_width());
+    accuml_size += output.back()->type->get_width();
   }
+
+  concat2tc concat(get_uint_type(accuml_size), output);
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
   base = idx->source_value;
-  return;
-}
-
-const smt_ast *
-smt_convt::concatonate_indexes(const std::vector<expr2tc> &fields,
-                               const std::vector<unsigned int> &out_widths)
-{
-  assert(fields.size() >= 1);
-
-  const smt_ast *concat = convert_ast(fields[0]);
-  unsigned long bvsize = out_widths[0];
-  unsigned long i = 1;
-  std::vector<expr2tc>::const_iterator it = fields.begin();
-  it++;
-  for (; it != fields.end(); it++, i++) {
-    bvsize += out_widths[i];
-    const smt_sort *bvsort = mk_sort(SMT_SORT_BV, bvsize, false);
-    const smt_ast *args[2];
-    args[0] = convert_ast(*it);
-    args[1] = concat;
-    concat = mk_func_app(bvsort, SMT_FUNC_CONCAT, args, 2);
-  }
-
   return concat;
 }
 
-void
-smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base,
-                                 std::vector<expr2tc> &output,
-                                 std::vector<unsigned int> &domsizes)
+expr2tc
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 {
   // Just like handle_select_chain, we have some kind of multidimensional
   // array, which we're representing as a single array with an extended domain,
@@ -1472,22 +1449,25 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base,
   // dimensions of it. Concat all of the indexs into one index; also give the
   // caller the base object that this is being applied to.
 
+  unsigned long accuml_size = 0;
+  std::vector<expr2tc> output;
   with2tc with = expr;
   output.push_back(twiddle_index_width(with->update_field, with->type));
-  domsizes.push_back(output.back()->type->get_width());
+  accuml_size += output.back()->type->get_width();
   while (is_with2t(with->update_value)) {
     with = with->update_value;
     output.push_back(twiddle_index_width(with->update_field, with->type));
-    domsizes.push_back(output.back()->type->get_width());
+    accuml_size += output.back()->type->get_width();
   }
 
   // With's are in reverse order to indexes; so swap around.
   std::reverse(output.begin(), output.end());
-  std::reverse(domsizes.begin(), domsizes.end());
+
+  concat2tc concat(get_uint_type(accuml_size), output);
 
   // Give the caller the actual value we're updating with.
   base = with->update_value;
-  return;
+  return concat;
 }
 
 const smt_ast *
@@ -1497,18 +1477,16 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
   const smt_ast *a;
   const smt_ast *args[2];
   expr2tc src_value = index.source_value;
+  expr2tc newidx;
 
   if (is_index2t(index.source_value)) {
-    std::vector<expr2tc> indexes;
-    std::vector<unsigned int> widths;
-    decompose_select_chain(expr, src_value, indexes, widths);
-    args[1] = concatonate_indexes(indexes, widths);
+    newidx = decompose_select_chain(expr, src_value);
   } else {
-    expr2tc newidx = fix_array_idx(index.index, index.source_value->type);
-    args[1] = convert_ast(newidx);
+    newidx = fix_array_idx(index.index, index.source_value->type);
   }
 
   args[0] = convert_ast(src_value);
+  args[1] = convert_ast(newidx);
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
@@ -1539,21 +1517,19 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
   const with2t &with = to_with2t(expr);
   const smt_ast *args[3];
   expr2tc update_val = with.update_value;
+  expr2tc newidx;
 
   args[0] = convert_ast(with.source_value);
   if (is_array_type(with.type) &&
       is_array_type(to_array_type(with.type).subtype) &&
       is_with2t(with.update_value)) {
-    std::vector<expr2tc> indexes;
-    std::vector<unsigned int> idx_widths;
-    decompose_store_chain(expr, update_val, indexes, idx_widths);
-    args[1] = concatonate_indexes(indexes, idx_widths);
+    newidx = decompose_store_chain(expr, update_val);
   } else {
-    expr2tc newidx = fix_array_idx(with.update_field, with.type);
-    args[1] = convert_ast(newidx);
+    newidx = fix_array_idx(with.update_field, with.type);
   }
 
   args[2] = convert_ast(update_val);
+  args[1] = convert_ast(newidx);
 
   assert(is_array_type(expr->type));
   const array_type2t &arrtype = to_array_type(expr->type);

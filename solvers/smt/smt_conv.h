@@ -334,14 +334,8 @@ public:
   const smt_ast *convert_array_of(const expr2tc &expr);
   type2tc flatten_array_type(const type2tc &type);
 
-  void decompose_select_chain(const expr2tc &expr, expr2tc &base,
-                              std::vector<expr2tc> &output,
-                              std::vector<unsigned int> &out_widths);
-  const smt_ast *concatonate_indexes(const std::vector<expr2tc> &fields,
-                                     const std::vector<unsigned int> &widths);
-  void decompose_store_chain(const expr2tc &expr, expr2tc &base,
-                              std::vector<expr2tc> &output,
-                              std::vector<unsigned int> &out_widths);
+  expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
+  expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
   // Types
 
