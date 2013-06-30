@@ -1314,19 +1314,19 @@ smt_convt::make_bit_bool(const smt_ast *a)
   return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
-const smt_ast *
-smt_convt::fix_array_idx(const smt_ast *idx, const smt_sort *arrsort)
+expr2tc
+smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
 {
   if (int_encoding)
     return idx;
 
-  unsigned int domain_width = arrsort->get_domain_width();
+  const smt_sort *s = convert_sort(arr_sort);
+  unsigned int domain_width = s->get_domain_width();
   if (domain_width == config.ansi_c.int_width)
     return idx;
 
   // Otherwise, we need to extract the lower bits out of this.
-  const smt_sort *domsort = mk_sort(SMT_SORT_BV, domain_width, false);
-  return mk_extract(idx, domain_width-1, 0, domsort);
+  return typecast2tc(get_uint_type(domain_width), idx);
 }
 
 unsigned long
@@ -1504,8 +1504,8 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
     decompose_select_chain(expr, src_value, indexes, widths);
     args[1] = concatonate_indexes(indexes, widths);
   } else {
-    args[1] = convert_ast(index.index);
-    args[1] = fix_array_idx(args[1], convert_sort(index.source_value->type));
+    expr2tc newidx = fix_array_idx(index.index, index.source_value->type);
+    args[1] = convert_ast(newidx);
   }
 
   args[0] = convert_ast(src_value);
@@ -1522,7 +1522,10 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
     a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
     a = make_bit_bool(a);
   } else if (is_tuple_array_ast_type(index.source_value->type)) {
-    a = tuple_array_select(args[0], ressort, args[1]);
+    std::cerr << "I'm covered in bees" << std::endl;
+    abort();
+    expr2tc tmp_idx;
+    a = tuple_array_select(args[0], ressort, tmp_idx);
   } else {
     a = mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
   }
@@ -1546,7 +1549,8 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     decompose_store_chain(expr, update_val, indexes, idx_widths);
     args[1] = concatonate_indexes(indexes, idx_widths);
   } else {
-    args[1] = fix_array_idx(convert_ast(with.update_field), ressort);
+    expr2tc newidx = fix_array_idx(with.update_field, with.type);
+    args[1] = convert_ast(newidx);
   }
 
   args[2] = convert_ast(update_val);
@@ -1560,7 +1564,10 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     assert(is_structure_type(arrtype.subtype) ||
            is_pointer_type(arrtype.subtype));
     const smt_sort *sort = convert_sort(with.update_value->type);
-    return tuple_array_update(args[0], args[1], args[2], sort);
+    std::cerr << "I'm covered in bees" << std::endl;
+    abort();
+    expr2tc tmp_idx;
+    return tuple_array_update(args[0], tmp_idx, args[2], sort);
   } else {
     // Normal operation
     return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);

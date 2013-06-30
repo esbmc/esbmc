@@ -235,8 +235,9 @@ public:
                                             bool const_array,
                                             const smt_sort *domain);
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const smt_ast *field);
-  virtual const smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
+                                      const expr2tc &field);
+  virtual const smt_ast *tuple_array_update(const smt_ast *a,
+                                      const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
   virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
   virtual const smt_ast *tuple_array_ite(const smt_ast *cond,
@@ -288,10 +289,11 @@ public:
                      const tuple_smt_ast *true_val,
                      const tuple_smt_ast *false_val);
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
-                              const tuple_smt_ast *result,const smt_ast *field);
+                              const tuple_smt_ast *result, const expr2tc &field,
+                              const expr2tc &arr_width);
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
-                              const smt_ast *idx, const tuple_smt_ast *res,
-                              const smt_sort *idx_sort,
+                              const expr2tc &idx, const tuple_smt_ast *res,
+                              const expr2tc &arr_width,
                               const type2tc &subtype);
   const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
                                            const tuple_smt_ast *b,
@@ -324,7 +326,7 @@ public:
   const smt_ast *make_bool_bit(const smt_ast *a);
   const smt_ast *make_bit_bool(const smt_ast *a);
 
-  const smt_ast *fix_array_idx(const smt_ast *idx, const smt_sort *array_type);
+  expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
   unsigned long size_to_bit_width(unsigned long sz);
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);

@@ -414,20 +414,16 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // indexes.
     const smt_ast *init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
-      const smt_ast *field = (int_encoding)
-        ? mk_smt_int(BigInt(i), false)
-        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      newsym = tuple_array_update(newsym, field, init, fieldsort);
+      constant_int2tc idx(index_type2(), BigInt(i));
+      newsym = tuple_array_update(newsym, idx, init, fieldsort);
     }
 
     return newsym;
   } else {
     // Repeatedly store operands into this.
     for (unsigned int i = 0; i < sz; i++) {
-      const smt_ast *field = (int_encoding)
-        ? mk_smt_int(BigInt(i), false)
-        : mk_smt_bvint(BigInt(i), false, config.ansi_c.int_width);
-      newsym = tuple_array_update(newsym, field, inputargs[i], fieldsort);
+      constant_int2tc idx(index_type2(), BigInt(i));
+      newsym = tuple_array_update(newsym, idx, inputargs[i], fieldsort);
     }
 
     return newsym;
@@ -436,7 +432,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
 
 const smt_ast *
 smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
-                              const smt_ast *field)
+                              const expr2tc &field)
 {
   // Select everything at the given element into a fresh tuple. Don't attempt
   // to support selecting array fields. In the future we can arrange something
@@ -449,7 +445,8 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
-  tuple_array_select_rec(ta, array_type.subtype, result, field);
+  tuple_array_select_rec(ta, array_type.subtype, result, field,
+                         array_type.array_size);
   return result;
 }
 
@@ -457,7 +454,8 @@ void
 smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
                                   const type2tc &subtype,
                                   const tuple_smt_ast *result,
-                                  const smt_ast *field)
+                                  const expr2tc &field,
+                                  const expr2tc &arr_width)
 {
   // Implementation of selecting out of a tuple array: ta contains the source
   // tuple array, and result is a new tuple that we're assigning things into.
@@ -478,17 +476,19 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       std::string substruct_name =
         ta->name + struct_type.member_names[i].as_string() + ".";
       const tuple_smt_ast *array_name = new tuple_smt_ast(sort, substruct_name);
-      tuple_array_select_rec(array_name, *it, result_field, field);
+      tuple_array_select_rec(array_name, *it, result_field, field, arr_width);
     } else {
       // Otherwise assume it's a normal variable: create its name (which is of
       // array type), and then extract the value from that array at the
       // specified index.
       std::string name = ta->name + struct_type.member_names[i].as_string();
+      type2tc this_arr_type(new array_type2t(*it, arr_width, false));
       const smt_ast *args[2];
       const smt_sort *field_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, field->sort,field_sort);
+      const smt_sort *arrsort = convert_sort(this_arr_type);
       args[0] = mk_smt_symbol(name, arrsort);
-      args[1] = fix_array_idx(field, arrsort);
+      expr2tc tmpidx = fix_array_idx(field, this_arr_type);
+      args[1] = convert_ast(tmpidx);
       args[0] = mk_func_app(field_sort, SMT_FUNC_SELECT, args, 2);
       args[1] = tuple_project(result, field_sort, i);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
@@ -499,7 +499,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
 }
 
 const smt_ast *
-smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
+smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
                               const smt_ast *val,
                               const smt_sort *fieldsort __attribute__((unused)))
 {
@@ -515,18 +515,18 @@ smt_convt::tuple_array_update(const smt_ast *a, const smt_ast *index,
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
   const array_type2t &arrtype = to_array_type(ts->thetype);
-  const smt_sort *idx_sort = make_array_domain_sort(arrtype);
-
   const array_type2t &array_type = to_array_type(ts->thetype);
-  tuple_array_update_rec(ta, tv, index, result, idx_sort, array_type.subtype);
+  tuple_array_update_rec(ta, tv, index, result, arrtype.array_size,
+                         array_type.subtype);
   return result;
 }
 
 void
 smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
-                                  const tuple_smt_ast *tv, const smt_ast *idx,
+                                  const tuple_smt_ast *tv,
+                                  const expr2tc &idx,
                                   const tuple_smt_ast *result,
-                                  const smt_sort *idx_sort,
+                                  const expr2tc &arr_width,
                                   const type2tc &subtype)
 {
   // Implementation of tuple array update: for each member take its array
@@ -551,19 +551,21 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       const tuple_smt_ast *src = new tuple_smt_ast(tmp, srcname);
       const tuple_smt_ast *val = new tuple_smt_ast(tmp, valname);
 
-      tuple_array_update_rec(src, val, idx, target, idx_sort, *it);
+      tuple_array_update_rec(src, val, idx, target, arr_width, *it);
     } else {
       // Normal value; name, update, assign.
       std::string arrname = ta->name + struct_type.member_names[i].as_string();
       std::string valname = tv->name + struct_type.member_names[i].as_string();
       std::string resname = result->name +
                             struct_type.member_names[i].as_string();
+      type2tc this_arr_type(new array_type2t(*it, arr_width, false));
       const smt_ast *args[3];
       const smt_sort *elem_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx_sort, elem_sort);
+      const smt_sort *arrsort = convert_sort(this_arr_type);
       // Take the source array variable and update it into an ast.
       args[0] = mk_smt_symbol(arrname, arrsort);
-      args[1] = fix_array_idx(idx, arrsort);
+      expr2tc tmp_idx = fix_array_idx(idx, this_arr_type);
+      args[1] = convert_ast(tmp_idx);
       args[2] = mk_smt_symbol(valname, elem_sort);
       args[0] = mk_func_app(arrsort, SMT_FUNC_STORE, args, 3);
       // Now assign that ast into the result tuple array.
