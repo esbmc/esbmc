@@ -337,6 +337,11 @@ public:
   expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
+  const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
+                           const smt_sort *ressort);
+  const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
+                          const expr2tc &value, const smt_sort *ressort);
+
   // Types
 
   // Types for union map.

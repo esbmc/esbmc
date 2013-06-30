@@ -1492,9 +1492,8 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 const smt_ast *
 smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
 {
-  const index2t &index = to_index2t(expr);
   const smt_ast *a;
-  const smt_ast *args[2];
+  const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
   expr2tc newidx;
 
@@ -1508,38 +1507,32 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
   if (!is_nil_expr(tmp_idx))
     newidx = tmp_idx;
 
-  args[0] = convert_ast(src_value);
-  args[1] = convert_ast(newidx);
-
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
-    return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+    return mk_select(src_value, newidx, ressort);
   }
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
     // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
     const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
-    a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
-    a = make_bit_bool(a);
+    a = mk_select(src_value, newidx, tmpsort);
+    return make_bit_bool(a);
   } else if (is_tuple_array_ast_type(index.source_value->type)) {
-    a = tuple_array_select(args[0], ressort, newidx);
+    a = convert_ast(src_value);
+    return tuple_array_select(a, ressort, newidx);
   } else {
-    a = mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+    return mk_select(src_value, newidx, ressort);
   }
-
-  return a;
 }
 
 const smt_ast *
 smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
 {
   const with2t &with = to_with2t(expr);
-  const smt_ast *args[3];
   expr2tc update_val = with.update_value;
   expr2tc newidx;
 
-  args[0] = convert_ast(with.source_value);
   if (is_array_type(with.type) &&
       is_array_type(to_array_type(with.type).subtype) &&
       is_with2t(with.update_value)) {
@@ -1552,22 +1545,22 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
   if (!is_nil_expr(tmp_idx))
     newidx = tmp_idx;
 
-  args[2] = convert_ast(update_val);
-  args[1] = convert_ast(newidx);
-
   assert(is_array_type(expr->type));
   const array_type2t &arrtype = to_array_type(expr->type);
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
-    args[2] = make_bool_bit(args[2]);
-    return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
+    typecast2tc cast(get_uint_type(1), update_val);
+    return mk_store(with.source_value, newidx, cast, ressort);
   } else if (is_tuple_array_ast_type(with.type)) {
     assert(is_structure_type(arrtype.subtype) ||
            is_pointer_type(arrtype.subtype));
     const smt_sort *sort = convert_sort(with.update_value->type);
-    return tuple_array_update(args[0], newidx, args[2], sort);
+    const smt_ast *src, *update;
+    src = convert_ast(with.source_value);
+    update = convert_ast(update_val);
+    return tuple_array_update(src, newidx, update, sort);
   } else {
     // Normal operation
-    return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
+    return mk_store(with.source_value, newidx, update_val, ressort);
   }
 }
 
@@ -1586,6 +1579,27 @@ smt_convt::flatten_array_type(const type2tc &type)
   uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+}
+
+const smt_ast *
+smt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
+                     const smt_sort *ressort)
+{
+  const smt_ast *args[2];
+  args[0] = convert_ast(array);
+  args[1] = convert_ast(idx);
+  return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+}
+
+const smt_ast *
+smt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
+                    const expr2tc &value, const smt_sort *ressort)
+{
+  const smt_ast *args[3];
+  args[0] = convert_ast(array);
+  args[1] = convert_ast(idx);
+  args[1] = convert_ast(value);
+  return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
 }
 
 const smt_convt::expr_op_convert
