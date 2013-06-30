@@ -836,6 +836,25 @@ expr_handle_table:
     }
     break;
   }
+  case expr2t::concat_id:
+  {
+    assert(!int_encoding && "Concatonate encountered in integer mode; "
+           "unimplemented (and funky)");
+    const concat2t &cat = to_concat2t(expr);
+    std::vector<expr2tc>::const_iterator it = cat.data_items.begin();
+    args[0] = convert_ast(*it);
+    unsigned long accuml_size = (*it)->type->get_width();
+    it++;
+    for (; it != cat.data_items.end() ;it++) {
+      accuml_size += (*it)->type->get_width();
+      const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_size, false);
+      args[1] = convert_ast(*it);
+      args[0] = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+    }
+
+    a = args[0];
+    break;
+  }
   default:
     std::cerr << "Couldn't convert expression in unrecognized format"
               << std::endl;
@@ -1660,6 +1679,9 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_catch
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw_dec
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isinf
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isnormal
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //concat
 };
 
 const std::string
