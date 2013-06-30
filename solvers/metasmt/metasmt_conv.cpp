@@ -584,24 +584,22 @@ metasmt_convt::convert_array_index(const expr2tc &expr, const smt_ast *array,
 }
  
 const smt_ast *
-metasmt_convt::convert_array_store(const expr2tc &expr, const smt_ast *array,
-                                   const smt_ast *idx, const smt_ast *value,
-                                   const smt_sort *ressort)
+metasmt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
 {
   const with2t &with = to_with2t(expr);
   const smt_ast *args[3];
-  args[0] = array;
-  args[1] = idx;
-  args[2] = value;
 
+  args[0] = convert_ast(with.source_value);
   if (is_array_type(with.type) &&
-      is_array_type(to_array_type(with.type).subtype)) {
+      is_array_type(to_array_type(with.type).subtype) &&
+      is_with2t(with.update_value)) {
     std::vector<expr2tc> indexes;
     std::vector<unsigned int> idx_widths;
-    decompose_store_chain(expr, &args[0], indexes, idx_widths);
+    decompose_store_chain(expr, &args[2], indexes, idx_widths);
     args[1] = concatonate_indexes(indexes, idx_widths);
   } else {
-    args[1] = fix_array_idx(args[1], args[0]->sort);
+    args[2] = convert_ast(with.update_value);
+    args[1] = fix_array_idx(convert_ast(with.update_field), ressort);
   }
 
   assert(is_array_type(expr->type));
