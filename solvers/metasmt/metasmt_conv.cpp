@@ -664,14 +664,14 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
   idxargs[0] = real_idx;
-  iteargs[2] = real_value;
+  iteargs[1] = real_value;
 
   for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
     idxargs[1] = mk_smt_bvint(BigInt(i), false, dom_width);
     const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
 
     iteargs[0] = idx_eq;
-    iteargs[1] = mast->array_fields[i];
+    iteargs[2] = mast->array_fields[i];
 
     const smt_ast *new_val =
       mk_func_app(iteargs[1]->sort, SMT_FUNC_ITE, iteargs, 3);
