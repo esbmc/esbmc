@@ -701,7 +701,7 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
     iteargs[0] = idx_eq;
     iteargs[1] = it->second;
 
-    iteargs[2] = mk_func_app(bool_sort, SMT_FUNC_ITE, iteargs, 3);
+    iteargs[2] = mk_func_app(ressort, SMT_FUNC_ITE, iteargs, 3);
   }
 
   return iteargs[2];
