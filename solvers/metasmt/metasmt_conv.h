@@ -61,6 +61,19 @@ public:
 
   virtual ~metasmt_smt_ast(void) { }
 
+  bool is_unbounded_array(void) {
+    if (sort->id != SMT_SORT_ARRAY)
+      return false;
+
+    if (sort->get_domain_width() > 10)
+      // This is either really large, or unbounded thus leading to a machine_int
+      // sized domain. Either way, not a normal one.
+      return true;
+    else
+      return false;
+  }
+
+
   result_type restype;
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
