@@ -1485,6 +1485,10 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
     newidx = fix_array_idx(index.index, index.source_value->type);
   }
 
+  expr2tc tmp_idx = newidx->simplify();
+  if (!is_nil_expr(tmp_idx))
+    newidx = tmp_idx;
+
   args[0] = convert_ast(src_value);
   args[1] = convert_ast(newidx);
 
@@ -1527,6 +1531,10 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
   } else {
     newidx = fix_array_idx(with.update_field, with.type);
   }
+
+  expr2tc tmp_idx = newidx->simplify();
+  if (!is_nil_expr(tmp_idx))
+    newidx = tmp_idx;
 
   args[2] = convert_ast(update_val);
   args[1] = convert_ast(newidx);
