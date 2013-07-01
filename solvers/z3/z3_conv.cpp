@@ -181,8 +181,6 @@ z3_convt::dec_solve(void)
   z3::check_result result;
   Z3_get_version(&major, &minor, &build, &revision);
 
-  std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
-
   result = check2_z3_properties();
 
   if (result == z3::unsat)

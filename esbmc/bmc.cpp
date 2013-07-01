@@ -166,6 +166,10 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
     status(str.str());
   }
 
+  std::stringstream ss;
+  ss << "Solving with solver " << prop_conv.solver_text();
+  status(ss.str());
+
   fine_timet sat_start=current_time();
   prop_convt::resultt dec_result=prop_conv.dec_solve();
   fine_timet sat_stop=current_time();
