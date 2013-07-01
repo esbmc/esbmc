@@ -1,20 +1,32 @@
 #ifndef _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 #define _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 
+#include <limits.h>
+// For the sake of...
+#define __STDC_LIMIT_MACROS
+#define __STDC_FORMAT_MACROS
+#include <stdint.h>
+#include <inttypes.h>
+
 #include <solvers/smt/smt_conv.h>
 
 #include <metaSMT/DirectSolver_Context.hpp>
 #include <metaSMT/frontend/Logic.hpp>
 #include <metaSMT/API/Assertion.hpp>
 #include <metaSMT/backend/Z3_Backend.hpp>
+#include <metaSMT/backend/MiniSAT.hpp>
+#include <metaSMT/backend/SAT_Clause.hpp>
+#include <metaSMT/BitBlast.hpp>
 
 // Crazyness: the desired solver is selected by some template meta programming.
 // Therefore we have to statically know what solver we want to be using. To do
 // that, we use the following war-def
-typedef metaSMT::solver::Z3_Backend solvertype;
+typedef metaSMT::BitBlast < metaSMT::SAT_Clause< metaSMT::solver::MiniSAT > > solvertype;
+//typedef metaSMT::solver::Z3_Backend solvertype;
 // Which defines our solvertype as being a Z3 solver.
 
-typedef metaSMT::solver::Z3_Backend::result_type result_type;
+typedef metaSMT::BitBlast < metaSMT::SAT_Clause< metaSMT::solver::MiniSAT > >::result_type result_type;
+//typedef metaSMT::solver::Z3_Backend::result_type result_type;
 
 namespace predtags = metaSMT::logic::tag;
 namespace bvtags = metaSMT::logic::QF_BV::tag;
