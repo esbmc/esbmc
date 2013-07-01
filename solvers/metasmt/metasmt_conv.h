@@ -34,6 +34,18 @@ public:
   virtual unsigned long get_domain_width(void) const {
     return arrdom_width;
   }
+
+  bool is_unbounded_array(void) {
+    if (id != SMT_SORT_ARRAY)
+      return false;
+
+    if (get_domain_width() > 10)
+      // This is either really large, or unbounded thus leading to a machine_int
+      // sized domain. Either way, not a normal one.
+      return true;
+    else
+      return false;
+  }
 };
 
 class metasmt_smt_ast : public smt_ast {
@@ -70,17 +82,8 @@ public:
   virtual ~metasmt_smt_ast(void) { }
 
   bool is_unbounded_array(void) {
-    if (sort->id != SMT_SORT_ARRAY)
-      return false;
-
-    if (sort->get_domain_width() > 10)
-      // This is either really large, or unbounded thus leading to a machine_int
-      // sized domain. Either way, not a normal one.
-      return true;
-    else
-      return false;
+    return metasmt_sort_downcast(sort)->is_unbounded_array();
   }
-
 
   result_type restype;
   std::string symname; // Only if this was produced from mk_smt_symbol.
