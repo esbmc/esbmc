@@ -5,7 +5,8 @@
 
 // For the purpose of vastly reducing build times:
 prop_convt *
-create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
+create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
+                                  const namespacet &ns);
 
 prop_convt *
 create_solver_factory(const std::string &solver_name, bool is_cpp,
@@ -28,7 +29,7 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
               << "ESBMC" << std::endl;
     abort();
 #else
-    return create_new_metasmt_solver(int_encoding, is_cpp, ns);
+    return create_new_metasmt_minisat_solver(int_encoding, is_cpp, ns);
 #endif
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"

@@ -8,7 +8,8 @@
 
 // To avoid having to build metaSMT into multiple files,
 prop_convt *
-create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
+create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
+                                  const namespacet &ns)
 {
   return new minisat_metasmt_convt(int_encoding, is_cpp, ns);
 }
