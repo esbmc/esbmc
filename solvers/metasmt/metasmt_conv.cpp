@@ -756,12 +756,28 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
 const metasmt_smt_ast *
 metasmt_convt::make_conditional_unbounded_ite_join(const metasmt_smt_ast *base,
             const smt_ast *condition,
-            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator start,
+            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it,
             metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end)
 {
-  abort();
-}
+  const smt_ast *args[3];
 
+  // Iterate through, making selects and stores.
+  for (; it != end; it++) {
+    args[0] = condition;
+    args[1] = it->second;
+    args[2] = mk_unbounded_select(base, it->first, it->second->sort);
+    const smt_ast *newval =
+      mk_func_app(it->second->sort, SMT_FUNC_ITE, args, 3);
+    const metasmt_smt_ast *new_base =
+      mk_unbounded_store(base, it->first, newval, base->sort);
+
+    // Save memory etc.
+    delete base;
+    base = new_base;
+  }
+
+  return base;
+}
 
 const metasmt_smt_ast *
 metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
