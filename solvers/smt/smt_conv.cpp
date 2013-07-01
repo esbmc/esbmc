@@ -525,7 +525,13 @@ expr_handle_table:
     const array_type2t &arr = to_array_type(expr->type);
     if (!can_init_unbounded_arrs && arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
-      a = mk_fresh(sort, "inf_array");
+      // If we have an array of tuples and no tuple support, use tuple_fresh.
+      // Otherwise, mk_fresh.
+      if ((is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))
+          && !tuple_support)
+        a = tuple_fresh(sort);
+      else
+        a = mk_fresh(sort, "inf_array");
       break;
     }
 
