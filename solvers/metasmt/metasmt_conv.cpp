@@ -824,20 +824,23 @@ metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
 }
 
 const smt_ast *
-metasmt_convt::convert_array_of(const expr2tc &expr)
+metasmt_convt::convert_array_of(const expr2tc &init_val,
+                                unsigned long domain_width)
 {
-  const constant_array_of2t &arr_of = to_constant_array_of2t(expr);
-  const metasmt_smt_sort *s = metasmt_sort_downcast(convert_sort(expr->type));
-  metasmt_smt_ast *mast = new metasmt_smt_ast(s);
+  const smt_sort *dom_sort = mk_sort(SMT_SORT_BV, domain_width, false);
+  const smt_sort *idx_sort = convert_sort(init_val->type);
+  const metasmt_smt_sort *arr_sort =
+    metasmt_sort_downcast(mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort));
 
-  const smt_ast *init = convert_ast(arr_of.initializer);
-  if (!int_encoding && is_bool_type(arr_of.initializer) && no_bools_in_arrays)
+  metasmt_smt_ast *mast = new metasmt_smt_ast(arr_sort);
+
+  const smt_ast *init = convert_ast(init_val);
+  if (!int_encoding && is_bool_type(init_val) && no_bools_in_arrays)
     init = make_bool_bit(init);
 
-  if (s->is_unbounded_array()) {
+  if (arr_sort->is_unbounded_array()) {
     mast->default_unbounded_val = init;
   } else {
-    unsigned long domain_width = s->get_domain_width();
     unsigned long array_size = 1UL << domain_width;
     for (unsigned long i = 0; i < array_size; i++)
       mast->array_fields.push_back(init);

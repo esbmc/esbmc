@@ -170,7 +170,8 @@ public:
                                   const expr2tc &value,
                                   const smt_sort *ressort);
 
-  virtual const smt_ast *convert_array_of(const expr2tc &expr);
+  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+                                          unsigned long domain_width);
 
   const smt_ast *mk_unbounded_select(const metasmt_smt_ast *array,
                                      const metasmt_smt_ast *idx,

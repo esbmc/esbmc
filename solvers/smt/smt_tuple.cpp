@@ -735,7 +735,7 @@ const smt_ast *
 smt_convt::array_create(const expr2tc &expr)
 {
   if (is_constant_array_of2t(expr))
-    return convert_array_of(expr);
+    return convert_array_of_prep(expr);
 
   // Handle constant array expressions: these don't have tuple type and so
   // don't need funky handling, but we need to create a fresh new symbol and
@@ -781,7 +781,7 @@ smt_convt::array_create(const expr2tc &expr)
 }
 
 const smt_ast *
-smt_convt::convert_array_of(const expr2tc &expr)
+smt_convt::convert_array_of_prep(const expr2tc &expr)
 {
   const constant_array_of2t &arrof = to_constant_array_of2t(expr);
   const array_type2t &arrtype = to_array_type(arrof.type);
@@ -811,13 +811,20 @@ smt_convt::convert_array_of(const expr2tc &expr)
     array_size = size_to_bit_width(cursz);
   }
 
+  return convert_array_of(base_init, array_size);
+}
+
+const smt_ast *
+smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
+{
   // We now an initializer, and a size of array to build. So:
+
   std::vector<expr2tc> array_of_inits;
   for (unsigned long i = 0; i < (1ULL << array_size); i++)
-    array_of_inits.push_back(base_init);
+    array_of_inits.push_back(init_val);
 
   constant_int2tc real_arr_size(index_type2(), BigInt(1ULL << array_size));
-  type2tc newtype(new array_type2t(base_init->type, real_arr_size, false));
+  type2tc newtype(new array_type2t(init_val->type, real_arr_size, false));
 
   expr2tc res(new constant_array2t(newtype, array_of_inits));
   return convert_ast(res);
