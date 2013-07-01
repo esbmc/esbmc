@@ -810,6 +810,8 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
 
   if (is_structure_type(base_init->type))
     return tuple_array_of(base_init, array_size);
+  else if (is_pointer_type(base_init->type))
+    return pointer_array_of(base_init, array_size);
   else
     return convert_array_of(base_init, array_size);
 }
@@ -861,6 +863,27 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
   }
 
   return newsym;
+}
+
+const smt_ast *
+smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
+{
+  // Actually a tuple, but the operand is going to be a symbol, null.
+  assert(is_symbol2t(init_val) && "Pointer type'd array_of can only be an "
+         "array of null");
+  const symbol2t &sym = to_symbol2t(init_val);
+  assert(sym.thename == "NULL" && "Pointer type'd array_of can only be an "
+         "array of null");
+
+  // Well known value; zero and zero.
+  constant_int2tc zero_val(machine_ptr, BigInt(0));
+  std::vector<expr2tc> operands;
+  operands.reserve(2);
+  operands.push_back(zero_val);
+  operands.push_back(zero_val);
+
+  constant_struct2tc strct(pointer_struct, operands);
+  return tuple_array_of(strct, array_width);
 }
 
 const smt_ast *

@@ -349,6 +349,8 @@ public:
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
   const smt_ast *convert_array_of_prep(const expr2tc &expr);
+  const smt_ast *pointer_array_of(const expr2tc &init_val,
+                                  unsigned long array_width);
 
   // Types
 
