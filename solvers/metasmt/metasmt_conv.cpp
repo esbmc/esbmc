@@ -2,13 +2,6 @@
 
 #include <solvers/prop/prop_conv.h>
 
-// To avoid having to build metaSMT into multiple files,
-prop_convt *
-create_new_metasmt_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
-{
-  return new metasmt_convt(int_encoding, is_cpp, ns);
-}
-
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
   : smt_convt(false, int_encoding, ns, is_cpp, false, true, true),

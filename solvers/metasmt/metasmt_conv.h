@@ -18,9 +18,6 @@
 #include <metaSMT/backend/SAT_Clause.hpp>
 #include <metaSMT/BitBlast.hpp>
 
-#define SOLVER_PREFIX metasmt
-#define SOLVER_TYPE metaSMT::BitBlast < metaSMT::SAT_Clause< metaSMT::solver::MiniSAT > >
-
 // To save everyone's faces from being knawed off by killer weasels powered by
 // GCC error messages and inflation, avoid turning metasmt_convt into a
 // template. It'd be far too funky, seriously. Every time you did something
@@ -36,10 +33,9 @@
 // Definitions: SOLVER_PREFIX = what to jam on the front of "_convt" and all
 // other paraphernalia to form class names.
 // SOLVER_TYPE = the solver we're going to be using.
-#define metasmt_convt SOLVER_PREFIX##_convt
-#define metasmt_smt_ast SOLVER_PREFIX##_smt_ast
-#define metasmt_smt_sort SOLVER_PREFIX##_smt_sort
-#define Lookup SOLVER_PREFIX##_Lookup
+
+// That being said, I've completely failed to macro, so have some external
+// definitions for the moment.
 
 typedef SOLVER_TYPE solvertype;
 //typedef metaSMT::solver::Z3_Backend solvertype;

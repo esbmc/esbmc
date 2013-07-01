@@ -15,7 +15,7 @@ ESBMCDIR=$(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=meta_smt_all.o
 
-SRCS= metasmt_conv.cpp
+SRCS= minisat.cpp
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
