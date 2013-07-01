@@ -686,9 +686,12 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
 {
 
   // Heavily echoing mk_select,
+  bool unmatched_free = false;
   const smt_ast *the_default = ma->default_unbounded_val;
-  if (the_default == NULL)
+  if (the_default == NULL) {
     the_default = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
+    unmatched_free = true;
+  }
 
   const smt_ast *idxargs[2], *impargs[2], *iteargs[3];
   unsigned long dom_width = ma->sort->get_domain_width();
@@ -707,6 +710,13 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
 
     iteargs[2] = mk_func_app(ressort, SMT_FUNC_ITE, iteargs, 3);
   }
+
+  // If there's no default value, and we selected something out, we have to
+  // ensure that future reads of the same position get the same value. So we
+  // have to store this free value :(. Do that by storing this select on top.
+  metasmt_smt_ast *mast = const_cast<metasmt_smt_ast *>(ma); // yolo
+  mast->array_values.push_front(
+      metasmt_smt_ast::unbounded_list_type::value_type(real_idx, iteargs[2]));
 
   return iteargs[2];
 }
