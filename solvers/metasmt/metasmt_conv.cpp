@@ -584,7 +584,7 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
   metasmt_smt_ast *ma = convert_ast(array);
 
   if (ma->is_unbounded_array())
-    return mk_unbounded_select(ma, idx, ressort);
+    return mk_unbounded_select(ma, convert_ast(idx), ressort);
 
   assert(ma->array_fields.size() != 0);
 
@@ -634,7 +634,8 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   metasmt_smt_ast *ma = convert_ast(array);
 
   if (ma->is_unbounded_array())
-    return mk_unbounded_store(ma, idx, value, ressort);
+    return mk_unbounded_store(ma, convert_ast(idx), convert_ast(value),
+                              ressort);
 
   assert(ma->array_fields.size() != 0);
 
@@ -679,13 +680,12 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
 
 const smt_ast *
 metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
-                                   const expr2tc &idx,
+                                   const metasmt_smt_ast *real_idx,
                                    const smt_sort *ressort)
 {
 
   // Heavily echoing mk_select,
   const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
-  const smt_ast *real_idx = convert_ast(idx);
   const smt_ast *idxargs[2], *impargs[2], *iteargs[3];
   unsigned long dom_width = ma->sort->get_domain_width();
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
@@ -709,7 +709,7 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
 
 const smt_ast *
 metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
-                                  const expr2tc &idx, const expr2tc &value,
+                                  const smt_ast *idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
   // Actually super simple: we have no way of working out whether an older
@@ -719,11 +719,9 @@ metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
   // whether they match what we want, without any nondeterminism occurring,
   // but that's for another time.
   metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_values);
-  const smt_ast *real_idx = convert_ast(idx);
-  const smt_ast *real_val = convert_ast(value);
 
   mast->array_values.push_front(
-      metasmt_smt_ast::unbounded_list_type::value_type(real_idx, real_val));
+      metasmt_smt_ast::unbounded_list_type::value_type(idx, value));
   return mast;
 }
 
