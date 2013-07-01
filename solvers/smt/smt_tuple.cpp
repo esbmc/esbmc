@@ -694,7 +694,7 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
       args[0] = cond;
       args[1] = mk_smt_symbol(tname, arrsort);
       args[2] = mk_smt_symbol(fname, arrsort);
-      args[0] = mk_func_app(idx_sort, SMT_FUNC_ITE, args, 3);
+      args[0] = mk_func_app(arrsort, SMT_FUNC_ITE, args, 3);
       args[1] = mk_smt_symbol(rname, arrsort);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
