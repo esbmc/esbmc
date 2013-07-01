@@ -7,6 +7,10 @@ endif
 # Munge includes path
 INCLUDES+= -I $(METASMT_PATH)/src
 
+ifdef MINISAT_PATH
+INCLUDES+= -I $(MINISAT_PATH) -I $(MINISAT_PATH)/..
+endif
+
 ESBMCDIR=$(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=meta_smt_all.o
