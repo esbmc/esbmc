@@ -4,6 +4,21 @@
 #define Lookup minisat_metasmt_Lookup
 #define SOLVER_TYPE metaSMT::BitBlast < metaSMT::SAT_Clause< metaSMT::solver::MiniSAT > >
 
+#include <limits.h>
+// For the sake of...
+#define __STDC_LIMIT_MACROS
+#define __STDC_FORMAT_MACROS
+#include <stdint.h>
+#include <inttypes.h>
+
+#include <solvers/smt/smt_conv.h>
+
+#include <metaSMT/frontend/Logic.hpp>
+#include <metaSMT/API/Assertion.hpp>
+#include <metaSMT/backend/MiniSAT.hpp>
+#include <metaSMT/backend/SAT_Clause.hpp>
+#include <metaSMT/BitBlast.hpp>
+
 #include "metasmt_conv.cpp"
 
 // To avoid having to build metaSMT into multiple files,

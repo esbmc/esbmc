@@ -1,22 +1,10 @@
 #ifndef _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 #define _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 
-#include <limits.h>
-// For the sake of...
-#define __STDC_LIMIT_MACROS
-#define __STDC_FORMAT_MACROS
-#include <stdint.h>
-#include <inttypes.h>
-
 #include <solvers/smt/smt_conv.h>
 
-#include <metaSMT/DirectSolver_Context.hpp>
 #include <metaSMT/frontend/Logic.hpp>
-#include <metaSMT/API/Assertion.hpp>
-#include <metaSMT/backend/Z3_Backend.hpp>
-#include <metaSMT/backend/MiniSAT.hpp>
-#include <metaSMT/backend/SAT_Clause.hpp>
-#include <metaSMT/BitBlast.hpp>
+#include <metaSMT/frontend/Array.hpp>
 
 // To save everyone's faces from being knawed off by killer weasels powered by
 // GCC error messages and inflation, avoid turning metasmt_convt into a
