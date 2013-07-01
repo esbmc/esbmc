@@ -829,14 +829,17 @@ metasmt_convt::convert_array_of(const expr2tc &expr)
   const metasmt_smt_sort *s = metasmt_sort_downcast(convert_sort(expr->type));
   metasmt_smt_ast *mast = new metasmt_smt_ast(s);
 
+  const smt_ast *init = convert_ast(arr_of.initializer);
+  if (!int_encoding && is_bool_type(arr_of.initializer) && no_bools_in_arrays)
+    init = make_bool_bit(init);
+
   if (s->is_unbounded_array()) {
-    mast->default_unbounded_val = convert_ast(arr_of.initializer);
+    mast->default_unbounded_val = init;
   } else {
     unsigned long domain_width = s->get_domain_width();
     unsigned long array_size = 1UL << domain_width;
-    const smt_ast *a = convert_ast(arr_of.initializer);
     for (unsigned long i = 0; i < array_size; i++)
-      mast->array_fields.push_back(a);
+      mast->array_fields.push_back(init);
   }
 
   return mast;
