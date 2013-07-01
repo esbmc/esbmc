@@ -136,7 +136,13 @@ private:
   void init_addr_space_array(void);
 
   virtual const std::string solver_text()
-  { return "Z3"; }
+  {
+    unsigned int major, minor, build, revision;
+    Z3_get_version(&major, &minor, &build, &revision);
+    std::stringstream ss;
+    ss << "Z3 v" << major << "." << minor;
+    return ss.str();
+  }
 
   virtual tvt l_get(literalt a);
 
