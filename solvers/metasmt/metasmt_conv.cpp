@@ -829,6 +829,10 @@ metasmt_convt::convert_array_of(const expr2tc &init_val,
 {
   const smt_sort *dom_sort = mk_sort(SMT_SORT_BV, domain_width, false);
   const smt_sort *idx_sort = convert_sort(init_val->type);
+
+  if (!int_encoding && is_bool_type(init_val) && no_bools_in_arrays)
+    idx_sort = mk_sort(SMT_SORT_BV, 1, false);
+
   const metasmt_smt_sort *arr_sort =
     metasmt_sort_downcast(mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort));
 
