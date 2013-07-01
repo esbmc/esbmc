@@ -796,8 +796,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
   if (is_array_type(arrtype.subtype)) {
     type2tc flat_type = flatten_array_type(expr->type);
     const array_type2t &arrtype2 = to_array_type(flat_type);
-    const constant_int2t &intref = to_constant_int2t(arrtype2.array_size);
-    array_size = size_to_bit_width(intref.constant_value.to_ulong());
+    array_size = calculate_array_domain_width(arrtype2);
 
     expr2tc rec_expr = expr;
     while (is_constant_array_of2t(rec_expr))
@@ -806,9 +805,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
     base_init = rec_expr;
   } else {
     base_init = arrof.initializer;
-    unsigned long cursz =
-        to_constant_int2t(arrtype.array_size).constant_value.to_ulong();
-    array_size = size_to_bit_width(cursz);
+    array_size = calculate_array_domain_width(arrtype);
   }
 
   return convert_array_of(base_init, array_size);
