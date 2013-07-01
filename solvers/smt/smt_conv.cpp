@@ -65,9 +65,11 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support, bool _nobools)
+                     bool is_cpp, bool _tuple_support, bool _nobools,
+                     bool can_init_inf_arrays)
   : caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support), no_bools_in_arrays(_nobools)
+    tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
+    can_init_unbounded_arrs(can_init_inf_arrays)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -521,7 +523,7 @@ expr_handle_table:
   case expr2t::constant_array_of_id:
   {
     const array_type2t &arr = to_array_type(expr->type);
-    if (arr.size_is_infinite) {
+    if (!can_init_unbounded_arrs && arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
       a = mk_fresh(sort, "inf_array");
       break;

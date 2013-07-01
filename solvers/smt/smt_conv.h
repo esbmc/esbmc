@@ -177,7 +177,8 @@ class smt_convt: public prop_convt
 {
 public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool tuple_support, bool no_bools_in_arrays);
+            bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
+            bool can_init_inf_arrs);
   ~smt_convt();
   void smt_post_init(void); // smt init stuff that calls into subclass.
 
@@ -412,6 +413,7 @@ public:
   const namespacet &ns;
   bool tuple_support;
   bool no_bools_in_arrays;
+  bool can_init_unbounded_arrs;
   std::string dyn_info_arr_name;
 
   std::map<std::string, unsigned int> fresh_map;
