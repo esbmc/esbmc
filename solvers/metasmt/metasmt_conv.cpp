@@ -415,12 +415,12 @@ metasmt_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 
   result_type r;
   if (sign) {
-    metaSMT::solver::bvtags::bvsint_tag lolwat;
+    ::metaSMT::logic::QF_BV::tag::bvsint_tag lolwat;
     boost::tuple<long, unsigned long> bees(theint.to_long(), w);
     boost::any face(bees);
     r = ctx(lolwat, face);
   } else {
-    metaSMT::solver::bvtags::bvuint_tag lolwat;
+    ::metaSMT::logic::QF_BV::tag::bvuint_tag lolwat;
     boost::tuple<unsigned long, unsigned long> bees(theint.to_long(), w);
     boost::any face(bees);
     r = ctx(lolwat, face);
