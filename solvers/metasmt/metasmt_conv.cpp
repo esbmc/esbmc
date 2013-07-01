@@ -685,13 +685,16 @@ metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
 {
 
   // Heavily echoing mk_select,
-  const smt_ast *fresh = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
+  const smt_ast *the_default = ma->default_unbounded_val;
+  if (the_default == NULL)
+    the_default = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
+
   const smt_ast *idxargs[2], *impargs[2], *iteargs[3];
   unsigned long dom_width = ma->sort->get_domain_width();
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
   idxargs[0] = real_idx;
-  iteargs[2] = fresh;
+  iteargs[2] = the_default;
 
   // Make one gigantic ITE, from the back upwards.
   for (metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it =
@@ -718,7 +721,8 @@ metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
   // We could optimise by looking at the topmost bunch of indexes and seeing
   // whether they match what we want, without any nondeterminism occurring,
   // but that's for another time.
-  metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_values);
+  metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_values,
+                                              ma->default_unbounded_val);
 
   mast->array_values.push_front(
       metasmt_smt_ast::unbounded_list_type::value_type(idx, value));
@@ -803,7 +807,8 @@ metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
   }
 
   // Generate the base array.
-  metasmt_smt_ast *base = new metasmt_smt_ast(true_arr->sort, common_tail);
+  metasmt_smt_ast *base = new metasmt_smt_ast(true_arr->sort, common_tail,
+                                              true_arr->default_unbounded_val);
 
   // Iterate over each set of other values, selecting the old and updated
   // element, then generating an ITE based on the input condition.
@@ -815,4 +820,24 @@ metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
                                              false_arr->array_values.rend());
 
   return base;
+}
+
+const smt_ast *
+metasmt_convt::convert_array_of(const expr2tc &expr)
+{
+  const constant_array_of2t &arr_of = to_constant_array_of2t(expr);
+  const metasmt_smt_sort *s = metasmt_sort_downcast(convert_sort(expr->type));
+  metasmt_smt_ast *mast = new metasmt_smt_ast(s);
+
+  if (s->is_unbounded_array()) {
+    mast->default_unbounded_val = convert_ast(arr_of.initializer);
+  } else {
+    unsigned long domain_width = s->get_domain_width();
+    unsigned long array_size = 1UL << domain_width;
+    const smt_ast *a = convert_ast(arr_of.initializer);
+    for (unsigned long i = 0; i < array_size; i++)
+      mast->array_fields.push_back(a);
+  }
+
+  return mast;
 }

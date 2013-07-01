@@ -55,27 +55,33 @@ public:
     unbounded_list_type;
 
   metasmt_smt_ast(const smt_sort *_s)
-    : smt_ast(_s), restype(), symname(""), array_fields(), array_values()
+    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(),
+      default_unbounded_val(NULL)
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s)
-    : smt_ast(_s), restype(r), symname(""), array_fields(), array_values()
+    : smt_ast(_s), restype(r), symname(""), array_fields(), array_values(),
+      default_unbounded_val(NULL)
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s, const std::string &s)
-    : smt_ast(_s), restype(r), symname(s), array_fields(), array_values()
+    : smt_ast(_s), restype(r), symname(s), array_fields(), array_values(),
+      default_unbounded_val(NULL)
   {
   }
 
   metasmt_smt_ast(const smt_sort *_s, const std::vector<const smt_ast *> &a)
-    : smt_ast(_s), restype(), symname(""), array_fields(a), array_values()
+    : smt_ast(_s), restype(), symname(""), array_fields(a), array_values(),
+      default_unbounded_val(NULL)
   {
   }
 
-  metasmt_smt_ast(const smt_sort *_s, const unbounded_list_type &a)
-    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(a)
+  metasmt_smt_ast(const smt_sort *_s, const unbounded_list_type &a,
+                  const smt_ast *def_val)
+    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(a),
+      default_unbounded_val(def_val)
   {
   }
 
@@ -95,6 +101,7 @@ public:
   // Alternately, for unbounded arrays, what we want is a list of historical
   // assignments, and their corresponding values.
   unbounded_list_type array_values;
+  const smt_ast *default_unbounded_val;
 };
 
 // copy+paste directly from the metaSMT documentation:
@@ -162,6 +169,8 @@ public:
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
                                   const expr2tc &value,
                                   const smt_sort *ressort);
+
+  virtual const smt_ast *convert_array_of(const expr2tc &expr);
 
   const smt_ast *mk_unbounded_select(const metasmt_smt_ast *array,
                                      const metasmt_smt_ast *idx,
