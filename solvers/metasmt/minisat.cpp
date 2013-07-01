@@ -14,3 +14,8 @@ create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
   return new minisat_metasmt_convt(int_encoding, is_cpp, ns);
 }
 
+const std::string
+minisat_metasmt_convt::solver_text()
+{
+  return "MiniSAT";
+}

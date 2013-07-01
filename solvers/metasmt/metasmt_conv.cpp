@@ -58,13 +58,6 @@ metasmt_convt::l_get(literalt a)
   return tvt(tvt::TV_FALSE);
 }
 
-const std::string
-metasmt_convt::solver_text()
-{
-  abort();
-}
-
-
 void
 metasmt_convt::assert_lit(const literalt &l)
 {
