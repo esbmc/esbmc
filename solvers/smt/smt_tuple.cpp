@@ -808,7 +808,10 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
     array_size = calculate_array_domain_width(arrtype);
   }
 
-  return convert_array_of(base_init, array_size);
+  if (is_structure_type(base_init->type))
+    return tuple_array_of(base_init, array_size);
+  else
+    return convert_array_of(base_init, array_size);
 }
 
 const smt_ast *
@@ -825,6 +828,39 @@ smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
 
   expr2tc res(new constant_array2t(newtype, array_of_inits));
   return convert_ast(res);
+}
+
+const smt_ast *
+smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
+{
+  assert(!tuple_support);
+
+  // An array of tuples without tuple support: decompose into array_of's each
+  // subtype.
+  const struct_union_data &subtype =  get_type_def(init_val->type);
+  const constant_datatype_data &data =
+    static_cast<const constant_datatype_data &>(*init_val.get());
+
+  constant_int2tc arrsize(index_type2(), BigInt(array_size));
+  type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
+  const smt_sort *sort = convert_sort(arrtype);
+  std::string name = mk_fresh_name("tuple_array_of::");
+  const smt_ast *newsym = new tuple_smt_ast(sort, name);
+  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+
+  assert(subtype.members.size() == data.datatype_members.size());
+  for (unsigned long i = 0; i < subtype.members.size(); i++) {
+    const expr2tc &val = data.datatype_members[i];
+    const smt_ast *sub_arr_of = convert_array_of(val, array_size);
+    const smt_ast *args[2];
+
+    const smt_sort *this_sort = convert_sort(subtype.members[i]);
+    args[0] = tuple_project(newsym, this_sort, i);
+    args[1] = sub_arr_of;
+    assert_lit(mk_lit(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2)));
+  }
+
+  return newsym;
 }
 
 const smt_ast *
