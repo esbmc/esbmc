@@ -437,7 +437,8 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   unsigned int i = 0;
 
-  if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr))
+  if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr) ||
+      is_address_of2t(expr))
     // Nope; needs special handling
     goto nocvt;
   special_cases = false;
