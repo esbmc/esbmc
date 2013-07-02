@@ -10,6 +10,9 @@ create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
 prop_convt *
 create_new_metasmt_z3_solver(bool int_encoding, bool is_cpp,
                              const namespacet &ns);
+prop_convt *
+create_new_metasmt_boolector_solver(bool int_encoding, bool is_cpp,
+                                    const namespacet &ns);
 
 static prop_convt *
 create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
@@ -48,9 +51,22 @@ create_metasmt_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 #endif
 }
 
-static const unsigned int num_of_solvers = 4;
+static prop_convt *
+create_metasmt_boolector_solver(bool is_cpp, bool int_encoding,
+                                const namespacet &ns)
+{
+#if !defined(METASMT) || !defined(BOOLECTOR)
+    std::cerr << "Sorry, metaSMT Boolector support was not built into this "
+              << "version of ESBMC" << std::endl;
+    abort();
+#else
+    return create_new_metasmt_boolector_solver(int_encoding, is_cpp, ns);
+#endif
+}
+
+static const unsigned int num_of_solvers = 5;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minsat", "metasmt" };
+{ "z3", "smtlib", "minsat", "metasmt", "boolector" };
 
 static prop_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
@@ -63,8 +79,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   if (total_solvers == 0) {
     std::cerr << "No solver specified; defaulting to Z3" << std::endl;
   } else if (total_solvers > 1) {
-    // Valid if it's z3 and metasmt.
-    if (options.get_bool_option("z3") && options.get_bool_option("metasmt")) {
+    // Metasmt is one fewer solver.
+    if (options.get_bool_option("metasmt") && total_solvers == 2) {
       ;
     } else {
       std::cerr << "Please only specify one solver" << std::endl;
@@ -79,6 +95,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
       return create_metasmt_minisat_solver(is_cpp, int_encoding, ns);
     } else if (options.get_bool_option("z3")) {
       return create_metasmt_z3_solver(is_cpp, int_encoding, ns);
+    } else if (options.get_bool_option("boolector")) {
+      return create_metasmt_boolector_solver(is_cpp, int_encoding, ns);
     } else {
       std::cerr << "You must specify a backend solver when using the metaSMT "
                 << "framework" << std::endl;
