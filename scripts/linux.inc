@@ -23,8 +23,8 @@ endif
 
 ifdef USE_SOLVER_BOOLECTOR
 BOOLECTOR = $(SATDIR)/boolector
-CXXFLAGS+= -DBOOLECTOR
-SOLVER_LIBS+= -L$(BOOLECTOR)/lib -lboolector
+CXXFLAGS+= -DBOOLECTOR -I $(BOOLECTOR$)
+SOLVER_LIBS+= -L$(BOOLECTOR) -lboolector -L$(SATDIR)/lingeling -llgl
 endif
 
 ifdef USE_SOLVER_MINISAT1

@@ -27,6 +27,10 @@ ifdef METASMT
   endif
 endif
 
+ifdef BOOLECTOR
+SRCS+= boolector.cpp
+endif
+
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
