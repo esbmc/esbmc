@@ -7,6 +7,9 @@
 prop_convt *
 create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
                                   const namespacet &ns);
+prop_convt *
+create_new_metasmt_z3_solver(bool int_encoding, bool is_cpp,
+                             const namespacet &ns);
 
 static prop_convt *
 create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
@@ -30,6 +33,18 @@ create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
     abort();
 #else
     return create_new_metasmt_minisat_solver(int_encoding, is_cpp, ns);
+#endif
+}
+
+static prop_convt *
+create_metasmt_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
+{
+#ifndef METASMT
+    std::cerr << "Sorry, metaSMT support was not built into this version of "
+              << "ESBMC" << std::endl;
+    abort();
+#else
+    return create_new_metasmt_z3_solver(int_encoding, is_cpp, ns);
 #endif
 }
 
@@ -62,6 +77,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   } else if (options.get_bool_option("metasmt")) {
     if (options.get_bool_option("minisat")) {
       return create_metasmt_minisat_solver(is_cpp, int_encoding, ns);
+    } else if (options.get_bool_option("z3")) {
+      return create_metasmt_z3_solver(is_cpp, int_encoding, ns);
     } else {
       std::cerr << "You must specify a backend solver when using the metaSMT "
                 << "framework" << std::endl;
