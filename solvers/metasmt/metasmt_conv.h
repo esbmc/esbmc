@@ -180,6 +180,7 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+#ifdef SOLVER_BITBLAST_ARRAYS
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
@@ -212,8 +213,7 @@ public:
             const smt_ast *cond,
             metasmt_smt_ast::unbounded_list_type::const_reverse_iterator start,
             metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end);
-
-
+#endif /* SOLVER_BITBLAST_ARRAYS */
 
   // Members
   solvertype ctx;

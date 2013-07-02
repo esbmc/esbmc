@@ -94,8 +94,10 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
   case SMT_FUNC_ITE:
   {
+#ifdef SOLVER_BITBLAST_ARRAYS
     if (s->id == SMT_SORT_ARRAY)
       return array_ite(args[0], args[1], args [2], metasmt_sort_downcast(s));
+#endif
 
     predtags::ite_tag tag;
     result = ctx(tag, args[0]->restype, args[1]->restype, args[2]->restype);
@@ -479,8 +481,10 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   }
   case SMT_SORT_ARRAY:
   {
+#ifdef SOLVER_BITBLAST_ARRAYS
     if (bitblast_arrays)
       return fresh_array(ms, name);
+#endif
     metaSMT::logic::Array::tag::array_var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.elem_width = ms->arrrange_width;
@@ -536,6 +540,7 @@ metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
   return new metasmt_smt_ast(res, s);
 }
 
+#ifdef SOLVER_BITBLAST_ARRAYS
 const metasmt_smt_ast *
 metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
 {
@@ -850,3 +855,5 @@ metasmt_convt::convert_array_of(const expr2tc &init_val,
 
   return mast;
 }
+
+#endif /* SOLVER_BITBLAST_ARRAYS */
