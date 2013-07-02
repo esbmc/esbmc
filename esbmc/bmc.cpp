@@ -554,29 +554,7 @@ bool bmct::run_thread()
           (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    // Work out what solver to use.
-    int use_z3 = (options.get_bool_option("z3")) ? 1 : 0;
-    int use_smtlib = (options.get_bool_option("smtlib")) ? 1 : 0;
-    int use_metasmt = (options.get_bool_option("metasmt")) ? 1 : 0;
-    int total = use_z3 + use_smtlib + use_metasmt;
-    std::string solvername;
-
-    if (total > 1) {
-      std::cerr << "More than one solver specified; please pick one and specify"
-                   " only that on the command line" << std::endl;
-      abort();
-    } else if (total == 0) {
-      std::cerr << "Defaulting to using solver Z3" << std::endl;
-      solvername = "z3";
-    } else if (use_z3) {
-      solvername = "z3";
-    } else if (use_smtlib) {
-      solvername = "smtlib";
-    } else if (use_metasmt) {
-      solvername = "metasmt";
-    }
-
-    solver = create_solver_factory(solvername, is_cpp,
+    solver = create_solver_factory("", is_cpp,
                                    options.get_bool_option("int-encoding"),
                                    ns, options);
 
