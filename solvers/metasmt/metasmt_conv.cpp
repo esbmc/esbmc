@@ -5,8 +5,7 @@
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
   : smt_convt(false, int_encoding, ns, is_cpp, false, true, true),
-    ctx(), symbols(), astsyms(), sym_lookup(symbols, astsyms),
-    bitblast_arrays(true)
+    ctx(), symbols(), astsyms(), sym_lookup(symbols, astsyms)
 {
 
   if (int_encoding) {
@@ -482,9 +481,8 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   case SMT_SORT_ARRAY:
   {
 #ifdef SOLVER_BITBLAST_ARRAYS
-    if (bitblast_arrays)
-      return fresh_array(ms, name);
-#endif
+    return fresh_array(ms, name);
+#else
     metaSMT::logic::Array::tag::array_var_tag tag;
     tag.id = metaSMT::impl::new_var_id();
     tag.elem_width = ms->arrrange_width;
@@ -494,6 +492,7 @@ metasmt_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     metasmt_smt_ast *mast = new metasmt_smt_ast(res, s, name);
     sym_lookup.insert(mast, tag.id, name);
     return mast;
+#endif
   }
   case SMT_SORT_BOOL:
   {

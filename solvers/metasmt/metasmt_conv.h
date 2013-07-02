@@ -220,7 +220,6 @@ public:
   Lookup::symmap symbols;
   Lookup::astmap astsyms;
   Lookup sym_lookup;
-  bool bitblast_arrays;
 };
 
 #endif
