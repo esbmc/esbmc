@@ -33,11 +33,54 @@ create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
 #endif
 }
 
+static const unsigned int num_of_solvers = 4;
+static const std::string list_of_solvers[] =
+{ "z3", "smtlib", "minsat", "metasmt" };
+
+static prop_convt *
+pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
+            const optionst &options)
+{
+  unsigned int i, total_solvers = 0;
+  for (i = 0; i < num_of_solvers; i++)
+    total_solvers += (options.get_bool_option(list_of_solvers[i])) ? 1 : 0;
+
+  if (total_solvers == 0) {
+    std::cerr << "No solver specified; defaulting to Z3" << std::endl;
+  } else if (total_solvers > 1) {
+    // Valid if it's z3 and metasmt.
+    if (options.get_bool_option("z3") && options.get_bool_option("metasmt")) {
+      ;
+    } else {
+      std::cerr << "Please only specify one solver" << std::endl;
+      abort();
+    }
+  }
+
+  if (options.get_bool_option("smtlib")) {
+    return new smtlib_convt(int_encoding, ns, is_cpp, options);
+  } else if (options.get_bool_option("metasmt")) {
+    if (options.get_bool_option("minisat")) {
+      return create_metasmt_minisat_solver(is_cpp, int_encoding, ns);
+    } else {
+      std::cerr << "You must specify a backend solver when using the metaSMT "
+                << "framework" << std::endl;
+      abort();
+    }
+  } else {
+    return create_z3_solver(is_cpp, int_encoding, ns);
+  }
+}
+
 prop_convt *
 create_solver_factory(const std::string &solver_name, bool is_cpp,
                       bool int_encoding, const namespacet &ns,
                       const optionst &options)
 {
+  if (solver_name == "")
+    // Pick one based on options.
+    return pick_solver(is_cpp, int_encoding, ns, options);
+
   if (solver_name == "z3") {
     return create_z3_solver(is_cpp, int_encoding, ns);
   } else if (solver_name == "smtlib") {
