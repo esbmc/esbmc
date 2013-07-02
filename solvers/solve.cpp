@@ -27,9 +27,9 @@ static prop_convt *
 create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
                               const namespacet &ns)
 {
-#ifndef METASMT
-    std::cerr << "Sorry, metaSMT support was not built into this version of "
-              << "ESBMC" << std::endl;
+#if !defined(METASMT) || !defined(MINISAT)
+    std::cerr << "Sorry, metaSMT minisat support was not built into this "
+                 "version of " << "ESBMC" << std::endl;
     abort();
 #else
     return create_new_metasmt_minisat_solver(int_encoding, is_cpp, ns);
@@ -39,8 +39,8 @@ create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
 static prop_convt *
 create_metasmt_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 {
-#ifndef METASMT
-    std::cerr << "Sorry, metaSMT support was not built into this version of "
+#if !defined(METASMT) || !defined(Z3)
+    std::cerr << "Sorry, metaSMT Z3 support was not built into this version of "
               << "ESBMC" << std::endl;
     abort();
 #else
