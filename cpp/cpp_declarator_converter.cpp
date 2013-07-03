@@ -85,10 +85,10 @@ symbolt &cpp_declarator_convertert::convert(
       declarator.name(), base_name, template_args);
 
     scope=&cpp_typecheck.cpp_scopes.current_scope();
-  }
 
-  // check the type
-  cpp_typecheck.typecheck_type(final_type);
+    // check the type
+    cpp_typecheck.typecheck_type(final_type);
+  }
 
   is_code=is_code_type(final_type);
 
