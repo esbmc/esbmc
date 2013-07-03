@@ -19,6 +19,8 @@
 #include <metaSMT/backend/SAT_Clause.hpp>
 #include <metaSMT/BitBlast.hpp>
 
+#define SOLVER_BITBLAST_ARRAYS
+
 #include "metasmt_conv.cpp"
 
 // To avoid having to build metaSMT into multiple files,
