@@ -35,7 +35,7 @@ endif
 
 ifdef USE_SOLVER_STP
 STP=1
-CXXFLAGS+= -DSTP
+CXXFLAGS+= -DUSESTP
 SOLVER_LIBS+= -L$(STP_PATH)/lib -lstp
 endif
 
