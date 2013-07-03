@@ -39,6 +39,7 @@ $(OBJDIR)/solvers.o: $(OBJS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
+	-rm $(OBJS)
 	for dir in $(DIRS); do \
 	    make -C $$dir clean; \
 	done
