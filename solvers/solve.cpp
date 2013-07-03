@@ -13,6 +13,9 @@ create_new_metasmt_z3_solver(bool int_encoding, bool is_cpp,
 prop_convt *
 create_new_metasmt_boolector_solver(bool int_encoding, bool is_cpp,
                                     const namespacet &ns);
+prop_convt *
+create_new_metasmt_sword_solver(bool int_encoding, bool is_cpp,
+                                const namespacet &ns);
 
 static prop_convt *
 create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
@@ -64,9 +67,22 @@ create_metasmt_boolector_solver(bool is_cpp, bool int_encoding,
 #endif
 }
 
-static const unsigned int num_of_solvers = 5;
+static prop_convt *
+create_metasmt_sword_solver(bool is_cpp, bool int_encoding,
+                            const namespacet &ns)
+{
+#if !defined(METASMT) || !defined(SWORD)
+    std::cerr << "Sorry, SWORD support was not built into this version of ESBMC"
+              << std::endl;
+    abort();
+#else
+    return create_new_metasmt_sword_solver(int_encoding, is_cpp, ns);
+#endif
+}
+
+static const unsigned int num_of_solvers = 6;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minsat", "metasmt", "boolector" };
+{ "z3", "smtlib", "minsat", "metasmt", "boolector", "sword" };
 
 static prop_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
@@ -97,6 +113,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
       return create_metasmt_z3_solver(is_cpp, int_encoding, ns);
     } else if (options.get_bool_option("boolector")) {
       return create_metasmt_boolector_solver(is_cpp, int_encoding, ns);
+    } else if (options.get_bool_option("sword")) {
+      return create_metasmt_sword_solver(is_cpp, int_encoding, ns);
     } else {
       std::cerr << "You must specify a backend solver when using the metaSMT "
                 << "framework" << std::endl;

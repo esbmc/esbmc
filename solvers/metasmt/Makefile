@@ -11,6 +11,10 @@ ifdef MINISAT_PATH
 INCLUDES+= -I $(MINISAT_PATH) -I $(MINISAT_PATH)/..
 endif
 
+ifdef SWORD_PATH
+INCLUDES+= -I $(SWORD_PATH)/include
+endif
+
 ESBMCDIR=$(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=meta_smt_all.o
@@ -29,6 +33,10 @@ endif
 
 ifdef BOOLECTOR
 SRCS+= boolector.cpp
+endif
+
+ifdef SWORD
+SRCS+= sword.cpp
 endif
 
 clean:
