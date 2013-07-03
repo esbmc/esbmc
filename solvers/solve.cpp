@@ -27,8 +27,9 @@ create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 }
 
 static prop_convt *
-create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
-                              const namespacet &ns)
+create_metasmt_minisat_solver(bool is_cpp __attribute__((unused)),
+                              bool int_encoding __attribute__((unused)),
+                              const namespacet &ns __attribute__((unused)))
 {
 #if !defined(METASMT) || !defined(MINISAT)
     std::cerr << "Sorry, metaSMT minisat support was not built into this "
@@ -40,7 +41,9 @@ create_metasmt_minisat_solver(bool is_cpp, bool int_encoding,
 }
 
 static prop_convt *
-create_metasmt_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
+create_metasmt_z3_solver(bool is_cpp __attribute__((unused)),
+                         bool int_encoding __attribute__((unused)),
+                         const namespacet &ns __attribute__((unused)))
 {
 #if !defined(METASMT) || !defined(Z3)
     std::cerr << "Sorry, metaSMT Z3 support was not built into this version of "
@@ -52,8 +55,9 @@ create_metasmt_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 }
 
 static prop_convt *
-create_metasmt_boolector_solver(bool is_cpp, bool int_encoding,
-                                const namespacet &ns)
+create_metasmt_boolector_solver(bool is_cpp __attribute__((unused)),
+                                bool int_encoding __attribute__((unused)),
+                                const namespacet &ns __attribute__((unused)))
 {
 #if !defined(METASMT) || !defined(BOOLECTOR)
     std::cerr << "Sorry, metaSMT Boolector support was not built into this "
