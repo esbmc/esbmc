@@ -1,3 +1,6 @@
+#include <string>
+#include <sstream>
+
 #include "metasmt_conv.h"
 
 #include <solvers/prop/prop_conv.h>
