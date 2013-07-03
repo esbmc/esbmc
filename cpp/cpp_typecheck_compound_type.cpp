@@ -1006,7 +1006,7 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
     typecheck_compound_bases(type);
   }
 
-  exprt &body=(exprt &)type.add("body");
+  exprt &body=static_cast<exprt &>(type.add("body"));
   struct_typet::componentst &components=type.components();
 
   symbol.type.set("name", symbol.name);
@@ -1193,8 +1193,10 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
       {
         cpp_declaratort &declarator=*d_it;
 
+        #if 0
         std::string ctor_full_name, ctor_base_name;
         declarator.name().convert(ctor_full_name, ctor_base_name);
+        #endif
 
         if(declarator.find("value").is_not_nil())
         {
@@ -1450,7 +1452,7 @@ void cpp_typecheckt::adjust_method_type(
 
   arguments.get_sub().insert(arguments.get_sub().begin(), irept("argument"));
 
-  exprt &argument=(exprt &)arguments.get_sub().front();
+  exprt &argument=static_cast<exprt &>(arguments.get_sub().front());
   argument.type()=typet("pointer");
 
   argument.type().subtype()=typet("symbol");
@@ -1643,11 +1645,13 @@ bool cpp_typecheckt::get_component(
         }
         else
         {
+          #if 0
           err_location(location);
           str << "error: member `" << component_name
               << "' is not accessible (" << component.get("access").c_str() <<")";
           str << "\nstruct name: " << final_type.name();
           throw 0;
+          #endif
         }
       }
 
@@ -1747,12 +1751,12 @@ bool cpp_typecheckt::check_component_access(
   // check friendship
   forall_irep(f_it, struct_type.find("#friends").get_sub())
   {
-    const irept& friend_symb = *f_it;
+    const irept &friend_symb = *f_it;
 
-    const cpp_scopet& friend_scope =
+    const cpp_scopet &friend_scope =
       cpp_scopes.get_scope(friend_symb.identifier());
 
-    cpp_scopet* pscope = &(cpp_scopes.current_scope());
+    cpp_scopet *pscope = &(cpp_scopes.current_scope());
 
     while(!(pscope->is_root_scope()))
     {
