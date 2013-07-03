@@ -15,6 +15,10 @@ ifdef SWORD_PATH
 INCLUDES+= -I $(SWORD_PATH)/include
 endif
 
+ifdef STP_PATH
+INCLUDES+= -I $(STP_PATH)/include
+endif
+
 ESBMCDIR=$(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=meta_smt_all.o
@@ -37,6 +41,10 @@ endif
 
 ifdef SWORD
 SRCS+= sword.cpp
+endif
+
+ifdef STP
+SRCS+= stp.cpp
 endif
 
 clean:
