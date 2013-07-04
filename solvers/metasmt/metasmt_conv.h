@@ -253,8 +253,8 @@ public:
         const smt_ast *val;
       } w;
       struct {
-        unsigned int src_array_update_1;
-        unsigned int src_array_update_2;
+        unsigned int src_array_update_true;
+        unsigned int src_array_update_false;
         const smt_ast *cond;
       } i;
     } u;
