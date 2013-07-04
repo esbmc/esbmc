@@ -228,8 +228,12 @@ public:
   // elements: whenever we select an element from an array, we return a
   // free value, and record it here. Assertions made later will link this
   // up with real values.
-  std::vector<std::vector<std::list<std::pair<expr2tc, smt_ast *> > > >
-    array_values;
+  struct array_select {
+    unsigned int src_array_update_num;
+    expr2tc idx;
+    smt_ast *val;
+  };
+  std::vector<std::vector<std::list<struct array_select> > > array_values;
 
   // Update records: For each array, for each 'with' operation, we record
   // the index used and the AST representation of the value assigned. We
