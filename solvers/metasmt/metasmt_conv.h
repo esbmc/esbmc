@@ -117,6 +117,7 @@ public:
 
   std::vector<const smt_ast *> array_fields;
   unsigned int base_array_id;
+  unsigned int array_update_num;
 };
 
 // copy+paste directly from the metaSMT documentation:
