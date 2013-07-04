@@ -215,8 +215,12 @@ public:
   Lookup::astmap astsyms;
   Lookup sym_lookup;
 
+  // Array tracking: each new root array (from fresh_array) gets its own
+  // ID number which is stored. Then, whenever any operation occurs on it,
+  // we add the index to the set contained in the following object. This
+  // obtains all the tracking data required for CBMC-like array
+  // bitblasting.
   std::vector<std::set<expr2tc> > array_indexes;
-//  std::list 
 };
 
 #endif
