@@ -561,8 +561,16 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
     // Don't attempt to initialize. Store the fact that we've allocated a
     // fresh new array.
     mast->base_array_id = array_indexes.size();
+    mast->array_update_num = 0;
     std::set<expr2tc> tmp_set;
     array_indexes.push_back(tmp_set);
+
+    std::vector<std::list<struct array_select> > tmp2;
+    array_values.push_back(tmp2);
+
+    std::vector<struct array_with> tmp3;
+    array_updates.push_back(tmp3);
+
     return mast;
   }
 
