@@ -765,7 +765,24 @@ metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
                                    const metasmt_array_ast *false_arr,
                                    const metasmt_smt_sort *thesort)
 {
-  abort();
+  // Precondition for a lot of goo: that the two arrays are the same, at
+  // different points in time.
+  assert(true_arr->base_array_id == false_arr->base_array_id &&
+         "ITE between two arrays with different bases are unsupported");
+
+  metasmt_array_ast *newarr = new metasmt_array_ast(thesort);
+  newarr->base_array_id = true_arr->base_array_id;
+  newarr->array_update_num = array_updates[true_arr->base_array_id].size();
+
+  struct array_with w;
+  w.is_ite = true;
+  w.idx = expr2tc();
+  w.u.i.src_array_update_true = true_arr->array_update_num;
+  w.u.i.src_array_update_false = false_arr->array_update_num;
+  w.u.i.cond = cond;
+  array_updates[true_arr->base_array_id].push_back(w);
+
+  return newarr;
 }
 
 const smt_ast *
