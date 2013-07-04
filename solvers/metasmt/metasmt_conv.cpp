@@ -805,7 +805,10 @@ metasmt_convt::convert_array_of(const expr2tc &init_val,
     init = make_bool_bit(init);
 
   if (arr_sort->is_unbounded_array()) {
-    abort();
+    delete mast;
+    mast = metasmt_array_downcast(fresh_array(arr_sort, "array_of_unbounded"));
+    array_of_vals.insert(std::pair<unsigned, const smt_ast *>
+                                  (mast->base_array_id, init));
   } else {
     unsigned long array_size = 1UL << domain_width;
     for (unsigned long i = 0; i < array_size; i++)

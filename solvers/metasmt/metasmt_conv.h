@@ -260,6 +260,10 @@ public:
     } u;
   };
   std::vector<std::vector<struct array_with> > array_updates;
+
+  // Map between base array identifiers and the value to initialize it with.
+  // Only applicable to unbounded arrays.
+  std::map<unsigned, const smt_ast *> array_of_vals;
 };
 
 #endif
