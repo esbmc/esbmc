@@ -232,8 +232,15 @@ public:
     array_values;
 
   // Update records: For each array, for each 'with' operation, we record
-  // the index used and the AST representation of the value assigned.
-  std::vector<std::vector<std::pair<expr2tc, smt_ast *> > > array_updates;
+  // the index used and the AST representation of the value assigned. We
+  // also store the ID number of the source array, because due to phi's
+  // we may branch arrays before joining.
+  struct array_with {
+    unsigned int src_array_update_num;
+    expr2tc idx;
+    smt_ast *val;
+  };
+  std::vector<std::vector<struct array_with> > array_updates;
 };
 
 #endif
