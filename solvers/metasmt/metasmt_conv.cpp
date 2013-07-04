@@ -119,24 +119,34 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     } else {
       // Conceptually, array equalities shouldn't happen. But wait: symbol
       // assignments!
-      if (args[0]->symname == "" && args[1]->symname == "") {
+      if (args[0]->sort->id != SMT_SORT_ARRAY ||
+          args[1]->sort->id != SMT_SORT_ARRAY) {
         std::cerr << "SMT equality not implemented in metasmt for sort "
                   << args[0]->sort->id << std::endl;
+        abort();
+      }
+
+      const metasmt_array_ast *side1, *side2;
+      side1 = metasmt_array_downcast(_args[0]);
+      side2 = metasmt_array_downcast(_args[1]);
+
+      if (side1->symname == "" && side2->symname == "") {
+        std::cerr << "Malformed MetaSMT array equality" << std::endl;
         abort();
       }
 
       // Instead of making an equality, store the rhs into the symbol table.
       // However we're not guarenteed that arg[1] is the rhs - so look for the
       // symbol. If both are symbols, fall back to args[0] being lhs.
-      const metasmt_smt_ast *lhs = args[0];
-      const metasmt_smt_ast *rhs = args[1];
-      if (args[1]->symname != "") {
-        lhs = args[1];
-        rhs = args[0];
+      const metasmt_array_ast *lhs = side1;
+      const metasmt_array_ast *rhs = side2;
+      if (side2->symname != "") {
+        lhs = side2;
+        rhs = side1;
       }
-      if (args[0]->symname != "") {
-        lhs = args[0];
-        rhs = args[1];
+      if (side1->symname != "") {
+        lhs = side1;
+        rhs = side2;
       }
 
       astsyms[lhs->symname] = rhs;
