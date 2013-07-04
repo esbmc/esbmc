@@ -246,6 +246,15 @@ public:
     const smt_ast *val;
   };
   std::vector<std::vector<struct array_with> > array_updates;
+
+  // ITE record -- precondition is that the two sources are in fact the same
+  // arrays, but at different points in time. Follow CBMC algorithm of producing
+  // an ITE for each element later. Might be optimised at some point.
+  struct array_ite {
+    unsigned int src_array_update_1;
+    unsigned int src_array_update_2;
+  };
+  std::vector<std::vector<struct array_ite> > array_ites;
 };
 
 #endif
