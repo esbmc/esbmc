@@ -1,6 +1,10 @@
 #ifndef _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 #define _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 
+#include <set>
+
+#include <irep2.h>
+
 #include <solvers/smt/smt_conv.h>
 
 #include <metaSMT/frontend/Logic.hpp>
@@ -67,63 +71,58 @@ public:
 class metasmt_smt_ast : public smt_ast {
 public:
 #define metasmt_ast_downcast(x) static_cast<const metasmt_smt_ast*>(x)
-  typedef std::list<std::pair<const smt_ast *, const smt_ast *> >
-    unbounded_list_type;
-
   metasmt_smt_ast(const smt_sort *_s)
-    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(),
-      default_unbounded_val(NULL)
+    : smt_ast(_s), restype(), symname("")
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s)
-    : smt_ast(_s), restype(r), symname(""), array_fields(), array_values(),
-      default_unbounded_val(NULL)
+    : smt_ast(_s), restype(r), symname("")
   {
   }
 
   metasmt_smt_ast(result_type r, const smt_sort *_s, const std::string &s)
-    : smt_ast(_s), restype(r), symname(s), array_fields(), array_values(),
-      default_unbounded_val(NULL)
-  {
-  }
-
-  metasmt_smt_ast(const smt_sort *_s, const std::vector<const smt_ast *> &a)
-    : smt_ast(_s), restype(), symname(""), array_fields(a), array_values(),
-      default_unbounded_val(NULL)
-  {
-  }
-
-  metasmt_smt_ast(const smt_sort *_s, const unbounded_list_type &a,
-                  const smt_ast *def_val)
-    : smt_ast(_s), restype(), symname(""), array_fields(), array_values(a),
-      default_unbounded_val(def_val)
+    : smt_ast(_s), restype(r), symname(s)
   {
   }
 
   virtual ~metasmt_smt_ast(void) { }
 
+  result_type restype;
+  std::string symname; // Only if this was produced from mk_smt_symbol.
+};
+
+class metasmt_array_ast : public smt_ast {
+public:
+#define metasmt_array_downcast(x) static_cast<const metasmt_array_ast*>(x)
+
+  metasmt_array_ast(const smt_sort *_s)
+    : smt_ast(_s), symname(""), array_fields()
+  {
+  }
+
+  metasmt_array_ast(const smt_sort *_s,
+                    const std::vector<const smt_ast *> &_a)
+    : smt_ast(_s), symname(""), array_fields(_a)
+  {
+  }
+
+  virtual ~metasmt_array_ast(void) { }
+
   bool is_unbounded_array(void) {
     return metasmt_sort_downcast(sort)->is_unbounded_array();
   }
 
-  result_type restype;
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
-  // If an array type, contains the set of array values. Identified by their
-  // indexes.
   std::vector<const smt_ast *> array_fields;
-
-  // Alternately, for unbounded arrays, what we want is a list of historical
-  // assignments, and their corresponding values.
-  unbounded_list_type array_values;
-  const smt_ast *default_unbounded_val;
+  unsigned int base_array_id;
 };
 
 // copy+paste directly from the metaSMT documentation:
 struct Lookup {
   typedef std::unordered_map<unsigned, std::string, std::hash<unsigned> >symmap;
-  typedef std::unordered_map<std::string, metasmt_smt_ast*,
+  typedef std::unordered_map<std::string, smt_ast*,
                              std::hash<std::string> > astmap;
   symmap &map_;
   astmap &astmap_;
@@ -135,7 +134,7 @@ struct Lookup {
     return map_[id];
   }
 
-  metasmt_smt_ast *operator()(const std::string &str) {
+  smt_ast *operator()(const std::string &str) {
     astmap::const_iterator it = astmap_.find(str);
     if (it == astmap_.end())
       return NULL;
@@ -143,7 +142,7 @@ struct Lookup {
     return it->second;
   }
 
-  void insert(metasmt_smt_ast *ast, unsigned int id, std::string const &name) {
+  void insert(smt_ast *ast, unsigned int id, std::string const &name) {
     map_.insert(std::make_pair(id, name));
     astmap_.insert(std::make_pair(name, ast));
   }
@@ -190,29 +189,24 @@ public:
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
-  const smt_ast *mk_unbounded_select(const metasmt_smt_ast *array,
+  const smt_ast *mk_unbounded_select(const metasmt_array_ast *array,
                                      const metasmt_smt_ast *idx,
                                      const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const metasmt_smt_ast *array,
+  const smt_ast *mk_unbounded_store(const metasmt_array_ast *array,
                                     const smt_ast *idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
 
-  const metasmt_smt_ast *fresh_array(const metasmt_smt_sort *ms,
-                                     const std::string &name);
-  const metasmt_smt_ast *array_ite(const metasmt_smt_ast *cond,
-                                   const metasmt_smt_ast *true_arr,
-                                   const metasmt_smt_ast *false_arr,
+  const smt_ast *fresh_array(const metasmt_smt_sort *ms,
+                             const std::string &name);
+  const metasmt_array_ast *array_ite(const metasmt_smt_ast *cond,
+                                   const metasmt_array_ast *true_arr,
+                                   const metasmt_array_ast *false_arr,
                                    const metasmt_smt_sort *thesort);
-  const metasmt_smt_ast *unbounded_array_ite(const metasmt_smt_ast *cond,
-                                             const metasmt_smt_ast *true_arr,
-                                             const metasmt_smt_ast *false_arr,
-                                             const metasmt_smt_sort *thesort);
-  const metasmt_smt_ast *make_conditional_unbounded_ite_join(
-            const metasmt_smt_ast *base,
-            const smt_ast *cond,
-            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator start,
-            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end);
+  const metasmt_array_ast *unbounded_array_ite(const metasmt_smt_ast *cond,
+                                       const metasmt_array_ast *true_arr,
+                                       const metasmt_array_ast *false_arr,
+                                       const metasmt_smt_sort *thesort);
 #endif /* SOLVER_BITBLAST_ARRAYS */
 
   // Members
@@ -220,6 +214,9 @@ public:
   Lookup::symmap symbols;
   Lookup::astmap astsyms;
   Lookup sym_lookup;
+
+  std::vector<std::set<expr2tc> > array_indexes;
+//  std::list 
 };
 
 #endif

@@ -98,7 +98,9 @@ metasmt_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   {
 #ifdef SOLVER_BITBLAST_ARRAYS
     if (s->id == SMT_SORT_ARRAY)
-      return array_ite(args[0], args[1], args [2], metasmt_sort_downcast(s));
+      return array_ite(args[0], metasmt_array_downcast(_args[1]),
+                       metasmt_array_downcast(_args[2]),
+                       metasmt_sort_downcast(s));
 #endif
 
     predtags::ite_tag tag;
@@ -543,7 +545,7 @@ metasmt_convt::mk_extract(const smt_ast *a, unsigned int high,
 }
 
 #ifdef SOLVER_BITBLAST_ARRAYS
-const metasmt_smt_ast *
+const smt_ast *
 metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
 {
   // No solver representation for this.
@@ -551,7 +553,7 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
   unsigned long array_size = 1UL << domain_width;
   const smt_sort *range_sort = mk_sort(SMT_SORT_BV, ms->arrrange_width, false);
 
-  metasmt_smt_ast *mast = new metasmt_smt_ast(ms);
+  metasmt_array_ast *mast = new metasmt_array_ast(ms);
   mast->symname = name;
   sym_lookup.insert(mast, 0, name); // yolo
   if (mast->is_unbounded_array())
@@ -575,7 +577,7 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
                          const smt_sort *ressort)
 {
   assert(ressort->id != SMT_SORT_ARRAY);
-  metasmt_smt_ast *ma = convert_ast(array);
+  metasmt_array_ast *ma = metasmt_array_downcast(convert_ast(array));
 
   if (ma->is_unbounded_array())
     return mk_unbounded_select(ma, convert_ast(idx), ressort);
@@ -625,7 +627,7 @@ const smt_ast *
 metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
                         const expr2tc &value, const smt_sort *ressort)
 {
-  metasmt_smt_ast *ma = convert_ast(array);
+  metasmt_array_ast *ma = metasmt_array_downcast(convert_ast(array));
 
   if (ma->is_unbounded_array())
     return mk_unbounded_store(ma, convert_ast(idx), convert_ast(value),
@@ -633,7 +635,8 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
 
   assert(ma->array_fields.size() != 0);
 
-  metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_fields);
+  metasmt_array_ast *mast =
+    new metasmt_array_ast(ressort, ma->array_fields);
 
   // If this is a constant index, simple. If not, not.
   if (is_constant_int2t(idx)) {
@@ -673,72 +676,25 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
 }
 
 const smt_ast *
-metasmt_convt::mk_unbounded_select(const metasmt_smt_ast *ma,
+metasmt_convt::mk_unbounded_select(const metasmt_array_ast *ma,
                                    const metasmt_smt_ast *real_idx,
                                    const smt_sort *ressort)
 {
-
-  // Heavily echoing mk_select,
-  bool unmatched_free = false;
-  const smt_ast *the_default = ma->default_unbounded_val;
-  if (the_default == NULL) {
-    the_default = mk_fresh(ressort, "metasmt_mk_unbounded_select::");
-    unmatched_free = true;
-  }
-
-  const smt_ast *idxargs[2], *impargs[2], *iteargs[3];
-  unsigned long dom_width = ma->sort->get_domain_width();
-  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
-
-  idxargs[0] = real_idx;
-  iteargs[2] = the_default;
-
-  // Make one gigantic ITE, from the back upwards.
-  for (metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it =
-       ma->array_values.rbegin(); it != ma->array_values.rend(); it++) {
-    idxargs[1] = it->first;
-    const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
-    iteargs[0] = idx_eq;
-    iteargs[1] = it->second;
-
-    iteargs[2] = mk_func_app(ressort, SMT_FUNC_ITE, iteargs, 3);
-  }
-
-#if 0
-  // If there's no default value, and we selected something out, we have to
-  // ensure that future reads of the same position get the same value. So we
-  // have to store this free value :(. Do that by storing this select on top.
-  metasmt_smt_ast *mast = const_cast<metasmt_smt_ast *>(ma); // yolo
-  mast->array_values.push_front(
-      metasmt_smt_ast::unbounded_list_type::value_type(real_idx, iteargs[2]));
-#endif
-
-  return iteargs[2];
+  abort();
 }
 
 const smt_ast *
-metasmt_convt::mk_unbounded_store(const metasmt_smt_ast *ma,
+metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
                                   const smt_ast *idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
-  // Actually super simple: we have no way of working out whether an older
-  // assignment has expired (at least, not if there's any nondeterminism
-  // anywyere), so don't bother, and just push this on the top.
-  // We could optimise by looking at the topmost bunch of indexes and seeing
-  // whether they match what we want, without any nondeterminism occurring,
-  // but that's for another time.
-  metasmt_smt_ast *mast = new metasmt_smt_ast(ressort, ma->array_values,
-                                              ma->default_unbounded_val);
-
-  mast->array_values.push_front(
-      metasmt_smt_ast::unbounded_list_type::value_type(idx, value));
-  return mast;
+  abort();
 }
 
-const metasmt_smt_ast *
+const metasmt_array_ast *
 metasmt_convt::array_ite(const metasmt_smt_ast *cond,
-                         const metasmt_smt_ast *true_arr,
-                         const metasmt_smt_ast *false_arr,
+                         const metasmt_array_ast *true_arr,
+                         const metasmt_array_ast *false_arr,
                          const metasmt_smt_sort *thesort)
 {
 
@@ -748,7 +704,7 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
   // For each element, make an ite.
   assert(true_arr->array_fields.size() != 0 &&
          true_arr->array_fields.size() == false_arr->array_fields.size());
-  metasmt_smt_ast *mast = new metasmt_smt_ast(thesort);
+  metasmt_array_ast *mast = new metasmt_array_ast(thesort);
   const smt_ast *args[3];
   args[0] = cond;
   unsigned long i;
@@ -763,69 +719,13 @@ metasmt_convt::array_ite(const metasmt_smt_ast *cond,
   return mast;
 }
 
-const metasmt_smt_ast *
-metasmt_convt::make_conditional_unbounded_ite_join(const metasmt_smt_ast *base,
-            const smt_ast *condition,
-            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it,
-            metasmt_smt_ast::unbounded_list_type::const_reverse_iterator end)
-{
-  const smt_ast *args[3];
-
-  // Iterate through, making selects and stores.
-  for (; it != end; it++) {
-    args[0] = condition;
-    args[1] = it->second;
-    args[2] = mk_unbounded_select(base, it->first, it->second->sort);
-    const smt_ast *newval =
-      mk_func_app(it->second->sort, SMT_FUNC_ITE, args, 3);
-    const metasmt_smt_ast *new_base =
-      mk_unbounded_store(base, it->first, newval, base->sort);
-
-    // Save memory etc.
-    delete base;
-    base = new_base;
-  }
-
-  return base;
-}
-
-const metasmt_smt_ast *
+const metasmt_array_ast *
 metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
-                                   const metasmt_smt_ast *true_arr,
-                                   const metasmt_smt_ast *false_arr,
+                                   const metasmt_array_ast *true_arr,
+                                   const metasmt_array_ast *false_arr,
                                    const metasmt_smt_sort *thesort)
 {
-  // Ok, we have two lists of values. They're _guarenteed_ to be from the
-  // same array (array ite's can only occur in phis). So, discover the common
-  // tail of assignments that the lists posess. Then make conditional stores
-  // of the remaining values into a new array.
-  metasmt_smt_ast::unbounded_list_type common_tail;
-
-  metasmt_smt_ast::unbounded_list_type::const_reverse_iterator it, it2;
-  it = true_arr->array_values.rbegin();
-  it2 = false_arr->array_values.rbegin();
-  for (; it != true_arr->array_values.rend(); it++, it2++) {
-    if (it->first == it2->first) {
-      common_tail.push_back(*it);
-    } else {
-      break;
-    }
-  }
-
-  // Generate the base array.
-  metasmt_smt_ast *base = new metasmt_smt_ast(true_arr->sort, common_tail,
-                                              true_arr->default_unbounded_val);
-
-  // Iterate over each set of other values, selecting the old and updated
-  // element, then generating an ITE based on the input condition.
-  base = make_conditional_unbounded_ite_join(base, cond, it,
-                                             true_arr->array_values.rend());
-  const smt_ast *inverted_cond =
-    mk_func_app(cond->sort, SMT_FUNC_NOT, &cond, 1);
-  base = make_conditional_unbounded_ite_join(base, inverted_cond, it2,
-                                             false_arr->array_values.rend());
-
-  return base;
+  abort();
 }
 
 const smt_ast *
@@ -841,14 +741,14 @@ metasmt_convt::convert_array_of(const expr2tc &init_val,
   const metasmt_smt_sort *arr_sort =
     metasmt_sort_downcast(mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort));
 
-  metasmt_smt_ast *mast = new metasmt_smt_ast(arr_sort);
+  metasmt_array_ast *mast = new metasmt_array_ast(arr_sort);
 
   const smt_ast *init = convert_ast(init_val);
   if (!int_encoding && is_bool_type(init_val) && no_bools_in_arrays)
     init = make_bool_bit(init);
 
   if (arr_sort->is_unbounded_array()) {
-    mast->default_unbounded_val = init;
+    abort();
   } else {
     unsigned long array_size = 1UL << domain_width;
     for (unsigned long i = 0; i < array_size; i++)
