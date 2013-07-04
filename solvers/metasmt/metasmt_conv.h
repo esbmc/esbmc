@@ -240,21 +240,26 @@ public:
   // the index used and the AST representation of the value assigned. We
   // also store the ID number of the source array, because due to phi's
   // we may branch arrays before joining.
+  // We also record ite's here, because they're effectively an array update.
+  // The is_ite boolean indicates whether the following union is a with or
+  // an ite repr. If it's an ite, the two integers represent which two
+  // historical update indexes of the array are operands of the ite.
   struct array_with {
-    unsigned int src_array_update_num;
+    bool is_ite;
     expr2tc idx;
-    const smt_ast *val;
+    union {
+      struct {
+        unsigned int src_array_update_num;
+        const smt_ast *val;
+      } w;
+      struct {
+        unsigned int src_array_update_1;
+        unsigned int src_array_update_2;
+        const smt_ast *cond;
+      } i;
+    } u;
   };
   std::vector<std::vector<struct array_with> > array_updates;
-
-  // ITE record -- precondition is that the two sources are in fact the same
-  // arrays, but at different points in time. Follow CBMC algorithm of producing
-  // an ITE for each element later. Might be optimised at some point.
-  struct array_ite {
-    unsigned int src_array_update_1;
-    unsigned int src_array_update_2;
-  };
-  std::vector<std::vector<struct array_ite> > array_ites;
 };
 
 #endif

@@ -721,9 +721,10 @@ metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
 
   // Record update
   struct array_with w;
-  w.src_array_update_num = ma->array_update_num;
+  w.is_ite = false;
   w.idx = idx;
-  w.val = value;
+  w.u.w.src_array_update_num = ma->array_update_num;
+  w.u.w.val = value;
   array_updates[ma->base_array_id].push_back(w);
 
   // Result is the new array id goo.
