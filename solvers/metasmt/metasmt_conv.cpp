@@ -581,7 +581,7 @@ metasmt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
   metasmt_array_ast *ma = metasmt_array_downcast(convert_ast(array));
 
   if (ma->is_unbounded_array())
-    return mk_unbounded_select(ma, convert_ast(idx), ressort);
+    return mk_unbounded_select(ma, idx, ressort);
 
   assert(ma->array_fields.size() != 0);
 
@@ -631,8 +631,7 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
   metasmt_array_ast *ma = metasmt_array_downcast(convert_ast(array));
 
   if (ma->is_unbounded_array())
-    return mk_unbounded_store(ma, convert_ast(idx), convert_ast(value),
-                              ressort);
+    return mk_unbounded_store(ma, idx, convert_ast(value), ressort);
 
   assert(ma->array_fields.size() != 0);
 
@@ -678,7 +677,7 @@ metasmt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
 
 const smt_ast *
 metasmt_convt::mk_unbounded_select(const metasmt_array_ast *ma,
-                                   const metasmt_smt_ast *real_idx,
+                                   const expr2tc &real_idx,
                                    const smt_sort *ressort)
 {
   abort();
@@ -686,7 +685,7 @@ metasmt_convt::mk_unbounded_select(const metasmt_array_ast *ma,
 
 const smt_ast *
 metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
-                                  const smt_ast *idx, const smt_ast *value,
+                                  const expr2tc &idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
   abort();

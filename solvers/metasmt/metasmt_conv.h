@@ -190,10 +190,10 @@ public:
                                           unsigned long domain_width);
 
   const smt_ast *mk_unbounded_select(const metasmt_array_ast *array,
-                                     const metasmt_smt_ast *idx,
+                                     const expr2tc &idx,
                                      const smt_sort *ressort);
   const smt_ast *mk_unbounded_store(const metasmt_array_ast *array,
-                                    const smt_ast *idx,
+                                    const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
 
