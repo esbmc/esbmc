@@ -693,7 +693,20 @@ metasmt_convt::mk_unbounded_select(const metasmt_array_ast *ma,
                                    const expr2tc &real_idx,
                                    const smt_sort *ressort)
 {
-  abort();
+  // Record that we've accessed this index.
+  array_indexes[ma->base_array_id].insert(real_idx);
+
+  // Generate a new free variable
+  smt_ast *a = mk_fresh(ressort, "mk_unbounded_select");
+
+  struct array_select sel;
+  sel.src_array_update_num = ma->array_update_num;
+  sel.idx = real_idx;
+  sel.val = a;
+  // Record this index
+  array_values[ma->base_array_id][ma->array_update_num].push_back(sel);
+
+  return a;
 }
 
 const smt_ast *
@@ -701,7 +714,20 @@ metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
                                   const expr2tc &idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
-  abort();
+  // More nuanced: allocate a new array representation.
+  metasmt_array_ast *newarr = new metasmt_array_ast(ressort);
+  newarr->base_array_id = ma->base_array_id;
+  newarr->array_update_num = array_updates[ma->base_array_id].size();
+
+  // Record update
+  struct array_with w;
+  w.src_array_update_num = ma->array_update_num;
+  w.idx = idx;
+  w.val = value;
+  array_updates[ma->base_array_id].push_back(w);
+
+  // Result is the new array id goo.
+  return newarr;
 }
 
 const metasmt_array_ast *

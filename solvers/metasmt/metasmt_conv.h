@@ -243,7 +243,7 @@ public:
   struct array_with {
     unsigned int src_array_update_num;
     expr2tc idx;
-    smt_ast *val;
+    const smt_ast *val;
   };
   std::vector<std::vector<struct array_with> > array_updates;
 };
