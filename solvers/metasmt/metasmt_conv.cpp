@@ -557,9 +557,14 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
   metasmt_array_ast *mast = new metasmt_array_ast(ms);
   mast->symname = name;
   sym_lookup.insert(mast, 0, name); // yolo
-  if (mast->is_unbounded_array())
-    // Don't attempt to initialize.
+  if (mast->is_unbounded_array()) {
+    // Don't attempt to initialize. Store the fact that we've allocated a
+    // fresh new array.
+    mast->base_array_id = array_indexes.size();
+    std::set<expr2tc> tmp_set;
+    array_indexes.push_back(tmp_set);
     return mast;
+  }
 
   mast->array_fields.reserve(array_size);
 
