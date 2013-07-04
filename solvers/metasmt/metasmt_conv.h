@@ -221,6 +221,19 @@ public:
   // obtains all the tracking data required for CBMC-like array
   // bitblasting.
   std::vector<std::set<expr2tc> > array_indexes;
+
+  // Array /value/ tracking. For each array (outer vector) we have an inner
+  // vector, each element of which corresponds to each 'with' operation
+  // on an array. Within that is a list of indexes and free value'd
+  // elements: whenever we select an element from an array, we return a
+  // free value, and record it here. Assertions made later will link this
+  // up with real values.
+  std::vector<std::vector<std::list<std::pair<expr2tc, smt_ast *> > > >
+    array_values;
+
+  // Update records: For each array, for each 'with' operation, we record
+  // the index used and the AST representation of the value assigned.
+  std::vector<std::vector<std::pair<expr2tc, smt_ast *> > > array_updates;
 };
 
 #endif
