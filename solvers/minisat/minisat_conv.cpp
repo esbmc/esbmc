@@ -95,11 +95,24 @@ minisat_convt::assert_lit(const literalt &l __attribute__((unused)))
 
 smt_ast*
 minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
-    smt_func_kind f __attribute__((unused)),
-    const smt_ast* const* args __attribute__((unused)),
-    unsigned int num __attribute__((unused)))
+    smt_func_kind f, const smt_ast* const* _args, unsigned int numargs)
 {
-  abort();
+  const minisat_smt_ast *args[4];
+  const minisat_smt_ast *result = NULL;
+  unsigned int i;
+
+  assert(numargs < 4 && "Too many arguments to minisat_convt::mk_func_app");
+  for (i = 0; i < numargs; i++)
+    args[i] = minisat_ast_downcast(_args[i]);
+
+  switch (f) {
+  default:
+    std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
+              << std::endl;
+    abort();
+  }
+
+  return result;
 }
 
 smt_sort*
