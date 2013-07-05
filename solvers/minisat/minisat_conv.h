@@ -56,6 +56,7 @@ class minisat_smt_sort : public smt_sort {
 
 class minisat_smt_ast : public smt_ast {
 public:
+#define minisat_ast_downcast(x) static_cast<const minisat_smt_ast*>(x)
   minisat_smt_ast(const smt_sort *s) : smt_ast(s) { }
 
   // Everything is, to a greater or lesser extend, a vector of booleans, which
