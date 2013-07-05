@@ -918,4 +918,13 @@ metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
   abort();
 }
 
+void
+metasmt_convt::collate_array_values(std::vector<const smt_ast *> &vals,
+                                    const std::map<expr2tc, unsigned> &idx_map,
+                                    const std::list<struct array_select> &idxs,
+                                    const smt_ast *init_val)
+{
+  abort();
+}
+
 #endif /* SOLVER_BITBLAST_ARRAYS */

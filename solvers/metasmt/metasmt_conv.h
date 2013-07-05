@@ -153,6 +153,8 @@ struct Lookup {
 class metasmt_convt : public smt_convt
 {
 public:
+  struct array_select;
+
   metasmt_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
   virtual ~metasmt_convt();
 
@@ -216,6 +218,10 @@ public:
                            std::vector<const smt_ast *> &dest,
                            unsigned int idx,
                            const std::map<expr2tc, unsigned> &idx_map);
+  void collate_array_values(std::vector<const smt_ast *> &vals,
+                            const std::map<expr2tc, unsigned> &idx_map,
+                            const std::list<struct array_select> &idxs,
+                            const smt_ast *init_val = NULL);
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
 
