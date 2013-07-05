@@ -878,6 +878,14 @@ metasmt_convt::add_array_constraints(unsigned int arr)
   for (unsigned int i = 0; i < real_array_values.size(); i++)
     real_array_values[i].resize(indexes.size());
 
+  // Compute a mapping between indexes and an element in the vector. These
+  // are ordered by how std::set orders them, not by history or anything. Or
+  // even the element index.
+  std::map<expr2tc, unsigned> idx_map;
+  for (std::set<expr2tc>::const_iterator it = indexes.begin();
+       it != indexes.end(); it++)
+    idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
+
   // Initialize the first set of elements.
   std::map<unsigned, const smt_ast*>::const_iterator it =
     array_of_vals.find(arr);
