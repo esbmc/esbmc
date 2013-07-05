@@ -862,8 +862,45 @@ metasmt_convt::add_array_constraints(void)
 void
 metasmt_convt::add_array_constraints(unsigned int arr)
 {
-  abort();
+  // Right: we need to tie things up regarding these bitvectors. We have a
+  // set of indexes...
+  const std::set<expr2tc> &indexes = array_indexes[arr];
+
+  // What we're going to build is a two-dimensional vector ish of each element
+  // at each point in time. Expensive, but meh.
+  std::vector<std::vector<const smt_ast *> > real_array_values;
+
+  // Subtype is thus
+  const smt_sort *subtype = mk_sort(SMT_SORT_BV, array_subtypes[arr], false);
+
+  // Pre-allocate all the storage.
+  real_array_values.resize(array_values[arr].size());
+  for (unsigned int i = 0; i < real_array_values.size(); i++)
+    real_array_values[i].resize(indexes.size());
+
+  // Initialize the first set of elements.
+  std::map<unsigned, const smt_ast*>::const_iterator it =
+    array_of_vals.find(arr);
+  if (it != array_of_vals.end()) {
+    const smt_ast *init_val = it->second;
+    for (unsigned i = 0; i < indexes.size(); i++)
+      real_array_values[0][i] = init_val;
+  } else {
+    for (unsigned i = 0; i < indexes.size(); i++)
+      real_array_values[0][i] = mk_fresh(subtype, "init_array_constraints::");
+  }
+
+  // Now repeatedly execute transitions between states.
+  for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
+    execute_array_trans(real_array_values[i], real_array_values[i+1], i);
 }
 
+void
+metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
+                                   std::vector<const smt_ast *> &dest,
+                                   unsigned int idx)
+{
+  abort();
+}
 
 #endif /* SOLVER_BITBLAST_ARRAYS */

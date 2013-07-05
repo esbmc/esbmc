@@ -211,6 +211,9 @@ public:
 
   void add_array_constraints(void);
   void add_array_constraints(unsigned int arr);
+  void execute_array_trans(std::vector<const smt_ast *> &src,
+                           std::vector<const smt_ast *> &dest,
+                           unsigned int idx);
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
 
