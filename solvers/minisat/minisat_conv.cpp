@@ -195,10 +195,44 @@ minisat_convt::mk_smt_bool(bool boolval)
 }
 
 smt_ast*
-minisat_convt::mk_smt_symbol(const std::string &name __attribute__((unused)),
-                             const smt_sort *sort __attribute__((unused)))
+minisat_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
 {
-  abort();
+  // Like metasmt, minisat doesn't have a symbol table. So, build our own.
+  symtable_type::const_iterator it = sym_table.find(name);
+  if (it != sym_table.end())
+    return it->second;
+
+  // Otherwise, we need to build this AST ourselves.
+  minisat_smt_ast *a = new minisat_smt_ast(sort);
+  minisat_smt_sort *s = minisat_sort_downcast(sort);
+  switch (sort->id) {
+  case SMT_SORT_BOOL:
+  {
+    literalt l = new_variable();
+    a->bv.push_back(l);
+    break;
+  }
+  case SMT_SORT_BV:
+  {
+    // Bunch of fresh variables
+    for (unsigned int i = 0; i < s->width; i++)
+      a->bv.push_back(new_variable());
+    break;
+  }
+  case SMT_SORT_ARRAY:
+  {
+    abort();
+//    a = fresh_array(s, name);
+    break;
+  }
+  default:
+    std::cerr << "Unimplemented symbol type " << sort->id
+              << " in minisat symbol creation" << std::endl;
+    abort();
+  }
+
+  sym_table.insert(symtable_type::value_type(name, a));
+  return a;
 }
 
 smt_sort*

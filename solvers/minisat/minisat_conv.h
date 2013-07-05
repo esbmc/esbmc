@@ -67,6 +67,8 @@ public:
 
 class minisat_convt : public smt_convt {
 public:
+  typedef hash_map_cont<std::string, const minisat_smt_ast *, std::hash<std::string> > symtable_type;
+
   minisat_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
                 const optionst &opts);
   ~minisat_convt();
@@ -100,6 +102,7 @@ public:
 
   Minisat::Solver solver;
   const optionst &options;
+  symtable_type sym_table;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_CONV_H_ */
