@@ -1,6 +1,7 @@
 #include "solve.h"
 
 #include <solvers/z3/z3_conv.h>
+#include <solvers/minisat/minisat_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
 
 // For the purpose of vastly reducing build times:
@@ -29,6 +30,19 @@ create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
     abort();
 #else
     return new z3_convt(int_encoding, is_cpp, ns);
+#endif
+}
+
+static prop_convt *
+create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                      const optionst &options)
+{
+#ifndef Z3
+    std::cerr << "Sorry, MiniSAT support was not built into this version of "
+              "ESBMC" << std::endl;
+    abort();
+#else
+    return new minisat_convt(int_encoding, ns, is_cpp, options);
 #endif
 }
 
@@ -144,6 +158,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
                 << "framework" << std::endl;
       abort();
     }
+  } else if (options.get_bool_option("minisat")) {
+    return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else {
     return create_z3_solver(is_cpp, int_encoding, ns);
   }
@@ -170,6 +186,8 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
                 << "framework" << std::endl;
       abort();
     }
+  } else if (options.get_bool_option("minisat")) {
+    return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
               << std::endl;
