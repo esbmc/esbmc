@@ -899,14 +899,13 @@ metasmt_convt::add_array_constraints(unsigned int arr)
 
   // Now repeatedly execute transitions between states.
   for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
-    execute_array_trans(real_array_values[i], real_array_values[i+1],
-                        arr, i+1, idx_map, subtype);
+    execute_array_trans(real_array_values, arr, i, idx_map, subtype);
 
 }
 
 void
-metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
-                                   std::vector<const smt_ast *> &dest,
+metasmt_convt::execute_array_trans(
+                            std::vector<std::vector<const smt_ast *> > &data,
                                    unsigned int arr,
                                    unsigned int idx,
                                    const std::map<expr2tc, unsigned> &idx_map,
@@ -917,7 +916,8 @@ metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
   // Then apply update or ITE constraints.
   // Then apply equalities between the old and new values.
 
-  collate_array_values(dest, idx_map, array_values[arr][idx], subtype);
+  std::vector<const smt_ast *> &dest_data = data[idx+1];
+  collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
@@ -927,7 +927,22 @@ metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
     // single element is addressed and updated; no further constraints are
     // needed. Not even the ackerman ones, in fact, because instances of that
     // from previous array updates will feed through to here (speculation).
-    abort();
+
+    unsigned int true_idx = w.u.i.src_array_update_true;
+    unsigned int false_idx = w.u.i.src_array_update_false;
+    assert(true_idx < idx + 1 && false_idx < idx + 1);
+    const std::vector<const smt_ast *> &true_vals = data[true_idx];
+    const std::vector<const smt_ast *> &false_vals = data[false_idx];
+    const smt_ast *cond = w.u.i.cond;
+
+    // Each index value becomes an ITE between each source value.
+    const smt_ast *args[3];
+    args[0] = cond;
+    for (unsigned int i = 0; i < idx_map.size(); i++) {
+      args[1] = true_vals[i];
+      args[2] = false_vals[i];
+      dest_data[i] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+    }
   } else {
     // Place a constraint on the updated variable; add equality constraints
     // between the older version and this version. And finally add ackerman

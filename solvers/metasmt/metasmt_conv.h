@@ -215,8 +215,7 @@ public:
 
   void add_array_constraints(void);
   void add_array_constraints(unsigned int arr);
-  void execute_array_trans(std::vector<const smt_ast *> &src,
-                           std::vector<const smt_ast *> &dest,
+  void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
                            unsigned int arr,
                            unsigned int idx,
                            const std::map<expr2tc, unsigned> &idx_map,
