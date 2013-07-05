@@ -947,7 +947,44 @@ metasmt_convt::execute_array_trans(
     // Place a constraint on the updated variable; add equality constraints
     // between the older version and this version. And finally add ackerman
     // constraints.
-    abort();
+
+    // So, the updated element,
+    std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(w.idx);
+    assert(it != idx_map.end());
+
+    const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+    const expr2tc &update_idx_expr = it->first;
+    const smt_ast *update_idx_ast = convert_ast(update_idx_expr);
+    unsigned int updated_idx = it->second;
+    const smt_ast *updated_value = w.u.w.val;
+
+    // Assign in its value.
+    dest_data[updated_idx] = updated_value;
+
+    // Now look at all those other indexes...
+    assert(w.u.w.src_array_update_num < idx+1);
+    const std::vector<const smt_ast *> &source_data =
+      data[w.u.w.src_array_update_num];
+
+    const smt_ast *args[3];
+    unsigned int i = 0;
+    for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
+         it2 != idx_map.end(); it2++, i++) {
+      if (it2->second == updated_idx)
+        continue;
+
+      // Generate an ITE. If the index is nondeterministically equal to the
+      // current index, take the updated value, otherwise the original value.
+      // This departs from the CBMC implementation, in that they explicitly
+      // use implies and ackerman constraints.
+      // FIXME: benchmark the two approaches. For now, this is shorter.
+      args[0] = update_idx_ast;
+      args[1] = convert_ast(it2->first);
+      args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      args[1] = updated_value;
+      args[2] = source_data[i];
+      dest_data[i] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+    }
   }
 }
 
