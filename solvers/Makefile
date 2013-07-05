@@ -18,6 +18,11 @@ OBJS+= metasmt/$(OBJDIR)/meta_smt_all.o
 DIRS+= metasmt
 endif
 
+ifdef MINISAT
+OBJS+= minisat/$(OBJDIR)/minisat.o
+DIRS+= minisat
+endif
+
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
