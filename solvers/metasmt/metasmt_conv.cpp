@@ -900,6 +900,10 @@ metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
                                    std::vector<const smt_ast *> &dest,
                                    unsigned int idx)
 {
+  // Steps: First, fill the destination vector with either free variables, or
+  // the free variables that resulted for selects corresponding to that item.
+  // Then apply update or ITE constraints.
+  // Then apply equalities between the old and new values.
   abort();
 }
 
