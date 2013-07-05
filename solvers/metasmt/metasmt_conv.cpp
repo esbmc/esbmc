@@ -890,12 +890,11 @@ metasmt_convt::add_array_constraints(unsigned int arr)
   std::map<unsigned, const smt_ast*>::const_iterator it =
     array_of_vals.find(arr);
   if (it != array_of_vals.end()) {
-    const smt_ast *init_val = it->second;
-    for (unsigned i = 0; i < indexes.size(); i++)
-      real_array_values[0][i] = init_val;
+    collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
+        subtype, it->second);
   } else {
-    for (unsigned i = 0; i < indexes.size(); i++)
-      real_array_values[0][i] = mk_fresh(subtype, "init_array_constraints::");
+    collate_array_values(real_array_values[0], idx_map, array_values[arr][0],
+        subtype);
   }
 
   // Now repeatedly execute transitions between states.
