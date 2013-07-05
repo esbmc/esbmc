@@ -12,6 +12,8 @@
 
 #include <core/Solver.h>
 
+typedef Minisat::Lit Lit;
+
 class minisat_smt_sort : public smt_sort {
   // Record all the things.
   public:
@@ -33,6 +35,7 @@ class minisat_smt_sort : public smt_sort {
   virtual ~minisat_smt_sort() { }
   unsigned int width; // bv width
   unsigned int arrdom_width, arrrange_width; // arr sort widths
+
   virtual unsigned long get_domain_width(void) const {
     return arrdom_width;
   }
@@ -48,6 +51,15 @@ class minisat_smt_sort : public smt_sort {
     else
       return false;
   }
+};
+
+class minisat_smt_ast : public smt_ast {
+public:
+  minisat_smt_ast(const smt_sort *s) : smt_ast(s) { }
+
+  // Everything is, to a greater or lesser extend, a vector of booleans, which
+  // we'll represent as minisat Lit's.
+  std::vector<Lit> bv;
 };
 
 class minisat_convt : public smt_convt {
