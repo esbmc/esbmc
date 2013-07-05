@@ -225,6 +225,10 @@ public:
                             const std::list<struct array_select> &idxs,
                             const smt_sort *subtype,
                             const smt_ast *init_val = NULL);
+  void add_initial_ackerman_constraints(
+                                    const std::vector<const smt_ast *> &vals,
+                                    const std::map<expr2tc,unsigned> &idx_map,
+                                    const smt_sort *subtype);
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
 

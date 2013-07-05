@@ -897,6 +897,8 @@ metasmt_convt::add_array_constraints(unsigned int arr)
         subtype);
   }
 
+  add_initial_ackerman_constraints(real_array_values[0], idx_map, subtype);
+
   // Now repeatedly execute transitions between states.
   for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
     execute_array_trans(real_array_values, arr, i, idx_map, subtype);
@@ -1035,6 +1037,38 @@ metasmt_convt::collate_array_values(std::vector<const smt_ast *> &vals,
   }
 
   // Fin.
+}
+
+void
+metasmt_convt::add_initial_ackerman_constraints(
+                                  const std::vector<const smt_ast *> &vals,
+                                  const std::map<expr2tc,unsigned> &idx_map,
+                                  const smt_sort *subtype)
+{
+  // Lolquadratic,
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
+       it != idx_map.end(); it++) {
+    const smt_ast *outer_idx = convert_ast(it->first);
+    for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
+         it2 != idx_map.end(); it2++) {
+      const smt_ast *inner_idx = convert_ast(it2->first);
+
+      // If they're the same idx, they're the same value.
+      const smt_ast *args[2];
+      args[0] = outer_idx;
+      args[1] = inner_idx;
+      const smt_ast *idxeq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+      args[0] = vals[it->second];
+      args[1] = vals[it2->second];
+      const smt_ast *valeq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+
+      args[0] = idxeq;
+      args[1] = valeq;
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2)));
+    }
+  }
 }
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
