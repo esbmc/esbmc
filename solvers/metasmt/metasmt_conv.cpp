@@ -731,6 +731,9 @@ metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
                                   const expr2tc &idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
+  // Record that we've accessed this index.
+  array_indexes[ma->base_array_id].insert(idx);
+
   // More nuanced: allocate a new array representation.
   metasmt_array_ast *newarr = new metasmt_array_ast(ressort);
   newarr->base_array_id = ma->base_array_id;
