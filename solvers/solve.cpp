@@ -66,7 +66,7 @@ create_metasmt_boolector_solver(bool is_cpp, bool int_encoding,
 
 static const unsigned int num_of_solvers = 5;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minsat", "metasmt", "boolector" };
+{ "z3", "smtlib", "minisat", "metasmt", "boolector" };
 
 static prop_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
