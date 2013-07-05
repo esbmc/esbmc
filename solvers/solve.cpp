@@ -1,7 +1,6 @@
 #include "solve.h"
 
 #include <solvers/z3/z3_conv.h>
-#include <solvers/minisat/minisat_conv.h>
 #include <solvers/smtlib/smtlib_conv.h>
 
 // For the purpose of vastly reducing build times:
@@ -20,6 +19,9 @@ create_new_metasmt_sword_solver(bool int_encoding, bool is_cpp,
 prop_convt *
 create_new_metasmt_stp_solver(bool int_encoding, bool is_cpp,
                                 const namespacet &ns);
+prop_convt *
+create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts);
 
 static prop_convt *
 create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
@@ -42,7 +44,7 @@ create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
               "ESBMC" << std::endl;
     abort();
 #else
-    return new minisat_convt(int_encoding, ns, is_cpp, options);
+    return create_new_minisat_solver(int_encoding, ns, is_cpp, options);
 #endif
 }
 

@@ -1,5 +1,12 @@
 #include "minisat_conv.h"
 
+prop_convt *
+create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &options)
+{
+  return new minisat_convt(int_encoding, ns, is_cpp, options);
+}
+
 // Utility functions -- echoing CBMC quite a bit. The plan is to build up
 // what's necessary, then doing all the required abstractions.
 
