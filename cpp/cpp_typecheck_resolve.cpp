@@ -945,6 +945,12 @@ exprt cpp_typecheck_resolvet::do_builtin(
                       << original_scope->prefix;
     cpp_typecheck.warning();
   }
+  else if(base_name=="context")
+  {
+    dest=exprt("constant", typet("empty"));
+    cpp_typecheck.context.show(cpp_typecheck.str);
+    cpp_typecheck.warning();
+  }
   else
   {
     cpp_typecheck.err_location(location);
