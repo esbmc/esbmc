@@ -1,5 +1,46 @@
 #include "minisat_conv.h"
 
+// Utility functions -- echoing CBMC quite a bit. The plan is to build up
+// what's necessary, then doing all the required abstractions.
+
+void
+minisat_convt::convert(const bvt &bv, Minisat::vec<Lit> &dest)
+{
+  dest.capacity(bv.size());
+
+  for (unsigned int i = 0; i < bv.size(); i++) {
+    if (!bv[i].is_false())
+      dest.push(Minisat::mkLit(bv[i].var_no(), bv[i].sign()));
+  }
+  return;
+}
+
+literalt
+minisat_convt::lnot(literalt a)
+{
+  a.invert();
+  return a;
+}
+
+void
+minisat_convt::set_equal(literalt a, literalt b)
+{
+  bvt bv;
+  bv.resize(2);
+  bv[0] = a;
+  bv[1] = lnot(b);
+  Minisat::vec<Lit> l;
+  convert(bv, l);
+  solver.addClause_(l);
+
+  bv[0] = lnot(a);
+  bv[1] = b;
+  l.clear();
+  convert(bv, l);
+  solver.addClause_(l);
+  return;
+}
+
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
          : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),

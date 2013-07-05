@@ -91,6 +91,11 @@ public:
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  // Things imported from CBMC, more or less
+  void convert(const bvt &bv, Minisat::vec<Lit> &dest);
+  literalt lnot(literalt a);
+  void set_equal(literalt a, literalt b);
+
   Minisat::Solver solver;
   const optionst &options;
 };
