@@ -588,6 +588,8 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
     std::vector<struct array_with> tmp3;
     array_updates.push_back(tmp3);
 
+    array_subtypes.push_back(ms->arrrange_width);
+
     return mast;
   }
 

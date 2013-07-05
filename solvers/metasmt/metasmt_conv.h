@@ -227,6 +227,9 @@ public:
   // bitblasting.
   std::vector<std::set<expr2tc> > array_indexes;
 
+  // Self explanatory. Contains bitwidth of subtypes
+  std::vector<unsigned int> array_subtypes;
+
   // Array /value/ tracking. For each array (outer vector) we have an inner
   // vector, each element of which corresponds to each 'with' operation
   // on an array. Within that is a list of indexes and free value'd
