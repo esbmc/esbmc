@@ -1015,10 +1015,12 @@ metasmt_convt::collate_array_values(std::vector<const smt_ast *> &vals,
 
   // Initialize everything else to either a free variable or the initial value.
   if (init_val == NULL) {
-    // Free variables
+    // Free variables, except where free variables tied to selects have occurred
     for (std::vector<const smt_ast *>::iterator it = vals.begin();
-         it != vals.end(); it++)
-      *it = mk_fresh(subtype, "collate_array_vals::");
+         it != vals.end(); it++) {
+      if (*it == NULL)
+        *it = mk_fresh(subtype, "collate_array_vals::");
+    }
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
