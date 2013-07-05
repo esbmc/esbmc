@@ -312,6 +312,15 @@ void cpp_typecheckt::typecheck_compound_declarator(
   cpp_namet cpp_name;
   cpp_name.swap(declarator.name());
 
+  // Ugly hack
+  if(declaration.is_destructor()
+     || declaration.is_constructor())
+  {
+    // Construtors and destructors can have names with template args
+    if(cpp_name.has_template_args())
+      cpp_name.get_sub().erase(cpp_name.get_sub().end());
+  }
+
   std::string full_name, base_name;
   cpp_name.convert(full_name, base_name);
 
