@@ -14,6 +14,7 @@
 
 typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
+typedef std::vector<literalt> bvt; // sadface.jpg
 
 class minisat_smt_sort : public smt_sort {
   // Record all the things.
@@ -61,7 +62,7 @@ public:
 
   // Everything is, to a greater or lesser extend, a vector of booleans, which
   // we'll represent as minisat Lit's.
-  std::vector<Lit> bv;
+  bvt bv;
 };
 
 class minisat_convt : public smt_convt {

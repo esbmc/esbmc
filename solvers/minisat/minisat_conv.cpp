@@ -90,8 +90,14 @@ minisat_convt::mk_sort(smt_sort_kind k, ...)
 }
 
 literalt
-minisat_convt::mk_lit(const smt_ast *val __attribute__((unused)))
+minisat_convt::mk_lit(const smt_ast *val)
 {
+  const minisat_smt_ast *a = minisat_ast_downcast(val);
+  assert(a->sort->id == SMT_SORT_BOOL);
+  assert(a->bv.size() == 1);
+
+  literalt l = new_variable();
+  Lit ll = Minisat::mkLit(l.var_no());
   abort();
 }
 
@@ -118,12 +124,7 @@ minisat_convt::mk_smt_bvint(const mp_integer &inval __attribute__((unused)),
 smt_ast*
 minisat_convt::mk_smt_bool(bool boolval)
 {
-  Lit l;
-  if (boolval) {
-    l = Minisat::mkLit(Minisat::toInt(l_True));
-  } else {
-    l = Minisat::mkLit(Minisat::toInt(l_False));
-  }
+  literalt l = const_literal(boolval);
 
   smt_sort *s = mk_sort(SMT_SORT_BOOL);
   minisat_smt_ast *a = new minisat_smt_ast(s);
