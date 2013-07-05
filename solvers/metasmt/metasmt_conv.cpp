@@ -922,9 +922,49 @@ void
 metasmt_convt::collate_array_values(std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc, unsigned> &idx_map,
                                     const std::list<struct array_select> &idxs,
+                                    const smt_sort *subtype,
                                     const smt_ast *init_val)
 {
-  abort();
+  // So, the value vector should be allocated but not initialized,
+  assert(vals.size() == idx_map.size());
+
+  // First, make everything null,
+  for (std::vector<const smt_ast *>::iterator it = vals.begin();
+       it != vals.end(); it++)
+    *it = NULL;
+
+  // Now assign in all free variables created as a result of selects.
+  for (std::list<struct array_select>::const_iterator it = idxs.begin();
+       it != idxs.end(); it++) {
+    std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.find(it->idx);
+    assert(it2 != idx_map.end());
+    vals[it2->second] = it->val;
+  }
+
+  // Initialize everything else to either a free variable or the initial value.
+  if (init_val == NULL) {
+    // Free variables
+    for (std::vector<const smt_ast *>::iterator it = vals.begin();
+         it != vals.end(); it++)
+      *it = mk_fresh(subtype, "collate_array_vals::");
+  } else {
+    // We need to assign the initial value in, except where there's already
+    // a select/index, in which case we assert that the values are equal.
+    const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+    for (std::vector<const smt_ast *>::iterator it = vals.begin();
+         it != vals.end(); it++) {
+      if (*it == NULL) {
+        *it = init_val;
+      } else {
+        const smt_ast *args[2];
+        args[0] = *it;
+        args[1] = init_val;
+        assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      }
+    }
+  }
+
+  // Fin.
 }
 
 #endif /* SOLVER_BITBLAST_ARRAYS */

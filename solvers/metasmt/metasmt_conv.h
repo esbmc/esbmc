@@ -221,6 +221,7 @@ public:
   void collate_array_values(std::vector<const smt_ast *> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,
+                            const smt_sort *subtype,
                             const smt_ast *init_val = NULL);
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
