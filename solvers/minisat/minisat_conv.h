@@ -96,7 +96,8 @@ public:
   virtual literalt new_variable();
 
   minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
-                                   const minisat_smt_ast *b);
+                                   const minisat_smt_ast *b,
+                                   const smt_sort *ressort);
 
   // Things imported from CBMC, more or less
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);

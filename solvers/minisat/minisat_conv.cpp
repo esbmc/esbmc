@@ -229,7 +229,7 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   case SMT_FUNC_EQ:
   {
     assert(ressort->id == SMT_SORT_BOOL);
-    result = mk_ast_equality(args[0], args[1]);
+    result = mk_ast_equality(args[0], args[1], ressort);
     break;
   }
   case SMT_FUNC_NOT:
@@ -409,7 +409,8 @@ minisat_convt::mk_extract(const smt_ast *src __attribute__((unused)), unsigned i
 
 minisat_smt_ast *
 minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
-                               const minisat_smt_ast *b)
+                               const minisat_smt_ast *b,
+                               const smt_sort *ressort)
 {
   switch (a->sort->id) {
   case SMT_SORT_BOOL:
@@ -422,7 +423,7 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
   case SMT_SORT_BV:
   {
     const minisat_smt_sort *ms = minisat_sort_downcast(a->sort);
-    minisat_smt_ast *n = new minisat_smt_ast(a->sort);
+    minisat_smt_ast *n = new minisat_smt_ast(ressort);
     n->bv.reserve(ms->width);
 
     for (unsigned int i = 0; i < ms->width; i++)
