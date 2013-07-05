@@ -52,9 +52,41 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
 }
 
 smt_sort*
-minisat_convt::mk_sort(smt_sort_kind k __attribute__((unused)), ...)
+minisat_convt::mk_sort(smt_sort_kind k, ...)
 {
-  abort();
+  va_list ap;
+  minisat_smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
+  int thebool;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+    std::cerr << "Can't make Int sorts in Minisat" << std::endl;
+    abort();
+  case SMT_SORT_REAL:
+    std::cerr << "Can't make Real sorts in Minisat" << std::endl;
+    abort();
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    s = new minisat_smt_sort(k, uint);
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, minisat_smt_sort *); // Consider constness?
+    range = va_arg(ap, minisat_smt_sort *);
+    s = new minisat_smt_sort(k, dom->width, range->width);
+    break;
+  case SMT_SORT_BOOL:
+    s = new minisat_smt_sort(k);
+    break;
+  default:
+    std::cerr << "Unimplemented SMT sort " << k << " in Minisat conversion"
+              << std::endl;
+    abort();
+  }
+
+  return s;
 }
 
 literalt
