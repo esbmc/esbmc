@@ -313,9 +313,12 @@ minisat_convt::l_get(literalt l __attribute__((unused)))
 }
 
 void
-minisat_convt::assert_lit(const literalt &l __attribute__((unused)))
+minisat_convt::assert_lit(const literalt &l)
 {
-  abort();
+  Minisat::vec<Lit> c;
+  c.push(Minisat::mkLit(l.var_no(), l.sign()));
+  solver.addClause_(c);
+  return;
 }
 
 smt_ast*
