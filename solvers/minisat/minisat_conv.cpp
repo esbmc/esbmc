@@ -58,6 +58,19 @@ minisat_convt::lxor(literalt a, literalt b)
   return output;
 }
 
+literalt
+minisat_convt::lor(literalt a, literalt b)
+{
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return const_literal(true);
+  if (b == const_literal(true)) return const_literal(true);
+
+  literalt output = new_variable();
+  gate_or(a, b, output);
+  return output;
+}
+
 void
 minisat_convt::gate_xor(literalt a, literalt b, literalt o)
 {
@@ -93,6 +106,32 @@ minisat_convt::gate_xor(literalt a, literalt b, literalt o)
   lits.push_back(pos(a));
   lits.push_back(neg(b));
   lits.push_back(pos(o));
+  lcnf(lits);
+}
+
+void
+minisat_convt::gate_or(literalt a, literalt b, literalt o)
+{
+  // a+b=c <==> (a' + c)( b' + c)(a + b + c')
+  bvt lits;
+
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(neg(a));
+  lits.push_back(pos(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(neg(b));
+  lits.push_back(pos(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(pos(a));
+  lits.push_back(pos(b));
+  lits.push_back(neg(o));
   lcnf(lits);
 }
 
@@ -183,6 +222,14 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(res);
     break;
   }
+  case SMT_FUNC_OR:
+  {
+    literalt res = lor(args[0]->bv[0], args[1]->bv[0]);
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(res);
+    break;
+  }
+
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;

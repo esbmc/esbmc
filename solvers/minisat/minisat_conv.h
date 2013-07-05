@@ -103,7 +103,9 @@ public:
   literalt lnot(literalt a);
   literalt lequal(literalt a, literalt b);
   literalt lxor(literalt a, literalt b);
+  literalt lor(literalt a, literalt b);
   void gate_xor(literalt a, literalt b, literalt o);
+  void gate_or(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
 
   Minisat::Solver solver;
