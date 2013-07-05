@@ -740,6 +740,10 @@ metasmt_convt::mk_unbounded_store(const metasmt_array_ast *ma,
   w.u.w.val = value;
   array_updates[ma->base_array_id].push_back(w);
 
+  // Also file a new select record for this point in time.
+  std::list<struct array_select> tmp;
+  array_values[ma->base_array_id].push_back(tmp);
+
   // Result is the new array id goo.
   return newarr;
 }
@@ -794,6 +798,10 @@ metasmt_convt::unbounded_array_ite(const metasmt_smt_ast *cond,
   w.u.i.src_array_update_false = false_arr->array_update_num;
   w.u.i.cond = cond;
   array_updates[true_arr->base_array_id].push_back(w);
+
+  // Also file a new select record for this point in time.
+  std::list<struct array_select> tmp;
+  array_values[true_arr->base_array_id].push_back(tmp);
 
   return newarr;
 }
