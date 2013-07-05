@@ -107,6 +107,7 @@ public:
   void gate_xor(literalt a, literalt b, literalt o);
   void gate_or(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
+  virtual void lcnf(const bvt &bv);
 
   Minisat::Solver solver;
   const optionst &options;

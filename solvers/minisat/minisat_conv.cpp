@@ -154,6 +154,23 @@ minisat_convt::set_equal(literalt a, literalt b)
   return;
 }
 
+void
+minisat_convt::lcnf(const bvt &bv)
+{
+  bvt new_bv;
+
+  if (process_clause(bv, new_bv))
+    return;
+
+  if (new_bv.empty())
+    return;
+
+  Minisat::vec<Lit> c;
+  convert(bv, c);
+  solver.addClause_(c);
+  return;
+}
+
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
          : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
