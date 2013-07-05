@@ -13,6 +13,7 @@
 #include <core/Solver.h>
 
 typedef Minisat::Lit Lit;
+typedef Minisat::lbool lbool;
 
 class minisat_smt_sort : public smt_sort {
   // Record all the things.

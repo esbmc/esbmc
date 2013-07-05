@@ -116,9 +116,19 @@ minisat_convt::mk_smt_bvint(const mp_integer &inval __attribute__((unused)),
 }
 
 smt_ast*
-minisat_convt::mk_smt_bool(bool boolval __attribute__((unused)))
+minisat_convt::mk_smt_bool(bool boolval)
 {
-  abort();
+  Lit l;
+  if (boolval) {
+    l = Minisat::mkLit(Minisat::toInt(l_True));
+  } else {
+    l = Minisat::mkLit(Minisat::toInt(l_False));
+  }
+
+  smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  minisat_smt_ast *a = new minisat_smt_ast(s);
+  a->bv.push_back(l);
+  return a;
 }
 
 smt_ast*
