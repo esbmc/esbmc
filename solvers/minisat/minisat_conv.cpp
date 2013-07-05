@@ -3,6 +3,16 @@
 // Utility functions -- echoing CBMC quite a bit. The plan is to build up
 // what's necessary, then doing all the required abstractions.
 
+literalt
+minisat_convt::new_variable()
+{
+  literalt l;
+  Minisat::Var tmp = solver.newVar();
+  l.set(tmp, false);
+  no_variables = tmp;
+  return l;
+}
+
 void
 minisat_convt::convert(const bvt &bv, Minisat::vec<Lit> &dest)
 {

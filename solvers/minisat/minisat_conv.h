@@ -91,6 +91,8 @@ public:
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  virtual literalt new_variable();
+
   // Things imported from CBMC, more or less
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
   literalt lnot(literalt a);
