@@ -389,7 +389,7 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     smt_func_kind f, const smt_ast* const* _args, unsigned int numargs)
 {
   const minisat_smt_ast *args[4];
-  const minisat_smt_ast *result = NULL;
+  minisat_smt_ast *result = NULL;
   unsigned int i;
 
   assert(numargs < 4 && "Too many arguments to minisat_convt::mk_func_app");
@@ -415,6 +415,14 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     literalt res = lor(args[0]->bv[0], args[1]->bv[0]);
     result = new minisat_smt_ast(ressort);
     result->bv.push_back(res);
+    break;
+  }
+  case SMT_FUNC_BVADD:
+  {
+    literalt carry_in = const_literal(false);
+    literalt carry_out;
+    result = new minisat_smt_ast(ressort);
+    full_adder(args[0]->bv, args[1]->bv, result->bv, carry_in, carry_out);
     break;
   }
 
