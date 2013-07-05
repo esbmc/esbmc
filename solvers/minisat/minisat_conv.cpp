@@ -145,12 +145,14 @@ minisat_convt::mk_lit(const smt_ast *val)
 smt_ast*
 minisat_convt::mk_smt_int(const mp_integer &intval __attribute__((unused)), bool sign __attribute__((unused)))
 {
+  std::cerr << "Can't create integers in minisat solver" << std::endl;
   abort();
 }
 
 smt_ast*
 minisat_convt::mk_smt_real(const std::string &value __attribute__((unused)))
 {
+  std::cerr << "Can't create reals in minisat solver" << std::endl;
   abort();
 }
 
