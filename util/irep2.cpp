@@ -1270,6 +1270,11 @@ static inline __attribute__((always_inline)) int
 do_type_lt(const std::vector<type2tc> &side1, const std::vector<type2tc> &side2)
 {
 
+  if (side1.size() < side2.size())
+    return -1;
+  else if (side1.size() > side2.size())
+    return 1;
+
   int tmp = 0;
   std::vector<type2tc>::const_iterator it2 = side2.begin();
   forall_types(it, side1) {
