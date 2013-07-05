@@ -101,12 +101,16 @@ public:
 
   // Things imported from CBMC, more or less
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
+  void eliminate_duplicates(const bvt &bv, bvt &dest);
   literalt lnot(literalt a);
   literalt lequal(literalt a, literalt b);
   literalt lxor(literalt a, literalt b);
   literalt lor(literalt a, literalt b);
+  literalt land(literalt a, literalt b);
+  literalt land(const bvt &bv);
   void gate_xor(literalt a, literalt b, literalt o);
   void gate_or(literalt a, literalt b, literalt o);
+  void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
   virtual void lcnf(const bvt &bv);
 

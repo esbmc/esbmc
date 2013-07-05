@@ -1,3 +1,5 @@
+#include <set>
+
 #include "minisat_conv.h"
 
 prop_convt *
@@ -71,6 +73,68 @@ minisat_convt::lor(literalt a, literalt b)
   return output;
 }
 
+literalt
+minisat_convt::land(literalt a, literalt b)
+{
+  if (a == const_literal(true)) return b;
+  if (b == const_literal(true)) return a;
+  if (a == const_literal(false)) return const_literal(false);
+  if (b == const_literal(false)) return const_literal(false);
+  if (a == b) return a;
+
+  literalt output = new_variable();
+  gate_and(a, b, output);
+  return output;
+}
+
+
+literalt
+minisat_convt::land(const bvt &bv)
+{
+  if (bv.size() == 0)
+    return const_literal(true);
+  else if (bv.size() == 1)
+    return bv[0];
+  else if (bv.size() == 2)
+    return land(bv[0], bv[1]);
+
+  unsigned int trues = 0;
+  for (unsigned int i; i < bv.size(); i++) {
+    if (bv[i] == const_literal(false))
+      return const_literal(false);
+    else if (bv[i] == const_literal(true))
+      trues++;
+  }
+
+  if (trues == bv.size())
+    return const_literal(true);
+
+  bvt new_bv;
+
+  eliminate_duplicates(bv, new_bv);
+
+  literalt lit = new_variable();
+
+  for (unsigned int i; i < new_bv.size(); i++) {
+    bvt lits;
+    lits.reserve(2);
+    lits.push_back(pos(new_bv[i]));
+    lits.push_back(neg(lit));
+    lcnf(lits);
+  }
+
+  bvt lits;
+  lits.reserve(new_bv.size() + 1);
+
+  for (unsigned int i; i < new_bv.size(); i++)
+    lits.push_back(neg(new_bv[i]));
+
+  lits.push_back(pos(lit));
+  lcnf(lits);
+
+  return lit;
+}
+
 void
 minisat_convt::gate_xor(literalt a, literalt b, literalt o)
 {
@@ -136,6 +200,32 @@ minisat_convt::gate_or(literalt a, literalt b, literalt o)
 }
 
 void
+minisat_convt::gate_and(literalt a, literalt b, literalt o)
+{
+  // a*b=c <==> (a + o')( b + o')(a'+b'+o)
+  bvt lits;
+
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(pos(a));
+  lits.push_back(neg(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(2);
+  lits.push_back(pos(b));
+  lits.push_back(neg(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(neg(a));
+  lits.push_back(neg(b));
+  lits.push_back(pos(o));
+  lcnf(lits);
+}
+
+void
 minisat_convt::set_equal(literalt a, literalt b)
 {
   bvt bv;
@@ -170,6 +260,21 @@ minisat_convt::lcnf(const bvt &bv)
   solver.addClause_(c);
   return;
 }
+
+void
+minisat_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
+{
+  std::set<literalt> s;
+
+  dest.reserve(bv.size());
+
+  for(bvt::const_iterator it=bv.begin(); it!=bv.end(); it++)
+  {
+    if(s.insert(*it).second)
+      dest.push_back(*it);
+  }
+}
+
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
@@ -422,13 +527,15 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
   }
   case SMT_SORT_BV:
   {
+    bvt tmp;
     const minisat_smt_sort *ms = minisat_sort_downcast(a->sort);
     minisat_smt_ast *n = new minisat_smt_ast(ressort);
-    n->bv.reserve(ms->width);
+    tmp.reserve(ms->width);
 
     for (unsigned int i = 0; i < ms->width; i++)
-      n->bv.push_back(lequal(a->bv[i], a->bv[i]));
+      tmp.push_back(lequal(a->bv[i], a->bv[i]));
 
+    n->bv.push_back(land(tmp));
     return n;
   }
   case SMT_SORT_ARRAY:
