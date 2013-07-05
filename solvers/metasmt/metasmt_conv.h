@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_METASMT_MESTASMT_CONV_H_
 
 #include <set>
+#include <map>
 
 #include <irep2.h>
 
@@ -213,7 +214,8 @@ public:
   void add_array_constraints(unsigned int arr);
   void execute_array_trans(std::vector<const smt_ast *> &src,
                            std::vector<const smt_ast *> &dest,
-                           unsigned int idx);
+                           unsigned int idx,
+                           const std::map<expr2tc, unsigned> &idx_map);
 
 #endif /* SOLVER_BITBLAST_ARRAYS */
 

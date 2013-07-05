@@ -900,13 +900,16 @@ metasmt_convt::add_array_constraints(unsigned int arr)
 
   // Now repeatedly execute transitions between states.
   for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
-    execute_array_trans(real_array_values[i], real_array_values[i+1], i);
+    execute_array_trans(real_array_values[i], real_array_values[i+1], i+1,
+                        idx_map);
+
 }
 
 void
 metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
                                    std::vector<const smt_ast *> &dest,
-                                   unsigned int idx)
+                                   unsigned int idx,
+                                   const std::map<expr2tc, unsigned> &idx_map)
 {
   // Steps: First, fill the destination vector with either free variables, or
   // the free variables that resulted for selects corresponding to that item.
