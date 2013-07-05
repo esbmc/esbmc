@@ -39,6 +39,10 @@ metasmt_convt::set_to(const expr2tc &expr, bool value)
 prop_convt::resultt
 metasmt_convt::dec_solve()
 {
+#ifdef SOLVER_BITBLAST_ARRAYS
+  add_array_constraints();
+#endif
+
   bool res = ctx.solve();
   if (res) {
     return prop_convt::P_SATISFIABLE;
@@ -838,5 +842,23 @@ metasmt_convt::convert_array_of(const expr2tc &init_val,
 
   return mast;
 }
+
+void
+metasmt_convt::add_array_constraints(void)
+{
+
+  for (unsigned int i = 0; i < array_indexes.size(); i++) {
+    add_array_constraints(i);
+  }
+
+  return;
+}
+
+void
+metasmt_convt::add_array_constraints(unsigned int arr)
+{
+  abort();
+}
+
 
 #endif /* SOLVER_BITBLAST_ARRAYS */

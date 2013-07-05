@@ -208,6 +208,10 @@ public:
                                        const metasmt_array_ast *true_arr,
                                        const metasmt_array_ast *false_arr,
                                        const metasmt_smt_sort *thesort);
+
+  void add_array_constraints(void);
+  void add_array_constraints(unsigned int arr);
+
 #endif /* SOLVER_BITBLAST_ARRAYS */
 
   // Members
