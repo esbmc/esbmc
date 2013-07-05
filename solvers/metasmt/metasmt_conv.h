@@ -154,6 +154,7 @@ class metasmt_convt : public smt_convt
 {
 public:
   struct array_select;
+  struct array_with;
 
   metasmt_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
   virtual ~metasmt_convt();
@@ -216,8 +217,10 @@ public:
   void add_array_constraints(unsigned int arr);
   void execute_array_trans(std::vector<const smt_ast *> &src,
                            std::vector<const smt_ast *> &dest,
+                           unsigned int arr,
                            unsigned int idx,
-                           const std::map<expr2tc, unsigned> &idx_map);
+                           const std::map<expr2tc, unsigned> &idx_map,
+                           const smt_sort *subtype);
   void collate_array_values(std::vector<const smt_ast *> &vals,
                             const std::map<expr2tc, unsigned> &idx_map,
                             const std::list<struct array_select> &idxs,

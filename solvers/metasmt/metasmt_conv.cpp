@@ -899,22 +899,41 @@ metasmt_convt::add_array_constraints(unsigned int arr)
 
   // Now repeatedly execute transitions between states.
   for (unsigned int i = 0; i < real_array_values.size() - 1; i++)
-    execute_array_trans(real_array_values[i], real_array_values[i+1], i+1,
-                        idx_map);
+    execute_array_trans(real_array_values[i], real_array_values[i+1],
+                        arr, i+1, idx_map, subtype);
 
 }
 
 void
 metasmt_convt::execute_array_trans(std::vector<const smt_ast *> &src,
                                    std::vector<const smt_ast *> &dest,
+                                   unsigned int arr,
                                    unsigned int idx,
-                                   const std::map<expr2tc, unsigned> &idx_map)
+                                   const std::map<expr2tc, unsigned> &idx_map,
+                                   const smt_sort *subtype)
 {
   // Steps: First, fill the destination vector with either free variables, or
   // the free variables that resulted for selects corresponding to that item.
   // Then apply update or ITE constraints.
   // Then apply equalities between the old and new values.
-  abort();
+
+  collate_array_values(dest, idx_map, array_values[arr][idx], subtype);
+
+  // Two updates that could have occurred for this array: a simple with, or
+  // an ite.
+  const array_with &w = array_updates[arr][idx];
+  if (w.is_ite) {
+    // Turn every index element into an ITE representing this operation. Every
+    // single element is addressed and updated; no further constraints are
+    // needed. Not even the ackerman ones, in fact, because instances of that
+    // from previous array updates will feed through to here (speculation).
+    abort();
+  } else {
+    // Place a constraint on the updated variable; add equality constraints
+    // between the older version and this version. And finally add ackerman
+    // constraints.
+    abort();
+  }
 }
 
 void
