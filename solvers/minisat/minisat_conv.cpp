@@ -135,6 +135,42 @@ minisat_convt::land(const bvt &bv)
   return lit;
 }
 
+literalt
+minisat_convt::lor(const bvt &bv)
+{
+  if (bv.size() == 0) return const_literal(false);
+  else if (bv.size() == 1) return bv[0];
+  else if (bv.size() == 2) return lor(bv[0], bv[1]);
+
+  for (unsigned int i = 0; i < bv.size(); i++)
+    if (bv[i] == const_literal(true))
+      return const_literal(true);
+
+  bvt new_bv;
+  eliminate_duplicates(bv, new_bv);
+
+  literalt literal = new_variable();
+  for (unsigned int i = 0; i < new_bv.size(); i++) {
+    bvt lits;
+    lits.reserve(2);
+    lits.push_back(neg(new_bv[i]));
+    lits.push_back(pos(literal));
+    lcnf(lits);
+  }
+
+  bvt lits;
+  lits.reserve(new_bv.size() + 1);
+
+  for (unsigned int i = 0; i < new_bv.size(); i++)
+    lits.push_back(pos(new_bv[i]));
+
+  lits.push_back(neg(literal));
+  lcnf(lits);
+
+  return literal;
+}
+
+
 void
 minisat_convt::gate_xor(literalt a, literalt b, literalt o)
 {
@@ -275,6 +311,33 @@ minisat_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
   }
 }
 
+void
+minisat_convt::full_adder(const bvt &op0, const bvt &op1, bvt &output,
+                          literalt carry_in, literalt &carry_out)
+{
+  assert(op0.size() == op1.size());
+  output.reserve(op0.size());
+
+  carry_out = carry_in;
+
+  for (unsigned int i = 0; i < op0.size(); i++) {
+    output.push_back(lxor(lxor(op0[i], op1[i]), carry_out));
+    carry_out = carry(op0[i], op1[i], carry_out);
+  }
+
+  return;
+}
+
+literalt
+minisat_convt::carry(literalt a, literalt b, literalt c)
+{
+  bvt tmp;
+  tmp.reserve(3);
+  tmp.push_back(land(a, b));
+  tmp.push_back(land(a, c));
+  tmp.push_back(land(b, c));
+  return lor(tmp);
+}
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)

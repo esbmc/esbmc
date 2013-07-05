@@ -108,11 +108,16 @@ public:
   literalt lor(literalt a, literalt b);
   literalt land(literalt a, literalt b);
   literalt land(const bvt &bv);
+  literalt lor(const bvt &bv);
   void gate_xor(literalt a, literalt b, literalt o);
   void gate_or(literalt a, literalt b, literalt o);
   void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
   virtual void lcnf(const bvt &bv);
+
+  void full_adder(const bvt &op0, const bvt &op1, bvt &output,
+                  literalt carry_in, literalt &carry_out);
+  literalt carry(literalt a, literalt b, literalt c);
 
   Minisat::Solver solver;
   const optionst &options;
