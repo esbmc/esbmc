@@ -1,7 +1,16 @@
 #ifndef _ESBMC_SOLVERS_SMTLIB_CONV_H_
 #define _ESBMC_SOLVERS_SMTLIB_CONV_H_
 
+#include <limits.h>
+// For the sake of...
+#define __STDC_LIMIT_MACROS
+#define __STDC_FORMAT_MACROS
+#include <stdint.h>
+#include <inttypes.h>
+
 #include <solvers/smt/smt_conv.h>
+
+#include <core/Solver.h>
 
 class minisat_convt : public smt_convt {
 public:
@@ -28,6 +37,9 @@ public:
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
+
+  Minisat::Solver solver;
+  const optionst &options;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_CONV_H_ */
