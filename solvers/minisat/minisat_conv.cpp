@@ -138,8 +138,8 @@ minisat_convt::mk_lit(const smt_ast *val)
   assert(a->bv.size() == 1);
 
   literalt l = new_variable();
-  Lit ll = Minisat::mkLit(l.var_no());
-  abort();
+  set_equal(l, a->bv[0]);
+  return l;
 }
 
 smt_ast*
