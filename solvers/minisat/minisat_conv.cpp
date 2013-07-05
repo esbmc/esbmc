@@ -167,11 +167,20 @@ minisat_convt::mk_smt_real(const std::string &value __attribute__((unused)))
 }
 
 smt_ast*
-minisat_convt::mk_smt_bvint(const mp_integer &inval __attribute__((unused)),
-                            bool sign __attribute__((unused)),
-                            unsigned int w __attribute__((unused)))
+minisat_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
+                            unsigned int w)
 {
-  abort();
+  smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  minisat_smt_ast *a = new minisat_smt_ast(s);
+  a->bv.resize(w);
+  int64_t u = intval.to_long();
+  for (unsigned int i = 0; i < w; i++) {
+    int64_t mask = (1 << i);
+    bool val = u & mask;
+    a->bv[i] = const_literal(val);
+  }
+
+  return a;
 }
 
 smt_ast*
