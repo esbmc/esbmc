@@ -95,9 +95,15 @@ public:
 
   virtual literalt new_variable();
 
+  minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
+                                   const minisat_smt_ast *b);
+
   // Things imported from CBMC, more or less
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
   literalt lnot(literalt a);
+  literalt lequal(literalt a, literalt b);
+  literalt lxor(literalt a, literalt b);
+  void gate_xor(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
 
   Minisat::Solver solver;

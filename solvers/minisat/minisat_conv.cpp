@@ -32,6 +32,63 @@ minisat_convt::lnot(literalt a)
   return a;
 }
 
+literalt
+minisat_convt::lequal(literalt a, literalt b)
+{
+  return lnot(lxor(a, b));
+}
+
+literalt
+minisat_convt::lxor(literalt a, literalt b)
+{
+  if (a == const_literal(false)) return b;
+  if (b == const_literal(false)) return a;
+  if (a == const_literal(true)) return lnot(b);
+  if (b == const_literal(true)) return lnot(a);
+
+  literalt output = new_variable();
+  gate_xor(a, b, output);
+  return output;
+}
+
+void
+minisat_convt::gate_xor(literalt a, literalt b, literalt o)
+{
+  // a xor b = o <==> (a' + b' + o')
+  //                  (a + b + o' )
+  //                  (a' + b + o)
+  //                  (a + b' + o)
+  bvt lits;
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(neg(a));
+  lits.push_back(neg(b));
+  lits.push_back(neg(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(pos(a));
+  lits.push_back(pos(b));
+  lits.push_back(neg(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(neg(a));
+  lits.push_back(pos(b));
+  lits.push_back(pos(o));
+  lcnf(lits);
+
+  lits.clear();
+  lits.reserve(3);
+  lits.push_back(pos(a));
+  lits.push_back(neg(b));
+  lits.push_back(pos(o));
+  lcnf(lits);
+}
+
 void
 minisat_convt::set_equal(literalt a, literalt b)
 {
@@ -106,6 +163,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     args[i] = minisat_ast_downcast(_args[i]);
 
   switch (f) {
+  case SMT_FUNC_EQ:
+  {
+    assert(ressort->id == SMT_SORT_BOOL);
+    result = mk_ast_equality(args[0], args[1]);
+    break;
+  }
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
@@ -264,4 +327,37 @@ smt_ast*
 minisat_convt::mk_extract(const smt_ast *src __attribute__((unused)), unsigned int high __attribute__((unused)), unsigned int low __attribute__((unused)), const smt_sort *s __attribute__((unused)))
 {
   abort();
+}
+
+minisat_smt_ast *
+minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
+                               const minisat_smt_ast *b)
+{
+  switch (a->sort->id) {
+  case SMT_SORT_BOOL:
+  {
+    literalt res = lequal(a->bv[0], b->bv[0]);
+    minisat_smt_ast *n = new minisat_smt_ast(a->sort);
+    n->bv.push_back(res);
+    return n;
+  }
+  case SMT_SORT_BV:
+  {
+    const minisat_smt_sort *ms = minisat_sort_downcast(a->sort);
+    minisat_smt_ast *n = new minisat_smt_ast(a->sort);
+    n->bv.reserve(ms->width);
+
+    for (unsigned int i = 0; i < ms->width; i++)
+      n->bv.push_back(lequal(a->bv[i], a->bv[i]));
+
+    return n;
+  }
+  case SMT_SORT_ARRAY:
+    std::cerr <<  "Pull in array ops, pls" << std::endl;
+    abort();
+  default:
+    std::cerr << "Invalid sort " << a->sort->id << " for equality in minisat"
+              << std::endl;
+    abort();
+  }
 }
