@@ -578,6 +578,9 @@ metasmt_convt::fresh_array(const metasmt_smt_sort *ms, const std::string &name)
     std::vector<std::list<struct array_select> > tmp2;
     array_values.push_back(tmp2);
 
+    std::list<struct array_select> tmp25;
+    array_values[mast->base_array_id].push_back(tmp25);
+
     std::vector<struct array_with> tmp3;
     array_updates.push_back(tmp3);
 
