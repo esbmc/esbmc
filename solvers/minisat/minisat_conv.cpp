@@ -339,12 +339,37 @@ minisat_convt::carry(literalt a, literalt b, literalt c)
   return lor(tmp);
 }
 
+literalt
+minisat_convt::unsigned_less_than(const bvt &arg0, const bvt &arg1)
+{
+  bvt tmp = arg1;
+  invert(tmp);
+  return lnot(carry_out(arg0, tmp, const_literal(true)));
+}
+
+literalt
+minisat_convt::carry_out(const bvt &a, const bvt &b, literalt c)
+{
+  literalt carry_out = c;
+
+  for (unsigned int i = 0; i < a.size(); i++)
+    carry_out = carry(a[i], b[i], carry_out);
+
+  return carry_out;
+}
+
+void
+minisat_convt::invert(bvt &bv)
+{
+  for (unsigned int i = 0; i < bv.size(); i++)
+    bv[i] = lnot(bv[i]);
+}
+
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
          : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
            solver(), options(_opts)
 {
-  
 }
 
 minisat_convt::~minisat_convt(void)
@@ -425,7 +450,18 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     full_adder(args[0]->bv, args[1]->bv, result->bv, carry_in, carry_out);
     break;
   }
-
+  case SMT_FUNC_BVUGT:
+  {
+    // Same as LT flipped
+    std::swap(args[0], args[1]);
+    result = mk_func_app(ressort, SMT_FUNC_BVULT, args, 2);
+  }
+  case SMT_FUNC_BVULT:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
+    break;
+  }
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
