@@ -561,6 +561,18 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
     break;
   }
+  case SMT_FUNC_BVMUL:
+  {
+    result = new minisat_smt_ast(ressort);
+    const minisat_smt_sort *sort0 = minisat_sort_downcast(args[0]->sort);
+    const minisat_smt_sort *sort1 = minisat_sort_downcast(args[1]->sort);
+    if (sort0->sign || sort1->sign) {
+      signed_multiplier(args[0]->bv, args[1]->bv, result->bv);
+    } else {
+      unsigned_multiplier(args[0]->bv, args[1]->bv, result->bv);
+    }
+    break;
+  }
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
