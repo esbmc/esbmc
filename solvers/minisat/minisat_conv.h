@@ -133,6 +133,7 @@ public:
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
   void eliminate_duplicates(const bvt &bv, bvt &dest);
   literalt lnot(literalt a);
+  literalt lselect(literalt a, literalt b, literalt c);
   literalt lequal(literalt a, literalt b);
   literalt lxor(literalt a, literalt b);
   literalt lor(literalt a, literalt b);
@@ -152,6 +153,12 @@ public:
   void invert(bvt &bv);
 
   literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
+  void unsigned_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
+  void signed_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
+  void cond_negate(const bvt &vals, bvt &out, literalt cond);
+  void negate(const bvt &inp, bvt &oup);
+  void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
+                   bvt &oup);
 
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);

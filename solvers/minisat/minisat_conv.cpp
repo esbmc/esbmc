@@ -42,6 +42,20 @@ minisat_convt::lnot(literalt a)
 }
 
 literalt
+minisat_convt::lselect(literalt a, literalt b, literalt c)
+{  // a?b:c = (a AND b) OR (/a AND c)
+  if(a==const_literal(true)) return b;
+  if(a==const_literal(false)) return c;
+  if(b==c) return b;
+
+  bvt bv;
+  bv.reserve(2);
+  bv.push_back(land(a, b));
+  bv.push_back(land(lnot(a), c));
+  return lor(bv);
+}
+
+literalt
 minisat_convt::lequal(literalt a, literalt b)
 {
   return lnot(lxor(a, b));
@@ -345,6 +359,90 @@ minisat_convt::unsigned_less_than(const bvt &arg0, const bvt &arg1)
   bvt tmp = arg1;
   invert(tmp);
   return lnot(carry_out(arg0, tmp, const_literal(true)));
+}
+
+void
+minisat_convt::unsigned_multiplier(const bvt &op0, const bvt &op1, bvt &output)
+{
+  output.resize(op0.size());
+
+  for (unsigned int i = 0; i < op0.size(); i++)
+    output[i] = const_literal(false);
+
+  for (unsigned int i = 0; i < op0.size(); i++) {
+    if (op0[i] != const_literal(false)) {
+      bvt tmpop;
+      tmpop.reserve(op0.size());
+
+      for (unsigned int idx = 0; idx < i; idx++)
+        tmpop.push_back(const_literal(false));
+
+      for (unsigned int idx = i; idx < op0.size(); idx++)
+        tmpop.push_back(land(op1[idx-i], op0[i]));
+
+      bvt tmpadd;
+      literalt dummy;
+      full_adder(output, tmpop, tmpadd, const_literal(false), dummy);
+      output = tmpadd;
+    }
+  }
+}
+
+void
+minisat_convt::signed_multiplier(const bvt &op0, const bvt &op1, bvt &output)
+{
+  assert(op0.size() == op1.size() && op0.size() != 0);
+  literalt sign0 = op0[op0.size()-1];
+  literalt sign1 = op1[op1.size()-1];
+
+  bvt neg0, neg1;
+  cond_negate(op0, neg0, sign0);
+  cond_negate(op1, neg1, sign1);
+
+  bvt tmp;
+  unsigned_multiplier(neg0, neg1, tmp);
+
+  literalt res_sign = lxor(sign0, sign1);
+
+  cond_negate(tmp, output, res_sign);
+}
+
+void
+minisat_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
+{
+  bvt inv;
+  negate(vals, inv);
+
+  out.resize(vals.size());
+
+  for (unsigned int i = 0; i < vals.size(); i++)
+    out[i] = lselect(cond, inv[i], vals[i]);
+  
+  return;
+}
+
+void
+minisat_convt::negate(const bvt &inp, bvt &oup)
+{
+  oup.resize(inp.size());
+  literalt dummy;
+  incrementer(inp, const_literal(true), dummy, oup);
+  return;
+}
+
+void
+minisat_convt::incrementer(const bvt &inp, const literalt &carryin,
+                           literalt carryout, bvt &oup)
+{
+  carryout = carryin;
+
+  for (unsigned int i = 0; i < inp.size(); i++) {
+    literalt new_carry = land(carryout, inp[i]);
+    oup[i] = lxor(inp[i], carryout);
+    carryout = new_carry;
+  }
+
+  return;
 }
 
 literalt
