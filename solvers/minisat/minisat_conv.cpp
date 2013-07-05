@@ -589,7 +589,7 @@ minisat_convt::mk_sort(smt_sort_kind k, ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    s = new minisat_smt_sort(k, uint);
+    s = new minisat_smt_sort(k, uint, (bool)thebool);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, minisat_smt_sort *); // Consider constness?

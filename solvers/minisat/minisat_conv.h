@@ -22,20 +22,23 @@ class minisat_smt_sort : public smt_sort {
 #define minisat_sort_downcast(x) static_cast<const minisat_smt_sort*>(x)
 
   minisat_smt_sort(smt_sort_kind i)
-    : smt_sort(i), width(0), arrdom_width(0), arrrange_width(0)
+    : smt_sort(i), width(0), sign(false), arrdom_width(0), arrrange_width(0)
   { }
 
-  minisat_smt_sort(smt_sort_kind i, unsigned int _width)
-    : smt_sort(i), width(_width), arrdom_width(0), arrrange_width(0)
+  minisat_smt_sort(smt_sort_kind i, unsigned int _width, bool _sign)
+    : smt_sort(i), width(_width), sign(_sign), arrdom_width(0),
+      arrrange_width(0)
   { }
 
   minisat_smt_sort(smt_sort_kind i, unsigned int arrwidth,
                    unsigned int rangewidth)
-    : smt_sort(i), width(0), arrdom_width(arrwidth), arrrange_width(rangewidth)
+    : smt_sort(i), width(0), sign(false), arrdom_width(arrwidth),
+      arrrange_width(rangewidth)
   { }
 
   virtual ~minisat_smt_sort() { }
   unsigned int width; // bv width
+  bool sign;
   unsigned int arrdom_width, arrrange_width; // arr sort widths
 
   virtual unsigned long get_domain_width(void) const {
