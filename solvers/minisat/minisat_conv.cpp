@@ -1,5 +1,7 @@
 #include <set>
 
+#include <ansi-c/c_types.h>
+
 #include "minisat_conv.h"
 
 prop_convt *
@@ -1258,7 +1260,24 @@ minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
   // remaining elements with their values. This is lossy: if we want accuracy
   // in the future, then we need to find a way of returning sparse arrays
   // for potentially unbounded array sizes.
-  abort();
+  if (max_idx > 1024)
+    max_idx = 1024;
+
+  type2tc arr_type(new array_type2t(subtype,
+                                constant_int2tc(index_type2(), BigInt(max_idx)),
+                                false));
+  std::vector<expr2tc> array_values;
+  array_values.resize(max_idx);
+  for (unsigned int i = 0; i < values.size(); i++) {
+    const constant_int2t &ref = to_constant_int2t(values[i].first);
+    uint64_t this_idx = ref.constant_value.to_ulong();
+    if (this_idx >= max_idx)
+      continue;
+
+    array_values[this_idx] = values[i].second;
+  }
+
+  return constant_array2tc(arr_type, array_values);
 }
 
 void
