@@ -541,9 +541,16 @@ minisat_convt::solver_text()
 }
 
 tvt
-minisat_convt::l_get(literalt l __attribute__((unused)))
+minisat_convt::l_get(literalt l)
 {
-  return tvt(tvt::TV_FALSE);
+  Minisat::lbool val = solver.modelValue(Minisat::mkLit(l.var_no(), l.sign()));
+  int v = Minisat::toInt(val);
+  if (v == 0)
+    return tvt(tvt::TV_TRUE);
+  else if (v == 1)
+    return tvt(tvt::TV_FALSE);
+  else
+    return tvt(tvt::TV_UNKNOWN);
 }
 
 void
