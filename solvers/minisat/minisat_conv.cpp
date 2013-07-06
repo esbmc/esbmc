@@ -731,6 +731,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
     break;
   }
+  case SMT_FUNC_BVSLTE:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, true));
+    break;
+  }
   case SMT_FUNC_BVMUL:
   {
     result = new minisat_smt_ast(ressort);
