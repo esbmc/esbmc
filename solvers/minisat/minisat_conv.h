@@ -264,6 +264,11 @@ public:
   // Only applicable to unbounded arrays.
   std::map<unsigned, const smt_ast *> array_of_vals;
 
+  // Finally, for model building, we need all the past array values. Three
+  // vectors, dimensions are arrays id's, historical point, array element,
+  // respectively.
+  std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
+
   Minisat::Solver solver;
   const optionst &options;
   symtable_type sym_table;

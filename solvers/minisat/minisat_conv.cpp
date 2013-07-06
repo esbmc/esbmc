@@ -1245,7 +1245,9 @@ minisat_convt::add_array_constraints(unsigned int arr)
 
   // What we're going to build is a two-dimensional vector ish of each element
   // at each point in time. Expensive, but meh.
-  std::vector<std::vector<const smt_ast *> > real_array_values;
+  array_valuation.resize(array_valuation.size() + 1);
+  std::vector<std::vector<const smt_ast *> > &real_array_values =
+    array_valuation.back();
 
   // Subtype is thus
   const smt_sort *subtype = mk_sort(SMT_SORT_BV, array_subtypes[arr], false);
