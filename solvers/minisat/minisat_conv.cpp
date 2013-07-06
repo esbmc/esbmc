@@ -492,6 +492,41 @@ minisat_convt::dec_solve()
 }
 
 expr2tc
+minisat_convt::get_bool(const smt_ast *a)
+{
+  const minisat_smt_ast *mast = minisat_ast_downcast(a);
+  tvt t = l_get(mast->bv[0]);
+  if (t.is_true())
+    return true_expr;
+  else if (t.is_false())
+    return false_expr;
+  else
+    return expr2tc();
+}
+
+expr2tc
+minisat_convt::get_bv(const type2tc &t, const smt_ast *a)
+{
+  const minisat_smt_ast *mast = minisat_ast_downcast(a);
+  unsigned int sz = t->get_width();
+  assert(sz <= 64 && "Your integers are larger than a uint64_t");
+  assert(mast->bv.size() == sz);
+  uint64_t accuml = 0;
+  for (unsigned int i = 0; i < sz; i++) {
+    uint64_t mask = 1 << i;
+    tvt t = l_get(mast->bv[i]);
+    if (t.is_true())
+      accuml |= mask;
+    else if (t.is_false())
+      ; // It's zero
+    else
+      ; // It's undefined in this model. So may as well be zero.
+  }
+
+  return constant_int2tc(t, BigInt(accuml));
+}
+
+expr2tc
 minisat_convt::get(const expr2tc &expr)
 {
   // So, this should always be a symbol.
@@ -504,37 +539,12 @@ minisat_convt::get(const expr2tc &expr)
   switch (expr->type->type_id) {
   case type2t::bool_id:
   {
-    // Just read a bool out.
-    const minisat_smt_ast *mast = minisat_ast_downcast(value);
-    tvt t = l_get(mast->bv[0]);
-    if (t.is_true())
-      return true_expr;
-    else if (t.is_false())
-      return false_expr;
-    else
-      return expr2tc();
-    break;
+    return get_bool(value);
   }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   {
-    const minisat_smt_ast *mast = minisat_ast_downcast(value);
-    unsigned int sz = expr->type->get_width();
-    assert(sz <= 64 && "Your integers are larger than a uint64_t");
-    assert(mast->bv.size() == sz);
-    uint64_t accuml = 0;
-    for (unsigned int i = 0; i < sz; i++) {
-      uint64_t mask = 1 << i;
-      tvt t = l_get(mast->bv[i]);
-      if (t.is_true())
-        accuml |= mask;
-      else if (t.is_false())
-        ; // It's zero
-      else
-        ; // It's undefined in this model. So may as well be zero.
-    }
-
-    return constant_int2tc(expr->type, BigInt(accuml));
+    return get_bv(expr->type, value);
   }
   case type2t::array_id:
     return array_get(value);

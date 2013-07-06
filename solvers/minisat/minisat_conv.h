@@ -164,6 +164,9 @@ public:
   void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
                    bvt &oup);
 
+  expr2tc get_bool(const smt_ast *a);
+  expr2tc get_bv(const type2tc &t, const smt_ast *a);
+
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
