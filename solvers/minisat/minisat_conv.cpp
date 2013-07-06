@@ -875,7 +875,7 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
     tmp.reserve(ms->width);
 
     for (unsigned int i = 0; i < ms->width; i++)
-      tmp.push_back(lequal(a->bv[i], a->bv[i]));
+      tmp.push_back(lequal(a->bv[i], b->bv[i]));
 
     n->bv.push_back(land(tmp));
     return n;
