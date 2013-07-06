@@ -138,6 +138,7 @@ public:
   literalt lnot(literalt a);
   literalt lselect(literalt a, literalt b, literalt c);
   literalt lequal(literalt a, literalt b);
+  literalt limplies(literalt a, literalt b);
   literalt lxor(literalt a, literalt b);
   literalt lor(literalt a, literalt b);
   literalt land(literalt a, literalt b);

@@ -62,6 +62,12 @@ minisat_convt::lequal(literalt a, literalt b)
 }
 
 literalt
+minisat_convt::limplies(literalt a, literalt b)
+{
+  return lor(lnot(a), b);
+}
+
+literalt
 minisat_convt::lxor(literalt a, literalt b)
 {
   if (a == const_literal(false)) return b;
@@ -541,6 +547,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(res);
     break;
   }
+  case SMT_FUNC_IMPLIES:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(limplies(args[0]->bv[0], args[1]->bv[0]));
+    break;
+  }
   case SMT_FUNC_BVADD:
   {
     literalt carry_in = const_literal(false);
@@ -571,6 +583,15 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     } else {
       unsigned_multiplier(args[0]->bv, args[1]->bv, result->bv);
     }
+    break;
+  }
+  case SMT_FUNC_CONCAT:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
+                      args[1]->bv.end());
+    result->bv.insert(result->bv.begin(), args[0]->bv.begin(),
+                      args[0]->bv.end());
     break;
   }
   default:
