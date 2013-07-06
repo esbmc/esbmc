@@ -195,7 +195,7 @@ public:
                                        const minisat_array_ast *false_arr,
                                        const minisat_smt_sort *thesort);
 
-  expr2tc array_get(const smt_ast *a);
+  expr2tc array_get(const smt_ast *a, const type2tc &subtype);
   void add_array_constraints(void);
   void add_array_constraints(unsigned int arr);
   void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,

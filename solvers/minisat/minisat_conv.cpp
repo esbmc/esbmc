@@ -547,7 +547,10 @@ minisat_convt::get(const expr2tc &expr)
     return get_bv(expr->type, value);
   }
   case type2t::array_id:
-    return array_get(value);
+  {
+    const array_type2t &t = to_array_type(expr->type);
+    return array_get(value, t.subtype);
+  }
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
@@ -1207,7 +1210,7 @@ minisat_convt::convert_array_of(const expr2tc &init_val,
 }
 
 expr2tc
-minisat_convt::array_get(const smt_ast *a)
+minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
 {
   const minisat_array_ast *mast = minisat_array_downcast(a);
 
@@ -1224,7 +1227,7 @@ minisat_convt::array_get(const smt_ast *a)
     array_valuation[mast->base_array_id][mast->array_update_num];
 
   // Evaluate each index and each value.
-  unsigned int max_idx = 0;
+  BigInt::ullong_t max_idx = 0;
   std::vector<std::pair<expr2tc, expr2tc> > values;
   values.resize(idx_map.size());
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
@@ -1238,7 +1241,17 @@ minisat_convt::array_get(const smt_ast *a)
            "Unexpected sort in array field");
 
     // unimplemented
-    abort();
+    expr2tc real_value;
+    if (this_value->sort->id == SMT_SORT_BOOL)
+      real_value = get_bool(this_value);
+    else
+      real_value = get_bv(subtype, this_value);
+
+    values[it->second] = std::pair<expr2tc, expr2tc>(idx, real_value);
+
+    // And record the largest index
+    max_idx = std::max(max_idx,
+                       to_constant_int2t(idx).constant_value.to_ulong());
   }
 
   // Work out the size of the array. If it's too large, clip it. Fill the
