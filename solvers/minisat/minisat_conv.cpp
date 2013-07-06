@@ -492,9 +492,26 @@ minisat_convt::dec_solve()
 }
 
 expr2tc
-minisat_convt::get(const expr2tc &expr __attribute__((unused)))
+minisat_convt::get(const expr2tc &expr)
 {
-  return expr2tc();
+  // So, this should always be a symbol.
+  assert(is_symbol2t(expr));
+
+  // It can however have various types. We only deal with bools and bitvectors;
+  // hand everything else off to additional modelling code.
+  switch (expr->type->type_id) {
+  case type2t::bool_id:
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  case type2t::array_id:
+  case type2t::pointer_id:
+  case type2t::struct_id:
+  case type2t::union_id:
+  default:
+    std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
+              << " get" << std::endl;
+    abort();
+  }
 }
 
 const std::string
