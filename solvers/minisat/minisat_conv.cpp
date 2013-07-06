@@ -497,16 +497,36 @@ minisat_convt::get(const expr2tc &expr)
   // So, this should always be a symbol.
   assert(is_symbol2t(expr));
 
+  const smt_ast *value = convert_ast(expr);
+
   // It can however have various types. We only deal with bools and bitvectors;
   // hand everything else off to additional modelling code.
   switch (expr->type->type_id) {
   case type2t::bool_id:
+  {
+    // Just read a bool out.
+    const minisat_smt_ast *mast = minisat_ast_downcast(value);
+    Minisat::lbool val = solver.modelValue(Minisat::mkLit(mast->bv[0].var_no(),
+                                                          mast->bv[0].sign()));
+    int v = Minisat::toInt(val);
+    if (v == 0)
+      return true_expr;
+    else if (v == 1)
+      return false_expr;
+    else
+      return expr2tc();
+    break;
+  }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
   case type2t::array_id:
+    std::cerr << "Array get unimplemented" << std::endl;
+    abort();
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
+    std::cerr << "Struct get unimplemented" << std::endl;
+    abort();
   default:
     std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
               << " get" << std::endl;
