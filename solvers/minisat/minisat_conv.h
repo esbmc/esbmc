@@ -127,6 +127,8 @@ public:
                               unsigned int low, const smt_sort *s);
 
   virtual literalt new_variable();
+  virtual const smt_ast *convert_array_equality(const expr2tc &a,
+                                                const expr2tc &b);
 
   minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
                                    const minisat_smt_ast *b,

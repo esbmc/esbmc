@@ -439,8 +439,10 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   unsigned int i = 0;
 
+  // FIXME: turn this into a lookup table
   if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr) ||
-      is_address_of2t(expr))
+      is_address_of2t(expr) ||
+      (is_equality2t(expr) && is_array_type(to_equality2t(expr).side_1->type)))
     // Nope; needs special handling
     goto nocvt;
   special_cases = false;
@@ -745,10 +747,12 @@ expr_handle_table:
       if (is_structure_type(to_array_type(eq.side_1->type).subtype) ||
           is_pointer_type(to_array_type(eq.side_1->type).subtype)) {
         // Array of structs equality.
+        args[0] = convert_ast(eq.side_1);
+        args[1] = convert_ast(eq.side_2);
         a = tuple_array_equality(args[0], args[1]);
       } else {
         // Normal array equality
-        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
+        a = convert_array_equality(eq.side_1, eq.side_2);
       }
     } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
       // Pointers are tuples

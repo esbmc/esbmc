@@ -951,45 +951,42 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
   }
   case SMT_SORT_ARRAY:
   {
-    if (a->sort->id != SMT_SORT_ARRAY || b->sort->id != SMT_SORT_ARRAY) {
-      std::cerr << "SMT equality not implemented in minisat for sort "
-                << a->sort->id << std::endl;
-      abort();
-    }
-
-    const minisat_array_ast *side1 = minisat_array_downcast((const smt_ast*)a);
-    const minisat_array_ast *side2 = minisat_array_downcast((const smt_ast*)b);
-
-    if (side1->symname == "" && side2->symname == "") {
-      std::cerr << "Malformed minisat array equality" << std::endl;
-      abort();
-    }
-
-    // Instead of making an equality, store the rhs into the symbol table.
-    // However we're not guarenteed that arg[1] is the rhs - so look for the
-    // symbol. If both are symbols, fall back to args[0] being lhs.
-    const minisat_array_ast *lhs = side1;
-    const minisat_array_ast *rhs = side2;
-    if (side2->symname != "") {
-      lhs = side2;
-      rhs = side1;
-    }
-    if (side1->symname != "") {
-      lhs = side1;
-      rhs = side2;
-    }
-
-    sym_table[lhs->symname] = rhs;
-    // Return a true value, because that assignment is always true.
-    minisat_smt_ast *result = new minisat_smt_ast(ressort);
-    result->bv.push_back(const_literal(true));
-    return result;
+    std::cerr << "No direct array equality support in MiniSAT converter"
+              << std::endl;
+    abort();
   }
   default:
     std::cerr << "Invalid sort " << a->sort->id << " for equality in minisat"
               << std::endl;
     abort();
   }
+}
+
+const smt_ast *
+minisat_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
+{
+
+  // Only support a scenario where the lhs (a) is a symbol.
+  assert(is_symbol2t(a) && "Malformed minisat array equality");
+
+  const minisat_array_ast *value = minisat_array_downcast(convert_ast(b));
+  const symbol2t &sym = to_symbol2t(a);
+  std::string symname = sym.get_symbol_name();
+
+  sym_table[symname] = value;
+
+  // Also pump that into the smt cache.
+  smt_cache_entryt e;
+  e.val = a;
+  e.ast = value;
+  e.level = ctx_level;
+  smt_cache.insert(e);
+
+  // Return a true value, because that assignment is always true.
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  minisat_smt_ast *result = new minisat_smt_ast(boolsort);
+  result->bv.push_back(const_literal(true));
+  return result;
 }
 
 const smt_ast *

@@ -911,3 +911,14 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr,
     return tuple_array_create(arr.type, args, false, domain);
   }
 }
+
+const smt_ast *
+smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
+{
+  const smt_ast *args[2];
+  const smt_sort * s = mk_sort(SMT_SORT_BOOL);
+  args[0] = convert_ast(a);
+  args[1] = convert_ast(b);
+
+  return mk_func_app(s, SMT_FUNC_EQ, args, 2);
+}

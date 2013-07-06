@@ -270,6 +270,9 @@ public:
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
+  virtual const smt_ast *convert_array_equality(const expr2tc &a,
+                                                const expr2tc &b);
+
   // Internal foo
 
   smt_sort *convert_sort(const type2tc &type);
