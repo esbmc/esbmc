@@ -493,6 +493,42 @@ minisat_convt::carry_out(const bvt &a, const bvt &b, literalt c)
   return carry_out;
 }
 
+literalt
+minisat_convt::equal(const bvt &op0, const bvt &op1)
+{
+  bvt tmp;
+  tmp.reserve(op0.size());
+
+  for (unsigned int i = 0; i < op0.size(); i++)
+    tmp.push_back(lequal(op0[i], op1[i]));
+
+  literalt res = land(tmp);
+  return res;
+}
+
+literalt
+minisat_convt::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
+                        bool is_signed)
+{
+  assert(bv0.size() == bv1.size());
+  literalt top0 = bv0[bv0.size() - 1], top1 = bv1[bv1.size() - 1];
+
+  bvt inv_op1 = bv1;
+  invert(inv_op1);
+  literalt carry = carry_out(bv0, inv_op1, const_literal(true));
+
+  literalt result;
+  if (is_signed)
+    result = lxor(lequal(top0, top1), carry);
+  else
+    result = lnot(carry);
+
+  if (or_equal)
+    result = lor(result, equal(bv0, bv1));
+
+  return result;
+}
+
 void
 minisat_convt::invert(bvt &bv)
 {
@@ -896,15 +932,9 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
   }
   case SMT_SORT_BV:
   {
-    bvt tmp;
     const minisat_smt_sort *ms = minisat_sort_downcast(a->sort);
     minisat_smt_ast *n = new minisat_smt_ast(ressort);
-    tmp.reserve(ms->width);
-
-    for (unsigned int i = 0; i < ms->width; i++)
-      tmp.push_back(lequal(a->bv[i], b->bv[i]));
-
-    n->bv.push_back(land(tmp));
+    n->bv.push_back(equal(a->bv, b->bv));
     return n;
   }
   case SMT_SORT_ARRAY:

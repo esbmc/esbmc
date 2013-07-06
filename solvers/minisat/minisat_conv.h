@@ -155,6 +155,9 @@ public:
                   literalt carry_in, literalt &carry_out);
   literalt carry(literalt a, literalt b, literalt c);
   literalt carry_out(const bvt &a, const bvt &b, literalt c);
+  literalt equal(const bvt &op0, const bvt &op1);
+  literalt lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
+                    bool is_signed);
   void invert(bvt &bv);
 
   literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
