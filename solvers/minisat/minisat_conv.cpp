@@ -484,13 +484,17 @@ minisat_convt::~minisat_convt(void)
 prop_convt::resultt
 minisat_convt::dec_solve()
 {
-  abort();
+  bool res = solver.solve();
+  if (res)
+    return prop_convt::P_SATISFIABLE;
+  else
+    return prop_convt::P_UNSATISFIABLE;
 }
 
 expr2tc
 minisat_convt::get(const expr2tc &expr __attribute__((unused)))
 {
-  abort();
+  return expr2tc();
 }
 
 const std::string
@@ -502,7 +506,7 @@ minisat_convt::solver_text()
 tvt
 minisat_convt::l_get(literalt l __attribute__((unused)))
 {
-  abort();
+  return tvt(tvt::TV_FALSE);
 }
 
 void
