@@ -148,7 +148,7 @@ minisat_convt::land(const bvt &bv)
   bvt lits;
   lits.reserve(new_bv.size() + 1);
 
-  for (unsigned int i; i < new_bv.size(); i++)
+  for (unsigned int i = 0; i < new_bv.size(); i++)
     lits.push_back(neg(new_bv[i]));
 
   lits.push_back(pos(lit));
