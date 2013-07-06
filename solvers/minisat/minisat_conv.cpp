@@ -757,7 +757,7 @@ minisat_convt::mk_extract(const smt_ast *src, unsigned int high,
 {
   const minisat_smt_ast *mast = minisat_ast_downcast(src);
   minisat_smt_ast *result = new minisat_smt_ast(s);
-  for (unsigned int i = low; i < high; i++)
+  for (unsigned int i = low; i <= high; i++)
     result->bv.push_back(mast->bv[i]);
 
   return result;
