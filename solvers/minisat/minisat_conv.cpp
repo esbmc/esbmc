@@ -517,6 +517,25 @@ minisat_convt::get(const expr2tc &expr)
   }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+  {
+    const minisat_smt_ast *mast = minisat_ast_downcast(value);
+    unsigned int sz = expr->type->get_width();
+    assert(sz <= 64 && "Your integers are larger than a uint64_t");
+    assert(mast->bv.size() == sz);
+    uint64_t accuml = 0;
+    for (unsigned int i = 0; i < sz; i++) {
+      uint64_t mask = 1 << i;
+      tvt t = l_get(mast->bv[i]);
+      if (t.is_true())
+        accuml |= mask;
+      else if (t.is_false())
+        ; // It's zero
+      else
+        ; // It's undefined in this model. So may as well be zero.
+    }
+
+    return constant_int2tc(expr->type, BigInt(accuml));
+  }
   case type2t::array_id:
     std::cerr << "Array get unimplemented" << std::endl;
     abort();
