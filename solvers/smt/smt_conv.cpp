@@ -761,6 +761,31 @@ expr_handle_table:
     }
     break;
   }
+  case expr2t::shl_id:
+  {
+    const shl2t &shl = to_shl2t(expr);
+
+    if (shl.side_1->type->get_width() != shl.side_2->type->get_width()) {
+      // FIXME: frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(shl.side_1->type, shl.side_2);
+      args[1] = convert_ast(cast);
+    }
+
+    if (int_encoding) {
+      // Raise 2^shift, then multiply first operand by that value. If it's
+      // negative, what to do? FIXME.
+      constant_int2tc two(shl.type, BigInt(2));
+      const smt_ast *powargs[2];
+      powargs[0] = args[1];
+      powargs[1] = convert_ast(two);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
+    }
+    break;
+  }
   case expr2t::ashr_id:
   {
     const ashr2t &ashr = to_ashr2t(expr);
@@ -784,6 +809,33 @@ expr_handle_table:
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
+    }
+    break;
+  }
+  case expr2t::lshr_id:
+  {
+    // Like ashr. Haven't got around to cleaning this up yet.
+    const lshr2t &lshr = to_lshr2t(expr);
+
+    if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width()) {
+      // FIXME: frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(lshr.side_1->type, lshr.side_2);
+      args[1] = convert_ast(cast);
+    }
+
+    if (int_encoding) {
+      // Raise 2^shift, then divide first operand by that value. If it's
+      // negative, I suspect the correct operation is to latch to -1,
+      // XXX XXX XXX haven't implemented that yet.
+      constant_int2tc two(lshr.type, BigInt(2));
+      const smt_ast *powargs[2];
+      powargs[0] = args[1];
+      powargs[1] = convert_ast(two);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
     }
     break;
   }
@@ -1344,7 +1396,8 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_BVNOR, SMT_FUNC_BVNOR, 2, SMT_SORT_BV},  //bitnor
 { SMT_FUNC_INVALID, SMT_FUNC_BVNXOR, SMT_FUNC_BVNXOR, 2, SMT_SORT_BV}, //bitnxor
 { SMT_FUNC_INVALID, SMT_FUNC_BVNOT, SMT_FUNC_BVNOT, 1, SMT_SORT_BV},  //bitnot
-{ SMT_FUNC_INVALID, SMT_FUNC_BVLSHR, SMT_FUNC_BVLSHR, 2, SMT_SORT_BV},  //lshr
+  // See comment below about shifts
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // lshl
 { SMT_FUNC_NEG, SMT_FUNC_BVNEG, SMT_FUNC_BVNEG, 1, SMT_SORT_ALLINTS},  //neg
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //abs
 { SMT_FUNC_ADD, SMT_FUNC_BVADD, SMT_FUNC_BVADD, 2, SMT_SORT_ALLINTS},//add
@@ -1352,11 +1405,10 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_MUL, SMT_FUNC_BVMUL, SMT_FUNC_BVMUL, 2, SMT_SORT_INT | SMT_SORT_REAL },//mul
 { SMT_FUNC_DIV, SMT_FUNC_BVSDIV, SMT_FUNC_BVUDIV, 2, SMT_SORT_INT | SMT_SORT_REAL },//div
 { SMT_FUNC_MOD, SMT_FUNC_BVSMOD, SMT_FUNC_BVUMOD, 2, SMT_SORT_BV | SMT_SORT_INT},//mod
-{ SMT_FUNC_SHL, SMT_FUNC_BVSHL, SMT_FUNC_BVSHL, 2, SMT_SORT_BV | SMT_SORT_INT},  //shl
-
-// Error: C frontend doesn't upcast the 2nd operand to ashr to the 1st operands
+// Error: C frontend doesn't upcast the 2nd operand to shift to the 1st operands
 // bit width. Therefore this doesn't work. Fall back to backup method.
 //{ SMT_FUNC_INVALID, SMT_FUNC_BVASHR, SMT_FUNC_BVASHR, 2, SMT_SORT_BV},  //ashr
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // shl
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //ashr
 
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //dyn_obj_id
