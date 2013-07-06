@@ -1209,13 +1209,26 @@ minisat_convt::array_get(const smt_ast *a)
        it != indexes.end(); it++)
     idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
 
+  // Pick a set of array values.
+  const std::vector<const smt_ast *> &solver_values =
+    array_valuation[mast->base_array_id][mast->array_update_num];
+
   // Evaluate each index and each value.
   unsigned int max_idx = 0;
   std::vector<std::pair<expr2tc, expr2tc> > values;
   values.resize(idx_map.size());
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
        it != idx_map.end(); it++) {
-abort();
+    expr2tc idx = get(it->first);
+    const smt_ast *this_value = solver_values[it->second];
+
+    // Read the valuation. Guarenteed not to be an array or struct.
+    assert((this_value->sort->id == SMT_SORT_BOOL ||
+            this_value->sort->id == SMT_SORT_BV) &&
+           "Unexpected sort in array field");
+
+    // unimplemented
+    abort();
   }
 
   // Work out the size of the array. If it's too large, clip it. Fill the
