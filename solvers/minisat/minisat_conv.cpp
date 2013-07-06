@@ -537,8 +537,7 @@ minisat_convt::get(const expr2tc &expr)
     return constant_int2tc(expr->type, BigInt(accuml));
   }
   case type2t::array_id:
-    std::cerr << "Array get unimplemented" << std::endl;
-    abort();
+    return array_get(value);
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
@@ -1195,6 +1194,35 @@ minisat_convt::convert_array_of(const expr2tc &init_val,
   }
 
   return mast;
+}
+
+expr2tc
+minisat_convt::array_get(const smt_ast *a)
+{
+  const minisat_array_ast *mast = minisat_array_downcast(a);
+
+  // Fetch all the indexes
+  const std::set<expr2tc> &indexes = array_indexes[mast->base_array_id];
+
+  std::map<expr2tc, unsigned> idx_map;
+  for (std::set<expr2tc>::const_iterator it = indexes.begin();
+       it != indexes.end(); it++)
+    idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
+
+  // Evaluate each index and each value.
+  unsigned int max_idx = 0;
+  std::vector<std::pair<expr2tc, expr2tc> > values;
+  values.resize(idx_map.size());
+  for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
+       it != idx_map.end(); it++) {
+abort();
+  }
+
+  // Work out the size of the array. If it's too large, clip it. Fill the
+  // remaining elements with their values. This is lossy: if we want accuracy
+  // in the future, then we need to find a way of returning sparse arrays
+  // for potentially unbounded array sizes.
+  abort();
 }
 
 void
