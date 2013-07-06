@@ -496,7 +496,7 @@ minisat_convt::get(const expr2tc &expr __attribute__((unused)))
 const std::string
 minisat_convt::solver_text()
 {
-  abort();
+  return "MiniSAT";
 }
 
 tvt
