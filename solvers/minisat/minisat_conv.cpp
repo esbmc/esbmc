@@ -1246,7 +1246,11 @@ minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
 {
   const minisat_array_ast *mast = minisat_array_downcast(a);
 
-  assert(mast->base_array_id < array_valuation.size());
+  if (mast->base_array_id >= array_valuation.size()) {
+    // This is an array that was not previously converted, therefore doesn't
+    // appear in the valuation table. Therefore, all its values are free.
+    return expr2tc();
+  }
 
   // Fetch all the indexes
   const std::set<expr2tc> &indexes = array_indexes[mast->base_array_id];
