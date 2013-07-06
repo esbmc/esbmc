@@ -525,8 +525,7 @@ minisat_convt::get(const expr2tc &expr)
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
-    std::cerr << "Struct get unimplemented" << std::endl;
-    abort();
+    return tuple_get(expr);
   default:
     std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
               << " get" << std::endl;
