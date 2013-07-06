@@ -121,7 +121,7 @@ minisat_convt::land(const bvt &bv)
     return land(bv[0], bv[1]);
 
   unsigned int trues = 0;
-  for (unsigned int i; i < bv.size(); i++) {
+  for (unsigned int i = 0; i < bv.size(); i++) {
     if (bv[i] == const_literal(false))
       return const_literal(false);
     else if (bv[i] == const_literal(true))
@@ -137,7 +137,7 @@ minisat_convt::land(const bvt &bv)
 
   literalt lit = new_variable();
 
-  for (unsigned int i; i < new_bv.size(); i++) {
+  for (unsigned int i = 0; i < new_bv.size(); i++) {
     bvt lits;
     lits.reserve(2);
     lits.push_back(pos(new_bv[i]));
