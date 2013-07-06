@@ -727,9 +727,15 @@ minisat_convt::mk_union_sort(const type2tc &t __attribute__((unused)))
 }
 
 smt_ast*
-minisat_convt::mk_extract(const smt_ast *src __attribute__((unused)), unsigned int high __attribute__((unused)), unsigned int low __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+minisat_convt::mk_extract(const smt_ast *src, unsigned int high,
+                          unsigned int low, const smt_sort *s)
 {
-  abort();
+  const minisat_smt_ast *mast = minisat_ast_downcast(src);
+  minisat_smt_ast *result = new minisat_smt_ast(s);
+  for (unsigned int i = low; i < high; i++)
+    result->bv.push_back(mast->bv[i]);
+
+  return result;
 }
 
 minisat_smt_ast *
