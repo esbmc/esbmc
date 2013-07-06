@@ -486,6 +486,7 @@ minisat_convt::~minisat_convt(void)
 prop_convt::resultt
 minisat_convt::dec_solve()
 {
+  add_array_constraints();
   bool res = solver.solve();
   if (res)
     return prop_convt::P_SATISFIABLE;
@@ -1215,6 +1216,8 @@ expr2tc
 minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
 {
   const minisat_array_ast *mast = minisat_array_downcast(a);
+
+  assert(mast->base_array_id < array_valuation.size());
 
   // Fetch all the indexes
   const std::set<expr2tc> &indexes = array_indexes[mast->base_array_id];
