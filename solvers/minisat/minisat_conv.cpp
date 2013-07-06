@@ -712,10 +712,10 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   case SMT_FUNC_CONCAT:
   {
     result = new minisat_smt_ast(ressort);
-    result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
-                      args[1]->bv.end());
     result->bv.insert(result->bv.begin(), args[0]->bv.begin(),
                       args[0]->bv.end());
+    result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
+                      args[1]->bv.end());
     break;
   }
   default:
