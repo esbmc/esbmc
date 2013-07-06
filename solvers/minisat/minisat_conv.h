@@ -148,6 +148,7 @@ public:
   void gate_or(literalt a, literalt b, literalt o);
   void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
+  void setto(literalt a, bool val);
   virtual void lcnf(const bvt &bv);
 
   void full_adder(const bvt &op0, const bvt &op1, bvt &output,

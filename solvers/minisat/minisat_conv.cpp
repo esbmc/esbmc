@@ -284,8 +284,37 @@ minisat_convt::gate_and(literalt a, literalt b, literalt o)
 }
 
 void
+minisat_convt::setto(literalt a, bool val)
+{
+  bvt b;
+  if (val)
+    b.push_back(a);
+  else
+    b.push_back(lnot(a));
+
+  Minisat::vec<Lit> l;
+  convert(b, l);
+  solver.addClause_(l);
+  return;
+}
+
+void
 minisat_convt::set_equal(literalt a, literalt b)
 {
+  if (a == const_literal(false)) {
+    setto(b, false);
+    return;
+  } else if (b == const_literal(false)) {
+    setto(a, false);
+    return;
+  } else if (a == const_literal(true)) {
+    setto(b, true);
+    return;
+  } else if (b == const_literal(true)) {
+    setto(a, true);
+    return;
+  }
+
   bvt bv;
   bv.resize(2);
   bv[0] = a;
