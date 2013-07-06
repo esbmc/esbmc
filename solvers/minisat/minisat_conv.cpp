@@ -561,8 +561,6 @@ minisat_convt::get_bv(const type2tc &t, const smt_ast *a)
 expr2tc
 minisat_convt::get(const expr2tc &expr)
 {
-  // So, this should always be a symbol.
-  assert(is_symbol2t(expr));
 
   const smt_ast *value = convert_ast(expr);
 
