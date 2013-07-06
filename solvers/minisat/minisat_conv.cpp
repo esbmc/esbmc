@@ -557,6 +557,15 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(limplies(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
+  case SMT_FUNC_ITE:
+  {
+    assert(args[1]->bv.size() == args[2]->bv.size());
+    result = new minisat_smt_ast(ressort);
+    for (unsigned int i = 0; i < args[1]->bv.size(); i++)
+      result->bv.push_back(lselect(args[0]->bv[0], args[1]->bv[i],
+                                   args[2]->bv[i]));
+    break;
+  }
   case SMT_FUNC_BVADD:
   {
     literalt carry_in = const_literal(false);
