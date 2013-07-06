@@ -1266,7 +1266,10 @@ minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
   values.resize(idx_map.size());
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
        it != idx_map.end(); it++) {
-    expr2tc idx = get(it->first);
+    expr2tc idx = it->first;
+    if (!is_constant_expr(idx))
+      idx = get(idx);
+
     const smt_ast *this_value = solver_values[it->second];
 
     // Read the valuation. Guarenteed not to be an array or struct.
