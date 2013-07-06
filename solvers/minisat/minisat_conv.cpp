@@ -537,6 +537,13 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result = mk_ast_equality(args[0], args[1], ressort);
     break;
   }
+  case SMT_FUNC_NOTEQ:
+  {
+    assert(ressort->id == SMT_SORT_BOOL);
+    result = mk_ast_equality(args[0], args[1], ressort);
+    result->bv[0] = lnot(result->bv[0]);
+    break;
+  }
   case SMT_FUNC_NOT:
   {
     literalt res = lnot(args[0]->bv[0]);
