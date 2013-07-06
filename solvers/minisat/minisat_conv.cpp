@@ -506,12 +506,10 @@ minisat_convt::get(const expr2tc &expr)
   {
     // Just read a bool out.
     const minisat_smt_ast *mast = minisat_ast_downcast(value);
-    Minisat::lbool val = solver.modelValue(Minisat::mkLit(mast->bv[0].var_no(),
-                                                          mast->bv[0].sign()));
-    int v = Minisat::toInt(val);
-    if (v == 0)
+    tvt t = l_get(mast->bv[0]);
+    if (t.is_true())
       return true_expr;
-    else if (v == 1)
+    else if (t.is_false())
       return false_expr;
     else
       return expr2tc();
