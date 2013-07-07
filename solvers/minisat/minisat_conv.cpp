@@ -1477,8 +1477,7 @@ minisat_convt::execute_array_trans(
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
-    // between the older version and this version. And finally add ackerman
-    // constraints.
+    // between the older version and this version.
 
     // So, the updated element,
     std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(w.idx);
