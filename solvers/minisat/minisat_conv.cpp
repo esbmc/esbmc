@@ -1136,6 +1136,35 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     barrel_shift(args[0]->bv, shiftt::LEFT, args[1]->bv, result->bv);
     break;
   }
+  case SMT_FUNC_BVSDIV:
+  {
+    bvt rem;
+    result = new minisat_smt_ast(ressort);
+    signed_divider(args[0]->bv, args[1]->bv, result->bv, rem);
+    break;
+  }
+  case SMT_FUNC_BVUDIV:
+  {
+    bvt rem;
+    result = new minisat_smt_ast(ressort);
+    unsigned_divider(args[0]->bv, args[1]->bv, result->bv, rem);
+    break;
+  }
+  case SMT_FUNC_BVSMOD:
+  {
+    bvt res;
+    result = new minisat_smt_ast(ressort);
+    signed_divider(args[0]->bv, args[1]->bv, res, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVUMOD:
+  {
+    bvt res;
+    result = new minisat_smt_ast(ressort);
+    unsigned_divider(args[0]->bv, args[1]->bv, res, result->bv);
+    break;
+  }
+
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
