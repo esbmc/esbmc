@@ -769,10 +769,23 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
     break;
   }
+  case SMT_FUNC_BVSGTE:
+  {
+    // This is the negative of less-than
+    result = mk_func_app(ressort, SMT_FUNC_BVSLT, args, 2);
+    result->bv[0].invert();
+    break;
+  }
   case SMT_FUNC_BVSLTE:
   {
     result = new minisat_smt_ast(ressort);
     result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, true));
+    break;
+  }
+  case SMT_FUNC_BVSLT:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(lt_or_le(false, args[0]->bv, args[1]->bv, true));
     break;
   }
   case SMT_FUNC_BVMUL:
