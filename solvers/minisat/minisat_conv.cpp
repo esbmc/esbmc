@@ -1280,7 +1280,7 @@ minisat_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
   a->bv.resize(w);
   int64_t u = intval.to_long();
   for (unsigned int i = 0; i < w; i++) {
-    int64_t mask = (1 << i);
+    int64_t mask = (1ULL << i);
     bool val = u & mask;
     a->bv[i] = const_literal(val);
   }
