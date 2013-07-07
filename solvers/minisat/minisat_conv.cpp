@@ -628,8 +628,7 @@ minisat_convt::get(const expr2tc &expr)
   }
   case type2t::array_id:
   {
-    const array_type2t &t = to_array_type(expr->type);
-    return array_get(value, t.subtype);
+    return array_get(value, expr->type);
   }
   case type2t::pointer_id:
   case type2t::struct_id:
@@ -1375,8 +1374,31 @@ minisat_convt::convert_array_of(const expr2tc &init_val,
 }
 
 expr2tc
-minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
+minisat_convt::fixed_array_get(const smt_ast *a, const type2tc &type)
 {
+  const minisat_array_ast *mast = minisat_array_downcast(a);
+  const array_type2t &arr = to_array_type(type);
+
+  std::vector<expr2tc> fields;
+  fields.reserve(mast->array_fields.size());
+  for (unsigned int i = 0; i < mast->array_fields.size(); i++) {
+    fields.push_back(get_bv(arr.subtype, mast->array_fields[i]));
+  }
+
+  constant_array2tc result(type, fields);
+  return result;
+}
+
+expr2tc
+minisat_convt::array_get(const smt_ast *a, const type2tc &type)
+{
+  const minisat_smt_sort *s = minisat_sort_downcast(convert_sort(type));
+  if (!s->is_unbounded_array()) {
+    return fixed_array_get(a, type);
+  }
+
+  const array_type2t &t = to_array_type(type);
+
   const minisat_array_ast *mast = minisat_array_downcast(a);
 
   if (mast->base_array_id >= array_valuation.size()) {
@@ -1419,7 +1441,7 @@ minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
     if (this_value->sort->id == SMT_SORT_BOOL)
       real_value = get_bool(this_value);
     else
-      real_value = get_bv(subtype, this_value);
+      real_value = get_bv(t.subtype, this_value);
 
     values[it->second] = std::pair<expr2tc, expr2tc>(idx, real_value);
 
@@ -1435,7 +1457,7 @@ minisat_convt::array_get(const smt_ast *a, const type2tc &subtype)
   if (max_idx > 1024)
     max_idx = 1024;
 
-  type2tc arr_type(new array_type2t(subtype,
+  type2tc arr_type(new array_type2t(t.subtype,
                                 constant_int2tc(index_type2(), BigInt(max_idx)),
                                 false));
   std::vector<expr2tc> array_values;
