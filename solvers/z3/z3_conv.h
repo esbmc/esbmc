@@ -126,10 +126,6 @@ private:
 
   std::string double2string(double d) const;
 
-  std::string get_fixed_point(
-	const unsigned width,
-    std::string value) const;
-
   expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
   void debug_label_formula(std::string name, const z3::expr &formula);
