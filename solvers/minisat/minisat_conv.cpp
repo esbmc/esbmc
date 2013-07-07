@@ -1499,6 +1499,21 @@ minisat_convt::execute_array_trans(
     // Assign in its value.
     dest_data[updated_idx] = updated_value;
 
+    // Check all the values selected out of this instance; if any have the same
+    // index, tie the select's fresh variable to the updated value. If there are
+    // differing index exprs that evaluate to the same location they'll be
+    // caught by code later.
+    const std::list<struct array_select> &sels = array_values[arr][idx+1];
+    for (std::list<struct array_select>::const_iterator it = sels.begin();
+         it != sels.end(); it++) {
+      if (it->idx == update_idx_expr) {
+        const smt_ast *args[2];
+        args[0] = updated_value;
+        args[1] = it->val;
+        assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      }
+    }
+
     // Now look at all those other indexes...
     assert(w.u.w.src_array_update_num < idx+1);
     const std::vector<const smt_ast *> &source_data =
