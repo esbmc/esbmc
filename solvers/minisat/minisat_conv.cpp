@@ -1458,6 +1458,8 @@ minisat_convt::execute_array_trans(
   std::vector<const smt_ast *> &dest_data = data[idx+1];
   collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
   const array_with &w = array_updates[arr][idx+1];
@@ -1475,12 +1477,14 @@ minisat_convt::execute_array_trans(
     const smt_ast *cond = w.u.i.cond;
 
     // Each index value becomes an ITE between each source value.
-    const smt_ast *args[3];
+    const smt_ast *args[3], *eq[2];
     args[0] = cond;
     for (unsigned int i = 0; i < idx_map.size(); i++) {
       args[1] = true_vals[i];
       args[2] = false_vals[i];
-      dest_data[i] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      eq[0] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      eq[1] = dest_data[i];
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
@@ -1490,7 +1494,6 @@ minisat_convt::execute_array_trans(
     std::map<expr2tc, unsigned>::const_iterator it = idx_map.find(w.idx);
     assert(it != idx_map.end());
 
-    const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
     const expr2tc &update_idx_expr = it->first;
     const smt_ast *update_idx_ast = convert_ast(update_idx_expr);
     unsigned int updated_idx = it->second;
