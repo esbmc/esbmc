@@ -723,11 +723,19 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   }
   case SMT_FUNC_ITE:
   {
-    assert(args[1]->bv.size() == args[2]->bv.size());
-    result = new minisat_smt_ast(ressort);
-    for (unsigned int i = 0; i < args[1]->bv.size(); i++)
-      result->bv.push_back(lselect(args[0]->bv[0], args[1]->bv[i],
-                                   args[2]->bv[i]));
+    if (ressort->id == SMT_SORT_ARRAY) {
+      minisat_array_ast *res;
+      res = array_ite(args[0], minisat_array_downcast(_args[1]),
+                         minisat_array_downcast(_args[2]),
+                         minisat_sort_downcast(ressort));
+      result = (minisat_smt_ast*)res;
+    } else {
+      assert(args[1]->bv.size() == args[2]->bv.size());
+      result = new minisat_smt_ast(ressort);
+      for (unsigned int i = 0; i < args[1]->bv.size(); i++)
+        result->bv.push_back(lselect(args[0]->bv[0], args[1]->bv[i],
+                                     args[2]->bv[i]));
+    }
     break;
   }
   case SMT_FUNC_AND:
