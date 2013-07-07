@@ -102,6 +102,10 @@ public:
   struct array_with;
   typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
 
+  typedef enum {
+    LEFT, LRIGHT, ARIGHT
+  } shiftt;
+
   minisat_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
                 const optionst &opts);
   ~minisat_convt();
@@ -164,6 +168,8 @@ public:
   literalt lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
                     bool is_signed);
   void invert(bvt &bv);
+  void barrel_shift(const bvt &op, const shiftt s, const bvt &dist, bvt &out);
+  void shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out);
 
   literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
   void unsigned_multiplier(const bvt &op0, const bvt &bv1, bvt &output);

@@ -550,6 +550,53 @@ minisat_convt::invert(bvt &bv)
     bv[i] = lnot(bv[i]);
 }
 
+void
+minisat_convt::barrel_shift(const bvt &op, const shiftt s, const bvt &dist,
+                            bvt &out)
+{
+  unsigned long d = 1;
+  out = op;
+
+  // FIXME: clip this on oversized shifts?
+  for (unsigned int pos = 0; pos < dist.size(); pos++) {
+    if (dist[pos] != const_literal(false)) {
+      bvt tmp;
+      shift(out, s, d, tmp);
+
+      for (unsigned int i = 0; i < op.size(); i++)
+        out[i] = lselect(dist[pos], tmp[i], out[i]);
+    }
+
+    d <<= 1;
+  }
+}
+
+void
+minisat_convt::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out)
+{
+  out.resize(inp.size());
+
+  for (unsigned int i = 0; i < inp.size(); i++) {
+    literalt l;
+
+    switch (s) {
+    case LEFT:
+      l = ((d <= i) ? inp[i-d] : const_literal(false));
+      break;
+    case ARIGHT:
+      l = ((i+d < inp.size()) ? inp[i+d] : inp[inp.size()-1]);
+      break;
+    case LRIGHT:
+      l = ((i+d < inp.size()) ? inp[i+d] : const_literal(false));
+      break;
+    }
+
+    out[i] = l;
+  }
+
+  return;
+}
+
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
          : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
