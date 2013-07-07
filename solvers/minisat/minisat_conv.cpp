@@ -628,7 +628,10 @@ minisat_convt::get(const expr2tc &expr)
   }
   case type2t::array_id:
   {
-    return array_get(value, expr->type);
+    if (is_tuple_array_ast_type(expr->type))
+      return tuple_array_get(expr);
+    else
+      return array_get(value, expr->type);
   }
   case type2t::pointer_id:
   case type2t::struct_id:

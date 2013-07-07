@@ -729,6 +729,13 @@ smt_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
+expr2tc
+smt_convt::tuple_array_get(const expr2tc &expr __attribute__((unused)))
+{
+  std::cerr << "Tuple array get currently unimplemented" << std::endl;
+  return expr2tc();
+}
+
 const smt_ast *
 smt_convt::array_create(const expr2tc &expr)
 {
