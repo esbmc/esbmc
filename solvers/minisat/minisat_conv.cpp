@@ -508,6 +508,7 @@ minisat_convt::carry_out(const bvt &a, const bvt &b, literalt c)
 literalt
 minisat_convt::equal(const bvt &op0, const bvt &op1)
 {
+  assert(op0.size() == op1.size());
   bvt tmp;
   tmp.reserve(op0.size());
 
