@@ -610,6 +610,7 @@ minisat_convt::get(const expr2tc &expr)
   }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+  case type2t::fixedbv_id:
   {
     return get_bv(expr->type, value);
   }
