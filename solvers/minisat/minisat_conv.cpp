@@ -520,6 +520,183 @@ minisat_convt::incrementer(const bvt &inp, const literalt &carryin,
   return;
 }
 
+void
+minisat_convt::signed_divider(const bvt &op0, const bvt &op1, bvt &res,
+                              bvt &rem)
+{
+  assert(op0.size() == op1.size());
+
+  bvt _op0;
+  bvt _op1;
+  _op0.resize(op0.size());
+  _op1.resize(op1.size());
+
+  literalt sign0 = op0[op0.size() - 1];
+  literalt sign1 = op1[op1.size() - 1];
+
+  bvt neg0;
+  bvt neg1;
+  negate(op0, neg0);
+  negate(op1, neg1);
+
+  for (unsigned int i = 0; i < op0.size(); i++)
+    _op0[i] = lselect(sign0, neg0[i], op0[i]);
+
+  for (unsigned int i = 0; i < op1.size(); i++)
+    _op1[i] = lselect(sign1, neg1[i], op1[i]);
+
+  unsigned_divider(_op0, _op1, res, rem);
+
+  bvt neg_res;
+  bvt neg_rem;
+  negate(res, neg_res);
+  negate(rem, neg_rem);
+
+  literalt result_sign = lxor(sign0, sign1);
+
+  for (unsigned int i = 0; i < res.size(); i++)
+    res[i] = lselect(result_sign, neg_res[i], res[i]);
+
+  for (unsigned int i = 0; i < rem.size(); i++)
+    rem[i] = lselect(result_sign, neg_rem[i], rem[i]);
+
+  return;
+}
+
+void
+minisat_convt::unsigned_divider(const bvt &op0, const bvt &op1, bvt &res,
+                                bvt &rem)
+{
+  assert(op0.size() == op1.size());
+  unsigned int width = op0.size();
+  res.resize(width);
+  rem.resize(width);
+
+  literalt is_not_zero = lor(op1);
+
+  for (unsigned int i = 0; i < width; i++) {
+    res[i] = new_variable();
+    rem[i] = new_variable();
+  }
+
+  bvt product;
+  unsigned_multiplier_no_overflow(res, op1, product);
+
+  // "res*op1 + rem = op0"
+
+  bvt sum;
+  adder_no_overflow(product, rem, sum);
+
+  literalt is_equal = equal(sum, op0);
+
+  assert_lit(limplies(is_not_zero, is_equal));
+
+  // "op1 != 0 => rem < op1"
+
+  assert_lit(limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
+
+  // "op1 != 0 => res <= op0"
+
+  assert_lit(limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
+}
+
+void
+minisat_convt::unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1,
+                                               bvt &res)
+{
+  assert(op0.size() == op1.size());
+  bvt _op0 = op0, _op1 = op1;
+
+  if (is_constant(_op1))
+    std::swap(_op0, _op1);
+
+  res.resize(op0.size());
+
+  for (unsigned int i = 0; i < res.size(); i++)
+    res[i] = const_literal(false);
+
+  for (unsigned int sum = 0; sum < op0.size(); sum++) {
+    if (op0[sum] != const_literal(false)) {
+      bvt tmpop;
+
+      tmpop.reserve(res.size());
+
+      for (unsigned int idx = 0; idx < sum; idx++)
+        tmpop.push_back(const_literal(false));
+
+      for (unsigned int idx = sum; idx < res.size(); idx++)
+        tmpop.push_back(land(op1[idx-sum], op0[sum]));
+
+      bvt copy = res;
+      adder_no_overflow(copy, tmpop, res);
+
+      for (unsigned int idx = op1.size() - sum; idx < op1.size(); idx++) {
+        literalt tmp = land(op1[idx], op0[sum]);
+        tmp.invert();
+        assert_lit(tmp);
+      }
+    }
+  }
+}
+
+void
+minisat_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
+                                 bool subtract, bool is_signed)
+{
+  assert(op0.size() == op1.size());
+  unsigned int width = op0.size();;
+  bvt tmp_op1 = op1;
+  if (subtract)
+    negate(op1, tmp_op1);
+
+  if (is_signed) {
+    literalt old_sign = op0[width-1];
+    literalt sign_the_same = lequal(op0[width-1], tmp_op1[width-1]);
+    literalt carry;
+    full_adder(op0, tmp_op1, res, const_literal(subtract), carry);
+    literalt stop_overflow = land(sign_the_same, lxor(op0[width-1], old_sign));
+    stop_overflow.invert();
+    assert_lit(stop_overflow);
+  } else {
+    literalt carry_out;
+    full_adder(op0, tmp_op1, res, const_literal(subtract), carry_out);
+    if (subtract) {
+      assert_lit(carry_out);
+    } else {
+      carry_out.invert();
+      assert_lit(carry_out);
+    }
+  }
+
+  return;
+}
+
+void
+minisat_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
+{
+  res.resize(op0.size());
+
+  literalt carry_out = const_literal(false);
+  for (unsigned int i = 0; i < op0.size(); i++) {
+    literalt op0_bit = op0[i];
+
+    res[i] = lxor(lxor(op0_bit, op1[i]), carry_out);
+    carry_out = carry(op0_bit, op1[i], carry_out);
+  }
+
+  carry_out.invert();
+  assert_lit(carry_out);
+}
+
+bool
+minisat_convt::is_constant(const bvt &bv)
+{
+  for (unsigned int i = 0; i < bv.size(); i++)
+    if (!bv[i].is_constant())
+      return false;
+  return true;
+}
+
 literalt
 minisat_convt::carry_out(const bvt &a, const bvt &b, literalt c)
 {

@@ -181,6 +181,14 @@ public:
   void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
                    bvt &oup);
 
+  void signed_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
+  void unsigned_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
+  void unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1, bvt &r);
+  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
+                         bool subtract, bool is_signed);
+  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res);
+  bool is_constant(const bvt &bv);
+
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
