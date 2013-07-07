@@ -727,6 +727,16 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     full_adder(args[0]->bv, args[1]->bv, result->bv, carry_in, carry_out);
     break;
   }
+  case SMT_FUNC_BVSUB:
+  {
+    literalt carry_in = const_literal(true);
+    literalt carry_out;
+    result = new minisat_smt_ast(ressort);
+    bvt op1 = args[1]->bv;
+    invert(op1);
+    full_adder(args[0]->bv, op1, result->bv, carry_in, carry_out);
+    break;
+  }
   case SMT_FUNC_BVUGT:
   {
     // Same as LT flipped
