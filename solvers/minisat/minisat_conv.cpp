@@ -1164,7 +1164,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     unsigned_divider(args[0]->bv, args[1]->bv, res, result->bv);
     break;
   }
-
+  case SMT_FUNC_BVNEG:
+  {
+    result = new minisat_smt_ast(ressort);
+    negate(args[0]->bv, result->bv);
+    break;
+  }
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
