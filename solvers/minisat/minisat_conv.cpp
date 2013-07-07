@@ -157,6 +157,18 @@ minisat_convt::land(const bvt &bv)
   return lit;
 }
 
+
+literalt
+minisat_convt::land(const bvt &bv0, const bvt &bv1)
+{
+  bvt lits;
+
+  for (unsigned int i = 0; i < bv0.size(); i++)
+    lits.push_back(land(bv0[i], bv1[i]));
+
+  return land(lits);
+}
+
 literalt
 minisat_convt::lor(const bvt &bv)
 {
@@ -774,6 +786,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
                       args[0]->bv.end());
     result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
                       args[1]->bv.end());
+    break;
+  }
+  case SMT_FUNC_BVAND:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(land(args[0]->bv, args[1]->bv));
     break;
   }
   default:
