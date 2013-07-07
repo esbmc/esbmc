@@ -754,6 +754,14 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     // Same as LT flipped
     std::swap(args[0], args[1]);
     result = mk_func_app(ressort, SMT_FUNC_BVULT, args, 2);
+    break;
+  }
+  case SMT_FUNC_BVUGTE:
+  {
+    // This is the negative of less-than
+    result = mk_func_app(ressort, SMT_FUNC_BVULT, args, 2);
+    result->bv[0].invert();
+    break;
   }
   case SMT_FUNC_BVULT:
   {
