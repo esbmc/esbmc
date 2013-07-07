@@ -1266,7 +1266,8 @@ minisat_convt::convert_array_of(const expr2tc &init_val,
 
   if (arr_sort->is_unbounded_array()) {
     delete mast;
-    mast = minisat_array_downcast(fresh_array(arr_sort, "array_of_unbounded"));
+    std::string name = mk_fresh_name("array_of_unbounded::");
+    mast = minisat_array_downcast(fresh_array(arr_sort, name));
     array_of_vals.insert(std::pair<unsigned, const smt_ast *>
                                   (mast->base_array_id, init));
   } else {
