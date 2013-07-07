@@ -773,6 +773,15 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   return result;
 }
 
+const smt_ast *
+minisat_convt::lit_to_ast(const literalt &l)
+{
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  minisat_smt_ast *a = new minisat_smt_ast(s);
+  a->bv.push_back(l);
+  return a;
+}
+
 smt_sort*
 minisat_convt::mk_sort(smt_sort_kind k, ...)
 {

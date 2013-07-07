@@ -130,6 +130,8 @@ public:
   virtual const smt_ast *convert_array_equality(const expr2tc &a,
                                                 const expr2tc &b);
 
+  virtual const smt_ast *lit_to_ast(const literalt &l);
+
   minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
                                    const minisat_smt_ast *b,
                                    const smt_sort *ressort);
