@@ -153,6 +153,7 @@ public:
   literalt land(const bvt &bv);
   void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
   literalt lor(const bvt &bv);
+  void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
   void gate_xor(literalt a, literalt b, literalt o);
   void gate_or(literalt a, literalt b, literalt o);
   void gate_and(literalt a, literalt b, literalt o);

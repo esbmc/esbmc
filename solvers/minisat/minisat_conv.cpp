@@ -170,6 +170,19 @@ minisat_convt::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
   return;
 }
 
+void
+minisat_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
+{
+  assert(bv0.size() == bv1.size());
+  output.clear();
+  output.reserve(bv0.size());
+
+  for (unsigned int i = 0; i < bv0.size(); i++)
+    output.push_back(lor(bv0[i], bv1[i]));
+
+  return;
+}
+
 literalt
 minisat_convt::lor(const bvt &bv)
 {
@@ -890,6 +903,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   {
     result = new minisat_smt_ast(ressort);
     bvand(args[0]->bv, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVOR:
+  {
+    result = new minisat_smt_ast(ressort);
+    bvor(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVASHR:
