@@ -1305,7 +1305,7 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
 
   args[0] = true_bit;
   args[1] = is_neg_bit;
-  const smt_ast *is_neg = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
+  const smt_ast *is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
   // final switch
   args[0] = is_neg;
