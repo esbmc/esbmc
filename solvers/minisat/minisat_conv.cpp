@@ -542,6 +542,7 @@ minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
            array_indexes(), array_values(), array_updates(),
            solver(), options(_opts)
 {
+  smt_post_init();
 }
 
 minisat_convt::~minisat_convt(void)
