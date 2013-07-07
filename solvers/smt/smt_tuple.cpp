@@ -530,7 +530,6 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   // Implementation of tuple array update: for each member take its array
   // variable from the source (in ta), then update it with the relevant member
   // of tv at index idx. Then assign that value into result.
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
@@ -557,16 +556,16 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       std::string resname = result->name +
                             struct_type.member_names[i].as_string();
       type2tc this_arr_type(new array_type2t(*it, arr_width, false));
-      const smt_ast *args[3];
-      const smt_sort *arrsort = convert_sort(this_arr_type);
       // Take the source array variable and update it into an ast.
       symbol2tc arrsym(this_arr_type, arrname);
       expr2tc tmp_idx = fix_array_idx(idx, this_arr_type);
       symbol2tc valsym(*it, valname);
-      args[0] = mk_store(arrsym, tmp_idx, valsym, arrsort);
+      with2tc store(this_arr_type, arrsym, tmp_idx, valsym);
+
       // Now assign that ast into the result tuple array.
-      args[1] = mk_smt_symbol(resname, arrsort);
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      symbol2tc ressym(this_arr_type, irep_idt(resname));
+      const smt_ast *eq = convert_array_equality(ressym, store);
+      assert_lit(mk_lit(eq));
     }
 
     i++;
@@ -583,19 +582,18 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
-  const smt_sort *idx_sort = make_array_domain_sort(array_type);
-  return tuple_array_equality_rec(ta, tb, idx_sort, array_type.subtype);
+  return tuple_array_equality_rec(ta, tb, array_type.array_size,
+                                  array_type.subtype);
 }
 
 const smt_ast *
 smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
                                     const tuple_smt_ast *b,
-                                    const smt_sort *idx_sort,
+                                    const expr2tc &arr_width,
                                     const type2tc &subtype)
 {
   // Same as tuple equality rec, but with arrays instead of their normal types.
   bvt eqs;
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
@@ -607,17 +605,17 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
       const tuple_smt_ast *new1 = new tuple_smt_ast(tmp, name1);
       const tuple_smt_ast *new2 = new tuple_smt_ast(tmp, name2);
-      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, idx_sort,*it)));
+      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, arr_width,
+                                                    *it)));
     } else {
       // Normal equality between members (which are in fact arrays).
       std::string name1 = a->name + struct_type.member_names[i].as_string();
       std::string name2 = b->name + struct_type.member_names[i].as_string();
-      const smt_ast *args[2];
-      const smt_sort *elem_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, idx_sort, elem_sort);
-      args[0] = mk_smt_symbol(name1, arrsort);
-      args[1] = mk_smt_symbol(name2, arrsort);
-      eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      type2tc arrtype(new array_type2t(*it, arr_width, false));
+      symbol2tc arr1(arrtype, irep_idt(name1));
+      symbol2tc arr2(arrtype, irep_idt(name2));
+      const smt_ast *eq = convert_array_equality(arr1, arr2);
+      eqs.push_back(mk_lit(eq));
     }
 
     i++;
