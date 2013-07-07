@@ -500,8 +500,11 @@ void
 minisat_convt::negate(const bvt &inp, bvt &oup)
 {
   oup.resize(inp.size());
+  bvt inv = inp;
+  invert(inv);
+
   literalt dummy;
-  incrementer(inp, const_literal(true), dummy, oup);
+  incrementer(inv, const_literal(true), dummy, oup);
   return;
 }
 
