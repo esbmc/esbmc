@@ -1536,7 +1536,12 @@ minisat_convt::execute_array_trans(
       args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       args[1] = updated_value;
       args[2] = source_data[i];
-      dest_data[i] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      args[0] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      args[1] = dest_data[i];
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      // The latter part of this could be replaced with more complex logic,
+      // that only asserts an equality between selected values, and just stores
+      // the result of the ITE for all other values. FIXME: try this.
     }
   }
 }
