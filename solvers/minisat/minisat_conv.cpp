@@ -803,6 +803,13 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, true));
     break;
   }
+  case SMT_FUNC_BVSGT:
+  {
+    // Same as LT flipped
+    std::swap(args[0], args[1]);
+    result = mk_func_app(ressort, SMT_FUNC_BVSLT, args, 2);
+    break;
+  }
   case SMT_FUNC_BVSLT:
   {
     result = new minisat_smt_ast(ressort);
