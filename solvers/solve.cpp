@@ -120,7 +120,7 @@ create_metasmt_stp_solver(bool is_cpp __attribute__((unused)),
 
 static const unsigned int num_of_solvers = 6;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minsat", "metasmt", "boolector", "sword", "stp" };
+{ "z3", "smtlib", "minisat", "metasmt", "boolector", "sword", "stp" };
 
 static prop_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
