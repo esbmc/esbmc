@@ -892,6 +892,24 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     bvand(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
+  case SMT_FUNC_BVASHR:
+  {
+    result = new minisat_smt_ast(ressort);
+    barrel_shift(args[0]->bv, shiftt::ARIGHT, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVLSHR:
+  {
+    result = new minisat_smt_ast(ressort);
+    barrel_shift(args[0]->bv, shiftt::LRIGHT, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVSHL:
+  {
+    result = new minisat_smt_ast(ressort);
+    barrel_shift(args[0]->bv, shiftt::LEFT, args[1]->bv, result->bv);
+    break;
+  }
   default:
     std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
               << std::endl;
