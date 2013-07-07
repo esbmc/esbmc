@@ -861,6 +861,22 @@ minisat_convt::get_bv(const type2tc &t, const smt_ast *a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
+void
+minisat_convt::dump_bv(const bvt &bv) const
+{
+  for (unsigned int i = 0; i < bv.size(); i++) {
+    if (bv[i] == const_literal(false))
+      std::cerr << "0";
+    else if (bv[i] == const_literal(true))
+      std::cerr << "1";
+    else
+      std::cerr << "?";
+  }
+
+  std::cerr << " " << bv.size() << std::endl;
+  return;
+}
+
 expr2tc
 minisat_convt::get(const expr2tc &expr)
 {
