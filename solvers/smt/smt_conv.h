@@ -356,6 +356,8 @@ public:
   const smt_ast *pointer_array_of(const expr2tc &init_val,
                                   unsigned long array_width);
 
+  std::string get_fixed_point(const unsigned width, std::string value) const;
+
   // Types
 
   // Types for union map.
