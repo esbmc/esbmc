@@ -192,9 +192,6 @@ smt_convt::process_clause(const bvt &bv, bvt &dest)
   {
     literalt l = *it;
 
-    // we never use index 0
-    assert(l.var_no() != 0);
-
     if (l.is_true())
       return true;  // clause satisfied
 
