@@ -1037,6 +1037,13 @@ minisat_convt::fresh_array(const minisat_smt_sort *ms, const std::string &name)
     std::vector<struct array_with> tmp3;
     array_updates.push_back(tmp3);
 
+    // Aimless piece of data, just to keep indexes in iarray_updates and
+    // array_values in sync.
+    struct array_with w;
+    w.is_ite = false;
+    w.idx = expr2tc();
+    array_updates[mast->base_array_id].push_back(w);
+
     array_subtypes.push_back(ms->arrrange_width);
 
     return mast;
@@ -1453,7 +1460,7 @@ minisat_convt::execute_array_trans(
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
-  const array_with &w = array_updates[arr][idx];
+  const array_with &w = array_updates[arr][idx+1];
   if (w.is_ite) {
     // Turn every index element into an ITE representing this operation. Every
     // single element is addressed and updated; no further constraints are
