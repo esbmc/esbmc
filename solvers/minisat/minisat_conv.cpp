@@ -969,7 +969,16 @@ minisat_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   // Only support a scenario where the lhs (a) is a symbol.
   assert(is_symbol2t(a) && "Malformed minisat array equality");
 
-  const minisat_array_ast *value = minisat_array_downcast(convert_ast(b));
+  const minisat_array_ast *value;
+
+  // We want everything to go through the expression cache. Except when creating
+  // new arrays with either constant_array_of or constant_array.
+  if (is_constant_expr(b)) {
+    value = minisat_array_downcast(array_create(b));
+  } else {
+    value = minisat_array_downcast(convert_ast(b));
+  }
+
   const symbol2t &sym = to_symbol2t(a);
   std::string symname = sym.get_symbol_name();
 
