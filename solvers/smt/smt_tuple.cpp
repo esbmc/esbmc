@@ -196,6 +196,23 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   }
 }
 
+expr2tc
+smt_convt::tuple_project_sym(const smt_ast *a, unsigned int i)
+{
+  // Like tuple project, but only return a symbol expr, not the converted
+  // value. Only for terminal elements.
+  const tuple_smt_ast *ta = to_tuple_ast(a);
+  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+
+  assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
+  const type2tc &fieldtype = data.members[i];
+  const std::string &fieldname = data.member_names[i].as_string();
+  std::string sym_name = ta->name + fieldname;
+  return symbol2tc(fieldtype, sym_name);
+}
+
 const smt_ast *
 smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 {
@@ -224,9 +241,15 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
       // tuple project and assign it in.
       const smt_sort *tmp = convert_sort(*it);
       const smt_ast *thefield = tuple_project(result, tmp, j);
+
       if (is_tuple_ast_type(*it)) {
         // If it's of tuple type though, we need to generate a tuple equality.
         eqs.push_back(mk_lit(tuple_equality(thefield, v)));
+      } else if (is_tuple_array_ast_type(*it)) {
+        eqs.push_back(mk_lit(tuple_array_equality(thefield, v)));
+      } else if (is_array_type(*it)) {
+        expr2tc update_val_expr = tuple_project_sym(result, j);
+        eqs.push_back(mk_lit(convert_array_equality(update_val_expr, ve)));
       } else {
         args[0] = thefield;
         args[1] = v;

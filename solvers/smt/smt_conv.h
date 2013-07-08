@@ -320,6 +320,7 @@ public:
                            const tuple_smt_ast *res);
   expr2tc tuple_get(const expr2tc &expr);
   expr2tc tuple_array_get(const expr2tc &expr);
+  expr2tc tuple_project_sym(const smt_ast *a, unsigned int f);
 
   void init_addr_space_array(void);
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
