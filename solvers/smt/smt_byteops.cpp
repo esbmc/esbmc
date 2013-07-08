@@ -129,7 +129,8 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     }
 
     if (has_field)
-      return tuple_update(tuple, intref.constant_value.to_long(), value);
+      return tuple_update(tuple, intref.constant_value.to_long(),
+                          data.update_value);
     else
       return tuple;
   } else if (is_signedbv_type(data.source_value->type)) {

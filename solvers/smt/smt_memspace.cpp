@@ -83,14 +83,13 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         pointer_offset2tc offs1(machine_ptr, side1);
         pointer_offset2tc offs2(machine_ptr, side2);
         sub2tc the_ptr_offs(offs1->type, offs1, offs2);
-        const smt_ast *ptr_offs_ast = convert_ast(the_ptr_offs);
 
         if (ret_is_ptr) {
           // Update field in tuple.
           const smt_ast *the_ptr = convert_ast(side1);
-          return tuple_update(the_ptr, 1, ptr_offs_ast);
+          return tuple_update(the_ptr, 1, the_ptr_offs);
         } else {
-          return ptr_offs_ast;
+          return convert_ast(the_ptr_offs);
         }
       } else {
         std::cerr << "Pointer arithmetic with two pointer operands"
@@ -152,12 +151,11 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       }
 
       // Voila, we have our pointer arithmatic
-      const smt_ast *a = convert_ast(newexpr);
       const smt_ast *the_ptr = convert_ast(ptr_op);
 
       // That calculated the offset; update field in pointer.
-      return tuple_update(the_ptr, 1, a);
-      }
+      return tuple_update(the_ptr, 1, newexpr);
+    }
   }
 
   std::cerr << "Fell through convert_pointer_logic" << std::endl;
@@ -363,8 +361,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
     // Update pointer offset to offset to that field.
     constant_int2tc offset(machine_int, BigInt(offs));
-    const smt_ast *o = convert_ast(offset);
-    return tuple_update(a, 1, o);
+    return tuple_update(a, 1, offset);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 

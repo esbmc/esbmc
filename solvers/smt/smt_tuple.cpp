@@ -197,7 +197,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 }
 
 const smt_ast *
-smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
+smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 {
   // Take the tuple_smt_ast a and update the ith field with the value v. As
   // ever, we do this by creating a new tuple. The non-ith values are just
@@ -205,6 +205,8 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const smt_ast *v)
   const smt_ast *args[2];
   bvt eqs;
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+
+  const smt_ast *v = convert_ast(ve);
 
   // Create a fresh tuple to store the result in
   std::string name = mk_fresh_name("tuple_update::");
