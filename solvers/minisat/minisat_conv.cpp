@@ -1939,7 +1939,7 @@ minisat_convt::execute_array_trans(
       args[2] = false_vals[i];
       eq[0] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
       eq[1] = dest_data[i];
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2)));
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
