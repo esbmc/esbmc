@@ -1605,6 +1605,10 @@ minisat_convt::mk_unbounded_select(const minisat_array_ast *ma,
   // Record this index
   array_values[ma->base_array_id][ma->array_update_num].push_back(sel);
 
+  // Convert index; it might trigger an array_of, or something else, which
+  // fiddles with other arrays.
+  convert_ast(real_idx);
+
   return a;
 }
 
@@ -1628,6 +1632,10 @@ minisat_convt::mk_unbounded_store(const minisat_array_ast *ma,
   w.u.w.src_array_update_num = ma->array_update_num;
   w.u.w.val = value;
   array_updates[ma->base_array_id].push_back(w);
+
+  // Convert index; it might trigger an array_of, or something else, which
+  // fiddles with other arrays.
+  convert_ast(idx);
 
   // Also file a new select record for this point in time.
   std::list<struct array_select> tmp;
