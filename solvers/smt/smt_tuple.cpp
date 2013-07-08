@@ -267,6 +267,10 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
         const smt_ast *field1 = tuple_project(ta, tmp, j);
         const smt_ast *field2 = tuple_project(result, tmp, j);
         eqs.push_back(mk_lit(tuple_equality(field1, field2)));
+      } else if (is_array_type(*it)) {
+        expr2tc side1 = tuple_project_sym(result, j);
+        expr2tc side2 = tuple_project_sym(ta, j);
+        eqs.push_back(mk_lit(convert_array_equality(side1, side2)));
       } else {
         const smt_sort *tmp = convert_sort(*it);
         args[0] = tuple_project(ta, tmp, j);
