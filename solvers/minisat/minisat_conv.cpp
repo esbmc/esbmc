@@ -1878,6 +1878,8 @@ minisat_convt::add_array_constraints(unsigned int arr)
        it != indexes.end(); it++)
     idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
 
+  assert(idx_map.size() == indexes.size());
+
   // Initialize the first set of elements.
   std::map<unsigned, const smt_ast*>::const_iterator it =
     array_of_vals.find(arr);
