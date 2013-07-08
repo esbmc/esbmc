@@ -184,6 +184,18 @@ minisat_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
 }
 
 void
+minisat_convt::bvxor(const bvt &bv0, const bvt &bv1, bvt &output)
+{
+  output.clear();
+  output.reserve(bv0.size());
+
+  for (unsigned int i = 0; i < bv0.size(); i++)
+    output.push_back(lxor(bv0[0], bv1[1]));
+
+  return;
+}
+
+void
 minisat_convt::bvnot(const bvt &bv0, bvt &output)
 {
   output.clear();
@@ -1123,6 +1135,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   {
     result = new minisat_smt_ast(ressort);
     bvand(args[0]->bv, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVXOR:
+  {
+    result = new minisat_smt_ast(ressort);
+    bvxor(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVOR:
