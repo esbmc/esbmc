@@ -314,6 +314,10 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
         l = mk_lit(tuple_array_equality(side1, side2));
 
       lits.push_back(l);
+    } else if (is_array_type(*it)) {
+      expr2tc side1 = tuple_project_sym(a, i);
+      expr2tc side2 = tuple_project_sym(b, i);
+      lits.push_back(mk_lit(convert_array_equality(side1, side2)));
     } else {
       // This is a normal piece of data, project it to get a normal smt symbol
       // and encode an equality between the two values.
