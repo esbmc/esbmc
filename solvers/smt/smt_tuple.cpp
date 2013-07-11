@@ -393,8 +393,6 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
   const tuple_smt_ast *true_val = to_tuple_ast(convert_ast(true_val_exp));
   const tuple_smt_ast *false_val = to_tuple_ast(convert_ast(false_val_exp));
 
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*result->type.get());
 
@@ -418,15 +416,12 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
     } else {
       // Normal field: create symbols for the member in each of the arguments,
       // then create an ite between them, and assert it.
-      const smt_ast *args[3], *eqargs[2];
-      const smt_sort *sort = convert_sort(*it);
-      const smt_ast *result_ast = convert_ast(result);
-      args[0] = convert_ast(cond_exp);
-      args[1] = tuple_project(true_val, sort, i);
-      args[2] = tuple_project(false_val, sort, i);
-      eqargs[0] = mk_func_app(sort, SMT_FUNC_ITE, args, 3);
-      eqargs[1] = tuple_project(result_ast, sort, i);
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, eqargs, 2)));
+      expr2tc trueitem = tuple_project_sym(true_val, i);
+      expr2tc falseitem = tuple_project_sym(false_val, i);
+      if2tc ite(get_bool_type(), cond_exp, trueitem, falseitem);
+      expr2tc result = tuple_project_sym(result, i);
+      equality2tc eq(ite, result);
+      assert_lit(mk_lit(convert_ast(eq)));
     }
 
     i++;
