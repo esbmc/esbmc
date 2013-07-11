@@ -184,10 +184,13 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     obj_num = pointer_logic.back().add_object(expr);
 
   s = convert_sort(pointer_struct);
-  if (!tuple_support)
-    a = new tuple_smt_ast(s, symbol);
-  else
+  if (!tuple_support) {
+    type2tc t(new pointer_type2t(get_empty_type()));
+    symbol2tc sym(t, symbol);
+    a = mk_tuple_symbol(sym);
+  } else {
     a = mk_smt_symbol(symbol, s);
+  }
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out
