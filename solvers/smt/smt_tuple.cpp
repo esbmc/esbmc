@@ -406,8 +406,7 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
   const tuple_smt_ast *true_val = to_tuple_ast(convert_ast(true_val_exp));
   const tuple_smt_ast *false_val = to_tuple_ast(convert_ast(false_val_exp));
 
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*result->type.get());
+  const struct_union_data &data = get_type_def(result->type);
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
@@ -756,8 +755,7 @@ smt_convt::tuple_get(const expr2tc &expr)
 
   const type2tc &thetype = (is_structure_type(expr->type))
     ? expr->type : pointer_struct;
-  const struct_union_data &strct =
-    static_cast<const struct_union_data &>(*thetype.get());
+  const struct_union_data &strct = get_type_def(thetype);
 
   // XXX - what's the correct type to return here.
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
