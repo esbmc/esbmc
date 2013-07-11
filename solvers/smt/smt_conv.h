@@ -349,6 +349,7 @@ public:
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
   expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
   type2tc flatten_array_type(const type2tc &type);
+  expr2tc array_domain_to_width(const type2tc &type);
 
   expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);

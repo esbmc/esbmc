@@ -697,7 +697,6 @@ smt_convt::tuple_array_ite_rec(const expr2tc &tv, const expr2tc &fv,
   // Almost the same as tuple_ite, but with array types. Iterate over each
   // member of the type we're dealing with, projecting the members out then
   // computing an ite over each of them, storing into res.
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
   const array_type2t &array_type = to_array_type(type);
   const struct_union_data &struct_type = get_type_def(array_type.subtype);
 
@@ -719,19 +718,14 @@ smt_convt::tuple_array_ite_rec(const expr2tc &tv, const expr2tc &fv,
         tuple_array_ite_rec(trueval, falseval, cond, *it, dom_sort, resval);
       }
     } else {
+      type2tc arrtype(new array_type2t(*it, array_domain_to_width(dom_sort),
+                                       false));
       expr2tc resval = tuple_project_sym(res, i);
       expr2tc trueval = tuple_project_sym(tv, i);
       expr2tc falseval = tuple_project_sym(fv, i);
-      const smt_ast *args[3];
-      const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, convert_sort(dom_sort),
-                                        idx_sort);
-      args[0] = convert_ast(cond);
-      args[1] = convert_ast(trueval);
-      args[2] = convert_ast(falseval);
-      args[0] = mk_func_app(arrsort, SMT_FUNC_ITE, args, 3);
-      args[1] = convert_ast(resval);
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      if2tc ite(arrtype, cond, trueval, falseval);
+      equality2tc eq(resval, ite);
+      assert_lit(mk_lit(convert_ast(eq)));
     }
 
     i++;

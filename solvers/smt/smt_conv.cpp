@@ -1468,6 +1468,13 @@ smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
   }
 }
 
+expr2tc
+smt_convt::array_domain_to_width(const type2tc &type)
+{
+  const unsignedbv_type2t &uint = to_unsignedbv_type(type);
+  uint64_t sz = 1ULL << uint.width;
+  return constant_int2tc(index_type2(), BigInt(sz));
+}
 
 expr2tc
 smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
