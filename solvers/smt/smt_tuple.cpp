@@ -90,7 +90,7 @@ smt_convt::tuple_create(const expr2tc &structdef)
 smt_ast *
 smt_convt::tuple_fresh(const smt_sort *s)
 {
-  std::string name = mk_fresh_name("tuple_fresh::");
+  std::string name = mk_fresh_name("tuple_fresh::") + ".";
 
   smt_ast *a = mk_smt_symbol(name, s);
   a = a;
@@ -267,7 +267,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
   const smt_ast *v = convert_ast(ve);
 
   // Create a fresh tuple to store the result in
-  std::string name = mk_fresh_name("tuple_update::");
+  std::string name = mk_fresh_name("tuple_update::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
@@ -392,7 +392,7 @@ smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
   // into, then pass everything down to tuple_ite_rec.
 
   // Create a fresh tuple to store the result in
-  std::string name = mk_fresh_name("tuple_ite::");
+  std::string name = mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(type, irep_idt(name));
 
   tuple_ite_rec(result, cond,
@@ -460,7 +460,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
   const smt_sort *sort = convert_sort(array_type);
-  std::string name = mk_fresh_name("tuple_array_create::");
+  std::string name = mk_fresh_name("tuple_array_create::") + ".";
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
 
   // Check size
@@ -510,7 +510,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
-  std::string name = mk_fresh_name("tuple_array_select::");
+  std::string name = mk_fresh_name("tuple_array_select::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
   const array_type2t &array_type = to_array_type(ts->thetype);
@@ -578,7 +578,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
   const tuple_smt_ast *tv = to_tuple_ast(val);
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
 
-  std::string name = mk_fresh_name("tuple_array_update[]::");
+  std::string name = mk_fresh_name("tuple_array_update[]::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
   const array_type2t &arrtype = to_array_type(ts->thetype);
@@ -699,7 +699,7 @@ smt_convt::tuple_array_ite(const expr2tc &cond, const expr2tc &trueval,
 {
   // Same deal as tuple_ite, but with array types. In this function we create
   // the fresh tuple array in which to store all the results into.
-  std::string name = mk_fresh_name("tuple_array_ite[]::");
+  std::string name = mk_fresh_name("tuple_array_ite[]::") + ".";
   symbol2tc result(trueval->type, name);
 
   const array_type2t &array_type = to_array_type(trueval->type);
@@ -798,7 +798,7 @@ smt_convt::array_create(const expr2tc &expr)
   // don't need funky handling, but we need to create a fresh new symbol and
   // repeatedly store the desired data into it, to create an SMT array
   // representing the expression we're converting.
-  std::string name = mk_fresh_name("array_create::");
+  std::string name = mk_fresh_name("array_create::") + ".";
   expr2tc newsym = symbol2tc(expr->type, name);
 
   // Check size
@@ -903,7 +903,7 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
   constant_int2tc arrsize(index_type2(), BigInt(array_size));
   type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
   const smt_sort *sort = convert_sort(arrtype);
-  std::string name = mk_fresh_name("tuple_array_of::");
+  std::string name = mk_fresh_name("tuple_array_of::") + ".";
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
   const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
