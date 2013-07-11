@@ -162,7 +162,14 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
   // That's done by creating the prefix for the names of all the contained
   // variables, and storing it.
   const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name() + ".";
+  std::string name = sym.get_symbol_name();
+
+  // We put a '.' on the end of all symbols to deliminate the rest of the
+  // name. However, these names may become expressions again, then be converted
+  // again, thus accumulating dots. So don't.
+  if (name[name.size() - 1] != '.')
+    name += ".";
+
   const smt_sort *sort = convert_sort(sym.type);
   return new tuple_smt_ast(sort, name);
 }
