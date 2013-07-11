@@ -197,7 +197,7 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
 }
 
 expr2tc
-smt_convt::tuple_project_sym(const smt_ast *a, unsigned int i)
+smt_convt::tuple_project_sym(const smt_ast *a, unsigned int i, bool dot)
 {
   // Like tuple project, but only return a symbol expr, not the converted
   // value. Only for terminal elements.
@@ -210,6 +210,28 @@ smt_convt::tuple_project_sym(const smt_ast *a, unsigned int i)
   const type2tc &fieldtype = data.members[i];
   const std::string &fieldname = data.member_names[i].as_string();
   std::string sym_name = ta->name + fieldname;
+  if (dot)
+    sym_name += ".";
+  return symbol2tc(fieldtype, sym_name);
+}
+
+expr2tc
+smt_convt::tuple_project_sym(const expr2tc &a, unsigned int i, bool dot)
+{
+  // Like tuple project, but only return a symbol expr, not the converted
+  // value. Only for terminal elements.
+  const symbol2t &sym = to_symbol2t(a);
+  const struct_union_data &data =
+    dynamic_cast<const struct_union_data &>(*sym.type.get());
+
+  assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
+  const type2tc &fieldtype = data.members[i];
+  const std::string &fieldname = data.member_names[i].as_string();
+  std::stringstream ss;
+  ss << sym.thename << fieldname;
+  if (dot)
+    ss << ".";
+  std::string sym_name = ss.str();
   return symbol2tc(fieldtype, sym_name);
 }
 
@@ -343,68 +365,67 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 }
 
 const smt_ast *
-smt_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
-                     const smt_ast *false_val, const smt_sort *sort)
+smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
+                     const expr2tc &false_val, const type2tc &type)
 {
   // Prepare to create an ite between our arguments; the heavy lifting is done
   // by tuple_ite_rec, here we generate a new name for these things to be stored
   // into, then pass everything down to tuple_ite_rec.
-  const tuple_smt_ast *trueast = to_tuple_ast(true_val);
-  const tuple_smt_ast *falseast = to_tuple_ast(false_val);
 
   // Create a fresh tuple to store the result in
   std::string name = mk_fresh_name("tuple_ite::");
-  const tuple_smt_ast *result = new tuple_smt_ast(sort, name);
+  symbol2tc result(type, irep_idt(name));
 
-  tuple_ite_rec(result, cond, trueast, falseast);
-  return result;
+  tuple_ite_rec(result, cond, true_val, false_val);
+  return convert_ast(result);
 }
 
 void
-smt_convt::tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
-                         const tuple_smt_ast *true_val,
-                         const tuple_smt_ast *false_val)
+smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
+                         const expr2tc &true_val_exp,
+                         const expr2tc &false_val_exp)
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
   // projecting each member out of our arguments and computing another ite
   // over each member. Note that we always make assertions here, because the
   // ite is always true, we don't return anything.
+  const tuple_smt_ast *true_val = to_tuple_ast(convert_ast(true_val_exp));
+  const tuple_smt_ast *false_val = to_tuple_ast(convert_ast(false_val_exp));
+
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const tuple_smt_sort *ts = to_tuple_sort(true_val->sort);
+
   const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
+    dynamic_cast<const struct_union_data &>(*result->type.get());
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
   forall_types(it, data.members) {
     if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
       // Recurse.
-      const tuple_smt_ast *args[3];
-      const smt_sort *sort = convert_sort(*it);
-      args[0] = to_tuple_ast(tuple_project(result, sort, i));
-      args[1] = to_tuple_ast(tuple_project(true_val, sort, i));
-      args[2] = to_tuple_ast(tuple_project(false_val, sort, i));
 
+      expr2tc res_item = tuple_project_sym(result, i);
+      expr2tc true_item = tuple_project_sym(true_val_exp, i);
+      expr2tc false_item = tuple_project_sym(false_val_exp, i);
       if (is_tuple_ast_type(*it)) {
-        tuple_ite_rec(args[0], cond, args[1], args[2]);
+        tuple_ite_rec(res_item, cond_exp, true_item, false_item);
       } else {
-        const tuple_smt_sort *tsort = to_tuple_sort(args[1]->sort);
         const array_type2t &array_type = to_array_type(*it);
-        const smt_sort *dom_sort = make_array_domain_sort(array_type);
-        tuple_array_ite_rec(args[1], args[2], cond, tsort->thetype, dom_sort,
-                            args[0]);
+        type2tc dom_sort = make_array_domain_sort_exp(array_type);
+        tuple_array_ite_rec(true_item, false_item, cond_exp, true_item->type,
+                            dom_sort, res_item);
       }
     } else {
       // Normal field: create symbols for the member in each of the arguments,
       // then create an ite between them, and assert it.
       const smt_ast *args[3], *eqargs[2];
       const smt_sort *sort = convert_sort(*it);
-      args[0] = cond;
+      const smt_ast *result_ast = convert_ast(result);
+      args[0] = convert_ast(cond_exp);
       args[1] = tuple_project(true_val, sort, i);
       args[2] = tuple_project(false_val, sort, i);
       eqargs[0] = mk_func_app(sort, SMT_FUNC_ITE, args, 3);
-      eqargs[1] = tuple_project(result, sort, i);
+      eqargs[1] = tuple_project(result_ast, sort, i);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, eqargs, 2)));
     }
 
@@ -658,30 +679,25 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
 }
 
 const smt_ast *
-smt_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
-                           const smt_ast *false_val,
-                           const smt_sort *sort __attribute__((unused)))
+smt_convt::tuple_array_ite(const expr2tc &cond, const expr2tc &trueval,
+                           const expr2tc &falseval)
 {
   // Same deal as tuple_ite, but with array types. In this function we create
   // the fresh tuple array in which to store all the results into.
-  const tuple_smt_ast *tv = to_tuple_ast(trueval);
-  const tuple_smt_ast *fv = to_tuple_ast(false_val);
-  const tuple_smt_sort *ts = to_tuple_sort(tv->sort);
-
   std::string name = mk_fresh_name("tuple_array_ite[]::");
-  const tuple_smt_ast *result = new tuple_smt_ast(tv->sort, name);
+  symbol2tc result(trueval->type, name);
 
-  const array_type2t &array_type = to_array_type(ts->thetype);
-  const smt_sort *dom_sort = make_array_domain_sort(array_type);
-  tuple_array_ite_rec(tv, fv, cond, ts->thetype, dom_sort, result);
-  return result;
+  const array_type2t &array_type = to_array_type(trueval->type);
+  type2tc dom_sort = make_array_domain_sort_exp(array_type);
+  tuple_array_ite_rec(trueval, falseval, cond, trueval->type, dom_sort, result);
+  return convert_ast(result);
 }
 
 void
-smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
-                               const smt_ast *cond, const type2tc &type,
-                               const smt_sort *dom_sort,
-                               const tuple_smt_ast *res)
+smt_convt::tuple_array_ite_rec(const expr2tc &tv, const expr2tc &fv,
+                               const expr2tc &cond, const type2tc &type,
+                               const type2tc &dom_sort,
+                               const expr2tc &res)
 {
   // Almost the same as tuple_ite, but with array types. Iterate over each
   // member of the type we're dealing with, projecting the members out then
@@ -693,17 +709,9 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
   unsigned int i = 0;
   forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
-      const smt_sort *tmp = convert_sort(*it);
-      std::string resname = res->name +
-                            struct_type.member_names[i].as_string() +
-                            ".";
-      std::string truename= tv->name + struct_type.member_names[i].as_string() +
-                            ".";
-      std::string falsename=fv->name + struct_type.member_names[i].as_string() +
-                            ".";
-      const tuple_smt_ast *resval = new tuple_smt_ast(tmp, resname);
-      const tuple_smt_ast *trueval = new tuple_smt_ast(tmp, truename);
-      const tuple_smt_ast *falseval = new tuple_smt_ast(tmp, falsename);
+      expr2tc resval = tuple_project_sym(res, i, true);
+      expr2tc trueval = tuple_project_sym(tv, i, true);
+      expr2tc falseval = tuple_project_sym(fv, i, true);
 
       if (is_tuple_ast_type(*it)) {
         // Create an array type for this -- because it's contained in an array,
@@ -716,17 +724,18 @@ smt_convt::tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
         tuple_array_ite_rec(trueval, falseval, cond, *it, dom_sort, resval);
       }
     } else {
-      std::string tname = tv->name + struct_type.member_names[i].as_string();
-      std::string fname = fv->name + struct_type.member_names[i].as_string();
-      std::string rname = res->name + struct_type.member_names[i].as_string();
+      expr2tc resval = tuple_project_sym(res, i);
+      expr2tc trueval = tuple_project_sym(tv, i);
+      expr2tc falseval = tuple_project_sym(fv, i);
       const smt_ast *args[3];
       const smt_sort *idx_sort = convert_sort(*it);
-      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
-      args[0] = cond;
-      args[1] = mk_smt_symbol(tname, arrsort);
-      args[2] = mk_smt_symbol(fname, arrsort);
+      const smt_sort *arrsort = mk_sort(SMT_SORT_ARRAY, convert_sort(dom_sort),
+                                        idx_sort);
+      args[0] = convert_ast(cond);
+      args[1] = convert_ast(trueval);
+      args[2] = convert_ast(falseval);
       args[0] = mk_func_app(arrsort, SMT_FUNC_ITE, args, 3);
-      args[1] = mk_smt_symbol(rname, arrsort);
+      args[1] = convert_ast(resval);
       assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
     }
 

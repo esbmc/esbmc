@@ -229,8 +229,8 @@ public:
   virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                       const expr2tc &val);
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
-  virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
-                             const smt_ast *false_val, const smt_sort *sort);
+  virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
+                             const expr2tc &false_val, const type2tc &sort);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,
@@ -242,10 +242,9 @@ public:
                                       const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
   virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
-  virtual const smt_ast *tuple_array_ite(const smt_ast *cond,
-                                         const smt_ast *trueval,
-                                         const smt_ast *false_val,
-                                         const smt_sort *sort);
+  virtual const smt_ast *tuple_array_ite(const expr2tc &cond,
+                                         const expr2tc &trueval,
+                                         const expr2tc &false_val);
   virtual const smt_ast *tuple_array_of(const expr2tc &init_value,
                                         unsigned long domain_width);
 
@@ -300,9 +299,8 @@ public:
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
   void tuple_create_rec(const std::string &name, const type2tc &structtype,
                         const smt_ast **inputargs);
-  void tuple_ite_rec(const tuple_smt_ast *result, const smt_ast *cond,
-                     const tuple_smt_ast *true_val,
-                     const tuple_smt_ast *false_val);
+  void tuple_ite_rec(const expr2tc &result, const expr2tc &cond,
+                     const expr2tc &true_val, const expr2tc &false_val);
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
                               const tuple_smt_ast *result, const expr2tc &field,
                               const expr2tc &arr_width);
@@ -314,13 +312,14 @@ public:
                                            const tuple_smt_ast *b,
                                            const expr2tc &arr_width,
                                            const type2tc &subtype);
-  void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
-                           const smt_ast *cond, const type2tc &type,
-                           const smt_sort *dom_sort,
-                           const tuple_smt_ast *res);
+  void tuple_array_ite_rec(const expr2tc &true_val, const expr2tc &false_val,
+                           const expr2tc &cond, const type2tc &type,
+                           const type2tc &dom_sort,
+                           const expr2tc &res);
   expr2tc tuple_get(const expr2tc &expr);
   expr2tc tuple_array_get(const expr2tc &expr);
-  expr2tc tuple_project_sym(const smt_ast *a, unsigned int f);
+  expr2tc tuple_project_sym(const smt_ast *a, unsigned int f, bool dot = false);
+  expr2tc tuple_project_sym(const expr2tc &a, unsigned int f, bool dot = false);
 
   void init_addr_space_array(void);
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -347,6 +346,7 @@ public:
   unsigned long size_to_bit_width(unsigned long sz);
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
+  type2tc make_array_domain_sort_exp(const array_type2t &arr);
   expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
   type2tc flatten_array_type(const type2tc &type);
 
