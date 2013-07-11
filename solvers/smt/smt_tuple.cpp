@@ -232,8 +232,7 @@ smt_convt::tuple_project_sym(const expr2tc &a, unsigned int i, bool dot)
   // Like tuple project, but only return a symbol expr, not the converted
   // value. Only for terminal elements.
   const symbol2t &sym = to_symbol2t(a);
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*sym.type.get());
+  const struct_union_data &data = get_type_def(sym.type);
 
   assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
   const type2tc &fieldtype = data.members[i];
