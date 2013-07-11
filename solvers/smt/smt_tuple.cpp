@@ -104,6 +104,17 @@ smt_convt::get_type_def(const type2tc &type)
         : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
+expr2tc
+smt_convt::force_expr_to_tuple_sym(const expr2tc &expr)
+{
+  // Arguments may have any expression form; however the code we call into
+  // expects to be dealing with a set of expressions that are just names
+  // of tuple variables, wrapped in a symbol2t. To ensure that this is the
+  // case, convert an argument to tuple ast, then back to symbol.
+  const tuple_smt_ast *val = to_tuple_ast(convert_ast(expr));
+  return symbol2tc(expr->type, val->name);
+}
+
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                             const smt_ast **inputargs)
@@ -376,7 +387,9 @@ smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
   std::string name = mk_fresh_name("tuple_ite::");
   symbol2tc result(type, irep_idt(name));
 
-  tuple_ite_rec(result, cond, true_val, false_val);
+  tuple_ite_rec(result, cond,
+                force_expr_to_tuple_sym(true_val),
+                force_expr_to_tuple_sym(false_val));
   return convert_ast(result);
 }
 
@@ -684,7 +697,9 @@ smt_convt::tuple_array_ite(const expr2tc &cond, const expr2tc &trueval,
 
   const array_type2t &array_type = to_array_type(trueval->type);
   type2tc dom_sort = make_array_domain_sort_exp(array_type);
-  tuple_array_ite_rec(trueval, falseval, cond, trueval->type, dom_sort, result);
+  tuple_array_ite_rec(force_expr_to_tuple_sym(trueval),
+                      force_expr_to_tuple_sym(falseval),
+                      cond, trueval->type, dom_sort, result);
   return convert_ast(result);
 }
 

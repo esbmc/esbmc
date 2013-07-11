@@ -338,6 +338,7 @@ public:
                                       unsigned int towidth);
 
   const struct_union_data &get_type_def(const type2tc &type);
+  expr2tc force_expr_to_tuple_sym(const expr2tc &expr);
 
   const smt_ast *make_bool_bit(const smt_ast *a);
   const smt_ast *make_bit_bool(const smt_ast *a);
