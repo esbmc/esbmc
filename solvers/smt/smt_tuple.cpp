@@ -75,6 +75,8 @@ smt_convt::tuple_create(const expr2tc &structdef)
   // From a vector of expressions, create a tuple representation by creating
   // a fresh name and assigning members into it.
   std::string name = mk_fresh_name("tuple_create::");
+  // Add a . suffix because this is of tuple type.
+  name += ".";
 
   const smt_ast *args[structdef->get_num_sub_exprs()];
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
