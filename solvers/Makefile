@@ -18,6 +18,11 @@ OBJS+= metasmt/$(OBJDIR)/meta_smt_all.o
 DIRS+= metasmt
 endif
 
+ifdef MATHSAT
+OBJS+= mathsat/$(OBJDIR)/mathsat.o
+DIRS+= mathsat
+endif
+
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
