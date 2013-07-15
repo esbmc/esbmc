@@ -7,6 +7,19 @@
 
 #include <mathsat.h>
 
+class mathsat_smt_sort : public smt_sort
+{
+public:
+#define mathsat_sort_downcast(x) static_cast<const mathsat_smt_sort *>(x)
+  mathsat_smt_sort(smt_sort_kind i, msat_type _t) : smt_sort(i), t(_t) { }
+  virtual ~mathsat_smt_sort() { }
+  virtual unsigned long get_domain_width(void) const {
+    return array_dom_width;
+  }
+  msat_type t;
+  unsigned int array_dom_width;
+};
+
 class mathsat_convt : public smt_convt
 {
 public:
