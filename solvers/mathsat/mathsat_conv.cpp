@@ -135,9 +135,11 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint __attribute__((unused)), bo
 }
 
 smt_ast *
-mathsat_convt::mk_smt_bool(bool val __attribute__((unused)))
+mathsat_convt::mk_smt_bool(bool val)
 {
-  abort();
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new mathsat_smt_ast(s, (val) ? msat_make_true(env)
+                                      : msat_make_false(env));
 }
 
 smt_ast *
