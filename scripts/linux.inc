@@ -32,6 +32,11 @@ MINISAT = $(SATDIR)/MiniSat-p_v1.14
 CXXFLAGS+= -DMINISAT
 endif
 
+ifdef USE_SOLVER_MATHSAT
+MATHSAT = $(MATHSAT_PATH)/lib
+CXXFLAGS+= -DMATHSAT -I $(MATHSAT)/include
+endif
+
 # Other goo
 
 ifdef TARGET32
