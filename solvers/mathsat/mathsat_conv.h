@@ -5,6 +5,8 @@
 
 #include <util/threeval.h>
 
+#include <mathsat.h>
+
 class mathsat_convt : public smt_convt
 {
 public:
@@ -33,6 +35,10 @@ public:
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
+
+  // MathSAT data.
+  msat_config cfg;
+  msat_env env;
 };
 
 #endif /* _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_ */

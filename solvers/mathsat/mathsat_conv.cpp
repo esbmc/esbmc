@@ -10,7 +10,12 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
   : smt_convt(true, int_encoding, ns, is_cpp, false, true, true)
 {
-  abort();
+
+  cfg = msat_create_config();
+  /* XXX -- where is the list of options?" */
+  msat_set_option(cfg, "model_generation", "true");
+  env = msat_create_env(cfg);
+
 }
 
 mathsat_convt::~mathsat_convt(void)
