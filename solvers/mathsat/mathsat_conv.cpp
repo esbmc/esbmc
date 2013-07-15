@@ -66,8 +66,46 @@ mathsat_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_k
 }
 
 smt_sort *
-mathsat_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 {
+  va_list ap;
+  unsigned long uint;
+  int thebool;
+  const mathsat_smt_sort *dom, *range;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+  case SMT_SORT_REAL:
+    std::cerr << "Sorry, no integer encoding sorts for MathSAT" << std::endl;
+    abort();
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    thebool = thebool;
+    return new mathsat_smt_sort(k, msat_get_bv_type(env, uint));
+  case SMT_SORT_ARRAY:
+  {
+    dom = va_arg(ap, const mathsat_smt_sort *);
+    range = va_arg(ap, const mathsat_smt_sort *);
+    mathsat_smt_sort *result =
+      new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t));
+    size_t sz = 0;
+    int tmp;
+    tmp = msat_is_bv_type(env, dom->t, &sz);
+    assert(tmp == 1 && "Domain of array must be a bitvector");
+    result->array_dom_width = sz;
+    return result;
+  }
+  case SMT_SORT_BOOL:
+    return new mathsat_smt_sort(k, msat_get_bool_type(env));
+  case SMT_SORT_STRUCT:
+  case SMT_SORT_UNION:
+    std::cerr << "MathSAT does not support tuples" << std::endl;
+    abort();
+  }
+
+  std::cerr << "MathSAT sort conversion fell through" << std::endl;
   abort();
 }
 
