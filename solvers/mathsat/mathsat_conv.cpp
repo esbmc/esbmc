@@ -10,6 +10,11 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
   : smt_convt(true, int_encoding, ns, is_cpp, false, true, true)
 {
+  if (int_encoding) {
+    std::cerr << "MathSAT converter doesn't support integer encoding"
+              << std::endl;
+    abort();
+  }
 
   cfg = msat_create_config();
   /* XXX -- where is the list of options?" */
