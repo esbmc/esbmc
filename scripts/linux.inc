@@ -33,8 +33,9 @@ CXXFLAGS+= -DMINISAT
 endif
 
 ifdef USE_SOLVER_MATHSAT
-MATHSAT = $(MATHSAT_PATH)/lib
+MATHSAT = $(MATHSAT_PATH)
 CXXFLAGS+= -DMATHSAT -I $(MATHSAT)/include
+SOLVER_LIBS += -L$(MATHSAT)/lib -lmathsat
 endif
 
 # Other goo
