@@ -104,16 +104,30 @@ public:
   smt_sort_kind id;
   smt_sort(smt_sort_kind i) : id(i) { }
   virtual ~smt_sort() { }
+  virtual unsigned long get_domain_width(void) const = 0;
 };
 
 class tuple_smt_sort : public smt_sort
 {
 public:
   const type2tc thetype;
-  tuple_smt_sort(const type2tc &type) : smt_sort(SMT_SORT_STRUCT), thetype(type)
+  unsigned long domain_width;
+
+  tuple_smt_sort(const type2tc &type)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(0)
   {
   }
+
+  tuple_smt_sort(const type2tc &type, unsigned long dom_width)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(dom_width)
+  {
+  }
+
   virtual ~tuple_smt_sort() { }
+
+  virtual unsigned long get_domain_width(void) const {
+    return domain_width;
+  }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -163,7 +177,8 @@ class smt_convt: public prop_convt
 {
 public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool tuple_support, bool no_bools_in_arrays);
+            bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
+            bool can_init_inf_arrs);
   ~smt_convt();
   void smt_post_init(void); // smt init stuff that calls into subclass.
 
@@ -185,7 +200,8 @@ public:
   virtual const smt_ast *lit_to_ast(const literalt &l);
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs) = 0;
+                               const smt_ast * const *args,
+                               unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual literalt mk_lit(const smt_ast *s) = 0;
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
@@ -221,14 +237,17 @@ public:
                                             bool const_array,
                                             const smt_sort *domain);
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const smt_ast *field);
-  virtual const smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
+                                      const expr2tc &field);
+  virtual const smt_ast *tuple_array_update(const smt_ast *a,
+                                      const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
   virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
   virtual const smt_ast *tuple_array_ite(const smt_ast *cond,
                                          const smt_ast *trueval,
                                          const smt_ast *false_val,
                                          const smt_sort *sort);
+  virtual const smt_ast *tuple_array_of(const expr2tc &init_value,
+                                        unsigned long domain_width);
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
@@ -236,6 +255,20 @@ public:
 
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
   std::string mk_fresh_name(const std::string &tag);
+
+  virtual const smt_ast *convert_array_index(const expr2tc &expr,
+                                             const smt_sort *ressort);
+  virtual const smt_ast *convert_array_store(const expr2tc &expr,
+                                             const smt_sort *ressort);
+
+  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
+                                   const smt_sort *ressort);
+  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
+                                  const expr2tc &value,
+                                  const smt_sort *ressort);
+
+  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+                                          unsigned long domain_width);
 
   // Internal foo
 
@@ -268,15 +301,19 @@ public:
                      const tuple_smt_ast *true_val,
                      const tuple_smt_ast *false_val);
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
-                              const tuple_smt_ast *result,const smt_ast *field);
+                              const tuple_smt_ast *result, const expr2tc &field,
+                              const expr2tc &arr_width);
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
-                              const smt_ast *idx, const tuple_smt_ast *res,
+                              const expr2tc &idx, const tuple_smt_ast *res,
+                              const expr2tc &arr_width,
                               const type2tc &subtype);
   const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
                                            const tuple_smt_ast *b,
+                                           const smt_sort *idx_sort,
                                            const type2tc &subtype);
   void tuple_array_ite_rec(const tuple_smt_ast *tv, const tuple_smt_ast *fv,
                            const smt_ast *cond, const type2tc &type,
+                           const smt_sort *dom_sort,
                            const tuple_smt_ast *res);
   expr2tc tuple_get(const expr2tc &expr);
 
@@ -300,6 +337,20 @@ public:
 
   const smt_ast *make_bool_bit(const smt_ast *a);
   const smt_ast *make_bit_bool(const smt_ast *a);
+
+  expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
+  unsigned long size_to_bit_width(unsigned long sz);
+  unsigned long calculate_array_domain_width(const array_type2t &arr);
+  const smt_sort *make_array_domain_sort(const array_type2t &arr);
+  expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
+  type2tc flatten_array_type(const type2tc &type);
+
+  expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
+  expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
+
+  const smt_ast *convert_array_of_prep(const expr2tc &expr);
+  const smt_ast *pointer_array_of(const expr2tc &init_val,
+                                  unsigned long array_width);
 
   // Types
 
@@ -369,6 +420,7 @@ public:
   const namespacet &ns;
   bool tuple_support;
   bool no_bools_in_arrays;
+  bool can_init_unbounded_arrs;
   std::string dyn_info_arr_name;
 
   std::map<std::string, unsigned int> fresh_map;

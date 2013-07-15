@@ -31,4 +31,7 @@ typet long_double_type();
 typet size_type();
 typet signed_size_type();
 
+typet pointer_type();
+type2tc pointer_type2();
+
 #endif

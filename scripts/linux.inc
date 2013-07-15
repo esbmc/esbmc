@@ -9,10 +9,22 @@ Z3_SOLVER_LIBS+= -L$(Z3)/lib -lz3
 INCLUDES+= -I $(Z3)/include
 endif
 
+ifdef USE_SOLVER_METASMT
+CXXFLAGS+= -DMETASMT
+METASMT=1
+METASMT_SOLVER_LIBS+= -L $(METASMT_PATH)/src/lib -lmetaSMT
+endif
+
+ifdef USE_SOLVER_MINISAT
+CXXFLAGS+= -DMINISAT
+MINISAT=1
+METASMT_SOLVER_LIBS+= $(MINISAT_PATH)/core/lib.a  $(MINISAT_PATH)/simp/lib.a
+endif
+
 ifdef USE_SOLVER_BOOLECTOR
 BOOLECTOR = $(SATDIR)/boolector
-CXXFLAGS+= -DBOOLECTOR
-SOLVER_LIBS+= -L$(BOOLECTOR)/lib -lboolector
+CXXFLAGS+= -DBOOLECTOR -I $(BOOLECTOR$)
+SOLVER_LIBS+= -L$(BOOLECTOR) -lboolector -L$(SATDIR)/lingeling -llgl
 endif
 
 ifdef USE_SOLVER_MINISAT1
@@ -55,7 +67,7 @@ else
 PLATLIBS+= -lgomp -pthread -lrt -lpthread
 endif
 
-SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
+SOLVER_LIBS+=$(Z3_SOLVER_LIBS) $(METASMT_SOLVER_LIBS)
 
 HOSTCC=     gcc
 HOSTCXX=    g++

@@ -28,7 +28,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 
-#include "z3++.h"
+#include "z3pp.h"
 
 typedef unsigned int uint;
 
@@ -70,7 +70,8 @@ private:
 
   // SMT-abstraction migration:
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs);
+                               const smt_ast * const *args,
+                               unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
 
@@ -135,7 +136,13 @@ private:
   void init_addr_space_array(void);
 
   virtual const std::string solver_text()
-  { return "Z3"; }
+  {
+    unsigned int major, minor, build, revision;
+    Z3_get_version(&major, &minor, &build, &revision);
+    std::stringstream ss;
+    ss << "Z3 v" << major << "." << minor;
+    return ss.str();
+  }
 
   virtual tvt l_get(literalt a);
 
@@ -154,10 +161,15 @@ public:
 
   class z3_smt_sort : public smt_sort {
   public:
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, bool is_s = false) : smt_sort(i), s(_s), is_signed(is_s) { }
+  #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, bool is_s = false) : smt_sort(i), s(_s), is_signed(is_s), array_dom_width(0) { }
     virtual ~z3_smt_sort() { }
+    virtual unsigned long get_domain_width(void) const {
+      return array_dom_width;
+    }
     z3::sort s;
     bool is_signed;
+    unsigned int array_dom_width;
   };
 
   //  Must be first member; that way it's the last to be destroyed.

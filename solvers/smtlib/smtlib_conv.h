@@ -29,6 +29,12 @@ public:
   smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
                   const smtlib_smt_sort *rag)
     : smt_sort(k), domain(dom), range(rag) { }
+
+  virtual unsigned long get_domain_width(void) const {
+    assert(id == SMT_SORT_ARRAY);
+    return domain->width;
+  }
+
   unsigned int width;
   bool sign;
   const smtlib_smt_sort *domain;
@@ -63,7 +69,8 @@ public:
 
   virtual void assert_lit(const literalt &l);
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
-                               const smt_ast **args, unsigned int numargs);
+                               const smt_ast * const *args,
+                               unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *s);
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);

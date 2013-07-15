@@ -47,7 +47,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(true, int_encoding, _ns, is_cpp, false, false)
+: smt_convt(true, int_encoding, _ns, is_cpp, false, false, false), ctx(false)
 {
   this->int_encoding = int_encoding;
 
@@ -180,8 +180,6 @@ z3_convt::dec_solve(void)
   unsigned major, minor, build, revision;
   z3::check_result result;
   Z3_get_version(&major, &minor, &build, &revision);
-
-  std::cout << "Solving with SMT Solver Z3 v" << major << "." << minor << "\n";
 
   result = check2_z3_properties();
 
@@ -578,7 +576,8 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 // SMT-abstraction migration routines.
 
 smt_ast *
-z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k, const smt_ast **args,
+z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                      const smt_ast * const *args,
                       unsigned int numargs)
 {
   const z3_smt_ast *asts[4];
@@ -789,6 +788,10 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
     s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s));
+    if (!int_encoding)
+      s->array_dom_width = dom->s.bv_size();
+    else
+      s->array_dom_width = 0;
     break;
   case SMT_SORT_BOOL:
     s = new z3_smt_sort(k, ctx.bool_sort());
@@ -883,34 +886,35 @@ z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
 }
 
 const smt_ast *
-z3_convt::*tuple_array_create(const type2tc &array_type,
+z3_convt::tuple_array_create(const type2tc &arr_type,
                               const smt_ast **input_args, bool const_array,
                               const smt_sort *domain)
 {
   z3::expr output;
-  const array_type2t &arrtype = to_array_type(array_type);
+  const array_type2t &arrtype = to_array_type(arr_type);
+
+  const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
+
+  assert(is_constant_int2t(arrtype.array_size) &&
+         "array_of sizes should be constant");
+
+  int64_t size;
+  size = sz.as_long();
 
   if (const_array) {
     z3::expr value, index;
     z3::sort array_type;
     std::string tmp, identifier;
-    int64_t size;
     u_int j;
 
-    const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
-
-    convert_type(array.type, array_type);
+    array_type = z3_sort_downcast(convert_sort(arr_type))->s;
+    z3::sort domsort = z3_sort_downcast(domain)->s;
 
     if (arrtype.size_is_infinite) {
       // Don't attempt to do anything with this. The user is on their own.
       output = ctx.fresh_const(NULL, array_type);
       goto out;
     }
-
-    assert(is_constant_int2t(arrtype.array_size) &&
-           "array_of sizes should be constant");
-
-    size = sz.as_long();
 
     const z3_smt_ast *tmpast = z3_smt_downcast(*input_args);
     value = tmpast->e;
@@ -921,10 +925,10 @@ z3_convt::*tuple_array_create(const type2tc &array_type,
 
     output = ctx.fresh_const(NULL, array_type);
 
-    //update array
+    // update array -- sort size of array domain might be funky though.
     for (j = 0; j < size; j++)
     {
-      index = ctx.esbmc_int_val(j);
+      index = ctx.num_val(j, domsort);
       output = z3::store(output, index, value);
     }
   } else {
@@ -933,17 +937,15 @@ z3_convt::*tuple_array_create(const type2tc &array_type,
     z3::expr int_cte, val_cte;
     z3::sort elem_type;
 
-    convert_type(arrtype.subtype, elem_type);
+    elem_type = z3_sort_downcast(convert_sort(arrtype.subtype))->s;
     z3_array_type = ctx.array_sort(ctx.esbmc_int_sort(), elem_type);
 
     output = ctx.fresh_const(NULL, z3_array_type);
 
-    i = 0;
-    forall_exprs(it, array.datatype_members) {
+    for (i = 0; i < size; i++) {
       int_cte = ctx.esbmc_int_val(i);
       const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
       output = z3::store(output, int_cte, tmpast->e);
-      ++i;
     }
   }
 
@@ -964,7 +966,8 @@ z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
 
 smt_ast *
 z3_convt::tuple_array_update(const smt_ast *a, const smt_ast *field,
-                             const smt_ast *val, const smt_sort *s)
+                             const smt_ast *val,
+                             const smt_sort *s __attribute__((unused)))
 {
   Z3_ast ast = Z3_mk_store(z3_ctx, z3_smt_downcast(a)->e,
                           z3_smt_downcast(field)->e, z3_smt_downcast(val)->e);
