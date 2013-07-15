@@ -110,9 +110,15 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 }
 
 literalt
-mathsat_convt::mk_lit(const smt_ast *s __attribute__((unused)))
+mathsat_convt::mk_lit(const smt_ast *a)
 {
-  abort();
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  literalt l = new_variable();
+  const mathsat_smt_ast *m2 = mathsat_ast_downcast(lit_to_ast(l));
+
+  msat_term r = msat_make_equal(env, mast->t, m2->t);
+  msat_assert_formula(env, r);
+  return l;
 }
 
 smt_ast *
