@@ -1,6 +1,3 @@
-#include<stdio.h>
-#include<stdlib.h>
-
 int nondet_int();
 
 unsigned int nondet_uint();
