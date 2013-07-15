@@ -20,6 +20,16 @@ public:
   unsigned int array_dom_width;
 };
 
+class mathsat_smt_ast : public smt_ast
+{
+public:
+#define mathsat_ast_downcast(x) static_cast<const mathsat_smt_ast *>(x)
+  mathsat_smt_ast(const smt_sort *_s, msat_term _t) : smt_ast(_s), t(_t) { }
+  virtual ~mathsat_smt_ast() { }
+
+  msat_term t;
+};
+
 class mathsat_convt : public smt_convt
 {
 public:
