@@ -192,6 +192,11 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     else
       r = msat_make_equal(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_NOTEQ:
+  {
+    smt_ast *a = mk_func_app(s, SMT_FUNC_EQ, _args, numargs);
+    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
+  }
   case SMT_FUNC_NOT:
     r = msat_make_not(env, args[0]->t);
     break;
