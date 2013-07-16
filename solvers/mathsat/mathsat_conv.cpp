@@ -55,7 +55,11 @@ mathsat_convt::l_get(literalt l __attribute__((unused)))
 const std::string
 mathsat_convt::solver_text()
 {
-  abort();
+  std::stringstream ss;
+  char * tmp = msat_get_version();
+  ss << tmp;
+  msat_free(tmp);
+  return ss.str();
 }
 
 smt_ast *
