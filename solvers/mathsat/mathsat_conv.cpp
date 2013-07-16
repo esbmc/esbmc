@@ -114,8 +114,10 @@ mathsat_convt::get(const expr2tc &expr)
 
   switch (expr->type->type_id) {
   case type2t::bool_id:
+    return get_bool(convert_ast(expr));
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
+    return get_bv(convert_ast(expr));
   case type2t::fixedbv_id:
   case type2t::array_id:
   case type2t::pointer_id:
