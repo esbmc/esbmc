@@ -120,6 +120,7 @@ mathsat_convt::get(const expr2tc &expr)
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
+    return tuple_get(expr);
   default:
     std::cerr << "Unrecognized type id " << get_type_id(expr->type)
               << " in MathSAT get" << std::endl;
