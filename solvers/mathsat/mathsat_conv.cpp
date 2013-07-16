@@ -251,6 +251,18 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     r = msat_make_bv_times(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_BVSDIV:
+    r = msat_make_bv_sdiv(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVUDIV:
+    r = msat_make_bv_udiv(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVSMOD:
+    r = msat_make_bv_srem(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVUMOD:
+    r = msat_make_bv_urem(env, args[0]->t, args[1]->t);
+    break;
   case SMT_FUNC_BVSHL:
     r = msat_make_bv_lshl(env, args[0]->t, args[1]->t);
     break;
