@@ -287,7 +287,8 @@ mathsat_convt::mk_lit(const smt_ast *a)
   literalt l = new_variable();
   const mathsat_smt_ast *m2 = mathsat_ast_downcast(lit_to_ast(l));
 
-  msat_term r = msat_make_equal(env, mast->t, m2->t);
+  msat_term r = msat_make_iff(env, mast->t, m2->t);
+  assert(!MSAT_ERROR_TERM(r) && "Error creating mathsat literal equality");
   msat_assert_formula(env, r);
   return l;
 }
