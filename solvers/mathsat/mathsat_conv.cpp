@@ -80,6 +80,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_EQ:
     r = msat_make_equal(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_NOT:
+    r = msat_make_not(env, args[0]->t);
+    break;
   case SMT_FUNC_AND:
     r = msat_make_and(env, args[0]->t, args[1]->t);
     break;
