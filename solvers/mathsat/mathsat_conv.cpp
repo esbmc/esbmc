@@ -49,9 +49,23 @@ mathsat_convt::dec_solve()
 }
 
 expr2tc
-mathsat_convt::get(const expr2tc &expr __attribute__((unused)))
+mathsat_convt::get(const expr2tc &expr)
 {
-  abort();
+
+  switch (expr->type->type_id) {
+  case type2t::bool_id:
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  case type2t::fixedbv_id:
+  case type2t::array_id:
+  case type2t::pointer_id:
+  case type2t::struct_id:
+  case type2t::union_id:
+  default:
+    std::cerr << "Unrecognized type id " << get_type_id(expr->type)
+              << " in MathSAT get" << std::endl;
+    abort();
+  }
 }
 
 tvt
