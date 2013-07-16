@@ -254,8 +254,10 @@ mathsat_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
 }
 
 smt_ast *
-mathsat_convt::mk_extract(const smt_ast *a __attribute__((unused)), unsigned int high __attribute__((unused)),
-                            unsigned int low __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
+                          unsigned int low, const smt_sort *s)
 {
-  abort();
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  msat_term t = msat_make_bv_extract(env, high, low, mast->t);
+  return new mathsat_smt_ast(s, t);
 }
