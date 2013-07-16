@@ -256,6 +256,26 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVULT:
     r = msat_make_bv_ult(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_BVSGTE:
+  {
+    // This is !SLT
+    assert(s->id == SMT_SORT_BOOL);
+    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLT, _args, numargs);
+    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
+  }
+  case SMT_FUNC_BVSGT:
+  {
+    // This is !SLTE
+    assert(s->id == SMT_SORT_BOOL);
+    const smt_ast *a = mk_func_app(s, SMT_FUNC_BVSLTE, _args, numargs);
+    return mk_func_app(s, SMT_FUNC_NOT, &a, 1);
+  }
+  case SMT_FUNC_BVSLTE:
+    r = msat_make_bv_sleq(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVSLT:
+    r = msat_make_bv_slt(env, args[0]->t, args[1]->t);
+    break;
   case SMT_FUNC_STORE:
     r = msat_make_array_write(env, args[0]->t, args[1]->t, args[2]->t);
     break;
