@@ -115,6 +115,12 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     abort();
   }
 
+  if (MSAT_ERROR_TERM(r)) {
+    std::cerr << "Error creating SMT " << smt_func_name_table[k] << " function "
+              << "application" << std::endl;
+    abort();
+  }
+
   return new mathsat_smt_ast(s, r);
 }
 
