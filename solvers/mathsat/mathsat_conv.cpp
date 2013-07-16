@@ -58,11 +58,34 @@ mathsat_convt::solver_text()
 }
 
 smt_ast *
-mathsat_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)),
-                             const smt_ast * const *args __attribute__((unused)),
-                             unsigned int numargs __attribute__((unused)))
+mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                             const smt_ast * const *_args,
+                             unsigned int numargs)
 {
-  abort();
+  s = s;
+  k = k;
+  numargs = numargs;
+
+  const mathsat_smt_ast *args[4];
+  unsigned int i;
+
+  assert(numargs <= 4);
+  for (i = 0; i < numargs; i++)
+    args[i] = mathsat_ast_downcast(_args[i]);
+
+  msat_term r;
+
+  switch (k) {
+  case SMT_FUNC_EQ:
+    r = msat_make_equal(env, args[0]->t, args[1]->t);
+    break;
+  default:
+    std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
+              << "in mathsat conversion" << std::endl;
+    abort();
+  }
+
+  return new mathsat_smt_ast(s, r);
 }
 
 smt_sort *
