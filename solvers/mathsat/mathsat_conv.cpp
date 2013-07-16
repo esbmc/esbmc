@@ -28,9 +28,10 @@ mathsat_convt::~mathsat_convt(void)
 }
 
 void
-mathsat_convt::assert_lit(const literalt &l __attribute__((unused)))
+mathsat_convt::assert_lit(const literalt &l)
 {
-  abort();
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(lit_to_ast(l));
+  msat_assert_formula(env, mast->t);
 }
 
 prop_convt::resultt
