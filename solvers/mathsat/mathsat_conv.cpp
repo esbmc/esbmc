@@ -111,6 +111,13 @@ mathsat_convt::get_bv(const smt_ast *a)
 expr2tc
 mathsat_convt::get_array(const smt_ast *a, const type2tc &t)
 {
+
+  const array_type2t &ar = to_array_type(t);
+  if (is_tuple_ast_type(ar.subtype)) {
+    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
+    return expr2tc();
+  }
+
   // Fetch the array bounds, if it's huge then assume this is a 1024 element
   // array. Then fetch all elements and formulate a constant_array.
   size_t w = a->sort->get_domain_width();
@@ -121,7 +128,6 @@ mathsat_convt::get_array(const smt_ast *a, const type2tc &t)
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
 
-  const array_type2t &ar = to_array_type(t);
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   const smt_sort *s = convert_sort(ar.subtype);
   std::vector<expr2tc> fields;
