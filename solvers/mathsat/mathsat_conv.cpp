@@ -80,6 +80,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_EQ:
     r = msat_make_equal(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_AND:
+    r = msat_make_and(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVADD:
+    r = msat_make_bv_plus(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVSUB:
+    r = msat_make_bv_minus(env, args[0]->t, args[1]->t);
+    break;
   default:
     std::cerr << "Unhandled SMT function \"" << smt_func_name_table[k] << "\" "
               << "in mathsat conversion" << std::endl;
