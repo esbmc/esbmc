@@ -245,6 +245,16 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_OR:
     r = msat_make_or(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_XOR:
+  {
+    // Another thing that mathsat doesn't implement for no reasons.
+    // Do this as and(or(a,b),not(and(a,b)))
+    msat_term and2 = msat_make_and(env, args[0]->t, args[1]->t);
+    msat_term notand2 = msat_make_not(env, and2);
+    msat_term or1 = msat_make_or(env, args[0]->t, args[1]->t);
+    r = msat_make_and(env, or1, notand2);
+    break;
+  }
   case SMT_FUNC_IMPLIES:
     // MathSAT doesn't seem to implement this; so do it manually. Following the
     // CNF conversion CBMC does, this is: lor(lnot(a), b)
