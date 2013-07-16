@@ -107,7 +107,6 @@ mathsat_convt::get_bv(const smt_ast *a)
   return constant_int2tc(get_uint64_type(), BigInt(finval));
 }
 
-
 expr2tc
 mathsat_convt::get(const expr2tc &expr)
 {
