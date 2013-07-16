@@ -130,9 +130,15 @@ mathsat_convt::get(const expr2tc &expr)
 }
 
 tvt
-mathsat_convt::l_get(literalt l __attribute__((unused)))
+mathsat_convt::l_get(literalt l)
 {
-  abort();
+  constant_bool2tc b = get_bool(lit_to_ast(l));
+  if (b->constant_value)
+    return tvt(true);
+  else if (!b->constant_value)
+    return tvt(false);
+  else
+    assert(0);
 }
 
 const std::string
