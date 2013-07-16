@@ -37,7 +37,15 @@ mathsat_convt::assert_lit(const literalt &l)
 prop_convt::resultt
 mathsat_convt::dec_solve()
 {
-  abort();
+  msat_result r = msat_solve(env);
+  if (r == MSAT_SAT) {
+    return P_SATISFIABLE;
+  } else if (r == MSAT_UNSAT) {
+    return P_UNSATISFIABLE;
+  } else {
+    std::cerr << "MathSAT returned MSAT_UNKNOWN for formula" << std::endl;
+    abort();
+  }
 }
 
 expr2tc
