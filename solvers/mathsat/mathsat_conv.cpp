@@ -149,9 +149,15 @@ mathsat_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
-mathsat_convt::mk_smt_symbol(const std::string &name __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  abort();
+  const mathsat_smt_sort *ms = mathsat_sort_downcast(s);
+  // XXX - does 'd' leak?
+  msat_decl d = msat_declare_function(env, name.c_str(), ms->t);
+  assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
+  msat_term t = msat_make_constant(env, d);
+  assert(!MSAT_ERROR_TERM(t) && "Invalid function decl for mathsat term");
+  return new mathsat_smt_ast(s, t);
 }
 
 smt_sort *
