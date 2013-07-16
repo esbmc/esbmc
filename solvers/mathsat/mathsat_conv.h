@@ -60,6 +60,7 @@ public:
                               unsigned int low, const smt_sort *s);
 
   expr2tc get_bool(const smt_ast *a);
+  expr2tc get_bv(const smt_ast *a);
 
   // MathSAT data.
   msat_config cfg;

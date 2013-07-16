@@ -1,5 +1,8 @@
 #include "mathsat_conv.h"
 
+// :|
+#include <gmp.h>
+
 prop_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 {
@@ -74,14 +77,34 @@ mathsat_convt::get_bv(const smt_ast *a)
   assert(msat_term_is_number(env, t) && "Model value of bool isn't "
          "a bool");
 
-  if (msat_term_is_true(env, t)) {
-    return true_expr;
-  } else if (msat_term_is_false(env, t)) {
-    return false_expr;
-  } else {
-    std::cerr << "Boolean model value is neither true or false" << std::endl;
+  // GMP rational value object. Mildly irritating that we need to use GMP
+  // directly; particularly seeing how a version incompatibility between
+  // MathSAT and the local version of GMP is now fatal.
+  mpq_t val;
+  mpq_init(val);
+  if (msat_term_to_number(env, t, val)) {
+    std::cerr << "Error fetching number from MathSAT. Message reads:"
+              << std::endl;
+    std::cerr << "\"" << msat_last_error_message(env) << "\""
+              << std::endl;
     abort();
   }
+
+  mpz_t num;
+  mpz_init(num);
+  mpz_set(num, mpq_numref(val));
+  char buffer[mpz_sizeinbase(num, 10) + 2];
+  mpz_get_str(buffer, 10, num);
+  char *foo = buffer;
+  int64_t finval = strtoll(buffer, &foo, 10);
+
+  if (buffer[0] != '\0' && (foo == buffer || *foo != '\0')) {
+    std::cerr << "Couldn't parse string representation of number \""
+              << buffer << "\"" << std::endl;
+    abort();
+  }
+
+  return constant_int2tc(get_uint64_type(), BigInt(finval));
 }
 
 
