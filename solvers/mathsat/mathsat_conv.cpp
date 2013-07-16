@@ -3,6 +3,8 @@
 // :|
 #include <gmp.h>
 
+#include <ansi-c/c_types.h>
+
 prop_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 {
@@ -106,6 +108,38 @@ mathsat_convt::get_bv(const smt_ast *a)
 }
 
 expr2tc
+mathsat_convt::get_array(const smt_ast *a, const type2tc &t)
+{
+  // Fetch the array bounds, if it's huge then assume this is a 1024 element
+  // array. Then fetch all elements and formulate a constant_array.
+  size_t w = a->sort->get_domain_width();
+  size_t orig_w = w;
+  if (w > 10)
+    w = 10;
+
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
+  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
+
+  const array_type2t &ar = to_array_type(t);
+  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  const smt_sort *s = convert_sort(ar.subtype);
+  std::vector<expr2tc> fields;
+
+  for (size_t i = 0; i < (1ULL << w); i++) {
+    smt_ast *tmpast = mk_smt_bvint(BigInt(i), false, orig_w);
+    const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+    msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+    free(tmpast);
+
+    mathsat_smt_ast *tmpb = new mathsat_smt_ast(s, t);
+    fields.push_back(get_bv(tmpb));
+    free(tmpb);
+  }
+
+  return constant_array2tc(arr_type, fields);
+}
+
+expr2tc
 mathsat_convt::get(const expr2tc &expr)
 {
 
@@ -130,9 +164,7 @@ mathsat_convt::get(const expr2tc &expr)
     return constant_fixedbv2tc(expr->type, fbv);
   }
   case type2t::array_id:
-    // XXX - fix this.
-    std::cerr << "No array model get'ing for MathSAT yet, sorry" << std::endl;
-    return expr2tc();
+    return get_array(convert_ast(expr), expr->type);
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:

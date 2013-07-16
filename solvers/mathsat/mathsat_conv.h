@@ -61,6 +61,7 @@ public:
 
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const smt_ast *a);
+  expr2tc get_array(const smt_ast *a, const type2tc &arrtype);
 
   // MathSAT data.
   msat_config cfg;
