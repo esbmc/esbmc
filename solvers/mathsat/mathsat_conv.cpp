@@ -205,6 +205,15 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     r = msat_make_bv_times(env, args[0]->t, args[1]->t);
     break;
+  case SMT_FUNC_BVSHL:
+    r = msat_make_bv_lshl(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVLSHR:
+    r = msat_make_bv_lshr(env, args[0]->t, args[1]->t);
+    break;
+  case SMT_FUNC_BVASHR:
+    r = msat_make_bv_ashr(env, args[0]->t, args[1]->t);
+    break;
   case SMT_FUNC_BVUGT:
   {
     // This is !ULTE
