@@ -59,6 +59,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  expr2tc get_bool(const smt_ast *a);
+
   // MathSAT data.
   msat_config cfg;
   msat_env env;
