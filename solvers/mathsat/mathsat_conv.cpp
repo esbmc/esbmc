@@ -116,6 +116,19 @@ mathsat_convt::get(const expr2tc &expr)
   case type2t::signedbv_id:
     return get_bv(convert_ast(expr));
   case type2t::fixedbv_id:
+  {
+    // XXX -- pulled from minisat in another branch, refactor this
+    expr2tc tmp = get_bv(convert_ast(expr));
+    const constant_int2t &intval = to_constant_int2t(tmp);
+    uint64_t val = intval.constant_value.to_ulong();
+    std::stringstream ss;
+    ss << val;
+    constant_exprt value_expr(migrate_type_back(expr->type));
+    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
+    fixedbvt fbv;
+    fbv.from_expr(value_expr);
+    return constant_fixedbv2tc(expr->type, fbv);
+  }
   case type2t::array_id:
   case type2t::pointer_id:
   case type2t::struct_id:
