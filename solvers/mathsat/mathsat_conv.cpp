@@ -56,8 +56,6 @@ mathsat_convt::get_bool(const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
-  assert(msat_term_is_boolean_constant(env, t) && "Model value of bool isn't "
-         "a bool");
 
   if (msat_term_is_true(env, t)) {
     return true_expr;
