@@ -272,6 +272,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVNOT:
     r = msat_make_bv_not(env, args[0]->t);
     break;
+  case SMT_FUNC_BVNEG:
+    r = msat_make_bv_neg(env, args[0]->t);
+    break;
   case SMT_FUNC_BVAND:
     r = msat_make_bv_and(env, args[0]->t, args[1]->t);
     break;
