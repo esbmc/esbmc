@@ -26,6 +26,7 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
 
+  smt_post_init();
 }
 
 mathsat_convt::~mathsat_convt(void)
