@@ -399,15 +399,11 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
 {
   std::stringstream ss;
 
-  if (theint.is_negative())
-    ss << theint.to_long();
-  else
-    ss << theint.to_ulong();
-
-  std::string rep = ss.str();
+  // MathSAT refuses to parse negative integers. So, feed it binary.
+  std::string str = integer2binary(theint, w);
 
   // Make bv int from textual representation.
-  msat_term t = msat_make_bv_number(env, rep.c_str(), w, 10);
+  msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat BV integer term");
   smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
   return new mathsat_smt_ast(s, t);
