@@ -118,6 +118,8 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   if (MSAT_ERROR_TERM(r)) {
     std::cerr << "Error creating SMT " << smt_func_name_table[k] << " function "
               << "application" << std::endl;
+    std::cerr << "Error text: \"" << msat_last_error_message(env) << "\""
+              << std::endl;
     abort();
   }
 
