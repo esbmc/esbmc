@@ -130,6 +130,9 @@ mathsat_convt::get(const expr2tc &expr)
     return constant_fixedbv2tc(expr->type, fbv);
   }
   case type2t::array_id:
+    // XXX - fix this.
+    std::cerr << "No array model get'ing for MathSAT yet, sorry" << std::endl;
+    return expr2tc();
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
