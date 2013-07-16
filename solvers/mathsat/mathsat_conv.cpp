@@ -190,6 +190,9 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     r = msat_make_not(env, args[0]->t);
     r = msat_make_or(env, r, args[1]->t);
     break;
+  case SMT_FUNC_ITE:
+    r = msat_make_term_ite(env, args[0]->t, args[1]->t, args[2]->t);
+    break;
   case SMT_FUNC_CONCAT:
     r = msat_make_bv_concat(env, args[0]->t, args[1]->t);
     break;
