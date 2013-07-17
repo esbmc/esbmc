@@ -54,10 +54,22 @@ cvc_convt::assert_lit(const literalt &l __attribute__((unused)))
 
 smt_ast *
 cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                             const smt_ast * const *args,
+                             const smt_ast * const *_args,
                              unsigned int numargs)
 {
+  const cvc_smt_ast *args[4];
+  unsigned int i;
+
+  assert(numargs <= 4);
+  for (i = 0; i < numargs; i++)
+    args[i] = cvc_ast_downcast(_args[i]);
+
+  CVC4::Expr e;
+
   switch (k) {
+  case SMT_FUNC_EQ:
+    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
+    break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
               << "\" in CVC conversion" << std::endl;
