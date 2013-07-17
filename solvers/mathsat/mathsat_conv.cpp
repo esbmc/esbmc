@@ -1,3 +1,6 @@
+#include <string>
+#include <sstream>
+
 #include "mathsat_conv.h"
 
 // :|
