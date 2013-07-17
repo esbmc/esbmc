@@ -18,6 +18,16 @@ public:
   unsigned int array_dom_width;
 };
 
+class cvc_smt_ast : public smt_ast
+{
+public:
+#define cvc_ast_downcast(x) static_cast<const cvc_smt_ast *>(x)
+  cvc_smt_ast(const smt_sort *_s, CVC4::Expr &_e) : smt_ast(_s), e(_e) { }
+  virtual ~cvc_smt_ast() { }
+
+  CVC4::Expr e;
+};
+
 class cvc_convt : public smt_convt
 {
 public:
