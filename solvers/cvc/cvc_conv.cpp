@@ -83,6 +83,12 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     return new cvc_smt_sort(k, t);
   }
   case SMT_SORT_ARRAY:
+  {
+    const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
+    const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
+    CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
+    return new cvc_smt_sort(k, t);
+  }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
               << std::endl;
