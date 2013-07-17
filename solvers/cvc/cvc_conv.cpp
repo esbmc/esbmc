@@ -128,9 +128,11 @@ cvc_convt::mk_smt_bool(bool val __attribute__((unused)))
 }
 
 smt_ast *
-cvc_convt::mk_smt_symbol(const std::string &name __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  abort();
+  const cvc_smt_sort *sort = cvc_sort_downcast(s);
+  CVC4::Expr e = em.mkVar(name, sort->t); // "global", eh?
+  return new cvc_smt_ast(s, e);
 }
 
 smt_sort *
