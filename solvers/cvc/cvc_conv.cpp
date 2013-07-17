@@ -10,7 +10,11 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
    : smt_convt(true, int_encoding, ns, is_cpp, false, true, false),
      em(), smt(&em)
 {
-  abort();
+  // Already initialized stuff in the constructor list,
+
+  assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
+
+  smt_post_init();
 }
 
 cvc_convt::~cvc_convt()
