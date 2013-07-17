@@ -3,6 +3,8 @@
 
 #include <solvers/smt/smt_conv.h>
 
+#include <cvc4/cvc4.h>
+
 class cvc_convt : public smt_convt
 {
 public:
@@ -31,6 +33,9 @@ public:
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
+
+  CVC4::ExprManager em;
+  CVC4::SmtEngine smt;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */
