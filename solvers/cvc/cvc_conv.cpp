@@ -115,10 +115,15 @@ cvc_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-cvc_convt::mk_smt_bvint(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)),
-                              unsigned int w __attribute__((unused)))
+cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
-  abort();
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
+
+  // Seems we can't make negative bitvectors; so just pull the value out and
+  // assume CVC is going to cut the top off correctly.
+  CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_ulong());
+  CVC4::Expr e = em.mkConst(bv);
+  return new cvc_smt_ast(s, e);
 }
 
 smt_ast *
