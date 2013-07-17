@@ -12,6 +12,9 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
 {
   // Already initialized stuff in the constructor list,
 
+  smt.setOption("produce-models", true);
+  smt.setLogic("QF_AUFBV");
+
   assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
 
   smt_post_init();
