@@ -38,6 +38,12 @@ CXXFLAGS+= -DMATHSAT -I $(MATHSAT)/include
 SOLVER_LIBS += -L$(MATHSAT)/lib -lmathsat
 endif
 
+ifdef USE_SOLVER_CVC
+CVC = $(CVC_PATH)
+CXXFLAGS+= -DUSECVC -I $(CVC)/include
+SOLVER_LIBS += -L$(CVC)/lib -lcvc4
+endif
+
 # Other goo
 
 ifdef TARGET32
