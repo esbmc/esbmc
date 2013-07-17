@@ -68,7 +68,11 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_EQ:
-    e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
+    if (s->id == SMT_SORT_BOOL) {
+      e = em.mkExpr(CVC4::kind::IFF, args[0]->e, args[1]->e);
+    } else {
+      e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
+    }
     break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
@@ -122,7 +126,7 @@ cvc_convt::mk_lit(const smt_ast *a)
   literalt l = new_variable();
   const cvc_smt_ast *c2 = cvc_ast_downcast(lit_to_ast(l));
 
-  CVC4::Expr e = em.mkExpr(CVC4::Kind::EQUAL, cast->e, c2->e);
+  CVC4::Expr e = em.mkExpr(CVC4::Kind::IFF, cast->e, c2->e);
   smt.assertFormula(e);
   return l;
 }
