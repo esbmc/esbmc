@@ -53,11 +53,16 @@ cvc_convt::assert_lit(const literalt &l __attribute__((unused)))
 }
 
 smt_ast *
-cvc_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)),
-                             const smt_ast * const *args __attribute__((unused)),
-                             unsigned int numargs __attribute__((unused)))
+cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                             const smt_ast * const *args,
+                             unsigned int numargs)
 {
-  abort();
+  switch (k) {
+  default:
+    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
+              << "\" in CVC conversion" << std::endl;
+    abort();
+  }
 }
 
 smt_sort *
