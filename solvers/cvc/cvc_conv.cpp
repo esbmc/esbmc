@@ -50,9 +50,10 @@ cvc_convt::solver_text()
 }
 
 void
-cvc_convt::assert_lit(const literalt &l __attribute__((unused)))
+cvc_convt::assert_lit(const literalt &l)
 {
-  abort();
+  const cvc_smt_ast *ca = cvc_ast_downcast(lit_to_ast(l));
+  smt.assertFormula(ca->e);
 }
 
 smt_ast *
