@@ -23,6 +23,12 @@ OBJS+= mathsat/$(OBJDIR)/mathsat.o
 DIRS+= mathsat
 endif
 
+ifdef CVC
+OBJS+= cvc/$(OBJDIR)/cvc.o
+DIRS+= cvc
+endif
+
+
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
