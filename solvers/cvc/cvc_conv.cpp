@@ -61,9 +61,21 @@ cvc_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind 
 }
 
 smt_sort *
-cvc_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
-  abort();
+  switch (k) {
+  case SMT_SORT_BOOL:
+  {
+    CVC4::BooleanType t = em.booleanType();
+    return new cvc_smt_sort(k, t);
+  }
+  case SMT_SORT_BV:
+  case SMT_SORT_ARRAY:
+  default:
+    std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
+              << std::endl;
+    abort();
+  }
 }
 
 literalt
