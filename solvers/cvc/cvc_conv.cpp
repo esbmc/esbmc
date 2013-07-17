@@ -75,6 +75,8 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
               << "\" in CVC conversion" << std::endl;
     abort();
   }
+
+  return new cvc_smt_ast(s, e);
 }
 
 smt_sort *
