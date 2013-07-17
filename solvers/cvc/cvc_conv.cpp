@@ -71,7 +71,7 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_EQ:
-    if (s->id == SMT_SORT_BOOL) {
+    if (args[0]->sort->id == SMT_SORT_BOOL) {
       e = em.mkExpr(CVC4::kind::IFF, args[0]->e, args[1]->e);
     } else {
       e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
