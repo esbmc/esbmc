@@ -8,7 +8,8 @@ SRCS= cvc_conv.cpp
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
 
-STRICTCOMPILE=1
+# CVC headers include some deprecated things, alas
+#STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
 
