@@ -63,6 +63,11 @@ cvc_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind 
 smt_sort *
 cvc_convt::mk_sort(const smt_sort_kind k, ...)
 {
+  va_list ap;
+  unsigned long uint;
+  int thebool;
+
+  va_start(ap, k);
   switch (k) {
   case SMT_SORT_BOOL:
   {
@@ -70,6 +75,13 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     return new cvc_smt_sort(k, t);
   }
   case SMT_SORT_BV:
+  {
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    thebool = thebool;
+    CVC4::BitVectorType t = em.mkBitVectorType(uint);
+    return new cvc_smt_sort(k, t);
+  }
   case SMT_SORT_ARRAY:
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
