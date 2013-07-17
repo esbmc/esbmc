@@ -540,6 +540,7 @@ public:
     code_cpp_throw_decl_end_id,
     isinf_id,
     isnormal_id,
+    concat_id,
     end_expr_id
   };
 
@@ -1937,6 +1938,7 @@ class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
 class isinf2t;
 class isnormal2t;
+class concat2t;
 
 // Data definitions.
 
@@ -2599,6 +2601,19 @@ public:
   std::vector<irep_idt> exception_list;
 };
 
+class concat_data : public expr2t
+{
+public:
+  concat_data(const type2tc &t, expr2t::expr_ids id,
+              const std::vector<expr2tc> &d)
+    : expr2t(t, id), data_items(d) { }
+  concat_data(const concat_data &ref)
+    : expr2t(ref), data_items(ref.data_items)
+      { }
+
+  std::vector<expr2tc> data_items;
+};
+
 // Give everything a typedef name. Use this to construct both the templated
 // expression methods, but also the container class which needs the template
 // parameters too.
@@ -2862,6 +2877,8 @@ irep_typedefs(isinf, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
 irep_typedefs(isnormal, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(concat, concat_data, esbmct::takestype,
+              std::vector<expr2tc>, concat_data, &concat_data::data_items);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4326,6 +4343,18 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class concat2t : public concat_expr_methods
+{
+public:
+  concat2t(const type2tc &type, const std::vector<expr2tc> &vals)
+    : concat_expr_methods(type, concat_id, vals) { }
+  concat2t(const concat2t &ref)
+    : concat_expr_methods(ref) { }
+  virtual expr2tc do_simplify(bool second) const;
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4483,6 +4512,7 @@ expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
 expr_macros(isinf);
 expr_macros(isnormal);
+expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast

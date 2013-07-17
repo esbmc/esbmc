@@ -4,6 +4,7 @@
 
 #include <base_type.h>
 #include <arith_tools.h>
+#include <ansi-c/c_types.h>
 
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
@@ -64,9 +65,11 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support, bool _nobools)
+                     bool is_cpp, bool _tuple_support, bool _nobools,
+                     bool can_init_inf_arrays)
   : caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support), no_bools_in_arrays(_nobools)
+    tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
+    can_init_unbounded_arrs(can_init_inf_arrays)
 {
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -418,6 +421,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ints_reals = false;
+  bool special_cases = true;
 
   if (caching) {
     smt_cachet::const_iterator cache_result = smt_cache.find(expr);
@@ -433,8 +437,15 @@ smt_convt::convert_ast(const expr2tc &expr)
     make_ints_reals = true;
   }
 
-  // Convert /all the arguments/.
   unsigned int i = 0;
+
+  if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr) ||
+      is_address_of2t(expr))
+    // Nope; needs special handling
+    goto nocvt;
+  special_cases = false;
+
+  // Convert /all the arguments/.
   forall_operands2(it, idx, expr) {
     args[i] = convert_ast(*it);
 
@@ -448,6 +459,8 @@ smt_convt::convert_ast(const expr2tc &expr)
     if (is_signedbv_type(*it) || is_fixedbv_type(*it))
       seen_signed_operand = true;
   }
+nocvt:
+
   num_args = i;
 
   sort = convert_sort(expr->type);
@@ -456,8 +469,9 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
-  if (!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
-      no_bools_in_arrays)
+  if ((!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
+       no_bools_in_arrays) ||
+       special_cases)
     goto expr_handle_table;
 
   if ((int_encoding && cvt->int_mode_func > SMT_FUNC_INVALID) ||
@@ -509,13 +523,25 @@ expr_handle_table:
   case expr2t::constant_array_of_id:
   {
     const array_type2t &arr = to_array_type(expr->type);
-    if (arr.size_is_infinite) {
+    if (!can_init_unbounded_arrs && arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
-      a = mk_fresh(sort, "inf_array");
+      // If we have an array of tuples and no tuple support, use tuple_fresh.
+      // Otherwise, mk_fresh.
+      if ((is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))
+          && !tuple_support)
+        a = tuple_fresh(sort);
+      else
+        a = mk_fresh(sort, "inf_array");
       break;
     }
 
-    const smt_sort *domain = machine_int_sort;
+    // Domain sort may be mesed with:
+    const smt_sort *domain;
+    if (int_encoding) {
+      domain = machine_int_sort;
+    } else {
+      domain = mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+    }
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
@@ -545,7 +571,7 @@ expr_handle_table:
       const smt_sort *s2 = convert_sort(mul.side_2->type);
       args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
-      a = mk_func_app(sort, SMT_FUNC_MUL, args, 2);
+      a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
       a = mk_extract(a, fbvt.width + fraction_bits - 1, fraction_bits, sort);
     } else {
       assert(is_bv_type(expr));
@@ -588,18 +614,7 @@ expr_handle_table:
   }
   case expr2t::index_id:
   {
-    const index2t &index = to_index2t(expr);
-    const array_type2t &arrtype = to_array_type(index.source_value->type);
-    if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
-      // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-      const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
-      a = mk_func_app(tmpsort, SMT_FUNC_SELECT, args, 2);
-      a = make_bit_bool(a);
-    } else if (is_tuple_array_ast_type(index.source_value->type)) {
-      a = tuple_array_select(args[0], sort, args[1]);
-    } else {
-      a = mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
-    }
+    a = convert_array_index(expr, sort);
     break;
   }
   case expr2t::with_id:
@@ -609,23 +624,10 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(args[0], idx, args[2]);
+      a = tuple_update(convert_ast(with.source_value), idx,
+                                   convert_ast(with.update_value));
     } else {
-      assert(is_array_type(expr->type));
-      const array_type2t &arrtype = to_array_type(expr->type);
-      if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
-        args[2] = make_bool_bit(args[2]);
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-        break;
-      } else if (is_tuple_array_ast_type(with.type)) {
-        assert(is_structure_type(arrtype.subtype) ||
-               is_pointer_type(arrtype.subtype));
-        const smt_sort *sort = convert_sort(with.update_value->type);
-        a = tuple_array_update(args[0], args[1], args[2], sort);
-      } else {
-        // Normal operation
-        a = mk_func_app(sort, SMT_FUNC_STORE, args, 3);
-      }
+      a = convert_array_store(expr, sort);
     }
     break;
   }
@@ -761,6 +763,31 @@ expr_handle_table:
     }
     break;
   }
+  case expr2t::shl_id:
+  {
+    const shl2t &shl = to_shl2t(expr);
+
+    if (shl.side_1->type->get_width() != shl.side_2->type->get_width()) {
+      // FIXME: frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(shl.side_1->type, shl.side_2);
+      args[1] = convert_ast(cast);
+    }
+
+    if (int_encoding) {
+      // Raise 2^shift, then multiply first operand by that value. If it's
+      // negative, what to do? FIXME.
+      constant_int2tc two(shl.type, BigInt(2));
+      const smt_ast *powargs[2];
+      powargs[0] = args[1];
+      powargs[1] = convert_ast(two);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
+    }
+    break;
+  }
   case expr2t::ashr_id:
   {
     const ashr2t &ashr = to_ashr2t(expr);
@@ -784,6 +811,33 @@ expr_handle_table:
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
+    }
+    break;
+  }
+  case expr2t::lshr_id:
+  {
+    // Like ashr. Haven't got around to cleaning this up yet.
+    const lshr2t &lshr = to_lshr2t(expr);
+
+    if (lshr.side_1->type->get_width() != lshr.side_2->type->get_width()) {
+      // FIXME: frontend doesn't cast the second operand up to the width of
+      // the first, which SMT does not enjoy.
+      typecast2tc cast(lshr.side_1->type, lshr.side_2);
+      args[1] = convert_ast(cast);
+    }
+
+    if (int_encoding) {
+      // Raise 2^shift, then divide first operand by that value. If it's
+      // negative, I suspect the correct operation is to latch to -1,
+      // XXX XXX XXX haven't implemented that yet.
+      constant_int2tc two(lshr.type, BigInt(2));
+      const smt_ast *powargs[2];
+      powargs[0] = args[1];
+      powargs[1] = convert_ast(two);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
+    } else {
+      a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
     }
     break;
   }
@@ -841,6 +895,25 @@ expr_handle_table:
       *new_expr.get()->get_sub_expr_nc(1) = cast2;
       a = convert_ast(new_expr);
     }
+    break;
+  }
+  case expr2t::concat_id:
+  {
+    assert(!int_encoding && "Concatonate encountered in integer mode; "
+           "unimplemented (and funky)");
+    const concat2t &cat = to_concat2t(expr);
+    std::vector<expr2tc>::const_iterator it = cat.data_items.begin();
+    args[0] = convert_ast(*it);
+    unsigned long accuml_size = (*it)->type->get_width();
+    it++;
+    for (; it != cat.data_items.end() ;it++) {
+      accuml_size += (*it)->type->get_width();
+      const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_size, false);
+      args[1] = convert_ast(*it);
+      args[0] = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+    }
+
+    a = args[0];
     break;
   }
   default:
@@ -916,11 +989,11 @@ smt_convt::convert_sort(const type2tc &type)
   }
   case type2t::string_id:
   {
-    const smt_sort *d = machine_int_sort;
-    smt_sort *r = (int_encoding)? mk_sort(SMT_SORT_INT)
-                                : mk_sort(SMT_SORT_BV, 8,
-                                          !config.ansi_c.char_is_unsigned);
-    return mk_sort(SMT_SORT_ARRAY, d, r);
+    const string_type2t &str_type = to_string_type(type);
+    constant_int2tc width(get_uint_type(config.ansi_c.int_width),
+                          BigInt(str_type.width));
+    type2tc new_type(new array_type2t(get_uint8_type(), width, false));
+    return convert_sort(new_type);
   }
   case type2t::array_id:
   {
@@ -928,18 +1001,26 @@ smt_convt::convert_sort(const type2tc &type)
 
     if (!tuple_support &&
         (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
-      return new tuple_smt_sort(type);
+      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
     }
 
-    // All arrays are indexed by integerse
-    const smt_sort *d = machine_int_sort;
+    // Index arrays by the smallest integer required to represent its size.
+    // Unless it's either infinite or dynamic in size, in which case use the
+    // machine int size. Also, faff about if it's an array of arrays, extending
+    // the domain.
+    const smt_sort *d = make_array_domain_sort(arr);
+
+    // Determine the range if we have arrays of arrays.
+    type2tc range = arr.subtype;
+    while (is_array_type(range))
+      range = to_array_type(range).subtype;
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
-    if (!int_encoding && is_bool_type(arr.subtype) && no_bools_in_arrays) {
+    if (!int_encoding && is_bool_type(range) && no_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {
-      r = convert_sort(arr.subtype);
+      r = convert_sort(range);
     }
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
@@ -1291,7 +1372,7 @@ smt_convt::make_bool_bit(const smt_ast *a)
   assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
          "smt_convt::make_bool_bit");
   const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-  const smt_ast *zero = mk_smt_bvint(BigInt(1), false, 1);
+  const smt_ast *zero = mk_smt_bvint(BigInt(0), false, 1);
   const smt_ast *args[3];
   args[0] = a;
   args[1] = one;
@@ -1312,6 +1393,320 @@ smt_convt::make_bit_bool(const smt_ast *a)
   args[1] = one;
   return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
+
+expr2tc
+smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
+{
+  if (int_encoding)
+    return idx;
+
+  const smt_sort *s = convert_sort(arr_sort);
+  unsigned int domain_width = s->get_domain_width();
+  if (domain_width == config.ansi_c.int_width)
+    return idx;
+
+  // Otherwise, we need to extract the lower bits out of this.
+  return typecast2tc(get_uint_type(domain_width), idx);
+}
+
+unsigned long
+smt_convt::size_to_bit_width(unsigned long sz)
+{
+  uint64_t domwidth = 2;
+  unsigned int dombits = 1;
+
+  // Shift domwidth up until it's either larger or equal to sz, or we risk
+  // overflowing.
+  while (domwidth != 0x8000000000000000ULL && domwidth < sz) {
+    domwidth <<= 1;
+    dombits++;
+  }
+
+  if (domwidth == 0x8000000000000000ULL)
+    dombits = 64;
+
+  return dombits;
+}
+
+unsigned long
+smt_convt::calculate_array_domain_width(const array_type2t &arr)
+{
+  // Index arrays by the smallest integer required to represent its size.
+  // Unless it's either infinite or dynamic in size, in which case use the
+  // machine int size.
+  if (!is_nil_expr(arr.array_size) && is_constant_int2t(arr.array_size)) {
+    constant_int2tc thesize = arr.array_size;
+    return size_to_bit_width(thesize->constant_value.to_ulong());
+  } else {
+    return config.ansi_c.int_width;
+  }
+}
+
+const smt_sort *
+smt_convt::make_array_domain_sort(const array_type2t &arr)
+{
+
+  // Start special casing if this is an array of arrays.
+  if (!is_array_type(arr.subtype)) {
+    // Normal array, work out what the domain sort is.
+    if (int_encoding)
+      return mk_sort(SMT_SORT_INT);
+    else
+      return mk_sort(SMT_SORT_BV, calculate_array_domain_width(arr), false);
+  } else {
+    // This is an array of arrays -- we're going to convert this into a single
+    // array that has an extended domain. Work out that width. Firstly, how
+    // many levels of array do we have?
+
+    unsigned int how_many_arrays = 1;
+    type2tc subarr = arr.subtype;
+    while (is_array_type(subarr)) {
+      how_many_arrays++;
+      subarr = to_array_type(subarr).subtype;
+    }
+
+    assert(how_many_arrays < 64 && "Suspiciously large number of array "
+                                   "dimensions");
+    unsigned int domwidth;
+    unsigned int i;
+    domwidth = calculate_array_domain_width(arr);
+    subarr = arr.subtype;
+    for (i = 1; i < how_many_arrays; i++) {
+      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
+      subarr = arr.subtype;
+    }
+
+    return mk_sort(SMT_SORT_BV, domwidth, false);
+  }
+}
+
+expr2tc
+smt_convt::twiddle_index_width(const expr2tc &expr, const type2tc &type)
+{
+  const array_type2t &arrtype = to_array_type(type);
+  unsigned int width = calculate_array_domain_width(arrtype);
+  typecast2tc t(type2tc(new unsignedbv_type2t(width)), expr);
+  expr2tc tmp = t->simplify();
+  if (is_nil_expr(tmp))
+    return t;
+  else
+    return tmp;
+}
+
+expr2tc
+smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
+{
+  // So: some series of index exprs will occur here, with some symbol or
+  // other expression at the bottom that's actually some symbol, or whatever.
+  // So, extract all the indexes, and concat them, with the first (lowest)
+  // index at the top, then descending.
+
+  unsigned long accuml_size = 0;
+  std::vector<expr2tc> output;
+  index2tc idx = expr;
+  output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
+  accuml_size += output.back()->type->get_width();
+  while (is_index2t(idx->source_value)) {
+    idx = idx->source_value;
+    output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
+    accuml_size += output.back()->type->get_width();
+  }
+
+  concat2tc concat(get_uint_type(accuml_size), output);
+
+  // Give the caller the base array object / thing. So that it can actually
+  // select out of the right piece of data.
+  base = idx->source_value;
+  return concat;
+}
+
+expr2tc
+smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
+{
+  // Just like handle_select_chain, we have some kind of multidimensional
+  // array, which we're representing as a single array with an extended domain,
+  // and using different segments of the domain to represent different
+  // dimensions of it. Concat all of the indexs into one index; also give the
+  // caller the base object that this is being applied to.
+
+  unsigned long accuml_size = 0;
+  std::vector<expr2tc> output;
+  with2tc with = expr;
+  output.push_back(twiddle_index_width(with->update_field, with->type));
+  accuml_size += output.back()->type->get_width();
+  while (is_with2t(with->update_value)) {
+    with = with->update_value;
+    output.push_back(twiddle_index_width(with->update_field, with->type));
+    accuml_size += output.back()->type->get_width();
+  }
+
+  // With's are in reverse order to indexes; so swap around.
+  std::reverse(output.begin(), output.end());
+
+  concat2tc concat(get_uint_type(accuml_size), output);
+
+  // Give the caller the actual value we're updating with.
+  base = with->update_value;
+  return concat;
+}
+
+const smt_ast *
+smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
+{
+  const smt_ast *a;
+  const index2t &index = to_index2t(expr);
+  expr2tc src_value = index.source_value;
+  expr2tc newidx;
+
+  if (is_index2t(index.source_value)) {
+    newidx = decompose_select_chain(expr, src_value);
+  } else {
+    newidx = fix_array_idx(index.index, index.source_value->type);
+  }
+
+  expr2tc tmp_idx = newidx->simplify();
+  if (!is_nil_expr(tmp_idx))
+    newidx = tmp_idx;
+
+  // Firstly, if it's a string, shortcircuit.
+  if (is_string_type(index.source_value)) {
+    return mk_select(src_value, newidx, ressort);
+  }
+
+  const array_type2t &arrtype = to_array_type(index.source_value->type);
+  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
+    // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
+    const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
+    a = mk_select(src_value, newidx, tmpsort);
+    return make_bit_bool(a);
+  } else if (is_tuple_array_ast_type(index.source_value->type)) {
+    a = convert_ast(src_value);
+    return tuple_array_select(a, ressort, newidx);
+  } else {
+    return mk_select(src_value, newidx, ressort);
+  }
+}
+
+const smt_ast *
+smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
+{
+  const with2t &with = to_with2t(expr);
+  expr2tc update_val = with.update_value;
+  expr2tc newidx;
+
+  if (is_array_type(with.type) &&
+      is_array_type(to_array_type(with.type).subtype) &&
+      is_with2t(with.update_value)) {
+    newidx = decompose_store_chain(expr, update_val);
+  } else {
+    newidx = fix_array_idx(with.update_field, with.type);
+  }
+
+  expr2tc tmp_idx = newidx->simplify();
+  if (!is_nil_expr(tmp_idx))
+    newidx = tmp_idx;
+
+  assert(is_array_type(expr->type));
+  const array_type2t &arrtype = to_array_type(expr->type);
+  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+    typecast2tc cast(get_uint_type(1), update_val);
+    return mk_store(with.source_value, newidx, cast, ressort);
+  } else if (is_tuple_array_ast_type(with.type)) {
+    assert(is_structure_type(arrtype.subtype) ||
+           is_pointer_type(arrtype.subtype));
+    const smt_sort *sort = convert_sort(with.update_value->type);
+    const smt_ast *src, *update;
+    src = convert_ast(with.source_value);
+    update = convert_ast(update_val);
+    return tuple_array_update(src, newidx, update, sort);
+  } else {
+    // Normal operation
+    return mk_store(with.source_value, newidx, update_val, ressort);
+  }
+}
+
+type2tc
+smt_convt::flatten_array_type(const type2tc &type)
+{
+  unsigned long arrbits = 0;
+
+  type2tc type_rec = type;
+  while (is_array_type(type_rec)) {
+    arrbits += calculate_array_domain_width(to_array_type(type_rec));
+    type_rec = to_array_type(type_rec).subtype;
+  }
+
+  // type_rec is now the base type.
+  uint64_t arr_size = 1ULL << arrbits;
+  constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
+  return type2tc(new array_type2t(type_rec, arr_size_expr, false));
+}
+
+const smt_ast *
+smt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
+                     const smt_sort *ressort)
+{
+  assert(ressort->id != SMT_SORT_ARRAY);
+  const smt_ast *args[2];
+  args[0] = convert_ast(array);
+  args[1] = convert_ast(idx);
+  return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
+}
+
+const smt_ast *
+smt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
+                    const expr2tc &value, const smt_sort *ressort)
+{
+  const smt_ast *args[3];
+
+  args[0] = convert_ast(array);
+  args[1] = convert_ast(idx);
+  args[2] = convert_ast(value);
+  return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
+}
+
+std::string
+smt_convt::get_fixed_point(const unsigned width, std::string value) const
+{
+  std::string m, f, tmp;
+  size_t found, size;
+  double v, magnitude, fraction, expoent;
+
+  found = value.find_first_of("/");
+  size = value.size();
+  m = value.substr(0, found);
+  if (found != std::string::npos)
+    f = value.substr(found + 1, size);
+  else 
+		f = "1";
+
+  if (m.compare("0") == 0 && f.compare("0") == 0)
+    return "0";
+
+  v = atof(m.c_str()) / atof(f.c_str());
+
+  magnitude = (int)v;
+  fraction = v - magnitude;
+  tmp = integer2string(power(2, width / 2), 10);
+  expoent = atof(tmp.c_str());
+  fraction = fraction * expoent;
+  fraction = floor(fraction);
+
+  std::string integer_str, fraction_str;
+  integer_str = integer2binary(string2integer(double2string(magnitude), 10), width / 2);
+	
+  fraction_str = integer2binary(string2integer(double2string(fraction), 10), width / 2);
+
+  value = integer_str + fraction_str;
+
+  if (magnitude == 0 && v<0) {
+    value = integer2binary(string2integer("-1", 10) - binary2integer(integer_str, true), width)
+          + integer2binary(string2integer(double2string(fraction), 10), width / 2);
+  }
+
+  return value;
+}
+
 
 const smt_convt::expr_op_convert
 smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
@@ -1344,7 +1739,8 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_BVNOR, SMT_FUNC_BVNOR, 2, SMT_SORT_BV},  //bitnor
 { SMT_FUNC_INVALID, SMT_FUNC_BVNXOR, SMT_FUNC_BVNXOR, 2, SMT_SORT_BV}, //bitnxor
 { SMT_FUNC_INVALID, SMT_FUNC_BVNOT, SMT_FUNC_BVNOT, 1, SMT_SORT_BV},  //bitnot
-{ SMT_FUNC_INVALID, SMT_FUNC_BVLSHR, SMT_FUNC_BVLSHR, 2, SMT_SORT_BV},  //lshr
+  // See comment below about shifts
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // lshl
 { SMT_FUNC_NEG, SMT_FUNC_BVNEG, SMT_FUNC_BVNEG, 1, SMT_SORT_ALLINTS},  //neg
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //abs
 { SMT_FUNC_ADD, SMT_FUNC_BVADD, SMT_FUNC_BVADD, 2, SMT_SORT_ALLINTS},//add
@@ -1352,11 +1748,10 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_MUL, SMT_FUNC_BVMUL, SMT_FUNC_BVMUL, 2, SMT_SORT_INT | SMT_SORT_REAL },//mul
 { SMT_FUNC_DIV, SMT_FUNC_BVSDIV, SMT_FUNC_BVUDIV, 2, SMT_SORT_INT | SMT_SORT_REAL },//div
 { SMT_FUNC_MOD, SMT_FUNC_BVSMOD, SMT_FUNC_BVUMOD, 2, SMT_SORT_BV | SMT_SORT_INT},//mod
-{ SMT_FUNC_SHL, SMT_FUNC_BVSHL, SMT_FUNC_BVSHL, 2, SMT_SORT_BV | SMT_SORT_INT},  //shl
-
-// Error: C frontend doesn't upcast the 2nd operand to ashr to the 1st operands
+// Error: C frontend doesn't upcast the 2nd operand to shift to the 1st operands
 // bit width. Therefore this doesn't work. Fall back to backup method.
 //{ SMT_FUNC_INVALID, SMT_FUNC_BVASHR, SMT_FUNC_BVASHR, 2, SMT_SORT_BV},  //ashr
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0}, // shl
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //ashr
 
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //dyn_obj_id
@@ -1366,9 +1761,9 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //addr_of
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_extract
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //byte_update
-{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, SMT_SORT_ARRAY | SMT_SORT_ALLINTS },  //with
+{ SMT_FUNC_STORE, SMT_FUNC_STORE, SMT_FUNC_STORE, 3, 0},  //with
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //member
-{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, SMT_SORT_ARRAY | SMT_SORT_INT | SMT_SORT_BV},  //index
+{ SMT_FUNC_SELECT, SMT_FUNC_SELECT, SMT_FUNC_SELECT, 2, 0},  //index
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_str_id
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //zero_len_str
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //isnan
@@ -1404,6 +1799,9 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_catch
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw
 { SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //cpp_throw_dec
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isinf
+{ SMT_FUNC_INVALID, SMT_FUNC_INVALID, SMT_FUNC_INVALID, 0, 0},  //isnormal
+{ SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //concat
 };
 
 const std::string

@@ -126,7 +126,7 @@ void goto_symext::symex_malloc(
 void goto_symext::symex_free(const code_free2t &code)
 {
 
-  pointer_offset2tc ptr_obj(uint_type2(), code.operand);
+  pointer_offset2tc ptr_obj(pointer_type2(), code.operand);
   equality2tc eq(ptr_obj, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
 }

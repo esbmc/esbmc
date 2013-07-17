@@ -13,7 +13,8 @@ extern sexpr *smtlib_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
-  : smt_convt(false, int_encoding, _ns, is_cpp, false, true), options(_opts)
+  : smt_convt(false, int_encoding, _ns, is_cpp, false, true, false),
+    options(_opts)
 {
   temp_sym_count = 1;
   std::string cmd;
@@ -278,6 +279,11 @@ smtlib_convt::dec_solve()
   // Declare all symbols
   std::map<std::string, const smt_sort *>::const_iterator it;
   for (it = symbol_table.begin(); it != symbol_table.end(); it++) {
+    // Struct / union symbols may have been created over the course of this
+    // conversion, but we don't actually use them, so don't print them.
+    if (it->second->id == SMT_SORT_STRUCT || it->second->id == SMT_SORT_UNION)
+      continue;
+
     fprintf(out_stream, "(declare-fun |%s| () %s)\n", it->first.c_str(),
            sort_to_string(it->second).c_str());
   }
@@ -512,7 +518,8 @@ smtlib_convt::assert_lit(const literalt &l)
 
 smt_ast *
 smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
-                          const smt_ast **args, unsigned int numargs)
+                          const smt_ast * const *args,
+                          unsigned int numargs)
 {
   assert(numargs <= 4 && "Too many arguments to smtlib mk_func_app");
   smtlib_smt_ast *a = new smtlib_smt_ast(s, k);
