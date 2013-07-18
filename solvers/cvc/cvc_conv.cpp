@@ -10,7 +10,7 @@ create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 
 cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
    : smt_convt(true, int_encoding, ns, is_cpp, false, true, false),
-     em(), smt(&em)
+     em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
 
@@ -357,7 +357,17 @@ smt_ast *
 cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const cvc_smt_sort *sort = cvc_sort_downcast(s);
+
+  // Standard arrangement: if we already have the name, return the expression
+  // from the symbol table. If not, time for a new name.
+  if (sym_tab.isBound(name)) {
+    CVC4::Expr e = sym_tab.lookup(name);
+    return new cvc_smt_ast(s, e);
+  }
+
+  // Time for a new one.
   CVC4::Expr e = em.mkVar(name, sort->t); // "global", eh?
+  sym_tab.bind(name, e, true);
   return new cvc_smt_ast(s, e);
 }
 

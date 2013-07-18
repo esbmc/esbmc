@@ -63,6 +63,7 @@ public:
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;
+  CVC4::SymbolTable sym_tab;
 };
 
 #endif /* _ESBMC_SOLVERS_CVC_CVC_CONV_H_ */
