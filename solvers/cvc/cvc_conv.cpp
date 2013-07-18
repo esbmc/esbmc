@@ -66,6 +66,17 @@ cvc_convt::get_bool(const smt_ast *a)
   return constant_bool2tc(foo);
 }
 
+expr2tc
+cvc_convt::get_bv(const smt_ast *a)
+{
+  const cvc_smt_ast *ca = cvc_ast_downcast(a);
+  CVC4::Expr e = smt.getValue(ca->e);
+  CVC4::BitVector foo = e.getConst<CVC4::BitVector>();
+  // huuurrrrrrrr, an immense lack of uint64_t's detected.
+  uint64_t val = foo.toInteger().getUnsignedLong();
+  return constant_int2tc(get_uint_type(foo.getSize()), BigInt(val));
+}
+
 const std::string
 cvc_convt::solver_text()
 {
