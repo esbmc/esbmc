@@ -169,9 +169,11 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 }
 
 smt_ast *
-cvc_convt::mk_smt_bool(bool val __attribute__((unused)))
+cvc_convt::mk_smt_bool(bool val)
 {
-  abort();
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  CVC4::Expr e = em.mkConst(val);
+  return new cvc_smt_ast(s, e);
 }
 
 smt_ast *
