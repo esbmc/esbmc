@@ -57,6 +57,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  expr2tc get_bool(const smt_ast *a);
+
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;
 };

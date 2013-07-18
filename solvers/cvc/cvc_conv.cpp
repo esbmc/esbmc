@@ -47,9 +47,23 @@ cvc_convt::get(const expr2tc &expr __attribute__((unused)))
 }
 
 tvt
-cvc_convt::l_get(literalt l __attribute__((unused)))
+cvc_convt::l_get(literalt l)
 {
-  abort();
+  const cvc_smt_ast *ca = cvc_ast_downcast(lit_to_ast(l));
+  constant_bool2tc b = get_bool(ca);
+  if (b->constant_value)
+    return tvt(true);
+  else
+    return tvt(false);
+}
+
+expr2tc
+cvc_convt::get_bool(const smt_ast *a)
+{
+  const cvc_smt_ast *ca = cvc_ast_downcast(a);
+  CVC4::Expr e = smt.getValue(ca->e);
+  bool foo = e.getConst<bool>();
+  return constant_bool2tc(foo);
 }
 
 const std::string
