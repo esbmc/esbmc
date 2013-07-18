@@ -24,7 +24,6 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
 
 cvc_convt::~cvc_convt()
 {
-  abort();
 }
 
 prop_convt::resultt
