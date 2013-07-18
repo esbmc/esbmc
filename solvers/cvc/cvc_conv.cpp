@@ -87,6 +87,30 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVSUB:
     e = em.mkExpr(CVC4::kind::BITVECTOR_SUB, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_BVUGT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UGT, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVUGTE:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UGE, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVULT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ULT, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVULTE:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ULE, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSGT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SGT, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSGTE:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SGE, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSLT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SLT, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSLTE:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SLE, args[0]->e, args[1]->e);
+    break;
   case SMT_FUNC_STORE:
     e = em.mkExpr(CVC4::kind::STORE, args[0]->e, args[1]->e, args[2]->e);
     break;
