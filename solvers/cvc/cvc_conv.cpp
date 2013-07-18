@@ -28,7 +28,16 @@ cvc_convt::~cvc_convt()
 prop_convt::resultt
 cvc_convt::dec_solve()
 {
-  abort();
+  CVC4::Result r = smt.checkSat();
+  if (r.isSat())
+    return P_SATISFIABLE;
+  else if (!r.isUnknown())
+    return P_UNSATISFIABLE;
+  else {
+    std::cerr << "Error solving satisfiability of formula with CVC"
+              << std::endl;
+    abort();
+  }
 }
 
 expr2tc
