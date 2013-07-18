@@ -207,6 +207,15 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     e = em.mkExpr(CVC4::kind::BITVECTOR_MULT, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_BVLSHR:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVASHR:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_ASHR, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSHL:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SHL, args[0]->e, args[1]->e);
+    break;
   case SMT_FUNC_BVUGT:
     e = em.mkExpr(CVC4::kind::BITVECTOR_UGT, args[0]->e, args[1]->e);
     break;
