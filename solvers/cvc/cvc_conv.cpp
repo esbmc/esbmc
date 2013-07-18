@@ -81,6 +81,9 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_AND:
     e = em.mkExpr(CVC4::kind::AND, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_STORE:
+    e = em.mkExpr(CVC4::kind::STORE, args[0]->e, args[1]->e, args[2]->e);
+    break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
               << "\" in CVC conversion" << std::endl;
