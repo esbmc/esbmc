@@ -41,9 +41,33 @@ cvc_convt::dec_solve()
 }
 
 expr2tc
-cvc_convt::get(const expr2tc &expr __attribute__((unused)))
+cvc_convt::get(const expr2tc &expr)
 {
-  abort();
+  switch (expr->type->type_id) {
+  case type2t::bool_id:
+    return get_bool(convert_ast(expr));
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+    return get_bv(convert_ast(expr));
+  case type2t::fixedbv_id:
+  {
+    // XXX -- again, another candidate for refactoring.
+    expr2tc tmp = get_bv(convert_ast(expr));
+    const constant_int2t &intval = to_constant_int2t(tmp);
+    uint64_t val = intval.constant_value.to_ulong();
+    std::stringstream ss;
+    ss << val;
+    constant_exprt value_expr(migrate_type_back(expr->type));
+    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
+    fixedbvt fbv;
+    fbv.from_expr(value_expr);
+    return constant_fixedbv2tc(expr->type, fbv);
+  }
+  default:
+    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
+              << ") in cvc get" << std::endl;
+    abort();
+  }
 }
 
 tvt
