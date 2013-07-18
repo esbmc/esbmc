@@ -195,6 +195,6 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
-  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ca->e, ext2);
+  CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
   return new cvc_smt_ast(s, fin);
 }
