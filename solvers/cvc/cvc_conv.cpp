@@ -1,3 +1,5 @@
+#include <ansi-c/c_types.h>
+
 #include "cvc_conv.h"
 
 prop_convt *
@@ -63,6 +65,8 @@ cvc_convt::get(const expr2tc &expr)
     fbv.from_expr(value_expr);
     return constant_fixedbv2tc(expr->type, fbv);
   }
+  case type2t::array_id:
+    return get_array(convert_ast(expr), expr->type);
   case type2t::struct_id:
   case type2t::union_id:
   case type2t::pointer_id:
@@ -103,6 +107,44 @@ cvc_convt::get_bv(const smt_ast *a)
   // huuurrrrrrrr, an immense lack of uint64_t's detected.
   uint64_t val = foo.toInteger().getUnsignedLong();
   return constant_int2tc(get_uint_type(foo.getSize()), BigInt(val));
+}
+
+expr2tc
+cvc_convt::get_array(const smt_ast *a, const type2tc &t)
+{
+
+  const array_type2t &ar = to_array_type(t);
+  if (is_tuple_ast_type(ar.subtype)) {
+    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
+    return expr2tc();
+  }
+
+  // Fetch the array bounds, if it's huge then assume this is a 1024 element
+  // array. Then fetch all elements and formulate a constant_array.
+  size_t w = a->sort->get_domain_width();
+  size_t orig_w = w;
+  if (w > 10)
+    w = 10;
+
+  const cvc_smt_ast *ca = cvc_ast_downcast(a);
+  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
+
+  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  const smt_sort *s = convert_sort(ar.subtype);
+  std::vector<expr2tc> fields;
+
+  for (size_t i = 0; i < (1ULL << w); i++) {
+    smt_ast *tmpast = mk_smt_bvint(BigInt(i), false, orig_w);
+    const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
+    CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, ca->e, tmpa->e);
+    free(tmpast);
+
+    cvc_smt_ast *tmpb = new cvc_smt_ast(s, e);
+    fields.push_back(get_bv(tmpb));
+    free(tmpb);
+  }
+
+  return constant_array2tc(arr_type, fields);
 }
 
 const std::string
