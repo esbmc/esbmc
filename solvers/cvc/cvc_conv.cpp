@@ -183,6 +183,9 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
       e = em.mkExpr(CVC4::kind::EQUAL, args[0]->e, args[1]->e);
     }
     break;
+  case SMT_FUNC_NOTEQ:
+    e = em.mkExpr(CVC4::kind::DISTINCT, args[0]->e, args[1]->e);
+    break;
   case SMT_FUNC_AND:
     e = em.mkExpr(CVC4::kind::AND, args[0]->e, args[1]->e);
     break;
