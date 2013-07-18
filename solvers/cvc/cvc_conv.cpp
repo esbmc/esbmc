@@ -120,7 +120,10 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     const cvc_smt_sort *dom = va_arg(ap, const cvc_smt_sort*);
     const cvc_smt_sort *range = va_arg(ap, const cvc_smt_sort*);
     CVC4::ArrayType t = em.mkArrayType(dom->t, range->t);
-    return new cvc_smt_sort(k, t);
+    cvc_smt_sort *cs = new cvc_smt_sort(k, t);
+    CVC4::BitVectorType bv_type(dom->t);
+    cs->array_dom_width = bv_type.getSize();
+    return cs;
   }
   default:
     std::cerr << "Unimplemented smt sort " << k << " in CVC mk_sort"
