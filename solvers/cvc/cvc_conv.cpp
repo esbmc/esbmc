@@ -63,6 +63,10 @@ cvc_convt::get(const expr2tc &expr)
     fbv.from_expr(value_expr);
     return constant_fixedbv2tc(expr->type, fbv);
   }
+  case type2t::struct_id:
+  case type2t::union_id:
+  case type2t::pointer_id:
+    return tuple_get(expr);
   default:
     std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
               << ") in cvc get" << std::endl;
