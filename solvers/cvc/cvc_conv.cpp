@@ -123,6 +123,9 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_SELECT:
     e = em.mkExpr(CVC4::kind::SELECT, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_CONCAT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_CONCAT, args[0]->e, args[1]->e);
+    break;
   default:
     std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[k]
               << "\" in CVC conversion" << std::endl;
