@@ -192,6 +192,9 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_OR:
     e = em.mkExpr(CVC4::kind::OR, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_XOR:
+    e = em.mkExpr(CVC4::kind::XOR, args[0]->e, args[1]->e);
+    break;
   case SMT_FUNC_IMPLIES:
     e = em.mkExpr(CVC4::kind::IMPLIES, args[0]->e, args[1]->e);
     break;
@@ -200,6 +203,12 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     break;
   case SMT_FUNC_NOT:
     e = em.mkExpr(CVC4::kind::NOT, args[0]->e);
+    break;
+  case SMT_FUNC_BVNOT:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_NOT, args[0]->e);
+    break;
+  case SMT_FUNC_BVNEG:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_NEG, args[0]->e);
     break;
   case SMT_FUNC_BVADD:
     e = em.mkExpr(CVC4::kind::BITVECTOR_PLUS, args[0]->e, args[1]->e);
@@ -210,6 +219,17 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     e = em.mkExpr(CVC4::kind::BITVECTOR_MULT, args[0]->e, args[1]->e);
     break;
+  case SMT_FUNC_BVSDIV:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SDIV, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVUDIV:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UDIV, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVSMOD:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_SREM, args[0]->e, args[1]->e);
+    break;
+  case SMT_FUNC_BVUMOD:
+    e = em.mkExpr(CVC4::kind::BITVECTOR_UREM, args[0]->e, args[1]->e);
   case SMT_FUNC_BVLSHR:
     e = em.mkExpr(CVC4::kind::BITVECTOR_LSHR, args[0]->e, args[1]->e);
     break;
