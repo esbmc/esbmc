@@ -46,7 +46,9 @@ cvc_convt::l_get(literalt l __attribute__((unused)))
 const std::string
 cvc_convt::solver_text()
 {
-  abort();
+  std::stringstream ss;
+  ss << "CVC " << CVC4::Configuration::getVersionString();
+  return ss.str();
 }
 
 void
