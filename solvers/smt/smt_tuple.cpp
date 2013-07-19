@@ -465,7 +465,7 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
       expr2tc falseitem = tuple_project_sym(false_val, i);
       if2tc ite(trueitem->type, cond_exp, trueitem, falseitem);
       expr2tc resitem = tuple_project_sym(result, i);
-      equality2tc eq(ite, resitem);
+      equality2tc eq(resitem, ite);
       assert_lit(mk_lit(convert_ast(eq)));
     }
 
