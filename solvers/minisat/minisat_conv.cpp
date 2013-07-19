@@ -1214,8 +1214,8 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     break;
   }
   default:
-    std::cerr << "Unimplemented SMT function " << f << " in minisat convt"
-              << std::endl;
+    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[f]
+              << "\" in minisat convt" << std::endl;
     abort();
   }
 
