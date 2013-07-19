@@ -132,6 +132,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,    "sword",                switc,         ""      },
 { 0,    "stp",                  switc,         ""      },
 { 0,    "mathsat",              switc,         ""      },
+{ 0,    "cvc",                  switc,         ""      },
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
