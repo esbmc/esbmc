@@ -1354,9 +1354,15 @@ minisat_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
     break;
   }
   default:
+  // Alas, tuple_fresh invokes us gratuitously with an invalid type. I can't
+  // remember why, but it was justified at the time, for one solver, somewhere.
+  // Either way, it should die in the future, but until then...
+  return NULL;
+#if 0
     std::cerr << "Unimplemented symbol type " << sort->id
               << " in minisat symbol creation" << std::endl;
     abort();
+#endif
   }
 
   sym_table.insert(symtable_type::value_type(name, a));
