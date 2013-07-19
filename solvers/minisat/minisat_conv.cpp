@@ -1040,6 +1040,12 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
     result->bv.push_back(land(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
+  case SMT_FUNC_XOR:
+  {
+    result = new minisat_smt_ast(ressort);
+    result->bv.push_back(lxor(args[0]->bv[0], args[1]->bv[0]));
+    break;
+  }
   case SMT_FUNC_BVADD:
   {
     literalt carry_in = const_literal(false);
