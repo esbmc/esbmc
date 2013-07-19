@@ -223,6 +223,19 @@ smt_convt::tuple_project_sym(const smt_ast *a, unsigned int i, bool dot)
   // value. Only for terminal elements.
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
+
+  if (is_array_type(ts->thetype)) {
+    // Project, then wrap in an array.
+    const array_type2t &arr = to_array_type(ts->thetype);
+    symbol2tc tmp(arr.subtype, ta->name);
+    symbol2tc result = tuple_project_sym(tmp, i, dot);
+
+    // Perform array wrapping
+    type2tc new_type(new array_type2t(result->type, arr.array_size, false));
+    result.get()->type = new_type;
+    return result;
+  }
+
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -241,6 +254,18 @@ smt_convt::tuple_project_sym(const expr2tc &a, unsigned int i, bool dot)
   // Like tuple project, but only return a symbol expr, not the converted
   // value. Only for terminal elements.
   const symbol2t &sym = to_symbol2t(a);
+  if (is_array_type(sym.type)) {
+    // Project, then wrap in an array.
+    const array_type2t &arr = to_array_type(sym.type);
+    symbol2tc tmp(arr.subtype, sym.thename);
+    symbol2tc result = tuple_project_sym(tmp, i, dot);
+
+    // Perform array wrapping
+    type2tc new_type(new array_type2t(result->type, arr.array_size, false));
+    result.get()->type = new_type;
+    return result;
+  }
+
   const struct_union_data &data = get_type_def(sym.type);
 
   assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
