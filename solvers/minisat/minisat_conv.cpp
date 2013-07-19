@@ -190,7 +190,7 @@ minisat_convt::bvxor(const bvt &bv0, const bvt &bv1, bvt &output)
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(lxor(bv0[0], bv1[1]));
+    output.push_back(lxor(bv0[i], bv1[i]));
 
   return;
 }
