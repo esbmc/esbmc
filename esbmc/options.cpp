@@ -129,6 +129,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,    "metasmt",              switc,         ""      },
 { 0,    "minisat",              switc,         ""      },
 { 0,    "boolector",            switc,         ""      },
+{ 0,    "sword",                switc,         ""      },
+{ 0,    "stp",                  switc,         ""      },
 { 0,    "mathsat",              switc,         ""      },
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},

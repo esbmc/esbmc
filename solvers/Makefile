@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
 OBJS= prop/$(OBJDIR)/propobj.o smt/$(OBJDIR)/smt.o smtlib/$(OBJDIR)/smtlib.o \
-      solve.o
+      $(OBJDIR)/solve.o
 
 DIRS= prop smt smtlib
 
@@ -21,6 +21,11 @@ endif
 ifdef MATHSAT
 OBJS+= mathsat/$(OBJDIR)/mathsat.o
 DIRS+= mathsat
+endif
+
+ifdef MINISAT
+OBJS+= minisat/$(OBJDIR)/minisat.o
+DIRS+= minisat
 endif
 
 ###############################################################################
@@ -44,10 +49,13 @@ $(OBJDIR)/solvers.o: $(OBJS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
+	-rm $(OBJS)
 	for dir in $(DIRS); do \
 	    make -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
+
+$(OBJDIR)/solve.o: solve.cpp
 
 STRICTCOMPILE=1
 

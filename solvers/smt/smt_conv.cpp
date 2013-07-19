@@ -192,9 +192,6 @@ smt_convt::process_clause(const bvt &bv, bvt &dest)
   {
     literalt l = *it;
 
-    // we never use index 0
-    assert(l.var_no() != 0);
-
     if (l.is_true())
       return true;  // clause satisfied
 
@@ -439,8 +436,10 @@ smt_convt::convert_ast(const expr2tc &expr)
 
   unsigned int i = 0;
 
+  // FIXME: turn this into a lookup table
   if (is_constant_array2t(expr) || is_with2t(expr) || is_index2t(expr) ||
-      is_address_of2t(expr))
+      is_address_of2t(expr) ||
+      (is_equality2t(expr) && is_array_type(to_equality2t(expr).side_1->type)))
     // Nope; needs special handling
     goto nocvt;
   special_cases = false;
@@ -624,8 +623,7 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr->type) || is_union_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(convert_ast(with.source_value), idx,
-                                   convert_ast(with.update_value));
+      a = tuple_update(convert_ast(with.source_value), idx, with.update_value);
     } else {
       a = convert_array_store(expr, sort);
     }
@@ -679,11 +677,13 @@ expr_handle_table:
   case expr2t::if_id:
   {
     // Only attempt to handle struct.s
+    const if2t &if_ref = to_if2t(expr);
     if (is_struct_type(expr) || is_pointer_type(expr)) {
-      a = tuple_ite(args[0], args[1], args[2], sort);
+      a = tuple_ite(if_ref.cond, if_ref.true_value, if_ref.false_value,
+                    if_ref.type);
     } else {
       assert(is_array_type(expr));
-      a = tuple_array_ite(args[0], args[1], args[2], sort);
+      a = tuple_array_ite(if_ref.cond, if_ref.true_value, if_ref.false_value);
     }
     break;
   }
@@ -745,10 +745,12 @@ expr_handle_table:
       if (is_structure_type(to_array_type(eq.side_1->type).subtype) ||
           is_pointer_type(to_array_type(eq.side_1->type).subtype)) {
         // Array of structs equality.
+        args[0] = convert_ast(eq.side_1);
+        args[1] = convert_ast(eq.side_2);
         a = tuple_array_equality(args[0], args[1]);
       } else {
         // Normal array equality
-        a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
+        a = convert_array_equality(eq.side_1, eq.side_2);
       }
     } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
       // Pointers are tuples
@@ -1356,7 +1358,7 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
 
   args[0] = true_bit;
   args[1] = is_neg_bit;
-  const smt_ast *is_neg = mk_func_app(bit, SMT_FUNC_EQ, args, 2);
+  const smt_ast *is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
   // final switch
   args[0] = is_neg;
@@ -1478,6 +1480,52 @@ smt_convt::make_array_domain_sort(const array_type2t &arr)
 
     return mk_sort(SMT_SORT_BV, domwidth, false);
   }
+}
+
+type2tc
+smt_convt::make_array_domain_sort_exp(const array_type2t &arr)
+{
+
+  // Start special casing if this is an array of arrays.
+  if (!is_array_type(arr.subtype)) {
+    // Normal array, work out what the domain sort is.
+    if (int_encoding)
+      return get_uint_type(config.ansi_c.int_width);
+    else
+      return get_uint_type(calculate_array_domain_width(arr));
+  } else {
+    // This is an array of arrays -- we're going to convert this into a single
+    // array that has an extended domain. Work out that width. Firstly, how
+    // many levels of array do we have?
+
+    unsigned int how_many_arrays = 1;
+    type2tc subarr = arr.subtype;
+    while (is_array_type(subarr)) {
+      how_many_arrays++;
+      subarr = to_array_type(subarr).subtype;
+    }
+
+    assert(how_many_arrays < 64 && "Suspiciously large number of array "
+                                   "dimensions");
+    unsigned int domwidth;
+    unsigned int i;
+    domwidth = calculate_array_domain_width(arr);
+    subarr = arr.subtype;
+    for (i = 1; i < how_many_arrays; i++) {
+      domwidth += calculate_array_domain_width(to_array_type(arr.subtype));
+      subarr = arr.subtype;
+    }
+
+    return get_uint_type(domwidth);
+  }
+}
+
+expr2tc
+smt_convt::array_domain_to_width(const type2tc &type)
+{
+  const unsignedbv_type2t &uint = to_unsignedbv_type(type);
+  uint64_t sz = 1ULL << uint.width;
+  return constant_int2tc(index_type2(), BigInt(sz));
 }
 
 expr2tc

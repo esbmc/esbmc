@@ -14,6 +14,15 @@ prop_convt *
 create_new_metasmt_boolector_solver(bool int_encoding, bool is_cpp,
                                     const namespacet &ns);
 prop_convt *
+create_new_metasmt_sword_solver(bool int_encoding, bool is_cpp,
+                                const namespacet &ns);
+prop_convt *
+create_new_metasmt_stp_solver(bool int_encoding, bool is_cpp,
+                                const namespacet &ns);
+prop_convt *
+create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts);
+prop_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
 
 static prop_convt *
@@ -25,6 +34,19 @@ create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
     abort();
 #else
     return new z3_convt(int_encoding, is_cpp, ns);
+#endif
+}
+
+static prop_convt *
+create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                      const optionst &options)
+{
+#ifndef Z3
+    std::cerr << "Sorry, MiniSAT support was not built into this version of "
+              "ESBMC" << std::endl;
+    abort();
+#else
+    return create_new_minisat_solver(int_encoding, ns, is_cpp, options);
 #endif
 }
 
@@ -71,6 +93,34 @@ create_metasmt_boolector_solver(bool is_cpp __attribute__((unused)),
 }
 
 static prop_convt *
+create_metasmt_sword_solver(bool is_cpp __attribute__((unused)),
+                            bool int_encoding __attribute__((unused)),
+                            const namespacet &ns __attribute__((unused)))
+{
+#if !defined(METASMT) || !defined(SWORD)
+    std::cerr << "Sorry, SWORD support was not built into this version of ESBMC"
+              << std::endl;
+    abort();
+#else
+    return create_new_metasmt_sword_solver(int_encoding, is_cpp, ns);
+#endif
+}
+
+static prop_convt *
+create_metasmt_stp_solver(bool is_cpp __attribute__((unused)),
+                          bool int_encoding __attribute__((unused)),
+                          const namespacet &ns __attribute__((unused)))
+{
+#if !defined(METASMT) || !defined(STP)
+    std::cerr << "Sorry, STP support was not built into this version of ESBMC"
+              << std::endl;
+    abort();
+#else
+    return create_new_metasmt_stp_solver(int_encoding, is_cpp, ns);
+#endif
+}
+
+static prop_convt *
 create_mathsat_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)))
@@ -84,10 +134,9 @@ create_mathsat_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-
-static const unsigned int num_of_solvers = 6;
+static const unsigned int num_of_solvers = 8;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minisat", "metasmt", "boolector", "mathsat" };
+{ "z3", "smtlib", "minisat", "metasmt", "boolector", "sword", "stp", "mathsat"};
 
 static prop_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
@@ -120,11 +169,17 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
       return create_metasmt_z3_solver(is_cpp, int_encoding, ns);
     } else if (options.get_bool_option("boolector")) {
       return create_metasmt_boolector_solver(is_cpp, int_encoding, ns);
+    } else if (options.get_bool_option("sword")) {
+      return create_metasmt_sword_solver(is_cpp, int_encoding, ns);
+    } else if (options.get_bool_option("stp")) {
+      return create_metasmt_stp_solver(is_cpp, int_encoding, ns);
     } else {
       std::cerr << "You must specify a backend solver when using the metaSMT "
                 << "framework" << std::endl;
       abort();
     }
+  } else if (options.get_bool_option("minisat")) {
+    return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else {
     return create_z3_solver(is_cpp, int_encoding, ns);
   }
@@ -153,6 +208,8 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
                 << "framework" << std::endl;
       abort();
     }
+  } else if (options.get_bool_option("minisat")) {
+    return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
               << std::endl;
