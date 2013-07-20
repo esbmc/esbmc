@@ -47,19 +47,6 @@ public:
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
   void dump_bv(const bvt &bv) const;
 
-  // What's basically the literalt api:
-  // Things imported from CBMC, more or less
-  literalt lselect(literalt a, literalt b, literalt c);
-  literalt lequal(literalt a, literalt b);
-  literalt limplies(literalt a, literalt b);
-  literalt lxor(literalt a, literalt b);
-  literalt lor(literalt a, literalt b);
-  literalt land(literalt a, literalt b);
-  void gate_xor(literalt a, literalt b, literalt o);
-  void gate_or(literalt a, literalt b, literalt o);
-  void gate_and(literalt a, literalt b, literalt o);
-  void set_equal(literalt a, literalt b);
-
   // Members
 
   Minisat::Solver solver;

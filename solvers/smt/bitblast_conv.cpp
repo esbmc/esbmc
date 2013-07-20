@@ -49,7 +49,7 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   }
   case SMT_FUNC_OR:
   {
-    literalt res = lor(args[0]->bv[0], args[1]->bv[0]);
+    literalt res = smt_convt::lor(args[0]->bv[0], args[1]->bv[0]);
     result = new bitblast_smt_ast(ressort);
     result->bv.push_back(res);
     break;
@@ -76,7 +76,7 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_AND:
   {
     result = new bitblast_smt_ast(ressort);
-    result->bv.push_back(land(args[0]->bv[0], args[1]->bv[0]));
+    result->bv.push_back(smt_convt::land(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
   case SMT_FUNC_XOR:
@@ -598,9 +598,9 @@ bitblast_convt::carry(literalt a, literalt b, literalt c)
 {
   bvt tmp;
   tmp.reserve(3);
-  tmp.push_back(land(a, b));
-  tmp.push_back(land(a, c));
-  tmp.push_back(land(b, c));
+  tmp.push_back(smt_convt::land(a, b));
+  tmp.push_back(smt_convt::land(a, c));
+  tmp.push_back(smt_convt::land(b, c));
   return lor(tmp);
 }
 
@@ -629,7 +629,7 @@ bitblast_convt::unsigned_multiplier(const bvt &op0, const bvt &op1, bvt &output)
         tmpop.push_back(const_literal(false));
 
       for (unsigned int idx = i; idx < op0.size(); idx++)
-        tmpop.push_back(land(op1[idx-i], op0[i]));
+        tmpop.push_back(smt_convt::land(op1[idx-i], op0[i]));
 
       bvt tmpadd;
       literalt dummy;
@@ -691,7 +691,7 @@ bitblast_convt::incrementer(const bvt &inp, const literalt &carryin,
   carryout = carryin;
 
   for (unsigned int i = 0; i < inp.size(); i++) {
-    literalt new_carry = land(carryout, inp[i]);
+    literalt new_carry = smt_convt::land(carryout, inp[i]);
     oup[i] = lxor(inp[i], carryout);
     carryout = new_carry;
   }
@@ -804,13 +804,13 @@ bitblast_convt::unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1,
         tmpop.push_back(const_literal(false));
 
       for (unsigned int idx = sum; idx < res.size(); idx++)
-        tmpop.push_back(land(op1[idx-sum], op0[sum]));
+        tmpop.push_back(smt_convt::land(op1[idx-sum], op0[sum]));
 
       bvt copy = res;
       adder_no_overflow(copy, tmpop, res);
 
       for (unsigned int idx = op1.size() - sum; idx < op1.size(); idx++) {
-        literalt tmp = land(op1[idx], op0[sum]);
+        literalt tmp = smt_convt::land(op1[idx], op0[sum]);
         tmp.invert();
         assert_lit(tmp);
       }
@@ -833,7 +833,7 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
     literalt sign_the_same = lequal(op0[width-1], tmp_op1[width-1]);
     literalt carry;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry);
-    literalt stop_overflow = land(sign_the_same, lxor(op0[width-1], old_sign));
+    literalt stop_overflow = smt_convt::land(sign_the_same, lxor(op0[width-1], old_sign));
     stop_overflow.invert();
     assert_lit(stop_overflow);
   } else {
@@ -919,7 +919,7 @@ bitblast_convt::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
     result = lnot(carry);
 
   if (or_equal)
-    result = lor(result, equal(bv0, bv1));
+    result = smt_convt::lor(result, equal(bv0, bv1));
 
   return result;
 }
@@ -986,7 +986,7 @@ bitblast_convt::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(land(bv0[i], bv1[i]));
+    output.push_back(smt_convt::land(bv0[i], bv1[i]));
 
   return;
 }
@@ -999,7 +999,7 @@ bitblast_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(lor(bv0[i], bv1[i]));
+    output.push_back(smt_convt::lor(bv0[i], bv1[i]));
 
   return;
 }
@@ -1036,7 +1036,7 @@ bitblast_convt::land(const bvt &bv)
   else if (bv.size() == 1)
     return bv[0];
   else if (bv.size() == 2)
-    return land(bv[0], bv[1]);
+    return smt_convt::land(bv[0], bv[1]);
 
   unsigned int trues = 0;
   for (unsigned int i = 0; i < bv.size(); i++) {
@@ -1080,7 +1080,7 @@ bitblast_convt::lor(const bvt &bv)
 {
   if (bv.size() == 0) return const_literal(false);
   else if (bv.size() == 1) return bv[0];
-  else if (bv.size() == 2) return lor(bv[0], bv[1]);
+  else if (bv.size() == 2) return smt_convt::lor(bv[0], bv[1]);
 
   for (unsigned int i = 0; i < bv.size(); i++)
     if (bv[i] == const_literal(true))

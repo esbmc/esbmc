@@ -80,16 +80,10 @@ public:
 
   // Boolean operations we require.
 //  virtual literalt lnot(literalt a) = 0;
-  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
-  virtual literalt lequal(literalt a, literalt b) = 0;
-  virtual literalt limplies(literalt a, literalt b) = 0;
-  virtual literalt lxor(literalt a, literalt b) = 0;
-  virtual literalt lor(literalt a, literalt b) = 0;
-  virtual literalt land(literalt a, literalt b) = 0;
-  virtual void gate_xor(literalt a, literalt b, literalt o) = 0;
-  virtual void gate_or(literalt a, literalt b, literalt o) = 0;
-  virtual void gate_and(literalt a, literalt b, literalt o) = 0;
-  virtual void set_equal(literalt a, literalt b) = 0;
+//  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
+//  virtual literalt lequal(literalt a, literalt b) = 0;
+//  virtual literalt limplies(literalt a, literalt b) = 0;
+//  virtual literalt lxor(literalt a, literalt b) = 0;
 
   // smt_convt apis we fufil
 
