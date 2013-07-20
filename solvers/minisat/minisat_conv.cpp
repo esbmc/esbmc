@@ -55,7 +55,7 @@ minisat_convt::lselect(literalt a, literalt b, literalt c)
   bv.reserve(2);
   bv.push_back(land(a, b));
   bv.push_back(land(lnot(a), c));
-  return lor(bv);
+  return bitblast_convt::lor(bv);
 }
 
 literalt
@@ -109,90 +109,6 @@ minisat_convt::land(literalt a, literalt b)
   gate_and(a, b, output);
   return output;
 }
-
-
-literalt
-minisat_convt::land(const bvt &bv)
-{
-  if (bv.size() == 0)
-    return const_literal(true);
-  else if (bv.size() == 1)
-    return bv[0];
-  else if (bv.size() == 2)
-    return land(bv[0], bv[1]);
-
-  unsigned int trues = 0;
-  for (unsigned int i = 0; i < bv.size(); i++) {
-    if (bv[i] == const_literal(false))
-      return const_literal(false);
-    else if (bv[i] == const_literal(true))
-      trues++;
-  }
-
-  if (trues == bv.size())
-    return const_literal(true);
-
-  bvt new_bv;
-
-  eliminate_duplicates(bv, new_bv);
-
-  literalt lit = new_variable();
-
-  for (unsigned int i = 0; i < new_bv.size(); i++) {
-    bvt lits;
-    lits.reserve(2);
-    lits.push_back(pos(new_bv[i]));
-    lits.push_back(neg(lit));
-    lcnf(lits);
-  }
-
-  bvt lits;
-  lits.reserve(new_bv.size() + 1);
-
-  for (unsigned int i = 0; i < new_bv.size(); i++)
-    lits.push_back(neg(new_bv[i]));
-
-  lits.push_back(pos(lit));
-  lcnf(lits);
-
-  return lit;
-}
-
-literalt
-minisat_convt::lor(const bvt &bv)
-{
-  if (bv.size() == 0) return const_literal(false);
-  else if (bv.size() == 1) return bv[0];
-  else if (bv.size() == 2) return lor(bv[0], bv[1]);
-
-  for (unsigned int i = 0; i < bv.size(); i++)
-    if (bv[i] == const_literal(true))
-      return const_literal(true);
-
-  bvt new_bv;
-  eliminate_duplicates(bv, new_bv);
-
-  literalt literal = new_variable();
-  for (unsigned int i = 0; i < new_bv.size(); i++) {
-    bvt lits;
-    lits.reserve(2);
-    lits.push_back(neg(new_bv[i]));
-    lits.push_back(pos(literal));
-    lcnf(lits);
-  }
-
-  bvt lits;
-  lits.reserve(new_bv.size() + 1);
-
-  for (unsigned int i = 0; i < new_bv.size(); i++)
-    lits.push_back(pos(new_bv[i]));
-
-  lits.push_back(neg(literal));
-  lcnf(lits);
-
-  return literal;
-}
-
 
 void
 minisat_convt::gate_xor(literalt a, literalt b, literalt o)

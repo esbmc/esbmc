@@ -86,14 +86,14 @@ public:
   virtual literalt lxor(literalt a, literalt b) = 0;
   virtual literalt lor(literalt a, literalt b) = 0;
   virtual literalt land(literalt a, literalt b) = 0;
-  virtual literalt land(const bvt &bv) = 0;
-  virtual literalt lor(const bvt &bv) = 0;
   virtual void gate_xor(literalt a, literalt b, literalt o) = 0;
   virtual void gate_or(literalt a, literalt b, literalt o) = 0;
   virtual void gate_and(literalt a, literalt b, literalt o) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
 
   // Bitblasting utilities, mostly from CBMC.
+  virtual literalt land(const bvt &bv);
+  virtual literalt lor(const bvt &bv);
   void eliminate_duplicates(const bvt &bv, bvt &dest);
   void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
   void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
