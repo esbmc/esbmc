@@ -3,6 +3,49 @@
 
 #include "smt_conv.h"
 
+class bitblast_smt_sort : public smt_sort {
+  // Record all the things.
+  public:
+#define bitblast_sort_downcast(x) static_cast<const bitblast_smt_sort*>(x)
+
+  bitblast_smt_sort(smt_sort_kind i)
+    : smt_sort(i), width(0), sign(false), arrdom_width(0), arrrange_width(0)
+  { }
+
+  bitblast_smt_sort(smt_sort_kind i, unsigned int _width, bool _sign)
+    : smt_sort(i), width(_width), sign(_sign), arrdom_width(0),
+      arrrange_width(0)
+  { }
+
+  bitblast_smt_sort(smt_sort_kind i, unsigned int arrwidth,
+                   unsigned int rangewidth)
+    : smt_sort(i), width(0), sign(false), arrdom_width(arrwidth),
+      arrrange_width(rangewidth)
+  { }
+
+  virtual ~bitblast_smt_sort() { }
+  unsigned int width; // bv width
+  bool sign;
+  unsigned int arrdom_width, arrrange_width; // arr sort widths
+
+  virtual unsigned long get_domain_width(void) const {
+    return arrdom_width;
+  }
+
+  virtual unsigned long get_range_width(void) const {
+    return arrrange_width;
+  }
+};
+
+class bitblast_smt_ast : public smt_ast {
+public:
+#define bitblast_ast_downcast(x) static_cast<const bitblast_smt_ast*>(x)
+  bitblast_smt_ast(const smt_sort *s) : smt_ast(s) { }
+
+  // Everything is, to a greater or lesser extend, a vector of booleans
+  bvt bv;
+};
+
 class bitblast_convt : public virtual smt_convt
 {
 public:
