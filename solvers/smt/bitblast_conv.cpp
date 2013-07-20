@@ -551,6 +551,15 @@ bitblast_convt::get(const expr2tc &expr)
   }
 }
 
+const smt_ast *
+bitblast_convt::lit_to_ast(const literalt &l)
+{
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  bitblast_smt_ast *a = new bitblast_smt_ast(s);
+  a->bv.push_back(l);
+  return a;
+}
+
 // ******************************  Bitblast foo *******************************
 
 void

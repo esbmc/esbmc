@@ -339,15 +339,6 @@ minisat_convt::assert_lit(const literalt &l)
   return;
 }
 
-const smt_ast *
-minisat_convt::lit_to_ast(const literalt &l)
-{
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  minisat_smt_ast *a = new minisat_smt_ast(s);
-  a->bv.push_back(l);
-  return a;
-}
-
 void
 minisat_convt::assign_array_symbol(const std::string &str, const smt_ast *a)
 {

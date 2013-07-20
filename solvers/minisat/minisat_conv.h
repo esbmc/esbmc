@@ -97,8 +97,6 @@ public:
   // Implemented by solver for arrays:
   virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
 
-  virtual const smt_ast *lit_to_ast(const literalt &l);
-
   // Internal gunk
 
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);

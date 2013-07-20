@@ -108,6 +108,7 @@ public:
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
+  virtual const smt_ast *lit_to_ast(const literalt &l);
 
   // Some gunk
   expr2tc get_bool(const smt_ast *a);
