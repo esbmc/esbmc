@@ -8,7 +8,6 @@ array_convt::array_convt(bool enable_cache, bool int_encoding,
   : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support, false,
               true)
 {
-  abort();
 }
 
 array_convt::~array_convt()

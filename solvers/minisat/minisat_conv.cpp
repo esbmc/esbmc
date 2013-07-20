@@ -817,7 +817,7 @@ minisat_convt::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out)
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
-         : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
+         : array_convt(true, int_encoding, _ns, is_cpp, false),
            array_indexes(), array_values(), array_updates(),
            solver(), options(_opts)
 {
@@ -1425,6 +1425,12 @@ minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
               << std::endl;
     abort();
   }
+}
+
+void
+minisat_convt::assign_array_symbol(const std::string &str, const smt_ast *a)
+{
+  sym_table[str] = a;
 }
 
 const smt_ast *

@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/array_conv.h>
 
 #include <core/Solver.h>
 
@@ -100,7 +101,7 @@ public:
   unsigned int array_update_num;
 };
 
-class minisat_convt : public smt_convt {
+class minisat_convt : public array_convt {
 public:
   struct array_select;
   struct array_with;
@@ -198,6 +199,8 @@ public:
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
   void dump_bv(const bvt &bv) const;
+
+  virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
 
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);
