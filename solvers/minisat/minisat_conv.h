@@ -49,7 +49,6 @@ public:
 
   // What's basically the literalt api:
   // Things imported from CBMC, more or less
-  literalt lnot(literalt a);
   literalt lselect(literalt a, literalt b, literalt c);
   literalt lequal(literalt a, literalt b);
   literalt limplies(literalt a, literalt b);

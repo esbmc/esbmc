@@ -38,13 +38,6 @@ minisat_convt::convert(const bvt &bv, Minisat::vec<Lit> &dest)
 }
 
 literalt
-minisat_convt::lnot(literalt a)
-{
-  a.invert();
-  return a;
-}
-
-literalt
 minisat_convt::lselect(literalt a, literalt b, literalt c)
 {  // a?b:c = (a AND b) OR (/a AND c)
   if(a==const_literal(true)) return b;
@@ -54,20 +47,20 @@ minisat_convt::lselect(literalt a, literalt b, literalt c)
   bvt bv;
   bv.reserve(2);
   bv.push_back(land(a, b));
-  bv.push_back(land(lnot(a), c));
+  bv.push_back(land(cnf_convt::lnot(a), c));
   return bitblast_convt::lor(bv);
 }
 
 literalt
 minisat_convt::lequal(literalt a, literalt b)
 {
-  return lnot(lxor(a, b));
+  return cnf_convt::lnot(lxor(a, b));
 }
 
 literalt
 minisat_convt::limplies(literalt a, literalt b)
 {
-  return lor(lnot(a), b);
+  return lor(cnf_convt::lnot(a), b);
 }
 
 literalt
@@ -75,8 +68,8 @@ minisat_convt::lxor(literalt a, literalt b)
 {
   if (a == const_literal(false)) return b;
   if (b == const_literal(false)) return a;
-  if (a == const_literal(true)) return lnot(b);
-  if (b == const_literal(true)) return lnot(a);
+  if (a == const_literal(true)) return cnf_convt::lnot(b);
+  if (b == const_literal(true)) return cnf_convt::lnot(a);
 
   literalt output = new_variable();
   gate_xor(a, b, output);
@@ -207,7 +200,7 @@ minisat_convt::setto(literalt a, bool val)
   if (val)
     b.push_back(a);
   else
-    b.push_back(lnot(a));
+    b.push_back(cnf_convt::lnot(a));
 
   Minisat::vec<Lit> l;
   convert(b, l);
@@ -235,12 +228,12 @@ minisat_convt::set_equal(literalt a, literalt b)
   bvt bv;
   bv.resize(2);
   bv[0] = a;
-  bv[1] = lnot(b);
+  bv[1] = cnf_convt::lnot(b);
   Minisat::vec<Lit> l;
   convert(bv, l);
   solver.addClause_(l);
 
-  bv[0] = lnot(a);
+  bv[0] = cnf_convt::lnot(a);
   bv[1] = b;
   l.clear();
   convert(bv, l);
