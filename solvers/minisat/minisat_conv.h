@@ -142,37 +142,6 @@ public:
   void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
 
-  // Bitblasting utilities:
-  void eliminate_duplicates(const bvt &bv, bvt &dest);
-  void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
-  void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
-  void bvxor(const bvt &bv0, const bvt &bv1, bvt &output);
-  void bvnot(const bvt &bv0, bvt &output);
-  void full_adder(const bvt &op0, const bvt &op1, bvt &output,
-                  literalt carry_in, literalt &carry_out);
-  literalt carry(literalt a, literalt b, literalt c);
-  literalt carry_out(const bvt &a, const bvt &b, literalt c);
-  literalt equal(const bvt &op0, const bvt &op1);
-  literalt lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
-                    bool is_signed);
-  void invert(bvt &bv);
-  void barrel_shift(const bvt &op, const shiftt s, const bvt &dist, bvt &out);
-  void shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out);
-  literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
-  void unsigned_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
-  void signed_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
-  void cond_negate(const bvt &vals, bvt &out, literalt cond);
-  void negate(const bvt &inp, bvt &oup);
-  void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
-                   bvt &oup);
-  void signed_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
-  void unsigned_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
-  void unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1, bvt &r);
-  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
-                         bool subtract, bool is_signed);
-  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res);
-  bool is_constant(const bvt &bv);
-
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
 

@@ -49,6 +49,10 @@ public:
 class bitblast_convt : public virtual smt_convt
 {
 public:
+  typedef enum {
+    LEFT, LRIGHT, ARIGHT
+  } shiftt;
+
   bitblast_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
                  bool is_cpp, bool tuple_support, bool bools_in_arrs,
                  bool can_init_inf_arrs);
@@ -73,6 +77,52 @@ public:
 
   virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
+
+  // Boolean operations we require.
+  virtual literalt lnot(literalt a) = 0;
+  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
+  virtual literalt lequal(literalt a, literalt b) = 0;
+  virtual literalt limplies(literalt a, literalt b) = 0;
+  virtual literalt lxor(literalt a, literalt b) = 0;
+  virtual literalt lor(literalt a, literalt b) = 0;
+  virtual literalt land(literalt a, literalt b) = 0;
+  virtual literalt land(const bvt &bv) = 0;
+  virtual literalt lor(const bvt &bv) = 0;
+  virtual void gate_xor(literalt a, literalt b, literalt o) = 0;
+  virtual void gate_or(literalt a, literalt b, literalt o) = 0;
+  virtual void gate_and(literalt a, literalt b, literalt o) = 0;
+  virtual void set_equal(literalt a, literalt b) = 0;
+
+  // Bitblasting utilities, mostly from CBMC.
+  void eliminate_duplicates(const bvt &bv, bvt &dest);
+  void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvxor(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvnot(const bvt &bv0, bvt &output);
+  void full_adder(const bvt &op0, const bvt &op1, bvt &output,
+                  literalt carry_in, literalt &carry_out);
+  literalt carry(literalt a, literalt b, literalt c);
+  literalt carry_out(const bvt &a, const bvt &b, literalt c);
+  literalt equal(const bvt &op0, const bvt &op1);
+  literalt lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
+                    bool is_signed);
+  void invert(bvt &bv);
+  void barrel_shift(const bvt &op, const shiftt s, const bvt &dist, bvt &out);
+  void shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out);
+  literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
+  void unsigned_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
+  void signed_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
+  void cond_negate(const bvt &vals, bvt &out, literalt cond);
+  void negate(const bvt &inp, bvt &oup);
+  void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
+                   bvt &oup);
+  void signed_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
+  void unsigned_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
+  void unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1, bvt &r);
+  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
+                         bool subtract, bool is_signed);
+  void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res);
+  bool is_constant(const bvt &bv);
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_ */
