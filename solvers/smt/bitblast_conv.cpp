@@ -13,3 +13,12 @@ bitblast_convt::bitblast_convt(bool enable_cache, bool int_encoding,
 bitblast_convt::~bitblast_convt()
 {
 }
+
+smt_ast *
+bitblast_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
+                            smt_func_kind f __attribute__((unused)),
+                            const smt_ast * const *args __attribute__((unused)),
+                            unsigned int num __attribute__((unused)))
+{
+  abort();
+}
