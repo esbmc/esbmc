@@ -11,6 +11,7 @@
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/bitblast_conv.h>
+#include <solvers/smt/cnf_conv.h>
 
 #include <core/Solver.h>
 
@@ -18,7 +19,7 @@ typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
 typedef std::vector<literalt> bvt; // sadface.jpg
 
-class minisat_convt : public virtual array_convt, public virtual bitblast_convt {
+class minisat_convt : public virtual array_convt, public virtual bitblast_convt, public virtual cnf_convt {
 public:
   typedef enum {
     LEFT, LRIGHT, ARIGHT
@@ -36,7 +37,7 @@ public:
   virtual void assert_lit(const literalt &l);
   virtual void lcnf(const bvt &bv);
 
-  void setto(literalt a, bool val);
+  virtual void setto(literalt a, bool val);
 
   // Implemented by solver for arrays:
   virtual void assign_array_symbol(const std::string &str, const smt_ast *a);

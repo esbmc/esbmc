@@ -5,6 +5,7 @@
 
 class cnf_convt : public virtual smt_convt
 {
+public:
   cnf_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
                  bool is_cpp, bool tuple_support, bool bools_in_arrs,
                  bool can_init_inf_arrs);

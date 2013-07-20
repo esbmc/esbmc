@@ -270,6 +270,7 @@ minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
 : smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
   array_convt(true, int_encoding, _ns, is_cpp, false),
   bitblast_convt(true, int_encoding, _ns, is_cpp, false, true, true),
+  cnf_convt(true, int_encoding, _ns, is_cpp, false, true, true),
   solver(), options(_opts)
 {
   smt_post_init();
