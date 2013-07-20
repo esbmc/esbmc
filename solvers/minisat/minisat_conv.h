@@ -74,7 +74,7 @@ public:
   bvt bv;
 };
 
-class minisat_convt : public array_convt, public bitblast_convt {
+class minisat_convt : public virtual array_convt, public virtual bitblast_convt {
 public:
   typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
 
@@ -90,7 +90,6 @@ public:
   virtual resultt dec_solve();
   virtual const std::string solver_text();
   virtual tvt l_get(literalt l);
-  virtual expr2tc get(const expr2tc &expr);
   virtual literalt new_variable();
   virtual void assert_lit(const literalt &l);
   virtual void lcnf(const bvt &bv);
@@ -136,9 +135,6 @@ public:
   void gate_or(literalt a, literalt b, literalt o);
   void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
-
-  expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
   // Members
 

@@ -77,6 +77,7 @@ public:
 
   virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
+  virtual expr2tc get(const expr2tc &expr);
 
   // Boolean operations we require.
   virtual literalt lnot(literalt a) = 0;
@@ -90,6 +91,10 @@ public:
   virtual void gate_or(literalt a, literalt b, literalt o) = 0;
   virtual void gate_and(literalt a, literalt b, literalt o) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
+
+  // Some gunk
+  expr2tc get_bool(const smt_ast *a);
+  expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
   // Bitblasting utilities, mostly from CBMC.
   smt_ast *mk_ast_equality(const smt_ast *a, const smt_ast *b,

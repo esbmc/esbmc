@@ -290,41 +290,6 @@ minisat_convt::dec_solve()
     return prop_convt::P_UNSATISFIABLE;
 }
 
-expr2tc
-minisat_convt::get_bool(const smt_ast *a)
-{
-  const minisat_smt_ast *mast = minisat_ast_downcast(a);
-  tvt t = l_get(mast->bv[0]);
-  if (t.is_true())
-    return true_expr;
-  else if (t.is_false())
-    return false_expr;
-  else
-    return expr2tc();
-}
-
-expr2tc
-minisat_convt::get_bv(const type2tc &t, const smt_ast *a)
-{
-  const minisat_smt_ast *mast = minisat_ast_downcast(a);
-  unsigned int sz = t->get_width();
-  assert(sz <= 64 && "Your integers are larger than a uint64_t");
-  assert(mast->bv.size() == sz);
-  uint64_t accuml = 0;
-  for (unsigned int i = 0; i < sz; i++) {
-    uint64_t mask = 1 << i;
-    tvt t = l_get(mast->bv[i]);
-    if (t.is_true())
-      accuml |= mask;
-    else if (t.is_false())
-      ; // It's zero
-    else
-      ; // It's undefined in this model. So may as well be zero.
-  }
-
-  return constant_int2tc(t, BigInt(accuml));
-}
-
 void
 minisat_convt::dump_bv(const bvt &bv) const
 {
@@ -339,55 +304,6 @@ minisat_convt::dump_bv(const bvt &bv) const
 
   std::cerr << " " << bv.size() << std::endl;
   return;
-}
-
-expr2tc
-minisat_convt::get(const expr2tc &expr)
-{
-
-  const smt_ast *value = convert_ast(expr);
-
-  // It can however have various types. We only deal with bools and bitvectors;
-  // hand everything else off to additional modelling code.
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-  {
-    return get_bool(value);
-  }
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-  {
-    return get_bv(expr->type, value);
-  }
-  case type2t::fixedbv_id:
-  {
-    expr2tc tmp = get_bv(expr->type, value);
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::array_id:
-  {
-    if (is_tuple_array_ast_type(expr->type))
-      return tuple_array_get(expr);
-    else
-      return array_get(value, expr->type);
-  }
-  case type2t::pointer_id:
-  case type2t::struct_id:
-  case type2t::union_id:
-    return tuple_get(expr);
-  default:
-    std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
-              << " get" << std::endl;
-    abort();
-  }
 }
 
 const std::string
