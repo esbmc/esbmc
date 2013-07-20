@@ -103,8 +103,6 @@ public:
 
 class minisat_convt : public array_convt {
 public:
-  struct array_select;
-  struct array_with;
   typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
 
   typedef enum {
@@ -250,63 +248,6 @@ public:
                                     const smt_sort *subtype);
 
   // Members
-
-  // Array tracking: each new root array (from fresh_array) gets its own
-  // ID number which is stored. Then, whenever any operation occurs on it,
-  // we add the index to the set contained in the following object. This
-  // obtains all the tracking data required for CBMC-like array
-  // bitblasting.
-  std::vector<std::set<expr2tc> > array_indexes;
-
-  // Self explanatory. Contains bitwidth of subtypes
-  std::vector<unsigned int> array_subtypes;
-
-  // Array /value/ tracking. For each array (outer vector) we have an inner
-  // vector, each element of which corresponds to each 'with' operation
-  // on an array. Within that is a list of indexes and free value'd
-  // elements: whenever we select an element from an array, we return a
-  // free value, and record it here. Assertions made later will link this
-  // up with real values.
-  struct array_select {
-    unsigned int src_array_update_num;
-    expr2tc idx;
-    smt_ast *val;
-  };
-  std::vector<std::vector<std::list<struct array_select> > > array_values;
-
-  // Update records: For each array, for each 'with' operation, we record
-  // the index used and the AST representation of the value assigned. We
-  // also store the ID number of the source array, because due to phi's
-  // we may branch arrays before joining.
-  // We also record ite's here, because they're effectively an array update.
-  // The is_ite boolean indicates whether the following union is a with or
-  // an ite repr. If it's an ite, the two integers represent which two
-  // historical update indexes of the array are operands of the ite.
-  struct array_with {
-    bool is_ite;
-    expr2tc idx;
-    union {
-      struct {
-        unsigned int src_array_update_num;
-        const smt_ast *val;
-      } w;
-      struct {
-        unsigned int src_array_update_true;
-        unsigned int src_array_update_false;
-        const smt_ast *cond;
-      } i;
-    } u;
-  };
-  std::vector<std::vector<struct array_with> > array_updates;
-
-  // Map between base array identifiers and the value to initialize it with.
-  // Only applicable to unbounded arrays.
-  std::map<unsigned, const smt_ast *> array_of_vals;
-
-  // Finally, for model building, we need all the past array values. Three
-  // vectors, dimensions are arrays id's, historical point, array element,
-  // respectively.
-  std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
 
   Minisat::Solver solver;
   const optionst &options;
