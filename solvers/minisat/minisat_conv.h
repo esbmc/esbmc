@@ -228,9 +228,6 @@ public:
                                        const minisat_array_ast *false_arr,
                                        const minisat_smt_sort *thesort);
 
-  expr2tc fixed_array_get(const smt_ast *a, const type2tc &subtype);
-  expr2tc array_get(const smt_ast *a, const type2tc &subtype);
-
   // Members
 
   Minisat::Solver solver;
