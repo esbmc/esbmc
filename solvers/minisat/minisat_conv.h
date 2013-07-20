@@ -230,18 +230,6 @@ public:
 
   expr2tc fixed_array_get(const smt_ast *a, const type2tc &subtype);
   expr2tc array_get(const smt_ast *a, const type2tc &subtype);
-  void add_array_constraints(void);
-  void add_array_constraints(unsigned int arr);
-  void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
-                           unsigned int arr,
-                           unsigned int idx,
-                           const std::map<expr2tc, unsigned> &idx_map,
-                           const smt_sort *subtype);
-  void collate_array_values(std::vector<const smt_ast *> &vals,
-                            const std::map<expr2tc, unsigned> &idx_map,
-                            const std::list<struct array_select> &idxs,
-                            const smt_sort *subtype,
-                            const smt_ast *init_val = NULL);
 
   // Members
 
