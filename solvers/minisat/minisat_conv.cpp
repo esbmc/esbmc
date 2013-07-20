@@ -349,34 +349,6 @@ minisat_convt::lit_to_ast(const literalt &l)
 }
 
 smt_ast*
-minisat_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
-                            unsigned int w)
-{
-  smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
-  minisat_smt_ast *a = new minisat_smt_ast(s);
-  a->bv.resize(w);
-  int64_t u = intval.to_long();
-  for (unsigned int i = 0; i < w; i++) {
-    int64_t mask = (1ULL << i);
-    bool val = u & mask;
-    a->bv[i] = const_literal(val);
-  }
-
-  return a;
-}
-
-smt_ast*
-minisat_convt::mk_smt_bool(bool boolval)
-{
-  literalt l = const_literal(boolval);
-
-  smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  minisat_smt_ast *a = new minisat_smt_ast(s);
-  a->bv.push_back(l);
-  return a;
-}
-
-smt_ast*
 minisat_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
 {
   // Like metasmt, minisat doesn't have a symbol table. So, build our own.
