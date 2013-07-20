@@ -4,7 +4,7 @@ include $(ESBMCDIR)/config.inc
 MAINOBJNAME=smt.o
 
 SRCS= smt_conv.cpp smt_tuple.cpp smt_overflow.cpp smt_byteops.cpp \
-      smt_memspace.cpp smt_casts.cpp array_conv.cpp
+      smt_memspace.cpp smt_casts.cpp array_conv.cpp bitblast_conv.cpp
 
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps
