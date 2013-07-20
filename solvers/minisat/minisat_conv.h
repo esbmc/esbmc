@@ -85,11 +85,21 @@ public:
                 const optionst &opts);
   ~minisat_convt();
 
+  // Things definitely to be done by the solver:
   virtual resultt dec_solve();
-  virtual expr2tc get(const expr2tc &expr);
   virtual const std::string solver_text();
   virtual tvt l_get(literalt l);
+  virtual expr2tc get(const expr2tc &expr);
+  virtual literalt new_variable();
   virtual void assert_lit(const literalt &l);
+  virtual void lcnf(const bvt &bv);
+
+  void setto(literalt a, bool val);
+
+  // Implemented by solver for arrays:
+  virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
+
+  // SMT api things that bitblast:
   virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
   virtual smt_sort* mk_sort(smt_sort_kind k, ...);
@@ -105,17 +115,18 @@ public:
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
-  virtual literalt new_variable();
-
   virtual const smt_ast *lit_to_ast(const literalt &l);
 
+  // Internal gunk
+
+  void convert(const bvt &bv, Minisat::vec<Lit> &dest);
+  void dump_bv(const bvt &bv) const;
   minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
                                    const minisat_smt_ast *b,
                                    const smt_sort *ressort);
 
+  // What's basically the literalt api:
   // Things imported from CBMC, more or less
-  void convert(const bvt &bv, Minisat::vec<Lit> &dest);
-  void eliminate_duplicates(const bvt &bv, bvt &dest);
   literalt lnot(literalt a);
   literalt lselect(literalt a, literalt b, literalt c);
   literalt lequal(literalt a, literalt b);
@@ -124,18 +135,18 @@ public:
   literalt lor(literalt a, literalt b);
   literalt land(literalt a, literalt b);
   literalt land(const bvt &bv);
-  void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
   literalt lor(const bvt &bv);
-  void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
-  void bvxor(const bvt &bv0, const bvt &bv1, bvt &output);
-  void bvnot(const bvt &bv0, bvt &output);
   void gate_xor(literalt a, literalt b, literalt o);
   void gate_or(literalt a, literalt b, literalt o);
   void gate_and(literalt a, literalt b, literalt o);
   void set_equal(literalt a, literalt b);
-  void setto(literalt a, bool val);
-  virtual void lcnf(const bvt &bv);
 
+  // Bitblasting utilities:
+  void eliminate_duplicates(const bvt &bv, bvt &dest);
+  void bvand(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvor(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvxor(const bvt &bv0, const bvt &bv1, bvt &output);
+  void bvnot(const bvt &bv0, bvt &output);
   void full_adder(const bvt &op0, const bvt &op1, bvt &output,
                   literalt carry_in, literalt &carry_out);
   literalt carry(literalt a, literalt b, literalt c);
@@ -146,7 +157,6 @@ public:
   void invert(bvt &bv);
   void barrel_shift(const bvt &op, const shiftt s, const bvt &dist, bvt &out);
   void shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out);
-
   literalt unsigned_less_than(const bvt &arg0, const bvt &arg1);
   void unsigned_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
   void signed_multiplier(const bvt &op0, const bvt &bv1, bvt &output);
@@ -154,7 +164,6 @@ public:
   void negate(const bvt &inp, bvt &oup);
   void incrementer(const bvt &inp, const literalt &carryin, literalt carryout,
                    bvt &oup);
-
   void signed_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
   void unsigned_divider(const bvt &op0, const bvt &op1, bvt &res, bvt &rem);
   void unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1, bvt &r);
@@ -165,10 +174,6 @@ public:
 
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
-
-  void dump_bv(const bvt &bv) const;
-
-  virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
 
   // Members
 
