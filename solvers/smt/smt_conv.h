@@ -105,6 +105,10 @@ public:
   smt_sort(smt_sort_kind i) : id(i) { }
   virtual ~smt_sort() { }
   virtual unsigned long get_domain_width(void) const = 0;
+  virtual unsigned long get_range_width(void) const
+  {
+    abort();
+  }
 };
 
 class tuple_smt_sort : public smt_sort
