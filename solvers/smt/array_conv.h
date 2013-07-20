@@ -60,17 +60,35 @@ public:
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
   virtual expr2tc get_bool(const smt_ast *a) = 0;
 
+  // The api parts that this implements for smt_convt:
+
   virtual const smt_ast *convert_array_equality(const expr2tc &a,
                                                 const expr2tc &b);
-
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
                                   const expr2tc &value,
                                   const smt_sort *ressort);
-
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
+
+  // The effective api for the solver-end to be using. Note that it has to
+  //   a) Catch creation of array symbols and use fresh_array
+  //   b) Catch array ITE's and call array_ite
+  //   c) Pass control of 'get'ed array exprs to array_get
+  //   d) Call add_array_constraints before calling dec_solve. Can be called
+  //      multiple times.
+
+  smt_ast *fresh_array(const smt_sort *ms,
+                             const std::string &name);
+  const smt_ast *array_ite(const array_ast *cond,
+                                   const array_ast *true_arr,
+                                   const array_ast *false_arr,
+                                   const smt_sort *thesort);
+  expr2tc array_get(const smt_ast *a, const type2tc &subtype);
+  void add_array_constraints(void);
+
+  // Internal funk:
 
   const smt_ast *mk_unbounded_select(const array_ast *array,
                                      const expr2tc &idx,
@@ -79,21 +97,14 @@ public:
                                     const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-
-  smt_ast *fresh_array(const smt_sort *ms,
-                             const std::string &name);
-  const smt_ast *array_ite(const array_ast *cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
-                                   const smt_sort *thesort);
   const smt_ast *unbounded_array_ite(const array_ast *cond,
                                        const array_ast *true_arr,
                                        const array_ast *false_arr,
                                        const smt_sort *thesort);
-
   expr2tc fixed_array_get(const smt_ast *a, const type2tc &subtype);
-  expr2tc array_get(const smt_ast *a, const type2tc &subtype);
-  void add_array_constraints(void);
+
+  // Array constraint beating
+
   void add_array_constraints(unsigned int arr);
   void execute_array_trans(std::vector<std::vector<const smt_ast *> > &data,
                            unsigned int arr,
