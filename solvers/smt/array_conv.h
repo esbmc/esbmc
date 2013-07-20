@@ -82,11 +82,11 @@ public:
 
   smt_ast *fresh_array(const smt_sort *ms,
                              const std::string &name);
-  const array_ast *array_ite(const array_ast *cond,
+  const smt_ast *array_ite(const array_ast *cond,
                                    const array_ast *true_arr,
                                    const array_ast *false_arr,
                                    const smt_sort *thesort);
-  const array_ast *unbounded_array_ite(const array_ast *cond,
+  const smt_ast *unbounded_array_ite(const array_ast *cond,
                                        const array_ast *true_arr,
                                        const array_ast *false_arr,
                                        const smt_sort *thesort);

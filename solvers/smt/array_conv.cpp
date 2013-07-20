@@ -258,7 +258,7 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   return newarr;
 }
 
-const array_ast *
+const smt_ast *
 array_convt::array_ite(const array_ast *cond,
                          const array_ast *true_arr,
                          const array_ast *false_arr,
@@ -286,7 +286,7 @@ array_convt::array_ite(const array_ast *cond,
   return mast;
 }
 
-const array_ast *
+const smt_ast *
 array_convt::unbounded_array_ite(const array_ast *cond,
                                    const array_ast *true_arr,
                                    const array_ast *false_arr,

@@ -134,8 +134,6 @@ public:
                               unsigned int low, const smt_sort *s);
 
   virtual literalt new_variable();
-  virtual const smt_ast *convert_array_equality(const expr2tc &a,
-                                                const expr2tc &b);
 
   virtual const smt_ast *lit_to_ast(const literalt &l);
 
@@ -199,34 +197,6 @@ public:
   void dump_bv(const bvt &bv) const;
 
   virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
-
-  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
-                                   const smt_sort *ressort);
-  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
-                                  const expr2tc &value,
-                                  const smt_sort *ressort);
-
-  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
-                                          unsigned long domain_width);
-
-  const smt_ast *mk_unbounded_select(const minisat_array_ast *array,
-                                     const expr2tc &idx,
-                                     const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const minisat_array_ast *array,
-                                    const expr2tc &idx,
-                                    const smt_ast *value,
-                                    const smt_sort *ressort);
-
-  const smt_ast *fresh_array(const minisat_smt_sort *ms,
-                             const std::string &name);
-  const minisat_array_ast *array_ite(const minisat_smt_ast *cond,
-                                   const minisat_array_ast *true_arr,
-                                   const minisat_array_ast *false_arr,
-                                   const minisat_smt_sort *thesort);
-  const minisat_array_ast *unbounded_array_ite(const minisat_smt_ast *cond,
-                                       const minisat_array_ast *true_arr,
-                                       const minisat_array_ast *false_arr,
-                                       const minisat_smt_sort *thesort);
 
   // Members
 
