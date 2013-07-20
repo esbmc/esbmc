@@ -44,7 +44,7 @@ public:
 };
 
 
-class array_convt : public smt_convt
+class array_convt : public virtual smt_convt
 {
 public:
   struct array_select;

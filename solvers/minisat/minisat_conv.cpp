@@ -817,8 +817,9 @@ minisat_convt::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out)
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
-         : array_convt(true, int_encoding, _ns, is_cpp, false),
-           solver(), options(_opts)
+: smt_convt(true, int_encoding, _ns, is_cpp, false, true, true),
+  array_convt(true, int_encoding, _ns, is_cpp, false),
+  solver(), options(_opts)
 {
   smt_post_init();
 }
