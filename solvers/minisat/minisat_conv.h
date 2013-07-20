@@ -76,8 +76,6 @@ public:
 
 class minisat_convt : public virtual array_convt, public virtual bitblast_convt {
 public:
-  typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
-
   typedef enum {
     LEFT, LRIGHT, ARIGHT
   } shiftt;
@@ -140,7 +138,6 @@ public:
 
   Minisat::Solver solver;
   const optionst &options;
-  symtable_type sym_table;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_CONV_H_ */

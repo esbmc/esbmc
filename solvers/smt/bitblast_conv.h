@@ -49,6 +49,9 @@ public:
 class bitblast_convt : public virtual smt_convt
 {
 public:
+  typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
+    symtable_type;
+
   typedef enum {
     LEFT, LRIGHT, ARIGHT
   } shiftt;
@@ -75,10 +78,6 @@ public:
   // in the domain of logical operations on literals, although all kinds of
   // other API things can be fudged, such as tuples and arrays.
 
-  virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
-                               const smt_ast* const* args, unsigned int num);
-  virtual expr2tc get(const expr2tc &expr);
-
   // Boolean operations we require.
   virtual literalt lnot(literalt a) = 0;
   virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
@@ -92,13 +91,31 @@ public:
   virtual void gate_and(literalt a, literalt b, literalt o) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
 
+  // smt_convt apis we fufil
+
+  virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
+                               const smt_ast* const* args, unsigned int num);
+  virtual expr2tc get(const expr2tc &expr);
+  virtual smt_sort* mk_sort(smt_sort_kind k, ...);
+  virtual literalt mk_lit(const smt_ast *val);
+  virtual smt_ast* mk_smt_int(const mp_integer &intval, bool sign);
+  virtual smt_ast* mk_smt_real(const std::string &value);
+  virtual smt_ast* mk_smt_bvint(const mp_integer &inval, bool sign,
+                                unsigned int w);
+  virtual smt_ast* mk_smt_bool(bool boolval);
+  virtual smt_ast* mk_smt_symbol(const std::string &name, const smt_sort *sort);
+  virtual smt_sort* mk_struct_sort(const type2tc &t);
+  virtual smt_sort* mk_union_sort(const type2tc&t);
+  virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
+                              unsigned int low, const smt_sort *s);
+
   // Some gunk
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
   // Bitblasting utilities, mostly from CBMC.
-  smt_ast *mk_ast_equality(const smt_ast *a, const smt_ast *b,
-                           const smt_sort *ressort);
+  bitblast_smt_ast *mk_ast_equality(const smt_ast *a, const smt_ast *b,
+                                    const smt_sort *ressort);
   virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
   void eliminate_duplicates(const bvt &bv, bvt &dest);
@@ -130,6 +147,13 @@ public:
                          bool subtract, bool is_signed);
   void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res);
   bool is_constant(const bvt &bv);
+
+  // Members
+
+  // This is placed here because (IMO) this class is connection between a bunch
+  // of literals and actual things that we give names to. So it's the logical
+  // place for these things to come together.
+  symtable_type sym_table;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_ */

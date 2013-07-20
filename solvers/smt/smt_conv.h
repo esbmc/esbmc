@@ -238,6 +238,21 @@ public:
     abort();
   }
 
+  // Massive hack, should be fixed.
+  virtual smt_ast *array_ite(const smt_ast *cond __attribute__((unused)),
+                               const smt_ast *true_arr __attribute__((unused)),
+                               const smt_ast *false_arr __attribute__((unused)),
+                               const smt_sort *thesort __attribute__((unused))) {
+    std::cerr << "array_ite unimplemented by smt converter" << std::endl;
+    abort();
+  }
+
+  virtual smt_ast *fresh_array(const smt_sort *ms __attribute__((unused)),
+                               const std::string &name __attribute__((unused))){
+    std::cerr << "fresh_array unimplemented by smt converter" << std::endl;
+    abort();
+  }
+
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
 

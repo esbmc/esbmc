@@ -258,12 +258,15 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   return newarr;
 }
 
-const smt_ast *
-array_convt::array_ite(const array_ast *cond,
-                         const array_ast *true_arr,
-                         const array_ast *false_arr,
+smt_ast *
+array_convt::array_ite(const smt_ast *_cond,
+                         const smt_ast *_true_arr,
+                         const smt_ast *_false_arr,
                          const smt_sort *thesort)
 {
+  const array_ast *cond = array_downcast(_cond);
+  const array_ast *true_arr = array_downcast(_true_arr);
+  const array_ast *false_arr = array_downcast(_false_arr);
 
   if (is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
@@ -286,7 +289,7 @@ array_convt::array_ite(const array_ast *cond,
   return mast;
 }
 
-const smt_ast *
+smt_ast *
 array_convt::unbounded_array_ite(const array_ast *cond,
                                    const array_ast *true_arr,
                                    const array_ast *false_arr,

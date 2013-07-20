@@ -355,14 +355,14 @@ minisat_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   case SMT_FUNC_EQ:
   {
     assert(ressort->id == SMT_SORT_BOOL);
-    result = mk_ast_equality(args[0], args[1], ressort);
-    break;
+    return mk_ast_equality(args[0], args[1], ressort);
   }
   case SMT_FUNC_NOTEQ:
   {
     assert(ressort->id == SMT_SORT_BOOL);
-    result = mk_ast_equality(args[0], args[1], ressort);
-    result->bv[0] = lnot(result->bv[0]);
+    bitblast_smt_ast *a = mk_ast_equality(args[0], args[1], ressort);
+    a->bv[0] = lnot(a->bv[0]);
+    return a;
     break;
   }
   case SMT_FUNC_NOT:

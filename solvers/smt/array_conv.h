@@ -78,11 +78,11 @@ public:
   //   d) Call add_array_constraints before calling dec_solve. Can be called
   //      multiple times.
 
-  smt_ast *fresh_array(const smt_sort *ms,
-                             const std::string &name);
-  const smt_ast *array_ite(const array_ast *cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
+  virtual smt_ast *fresh_array(const smt_sort *ms,
+                               const std::string &name);
+  smt_ast *array_ite(const smt_ast *cond,
+                                   const smt_ast *true_arr,
+                                   const smt_ast *false_arr,
                                    const smt_sort *thesort);
   expr2tc array_get(const smt_ast *a, const type2tc &subtype);
   void add_array_constraints(void);
@@ -96,7 +96,7 @@ public:
                                     const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-  const smt_ast *unbounded_array_ite(const array_ast *cond,
+  smt_ast *unbounded_array_ite(const array_ast *cond,
                                        const array_ast *true_arr,
                                        const array_ast *false_arr,
                                        const smt_sort *thesort);

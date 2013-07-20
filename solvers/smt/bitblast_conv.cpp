@@ -13,16 +13,423 @@ bitblast_convt::~bitblast_convt()
 {
 }
 
-smt_ast *
-bitblast_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
-                            smt_func_kind f __attribute__((unused)),
-                            const smt_ast * const *args __attribute__((unused)),
-                            unsigned int num __attribute__((unused)))
+smt_ast*
+bitblast_convt::mk_func_app(const smt_sort *ressort,
+                            smt_func_kind f, const smt_ast* const* _args,
+                            unsigned int numargs)
 {
+  const bitblast_smt_ast *args[4];
+  bitblast_smt_ast *result = NULL;
+  unsigned int i;
+
+  assert(numargs < 4 && "Too many arguments to bitblast_convt::mk_func_app");
+  for (i = 0; i < numargs; i++)
+    args[i] = bitblast_ast_downcast(_args[i]);
+
+  switch (f) {
+  case SMT_FUNC_EQ:
+  {
+    assert(ressort->id == SMT_SORT_BOOL);
+    result = mk_ast_equality(args[0], args[1], ressort);
+    break;
+  }
+  case SMT_FUNC_NOTEQ:
+  {
+    assert(ressort->id == SMT_SORT_BOOL);
+    result = mk_ast_equality(args[0], args[1], ressort);
+    result->bv[0] = lnot(result->bv[0]);
+    break;
+  }
+  case SMT_FUNC_NOT:
+  {
+    literalt res = lnot(args[0]->bv[0]);
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(res);
+    break;
+  }
+  case SMT_FUNC_OR:
+  {
+    literalt res = lor(args[0]->bv[0], args[1]->bv[0]);
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(res);
+    break;
+  }
+  case SMT_FUNC_IMPLIES:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(limplies(args[0]->bv[0], args[1]->bv[0]));
+    break;
+  }
+  case SMT_FUNC_ITE:
+  {
+    if (ressort->id == SMT_SORT_ARRAY) {
+      return array_ite(_args[0], _args[1], _args[2], ressort);
+    } else {
+      assert(args[1]->bv.size() == args[2]->bv.size());
+      result = new bitblast_smt_ast(ressort);
+      for (unsigned int i = 0; i < args[1]->bv.size(); i++)
+        result->bv.push_back(lselect(args[0]->bv[0], args[1]->bv[i],
+                                     args[2]->bv[i]));
+    }
+    break;
+  }
+  case SMT_FUNC_AND:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(land(args[0]->bv[0], args[1]->bv[0]));
+    break;
+  }
+  case SMT_FUNC_XOR:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(lxor(args[0]->bv[0], args[1]->bv[0]));
+    break;
+  }
+  case SMT_FUNC_BVADD:
+  {
+    literalt carry_in = const_literal(false);
+    literalt carry_out;
+    result = new bitblast_smt_ast(ressort);
+    full_adder(args[0]->bv, args[1]->bv, result->bv, carry_in, carry_out);
+    break;
+  }
+  case SMT_FUNC_BVSUB:
+  {
+    literalt carry_in = const_literal(true);
+    literalt carry_out;
+    result = new bitblast_smt_ast(ressort);
+    bvt op1 = args[1]->bv;
+    invert(op1);
+    full_adder(args[0]->bv, op1, result->bv, carry_in, carry_out);
+    break;
+  }
+  case SMT_FUNC_BVUGT:
+  {
+    // Same as LT flipped
+    const smt_ast *args2[2];
+    args2[0] = _args[1];
+    args2[1] = _args[0];
+    return mk_func_app(ressort, SMT_FUNC_BVULT, args2, 2);
+  }
+  case SMT_FUNC_BVUGTE:
+  {
+    // This is the negative of less-than
+    smt_ast *a = mk_func_app(ressort, SMT_FUNC_BVULT, _args, 2);
+    a = mk_func_app(ressort, SMT_FUNC_NOT, &a, 1);
+    return a;
+  }
+  case SMT_FUNC_BVULT:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
+    break;
+  }
+  case SMT_FUNC_BVULTE:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, false));
+    break;
+  }
+  case SMT_FUNC_BVSGTE:
+  {
+    // This is the negative of less-than
+    smt_ast *a = mk_func_app(ressort, SMT_FUNC_BVSLT, _args, 2);
+    return mk_func_app(ressort, SMT_FUNC_NOT, &a, 1);
+  }
+  case SMT_FUNC_BVSLTE:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, true));
+    break;
+  }
+  case SMT_FUNC_BVSGT:
+  {
+    // Same as LT flipped
+    const smt_ast *args2[2];
+    args2[0] = _args[1];
+    args2[1] = _args[0];
+    return mk_func_app(ressort, SMT_FUNC_BVSLT, args2, 2);
+  }
+  case SMT_FUNC_BVSLT:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.push_back(lt_or_le(false, args[0]->bv, args[1]->bv, true));
+    break;
+  }
+  case SMT_FUNC_BVMUL:
+  {
+    result = new bitblast_smt_ast(ressort);
+    const bitblast_smt_sort *sort0 = bitblast_sort_downcast(args[0]->sort);
+    const bitblast_smt_sort *sort1 = bitblast_sort_downcast(args[1]->sort);
+    if (sort0->sign || sort1->sign) {
+      signed_multiplier(args[0]->bv, args[1]->bv, result->bv);
+    } else {
+      unsigned_multiplier(args[0]->bv, args[1]->bv, result->bv);
+    }
+    break;
+  }
+  case SMT_FUNC_CONCAT:
+  {
+    result = new bitblast_smt_ast(ressort);
+    result->bv.insert(result->bv.begin(), args[0]->bv.begin(),
+                      args[0]->bv.end());
+    result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
+                      args[1]->bv.end());
+    break;
+  }
+  case SMT_FUNC_BVAND:
+  {
+    result = new bitblast_smt_ast(ressort);
+    bvand(args[0]->bv, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVXOR:
+  {
+    result = new bitblast_smt_ast(ressort);
+    bvxor(args[0]->bv, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVOR:
+  {
+    result = new bitblast_smt_ast(ressort);
+    bvor(args[0]->bv, args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVNOT:
+  {
+    result = new bitblast_smt_ast(ressort);
+    bvnot(args[0]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVASHR:
+  {
+    result = new bitblast_smt_ast(ressort);
+    barrel_shift(args[0]->bv, bitblast_convt::shiftt::ARIGHT,
+                 args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVLSHR:
+  {
+    result = new bitblast_smt_ast(ressort);
+    barrel_shift(args[0]->bv, bitblast_convt::shiftt::LRIGHT,
+                 args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVSHL:
+  {
+    result = new bitblast_smt_ast(ressort);
+    barrel_shift(args[0]->bv, bitblast_convt::shiftt::LEFT,
+                 args[1]->bv, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVSDIV:
+  {
+    bvt rem;
+    result = new bitblast_smt_ast(ressort);
+    signed_divider(args[0]->bv, args[1]->bv, result->bv, rem);
+    break;
+  }
+  case SMT_FUNC_BVUDIV:
+  {
+    bvt rem;
+    result = new bitblast_smt_ast(ressort);
+    unsigned_divider(args[0]->bv, args[1]->bv, result->bv, rem);
+    break;
+  }
+  case SMT_FUNC_BVSMOD:
+  {
+    bvt res;
+    result = new bitblast_smt_ast(ressort);
+    signed_divider(args[0]->bv, args[1]->bv, res, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVUMOD:
+  {
+    bvt res;
+    result = new bitblast_smt_ast(ressort);
+    unsigned_divider(args[0]->bv, args[1]->bv, res, result->bv);
+    break;
+  }
+  case SMT_FUNC_BVNEG:
+  {
+    result = new bitblast_smt_ast(ressort);
+    negate(args[0]->bv, result->bv);
+    break;
+  }
+  default:
+    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[f]
+              << "\" in bitblast convt" << std::endl;
+    abort();
+  }
+
+  return result;
+}
+
+smt_sort*
+bitblast_convt::mk_sort(smt_sort_kind k, ...)
+{
+  va_list ap;
+  bitblast_smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
+  int thebool;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+    std::cerr << "Can't make Int sorts in Minisat" << std::endl;
+    abort();
+  case SMT_SORT_REAL:
+    std::cerr << "Can't make Real sorts in Minisat" << std::endl;
+    abort();
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    s = new bitblast_smt_sort(k, uint, (bool)thebool);
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, bitblast_smt_sort *); // Consider constness?
+    range = va_arg(ap, bitblast_smt_sort *);
+    s = new bitblast_smt_sort(k, dom->width, range->width);
+    break;
+  case SMT_SORT_BOOL:
+    s = new bitblast_smt_sort(k);
+    break;
+  default:
+    std::cerr << "Unimplemented SMT sort " << k << " in Minisat conversion"
+              << std::endl;
+    abort();
+  }
+
+  return s;
+}
+
+literalt
+bitblast_convt::mk_lit(const smt_ast *val)
+{
+  const bitblast_smt_ast *a = bitblast_ast_downcast(val);
+  assert(a->sort->id == SMT_SORT_BOOL);
+  assert(a->bv.size() == 1);
+
+  literalt l = new_variable();
+  set_equal(l, a->bv[0]);
+  return l;
+}
+
+smt_ast*
+bitblast_convt::mk_smt_int(const mp_integer &intval __attribute__((unused)), bool sign __attribute__((unused)))
+{
+  std::cerr << "Can't create integers in bitblast solver" << std::endl;
   abort();
 }
 
-smt_ast *
+smt_ast*
+bitblast_convt::mk_smt_real(const std::string &value __attribute__((unused)))
+{
+  std::cerr << "Can't create reals in bitblast solver" << std::endl;
+  abort();
+}
+
+smt_ast*
+bitblast_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
+                            unsigned int w)
+{
+  smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  bitblast_smt_ast *a = new bitblast_smt_ast(s);
+  a->bv.resize(w);
+  int64_t u = intval.to_long();
+  for (unsigned int i = 0; i < w; i++) {
+    int64_t mask = (1ULL << i);
+    bool val = u & mask;
+    a->bv[i] = const_literal(val);
+  }
+
+  return a;
+}
+
+smt_ast*
+bitblast_convt::mk_smt_bool(bool boolval)
+{
+  literalt l = const_literal(boolval);
+
+  smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  bitblast_smt_ast *a = new bitblast_smt_ast(s);
+  a->bv.push_back(l);
+  return a;
+}
+
+smt_ast*
+bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
+{
+  // Like metasmt, bitblast doesn't have a symbol table. So, build our own.
+  symtable_type::iterator it = sym_table.find(name);
+  if (it != sym_table.end())
+    return it->second;
+
+  // Otherwise, we need to build this AST ourselves.
+  bitblast_smt_ast *a = new bitblast_smt_ast(sort);
+  smt_ast *result = a;
+  const bitblast_smt_sort *s = bitblast_sort_downcast(sort);
+  switch (sort->id) {
+  case SMT_SORT_BOOL:
+  {
+    literalt l = new_variable();
+    a->bv.push_back(l);
+    break;
+  }
+  case SMT_SORT_BV:
+  {
+    // Bunch of fresh variables
+    for (unsigned int i = 0; i < s->width; i++)
+      a->bv.push_back(new_variable());
+    break;
+  }
+  case SMT_SORT_ARRAY:
+  {
+    delete a;
+    result = fresh_array(s, name);
+    break;
+  }
+  default:
+  // Alas, tuple_fresh invokes us gratuitously with an invalid type. I can't
+  // remember why, but it was justified at the time, for one solver, somewhere.
+  // Either way, it should die in the future, but until then...
+  return NULL;
+#if 0
+    std::cerr << "Unimplemented symbol type " << sort->id
+              << " in bitblast symbol creation" << std::endl;
+    abort();
+#endif
+  }
+
+  sym_table.insert(symtable_type::value_type(name, result));
+  return a;
+}
+
+smt_sort*
+bitblast_convt::mk_struct_sort(const type2tc &t __attribute__((unused)))
+{
+    abort();
+}
+
+smt_sort*
+bitblast_convt::mk_union_sort(const type2tc &t __attribute__((unused)))
+{
+    abort();
+}
+
+smt_ast*
+bitblast_convt::mk_extract(const smt_ast *src, unsigned int high,
+                          unsigned int low, const smt_sort *s)
+{
+  const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
+  bitblast_smt_ast *result = new bitblast_smt_ast(s);
+  for (unsigned int i = low; i <= high; i++)
+    result->bv.push_back(mast->bv[i]);
+
+  return result;
+}
+
+bitblast_smt_ast *
 bitblast_convt::mk_ast_equality(const smt_ast *_a,
                                 const smt_ast *_b,
                                 const smt_sort *ressort)
