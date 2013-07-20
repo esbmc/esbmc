@@ -73,34 +73,6 @@ public:
   bvt bv;
 };
 
-class minisat_array_ast : public smt_ast {
-public:
-#define minisat_array_downcast(x) static_cast<const minisat_array_ast*>(x)
-
-  minisat_array_ast(const smt_sort *_s)
-    : smt_ast(_s), symname(""), array_fields()
-  {
-  }
-
-  minisat_array_ast(const smt_sort *_s,
-                    const std::vector<const smt_ast *> &_a)
-    : smt_ast(_s), symname(""), array_fields(_a)
-  {
-  }
-
-  virtual ~minisat_array_ast(void) { }
-
-  bool is_unbounded_array(void) {
-    return minisat_sort_downcast(sort)->is_unbounded_array();
-  }
-
-  std::string symname; // Only if this was produced from mk_smt_symbol.
-
-  std::vector<const smt_ast *> array_fields;
-  unsigned int base_array_id;
-  unsigned int array_update_num;
-};
-
 class minisat_convt : public array_convt {
 public:
   typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
