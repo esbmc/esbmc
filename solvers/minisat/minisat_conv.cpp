@@ -348,30 +348,6 @@ minisat_convt::lit_to_ast(const literalt &l)
   return a;
 }
 
-smt_sort*
-minisat_convt::mk_struct_sort(const type2tc &t __attribute__((unused)))
-{
-  abort();
-}
-
-smt_sort*
-minisat_convt::mk_union_sort(const type2tc &t __attribute__((unused)))
-{
-  abort();
-}
-
-smt_ast*
-minisat_convt::mk_extract(const smt_ast *src, unsigned int high,
-                          unsigned int low, const smt_sort *s)
-{
-  const minisat_smt_ast *mast = minisat_ast_downcast(src);
-  minisat_smt_ast *result = new minisat_smt_ast(s);
-  for (unsigned int i = low; i <= high; i++)
-    result->bv.push_back(mast->bv[i]);
-
-  return result;
-}
-
 void
 minisat_convt::assign_array_symbol(const std::string &str, const smt_ast *a)
 {
