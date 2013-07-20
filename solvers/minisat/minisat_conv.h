@@ -18,62 +18,6 @@ typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
 typedef std::vector<literalt> bvt; // sadface.jpg
 
-class minisat_smt_sort : public smt_sort {
-  // Record all the things.
-  public:
-#define minisat_sort_downcast(x) static_cast<const minisat_smt_sort*>(x)
-
-  minisat_smt_sort(smt_sort_kind i)
-    : smt_sort(i), width(0), sign(false), arrdom_width(0), arrrange_width(0)
-  { }
-
-  minisat_smt_sort(smt_sort_kind i, unsigned int _width, bool _sign)
-    : smt_sort(i), width(_width), sign(_sign), arrdom_width(0),
-      arrrange_width(0)
-  { }
-
-  minisat_smt_sort(smt_sort_kind i, unsigned int arrwidth,
-                   unsigned int rangewidth)
-    : smt_sort(i), width(0), sign(false), arrdom_width(arrwidth),
-      arrrange_width(rangewidth)
-  { }
-
-  virtual ~minisat_smt_sort() { }
-  unsigned int width; // bv width
-  bool sign;
-  unsigned int arrdom_width, arrrange_width; // arr sort widths
-
-  virtual unsigned long get_domain_width(void) const {
-    return arrdom_width;
-  }
-
-  virtual unsigned long get_range_width(void) const {
-    return arrrange_width;
-  }
-
-  bool is_unbounded_array(void) {
-    if (id != SMT_SORT_ARRAY)
-      return false;
-
-    if (get_domain_width() > 10)
-      // This is either really large, or unbounded thus leading to a machine_int
-      // sized domain. Either way, not a normal one.
-      return true;
-    else
-      return false;
-  }
-};
-
-class minisat_smt_ast : public smt_ast {
-public:
-#define minisat_ast_downcast(x) static_cast<const minisat_smt_ast*>(x)
-  minisat_smt_ast(const smt_sort *s) : smt_ast(s) { }
-
-  // Everything is, to a greater or lesser extend, a vector of booleans, which
-  // we'll represent as minisat Lit's.
-  bvt bv;
-};
-
 class minisat_convt : public virtual array_convt, public virtual bitblast_convt {
 public:
   typedef enum {
