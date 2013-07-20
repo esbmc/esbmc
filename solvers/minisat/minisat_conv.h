@@ -45,6 +45,10 @@ class minisat_smt_sort : public smt_sort {
     return arrdom_width;
   }
 
+  virtual unsigned long get_range_width(void) const {
+    return arrrange_width;
+  }
+
   bool is_unbounded_array(void) {
     if (id != SMT_SORT_ARRAY)
       return false;
