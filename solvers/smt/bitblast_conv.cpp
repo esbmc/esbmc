@@ -402,7 +402,7 @@ bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
   }
 
   sym_table.insert(symtable_type::value_type(name, result));
-  return a;
+  return result;
 }
 
 smt_sort*

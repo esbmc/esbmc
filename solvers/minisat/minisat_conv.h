@@ -98,7 +98,6 @@ public:
   virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
 
   // SMT api things that bitblast:
-  virtual smt_ast* mk_smt_symbol(const std::string &name, const smt_sort *sort);
   virtual smt_sort* mk_struct_sort(const type2tc &t);
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,

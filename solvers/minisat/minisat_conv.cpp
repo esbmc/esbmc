@@ -348,52 +348,6 @@ minisat_convt::lit_to_ast(const literalt &l)
   return a;
 }
 
-smt_ast*
-minisat_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
-{
-  // Like metasmt, minisat doesn't have a symbol table. So, build our own.
-  symtable_type::const_iterator it = sym_table.find(name);
-  if (it != sym_table.end())
-    return minisat_ast_downcast(it->second);
-
-  // Otherwise, we need to build this AST ourselves.
-  minisat_smt_ast *a = new minisat_smt_ast(sort);
-  minisat_smt_sort *s = minisat_sort_downcast(sort);
-  switch (sort->id) {
-  case SMT_SORT_BOOL:
-  {
-    literalt l = new_variable();
-    a->bv.push_back(l);
-    break;
-  }
-  case SMT_SORT_BV:
-  {
-    // Bunch of fresh variables
-    for (unsigned int i = 0; i < s->width; i++)
-      a->bv.push_back(new_variable());
-    break;
-  }
-  case SMT_SORT_ARRAY:
-  {
-    a = fresh_array(s, name);
-    break;
-  }
-  default:
-  // Alas, tuple_fresh invokes us gratuitously with an invalid type. I can't
-  // remember why, but it was justified at the time, for one solver, somewhere.
-  // Either way, it should die in the future, but until then...
-  return NULL;
-#if 0
-    std::cerr << "Unimplemented symbol type " << sort->id
-              << " in minisat symbol creation" << std::endl;
-    abort();
-#endif
-  }
-
-  sym_table.insert(symtable_type::value_type(name, a));
-  return a;
-}
-
 smt_sort*
 minisat_convt::mk_struct_sort(const type2tc &t __attribute__((unused)))
 {
