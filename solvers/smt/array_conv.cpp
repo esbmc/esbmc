@@ -5,7 +5,8 @@
 array_convt::array_convt(bool enable_cache, bool int_encoding,
                          const namespacet &_ns, bool is_cpp, bool tuple_support)
   // Declare that we can put bools in arrays, and init unbounded arrays
-  : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support, false,
+  // XXX - can't put bools in arrays /just/ yet due to some type hiccups.
+  : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support, true,
               true), array_indexes(), array_values(), array_updates()
 {
 }
