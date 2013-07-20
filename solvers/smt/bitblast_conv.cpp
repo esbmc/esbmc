@@ -22,6 +22,43 @@ bitblast_convt::mk_func_app(const smt_sort *ressort __attribute__((unused)),
   abort();
 }
 
+smt_ast *
+bitblast_convt::mk_ast_equality(const smt_ast *_a,
+                                const smt_ast *_b,
+                                const smt_sort *ressort)
+{
+  const bitblast_smt_ast *a = bitblast_ast_downcast(_a);
+  const bitblast_smt_ast *b = bitblast_ast_downcast(_b);
+
+  switch (a->sort->id) {
+  case SMT_SORT_BOOL:
+  {
+    literalt res = lequal(a->bv[0], b->bv[0]);
+    bitblast_smt_ast *n = new bitblast_smt_ast(a->sort);
+    n->bv.push_back(res);
+    return n;
+  }
+  case SMT_SORT_BV:
+  {
+    bitblast_smt_ast *n = new bitblast_smt_ast(ressort);
+    n->bv.push_back(equal(a->bv, b->bv));
+    return n;
+  }
+  case SMT_SORT_ARRAY:
+  {
+    // XXX - so, if we have different array encodings in the future then this
+    // might get quite funky. Leave it until then, though.
+    std::cerr << "No direct array equality support in bitblast converter"
+              << std::endl;
+    abort();
+  }
+  default:
+    std::cerr << "Invalid sort " << a->sort->id << " for equality in bitblast"
+              << std::endl;
+    abort();
+  }
+}
+
 void
 bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
 {

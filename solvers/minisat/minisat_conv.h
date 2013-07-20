@@ -122,9 +122,6 @@ public:
 
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);
   void dump_bv(const bvt &bv) const;
-  minisat_smt_ast *mk_ast_equality(const minisat_smt_ast *a,
-                                   const minisat_smt_ast *b,
-                                   const smt_sort *ressort);
 
   // What's basically the literalt api:
   // Things imported from CBMC, more or less

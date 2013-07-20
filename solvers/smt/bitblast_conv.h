@@ -92,6 +92,8 @@ public:
   virtual void set_equal(literalt a, literalt b) = 0;
 
   // Bitblasting utilities, mostly from CBMC.
+  smt_ast *mk_ast_equality(const smt_ast *a, const smt_ast *b,
+                           const smt_sort *ressort);
   virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
   void eliminate_duplicates(const bvt &bv, bvt &dest);

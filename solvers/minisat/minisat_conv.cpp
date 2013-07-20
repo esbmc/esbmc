@@ -845,39 +845,6 @@ minisat_convt::mk_extract(const smt_ast *src, unsigned int high,
   return result;
 }
 
-minisat_smt_ast *
-minisat_convt::mk_ast_equality(const minisat_smt_ast *a,
-                               const minisat_smt_ast *b,
-                               const smt_sort *ressort)
-{
-  switch (a->sort->id) {
-  case SMT_SORT_BOOL:
-  {
-    literalt res = lequal(a->bv[0], b->bv[0]);
-    minisat_smt_ast *n = new minisat_smt_ast(a->sort);
-    n->bv.push_back(res);
-    return n;
-  }
-  case SMT_SORT_BV:
-  {
-    const minisat_smt_sort *ms = minisat_sort_downcast(a->sort);
-    minisat_smt_ast *n = new minisat_smt_ast(ressort);
-    n->bv.push_back(equal(a->bv, b->bv));
-    return n;
-  }
-  case SMT_SORT_ARRAY:
-  {
-    std::cerr << "No direct array equality support in MiniSAT converter"
-              << std::endl;
-    abort();
-  }
-  default:
-    std::cerr << "Invalid sort " << a->sort->id << " for equality in minisat"
-              << std::endl;
-    abort();
-  }
-}
-
 void
 minisat_convt::assign_array_symbol(const std::string &str, const smt_ast *a)
 {
