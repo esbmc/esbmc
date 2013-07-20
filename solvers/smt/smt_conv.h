@@ -220,6 +220,24 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
+  // Getting: probably should be implemented at smt_convt in the future, and
+  // then use this api. For the moment, some things use this, and some don't.
+  // Those that do, implement this, others that don't implement it to abort.
+  virtual expr2tc get_bv(const type2tc &t __attribute__((unused)),
+                         const smt_ast *a __attribute__((unused))) {
+    std::cerr << "get_bv unimplemented by smt converter" << std::endl;
+    abort();
+  }
+  virtual expr2tc get_bool(const smt_ast *a __attribute__((unused))) {
+    std::cerr << "get_bool unimplemented by smt converter" << std::endl;
+    abort();
+  }
+  virtual expr2tc array_get(const smt_ast *a __attribute__((unused)),
+                            const type2tc &t __attribute__((unused))) {
+    std::cerr << "array_get unimplemented by smt converter" << std::endl;
+    abort();
+  }
+
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
 
