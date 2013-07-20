@@ -619,9 +619,7 @@ void goto_checkt::check_rec(
       overflow_check(expr, guard);
       if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
       {
-        if (!options.get_bool_option("boolector-bv") &&
-            !options.get_bool_option("z3-bv") &&
-            !options.get_bool_option("z3-ir"))
+        if (!options.get_bool_option("bv"))
         {
           options.set_option("int-encoding", false);
         }
@@ -639,8 +637,7 @@ void goto_checkt::check_rec(
   if (expr.id() == "ashr" || expr.id() == "lshr" ||
 	  expr.id() == "shl")
   {
-    if (!options.get_bool_option("z3-bv")
-		&& !options.get_bool_option("z3-ir"))
+    if (!options.get_bool_option("bv") && !options.get_bool_option("ir"))
     {
       options.set_option("int-encoding", false);
     }
@@ -649,8 +646,8 @@ void goto_checkt::check_rec(
 		   expr.id() == "bitxor" || expr.id() == "bitnand" ||
 		   expr.id() == "bitnor" || expr.id() == "bitnxor")
   {
-	if (!options.get_bool_option("z3-bv")
-		&& !options.get_bool_option("z3-ir"))
+	if (!options.get_bool_option("bv")
+		&& !options.get_bool_option("ir"))
 	{
           options.set_option("int-encoding", false);
     }
@@ -660,15 +657,15 @@ void goto_checkt::check_rec(
     div_by_zero_check(expr, guard);
     nan_check(expr, guard);
 
-	if (!options.get_bool_option("z3-bv")
-		&& !options.get_bool_option("z3-ir"))
+	if (!options.get_bool_option("bv")
+		&& !options.get_bool_option("ir"))
 	{
           options.set_option("int-encoding", false);
 	}
   }
 #if 0
   if (options.get_bool_option("k-induction")) {
-    if (options.get_bool_option("z3-ir")) {
+    if (options.get_bool_option("ir")) {
       options.set_option("int-encoding", true);
 	  } else {
       options.set_option("int-encoding", false);

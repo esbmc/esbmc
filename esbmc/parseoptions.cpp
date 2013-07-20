@@ -128,10 +128,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("arrays-uf", "auto");
 
-  if(cmdline.isset("z3-bv"))
+  if(cmdline.isset("bv"))
   {
-    options.set_option("z3", true);
-    options.set_option("z3-bv", true);
     options.set_option("int-encoding", false);
   }
 
@@ -150,10 +148,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("btor", true);
   }
 
-  if(cmdline.isset("z3-ir"))
+  if(cmdline.isset("ir"))
   {
-    options.set_option("z3", true);
-    options.set_option("z3-ir", true);
     options.set_option("int-encoding", true);
   }
 
@@ -1400,8 +1396,8 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    " --z3-bv                      use Z3 with bit-vector arithmetic\n"
-    " --z3-ir                      use Z3 with integer/real arithmetic\n"
+    " --bv                         use Z3 with bit-vector arithmetic\n"
+    " --ir                         use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"
     " --lazy                       use lazy instantiation with Z3 (default)\n"
     " --btor                       output VCCs in BTOR format (experimental)\n"

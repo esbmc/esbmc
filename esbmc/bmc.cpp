@@ -141,8 +141,7 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
 {
   std::string logic;
 
-  if (options.get_bool_option("bl-bv") || options.get_bool_option("z3-bv") ||
-      !options.get_bool_option("int-encoding"))
+  if (!options.get_bool_option("int-encoding"))
     logic = "bit-vector arithmetic";
   else
     logic = "integer/real arithmetic";
