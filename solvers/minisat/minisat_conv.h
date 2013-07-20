@@ -10,6 +10,7 @@
 
 #include <solvers/smt/smt_conv.h>
 #include <solvers/smt/array_conv.h>
+#include <solvers/smt/bitblast_conv.h>
 
 #include <core/Solver.h>
 
@@ -73,7 +74,7 @@ public:
   bvt bv;
 };
 
-class minisat_convt : public array_convt {
+class minisat_convt : public array_convt, public bitblast_convt {
 public:
   typedef hash_map_cont<std::string, const smt_ast *, std::hash<std::string> > symtable_type;
 
