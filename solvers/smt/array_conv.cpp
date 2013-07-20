@@ -20,7 +20,7 @@ array_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
 {
 
   // Only support a scenario where the lhs (a) is a symbol.
-  assert(is_symbol2t(a) && "Malformed minisat array equality");
+  assert(is_symbol2t(a) && "Malformed array equality");
 
   const array_ast *value;
 
