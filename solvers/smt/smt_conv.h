@@ -414,7 +414,7 @@ public:
 
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  virtual expr2tc get_array_elem(const smt_ast *array, const smt_ast *idx);
+  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index);
 
   // Ours:
   expr2tc get_array(const smt_ast *array, const type2tc &t);

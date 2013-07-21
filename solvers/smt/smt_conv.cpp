@@ -2082,13 +2082,34 @@ smt_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a __a
 }
 
 expr2tc
-smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), const smt_ast *idx __attribute__((unused)))
+smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), uint64_t index __attribute__((unused)))
 {
   abort();
 }
 
 expr2tc
-smt_convt::get_array(const smt_ast *array __attribute__((unused)), const type2tc &t __attribute__((unused)))
+smt_convt::get_array(const smt_ast *array, const type2tc &t)
 {
-  abort();
+
+  const array_type2t &ar = to_array_type(t);
+  if (is_tuple_ast_type(ar.subtype)) {
+    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
+    return expr2tc();
+  }
+
+  // Fetch the array bounds, if it's huge then assume this is a 1024 element
+  // array. Then fetch all elements and formulate a constant_array.
+  size_t w = array->sort->get_domain_width();
+  if (w > 10)
+    w = 10;
+
+  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
+  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
+  std::vector<expr2tc> fields;
+
+  for (size_t i = 0; i < (1ULL << w); i++) {
+    fields.push_back(get_array_elem(array, i));
+  }
+
+  return constant_array2tc(arr_type, fields);
 }
