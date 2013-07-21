@@ -294,6 +294,13 @@ smt_convt::make_conjunct(const ast_vec &v)
   return result;
 }
 
+const smt_ast *
+smt_convt::invert_ast(const smt_ast *a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  return mk_func_app(a->sort, SMT_FUNC_NOT, &a, 1);
+}
+
 literalt
 smt_convt::lor(const bvt &bv)
 {
