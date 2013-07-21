@@ -134,7 +134,17 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
 tvt
 mathsat_convt::l_get(literalt l)
 {
-  constant_bool2tc b = get_bool(lit_to_ast(l));
+  tvt result = l_get(lit_to_ast(l));
+  if (l.sign())
+    result = result.invert();
+
+  return result;
+}
+
+tvt
+mathsat_convt::l_get(const smt_ast *a)
+{
+  constant_bool2tc b = get_bool(a);
   if (b->constant_value)
     return tvt(true);
   else if (!b->constant_value)

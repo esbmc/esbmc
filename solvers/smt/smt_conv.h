@@ -411,6 +411,7 @@ public:
   virtual const std::string solver_text()=0;
 
   virtual tvt l_get(literalt a)=0;
+  virtual tvt l_get(const smt_ast *a)=0;
 
   virtual expr2tc get_bool(const smt_ast *a) = 0;
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;

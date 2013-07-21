@@ -44,7 +44,16 @@ cvc_convt::dec_solve()
 tvt
 cvc_convt::l_get(literalt l)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(lit_to_ast(l));
+  tvt result = l_get(lit_to_ast(l));
+  if (l.sign())
+    result = result.invert();
+  return result;
+}
+
+tvt
+cvc_convt::l_get(const smt_ast *a)
+{
+  const cvc_smt_ast *ca = cvc_ast_downcast(a);
   constant_bool2tc b = get_bool(ca);
   if (b->constant_value)
     return tvt(true);

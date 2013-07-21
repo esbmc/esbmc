@@ -139,6 +139,7 @@ private:
   }
 
   virtual tvt l_get(literalt a);
+  virtual tvt l_get(const smt_ast *a);
 
   z3::expr z3_literal(literalt l);
 

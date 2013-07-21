@@ -129,6 +129,14 @@ minisat_convt::l_get(literalt l)
     return tvt(tvt::TV_UNKNOWN);
 }
 
+tvt
+minisat_convt::l_get(const smt_ast *a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
+  return l_get(ba->bv[0]);
+}
+
 void
 minisat_convt::assert_lit(const literalt &l)
 {

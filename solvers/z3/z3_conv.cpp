@@ -448,17 +448,27 @@ z3_convt::z3_literal(literalt l)
 tvt
 z3_convt::l_get(literalt a)
 {
-  tvt result = tvt(tvt::TV_ASSUME);
-  std::string literal;
 
   if (a.is_true()) {
     return tvt(true);
-  } else if (a.is_false())    {
+  } else if (a.is_false()) {
     return tvt(false);
   }
 
-  symbol2tc sym(get_bool_type(), irep_idt("l" + i2string(a.var_no())));
-  expr2tc res = get(sym);
+  tvt result = l_get(lit_to_ast(a));
+
+  if (a.sign())
+    result = result.invert();
+
+  return result;
+}
+
+tvt
+z3_convt::l_get(const smt_ast *a)
+{
+  tvt result = tvt(tvt::TV_ASSUME);
+
+  expr2tc res = get_bool(a);
 
   if (!is_nil_expr(res) && is_constant_bool2t(res)) {
     result = (to_constant_bool2t(res).is_true())
@@ -467,8 +477,6 @@ z3_convt::l_get(literalt a)
     result = tvt(tvt::TV_UNKNOWN);
   }
 
-  if (a.sign())
-    result = !result;
 
   return result;
 }

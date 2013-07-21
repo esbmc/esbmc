@@ -38,6 +38,7 @@ public:
 
   virtual resultt dec_solve();
   virtual tvt l_get(literalt l);
+  virtual tvt l_get(const smt_ast *a);
   virtual const std::string solver_text();
 
   virtual void assert_lit(const literalt &l);

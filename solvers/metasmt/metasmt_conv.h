@@ -165,6 +165,7 @@ public:
   virtual expr2tc get(const expr2tc &expr);
 
   virtual tvt l_get(literalt a);
+  virtual tvt l_get(const smt_ast *a);
   virtual const std::string solver_text();
 
   virtual void assert_lit(const literalt &l);

@@ -65,6 +65,14 @@ metasmt_convt::l_get(literalt a)
   return tvt(tvt::TV_FALSE);
 }
 
+tvt
+metasmt_convt::l_get(const smt_ast *a)
+{
+  // Right now, forget it, let's just go for outcome correctness before result
+  // fetching.
+  return tvt(tvt::TV_FALSE);
+}
+
 void
 metasmt_convt::assert_lit(const literalt &l)
 {
