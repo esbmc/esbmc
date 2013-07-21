@@ -35,7 +35,6 @@ public:
   ~cvc_convt();
 
   virtual resultt dec_solve();
-  virtual expr2tc get(const expr2tc &expr);
   virtual tvt l_get(literalt l);
   virtual const std::string solver_text();
 
@@ -58,8 +57,9 @@ public:
                               unsigned int low, const smt_sort *s);
 
   expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const smt_ast *a);
-  expr2tc get_array(const smt_ast *a, const type2tc &t);
+  expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  expr2tc get_array_elem(const smt_ast *array, uint64_t index,
+                         const smt_sort *sort);
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;

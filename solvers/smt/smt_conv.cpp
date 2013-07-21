@@ -2082,7 +2082,7 @@ smt_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a __a
 }
 
 expr2tc
-smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), uint64_t index __attribute__((unused)))
+smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), uint64_t index __attribute__((unused)), const smt_sort *subtype_sort __attribute__((unused)))
 {
   abort();
 }
@@ -2106,9 +2106,10 @@ smt_convt::get_array(const smt_ast *array, const type2tc &t)
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
+  const smt_sort *subtype_sort = convert_sort(ar.subtype);
 
   for (size_t i = 0; i < (1ULL << w); i++) {
-    fields.push_back(get_array_elem(array, i));
+    fields.push_back(get_array_elem(array, i, subtype_sort));
   }
 
   return constant_array2tc(arr_type, fields);

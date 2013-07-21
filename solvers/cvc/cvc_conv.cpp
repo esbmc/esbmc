@@ -41,42 +41,6 @@ cvc_convt::dec_solve()
   }
 }
 
-expr2tc
-cvc_convt::get(const expr2tc &expr)
-{
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-    return get_bool(convert_ast(expr));
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return get_bv(convert_ast(expr));
-  case type2t::fixedbv_id:
-  {
-    // XXX -- again, another candidate for refactoring.
-    expr2tc tmp = get_bv(convert_ast(expr));
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::array_id:
-    return get_array(convert_ast(expr), expr->type);
-  case type2t::struct_id:
-  case type2t::union_id:
-  case type2t::pointer_id:
-    return tuple_get(expr);
-  default:
-    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
-              << ") in cvc get" << std::endl;
-    abort();
-  }
-}
-
 tvt
 cvc_convt::l_get(literalt l)
 {
@@ -98,7 +62,7 @@ cvc_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-cvc_convt::get_bv(const smt_ast *a)
+cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
   CVC4::Expr e = smt.getValue(ca->e);
@@ -109,41 +73,22 @@ cvc_convt::get_bv(const smt_ast *a)
 }
 
 expr2tc
-cvc_convt::get_array(const smt_ast *a, const type2tc &t)
+cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
+                          const smt_sort *elem_sort)
 {
+  const cvc_smt_ast *carray = cvc_ast_downcast(array);
+  unsigned int orig_w = array->sort->get_domain_width();
 
-  const array_type2t &ar = to_array_type(t);
-  if (is_tuple_ast_type(ar.subtype)) {
-    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
-    return expr2tc();
-  }
+  smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
+  const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
+  CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
+  free(tmpast);
 
-  // Fetch the array bounds, if it's huge then assume this is a 1024 element
-  // array. Then fetch all elements and formulate a constant_array.
-  size_t w = a->sort->get_domain_width();
-  size_t orig_w = w;
-  if (w > 10)
-    w = 10;
+  cvc_smt_ast *tmpb = new cvc_smt_ast(elem_sort, e);
+  expr2tc result = get_bv(type2tc(), tmpb);
+  free(tmpb);
 
-  const cvc_smt_ast *ca = cvc_ast_downcast(a);
-  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
-
-  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
-  const smt_sort *s = convert_sort(ar.subtype);
-  std::vector<expr2tc> fields;
-
-  for (size_t i = 0; i < (1ULL << w); i++) {
-    smt_ast *tmpast = mk_smt_bvint(BigInt(i), false, orig_w);
-    const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
-    CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, ca->e, tmpa->e);
-    free(tmpast);
-
-    cvc_smt_ast *tmpb = new cvc_smt_ast(s, e);
-    fields.push_back(get_bv(tmpb));
-    free(tmpb);
-  }
-
-  return constant_array2tc(arr_type, fields);
+  return result;
 }
 
 const std::string
