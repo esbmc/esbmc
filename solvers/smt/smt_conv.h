@@ -383,7 +383,7 @@ public:
 
   virtual resultt dec_solve() = 0;
   virtual literalt convert(const expr2tc &expr);
-  virtual expr2tc get(const expr2tc &expr) = 0;
+  virtual expr2tc get(const expr2tc &expr);
 
   virtual void clear_cache()
   {
@@ -411,6 +411,13 @@ public:
   virtual const std::string solver_text()=0;
 
   virtual tvt l_get(literalt a)=0;
+
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual expr2tc get_array_elem(const smt_ast *array, const smt_ast *idx);
+
+  // Ours:
+  expr2tc get_array(const smt_ast *array, const type2tc &t);
 
   // Types
 

@@ -2032,3 +2032,63 @@ smt_convt::set_equal(literalt a, literalt b)
   bv[1]=b;
   lcnf(bv);
 }
+
+expr2tc
+smt_convt::get(const expr2tc &expr)
+{
+  switch (expr->type->type_id) {
+  case type2t::bool_id:
+    return get_bool(convert_ast(expr));
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+    return get_bv(expr->type, convert_ast(expr));
+  case type2t::fixedbv_id:
+  {
+    // XXX -- again, another candidate for refactoring.
+    expr2tc tmp = get_bv(expr->type, convert_ast(expr));
+    const constant_int2t &intval = to_constant_int2t(tmp);
+    uint64_t val = intval.constant_value.to_ulong();
+    std::stringstream ss;
+    ss << val;
+    constant_exprt value_expr(migrate_type_back(expr->type));
+    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
+    fixedbvt fbv;
+    fbv.from_expr(value_expr);
+    return constant_fixedbv2tc(expr->type, fbv);
+  }
+  case type2t::array_id:
+    return get_array(convert_ast(expr), expr->type);
+  case type2t::struct_id:
+  case type2t::union_id:
+  case type2t::pointer_id:
+    return tuple_get(expr);
+  default:
+    std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
+              << ") in smt get" << std::endl;
+    abort();
+  }
+}
+
+expr2tc
+smt_convt::get_bool(const smt_ast *a __attribute__((unused)))
+{
+  abort();
+}
+
+expr2tc
+smt_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a __attribute__((unused)))
+{
+  abort();
+}
+
+expr2tc
+smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), const smt_ast *idx __attribute__((unused)))
+{
+  abort();
+}
+
+expr2tc
+smt_convt::get_array(const smt_ast *array __attribute__((unused)), const type2tc &t __attribute__((unused)))
+{
+  abort();
+}
