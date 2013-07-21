@@ -400,7 +400,7 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, const smt_sort 
   case SMT_SORT_ARRAY:
   {
     delete a;
-    result = fresh_array(s, name);
+    result = this->fresh_array(s, name);
     break;
   }
   default:
@@ -458,7 +458,7 @@ bitblast_convt<subclass>::mk_ast_equality(const smt_ast *_a,
   switch (a->sort->id) {
   case SMT_SORT_BOOL:
   {
-    literalt res = lequal(a->bv[0], b->bv[0]);
+    literalt res = this->lequal(a->bv[0], b->bv[0]);
     bitblast_smt_ast *n = new bitblast_smt_ast(a->sort);
     n->bv.push_back(res);
     return n;
@@ -489,7 +489,7 @@ expr2tc
 bitblast_convt<subclass>::get_bool(const smt_ast *a)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
-  tvt t = l_get(mast->bv[0]);
+  tvt t = this->l_get(mast->bv[0]);
   if (t.is_true())
     return true_expr;
   else if (t.is_false())
@@ -509,7 +509,7 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
   uint64_t accuml = 0;
   for (unsigned int i = 0; i < sz; i++) {
     uint64_t mask = 1 << i;
-    tvt t = l_get(mast->bv[i]);
+    tvt t = this->l_get(mast->bv[i]);
     if (t.is_true()) {
       accuml |= mask;
     } else if (t.is_false()) {
@@ -527,14 +527,14 @@ expr2tc
 bitblast_convt<subclass>::get(const expr2tc &expr)
 {
 
-  const smt_ast *value = convert_ast(expr);
+  const smt_ast *value = this->convert_ast(expr);
 
   // It can however have various types. We only deal with bools and bitvectors;
   // hand everything else off to additional modelling code.
   switch (expr->type->type_id) {
   case type2t::bool_id:
   {
-    return get_bool(value);
+    return this->get_bool(value);
   }
   case type2t::unsignedbv_id:
   case type2t::signedbv_id:
@@ -549,7 +549,7 @@ bitblast_convt<subclass>::get(const expr2tc &expr)
     std::stringstream ss;
     ss << val;
     constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
+    value_expr.set_value(this->get_fixed_point(expr->type->get_width(), ss.str()));
     fixedbvt fbv;
     fbv.from_expr(value_expr);
     return constant_fixedbv2tc(expr->type, fbv);
@@ -557,14 +557,14 @@ bitblast_convt<subclass>::get(const expr2tc &expr)
   case type2t::array_id:
   {
     if (is_tuple_array_ast_type(expr->type))
-      return tuple_array_get(expr);
+      return this->tuple_array_get(expr);
     else
-      return array_get(value, expr->type);
+      return this->array_get(value, expr->type);
   }
   case type2t::pointer_id:
   case type2t::struct_id:
   case type2t::union_id:
-    return tuple_get(expr);
+    return this->tuple_get(expr);
   default:
     std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
               << " get" << std::endl;
@@ -801,15 +801,15 @@ bitblast_convt<subclass>::unsigned_divider(const bvt &op0, const bvt &op1, bvt &
 
   literalt is_equal = equal(sum, op0);
 
-  assert_lit(this->limplies(is_not_zero, is_equal));
+  this->assert_lit(this->limplies(is_not_zero, is_equal));
 
   // "op1 != 0 => rem < op1"
 
-  assert_lit(this->limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
+  this->assert_lit(this->limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
 
   // "op1 != 0 => res <= op0"
 
-  assert_lit(this->limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
+  this->assert_lit(this->limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
 }
 
 template <class subclass>
@@ -846,7 +846,7 @@ bitblast_convt<subclass>::unsigned_multiplier_no_overflow(const bvt &op0, const 
       for (unsigned int idx = op1.size() - sum; idx < op1.size(); idx++) {
         literalt tmp = smt_convt::land(op1[idx], op0[sum]);
         tmp.invert();
-        assert_lit(tmp);
+        this->assert_lit(tmp);
       }
     }
   }
@@ -865,20 +865,20 @@ bitblast_convt<subclass>::adder_no_overflow(const bvt &op0, const bvt &op1, bvt 
 
   if (is_signed) {
     literalt old_sign = op0[width-1];
-    literalt sign_the_same = lequal(op0[width-1], tmp_op1[width-1]);
+    literalt sign_the_same = this->lequal(op0[width-1], tmp_op1[width-1]);
     literalt carry;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry);
     literalt stop_overflow = smt_convt::land(sign_the_same, this->lxor(op0[width-1], old_sign));
     stop_overflow.invert();
-    assert_lit(stop_overflow);
+    this->assert_lit(stop_overflow);
   } else {
     literalt carry_out;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry_out);
     if (subtract) {
-      assert_lit(carry_out);
+      this->assert_lit(carry_out);
     } else {
       carry_out.invert();
-      assert_lit(carry_out);
+      this->assert_lit(carry_out);
     }
   }
 
@@ -900,7 +900,7 @@ bitblast_convt<subclass>::adder_no_overflow(const bvt &op0, const bvt &op1, bvt 
   }
 
   carry_out.invert();
-  assert_lit(carry_out);
+  this->assert_lit(carry_out);
 }
 
 template <class subclass>
@@ -934,7 +934,7 @@ bitblast_convt<subclass>::equal(const bvt &op0, const bvt &op1)
   tmp.reserve(op0.size());
 
   for (unsigned int i = 0; i < op0.size(); i++)
-    tmp.push_back(lequal(op0[i], op1[i]));
+    tmp.push_back(this->lequal(op0[i], op1[i]));
 
   literalt res = land(tmp);
   return res;
@@ -954,7 +954,7 @@ bitblast_convt<subclass>::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1
 
   literalt result;
   if (is_signed)
-    result = this->lxor(lequal(top0, top1), carry);
+    result = this->lxor(this->lequal(top0, top1), carry);
   else
     result = this->lnot(carry);
 
@@ -1108,7 +1108,7 @@ bitblast_convt<subclass>::land(const bvt &bv)
     lits.reserve(2);
     lits.push_back(pos(new_bv[i]));
     lits.push_back(neg(lit));
-    lcnf(lits);
+    this->lcnf(lits);
   }
 
   bvt lits;
@@ -1118,7 +1118,7 @@ bitblast_convt<subclass>::land(const bvt &bv)
     lits.push_back(neg(new_bv[i]));
 
   lits.push_back(pos(lit));
-  lcnf(lits);
+  this->lcnf(lits);
 
   return lit;
 }
@@ -1144,7 +1144,7 @@ bitblast_convt<subclass>::lor(const bvt &bv)
     lits.reserve(2);
     lits.push_back(neg(new_bv[i]));
     lits.push_back(pos(literal));
-    lcnf(lits);
+    this->lcnf(lits);
   }
 
   bvt lits;
@@ -1154,7 +1154,7 @@ bitblast_convt<subclass>::lor(const bvt &bv)
     lits.push_back(pos(new_bv[i]));
 
   lits.push_back(neg(literal));
-  lcnf(lits);
+  this->lcnf(lits);
 
   return literal;
 }
