@@ -2070,24 +2070,6 @@ smt_convt::get(const expr2tc &expr)
 }
 
 expr2tc
-smt_convt::get_bool(const smt_ast *a __attribute__((unused)))
-{
-  abort();
-}
-
-expr2tc
-smt_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a __attribute__((unused)))
-{
-  abort();
-}
-
-expr2tc
-smt_convt::get_array_elem(const smt_ast *array __attribute__((unused)), uint64_t index __attribute__((unused)), const smt_sort *subtype_sort __attribute__((unused)))
-{
-  abort();
-}
-
-expr2tc
 smt_convt::get_array(const smt_ast *array, const type2tc &t)
 {
 

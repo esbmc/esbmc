@@ -412,10 +412,10 @@ public:
 
   virtual tvt l_get(literalt a)=0;
 
-  virtual expr2tc get_bool(const smt_ast *a);
-  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual expr2tc get_bool(const smt_ast *a) = 0;
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const smt_sort *sort);
+                                 const smt_sort *sort) = 0;
 
   // Ours:
   expr2tc get_array(const smt_ast *array, const type2tc &t);
