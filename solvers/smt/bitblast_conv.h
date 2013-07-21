@@ -47,7 +47,7 @@ public:
 };
 
 template <class subclass>
-class bitblast_convt : public virtual subclass
+class bitblast_convt : public subclass
 {
 public:
   typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >

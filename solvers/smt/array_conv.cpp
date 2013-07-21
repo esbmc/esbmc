@@ -6,7 +6,9 @@
 
 template <class subclass>
 array_convt<subclass>::array_convt(bool enable_cache, bool int_encoding,
-                         const namespacet &_ns, bool is_cpp, bool tuple_support)
+                                   const namespacet &_ns, bool is_cpp,
+                                   bool tuple_support, bool bools_in_arrs,
+                                   bool can_init_inf_arrs)
   // Declare that we can put bools in arrays, and init unbounded arrays
   // XXX - can't put bools in arrays /just/ yet due to some type hiccups.
   : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support, true,

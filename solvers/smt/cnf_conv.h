@@ -4,7 +4,7 @@
 #include "smt_conv.h"
 
 template <class subclass>
-class cnf_convt : public virtual subclass
+class cnf_convt : public subclass
 {
 public:
   cnf_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,

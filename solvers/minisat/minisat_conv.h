@@ -19,7 +19,7 @@ typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
 typedef std::vector<literalt> bvt; // sadface.jpg
 
-class minisat_convt : public virtual array_convt<smt_convt>, public virtual bitblast_convt<smt_convt>, public virtual cnf_convt<smt_convt> {
+class minisat_convt : public cnf_convt< bitblast_convt < array_convt <smt_convt> > > {
 public:
   typedef enum {
     LEFT, LRIGHT, ARIGHT

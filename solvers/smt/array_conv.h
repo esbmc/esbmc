@@ -45,14 +45,15 @@ public:
 
 
 template <class subclass>
-class array_convt : public virtual subclass
+class array_convt : public subclass
 {
 public:
   struct array_select;
   struct array_with;
 
   array_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-              bool is_cpp, bool tuple_support);
+              bool is_cpp, bool tuple_support, bool bools_in_arrs,
+              bool can_init_inf_arrs);
   ~array_convt();
 
   // Things that the user must implement:
