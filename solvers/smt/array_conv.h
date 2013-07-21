@@ -44,7 +44,8 @@ public:
 };
 
 
-class array_convt : public virtual smt_convt
+template <class subclass>
+class array_convt : public virtual subclass
 {
 public:
   struct array_select;
@@ -178,6 +179,9 @@ public:
   // respectively.
   std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
 };
+
+// And because this is a template...
+#include "array_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */
 
