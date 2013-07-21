@@ -368,32 +368,9 @@ array_convt<subclass>::convert_array_of(const expr2tc &init_val,
 
 template <class subclass>
 expr2tc
-array_convt<subclass>::fixed_array_get(const smt_ast *a, const type2tc &type)
+array_convt<subclass>::get_array_elem(const smt_ast *a, uint64_t index,
+                                      const smt_sort *elem_sort)
 {
-  const array_ast *mast = array_downcast(a);
-  const array_type2t &arr = to_array_type(type);
-
-  std::vector<expr2tc> fields;
-  fields.reserve(mast->array_fields.size());
-  for (unsigned int i = 0; i < mast->array_fields.size(); i++) {
-    fields.push_back(this->get_bv(arr.subtype, mast->array_fields[i]));
-  }
-
-  constant_array2tc result(type, fields);
-  return result;
-}
-
-template <class subclass>
-expr2tc
-array_convt<subclass>::array_get(const smt_ast *a, const type2tc &type)
-{
-  const smt_sort *s = this->convert_sort(type);
-  if (!is_unbounded_array(s)) {
-    return fixed_array_get(a, type);
-  }
-
-  const array_type2t &t = to_array_type(type);
-
   const array_ast *mast = array_downcast(a);
 
   if (mast->base_array_id >= array_valuation.size()) {
@@ -404,69 +381,31 @@ array_convt<subclass>::array_get(const smt_ast *a, const type2tc &type)
 
   // Fetch all the indexes
   const std::set<expr2tc> &indexes = array_indexes[mast->base_array_id];
+  unsigned int i = 0;
 
-  std::map<expr2tc, unsigned> idx_map;
-  for (std::set<expr2tc>::const_iterator it = indexes.begin();
-       it != indexes.end(); it++)
-    idx_map.insert(std::pair<expr2tc, unsigned>(*it, idx_map.size()));
+  // Basically, we have to do a linear search of all the indexes to find one
+  // that matches the index argument.
+  std::set<expr2tc>::const_iterator it;
+  for (it = indexes.begin(); it != indexes.end(); it++, i++) {
+    const expr2tc &e = *it;
+    expr2tc e2 = this->get(e);
+    const constant_int2t &intval = to_constant_int2t(e2);
+    if (intval.constant_value.to_uint64() == index)
+      break;
+  }
 
-  // Pick a set of array values.
+  if (it == indexes.end())
+    // Then this index wasn't modelled in any way.
+    return expr2tc();
+
+  // We've found an index; pick its value out, convert back to expr.
+  // First, what's it's type?
+  type2tc src_type = get_uint_type(array_subtypes[mast->base_array_id]);
+
   const std::vector<const smt_ast *> &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
-
-  // Evaluate each index and each value.
-  BigInt::ullong_t max_idx = 0;
-  std::vector<std::pair<expr2tc, expr2tc> > values;
-  values.resize(idx_map.size());
-  for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
-       it != idx_map.end(); it++) {
-    expr2tc idx = it->first;
-    if (!is_constant_expr(idx))
-      idx = this->get(idx);
-
-    const smt_ast *this_value = solver_values[it->second];
-
-    // Read the valuation. Guarenteed not to be an array or struct.
-    assert((this_value->sort->id == SMT_SORT_BOOL ||
-            this_value->sort->id == SMT_SORT_BV) &&
-           "Unexpected sort in array field");
-
-    // unimplemented
-    expr2tc real_value;
-    if (this_value->sort->id == SMT_SORT_BOOL)
-      real_value = get_bool(this_value);
-    else
-      real_value = this->get_bv(t.subtype, this_value);
-
-    values[it->second] = std::pair<expr2tc, expr2tc>(idx, real_value);
-
-    // And record the largest index
-    max_idx = std::max(max_idx,
-                       to_constant_int2t(idx).constant_value.to_ulong());
-  }
-
-  // Work out the size of the array. If it's too large, clip it. Fill the
-  // remaining elements with their values. This is lossy: if we want accuracy
-  // in the future, then we need to find a way of returning sparse arrays
-  // for potentially unbounded array sizes.
-  if (max_idx > 1024)
-    max_idx = 1024;
-
-  type2tc arr_type(new array_type2t(t.subtype,
-                                constant_int2tc(index_type2(), BigInt(max_idx)),
-                                false));
-  std::vector<expr2tc> array_values;
-  array_values.resize(max_idx);
-  for (unsigned int i = 0; i < values.size(); i++) {
-    const constant_int2t &ref = to_constant_int2t(values[i].first);
-    uint64_t this_idx = ref.constant_value.to_ulong();
-    if (this_idx >= max_idx)
-      continue;
-
-    array_values[this_idx] = values[i].second;
-  }
-
-  return constant_array2tc(arr_type, array_values);
+  assert(i < solver_values.size());
+  return this->get_bv(src_type, solver_values[i]);
 }
 
 template <class subclass>

@@ -90,7 +90,6 @@ public:
 
   virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
-  virtual expr2tc get(const expr2tc &expr);
   virtual smt_sort* mk_sort(smt_sort_kind k, ...);
   virtual literalt mk_lit(const smt_ast *val);
   virtual smt_ast* mk_smt_int(const mp_integer &intval, bool sign);

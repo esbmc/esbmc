@@ -523,56 +523,6 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
 }
 
 template <class subclass>
-expr2tc
-bitblast_convt<subclass>::get(const expr2tc &expr)
-{
-
-  const smt_ast *value = this->convert_ast(expr);
-
-  // It can however have various types. We only deal with bools and bitvectors;
-  // hand everything else off to additional modelling code.
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-  {
-    return this->get_bool(value);
-  }
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-  {
-    return get_bv(expr->type, value);
-  }
-  case type2t::fixedbv_id:
-  {
-    expr2tc tmp = get_bv(expr->type, value);
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(this->get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::array_id:
-  {
-    if (is_tuple_array_ast_type(expr->type))
-      return this->tuple_array_get(expr);
-    else
-      return this->array_get(value, expr->type);
-  }
-  case type2t::pointer_id:
-  case type2t::struct_id:
-  case type2t::union_id:
-    return this->tuple_get(expr);
-  default:
-    std::cerr << "Unrecognized type id " << expr->type->type_id << " in minisat"
-              << " get" << std::endl;
-    abort();
-  }
-}
-
-template <class subclass>
 const smt_ast *
 bitblast_convt<subclass>::lit_to_ast(const literalt &l)
 {

@@ -88,7 +88,8 @@ public:
                                    const smt_ast *true_arr,
                                    const smt_ast *false_arr,
                                    const smt_sort *thesort);
-  expr2tc array_get(const smt_ast *a, const type2tc &subtype);
+  expr2tc get_array_elem(const smt_ast *a, uint64_t index,
+                         const smt_sort *elem_sort);
   void add_array_constraints(void);
 
   // Internal funk:
@@ -104,7 +105,6 @@ public:
                                        const array_ast *true_arr,
                                        const array_ast *false_arr,
                                        const smt_sort *thesort);
-  expr2tc fixed_array_get(const smt_ast *a, const type2tc &subtype);
 
   // Array constraint beating
 
