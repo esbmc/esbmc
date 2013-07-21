@@ -3,7 +3,8 @@
 
 #include "smt_conv.h"
 
-class cnf_convt : public virtual smt_convt
+template <class subclass>
+class cnf_convt : public virtual subclass
 {
 public:
   cnf_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
@@ -28,5 +29,8 @@ public:
   virtual void gate_and(literalt a, literalt b, literalt o);
   virtual void set_equal(literalt a, literalt b);
 };
+
+// And because this is a template...
+#include "cnf_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_CNF_CONV_H_ */
