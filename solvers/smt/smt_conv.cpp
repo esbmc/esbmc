@@ -444,7 +444,10 @@ void
 smt_convt::set_to(const expr2tc &expr, bool value)
 {
 
-  l_set_to(convert(expr), value);
+  const smt_ast *a = convert_ast(expr);
+  if (value == false)
+    a = invert_ast(a);
+  assert_lit(mk_lit(a));
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
@@ -2007,19 +2010,6 @@ smt_convt::convert(const expr2tc &expr)
   cache.insert(entry);
 
   return literal;
-}
-
-void
-smt_convt::set_equal(literalt a, literalt b)
-{
-  bvt bv;
-  bv.resize(2);
-  bv[0]=a;
-  bv[1]=lnot(b);
-  lcnf(bv);
-  bv[0]=lnot(a);
-  bv[1]=b;
-  lcnf(bv);
 }
 
 expr2tc
