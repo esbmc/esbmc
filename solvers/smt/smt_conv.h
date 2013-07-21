@@ -381,7 +381,6 @@ public:
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
 
   virtual resultt dec_solve() = 0;
-  virtual literalt convert(const expr2tc &expr);
   virtual expr2tc get(const expr2tc &expr);
 
   virtual void clear_cache()

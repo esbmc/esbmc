@@ -1994,24 +1994,6 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
 
 // Debis from prop_convt: to be reorganized.
 
-literalt
-smt_convt::convert(const expr2tc &expr)
-{
-
-  cachet::iterator it = cache.find(expr);
-  if (it != cache.end())
-    return it->l;
-
-  literalt literal = convert_expr(expr);
-
-  // insert into cache
-
-  struct lit_cachet entry = { expr, literal, ctx_level };
-  cache.insert(entry);
-
-  return literal;
-}
-
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
