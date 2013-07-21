@@ -6,11 +6,17 @@
 #include <irep2.h>
 #include <message.h>
 #include <namespace.h>
+#include <threeval.h>
 
 #include <util/pointer_offset_size.h>
 
-#include <solvers/prop/prop_conv.h>
 #include <solvers/prop/pointer_logic.h>
+#include <solvers/prop/literal.h>
+
+#include <boost/multi_index_container.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/member.hpp>
+#include <boost/multi_index/ordered_index.hpp>
 
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
