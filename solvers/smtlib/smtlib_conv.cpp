@@ -345,6 +345,8 @@ smtlib_convt::dec_solve()
   }
 }
 
+// NB: this is a legitimate case of having to special-case smt_convt::get.
+// It could be done in smt_convt's way, but this is good for now.
 expr2tc
 smtlib_convt::get(const expr2tc &expr)
 {
