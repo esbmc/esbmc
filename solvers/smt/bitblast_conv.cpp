@@ -1,20 +1,25 @@
-#include "bitblast_conv.h"
+// Danger Will Robinson: this is not a C++ class, but in fact a template, and
+// is included by bitblast_conv.h directly so that uses of it are instanciated
+// correctly.
 
-bitblast_convt::bitblast_convt(bool enable_cache, bool int_encoding,
+template <class subclass>
+bitblast_convt<subclass>::bitblast_convt(bool enable_cache, bool int_encoding,
                                const namespacet &_ns, bool is_cpp,
                                bool tuple_support, bool bools_in_arrs,
                                bool can_init_inf_arrs)
-  : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support,
+  : subclass(enable_cache, int_encoding, _ns, is_cpp, tuple_support,
               bools_in_arrs, can_init_inf_arrs)
 {
 }
 
-bitblast_convt::~bitblast_convt()
+template <class subclass>
+bitblast_convt<subclass>::~bitblast_convt()
 {
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_func_app(const smt_sort *ressort,
+bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
                             smt_func_kind f, const smt_ast* const* _args,
                             unsigned int numargs)
 {
@@ -37,12 +42,12 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   {
     assert(ressort->id == SMT_SORT_BOOL);
     result = mk_ast_equality(args[0], args[1], ressort);
-    result->bv[0] = lnot(result->bv[0]);
+    result->bv[0] = this->lnot(result->bv[0]);
     break;
   }
   case SMT_FUNC_NOT:
   {
-    literalt res = lnot(args[0]->bv[0]);
+    literalt res = this->lnot(args[0]->bv[0]);
     result = new bitblast_smt_ast(ressort);
     result->bv.push_back(res);
     break;
@@ -58,18 +63,18 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_IMPLIES:
   {
     result = new bitblast_smt_ast(ressort);
-    result->bv.push_back(limplies(args[0]->bv[0], args[1]->bv[0]));
+    result->bv.push_back(this->limplies(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
   case SMT_FUNC_ITE:
   {
     if (ressort->id == SMT_SORT_ARRAY) {
-      return array_ite(_args[0], _args[1], _args[2], ressort);
+      return this->array_ite(_args[0], _args[1], _args[2], ressort);
     } else {
       assert(args[1]->bv.size() == args[2]->bv.size());
       result = new bitblast_smt_ast(ressort);
       for (unsigned int i = 0; i < args[1]->bv.size(); i++)
-        result->bv.push_back(lselect(args[0]->bv[0], args[1]->bv[i],
+        result->bv.push_back(this->lselect(args[0]->bv[0], args[1]->bv[i],
                                      args[2]->bv[i]));
     }
     break;
@@ -84,7 +89,7 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_XOR:
   {
     result = new bitblast_smt_ast(ressort);
-    result->bv.push_back(lxor(args[0]->bv[0], args[1]->bv[0]));
+    result->bv.push_back(this->lxor(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
   case SMT_FUNC_BVADD:
@@ -259,7 +264,7 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
     break;
   }
   default:
-    std::cerr << "Unimplemented SMT function \"" << smt_func_name_table[f]
+    std::cerr << "Unimplemented SMT function \"" << this->smt_func_name_table[f]
               << "\" in bitblast convt" << std::endl;
     abort();
   }
@@ -267,8 +272,9 @@ bitblast_convt::mk_func_app(const smt_sort *ressort,
   return result;
 }
 
+template <class subclass>
 smt_sort*
-bitblast_convt::mk_sort(smt_sort_kind k, ...)
+bitblast_convt<subclass>::mk_sort(smt_sort_kind k, ...)
 {
   va_list ap;
   bitblast_smt_sort *s = NULL, *dom, *range;
@@ -305,34 +311,38 @@ bitblast_convt::mk_sort(smt_sort_kind k, ...)
   return s;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::mk_lit(const smt_ast *val)
+bitblast_convt<subclass>::mk_lit(const smt_ast *val)
 {
   const bitblast_smt_ast *a = bitblast_ast_downcast(val);
   assert(a->sort->id == SMT_SORT_BOOL);
   assert(a->bv.size() == 1);
 
-  literalt l = new_variable();
-  set_equal(l, a->bv[0]);
+  literalt l = this->new_variable();
+  this->set_equal(l, a->bv[0]);
   return l;
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_smt_int(const mp_integer &intval __attribute__((unused)), bool sign __attribute__((unused)))
+bitblast_convt<subclass>::mk_smt_int(const mp_integer &intval __attribute__((unused)), bool sign __attribute__((unused)))
 {
   std::cerr << "Can't create integers in bitblast solver" << std::endl;
   abort();
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_smt_real(const std::string &value __attribute__((unused)))
+bitblast_convt<subclass>::mk_smt_real(const std::string &value __attribute__((unused)))
 {
   std::cerr << "Can't create reals in bitblast solver" << std::endl;
   abort();
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
+bitblast_convt<subclass>::mk_smt_bvint(const mp_integer &intval, bool sign,
                             unsigned int w)
 {
   smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
@@ -348,8 +358,9 @@ bitblast_convt::mk_smt_bvint(const mp_integer &intval, bool sign,
   return a;
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_smt_bool(bool boolval)
+bitblast_convt<subclass>::mk_smt_bool(bool boolval)
 {
   literalt l = const_literal(boolval);
 
@@ -359,8 +370,9 @@ bitblast_convt::mk_smt_bool(bool boolval)
   return a;
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
+bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, const smt_sort *sort)
 {
   // Like metasmt, bitblast doesn't have a symbol table. So, build our own.
   symtable_type::iterator it = sym_table.find(name);
@@ -374,7 +386,7 @@ bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
   switch (sort->id) {
   case SMT_SORT_BOOL:
   {
-    literalt l = new_variable();
+    literalt l = this->new_variable();
     a->bv.push_back(l);
     break;
   }
@@ -382,7 +394,7 @@ bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
   {
     // Bunch of fresh variables
     for (unsigned int i = 0; i < s->width; i++)
-      a->bv.push_back(new_variable());
+      a->bv.push_back(this->new_variable());
     break;
   }
   case SMT_SORT_ARRAY:
@@ -407,20 +419,23 @@ bitblast_convt::mk_smt_symbol(const std::string &name, const smt_sort *sort)
   return result;
 }
 
+template <class subclass>
 smt_sort*
-bitblast_convt::mk_struct_sort(const type2tc &t __attribute__((unused)))
+bitblast_convt<subclass>::mk_struct_sort(const type2tc &t __attribute__((unused)))
 {
     abort();
 }
 
+template <class subclass>
 smt_sort*
-bitblast_convt::mk_union_sort(const type2tc &t __attribute__((unused)))
+bitblast_convt<subclass>::mk_union_sort(const type2tc &t __attribute__((unused)))
 {
     abort();
 }
 
+template <class subclass>
 smt_ast*
-bitblast_convt::mk_extract(const smt_ast *src, unsigned int high,
+bitblast_convt<subclass>::mk_extract(const smt_ast *src, unsigned int high,
                           unsigned int low, const smt_sort *s)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
@@ -431,8 +446,9 @@ bitblast_convt::mk_extract(const smt_ast *src, unsigned int high,
   return result;
 }
 
+template <class subclass>
 bitblast_smt_ast *
-bitblast_convt::mk_ast_equality(const smt_ast *_a,
+bitblast_convt<subclass>::mk_ast_equality(const smt_ast *_a,
                                 const smt_ast *_b,
                                 const smt_sort *ressort)
 {
@@ -468,8 +484,9 @@ bitblast_convt::mk_ast_equality(const smt_ast *_a,
   }
 }
 
+template <class subclass>
 expr2tc
-bitblast_convt::get_bool(const smt_ast *a)
+bitblast_convt<subclass>::get_bool(const smt_ast *a)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
   tvt t = l_get(mast->bv[0]);
@@ -481,8 +498,9 @@ bitblast_convt::get_bool(const smt_ast *a)
     return expr2tc();
 }
 
+template <class subclass>
 expr2tc
-bitblast_convt::get_bv(const type2tc &t, const smt_ast *a)
+bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
   unsigned int sz = t->get_width();
@@ -504,8 +522,9 @@ bitblast_convt::get_bv(const type2tc &t, const smt_ast *a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
+template <class subclass>
 expr2tc
-bitblast_convt::get(const expr2tc &expr)
+bitblast_convt<subclass>::get(const expr2tc &expr)
 {
 
   const smt_ast *value = convert_ast(expr);
@@ -553,8 +572,9 @@ bitblast_convt::get(const expr2tc &expr)
   }
 }
 
+template <class subclass>
 const smt_ast *
-bitblast_convt::lit_to_ast(const literalt &l)
+bitblast_convt<subclass>::lit_to_ast(const literalt &l)
 {
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   bitblast_smt_ast *a = new bitblast_smt_ast(s);
@@ -564,8 +584,9 @@ bitblast_convt::lit_to_ast(const literalt &l)
 
 // ******************************  Bitblast foo *******************************
 
+template <class subclass>
 void
-bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
+bitblast_convt<subclass>::eliminate_duplicates(const bvt &bv, bvt &dest)
 {
   std::set<literalt> s;
 
@@ -578,8 +599,9 @@ bitblast_convt::eliminate_duplicates(const bvt &bv, bvt &dest)
   }
 }
 
+template <class subclass>
 void
-bitblast_convt::full_adder(const bvt &op0, const bvt &op1, bvt &output,
+bitblast_convt<subclass>::full_adder(const bvt &op0, const bvt &op1, bvt &output,
                           literalt carry_in, literalt &carry_out)
 {
   assert(op0.size() == op1.size());
@@ -588,15 +610,16 @@ bitblast_convt::full_adder(const bvt &op0, const bvt &op1, bvt &output,
   carry_out = carry_in;
 
   for (unsigned int i = 0; i < op0.size(); i++) {
-    output.push_back(lxor(lxor(op0[i], op1[i]), carry_out));
+    output.push_back(this->lxor(this->lxor(op0[i], op1[i]), carry_out));
     carry_out = carry(op0[i], op1[i], carry_out);
   }
 
   return;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::carry(literalt a, literalt b, literalt c)
+bitblast_convt<subclass>::carry(literalt a, literalt b, literalt c)
 {
   bvt tmp;
   tmp.reserve(3);
@@ -606,16 +629,18 @@ bitblast_convt::carry(literalt a, literalt b, literalt c)
   return lor(tmp);
 }
 
+template <class subclass>
 literalt
-bitblast_convt::unsigned_less_than(const bvt &arg0, const bvt &arg1)
+bitblast_convt<subclass>::unsigned_less_than(const bvt &arg0, const bvt &arg1)
 {
   bvt tmp = arg1;
   invert(tmp);
-  return lnot(carry_out(arg0, tmp, const_literal(true)));
+  return this->lnot(carry_out(arg0, tmp, const_literal(true)));
 }
 
+template <class subclass>
 void
-bitblast_convt::unsigned_multiplier(const bvt &op0, const bvt &op1, bvt &output)
+bitblast_convt<subclass>::unsigned_multiplier(const bvt &op0, const bvt &op1, bvt &output)
 {
   output.resize(op0.size());
 
@@ -641,8 +666,9 @@ bitblast_convt::unsigned_multiplier(const bvt &op0, const bvt &op1, bvt &output)
   }
 }
 
+template <class subclass>
 void
-bitblast_convt::signed_multiplier(const bvt &op0, const bvt &op1, bvt &output)
+bitblast_convt<subclass>::signed_multiplier(const bvt &op0, const bvt &op1, bvt &output)
 {
   assert(op0.size() == op1.size() && op0.size() != 0);
   literalt sign0 = op0[op0.size()-1];
@@ -655,13 +681,14 @@ bitblast_convt::signed_multiplier(const bvt &op0, const bvt &op1, bvt &output)
   bvt tmp;
   unsigned_multiplier(neg0, neg1, tmp);
 
-  literalt res_sign = lxor(sign0, sign1);
+  literalt res_sign = this->lxor(sign0, sign1);
 
   cond_negate(tmp, output, res_sign);
 }
 
+template <class subclass>
 void
-bitblast_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
+bitblast_convt<subclass>::cond_negate(const bvt &vals, bvt &out, literalt cond)
 {
   bvt inv;
   negate(vals, inv);
@@ -669,13 +696,14 @@ bitblast_convt::cond_negate(const bvt &vals, bvt &out, literalt cond)
   out.resize(vals.size());
 
   for (unsigned int i = 0; i < vals.size(); i++)
-    out[i] = lselect(cond, inv[i], vals[i]);
+    out[i] = this->lselect(cond, inv[i], vals[i]);
   
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::negate(const bvt &inp, bvt &oup)
+bitblast_convt<subclass>::negate(const bvt &inp, bvt &oup)
 {
   oup.resize(inp.size());
   bvt inv = inp;
@@ -686,23 +714,25 @@ bitblast_convt::negate(const bvt &inp, bvt &oup)
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::incrementer(const bvt &inp, const literalt &carryin,
+bitblast_convt<subclass>::incrementer(const bvt &inp, const literalt &carryin,
                            literalt carryout, bvt &oup)
 {
   carryout = carryin;
 
   for (unsigned int i = 0; i < inp.size(); i++) {
     literalt new_carry = smt_convt::land(carryout, inp[i]);
-    oup[i] = lxor(inp[i], carryout);
+    oup[i] = this->lxor(inp[i], carryout);
     carryout = new_carry;
   }
 
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::signed_divider(const bvt &op0, const bvt &op1, bvt &res,
+bitblast_convt<subclass>::signed_divider(const bvt &op0, const bvt &op1, bvt &res,
                               bvt &rem)
 {
   assert(op0.size() == op1.size());
@@ -721,10 +751,10 @@ bitblast_convt::signed_divider(const bvt &op0, const bvt &op1, bvt &res,
   negate(op1, neg1);
 
   for (unsigned int i = 0; i < op0.size(); i++)
-    _op0[i] = lselect(sign0, neg0[i], op0[i]);
+    _op0[i] = this->lselect(sign0, neg0[i], op0[i]);
 
   for (unsigned int i = 0; i < op1.size(); i++)
-    _op1[i] = lselect(sign1, neg1[i], op1[i]);
+    _op1[i] = this->lselect(sign1, neg1[i], op1[i]);
 
   unsigned_divider(_op0, _op1, res, rem);
 
@@ -733,19 +763,20 @@ bitblast_convt::signed_divider(const bvt &op0, const bvt &op1, bvt &res,
   negate(res, neg_res);
   negate(rem, neg_rem);
 
-  literalt result_sign = lxor(sign0, sign1);
+  literalt result_sign = this->lxor(sign0, sign1);
 
   for (unsigned int i = 0; i < res.size(); i++)
-    res[i] = lselect(result_sign, neg_res[i], res[i]);
+    res[i] = this->lselect(result_sign, neg_res[i], res[i]);
 
   for (unsigned int i = 0; i < rem.size(); i++)
-    rem[i] = lselect(result_sign, neg_rem[i], rem[i]);
+    rem[i] = this->lselect(result_sign, neg_rem[i], rem[i]);
 
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::unsigned_divider(const bvt &op0, const bvt &op1, bvt &res,
+bitblast_convt<subclass>::unsigned_divider(const bvt &op0, const bvt &op1, bvt &res,
                                 bvt &rem)
 {
   assert(op0.size() == op1.size());
@@ -756,8 +787,8 @@ bitblast_convt::unsigned_divider(const bvt &op0, const bvt &op1, bvt &res,
   literalt is_not_zero = lor(op1);
 
   for (unsigned int i = 0; i < width; i++) {
-    res[i] = new_variable();
-    rem[i] = new_variable();
+    res[i] = this->new_variable();
+    rem[i] = this->new_variable();
   }
 
   bvt product;
@@ -770,19 +801,20 @@ bitblast_convt::unsigned_divider(const bvt &op0, const bvt &op1, bvt &res,
 
   literalt is_equal = equal(sum, op0);
 
-  assert_lit(limplies(is_not_zero, is_equal));
+  assert_lit(this->limplies(is_not_zero, is_equal));
 
   // "op1 != 0 => rem < op1"
 
-  assert_lit(limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
+  assert_lit(this->limplies(is_not_zero, lt_or_le(false, rem, op1, false)));
 
   // "op1 != 0 => res <= op0"
 
-  assert_lit(limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
+  assert_lit(this->limplies(is_not_zero, lt_or_le(true, rem, op0, false)));
 }
 
+template <class subclass>
 void
-bitblast_convt::unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1,
+bitblast_convt<subclass>::unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1,
                                                bvt &res)
 {
   assert(op0.size() == op1.size());
@@ -820,8 +852,9 @@ bitblast_convt::unsigned_multiplier_no_overflow(const bvt &op0, const bvt &op1,
   }
 }
 
+template <class subclass>
 void
-bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
+bitblast_convt<subclass>::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
                                  bool subtract, bool is_signed)
 {
   assert(op0.size() == op1.size());
@@ -835,7 +868,7 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
     literalt sign_the_same = lequal(op0[width-1], tmp_op1[width-1]);
     literalt carry;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry);
-    literalt stop_overflow = smt_convt::land(sign_the_same, lxor(op0[width-1], old_sign));
+    literalt stop_overflow = smt_convt::land(sign_the_same, this->lxor(op0[width-1], old_sign));
     stop_overflow.invert();
     assert_lit(stop_overflow);
   } else {
@@ -852,8 +885,9 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res,
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
+bitblast_convt<subclass>::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
 {
   res.resize(op0.size());
 
@@ -861,7 +895,7 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
   for (unsigned int i = 0; i < op0.size(); i++) {
     literalt op0_bit = op0[i];
 
-    res[i] = lxor(lxor(op0_bit, op1[i]), carry_out);
+    res[i] = this->lxor(this->lxor(op0_bit, op1[i]), carry_out);
     carry_out = carry(op0_bit, op1[i], carry_out);
   }
 
@@ -869,8 +903,9 @@ bitblast_convt::adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res)
   assert_lit(carry_out);
 }
 
+template <class subclass>
 bool
-bitblast_convt::is_constant(const bvt &bv)
+bitblast_convt<subclass>::is_constant(const bvt &bv)
 {
   for (unsigned int i = 0; i < bv.size(); i++)
     if (!bv[i].is_constant())
@@ -878,8 +913,9 @@ bitblast_convt::is_constant(const bvt &bv)
   return true;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::carry_out(const bvt &a, const bvt &b, literalt c)
+bitblast_convt<subclass>::carry_out(const bvt &a, const bvt &b, literalt c)
 {
   literalt carry_out = c;
 
@@ -889,8 +925,9 @@ bitblast_convt::carry_out(const bvt &a, const bvt &b, literalt c)
   return carry_out;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::equal(const bvt &op0, const bvt &op1)
+bitblast_convt<subclass>::equal(const bvt &op0, const bvt &op1)
 {
   assert(op0.size() == op1.size());
   bvt tmp;
@@ -903,8 +940,9 @@ bitblast_convt::equal(const bvt &op0, const bvt &op1)
   return res;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
+bitblast_convt<subclass>::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
                         bool is_signed)
 {
   assert(bv0.size() == bv1.size());
@@ -916,9 +954,9 @@ bitblast_convt::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
 
   literalt result;
   if (is_signed)
-    result = lxor(lequal(top0, top1), carry);
+    result = this->lxor(lequal(top0, top1), carry);
   else
-    result = lnot(carry);
+    result = this->lnot(carry);
 
   if (or_equal)
     result = smt_convt::lor(result, equal(bv0, bv1));
@@ -926,15 +964,17 @@ bitblast_convt::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1,
   return result;
 }
 
+template <class subclass>
 void
-bitblast_convt::invert(bvt &bv)
+bitblast_convt<subclass>::invert(bvt &bv)
 {
   for (unsigned int i = 0; i < bv.size(); i++)
-    bv[i] = lnot(bv[i]);
+    bv[i] = this->lnot(bv[i]);
 }
 
+template <class subclass>
 void
-bitblast_convt::barrel_shift(const bvt &op, const shiftt s, const bvt &dist,
+bitblast_convt<subclass>::barrel_shift(const bvt &op, const shiftt s, const bvt &dist,
                             bvt &out)
 {
   unsigned long d = 1;
@@ -947,15 +987,16 @@ bitblast_convt::barrel_shift(const bvt &op, const shiftt s, const bvt &dist,
       shift(out, s, d, tmp);
 
       for (unsigned int i = 0; i < op.size(); i++)
-        out[i] = lselect(dist[pos], tmp[i], out[i]);
+        out[i] = this->lselect(dist[pos], tmp[i], out[i]);
     }
 
     d <<= 1;
   }
 }
 
+template <class subclass>
 void
-bitblast_convt::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out)
+bitblast_convt<subclass>::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out)
 {
   out.resize(inp.size());
 
@@ -980,8 +1021,9 @@ bitblast_convt::shift(const bvt &inp, const shiftt &s, unsigned long d, bvt &out
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
+bitblast_convt<subclass>::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
 {
   assert(bv0.size() == bv1.size());
   output.clear();
@@ -993,8 +1035,9 @@ bitblast_convt::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
+bitblast_convt<subclass>::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
 {
   assert(bv0.size() == bv1.size());
   output.clear();
@@ -1006,32 +1049,35 @@ bitblast_convt::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::bvxor(const bvt &bv0, const bvt &bv1, bvt &output)
+bitblast_convt<subclass>::bvxor(const bvt &bv0, const bvt &bv1, bvt &output)
 {
   output.clear();
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(lxor(bv0[i], bv1[i]));
+    output.push_back(this->lxor(bv0[i], bv1[i]));
 
   return;
 }
 
+template <class subclass>
 void
-bitblast_convt::bvnot(const bvt &bv0, bvt &output)
+bitblast_convt<subclass>::bvnot(const bvt &bv0, bvt &output)
 {
   output.clear();
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(lnot(bv0[i]));
+    output.push_back(this->lnot(bv0[i]));
 
   return;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::land(const bvt &bv)
+bitblast_convt<subclass>::land(const bvt &bv)
 {
   if (bv.size() == 0)
     return const_literal(true);
@@ -1055,7 +1101,7 @@ bitblast_convt::land(const bvt &bv)
 
   eliminate_duplicates(bv, new_bv);
 
-  literalt lit = new_variable();
+  literalt lit = this->new_variable();
 
   for (unsigned int i = 0; i < new_bv.size(); i++) {
     bvt lits;
@@ -1077,8 +1123,9 @@ bitblast_convt::land(const bvt &bv)
   return lit;
 }
 
+template <class subclass>
 literalt
-bitblast_convt::lor(const bvt &bv)
+bitblast_convt<subclass>::lor(const bvt &bv)
 {
   if (bv.size() == 0) return const_literal(false);
   else if (bv.size() == 1) return bv[0];
@@ -1091,7 +1138,7 @@ bitblast_convt::lor(const bvt &bv)
   bvt new_bv;
   eliminate_duplicates(bv, new_bv);
 
-  literalt literal = new_variable();
+  literalt literal = this->new_variable();
   for (unsigned int i = 0; i < new_bv.size(); i++) {
     bvt lits;
     lits.reserve(2);

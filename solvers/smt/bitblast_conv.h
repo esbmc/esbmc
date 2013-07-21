@@ -46,7 +46,8 @@ public:
   bvt bv;
 };
 
-class bitblast_convt : public virtual smt_convt
+template <class subclass>
+class bitblast_convt : public virtual subclass
 {
 public:
   typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
@@ -150,5 +151,8 @@ public:
   // place for these things to come together.
   symtable_type sym_table;
 };
+
+// And because this is a template...
+#include "bitblast_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_ */
