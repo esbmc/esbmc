@@ -187,6 +187,8 @@ public:
 class smt_convt : public messaget
 {
 public:
+  typedef std::vector<const smt_ast *> ast_vec;
+
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
             bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
             bool can_init_inf_arrs);
@@ -199,6 +201,8 @@ public:
   bool process_clause(const bvt &bv, bvt &dest);
   virtual literalt new_variable();
   virtual void lcnf(const bvt &bv);
+  virtual void assert_disjunct(const ast_vec &v);
+  virtual const smt_ast *make_conjunct(const ast_vec &v);
   virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
   virtual literalt land(literalt a, literalt b);

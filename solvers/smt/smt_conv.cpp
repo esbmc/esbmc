@@ -231,6 +231,69 @@ smt_convt::lcnf(const bvt &bv)
   assert_lit(l);
 }
 
+void
+smt_convt::assert_disjunct(const ast_vec &v)
+{
+  const smt_ast *args[v.size()];
+  const smt_ast *result = NULL;
+  unsigned int i = 0;
+
+  if (v.size() == 0)
+    return;
+
+  // Slightly funky due to being morphed from lor:
+  for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++) {
+    args[i] = *it;
+  }
+
+  // Chain these.
+  if (i > 1) {
+    unsigned int j;
+    const smt_ast *argstwo[2];
+    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    argstwo[0] = args[0];
+    for (j = 1; j < i; j++) {
+      argstwo[1] = args[j];
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2);
+    }
+    result = argstwo[0];
+  } else {
+    result = args[0];
+  }
+
+  assert_lit(mk_lit(result));
+}
+
+const smt_ast *
+smt_convt::make_conjunct(const ast_vec &v)
+{
+  const smt_ast *args[v.size()];
+  const smt_ast *result;
+  unsigned int i;
+
+  // Funky on account of conversion from land...
+  for (i = 0; i < v.size(); i++) {
+    args[i] = v[i];
+  }
+
+  // Chain these.
+  if (i > 1) {
+    unsigned int j;
+    const smt_ast *argstwo[2];
+    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    argstwo[0] = args[0];
+    for (j = 1; j < i; j++) {
+      argstwo[1] = args[j];
+      argstwo[0] = mk_func_app(sort, SMT_FUNC_AND, argstwo, 2);
+    }
+    result = argstwo[0];
+  } else {
+    result = args[0];
+  }
+
+  return result;
+}
+
 literalt
 smt_convt::lor(const bvt &bv)
 {
