@@ -1,9 +1,14 @@
+// Danger Will Robinson: this is not a C++ class, but in fact a template, and
+// is included by array_conv.h directly so that uses of it are instanciated
+// correctly.
+
 #include <ansi-c/c_types.h>
 
-#include "array_conv.h"
-
-array_convt::array_convt(bool enable_cache, bool int_encoding,
-                         const namespacet &_ns, bool is_cpp, bool tuple_support)
+template <class subclass>
+array_convt<subclass>::array_convt(bool enable_cache, bool int_encoding,
+                                   const namespacet &_ns, bool is_cpp,
+                                   bool tuple_support, bool bools_in_arrs,
+                                   bool can_init_inf_arrs)
   // Declare that we can put bools in arrays, and init unbounded arrays
   // XXX - can't put bools in arrays /just/ yet due to some type hiccups.
   : smt_convt(enable_cache, int_encoding, _ns, is_cpp, tuple_support, true,
@@ -11,12 +16,14 @@ array_convt::array_convt(bool enable_cache, bool int_encoding,
 {
 }
 
-array_convt::~array_convt()
+template <class subclass>
+array_convt<subclass>::~array_convt()
 {
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
+array_convt<subclass>::convert_array_equality(const expr2tc &a, const expr2tc &b)
 {
 
   // Only support a scenario where the lhs (a) is a symbol.
@@ -27,9 +34,9 @@ array_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   // We want everything to go through the expression cache. Except when creating
   // new arrays with either constant_array_of or constant_array.
   if (is_constant_expr(b)) {
-    value = array_downcast(array_create(b));
+    value = array_downcast(this->array_create(b));
   } else {
-    value = array_downcast(convert_ast(b));
+    value = array_downcast(this->convert_ast(b));
   }
 
   const symbol2t &sym = to_symbol2t(a);
@@ -38,21 +45,22 @@ array_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   assign_array_symbol(symname, value);
 
   // Also pump that into the smt cache.
-  smt_cache_entryt e = { a, value, ctx_level };
-  smt_cache.insert(e);
+  typename subclass::smt_cache_entryt e = { a, value, this->ctx_level };
+  this->smt_cache.insert(e);
 
   // Return a true value, because that assignment is always true.
-  return convert_ast(true_expr);
+  return this->convert_ast(true_expr);
 }
 
+template <class subclass>
 smt_ast *
-array_convt::fresh_array(const smt_sort *ms, const std::string &name)
+array_convt<subclass>::fresh_array(const smt_sort *ms, const std::string &name)
 {
   // No solver representation for this.
   unsigned long domain_width = ms->get_domain_width();
   unsigned long array_size = 1UL << domain_width;
   const smt_sort *range_sort =
-    mk_sort(SMT_SORT_BV, ms->get_range_width(), false);
+    this->mk_sort(SMT_SORT_BV, ms->get_range_width(), false);
 
   array_ast *mast = new array_ast(ms);
   mast->symname = name;
@@ -92,19 +100,20 @@ array_convt::fresh_array(const smt_sort *ms, const std::string &name)
   // Populate that array with a bunch of fresh bvs of the correct sort.
   unsigned long i;
   for (i = 0; i < array_size; i++) {
-    const smt_ast *a = mk_fresh(range_sort, "array_fresh_array::");
+    const smt_ast *a = this->mk_fresh(range_sort, "array_fresh_array::");
     mast->array_fields.push_back(a);
   }
 
   return mast;
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::mk_select(const expr2tc &array, const expr2tc &idx,
+array_convt<subclass>::mk_select(const expr2tc &array, const expr2tc &idx,
                          const smt_sort *ressort)
 {
   assert(ressort->id != SMT_SORT_ARRAY);
-  const array_ast *ma = array_downcast(convert_ast(array));
+  const array_ast *ma = array_downcast(this->convert_ast(array));
 
   if (is_unbounded_array(ma->sort))
     return mk_unbounded_select(ma, idx, ressort);
@@ -117,7 +126,7 @@ array_convt::mk_select(const expr2tc &array, const expr2tc &idx,
     unsigned long intval = intref.constant_value.to_ulong();
     if (intval > ma->array_fields.size())
       // Return a fresh value.
-      return mk_fresh(ressort, "array_mk_select_badidx::");
+      return this->mk_fresh(ressort, "array_mk_select_badidx::");
 
     // Otherwise,
     return ma->array_fields[intval];
@@ -125,38 +134,39 @@ array_convt::mk_select(const expr2tc &array, const expr2tc &idx,
 
   // What we have here is a nondeterministic index. Alas, compare with
   // everything.
-  const smt_ast *fresh = mk_fresh(ressort, "array_mk_select::");
-  const smt_ast *real_idx = convert_ast(idx);
+  const smt_ast *fresh = this->mk_fresh(ressort, "array_mk_select::");
+  const smt_ast *real_idx = this->convert_ast(idx);
   const smt_ast *args[2], *idxargs[2], *impargs[2];
   unsigned long dom_width = ma->sort->get_domain_width();
-  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *bool_sort = this->mk_sort(SMT_SORT_BOOL);
 
   args[0] = fresh;
   idxargs[0] = real_idx;
 
   for (unsigned long i = 0; i < ma->array_fields.size(); i++) {
-    idxargs[1] = mk_smt_bvint(BigInt(i), false, dom_width);
-    const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
+    idxargs[1] = this->mk_smt_bvint(BigInt(i), false, dom_width);
+    const smt_ast *idx_eq = this->mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
     args[1] = ma->array_fields[i];
-    const smt_ast *val_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2);
+    const smt_ast *val_eq = this->mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2);
 
     impargs[0] = idx_eq;
     impargs[1] = val_eq;
 
-    assert_lit(mk_lit(mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2)));
+    this->assert_lit(this->mk_lit(this->mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2)));
   }
 
   return fresh;
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::mk_store(const expr2tc &array, const expr2tc &idx,
+array_convt<subclass>::mk_store(const expr2tc &array, const expr2tc &idx,
                         const expr2tc &value, const smt_sort *ressort)
 {
-  const array_ast *ma = array_downcast(convert_ast(array));
+  const array_ast *ma = array_downcast(this->convert_ast(array));
 
   if (is_unbounded_array(ma->sort))
-    return mk_unbounded_store(ma, idx, convert_ast(value), ressort);
+    return mk_unbounded_store(ma, idx, this->convert_ast(value), ressort);
 
   assert(ma->array_fields.size() != 0);
 
@@ -168,40 +178,41 @@ array_convt::mk_store(const expr2tc &array, const expr2tc &idx,
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.constant_value.to_ulong();
     if (intval > ma->array_fields.size())
-      return convert_ast(array);
+      return this->convert_ast(array);
 
     // Otherwise,
-    mast->array_fields[intval] = convert_ast(value);
+    mast->array_fields[intval] = this->convert_ast(value);
     return mast;
   }
 
   // Oh dear. We need to update /all the fields/ :(
-  const smt_ast *real_idx = convert_ast(idx);
-  const smt_ast *real_value = convert_ast(value);
+  const smt_ast *real_idx = this->convert_ast(idx);
+  const smt_ast *real_value = this->convert_ast(value);
   const smt_ast *iteargs[3], *idxargs[2];
   unsigned long dom_width = mast->sort->get_domain_width();
-  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *bool_sort = this->mk_sort(SMT_SORT_BOOL);
 
   idxargs[0] = real_idx;
   iteargs[1] = real_value;
 
   for (unsigned long i = 0; i < mast->array_fields.size(); i++) {
-    idxargs[1] = mk_smt_bvint(BigInt(i), false, dom_width);
-    const smt_ast *idx_eq = mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
+    idxargs[1] = this->mk_smt_bvint(BigInt(i), false, dom_width);
+    const smt_ast *idx_eq = this->mk_func_app(bool_sort, SMT_FUNC_EQ, idxargs, 2);
 
     iteargs[0] = idx_eq;
     iteargs[2] = mast->array_fields[i];
 
     const smt_ast *new_val =
-      mk_func_app(iteargs[1]->sort, SMT_FUNC_ITE, iteargs, 3);
+      this->mk_func_app(iteargs[1]->sort, SMT_FUNC_ITE, iteargs, 3);
     mast->array_fields[i] = new_val;
   }
 
   return mast;
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::mk_unbounded_select(const array_ast *ma,
+array_convt<subclass>::mk_unbounded_select(const array_ast *ma,
                                    const expr2tc &real_idx,
                                    const smt_sort *ressort)
 {
@@ -209,7 +220,7 @@ array_convt::mk_unbounded_select(const array_ast *ma,
   array_indexes[ma->base_array_id].insert(real_idx);
 
   // Generate a new free variable
-  smt_ast *a = mk_fresh(ressort, "mk_unbounded_select");
+  smt_ast *a = this->mk_fresh(ressort, "mk_unbounded_select");
 
   struct array_select sel;
   sel.src_array_update_num = ma->array_update_num;
@@ -220,13 +231,14 @@ array_convt::mk_unbounded_select(const array_ast *ma,
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
-  convert_ast(real_idx);
+  this->convert_ast(real_idx);
 
   return a;
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::mk_unbounded_store(const array_ast *ma,
+array_convt<subclass>::mk_unbounded_store(const array_ast *ma,
                                   const expr2tc &idx, const smt_ast *value,
                                   const smt_sort *ressort)
 {
@@ -248,7 +260,7 @@ array_convt::mk_unbounded_store(const array_ast *ma,
 
   // Convert index; it might trigger an array_of, or something else, which
   // fiddles with other arrays.
-  convert_ast(idx);
+  this->convert_ast(idx);
 
   // Also file a new select record for this point in time.
   std::list<struct array_select> tmp;
@@ -258,12 +270,16 @@ array_convt::mk_unbounded_store(const array_ast *ma,
   return newarr;
 }
 
-const smt_ast *
-array_convt::array_ite(const array_ast *cond,
-                         const array_ast *true_arr,
-                         const array_ast *false_arr,
+template <class subclass>
+smt_ast *
+array_convt<subclass>::array_ite(const smt_ast *_cond,
+                         const smt_ast *_true_arr,
+                         const smt_ast *_false_arr,
                          const smt_sort *thesort)
 {
+  const array_ast *cond = array_downcast(_cond);
+  const array_ast *true_arr = array_downcast(_true_arr);
+  const array_ast *false_arr = array_downcast(_false_arr);
 
   if (is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
@@ -279,15 +295,16 @@ array_convt::array_ite(const array_ast *cond,
     // One ite pls.
     args[1] = true_arr->array_fields[i];
     args[2] = false_arr->array_fields[i];
-    const smt_ast *res = mk_func_app(args[1]->sort, SMT_FUNC_ITE, args, 3);
+    const smt_ast *res = this->mk_func_app(args[1]->sort, SMT_FUNC_ITE, args, 3);
     mast->array_fields.push_back(array_downcast(res));
   }
 
   return mast;
 }
 
-const smt_ast *
-array_convt::unbounded_array_ite(const array_ast *cond,
+template <class subclass>
+smt_ast *
+array_convt<subclass>::unbounded_array_ite(const array_ast *cond,
                                    const array_ast *true_arr,
                                    const array_ast *false_arr,
                                    const smt_sort *thesort)
@@ -316,26 +333,27 @@ array_convt::unbounded_array_ite(const array_ast *cond,
   return newarr;
 }
 
+template <class subclass>
 const smt_ast *
-array_convt::convert_array_of(const expr2tc &init_val,
+array_convt<subclass>::convert_array_of(const expr2tc &init_val,
                                 unsigned long domain_width)
 {
-  const smt_sort *dom_sort = mk_sort(SMT_SORT_BV, domain_width, false);
-  const smt_sort *idx_sort = convert_sort(init_val->type);
+  const smt_sort *dom_sort = this->mk_sort(SMT_SORT_BV, domain_width, false);
+  const smt_sort *idx_sort = this->convert_sort(init_val->type);
 
-  if (!int_encoding && is_bool_type(init_val) && no_bools_in_arrays)
-    idx_sort = mk_sort(SMT_SORT_BV, 1, false);
+  if (!this->int_encoding && is_bool_type(init_val) && this->no_bools_in_arrays)
+    idx_sort = this->mk_sort(SMT_SORT_BV, 1, false);
 
-  const smt_sort *arr_sort = mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
+  const smt_sort *arr_sort = this->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
 
   array_ast *mast = new array_ast(arr_sort);
 
-  const smt_ast *init = convert_ast(init_val);
-  if (!int_encoding && is_bool_type(init_val) && no_bools_in_arrays)
-    init = make_bool_bit(init);
+  const smt_ast *init = this->convert_ast(init_val);
+  if (!this->int_encoding && is_bool_type(init_val) && this->no_bools_in_arrays)
+    init = this->make_bool_bit(init);
 
   if (is_unbounded_array(arr_sort)) {
-    std::string name = mk_fresh_name("array_of_unbounded::");
+    std::string name = this->mk_fresh_name("array_of_unbounded::");
     mast = static_cast<array_ast*>(fresh_array(arr_sort, name));
     array_of_vals.insert(std::pair<unsigned, const smt_ast *>
                                   (mast->base_array_id, init));
@@ -348,8 +366,9 @@ array_convt::convert_array_of(const expr2tc &init_val,
   return mast;
 }
 
+template <class subclass>
 expr2tc
-array_convt::fixed_array_get(const smt_ast *a, const type2tc &type)
+array_convt<subclass>::fixed_array_get(const smt_ast *a, const type2tc &type)
 {
   const array_ast *mast = array_downcast(a);
   const array_type2t &arr = to_array_type(type);
@@ -357,17 +376,18 @@ array_convt::fixed_array_get(const smt_ast *a, const type2tc &type)
   std::vector<expr2tc> fields;
   fields.reserve(mast->array_fields.size());
   for (unsigned int i = 0; i < mast->array_fields.size(); i++) {
-    fields.push_back(get_bv(arr.subtype, mast->array_fields[i]));
+    fields.push_back(this->get_bv(arr.subtype, mast->array_fields[i]));
   }
 
   constant_array2tc result(type, fields);
   return result;
 }
 
+template <class subclass>
 expr2tc
-array_convt::array_get(const smt_ast *a, const type2tc &type)
+array_convt<subclass>::array_get(const smt_ast *a, const type2tc &type)
 {
-  const smt_sort *s = convert_sort(type);
+  const smt_sort *s = this->convert_sort(type);
   if (!is_unbounded_array(s)) {
     return fixed_array_get(a, type);
   }
@@ -402,7 +422,7 @@ array_convt::array_get(const smt_ast *a, const type2tc &type)
        it != idx_map.end(); it++) {
     expr2tc idx = it->first;
     if (!is_constant_expr(idx))
-      idx = get(idx);
+      idx = this->get(idx);
 
     const smt_ast *this_value = solver_values[it->second];
 
@@ -416,7 +436,7 @@ array_convt::array_get(const smt_ast *a, const type2tc &type)
     if (this_value->sort->id == SMT_SORT_BOOL)
       real_value = get_bool(this_value);
     else
-      real_value = get_bv(t.subtype, this_value);
+      real_value = this->get_bv(t.subtype, this_value);
 
     values[it->second] = std::pair<expr2tc, expr2tc>(idx, real_value);
 
@@ -449,8 +469,9 @@ array_convt::array_get(const smt_ast *a, const type2tc &type)
   return constant_array2tc(arr_type, array_values);
 }
 
+template <class subclass>
 void
-array_convt::add_array_constraints(void)
+array_convt<subclass>::add_array_constraints(void)
 {
 
   for (unsigned int i = 0; i < array_indexes.size(); i++) {
@@ -460,8 +481,9 @@ array_convt::add_array_constraints(void)
   return;
 }
 
+template <class subclass>
 void
-array_convt::add_array_constraints(unsigned int arr)
+array_convt<subclass>::add_array_constraints(unsigned int arr)
 {
   // Right: we need to tie things up regarding these bitvectors. We have a
   // set of indexes...
@@ -474,7 +496,7 @@ array_convt::add_array_constraints(unsigned int arr)
     array_valuation.back();
 
   // Subtype is thus
-  const smt_sort *subtype = mk_sort(SMT_SORT_BV, array_subtypes[arr], false);
+  const smt_sort *subtype = this->mk_sort(SMT_SORT_BV, array_subtypes[arr], false);
 
   // Pre-allocate all the storage.
   real_array_values.resize(array_values[arr].size());
@@ -510,8 +532,9 @@ array_convt::add_array_constraints(unsigned int arr)
 
 }
 
+template <class subclass>
 void
-array_convt::execute_array_trans(
+array_convt<subclass>::execute_array_trans(
                             std::vector<std::vector<const smt_ast *> > &data,
                                    unsigned int arr,
                                    unsigned int idx,
@@ -526,7 +549,7 @@ array_convt::execute_array_trans(
   std::vector<const smt_ast *> &dest_data = data[idx+1];
   collate_array_values(dest_data, idx_map, array_values[arr][idx+1], subtype);
 
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *boolsort = this->mk_sort(SMT_SORT_BOOL);
 
   // Two updates that could have occurred for this array: a simple with, or
   // an ite.
@@ -550,9 +573,9 @@ array_convt::execute_array_trans(
     for (unsigned int i = 0; i < idx_map.size(); i++) {
       args[1] = true_vals[i];
       args[2] = false_vals[i];
-      eq[0] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      eq[0] = this->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
       eq[1] = dest_data[i];
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2)));
+      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2)));
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
@@ -563,7 +586,7 @@ array_convt::execute_array_trans(
     assert(it != idx_map.end());
 
     const expr2tc &update_idx_expr = it->first;
-    const smt_ast *update_idx_ast = convert_ast(update_idx_expr);
+    const smt_ast *update_idx_ast = this->convert_ast(update_idx_expr);
     unsigned int updated_idx = it->second;
     const smt_ast *updated_value = w.u.w.val;
 
@@ -575,13 +598,13 @@ array_convt::execute_array_trans(
     // differing index exprs that evaluate to the same location they'll be
     // caught by code later.
     const std::list<struct array_select> &sels = array_values[arr][idx+1];
-    for (std::list<struct array_select>::const_iterator it = sels.begin();
+    for (typename std::list<struct array_select>::const_iterator it = sels.begin();
          it != sels.end(); it++) {
       if (it->idx == update_idx_expr) {
         const smt_ast *args[2];
         args[0] = updated_value;
         args[1] = it->val;
-        assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       }
     }
 
@@ -603,13 +626,13 @@ array_convt::execute_array_trans(
       // use implies and ackerman constraints.
       // FIXME: benchmark the two approaches. For now, this is shorter.
       args[0] = update_idx_ast;
-      args[1] = convert_ast(it2->first);
-      args[0] = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      args[1] = this->convert_ast(it2->first);
+      args[0] = this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
       args[1] = updated_value;
       args[2] = source_data[i];
-      args[0] = mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
+      args[0] = this->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
       args[1] = dest_data[i];
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       // The latter part of this could be replaced with more complex logic,
       // that only asserts an equality between selected values, and just stores
       // the result of the ITE for all other values. FIXME: try this.
@@ -617,8 +640,9 @@ array_convt::execute_array_trans(
   }
 }
 
+template <class subclass>
 void
-array_convt::collate_array_values(std::vector<const smt_ast *> &vals,
+array_convt<subclass>::collate_array_values(std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc, unsigned> &idx_map,
                                     const std::list<struct array_select> &idxs,
                                     const smt_sort *subtype,
@@ -633,7 +657,7 @@ array_convt::collate_array_values(std::vector<const smt_ast *> &vals,
     *it = NULL;
 
   // Now assign in all free variables created as a result of selects.
-  for (std::list<struct array_select>::const_iterator it = idxs.begin();
+  for (typename std::list<struct array_select>::const_iterator it = idxs.begin();
        it != idxs.end(); it++) {
     std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.find(it->idx);
     assert(it2 != idx_map.end());
@@ -646,12 +670,12 @@ array_convt::collate_array_values(std::vector<const smt_ast *> &vals,
     for (std::vector<const smt_ast *>::iterator it = vals.begin();
          it != vals.end(); it++) {
       if (*it == NULL)
-        *it = mk_fresh(subtype, "collate_array_vals::");
+        *it = this->mk_fresh(subtype, "collate_array_vals::");
     }
   } else {
     // We need to assign the initial value in, except where there's already
     // a select/index, in which case we assert that the values are equal.
-    const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+    const smt_sort *boolsort = this->mk_sort(SMT_SORT_BOOL);
     for (std::vector<const smt_ast *>::iterator it = vals.begin();
          it != vals.end(); it++) {
       if (*it == NULL) {
@@ -660,7 +684,7 @@ array_convt::collate_array_values(std::vector<const smt_ast *> &vals,
         const smt_ast *args[2];
         args[0] = *it;
         args[1] = init_val;
-        assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
       }
     }
   }
@@ -668,33 +692,34 @@ array_convt::collate_array_values(std::vector<const smt_ast *> &vals,
   // Fin.
 }
 
+template <class subclass>
 void
-array_convt::add_initial_ackerman_constraints(
+array_convt<subclass>::add_initial_ackerman_constraints(
                                   const std::vector<const smt_ast *> &vals,
                                   const std::map<expr2tc,unsigned> &idx_map)
 {
   // Lolquadratic,
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  const smt_sort *boolsort = this->mk_sort(SMT_SORT_BOOL);
   for (std::map<expr2tc, unsigned>::const_iterator it = idx_map.begin();
        it != idx_map.end(); it++) {
-    const smt_ast *outer_idx = convert_ast(it->first);
+    const smt_ast *outer_idx = this->convert_ast(it->first);
     for (std::map<expr2tc, unsigned>::const_iterator it2 = idx_map.begin();
          it2 != idx_map.end(); it2++) {
-      const smt_ast *inner_idx = convert_ast(it2->first);
+      const smt_ast *inner_idx = this->convert_ast(it2->first);
 
       // If they're the same idx, they're the same value.
       const smt_ast *args[2];
       args[0] = outer_idx;
       args[1] = inner_idx;
-      const smt_ast *idxeq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      const smt_ast *idxeq = this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
       args[0] = vals[it->second];
       args[1] = vals[it2->second];
-      const smt_ast *valeq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+      const smt_ast *valeq = this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
       args[0] = idxeq;
       args[1] = valeq;
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2)));
+      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2)));
     }
   }
 }

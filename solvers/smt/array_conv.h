@@ -44,14 +44,16 @@ public:
 };
 
 
-class array_convt : public smt_convt
+template <class subclass>
+class array_convt : public subclass
 {
 public:
   struct array_select;
   struct array_with;
 
   array_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-              bool is_cpp, bool tuple_support);
+              bool is_cpp, bool tuple_support, bool bools_in_arrs,
+              bool can_init_inf_arrs);
   ~array_convt();
 
   // Things that the user must implement:
@@ -59,6 +61,7 @@ public:
                                    const smt_ast *val) = 0;
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
   virtual expr2tc get_bool(const smt_ast *a) = 0;
+  // And the get_bv and get_bool methods.
 
   // The api parts that this implements for smt_convt:
 
@@ -79,11 +82,11 @@ public:
   //   d) Call add_array_constraints before calling dec_solve. Can be called
   //      multiple times.
 
-  smt_ast *fresh_array(const smt_sort *ms,
-                             const std::string &name);
-  const smt_ast *array_ite(const array_ast *cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
+  virtual smt_ast *fresh_array(const smt_sort *ms,
+                               const std::string &name);
+  smt_ast *array_ite(const smt_ast *cond,
+                                   const smt_ast *true_arr,
+                                   const smt_ast *false_arr,
                                    const smt_sort *thesort);
   expr2tc array_get(const smt_ast *a, const type2tc &subtype);
   void add_array_constraints(void);
@@ -97,7 +100,7 @@ public:
                                     const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-  const smt_ast *unbounded_array_ite(const array_ast *cond,
+  smt_ast *unbounded_array_ite(const array_ast *cond,
                                        const array_ast *true_arr,
                                        const array_ast *false_arr,
                                        const smt_sort *thesort);
@@ -179,6 +182,9 @@ public:
   // respectively.
   std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
 };
+
+// And because this is a template...
+#include "array_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */
 
