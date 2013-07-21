@@ -301,6 +301,16 @@ smt_convt::invert_ast(const smt_ast *a)
   return mk_func_app(a->sort, SMT_FUNC_NOT, &a, 1);
 }
 
+const smt_ast *
+smt_convt::imply_ast(const smt_ast *a, const smt_ast *b)
+{
+  assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
+  const smt_ast *args[2];
+  args[0] = a;
+  args[1] = b;
+  return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
+}
+
 literalt
 smt_convt::lor(const bvt &bv)
 {
