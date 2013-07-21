@@ -803,6 +803,16 @@ smt_convt::tuple_get(const expr2tc &expr)
     i++;
   }
 
+  // If it's a pointer, rewrite.
+  if (is_pointer_type(expr->type)) {
+    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
+                                    .constant_value.to_uint64();
+    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
+                                     .constant_value.to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
+  }
+
   return outstruct;
 }
 
