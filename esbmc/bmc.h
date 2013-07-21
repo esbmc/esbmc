@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <options.h>
 
 #include <solvers/solve.h>
-#include <solvers/prop/prop_conv.h>
+#include <solvers/smt/smt_conv.h>
 #ifdef Z3
 #include <solvers/z3/z3_conv.h>
 #endif
@@ -99,12 +99,12 @@ protected:
   // use gui format
   language_uit::uit ui;
 
-  virtual prop_convt::resultt
-    run_decision_procedure(prop_convt &prop_conv,
+  virtual smt_convt::resultt
+    run_decision_procedure(smt_convt &smt_conv,
                            symex_target_equationt &equation);
 
-  virtual void do_cbmc(prop_convt &solver, symex_target_equationt &eq);
-  virtual bool run_solver(symex_target_equationt &equation, prop_convt *solver);
+  virtual void do_cbmc(smt_convt &solver, symex_target_equationt &eq);
+  virtual bool run_solver(symex_target_equationt &equation, smt_convt *solver);
   virtual void show_vcc(symex_target_equationt &equation);
   virtual void show_vcc(std::ostream &out, symex_target_equationt &equation);
   virtual void show_program(symex_target_equationt &equation);
@@ -113,7 +113,7 @@ protected:
   virtual void write_checkpoint();
 
   virtual void error_trace(
-    prop_convt &prop_conv, symex_target_equationt &equation);
+    smt_convt &smt_conv, symex_target_equationt &equation);
     bool run_thread();
     int ltl_run_thread(symex_target_equationt *equation);
 };
