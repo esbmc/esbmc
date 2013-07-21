@@ -67,7 +67,7 @@ get_member_name_field(const type2tc &t, const expr2tc &name)
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
                      bool is_cpp, bool _tuple_support, bool _nobools,
                      bool can_init_inf_arrays)
-  : caching(enable_cache), int_encoding(intmode), ns(_ns),
+  : ctx_level(0), caching(enable_cache), int_encoding(intmode), ns(_ns),
     tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
@@ -144,13 +144,17 @@ smt_convt::push_ctx(void)
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
-  prop_convt::push_ctx();
+
+  ctx_level++;
 }
 
 void
 smt_convt::pop_ctx(void)
 {
-  prop_convt::pop_ctx();
+  cachet::nth_index<1>::type &lit_cache_numindex = cache.get<1>();
+  lit_cache_numindex.erase(ctx_level);
+
+  ctx_level--;
 
   union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();
   union_numindex.erase(ctx_level);
@@ -1915,3 +1919,36 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "pow",
   "is_int"
 };
+
+// Debis from prop_convt: to be reorganized.
+
+literalt
+smt_convt::convert(const expr2tc &expr)
+{
+
+  cachet::iterator it = cache.find(expr);
+  if (it != cache.end())
+    return it->l;
+
+  literalt literal = convert_expr(expr);
+
+  // insert into cache
+
+  struct lit_cachet entry = { expr, literal, ctx_level };
+  cache.insert(entry);
+
+  return literal;
+}
+
+void
+smt_convt::set_equal(literalt a, literalt b)
+{
+  bvt bv;
+  bv.resize(2);
+  bv[0]=a;
+  bv[1]=lnot(b);
+  lcnf(bv);
+  bv[0]=lnot(a);
+  bv[1]=b;
+  lcnf(bv);
+}

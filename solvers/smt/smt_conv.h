@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 #include <irep2.h>
+#include <message.h>
 #include <namespace.h>
 
 #include <util/pointer_offset_size.h>
@@ -177,7 +178,7 @@ public:
   const std::string name;
 };
 
-class smt_convt: public prop_convt
+class smt_convt : public messaget
 {
 public:
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
@@ -365,7 +366,47 @@ public:
 
   std::string get_fixed_point(const unsigned width, std::string value) const;
 
+  // The wreckage of prop_convt:
+  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+
+  virtual resultt dec_solve() = 0;
+  virtual literalt convert(const expr2tc &expr);
+  virtual expr2tc get(const expr2tc &expr) = 0;
+
+  virtual void clear_cache()
+  {
+    cache.clear();
+  }
+
+//  virtual literalt land(literalt a, literalt b)=0;
+//  virtual literalt lor(literalt a, literalt b)=0;
+//  virtual literalt land(const bvt &bv)=0;
+//  virtual literalt lor(const bvt &bv)=0;
+//  virtual literalt lnot(literalt a)=0;
+//  virtual literalt limplies(literalt a, literalt b)=0;
+  virtual void set_equal(literalt a, literalt b);
+
+  virtual void l_set_to(literalt a, bool value)
+  {
+    set_equal(a, const_literal(value));
+  }
+
+//  virtual void lcnf(const bvt &bv)=0;
+
+//  virtual literalt new_variable()=0;
+//  virtual uint64_t get_no_variables() const=0;
+
+  virtual const std::string solver_text()=0;
+
+  virtual tvt l_get(literalt a)=0;
+
   // Types
+
+  struct lit_cachet {
+    const expr2tc val;
+    literalt l;
+    unsigned int level;
+  };
 
   // Types for union map.
   struct union_var_mapt {
@@ -373,6 +414,21 @@ public:
     unsigned int idx;
     unsigned int level;
   };
+
+  typedef boost::multi_index_container<
+    lit_cachet,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, const expr2tc, val)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(lit_cachet, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > cachet;
+
+  cachet cache;
 
   typedef boost::multi_index_container<
     union_var_mapt,
@@ -417,6 +473,8 @@ public:
   };
 
   // Members
+  unsigned int ctx_level;
+
   union_varst union_vars;
   smt_cachet smt_cache;
   std::list<pointer_logict> pointer_logic;
