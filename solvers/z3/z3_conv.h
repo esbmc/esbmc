@@ -46,9 +46,6 @@ public:
   virtual smt_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
 
-  // overloading
-  virtual expr2tc get(const expr2tc &expr);
-
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
@@ -130,8 +127,6 @@ private:
   virtual void assert_lit(const literalt &l);
 
   std::string double2string(double d) const;
-
-  expr2tc bv_get_rec(const Z3_ast bv, const type2tc &type);
 
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
