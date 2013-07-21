@@ -107,21 +107,21 @@ void symex_target_equationt::assertion(
 }
 
 
-void symex_target_equationt::convert(prop_convt &prop_conv)
+void symex_target_equationt::convert(smt_convt &smt_conv)
 {
   bvt assertions;
   literalt assumpt_lit = const_literal(true);
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-    convert_internal_step(prop_conv, assumpt_lit, assertions, *it);
+    convert_internal_step(smt_conv, assumpt_lit, assertions, *it);
 
   if (!assertions.empty())
-    prop_conv.lcnf(assertions);
+    smt_conv.lcnf(assertions);
 
   return;
 }
 
-void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
+void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
                    literalt &assumpt_lit, bvt &assertions_lits, SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
@@ -136,14 +136,14 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
   }
 
   expr2tc tmp(step.guard);
-  step.guard_literal = prop_conv.convert(tmp);
+  step.guard_literal = smt_conv.convert(tmp);
 
   if (step.is_assume() || step.is_assert()) {
     expr2tc tmp(step.cond);
-    step.cond_literal = prop_conv.convert(tmp);
+    step.cond_literal = smt_conv.convert(tmp);
   } else if (step.is_assignment()) {
     expr2tc tmp2(step.cond);
-    prop_conv.set_to(tmp2, true);
+    smt_conv.set_to(tmp2, true);
   } else if (step.is_output()) {
     for(std::list<expr2tc>::const_iterator
         o_it = step.output_args.begin();
@@ -157,7 +157,7 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
       {
         symbol2tc sym(tmp->type, "symex::output::"+i2string(output_count++));
         equality2tc eq(tmp, sym);
-        prop_conv.set_to(eq, true);
+        smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }
     }
@@ -166,10 +166,10 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
   }
 
   if (step.is_assert()) {
-    step.cond_literal = prop_conv.limplies(assumpt_lit, step.cond_literal);
-    assertions_lits.push_back(prop_conv.lnot(step.cond_literal));
+    step.cond_literal = smt_conv.limplies(assumpt_lit, step.cond_literal);
+    assertions_lits.push_back(smt_conv.lnot(step.cond_literal));
   } else if (step.is_assume()) {
-    assumpt_lit = prop_conv.land(assumpt_lit, step.cond_literal);
+    assumpt_lit = smt_conv.land(assumpt_lit, step.cond_literal);
   }
 
   return;
@@ -302,7 +302,7 @@ symex_target_equationt::check_for_duplicate_assigns() const
 }
 
 runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
-                                                     prop_convt &_conv)
+                                                     smt_convt &_conv)
   : symex_target_equationt(_ns),
     conv(_conv)
 {
@@ -364,7 +364,7 @@ runtime_encoded_equationt::pop_ctx(void)
 }
 
 void
-runtime_encoded_equationt::convert(prop_convt &prop_conv)
+runtime_encoded_equationt::convert(smt_convt &smt_conv)
 {
 
   // Don't actually convert. We've already done most of the conversion by now
@@ -375,7 +375,7 @@ runtime_encoded_equationt::convert(prop_convt &prop_conv)
 
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
-    prop_conv.lcnf(assert_vec_list.back());
+    smt_conv.lcnf(assert_vec_list.back());
 
   return;
 }
@@ -418,28 +418,28 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // results are true, false, both.
   push_ctx();
   conv.l_set_to(q, true);
-  prop_convt::resultt res1 = conv.dec_solve();
+  smt_convt::resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
   conv.l_set_to(q, false);
-  prop_convt::resultt res2 = conv.dec_solve();
+  smt_convt::resultt res2 = conv.dec_solve();
   pop_ctx();
 
   // So; which result?
-  if (res1 == prop_convt::P_ERROR || res1 == prop_convt::P_SMTLIB ||
-      res2 == prop_convt::P_ERROR || res2 == prop_convt::P_SMTLIB) {
+  if (res1 == smt_convt::P_ERROR || res1 == smt_convt::P_SMTLIB ||
+      res2 == smt_convt::P_ERROR || res2 == smt_convt::P_SMTLIB) {
     std::cerr << "Solver returned error while asking question" << std::endl;
     abort();
-  } else if (res1 == prop_convt::P_SATISFIABLE &&
-             res2 == prop_convt::P_SATISFIABLE) {
+  } else if (res1 == smt_convt::P_SATISFIABLE &&
+             res2 == smt_convt::P_SATISFIABLE) {
     // Both ways are satisfiable; result is unknown.
     final_res = tvt(tvt::TV_UNKNOWN);
-  } else if (res1 == prop_convt::P_SATISFIABLE &&
-             res2 == prop_convt::P_UNSATISFIABLE) {
+  } else if (res1 == smt_convt::P_SATISFIABLE &&
+             res2 == smt_convt::P_UNSATISFIABLE) {
     // Truth of question is satisfiable; other not; so we're true.
     final_res = tvt(tvt::TV_TRUE);
-  } else if (res1 == prop_convt::P_UNSATISFIABLE &&
-             res2 == prop_convt::P_SATISFIABLE) {
+  } else if (res1 == smt_convt::P_UNSATISFIABLE &&
+             res2 == smt_convt::P_SATISFIABLE) {
     // Truth is unsat, false is sat, proposition is false
     final_res = tvt(tvt::TV_FALSE);
   } else {

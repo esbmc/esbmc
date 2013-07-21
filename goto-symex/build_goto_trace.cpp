@@ -14,7 +14,7 @@ Author: Daniel Kroening
 
 void build_goto_trace(
   const symex_target_equationt &target,
-  prop_convt &prop_conv,
+  smt_convt &smt_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
@@ -26,7 +26,7 @@ void build_goto_trace(
   {
     const symex_target_equationt::SSA_stept &SSA_step=*it;
     tvt result;
-    result=prop_conv.l_get(SSA_step.guard_literal);
+    result=smt_conv.l_get(SSA_step.guard_literal);
 
     if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
       continue;
@@ -52,7 +52,7 @@ void build_goto_trace(
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
     if(!is_nil_expr(SSA_step.lhs)) {
-      goto_trace_step.value = prop_conv.get(SSA_step.lhs);
+      goto_trace_step.value = smt_conv.get(SSA_step.lhs);
     }
 
     for(std::list<expr2tc>::const_iterator
@@ -64,13 +64,13 @@ void build_goto_trace(
       if (is_constant_expr(arg))
         goto_trace_step.output_args.push_back(arg);
       else
-        goto_trace_step.output_args.push_back(prop_conv.get(arg));
+        goto_trace_step.output_args.push_back(smt_conv.get(arg));
     }
 
     if(SSA_step.is_assert() ||
        SSA_step.is_assume())
     {
-      result = prop_conv.l_get(SSA_step.cond_literal);
+      result = smt_conv.l_get(SSA_step.cond_literal);
       if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
     	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0)) {
         goto_trace_step.guard = true;
