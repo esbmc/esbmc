@@ -220,21 +220,6 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
-  // Massive hack, should be fixed.
-  virtual smt_ast *array_ite(const smt_ast *cond __attribute__((unused)),
-                               const smt_ast *true_arr __attribute__((unused)),
-                               const smt_ast *false_arr __attribute__((unused)),
-                               const smt_sort *thesort __attribute__((unused))) {
-    std::cerr << "array_ite unimplemented by smt converter" << std::endl;
-    abort();
-  }
-
-  virtual smt_ast *fresh_array(const smt_sort *ms __attribute__((unused)),
-                               const std::string &name __attribute__((unused))){
-    std::cerr << "fresh_array unimplemented by smt converter" << std::endl;
-    abort();
-  }
-
 //  virtual literalt lnot(literalt a __attribute__((unused))){ abort(); }
   virtual literalt lselect(literalt a __attribute__((unused)), literalt b __attribute__((unused)), literalt c __attribute__((unused))){ abort(); }
   virtual literalt lequal(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
