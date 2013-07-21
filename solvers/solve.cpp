@@ -4,30 +4,30 @@
 #include <solvers/smtlib/smtlib_conv.h>
 
 // For the purpose of vastly reducing build times:
-prop_convt *
+smt_convt *
 create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
                                   const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_metasmt_z3_solver(bool int_encoding, bool is_cpp,
                              const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_metasmt_boolector_solver(bool int_encoding, bool is_cpp,
                                     const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_metasmt_sword_solver(bool int_encoding, bool is_cpp,
                                 const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_metasmt_stp_solver(bool int_encoding, bool is_cpp,
                                 const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts);
-prop_convt *
+smt_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
-prop_convt *
+smt_convt *
 create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
 
-static prop_convt *
+static smt_convt *
 create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 {
 #ifndef Z3
@@ -39,7 +39,7 @@ create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                       const optionst &options)
 {
@@ -52,7 +52,7 @@ create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_metasmt_minisat_solver(bool is_cpp __attribute__((unused)),
                               bool int_encoding __attribute__((unused)),
                               const namespacet &ns __attribute__((unused)))
@@ -66,7 +66,7 @@ create_metasmt_minisat_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_metasmt_z3_solver(bool is_cpp __attribute__((unused)),
                          bool int_encoding __attribute__((unused)),
                          const namespacet &ns __attribute__((unused)))
@@ -80,7 +80,7 @@ create_metasmt_z3_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_metasmt_boolector_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)))
@@ -94,7 +94,7 @@ create_metasmt_boolector_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_metasmt_sword_solver(bool is_cpp __attribute__((unused)),
                             bool int_encoding __attribute__((unused)),
                             const namespacet &ns __attribute__((unused)))
@@ -108,7 +108,7 @@ create_metasmt_sword_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_metasmt_stp_solver(bool is_cpp __attribute__((unused)),
                           bool int_encoding __attribute__((unused)),
                           const namespacet &ns __attribute__((unused)))
@@ -122,7 +122,7 @@ create_metasmt_stp_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_mathsat_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)))
@@ -136,7 +136,7 @@ create_mathsat_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static prop_convt *
+static smt_convt *
 create_cvc_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)))
@@ -154,7 +154,7 @@ static const unsigned int num_of_solvers = 9;
 static const std::string list_of_solvers[] =
 { "z3", "smtlib", "minisat", "metasmt", "boolector", "sword", "stp", "mathsat", "cvc"};
 
-static prop_convt *
+static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
             const optionst &options)
 {
@@ -203,7 +203,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   }
 }
 
-prop_convt *
+smt_convt *
 create_solver_factory(const std::string &solver_name, bool is_cpp,
                       bool int_encoding, const namespacet &ns,
                       const optionst &options)
