@@ -1459,3 +1459,18 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
 
   return result;
 }
+
+void
+z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
+{
+  std::stringstream ss;
+  unsigned &num = debug_label_map[name];
+  ss << "__ESBMC_" << name << num;
+  std::string the_name = ss.str();
+  num++;
+
+  z3::expr sym = ctx.constant(the_name.c_str(), formula.get_sort());
+  z3::expr eq = sym == formula;
+  assert_formula(eq);
+  return;
+}
