@@ -37,7 +37,6 @@ public:
   ~mathsat_convt(void);
 
   virtual resultt dec_solve();
-  virtual expr2tc get(const expr2tc &expr);
   virtual tvt l_get(literalt l);
   virtual const std::string solver_text();
 
@@ -60,8 +59,9 @@ public:
                               unsigned int low, const smt_sort *s);
 
   expr2tc get_bool(const smt_ast *a);
-  expr2tc get_bv(const smt_ast *a);
-  expr2tc get_array(const smt_ast *a, const type2tc &arrtype);
+  expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  expr2tc get_array_elem(const smt_ast *array, uint64_t idx,
+                         const smt_sort *elem_sort);
 
   // MathSAT data.
   msat_config cfg;

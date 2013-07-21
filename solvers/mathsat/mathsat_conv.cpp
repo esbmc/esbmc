@@ -74,7 +74,8 @@ mathsat_convt::get_bool(const smt_ast *a)
 }
 
 expr2tc
-mathsat_convt::get_bv(const smt_ast *a)
+mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
+                      const smt_ast *a)
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_get_model_value(env, mast->t);
@@ -112,78 +113,22 @@ mathsat_convt::get_bv(const smt_ast *a)
 }
 
 expr2tc
-mathsat_convt::get_array(const smt_ast *a, const type2tc &t)
+mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
+                              const smt_sort *elem_sort)
 {
+  size_t orig_w = array->sort->get_domain_width();
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
 
-  const array_type2t &ar = to_array_type(t);
-  if (is_tuple_ast_type(ar.subtype)) {
-    std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
-    return expr2tc();
-  }
+  smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);
+  const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
+  msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
+  free(tmpast);
 
-  // Fetch the array bounds, if it's huge then assume this is a 1024 element
-  // array. Then fetch all elements and formulate a constant_array.
-  size_t w = a->sort->get_domain_width();
-  size_t orig_w = w;
-  if (w > 10)
-    w = 10;
+  mathsat_smt_ast *tmpb = new mathsat_smt_ast(elem_sort, t);
+  expr2tc result = get_bv(type2tc(), tmpb);
+  free(tmpb);
 
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  constant_int2tc arr_size(index_type2(), BigInt(1 << w));
-
-  type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
-  const smt_sort *s = convert_sort(ar.subtype);
-  std::vector<expr2tc> fields;
-
-  for (size_t i = 0; i < (1ULL << w); i++) {
-    smt_ast *tmpast = mk_smt_bvint(BigInt(i), false, orig_w);
-    const mathsat_smt_ast *tmpa = mathsat_ast_downcast(tmpast);
-    msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
-    free(tmpast);
-
-    mathsat_smt_ast *tmpb = new mathsat_smt_ast(s, t);
-    fields.push_back(get_bv(tmpb));
-    free(tmpb);
-  }
-
-  return constant_array2tc(arr_type, fields);
-}
-
-expr2tc
-mathsat_convt::get(const expr2tc &expr)
-{
-
-  switch (expr->type->type_id) {
-  case type2t::bool_id:
-    return get_bool(convert_ast(expr));
-  case type2t::unsignedbv_id:
-  case type2t::signedbv_id:
-    return get_bv(convert_ast(expr));
-  case type2t::fixedbv_id:
-  {
-    // XXX -- pulled from minisat in another branch, refactor this
-    expr2tc tmp = get_bv(convert_ast(expr));
-    const constant_int2t &intval = to_constant_int2t(tmp);
-    uint64_t val = intval.constant_value.to_ulong();
-    std::stringstream ss;
-    ss << val;
-    constant_exprt value_expr(migrate_type_back(expr->type));
-    value_expr.set_value(get_fixed_point(expr->type->get_width(), ss.str()));
-    fixedbvt fbv;
-    fbv.from_expr(value_expr);
-    return constant_fixedbv2tc(expr->type, fbv);
-  }
-  case type2t::array_id:
-    return get_array(convert_ast(expr), expr->type);
-  case type2t::pointer_id:
-  case type2t::struct_id:
-  case type2t::union_id:
-    return tuple_get(expr);
-  default:
-    std::cerr << "Unrecognized type id " << get_type_id(expr->type)
-              << " in MathSAT get" << std::endl;
-    abort();
-  }
+  return result;
 }
 
 tvt
