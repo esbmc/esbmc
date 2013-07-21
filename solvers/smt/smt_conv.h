@@ -220,18 +220,6 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
-//  virtual literalt lnot(literalt a __attribute__((unused))){ abort(); }
-  virtual literalt lselect(literalt a __attribute__((unused)), literalt b __attribute__((unused)), literalt c __attribute__((unused))){ abort(); }
-  virtual literalt lequal(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-//  virtual literalt limplies(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-  virtual literalt lxor(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-//  virtual literalt lor(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-//  virtual literalt land(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-  virtual void gate_xor(literalt a __attribute__((unused)), literalt b __attribute__((unused)), literalt o __attribute__((unused))){ abort(); }
-  virtual void gate_or(literalt a __attribute__((unused)), literalt b __attribute__((unused)), literalt o __attribute__((unused))){ abort(); }
-  virtual void gate_and(literalt a __attribute__((unused)), literalt b __attribute__((unused)), literalt o __attribute__((unused))){ abort(); }
-  virtual void set_equal(literalt a __attribute__((unused)), literalt b __attribute__((unused))){ abort(); }
-
   virtual void set_to(const expr2tc &expr, bool value);
   virtual literalt convert_expr(const expr2tc &expr);
 

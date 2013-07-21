@@ -80,11 +80,11 @@ public:
   // other API things can be fudged, such as tuples and arrays.
 
   // Boolean operations we require.
-//  virtual literalt lnot(literalt a) = 0;
-//  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
-//  virtual literalt lequal(literalt a, literalt b) = 0;
-//  virtual literalt limplies(literalt a, literalt b) = 0;
-//  virtual literalt lxor(literalt a, literalt b) = 0;
+  virtual literalt lnot(literalt a) = 0;
+  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
+  virtual literalt lequal(literalt a, literalt b) = 0;
+  virtual literalt limplies(literalt a, literalt b) = 0;
+  virtual literalt lxor(literalt a, literalt b) = 0;
 
   // smt_convt apis we fufil
 
