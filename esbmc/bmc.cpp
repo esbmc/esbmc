@@ -74,7 +74,10 @@ void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
-  solver.clear_cache();
+  // XXX - disabled, seeing how not a small number of things in the array
+  // bitblaster seem to depend on the cache being intact to fetch any data.
+  // Consider this carefully to re-enabled0
+//  solver.clear_cache();
 }
 
 /*******************************************************************\

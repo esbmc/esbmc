@@ -151,9 +151,6 @@ smt_convt::push_ctx(void)
 void
 smt_convt::pop_ctx(void)
 {
-  cachet::nth_index<1>::type &lit_cache_numindex = cache.get<1>();
-  lit_cache_numindex.erase(ctx_level);
-
   ctx_level--;
 
   union_varst::nth_index<1>::type &union_numindex = union_vars.get<1>();

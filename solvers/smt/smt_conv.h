@@ -383,11 +383,6 @@ public:
   virtual resultt dec_solve() = 0;
   virtual expr2tc get(const expr2tc &expr);
 
-  virtual void clear_cache()
-  {
-    cache.clear();
-  }
-
 //  virtual literalt land(literalt a, literalt b)=0;
 //  virtual literalt lor(literalt a, literalt b)=0;
 //  virtual literalt land(const bvt &bv)=0;
@@ -415,33 +410,12 @@ public:
 
   // Types
 
-  struct lit_cachet {
-    const expr2tc val;
-    literalt l;
-    unsigned int level;
-  };
-
   // Types for union map.
   struct union_var_mapt {
     std::string ident;
     unsigned int idx;
     unsigned int level;
   };
-
-  typedef boost::multi_index_container<
-    lit_cachet,
-    boost::multi_index::indexed_by<
-      boost::multi_index::hashed_unique<
-        BOOST_MULTI_INDEX_MEMBER(lit_cachet, const expr2tc, val)
-      >,
-      boost::multi_index::ordered_non_unique<
-        BOOST_MULTI_INDEX_MEMBER(lit_cachet, unsigned int, level),
-        std::greater<unsigned int>
-      >
-    >
-  > cachet;
-
-  cachet cache;
 
   typedef boost::multi_index_container<
     union_var_mapt,
