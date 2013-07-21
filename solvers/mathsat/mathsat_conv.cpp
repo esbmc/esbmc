@@ -8,7 +8,7 @@
 
 #include <ansi-c/c_types.h>
 
-prop_convt *
+smt_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 {
     return new mathsat_convt(is_cpp, int_encoding, ns);
@@ -43,7 +43,7 @@ mathsat_convt::assert_lit(const literalt &l)
   msat_assert_formula(env, mast->t);
 }
 
-prop_convt::resultt
+smt_convt::resultt
 mathsat_convt::dec_solve()
 {
   msat_result r = msat_solve(env);

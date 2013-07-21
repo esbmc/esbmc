@@ -54,7 +54,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   }
   case SMT_FUNC_OR:
   {
-    prop_convt *us = this;
+    smt_convt *us = this;
     literalt res = us->lor(args[0]->bv[0], args[1]->bv[0]);
     result = new bitblast_smt_ast(ressort);
     result->bv.push_back(res);
@@ -82,7 +82,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_AND:
   {
     result = new bitblast_smt_ast(ressort);
-    prop_convt *us = this;
+    smt_convt *us = this;
     result->bv.push_back(us->land(args[0]->bv[0], args[1]->bv[0]));
     break;
   }

@@ -174,7 +174,7 @@ z3_convt::init_addr_space_array(void)
   return;
 }
 
-prop_convt::resultt
+smt_convt::resultt
 z3_convt::dec_solve(void)
 {
   unsigned major, minor, build, revision;
@@ -184,11 +184,11 @@ z3_convt::dec_solve(void)
   result = check2_z3_properties();
 
   if (result == z3::unsat)
-    return prop_convt::P_UNSATISFIABLE;
+    return smt_convt::P_UNSATISFIABLE;
   else if (result == z3::unknown)
-    return prop_convt::P_ERROR;
+    return smt_convt::P_ERROR;
   else
-    return prop_convt::P_SATISFIABLE;
+    return smt_convt::P_SATISFIABLE;
 }
 
 z3::check_result

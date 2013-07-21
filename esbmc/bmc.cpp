@@ -66,7 +66,7 @@ Function: bmct::do_cbmc
 
 \*******************************************************************/
 
-void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
+void bmct::do_cbmc(smt_convt &solver, symex_target_equationt &equation)
 {
   solver.set_message_handler(message_handler);
 
@@ -89,13 +89,13 @@ Function: bmct::error_trace
 
 \*******************************************************************/
 
-void bmct::error_trace(prop_convt &prop_conv,
+void bmct::error_trace(smt_convt &smt_conv,
                        symex_target_equationt &equation)
 {
   status("Building error trace");
 
   goto_tracet goto_trace;
-  build_goto_trace(equation, prop_conv, goto_trace);
+  build_goto_trace(equation, smt_conv, goto_trace);
 
   goto_trace.metadata_filename = options.get_option("llvm-metadata");
 
@@ -135,8 +135,8 @@ Function: bmct::run_decision_procedure
 
 \*******************************************************************/
 
-prop_convt::resultt
-bmct::run_decision_procedure(prop_convt &prop_conv,
+smt_convt::resultt
+bmct::run_decision_procedure(smt_convt &smt_conv,
                              symex_target_equationt &equation)
 {
   std::string logic;
@@ -149,11 +149,11 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
-  prop_conv.set_message_handler(message_handler);
-  prop_conv.set_verbosity(get_verbosity());
+  smt_conv.set_message_handler(message_handler);
+  smt_conv.set_verbosity(get_verbosity());
 
   fine_timet encode_start = current_time();
-  do_cbmc(prop_conv, equation);
+  do_cbmc(smt_conv, equation);
   fine_timet encode_stop = current_time();
 
   if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
@@ -166,11 +166,11 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   }
 
   std::stringstream ss;
-  ss << "Solving with solver " << prop_conv.solver_text();
+  ss << "Solving with solver " << smt_conv.solver_text();
   status(ss.str());
 
   fine_timet sat_start=current_time();
-  prop_convt::resultt dec_result=prop_conv.dec_solve();
+  smt_convt::resultt dec_result=smt_conv.dec_solve();
   fine_timet sat_stop=current_time();
 
   // output runtime
@@ -449,7 +449,7 @@ bool bmct::run(void)
 bool bmct::run_thread()
 {
   goto_symext::symex_resultt *result;
-  prop_convt *solver;
+  smt_convt *solver;
   symex_target_equationt *equation;
   bool ret;
 
@@ -578,7 +578,7 @@ bool bmct::run_thread()
 int
 bmct::ltl_run_thread(symex_target_equationt *equation)
 {
-  prop_convt *solver;
+  smt_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
 #ifndef Z3
@@ -710,18 +710,18 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 #endif
 }
 
-bool bmct::run_solver(symex_target_equationt &equation, prop_convt *solver)
+bool bmct::run_solver(symex_target_equationt &equation, smt_convt *solver)
 {
   switch(run_decision_procedure(*solver, equation))
   {
-    case prop_convt::P_UNSATISFIABLE:
+    case smt_convt::P_UNSATISFIABLE:
       if(!options.get_bool_option("base-case"))
         report_success();
       else
         status("No bug has been found in the base case");
       return false;
 
-    case prop_convt::P_SATISFIABLE:
+    case smt_convt::P_SATISFIABLE:
       if (options.get_bool_option("inductive-step") &&
     		  options.get_bool_option("show-counter-example"))
       {
@@ -745,7 +745,7 @@ bool bmct::run_solver(symex_target_equationt &equation, prop_convt *solver)
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit
   // immediately (with no error reported)
-  case prop_convt::P_SMTLIB:
+  case smt_convt::P_SMTLIB:
     return true;
 
   default:

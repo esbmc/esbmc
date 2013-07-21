@@ -2,7 +2,7 @@
 
 #include "cvc_conv.h"
 
-prop_convt *
+smt_convt *
 create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 {
     return new cvc_convt(is_cpp, int_encoding, ns);
@@ -26,7 +26,7 @@ cvc_convt::~cvc_convt()
 {
 }
 
-prop_convt::resultt
+smt_convt::resultt
 cvc_convt::dec_solve()
 {
   CVC4::Result r = smt.checkSat();

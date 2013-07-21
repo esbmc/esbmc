@@ -5,7 +5,7 @@
 
 #include "minisat_conv.h"
 
-prop_convt *
+smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &options)
 {
@@ -78,15 +78,15 @@ minisat_convt::~minisat_convt(void)
 {
 }
 
-prop_convt::resultt
+smt_convt::resultt
 minisat_convt::dec_solve()
 {
   add_array_constraints();
   bool res = solver.solve();
   if (res)
-    return prop_convt::P_SATISFIABLE;
+    return smt_convt::P_SATISFIABLE;
   else
-    return prop_convt::P_UNSATISFIABLE;
+    return smt_convt::P_UNSATISFIABLE;
 }
 
 void

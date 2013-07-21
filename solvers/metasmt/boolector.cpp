@@ -26,7 +26,7 @@ static void boolector_abort_function(void *bees __attribute__((unused))) {
 #include "metasmt_conv.cpp"
 
 // To avoid having to build metaSMT into multiple files,
-prop_convt *
+smt_convt *
 create_new_metasmt_boolector_solver(bool int_encoding, bool is_cpp,
                                   const namespacet &ns)
 {

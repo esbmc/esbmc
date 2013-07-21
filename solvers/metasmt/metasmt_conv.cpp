@@ -3,7 +3,7 @@
 
 #include "metasmt_conv.h"
 
-#include <solvers/prop/prop_conv.h>
+#include <solvers/smt/smt_conv.h>
 
 metasmt_convt::metasmt_convt(bool int_encoding, bool is_cpp,
                              const namespacet &ns)
@@ -36,7 +36,7 @@ metasmt_convt::set_to(const expr2tc &expr, bool value)
   ctx.assertion(result);
 }
 
-prop_convt::resultt
+smt_convt::resultt
 metasmt_convt::dec_solve()
 {
 #ifdef SOLVER_BITBLAST_ARRAYS
@@ -45,9 +45,9 @@ metasmt_convt::dec_solve()
 
   bool res = ctx.solve();
   if (res) {
-    return prop_convt::P_SATISFIABLE;
+    return smt_convt::P_SATISFIABLE;
   } else {
-    return prop_convt::P_UNSATISFIABLE;
+    return smt_convt::P_UNSATISFIABLE;
   }
 }
 

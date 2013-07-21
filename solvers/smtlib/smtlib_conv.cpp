@@ -264,7 +264,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
   return brace_level + 1;
 }
 
-prop_convt::resultt
+smt_convt::resultt
 smtlib_convt::dec_solve()
 {
   // Set some preliminaries, logic and so forth.
@@ -323,7 +323,7 @@ smtlib_convt::dec_solve()
 
   // If we're just outputing to a file, this is where we terminate.
   if (in_stream == NULL)
-    return prop_convt::P_SMTLIB;
+    return smt_convt::P_SMTLIB;
 
   // And read in the output
   smtlib_send_start_code = 1;
@@ -331,13 +331,13 @@ smtlib_convt::dec_solve()
 
   // This should generate on sexpr. See what it is.
   if (smtlib_output->token == TOK_KW_SAT) {
-    return prop_convt::P_SATISFIABLE;
+    return smt_convt::P_SATISFIABLE;
   } else if (smtlib_output->token == TOK_KW_UNSAT) {
-    return prop_convt::P_UNSATISFIABLE;
+    return smt_convt::P_UNSATISFIABLE;
   } else if (smtlib_output->token == TOK_KW_ERROR) {
     std::cerr << "SMTLIB solver returned error: \"" << smtlib_output->data
               << "\"" << std::endl;
-    return prop_convt::P_ERROR;
+    return smt_convt::P_ERROR;
   } else {
     std::cerr << "Unrecognized check-sat output from smtlib solver"
               << std::endl;

@@ -17,7 +17,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <map>
 #include <set>
 #include <hash_cont.h>
-#include <solvers/prop/prop_conv.h>
+#include <solvers/smt/smt_conv.h>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>
 #include <vector>
@@ -43,7 +43,7 @@ private:
 public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
-  virtual prop_convt::resultt dec_solve(void);
+  virtual smt_convt::resultt dec_solve(void);
   z3::check_result check2_z3_properties(void);
 
   // overloading
