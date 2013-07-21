@@ -254,3 +254,54 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     abort();
   }
 }
+
+expr2tc
+z3_convt::get_bool(const smt_ast *a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  const z3_smt_ast *za = z3_smt_downcast(a);
+
+  if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, za->e)) == Z3_L_TRUE)
+    return true_expr;
+  else
+    return false_expr;
+}
+
+expr2tc
+z3_convt::get_bv(const type2tc &t, const smt_ast *a)
+{
+  const z3_smt_ast *za = z3_smt_downcast(a);
+
+  if (Z3_get_ast_kind(z3_ctx, za->e) != Z3_NUMERAL_AST)
+    return expr2tc();
+
+  std::string value = Z3_get_numeral_string(z3_ctx, za->e);
+  return constant_int2tc(t, BigInt(value.c_str()));
+}
+
+expr2tc
+z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
+                         const smt_sort *elem_sort)
+{
+  const z3_smt_ast *za = z3_smt_downcast(array);
+  const z3_smt_sort *zs = z3_sort_downcast(elem_sort);
+  unsigned long bv_size = zs->s.bv_size();
+  z3_smt_ast *idx =
+    static_cast<z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
+
+  z3::expr e = select(za->e, idx->e);
+  delete idx;
+  try {
+    e = model.eval(idx->e, false);
+  } catch (z3::exception &e) {
+    // No model value
+    return expr2tc();
+  }
+
+  z3_smt_ast *value = new z3_smt_ast(e, elem_sort);
+  type2tc res_type = get_uint_type(bv_size);
+  expr2tc result = get_bv(res_type, value);
+  delete value;
+
+  return result;
+}

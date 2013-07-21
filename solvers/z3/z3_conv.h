@@ -49,6 +49,11 @@ public:
   // overloading
   virtual expr2tc get(const expr2tc &expr);
 
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
+  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
+                                 const smt_sort *elem_sort);
+
 private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
