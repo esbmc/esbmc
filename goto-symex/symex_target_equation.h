@@ -78,8 +78,8 @@ public:
     const sourcet &source);
 
   virtual void convert(smt_convt &smt_conv);
-  void convert_internal_step(smt_convt &smt_conv, literalt &assumpt_lit,
-                             bvt &assertions, SSA_stept &s);
+  void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
+                             smt_convt::ast_vec &assertions, SSA_stept &s);
 
   class SSA_stept
   {
@@ -113,7 +113,7 @@ public:
     std::list<expr2tc> output_args;
 
     // for conversion
-    literalt guard_literal, cond_literal;
+    const smt_ast *guard_ast, *cond_ast;
     std::list<expr2tc> converted_output_args;
     
     // for slicing
@@ -196,8 +196,8 @@ public:
   tvt ask_solver_question(const expr2tc &question);
 
   smt_convt &conv;
-  std::list<bvt> assert_vec_list;
-  std::list<literalt> assumpt_chain;
+  std::list<smt_convt::ast_vec> assert_vec_list;
+  std::list<const smt_ast *> assumpt_chain;
   std::list<SSA_stepst::iterator> scoped_end_points;
 };
 

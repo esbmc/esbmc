@@ -109,38 +109,40 @@ void symex_target_equationt::assertion(
 
 void symex_target_equationt::convert(smt_convt &smt_conv)
 {
-  bvt assertions;
-  literalt assumpt_lit = const_literal(true);
+  smt_convt::ast_vec assertions;
+  const smt_ast *assumpt_ast = smt_conv.convert_ast(true_expr);
 
   for (SSA_stepst::iterator it = SSA_steps.begin(); it != SSA_steps.end(); it++)
-    convert_internal_step(smt_conv, assumpt_lit, assertions, *it);
+    convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
 
   if (!assertions.empty())
-    smt_conv.lcnf(assertions);
+    smt_conv.assert_disjunct(assertions);
 
   return;
 }
 
 void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
-                   literalt &assumpt_lit, bvt &assertions_lits, SSA_stept &step)
+                   const smt_ast *&assumpt_ast,
+                   smt_convt::ast_vec &assertions,
+                   SSA_stept &step)
 {
   static unsigned output_count = 0; // Temporary hack; should become scoped.
   bvt assert_bv;
-  literalt true_lit = const_literal(true);
-  literalt false_lit = const_literal(false);
+  const smt_ast *true_val = smt_conv.convert_ast(true_expr);
+  const smt_ast *false_val = smt_conv.convert_ast(false_expr);
 
   if (step.ignore) {
-    step.cond_literal = true_lit;
-    step.guard_literal = false_lit;
+    step.cond_ast = true_val;
+    step.guard_ast = false_val;
     return;
   }
 
   expr2tc tmp(step.guard);
-  step.guard_literal = smt_conv.convert(tmp);
+  step.guard_ast = smt_conv.convert_ast(tmp);
 
   if (step.is_assume() || step.is_assert()) {
     expr2tc tmp(step.cond);
-    step.cond_literal = smt_conv.convert(tmp);
+    step.cond_ast = smt_conv.convert_ast(tmp);
   } else if (step.is_assignment()) {
     expr2tc tmp2(step.cond);
     smt_conv.set_to(tmp2, true);
@@ -166,10 +168,13 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
   }
 
   if (step.is_assert()) {
-    step.cond_literal = smt_conv.limplies(assumpt_lit, step.cond_literal);
-    assertions_lits.push_back(smt_conv.lnot(step.cond_literal));
+    step.cond_ast = smt_conv.imply_ast(assumpt_ast, step.cond_ast);
+    assertions.push_back(smt_conv.invert_ast(step.cond_ast));
   } else if (step.is_assume()) {
-    assumpt_lit = smt_conv.land(assumpt_lit, step.cond_literal);
+    smt_convt::ast_vec v;
+    v.push_back(assumpt_ast);
+    v.push_back(step.cond_ast);
+    assumpt_ast = smt_conv.make_conjunct(v);
   }
 
   return;
@@ -306,8 +311,8 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
   : symex_target_equationt(_ns),
     conv(_conv)
 {
-  assert_vec_list.push_back(bvt());
-  assumpt_chain.push_back(const_literal(true));
+  assert_vec_list.push_back(smt_convt::ast_vec());
+  assumpt_chain.push_back(conv.convert_ast(true_expr));
 }
 
 void
@@ -375,7 +380,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
 
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
-    smt_conv.lcnf(assert_vec_list.back());
+    smt_conv.assert_disjunct(assert_vec_list.back());
 
   return;
 }
@@ -404,11 +409,11 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // Convert the question (must be a bool).
   assert(is_bool_type(question));
-  literalt q = conv.convert(question);
+  const smt_ast *q = conv.convert_ast(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  conv.l_set_to(assumpt_chain.back(), true);
+  conv.assert_lit(conv.mk_lit(assumpt_chain.back()));
 
   // Now, how to ask the question? Unfortunately the clever solver stuff won't
   // negate the condition, it'll only give us a handle to it that it negates
@@ -417,11 +422,11 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.l_set_to(q, true);
+  conv.assert_lit(conv.mk_lit(q));
   smt_convt::resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.l_set_to(q, false);
+  conv.assert_lit(conv.mk_lit(conv.invert_ast(q)));
   smt_convt::resultt res2 = conv.dec_solve();
   pop_ctx();
 
