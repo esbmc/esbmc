@@ -21,15 +21,6 @@
 
 #include "z3_conv.h"
 
-std::string
-z3_convt::double2string(double d) const
-{
-
-  std::ostringstream format_message;
-  format_message << std::setprecision(12) << d;
-  return format_message.str();
-}
-
 expr2tc
 z3_convt::get_bool(const smt_ast *a)
 {

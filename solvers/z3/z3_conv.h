@@ -126,8 +126,6 @@ private:
   void assert_formula(const z3::expr &ast);
   virtual void assert_lit(const literalt &l);
 
-  std::string double2string(double d) const;
-
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
 
