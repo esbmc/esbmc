@@ -42,15 +42,6 @@ cvc_convt::dec_solve()
 }
 
 tvt
-cvc_convt::l_get(literalt l)
-{
-  tvt result = l_get(lit_to_ast(l));
-  if (l.sign())
-    result = result.invert();
-  return result;
-}
-
-tvt
 cvc_convt::l_get(const smt_ast *a)
 {
   const cvc_smt_ast *ca = cvc_ast_downcast(a);
@@ -109,9 +100,9 @@ cvc_convt::solver_text()
 }
 
 void
-cvc_convt::assert_lit(const literalt &l)
+cvc_convt::assert_ast(const smt_ast *a)
 {
-  const cvc_smt_ast *ca = cvc_ast_downcast(lit_to_ast(l));
+  const cvc_smt_ast *ca = cvc_ast_downcast(a);
   smt.assertFormula(ca->e);
 }
 
@@ -281,18 +272,6 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
               << std::endl;
     abort();
   }
-}
-
-literalt
-cvc_convt::mk_lit(const smt_ast *a)
-{
-  const cvc_smt_ast *cast = cvc_ast_downcast(a);
-  literalt l = new_variable();
-  const cvc_smt_ast *c2 = cvc_ast_downcast(lit_to_ast(l));
-
-  CVC4::Expr e = em.mkExpr(CVC4::Kind::IFF, cast->e, c2->e);
-  smt.assertFormula(e);
-  return l;
 }
 
 smt_ast *

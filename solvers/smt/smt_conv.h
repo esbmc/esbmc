@@ -198,21 +198,18 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  virtual literalt new_variable();
   virtual void assert_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
   const smt_ast *invert_ast(const smt_ast *a);
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);
   virtual uint64_t get_no_variables() const;
 
-  virtual void assert_lit(const literalt &l) = 0;
-  virtual const smt_ast *lit_to_ast(const literalt &l);
+  virtual void assert_ast(const smt_ast *a) = 0;
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs) = 0;
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
-  virtual literalt mk_lit(const smt_ast *s) = 0;
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
   virtual smt_ast *mk_smt_real(const std::string &str) = 0;
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
@@ -377,7 +374,6 @@ public:
 
   virtual const std::string solver_text()=0;
 
-  virtual tvt l_get(literalt a)=0;
   virtual tvt l_get(const smt_ast *a)=0;
 
   virtual expr2tc get_bool(const smt_ast *a) = 0;

@@ -37,9 +37,9 @@ mathsat_convt::~mathsat_convt(void)
 }
 
 void
-mathsat_convt::assert_lit(const literalt &l)
+mathsat_convt::assert_ast(const smt_ast *a)
 {
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(lit_to_ast(l));
+  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_assert_formula(env, mast->t);
 }
 
@@ -127,16 +127,6 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
   mathsat_smt_ast *tmpb = new mathsat_smt_ast(elem_sort, t);
   expr2tc result = get_bv(type2tc(), tmpb);
   free(tmpb);
-
-  return result;
-}
-
-tvt
-mathsat_convt::l_get(literalt l)
-{
-  tvt result = l_get(lit_to_ast(l));
-  if (l.sign())
-    result = result.invert();
 
   return result;
 }
@@ -388,19 +378,6 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
 
   std::cerr << "MathSAT sort conversion fell through" << std::endl;
   abort();
-}
-
-literalt
-mathsat_convt::mk_lit(const smt_ast *a)
-{
-  const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
-  literalt l = new_variable();
-  const mathsat_smt_ast *m2 = mathsat_ast_downcast(lit_to_ast(l));
-
-  msat_term r = msat_make_iff(env, mast->t, m2->t);
-  assert(!MSAT_ERROR_TERM(r) && "Error creating mathsat literal equality");
-  msat_assert_formula(env, r);
-  return l;
 }
 
 smt_ast *

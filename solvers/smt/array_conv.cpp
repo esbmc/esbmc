@@ -152,7 +152,7 @@ array_convt<subclass>::mk_select(const expr2tc &array, const expr2tc &idx,
     impargs[0] = idx_eq;
     impargs[1] = val_eq;
 
-    this->assert_lit(this->mk_lit(this->mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2)));
+    this->assert_ast(this->mk_func_app(bool_sort, SMT_FUNC_IMPLIES, impargs, 2));
   }
 
   return fresh;
@@ -514,7 +514,7 @@ array_convt<subclass>::execute_array_trans(
       args[2] = false_vals[i];
       eq[0] = this->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
       eq[1] = dest_data[i];
-      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2)));
+      this->assert_ast(this->mk_func_app(boolsort, SMT_FUNC_EQ, eq, 2));
     }
   } else {
     // Place a constraint on the updated variable; add equality constraints
@@ -543,7 +543,7 @@ array_convt<subclass>::execute_array_trans(
         const smt_ast *args[2];
         args[0] = updated_value;
         args[1] = it->val;
-        this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        this->assert_ast(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
       }
     }
 
@@ -571,7 +571,7 @@ array_convt<subclass>::execute_array_trans(
       args[2] = source_data[i];
       args[0] = this->mk_func_app(subtype, SMT_FUNC_ITE, args, 3);
       args[1] = dest_data[i];
-      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      this->assert_ast(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
       // The latter part of this could be replaced with more complex logic,
       // that only asserts an equality between selected values, and just stores
       // the result of the ITE for all other values. FIXME: try this.
@@ -623,7 +623,7 @@ array_convt<subclass>::collate_array_values(std::vector<const smt_ast *> &vals,
         const smt_ast *args[2];
         args[0] = *it;
         args[1] = init_val;
-        this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        this->assert_ast(this->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
       }
     }
   }
@@ -658,7 +658,7 @@ array_convt<subclass>::add_initial_ackerman_constraints(
 
       args[0] = idxeq;
       args[1] = valeq;
-      this->assert_lit(this->mk_lit(this->mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2)));
+      this->assert_ast(this->mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2));
     }
   }
 }

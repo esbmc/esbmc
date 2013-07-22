@@ -89,13 +89,14 @@ public:
   virtual literalt land(literalt a, literalt b) = 0;
   virtual literalt lor(literalt a, literalt b) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
+  virtual void assert_lit(const literalt &a) = 0;
+  virtual literalt new_variable() = 0;
 
   // smt_convt apis we fufil
 
   virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
   virtual smt_sort* mk_sort(smt_sort_kind k, ...);
-  virtual literalt mk_lit(const smt_ast *val);
   virtual smt_ast* mk_smt_int(const mp_integer &intval, bool sign);
   virtual smt_ast* mk_smt_real(const std::string &value);
   virtual smt_ast* mk_smt_bvint(const mp_integer &inval, bool sign,
@@ -106,7 +107,7 @@ public:
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
-  virtual const smt_ast *lit_to_ast(const literalt &l);
+  virtual void assert_ast(const smt_ast *a);
 
   // Some gunk
   expr2tc get_bool(const smt_ast *a);

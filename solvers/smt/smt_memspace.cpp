@@ -202,9 +202,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
     constant_struct2tc ptr_val_s(pointer_struct, membs);
     const smt_ast *ptr_val = tuple_create(ptr_val_s);
-    const smt_ast *constraint = tuple_equality(a, ptr_val);
-    literalt l = mk_lit(constraint);
-    assert_lit(l);
+    assert_ast(tuple_equality(a, ptr_val));
 
     type2tc ptr_loc_type = machine_ptr;
 

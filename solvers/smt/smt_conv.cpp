@@ -162,18 +162,6 @@ smt_convt::pop_ctx(void)
   addr_space_data.pop_back();
 }
 
-literalt
-smt_convt::new_variable()
-{
-  literalt l;
-
-  l.set(no_variables, false);
-
-  no_variables = no_variables + 1;
-
-  return l;
-}
-
 void
 smt_convt::assert_disjunct(const ast_vec &v)
 {
@@ -204,7 +192,7 @@ smt_convt::assert_disjunct(const ast_vec &v)
     result = args[0];
   }
 
-  assert_lit(mk_lit(result));
+  assert_ast(result);
 }
 
 const smt_ast *
@@ -254,30 +242,6 @@ smt_convt::imply_ast(const smt_ast *a, const smt_ast *b)
   return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
 }
 
-const smt_ast *
-smt_convt::lit_to_ast(const literalt &l)
-{
-  if (l.var_no() == literalt::const_var_no()) {
-    // Then don't turn this into a literal, turn it into a bool.
-    if (l.sign()) {
-      return mk_smt_bool(true);
-    } else {
-      return mk_smt_bool(false);
-    }
-  }
-
-  std::stringstream ss;
-  ss << "l" << l.var_no();
-  std::string name = ss.str();
-  symbol2tc sym(get_bool_type(), name);
-  if (l.sign()) {
-    not2tc anot(sym);
-    return convert_ast(anot);
-  } else {
-    return convert_ast(sym);
-  }
-}
-
 uint64_t
 smt_convt::get_no_variables() const
 {
@@ -291,7 +255,7 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   const smt_ast *a = convert_ast(expr);
   if (value == false)
     a = invert_ast(a);
-  assert_lit(mk_lit(a));
+  assert_ast(a);
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
@@ -850,9 +814,7 @@ done:
 void
 smt_convt::assert_expr(const expr2tc &e)
 {
-  const smt_ast *a = convert_ast(e);
-  literalt l = mk_lit(a);
-  assert_lit(l);
+  assert_ast(convert_ast(e));
   return;
 }
 

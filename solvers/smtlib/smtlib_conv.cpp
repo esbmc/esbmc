@@ -441,17 +441,12 @@ smtlib_convt::get(const expr2tc &expr)
 }
 
 tvt
-smtlib_convt::l_get(literalt a)
+smtlib_convt::l_get(const smt_ast *a __attribute__((unused)))
 {
-  if (a.is_constant()) {
-    if (a.is_true()) {
-      return tvt(true);
-    } else {
-      assert(a.is_false());
-      return tvt(false);
-    }
-  }
-
+  std::cerr << "l_get in smtlib_convt currently broken" << std::endl;
+  // Specifically, how are we reading these things?
+abort();
+#if 0
   std::stringstream ss;
   ss << "l" << a.var_no();
 
@@ -495,6 +490,7 @@ smtlib_convt::l_get(literalt a)
 
   delete smtlib_output;
   return result;
+#endif
 }
 
 const std::string
@@ -509,13 +505,9 @@ smtlib_convt::solver_text()
 }
 
 void
-smtlib_convt::assert_lit(const literalt &l)
+smtlib_convt::assert_ast(const smt_ast *a)
 {
-  std::stringstream ss;
-  smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  ss << "l" << l.var_no();
-  smt_ast *lit = mk_smt_symbol(ss.str(), sort);
-  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(lit));
+  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(a));
 }
 
 smt_ast *
@@ -567,21 +559,6 @@ smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
   }
 
   return s;
-}
-
-literalt
-smtlib_convt::mk_lit(const smt_ast *s)
-{
-  const smt_ast *args[2];
-  smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  std::stringstream ss;
-  literalt l = new_variable();
-  ss << "l" << l.var_no();
-  args[0] = mk_smt_symbol(ss.str(), sort);;
-  args[1] = s;
-  smt_ast *eq = mk_func_app(sort, SMT_FUNC_EQ, args, 2);
-  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(eq));
-  return l;
 }
 
 smt_ast *

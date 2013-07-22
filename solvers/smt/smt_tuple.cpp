@@ -139,9 +139,9 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       const smt_ast *src = inputargs[i];
 
       if (is_tuple_ast_type(*it))
-        assert_lit(mk_lit(tuple_equality(target, src)));
+        assert_ast(tuple_equality(target, src));
       else
-        assert_lit(mk_lit(tuple_array_equality(target, src)));
+        assert_ast(tuple_array_equality(target, src));
     } else {
       // This is a normal field -- take the value from the inputargs array,
       // compute the members name, and then make an equality.
@@ -150,7 +150,7 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       const smt_ast *args[2];
       args[0] = mk_smt_symbol(symname, sort);
       args[1] = inputargs[i];
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      assert_ast(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
     }
 
     i++;
@@ -349,7 +349,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
   }
 
   // Assert all the equalities we just generated.
-  assert_lit(mk_lit(make_conjunct(eqs)));
+  assert_ast(make_conjunct(eqs));
   return result;
 }
 
@@ -464,7 +464,7 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
       if2tc ite(trueitem->type, cond_exp, trueitem, falseitem);
       expr2tc resitem = tuple_project_sym(result, i);
       equality2tc eq(resitem, ite);
-      assert_lit(mk_lit(convert_ast(eq)));
+      assert_ast(convert_ast(eq));
     }
 
     i++;
@@ -581,7 +581,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
       expr2tc tmpidx = fix_array_idx(field, this_arr_type);
       args[0] = mk_select(array_sym, tmpidx, field_sort);
       args[1] = tuple_project(result, field_sort, i);
-      assert_lit(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+      assert_ast(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
     }
 
     i++;
@@ -657,7 +657,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       // Now assign that ast into the result tuple array.
       symbol2tc ressym(this_arr_type, irep_idt(resname));
       const smt_ast *eq = convert_array_equality(ressym, store);
-      assert_lit(mk_lit(eq));
+      assert_ast(eq);
     }
 
     i++;
@@ -769,7 +769,7 @@ smt_convt::tuple_array_ite_rec(const expr2tc &tv, const expr2tc &fv,
       expr2tc falseval = tuple_project_sym(fv, i);
       if2tc ite(arrtype, cond, trueval, falseval);
       equality2tc eq(resval, ite);
-      assert_lit(mk_lit(convert_ast(eq)));
+      assert_ast(convert_ast(eq));
     }
 
     i++;
@@ -948,7 +948,7 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
     const smt_sort *this_sort = convert_sort(subtype.members[i]);
     args[0] = tuple_project(newsym, this_sort, i);
     args[1] = sub_arr_of;
-    assert_lit(mk_lit(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2)));
+    assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
   }
 
   return newsym;

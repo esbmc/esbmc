@@ -413,7 +413,7 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
 
   // The proposition also needs to be guarded with the in-program assumptions,
   // which are not necessarily going to be part of the state guard.
-  conv.assert_lit(conv.mk_lit(assumpt_chain.back()));
+  conv.assert_ast(assumpt_chain.back());
 
   // Now, how to ask the question? Unfortunately the clever solver stuff won't
   // negate the condition, it'll only give us a handle to it that it negates
@@ -422,11 +422,11 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   // Those assertions are just is-the-prop-true, is-the-prop-false. Valid
   // results are true, false, both.
   push_ctx();
-  conv.assert_lit(conv.mk_lit(q));
+  conv.assert_ast(q);
   smt_convt::resultt res1 = conv.dec_solve();
   pop_ctx();
   push_ctx();
-  conv.assert_lit(conv.mk_lit(conv.invert_ast(q)));
+  conv.assert_ast(conv.invert_ast(q));
   smt_convt::resultt res2 = conv.dec_solve();
   pop_ctx();
 

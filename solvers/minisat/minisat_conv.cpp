@@ -112,8 +112,12 @@ minisat_convt::solver_text()
 }
 
 tvt
-minisat_convt::l_get(literalt l)
+minisat_convt::l_get(const smt_ast *a)
 {
+  assert(a->sort->id == SMT_SORT_BOOL);
+  const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
+  literalt l = ba->bv[0];
+
   if (l == const_literal(true))
     return tvt(tvt::TV_TRUE);
   else if (l == const_literal(false))
@@ -127,14 +131,6 @@ minisat_convt::l_get(literalt l)
     return tvt(tvt::TV_FALSE);
   else
     return tvt(tvt::TV_UNKNOWN);
-}
-
-tvt
-minisat_convt::l_get(const smt_ast *a)
-{
-  assert(a->sort->id == SMT_SORT_BOOL);
-  const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
-  return l_get(ba->bv[0]);
 }
 
 void

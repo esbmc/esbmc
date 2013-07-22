@@ -32,7 +32,6 @@ public:
   // Things definitely to be done by the solver:
   virtual resultt dec_solve();
   virtual const std::string solver_text();
-  virtual tvt l_get(literalt l);
   virtual tvt l_get(const smt_ast *a);
   virtual literalt new_variable();
   virtual void assert_lit(const literalt &l);

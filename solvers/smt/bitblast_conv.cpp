@@ -18,6 +18,16 @@ bitblast_convt<subclass>::~bitblast_convt()
 }
 
 template <class subclass>
+void
+bitblast_convt<subclass>::assert_ast(const smt_ast *a)
+{
+  assert(a->sort->id == SMT_SORT_BOOL);
+  const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
+  assert_lit(ba->bv[0]);
+  return;
+}
+
+template <class subclass>
 smt_ast*
 bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
                             smt_func_kind f, const smt_ast* const* _args,
@@ -310,19 +320,6 @@ bitblast_convt<subclass>::mk_sort(smt_sort_kind k, ...)
 }
 
 template <class subclass>
-literalt
-bitblast_convt<subclass>::mk_lit(const smt_ast *val)
-{
-  const bitblast_smt_ast *a = bitblast_ast_downcast(val);
-  assert(a->sort->id == SMT_SORT_BOOL);
-  assert(a->bv.size() == 1);
-
-  literalt l = this->new_variable();
-  this->set_equal(l, a->bv[0]);
-  return l;
-}
-
-template <class subclass>
 smt_ast*
 bitblast_convt<subclass>::mk_smt_int(const mp_integer &intval __attribute__((unused)), bool sign __attribute__((unused)))
 {
@@ -486,8 +483,7 @@ template <class subclass>
 expr2tc
 bitblast_convt<subclass>::get_bool(const smt_ast *a)
 {
-  const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
-  tvt t = this->l_get(mast->bv[0]);
+  tvt t = this->l_get(a);
   if (t.is_true())
     return true_expr;
   else if (t.is_false())
@@ -507,7 +503,7 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
   uint64_t accuml = 0;
   for (unsigned int i = 0; i < sz; i++) {
     uint64_t mask = 1 << i;
-    tvt t = this->l_get(mast->bv[i]);
+    tvt t = this->l_get(a);
     if (t.is_true()) {
       accuml |= mask;
     } else if (t.is_false()) {
@@ -518,16 +514,6 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
   }
 
   return constant_int2tc(t, BigInt(accuml));
-}
-
-template <class subclass>
-const smt_ast *
-bitblast_convt<subclass>::lit_to_ast(const literalt &l)
-{
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *a = new bitblast_smt_ast(s);
-  a->bv.push_back(l);
-  return a;
 }
 
 // ******************************  Bitblast foo *******************************

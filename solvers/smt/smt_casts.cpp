@@ -418,7 +418,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
         eq = tuple_equality(args[0], args[1]);
       else
         eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      assert_lit(mk_lit(eq));
+      assert_ast(eq);
       i2++;
     }
   } else {
@@ -454,7 +454,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
         eq = tuple_equality(args[0], args[1]);
       else
         eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      assert_lit(mk_lit(eq));
+      assert_ast(eq);
       i2++;
     }
    }

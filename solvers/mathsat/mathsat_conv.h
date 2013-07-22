@@ -37,17 +37,15 @@ public:
   ~mathsat_convt(void);
 
   virtual resultt dec_solve();
-  virtual tvt l_get(literalt l);
   virtual tvt l_get(const smt_ast *a);
   virtual const std::string solver_text();
 
-  virtual void assert_lit(const literalt &l);
+  virtual void assert_ast(const smt_ast *a);
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
-  virtual literalt mk_lit(const smt_ast *s);
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
   virtual smt_ast *mk_smt_real(const std::string &str);
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,

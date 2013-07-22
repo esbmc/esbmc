@@ -423,46 +423,6 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   return;
 }
 
-z3::expr
-z3_convt::z3_literal(literalt l)
-{
-
-  z3::expr literal_l;
-  std::string literal_s;
-
-  if (l == const_literal(false))
-    return ctx.bool_val(false);
-  else if (l == const_literal(true))
-    return ctx.bool_val(true);
-
-  literal_s = "l" + i2string(l.var_no());
-  literal_l = ctx.constant(literal_s.c_str(), ctx.bool_sort());
-
-  if (l.sign()) {
-    return !literal_l;
-  }
-
-  return literal_l;
-}
-
-tvt
-z3_convt::l_get(literalt a)
-{
-
-  if (a.is_true()) {
-    return tvt(true);
-  } else if (a.is_false()) {
-    return tvt(false);
-  }
-
-  tvt result = l_get(lit_to_ast(a));
-
-  if (a.sign())
-    result = result.invert();
-
-  return result;
-}
-
 tvt
 z3_convt::l_get(const smt_ast *a)
 {
@@ -482,11 +442,12 @@ z3_convt::l_get(const smt_ast *a)
 }
 
 void
-z3_convt::assert_lit(const literalt &l)
+z3_convt::assert_ast(const smt_ast *a)
 {
-  z3::expr thelit = z3_literal(l);
-  solver.add(thelit);
-  assumpt.push_back(thelit);
+  const z3_smt_ast *za = z3_smt_downcast(a);
+  z3::expr theval = za->e;
+  solver.add(theval);
+  assumpt.push_back(theval);
 }
 
 void
@@ -500,9 +461,8 @@ z3_convt::assert_formula(const z3::expr &ast)
     return;
   }
 
-  literalt l = new_variable();
-  z3::expr thelit = z3_literal(l);
-  z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, thelit, ast));
+  z3::expr newvar = ctx.fresh_const("", ctx.bool_sort());
+  z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, newvar, ast));
   solver.add(formula);
 
   // jmorse - delete when smtlib printer exists and works
@@ -511,7 +471,7 @@ z3_convt::assert_formula(const z3::expr &ast)
     assumpt.push_back(ast);
   else
 #endif
-    assumpt.push_back(z3_literal(l));
+    assumpt.push_back(newvar);
 
   return;
 }
@@ -825,16 +785,6 @@ z3_convt::mk_union_sort(const type2tc &type)
   z3::sort s;
   convert_type(type, s);
   return new z3_smt_sort(SMT_SORT_UNION, s);
-}
-
-literalt
-z3_convt::mk_lit(const smt_ast *a)
-{
-  const z3_smt_ast *b = static_cast<const z3_smt_ast *>(a);
-  literalt l = new_variable();
-  z3::expr eq = z3_literal(l) == b->e;
-  assert_formula(eq);
-  return l;
 }
 
 #if 0

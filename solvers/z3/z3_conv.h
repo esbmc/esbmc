@@ -75,7 +75,6 @@ private:
                                const smt_ast * const *args,
                                unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
-  virtual literalt mk_lit(const smt_ast *s);
 
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
   virtual smt_ast *mk_smt_real(const std::string &str);
@@ -124,7 +123,7 @@ private:
   // that are not "propositional variables or their negation". So we associate
   // the ast with a literal.
   void assert_formula(const z3::expr &ast);
-  virtual void assert_lit(const literalt &l);
+  virtual void assert_ast(const smt_ast *a);
 
   void debug_label_formula(std::string name, const z3::expr &formula);
   void init_addr_space_array(void);
@@ -138,10 +137,7 @@ private:
     return ss.str();
   }
 
-  virtual tvt l_get(literalt a);
   virtual tvt l_get(const smt_ast *a);
-
-  z3::expr z3_literal(literalt l);
 
   // Some useful types
 public:
