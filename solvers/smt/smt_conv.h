@@ -205,9 +205,7 @@ public:
   virtual const smt_ast *make_conjunct(const ast_vec &v);
   const smt_ast *invert_ast(const smt_ast *a);
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);
-  virtual literalt land(const bvt &bv);
   virtual literalt lor(const bvt &bv);
-  virtual literalt land(literalt a, literalt b);
   virtual literalt lor(literalt a, literalt b);
   virtual literalt lnot(literalt a);
   virtual uint64_t get_no_variables() const;

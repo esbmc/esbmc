@@ -82,8 +82,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_AND:
   {
     result = new bitblast_smt_ast(ressort);
-    smt_convt *us = this;
-    result->bv.push_back(us->land(args[0]->bv[0], args[1]->bv[0]));
+    result->bv.push_back(this->land(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
   case SMT_FUNC_XOR:
@@ -573,9 +572,9 @@ bitblast_convt<subclass>::carry(literalt a, literalt b, literalt c)
 {
   bvt tmp;
   tmp.reserve(3);
-  tmp.push_back(smt_convt::land(a, b));
-  tmp.push_back(smt_convt::land(a, c));
-  tmp.push_back(smt_convt::land(b, c));
+  tmp.push_back(this->land(a, b));
+  tmp.push_back(this->land(a, c));
+  tmp.push_back(this->land(b, c));
   return lor(tmp);
 }
 
@@ -606,7 +605,7 @@ bitblast_convt<subclass>::unsigned_multiplier(const bvt &op0, const bvt &op1, bv
         tmpop.push_back(const_literal(false));
 
       for (unsigned int idx = i; idx < op0.size(); idx++)
-        tmpop.push_back(smt_convt::land(op1[idx-i], op0[i]));
+        tmpop.push_back(this->land(op1[idx-i], op0[i]));
 
       bvt tmpadd;
       literalt dummy;
@@ -672,7 +671,7 @@ bitblast_convt<subclass>::incrementer(const bvt &inp, const literalt &carryin,
   carryout = carryin;
 
   for (unsigned int i = 0; i < inp.size(); i++) {
-    literalt new_carry = smt_convt::land(carryout, inp[i]);
+    literalt new_carry = this->land(carryout, inp[i]);
     oup[i] = this->lxor(inp[i], carryout);
     carryout = new_carry;
   }
@@ -788,13 +787,13 @@ bitblast_convt<subclass>::unsigned_multiplier_no_overflow(const bvt &op0, const 
         tmpop.push_back(const_literal(false));
 
       for (unsigned int idx = sum; idx < res.size(); idx++)
-        tmpop.push_back(smt_convt::land(op1[idx-sum], op0[sum]));
+        tmpop.push_back(this->land(op1[idx-sum], op0[sum]));
 
       bvt copy = res;
       adder_no_overflow(copy, tmpop, res);
 
       for (unsigned int idx = op1.size() - sum; idx < op1.size(); idx++) {
-        literalt tmp = smt_convt::land(op1[idx], op0[sum]);
+        literalt tmp = this->land(op1[idx], op0[sum]);
         tmp.invert();
         this->assert_lit(tmp);
       }
@@ -818,7 +817,8 @@ bitblast_convt<subclass>::adder_no_overflow(const bvt &op0, const bvt &op1, bvt 
     literalt sign_the_same = this->lequal(op0[width-1], tmp_op1[width-1]);
     literalt carry;
     full_adder(op0, tmp_op1, res, const_literal(subtract), carry);
-    literalt stop_overflow = smt_convt::land(sign_the_same, this->lxor(op0[width-1], old_sign));
+    literalt stop_overflow =
+      this->land(sign_the_same, this->lxor(op0[width-1], old_sign));
     stop_overflow.invert();
     this->assert_lit(stop_overflow);
   } else {
@@ -980,7 +980,7 @@ bitblast_convt<subclass>::bvand(const bvt &bv0, const bvt &bv1, bvt &output)
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(smt_convt::land(bv0[i], bv1[i]));
+    output.push_back(this->land(bv0[i], bv1[i]));
 
   return;
 }
@@ -1034,7 +1034,7 @@ bitblast_convt<subclass>::land(const bvt &bv)
   else if (bv.size() == 1)
     return bv[0];
   else if (bv.size() == 2)
-    return smt_convt::land(bv[0], bv[1]);
+    return this->land(bv[0], bv[1]);
 
   unsigned int trues = 0;
   for (unsigned int i = 0; i < bv.size(); i++) {
