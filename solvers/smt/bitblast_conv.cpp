@@ -534,6 +534,45 @@ bitblast_convt<subclass>::lit_to_ast(const literalt &l)
 // ******************************  Bitblast foo *******************************
 
 template <class subclass>
+bool
+bitblast_convt<subclass>::process_clause(const bvt &bv, bvt &dest)
+{
+
+  dest.clear();
+
+  // empty clause! this is UNSAT
+  if (bv.empty()) return false;
+
+  std::set<literalt> s;
+
+  dest.reserve(bv.size());
+
+  for (bvt::const_iterator it = bv.begin();
+       it != bv.end();
+       it++)
+  {
+    literalt l = *it;
+
+    if (l.is_true())
+      return true;  // clause satisfied
+
+    if (l.is_false())
+      continue;
+
+    assert(l.var_no() < this->no_variables);
+
+    // prevent duplicate literals
+    if (s.insert(l).second)
+      dest.push_back(l);
+
+    if (s.find(this->lnot(l)) != s.end())
+      return true;  // clause satisfied
+  }
+
+  return false;
+}
+
+template <class subclass>
 void
 bitblast_convt<subclass>::eliminate_duplicates(const bvt &bv, bvt &dest)
 {

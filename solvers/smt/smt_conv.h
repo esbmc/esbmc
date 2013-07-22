@@ -198,9 +198,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  bool process_clause(const bvt &bv, bvt &dest);
   virtual literalt new_variable();
-  virtual void lcnf(const bvt &bv);
   virtual void assert_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
   const smt_ast *invert_ast(const smt_ast *a);
@@ -387,8 +385,6 @@ public:
 //  virtual literalt lor(const bvt &bv)=0;
 //  virtual literalt lnot(literalt a)=0;
 //  virtual literalt limplies(literalt a, literalt b)=0;
-
-//  virtual void lcnf(const bvt &bv)=0;
 
 //  virtual literalt new_variable()=0;
 //  virtual uint64_t get_no_variables() const=0;

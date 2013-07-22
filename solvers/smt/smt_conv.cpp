@@ -174,60 +174,6 @@ smt_convt::new_variable()
   return l;
 }
 
-bool
-smt_convt::process_clause(const bvt &bv, bvt &dest)
-{
-
-  dest.clear();
-
-  // empty clause! this is UNSAT
-  if (bv.empty()) return false;
-
-  std::set<literalt> s;
-
-  dest.reserve(bv.size());
-
-  for (bvt::const_iterator it = bv.begin();
-       it != bv.end();
-       it++)
-  {
-    literalt l = *it;
-
-    if (l.is_true())
-      return true;  // clause satisfied
-
-    if (l.is_false())
-      continue;
-
-    assert(l.var_no() < no_variables);
-
-    // prevent duplicate literals
-    if (s.insert(l).second)
-      dest.push_back(l);
-
-    if (s.find(lnot(l)) != s.end())
-      return true;  // clause satisfied
-  }
-
-  return false;
-}
-
-void
-smt_convt::lcnf(const bvt &bv)
-{
-
-  bvt new_bv;
-
-  if (process_clause(bv, new_bv))
-    return;
-
-  if (new_bv.size() == 0)
-    return;
-
-  literalt l = lor(new_bv);
-  assert_lit(l);
-}
-
 void
 smt_convt::assert_disjunct(const ast_vec &v)
 {

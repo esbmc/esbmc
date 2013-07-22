@@ -80,6 +80,7 @@ public:
   // other API things can be fudged, such as tuples and arrays.
 
   // Boolean operations we require.
+  virtual void lcnf(const bvt &bv) = 0;
   virtual literalt lnot(literalt a) = 0;
   virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
   virtual literalt lequal(literalt a, literalt b) = 0;
@@ -111,6 +112,7 @@ public:
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
 
   // Bitblasting utilities, mostly from CBMC.
+  bool process_clause(const bvt &bv, bvt &dest);
   bitblast_smt_ast *mk_ast_equality(const smt_ast *a, const smt_ast *b,
                                     const smt_sort *ressort);
   virtual literalt land(const bvt &bv);
