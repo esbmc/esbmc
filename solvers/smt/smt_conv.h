@@ -202,7 +202,6 @@ public:
   virtual const smt_ast *make_conjunct(const ast_vec &v);
   const smt_ast *invert_ast(const smt_ast *a);
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);
-  virtual uint64_t get_no_variables() const;
 
   virtual void assert_ast(const smt_ast *a) = 0;
 

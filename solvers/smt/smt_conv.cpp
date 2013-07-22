@@ -243,12 +243,6 @@ smt_convt::imply_ast(const smt_ast *a, const smt_ast *b)
   return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
 }
 
-uint64_t
-smt_convt::get_no_variables() const
-{
-  return no_variables;
-}
-
 void
 smt_convt::set_to(const expr2tc &expr, bool value)
 {
