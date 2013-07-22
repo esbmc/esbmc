@@ -320,13 +320,6 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   }
 }
 
-literalt
-smt_convt::convert_expr(const expr2tc &expr)
-{
-  const smt_ast *a = convert_ast(expr);
-  return mk_lit(a);
-}
-
 const smt_ast *
 smt_convt::convert_ast(const expr2tc &expr)
 {

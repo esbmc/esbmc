@@ -226,7 +226,6 @@ public:
                               unsigned int low, const smt_sort *s) = 0;
 
   virtual void set_to(const expr2tc &expr, bool value);
-  virtual literalt convert_expr(const expr2tc &expr);
 
   // Things that the SMT converter can flatten to SMT, but that the specific
   // solver being used might have its own support for (in which case it should
