@@ -587,8 +587,6 @@ bitblast_convt<subclass>::process_clause(const bvt &bv, bvt &dest)
     if (l.is_false())
       continue;
 
-    assert(l.var_no() < this->no_variables);
-
     // prevent duplicate literals
     if (s.insert(l).second)
       dest.push_back(l);

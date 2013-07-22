@@ -449,7 +449,6 @@ public:
   const smt_sort *machine_uint_sort;
   bool caching;
   bool int_encoding;
-  uint64_t no_variables;
   const namespacet &ns;
   bool tuple_support;
   bool no_bools_in_arrays;

@@ -18,7 +18,6 @@ minisat_convt::new_variable()
   literalt l;
   Minisat::Var tmp = solver.newVar();
   l.set(tmp, false);
-  no_variables = tmp+1;
   return l;
 }
 

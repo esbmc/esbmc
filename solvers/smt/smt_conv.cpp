@@ -74,8 +74,6 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
-  no_variables = 1;
-
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
   names.push_back(irep_idt("pointer_object"));
