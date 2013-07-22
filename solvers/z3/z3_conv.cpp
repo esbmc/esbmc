@@ -736,13 +736,13 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   va_list ap;
   z3_smt_sort *s = NULL, *dom, *range;
   unsigned long uint;
-  int thebool;
+  bool thebool;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
     thebool = va_arg(ap, int);
-    s = new z3_smt_sort(k, ctx.int_sort(), thebool);
+    s = new z3_smt_sort(k, ctx.int_sort(), 0, thebool);
     break;
   case SMT_SORT_REAL:
     s = new z3_smt_sort(k, ctx.real_sort());
@@ -750,16 +750,13 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    s = new z3_smt_sort(k, ctx.bv_sort(uint), thebool);
+    s = new z3_smt_sort(k, ctx.bv_sort(uint), uint, thebool);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
-    s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s));
-    if (!int_encoding)
-      s->array_dom_width = dom->s.bv_size();
-    else
-      s->array_dom_width = 0;
+    s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), range->data_width,
+                        dom->data_width);
     break;
   case SMT_SORT_BOOL:
     s = new z3_smt_sort(k, ctx.bool_sort());

@@ -392,10 +392,9 @@ metasmt_convt::mk_sort(const smt_sort_kind k, ...)
   {
     metasmt_smt_sort *dom = va_arg(ap, metasmt_smt_sort *); // Consider constness?
     metasmt_smt_sort *range = va_arg(ap, metasmt_smt_sort *);
-    metasmt_smt_sort *s = new metasmt_smt_sort(k);
+    metasmt_smt_sort *s =
+      new metasmt_smt_sort(k, range->data_width, dom->data_width);
     assert(dom->id == SMT_SORT_BV && range->id == SMT_SORT_BV);
-    s->arrdom_width = dom->width;
-    s->arrrange_width = range->width;
     return s;
   }
   case SMT_SORT_BOOL:

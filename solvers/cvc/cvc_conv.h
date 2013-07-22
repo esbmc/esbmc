@@ -10,12 +10,13 @@ class cvc_smt_sort : public smt_sort
 public:
 #define cvc_sort_downcast(x) static_cast<const cvc_smt_sort *>(x)
   cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t) : smt_sort(i), t(_t) { }
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned int w)
+    : smt_sort(i, w), t(_t) { }
+  cvc_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned long w,unsigned long d)
+    : smt_sort(i, w, d), t(_t) { }
   virtual ~cvc_smt_sort() { }
-  virtual unsigned long get_domain_width(void) const {
-    return array_dom_width;
-  }
+
   CVC4::Type t;
-  unsigned int array_dom_width;
 };
 
 class cvc_smt_ast : public smt_ast

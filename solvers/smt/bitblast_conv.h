@@ -8,33 +8,15 @@ class bitblast_smt_sort : public smt_sort {
   public:
 #define bitblast_sort_downcast(x) static_cast<const bitblast_smt_sort*>(x)
 
-  bitblast_smt_sort(smt_sort_kind i)
-    : smt_sort(i), width(0), sign(false), arrdom_width(0), arrrange_width(0)
-  { }
-
+  bitblast_smt_sort(smt_sort_kind i) : smt_sort(i), sign(false) { }
   bitblast_smt_sort(smt_sort_kind i, unsigned int _width, bool _sign)
-    : smt_sort(i), width(_width), sign(_sign), arrdom_width(0),
-      arrrange_width(0)
-  { }
+    : smt_sort(i, _width), sign(_sign) { }
+  bitblast_smt_sort(smt_sort_kind i, unsigned long rangewidth,
+                   unsigned long domwidth)
+    : smt_sort(i, rangewidth, domwidth), sign(false) { }
 
-  bitblast_smt_sort(smt_sort_kind i, unsigned int arrwidth,
-                   unsigned int rangewidth)
-    : smt_sort(i), width(0), sign(false), arrdom_width(arrwidth),
-      arrrange_width(rangewidth)
-  { }
-
-  virtual ~bitblast_smt_sort() { }
-  unsigned int width; // bv width
   bool sign;
-  unsigned int arrdom_width, arrrange_width; // arr sort widths
-
-  virtual unsigned long get_domain_width(void) const {
-    return arrdom_width;
-  }
-
-  virtual unsigned long get_range_width(void) const {
-    return arrrange_width;
-  }
+  virtual ~bitblast_smt_sort() { }
 };
 
 class bitblast_smt_ast : public smt_ast {

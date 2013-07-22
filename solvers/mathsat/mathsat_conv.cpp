@@ -354,18 +354,18 @@ mathsat_convt::mk_sort(const smt_sort_kind k, ...)
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
     thebool = thebool;
-    return new mathsat_smt_sort(k, msat_get_bv_type(env, uint));
+    return new mathsat_smt_sort(k, msat_get_bv_type(env, uint), uint);
   case SMT_SORT_ARRAY:
   {
     dom = va_arg(ap, const mathsat_smt_sort *);
     range = va_arg(ap, const mathsat_smt_sort *);
     mathsat_smt_sort *result =
-      new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t));
+      new mathsat_smt_sort(k, msat_get_array_type(env, dom->t, range->t),
+                           range->data_width, dom->data_width);
     size_t sz = 0;
     int tmp;
     tmp = msat_is_bv_type(env, dom->t, &sz);
     assert(tmp == 1 && "Domain of array must be a bitvector");
-    result->array_dom_width = sz;
     return result;
   }
   case SMT_SORT_BOOL:

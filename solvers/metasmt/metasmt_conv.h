@@ -46,15 +46,13 @@ public:
 #define metasmt_sort_downcast(x) static_cast<const metasmt_smt_sort*>(x)
   // Only three kinds of sorts supported: bools, bv's and arrays. Only
   // additional desireable information is the width.
-  metasmt_smt_sort(smt_sort_kind i, unsigned int _width = 0)
-    : smt_sort(i), width(_width)
-  { }
+
+  metasmt_smt_sort(smt_sort_kind i) : smt_sort(i) { }
+  metasmt_smt_sort(smt_sort_kind i, unsigned long w) : smt_sort(i, w) { }
+  metasmt_smt_sort(smt_sort_kind i, unsigned long d_w, unsigned long dom_w)
+    : smt_sort(i, d_w, dom_w) { }
+
   virtual ~metasmt_smt_sort() { }
-  unsigned int width; // bv width
-  unsigned int arrdom_width, arrrange_width; // arr sort widths
-  virtual unsigned long get_domain_width(void) const {
-    return arrdom_width;
-  }
 
   bool is_unbounded_array(void) {
     if (id != SMT_SORT_ARRAY)

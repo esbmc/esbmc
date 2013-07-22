@@ -109,12 +109,21 @@ class smt_sort {
   // Same story as smt_ast.
 public:
   smt_sort_kind id;
-  smt_sort(smt_sort_kind i) : id(i) { }
+  unsigned long data_width; // BV width for BVs, range width for arrays
+  unsigned long domain_width; // Domain width for arrays.
+
+  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0) { }
+  smt_sort(smt_sort_kind i, unsigned long width)
+    : id(i), data_width(width), domain_width(0) { }
+  smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
+    : id(i), data_width(rwidth), domain_width(domwidth) { }
+
   virtual ~smt_sort() { }
-  virtual unsigned long get_domain_width(void) const = 0;
-  virtual unsigned long get_range_width(void) const
-  {
-    abort();
+  virtual unsigned long get_domain_width(void) const {
+    return domain_width;
+  }
+  virtual unsigned long get_range_width(void) const {
+    return data_width;
   }
 };
 

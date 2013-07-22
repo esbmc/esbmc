@@ -300,12 +300,12 @@ bitblast_convt<subclass>::mk_sort(smt_sort_kind k, ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    s = new bitblast_smt_sort(k, uint, (bool)thebool);
+    s = new bitblast_smt_sort(k, uint, thebool);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, bitblast_smt_sort *); // Consider constness?
     range = va_arg(ap, bitblast_smt_sort *);
-    s = new bitblast_smt_sort(k, dom->width, range->width);
+    s = new bitblast_smt_sort(k, range->data_width, dom->data_width);
     break;
   case SMT_SORT_BOOL:
     s = new bitblast_smt_sort(k);
@@ -388,7 +388,7 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, const smt_sort 
   case SMT_SORT_BV:
   {
     // Bunch of fresh variables
-    for (unsigned int i = 0; i < s->width; i++)
+    for (unsigned int i = 0; i < s->data_width; i++)
       a->bv.push_back(this->new_variable());
     break;
   }
