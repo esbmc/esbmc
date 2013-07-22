@@ -86,6 +86,8 @@ private:
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
+  virtual const smt_ast *make_disjunct(const ast_vec &v);
+  virtual const smt_ast *make_conjunct(const ast_vec &v);
 
 #if 0
   virtual smt_ast *tuple_create(const expr2tc &structdef);

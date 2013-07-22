@@ -1432,3 +1432,33 @@ z3_convt::debug_label_formula(std::string name, const z3::expr &formula)
   assert_formula(eq);
   return;
 }
+
+const smt_ast *
+z3_convt::make_disjunct(const ast_vec &v)
+{
+  // Make a gigantic 'or'.
+  Z3_ast arr[v.size()];
+
+  size_t i = 0;
+  for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
+    arr[i] = z3_smt_downcast(*it)->e;
+
+  z3::expr e = z3::to_expr(ctx, Z3_mk_or(z3_ctx, v.size(), arr));
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(e, s);
+}
+
+const smt_ast *
+z3_convt::make_conjunct(const ast_vec &v)
+{
+  // Make a gigantic 'and'.
+  Z3_ast arr[v.size()];
+
+  size_t i = 0;
+  for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++)
+    arr[i] = z3_smt_downcast(*it)->e;
+
+  z3::expr e = z3::to_expr(ctx, Z3_mk_and(z3_ctx, v.size(), arr));
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new z3_smt_ast(e, s);
+}
