@@ -292,10 +292,10 @@ bitblast_convt<subclass>::mk_sort(smt_sort_kind k, ...)
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
-    std::cerr << "Can't make Int sorts in Minisat" << std::endl;
+    std::cerr << "Can't make Int sorts in bitblaster" << std::endl;
     abort();
   case SMT_SORT_REAL:
-    std::cerr << "Can't make Real sorts in Minisat" << std::endl;
+    std::cerr << "Can't make Real sorts in bitblaster" << std::endl;
     abort();
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
@@ -311,7 +311,7 @@ bitblast_convt<subclass>::mk_sort(smt_sort_kind k, ...)
     s = new bitblast_smt_sort(k);
     break;
   default:
-    std::cerr << "Unimplemented SMT sort " << k << " in Minisat conversion"
+    std::cerr << "Unimplemented SMT sort " << k << " in bitblaster conversion"
               << std::endl;
     abort();
   }
