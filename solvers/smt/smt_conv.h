@@ -376,16 +376,6 @@ public:
   virtual resultt dec_solve() = 0;
   virtual expr2tc get(const expr2tc &expr);
 
-//  virtual literalt land(literalt a, literalt b)=0;
-//  virtual literalt lor(literalt a, literalt b)=0;
-//  virtual literalt land(const bvt &bv)=0;
-//  virtual literalt lor(const bvt &bv)=0;
-//  virtual literalt lnot(literalt a)=0;
-//  virtual literalt limplies(literalt a, literalt b)=0;
-
-//  virtual literalt new_variable()=0;
-//  virtual uint64_t get_no_variables() const=0;
-
   virtual const std::string solver_text()=0;
 
   virtual tvt l_get(literalt a)=0;
