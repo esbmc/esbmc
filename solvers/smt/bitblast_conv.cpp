@@ -525,6 +525,40 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
   return constant_int2tc(t, BigInt(accuml));
 }
 
+template <class subclass>
+const smt_ast *
+bitblast_convt<subclass>::make_disjunct(const smt_convt::ast_vec &v)
+{
+  bvt bv;
+  bv.reserve(v.size());
+  for (smt_convt::ast_vec::const_iterator it = v.begin(); it != v.end(); it++)
+    bv.push_back(bitblast_ast_downcast(*it)->bv[0]);
+
+  literalt l = lor(bv);
+
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
+  ba->bv.push_back(l);
+  return ba;
+}
+
+template <class subclass>
+const smt_ast *
+bitblast_convt<subclass>::make_conjunct(const smt_convt::ast_vec &v)
+{
+  bvt bv;
+  bv.reserve(v.size());
+  for (smt_convt::ast_vec::const_iterator it = v.begin(); it != v.end(); it++)
+    bv.push_back(bitblast_ast_downcast(*it)->bv[0]);
+
+  literalt l = land(bv);
+
+  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
+  ba->bv.push_back(l);
+  return ba;
+}
+
 // ******************************  Bitblast foo *******************************
 
 template <class subclass>
