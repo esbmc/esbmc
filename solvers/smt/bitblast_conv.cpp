@@ -54,8 +54,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   }
   case SMT_FUNC_OR:
   {
-    smt_convt *us = this;
-    literalt res = us->lor(args[0]->bv[0], args[1]->bv[0]);
+    literalt res = this->lor(args[0]->bv[0], args[1]->bv[0]);
     result = new bitblast_smt_ast(ressort);
     result->bv.push_back(res);
     break;
@@ -948,7 +947,7 @@ bitblast_convt<subclass>::lt_or_le(bool or_equal, const bvt &bv0, const bvt &bv1
     result = this->lnot(carry);
 
   if (or_equal)
-    result = smt_convt::lor(result, equal(bv0, bv1));
+    result = this->lor(result, equal(bv0, bv1));
 
   return result;
 }
@@ -1033,7 +1032,7 @@ bitblast_convt<subclass>::bvor(const bvt &bv0, const bvt &bv1, bvt &output)
   output.reserve(bv0.size());
 
   for (unsigned int i = 0; i < bv0.size(); i++)
-    output.push_back(smt_convt::lor(bv0[i], bv1[i]));
+    output.push_back(this->lor(bv0[i], bv1[i]));
 
   return;
 }
@@ -1118,7 +1117,7 @@ bitblast_convt<subclass>::lor(const bvt &bv)
 {
   if (bv.size() == 0) return const_literal(false);
   else if (bv.size() == 1) return bv[0];
-  else if (bv.size() == 2) return smt_convt::lor(bv[0], bv[1]);
+  else if (bv.size() == 2) return this->lor(bv[0], bv[1]);
 
   for (unsigned int i = 0; i < bv.size(); i++)
     if (bv[i] == const_literal(true))

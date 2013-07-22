@@ -254,51 +254,6 @@ smt_convt::imply_ast(const smt_ast *a, const smt_ast *b)
   return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
 }
 
-literalt
-smt_convt::lor(const bvt &bv)
-{
-  const smt_ast *args[bv.size()];
-  unsigned int i = 0;
-
-  for (bvt::const_iterator it = bv.begin(); it != bv.end(); it++, i++) {
-    args[i] = lit_to_ast(*it);
-  }
-
-  // Chain these.
-  if (i > 1) {
-    unsigned int j;
-    const smt_ast *argstwo[2];
-    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-    argstwo[0] = args[0];
-    for (j = 1; j < i; j++) {
-      argstwo[1] = args[j];
-      argstwo[0] = mk_func_app(sort, SMT_FUNC_OR, argstwo, 2);
-    }
-    literalt tmp = mk_lit(argstwo[0]);
-    return tmp;
-  } else {
-    literalt tmp = mk_lit(args[0]);
-    return tmp;
-  }
-}
-
-literalt
-smt_convt::lor(literalt a, literalt b)
-{
-  if (a == const_literal(false)) return b;
-  if (b == const_literal(false)) return a;
-  if (a == const_literal(true)) return const_literal(true);
-  if (b == const_literal(true)) return const_literal(true);
-  if (a == b) return a;
-
-  const smt_ast *args[2];
-  args[0] = lit_to_ast(a);
-  args[1] = lit_to_ast(b);
-  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *c = mk_func_app(sort, SMT_FUNC_OR, args, 2);
-  return mk_lit(c);
-}
-
 const smt_ast *
 smt_convt::lit_to_ast(const literalt &l)
 {

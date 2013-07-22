@@ -87,6 +87,7 @@ public:
   virtual literalt limplies(literalt a, literalt b) = 0;
   virtual literalt lxor(literalt a, literalt b) = 0;
   virtual literalt land(literalt a, literalt b) = 0;
+  virtual literalt lor(literalt a, literalt b) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
 
   // smt_convt apis we fufil
