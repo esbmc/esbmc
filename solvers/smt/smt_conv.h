@@ -205,7 +205,6 @@ public:
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);
   virtual literalt lor(const bvt &bv);
   virtual literalt lor(literalt a, literalt b);
-  virtual literalt lnot(literalt a);
   virtual uint64_t get_no_variables() const;
 
   virtual void assert_lit(const literalt &l) = 0;
