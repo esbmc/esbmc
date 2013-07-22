@@ -112,11 +112,8 @@ minisat_convt::solver_text()
 }
 
 tvt
-minisat_convt::l_get(const smt_ast *a)
+minisat_convt::l_get(const literalt &l)
 {
-  assert(a->sort->id == SMT_SORT_BOOL);
-  const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
-  literalt l = ba->bv[0];
 
   if (l == const_literal(true))
     return tvt(tvt::TV_TRUE);

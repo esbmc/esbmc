@@ -492,6 +492,15 @@ bitblast_convt<subclass>::get_bool(const smt_ast *a)
     return expr2tc();
 }
 
+
+template <class subclass>
+tvt
+bitblast_convt<subclass>::l_get(const smt_ast *a)
+{
+  const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
+  return this->l_get(mast->bv[0]);
+}
+
 template <class subclass>
 expr2tc
 bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
@@ -503,7 +512,7 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
   uint64_t accuml = 0;
   for (unsigned int i = 0; i < sz; i++) {
     uint64_t mask = 1 << i;
-    tvt t = this->l_get(a);
+    tvt t = this->l_get(mast->bv[i]);
     if (t.is_true()) {
       accuml |= mask;
     } else if (t.is_false()) {

@@ -90,6 +90,7 @@ public:
   virtual literalt lor(literalt a, literalt b) = 0;
   virtual void set_equal(literalt a, literalt b) = 0;
   virtual void assert_lit(const literalt &a) = 0;
+  virtual tvt l_get(const literalt &a) = 0;
   virtual literalt new_variable() = 0;
 
   // smt_convt apis we fufil
@@ -107,6 +108,7 @@ public:
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
                               unsigned int low, const smt_sort *s);
+  virtual tvt l_get(const smt_ast *a);
   virtual void assert_ast(const smt_ast *a);
 
   // Some gunk
