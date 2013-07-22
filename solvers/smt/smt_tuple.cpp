@@ -365,8 +365,8 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
-  std::vector<literalt> lits;
-  lits.reserve(data.members.size());
+  ast_vec eqs;
+  eqs.reserve(data.members.size());
 
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
@@ -377,17 +377,17 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       const smt_ast *side1 = tuple_project(a, sort, i);
       const smt_ast *side2 = tuple_project(b, sort, i);
 
-      literalt l;
+      const smt_ast *r;
       if (is_tuple_ast_type(*it))
-        l = mk_lit(tuple_equality(side1, side2));
+        r = tuple_equality(side1, side2);
       else
-        l = mk_lit(tuple_array_equality(side1, side2));
+        r = tuple_array_equality(side1, side2);
 
-      lits.push_back(l);
+      eqs.push_back(r);
     } else if (is_array_type(*it)) {
       expr2tc side1 = tuple_project_sym(a, i);
       expr2tc side2 = tuple_project_sym(b, i);
-      lits.push_back(mk_lit(convert_array_equality(side1, side2)));
+      eqs.push_back(convert_array_equality(side1, side2));
     } else {
       // This is a normal piece of data, project it to get a normal smt symbol
       // and encode an equality between the two values.
@@ -396,16 +396,14 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
       args[0] = tuple_project(a, sort, i);
       args[1] = tuple_project(b, sort, i);
       const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      literalt l = mk_lit(eq);
-      lits.push_back(l);
+      eqs.push_back(eq);
     }
 
     i++;
   }
 
   // Create an ast representing the fact that all the members are equal.
-  literalt l = land(lits);
-  return lit_to_ast(l);
+  return make_conjunct(eqs);
 }
 
 const smt_ast *
@@ -687,7 +685,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
                                     const type2tc &subtype)
 {
   // Same as tuple equality rec, but with arrays instead of their normal types.
-  bvt eqs;
+  ast_vec eqs;
   const struct_union_data &struct_type = get_type_def(subtype);
 
   unsigned int i = 0;
@@ -699,8 +697,7 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
       const tuple_smt_ast *new1 = new tuple_smt_ast(tmp, name1);
       const tuple_smt_ast *new2 = new tuple_smt_ast(tmp, name2);
-      eqs.push_back(mk_lit(tuple_array_equality_rec(new1, new2, arr_width,
-                                                    *it)));
+      eqs.push_back(tuple_array_equality_rec(new1, new2, arr_width, *it));
     } else {
       // Normal equality between members (which are in fact arrays).
       std::string name1 = a->name + struct_type.member_names[i].as_string();
@@ -709,13 +706,13 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       symbol2tc arr1(arrtype, irep_idt(name1));
       symbol2tc arr2(arrtype, irep_idt(name2));
       const smt_ast *eq = convert_array_equality(arr1, arr2);
-      eqs.push_back(mk_lit(eq));
+      eqs.push_back(eq);
     }
 
     i++;
   }
 
-  return lit_to_ast(land(eqs));
+  return make_conjunct(eqs);
 }
 
 const smt_ast *
