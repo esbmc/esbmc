@@ -286,7 +286,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
   // ever, we do this by creating a new tuple. The non-ith values are just
   // assigned into the new tuple, and the ith member is replaced with v.
   const smt_ast *args[2];
-  bvt eqs;
+  ast_vec eqs;
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   const smt_ast *v = convert_ast(ve);
@@ -310,16 +310,16 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 
       if (is_tuple_ast_type(*it)) {
         // If it's of tuple type though, we need to generate a tuple equality.
-        eqs.push_back(mk_lit(tuple_equality(thefield, v)));
+        eqs.push_back(tuple_equality(thefield, v));
       } else if (is_tuple_array_ast_type(*it)) {
-        eqs.push_back(mk_lit(tuple_array_equality(thefield, v)));
+        eqs.push_back(tuple_array_equality(thefield, v));
       } else if (is_array_type(*it)) {
         expr2tc update_val_expr = tuple_project_sym(result, j);
-        eqs.push_back(mk_lit(convert_array_equality(update_val_expr, ve)));
+        eqs.push_back(convert_array_equality(update_val_expr, ve));
       } else {
         args[0] = thefield;
         args[1] = v;
-        eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        eqs.push_back(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
       }
     } else {
       // This is not an updated field; extract the member out of the input
@@ -332,16 +332,16 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
         const smt_sort *tmp = convert_sort(*it);
         const smt_ast *field1 = tuple_project(ta, tmp, j);
         const smt_ast *field2 = tuple_project(result, tmp, j);
-        eqs.push_back(mk_lit(tuple_equality(field1, field2)));
+        eqs.push_back(tuple_equality(field1, field2));
       } else if (is_array_type(*it)) {
         expr2tc side1 = tuple_project_sym(result, j);
         expr2tc side2 = tuple_project_sym(ta, j);
-        eqs.push_back(mk_lit(convert_array_equality(side1, side2)));
+        eqs.push_back(convert_array_equality(side1, side2));
       } else {
         const smt_sort *tmp = convert_sort(*it);
         args[0] = tuple_project(ta, tmp, j);
         args[1] = tuple_project(result, tmp, j);
-        eqs.push_back(mk_lit(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2)));
+        eqs.push_back(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
       }
     }
 
@@ -349,7 +349,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
   }
 
   // Assert all the equalities we just generated.
-  assert_lit(land(eqs));
+  assert_lit(mk_lit(make_conjunct(eqs)));
   return result;
 }
 
