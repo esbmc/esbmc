@@ -198,7 +198,7 @@ public:
   virtual void push_ctx(void);
   virtual void pop_ctx(void);
 
-  virtual void assert_disjunct(const ast_vec &v);
+  virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
   const smt_ast *invert_ast(const smt_ast *a);
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);

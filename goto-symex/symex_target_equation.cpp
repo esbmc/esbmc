@@ -116,7 +116,7 @@ void symex_target_equationt::convert(smt_convt &smt_conv)
     convert_internal_step(smt_conv, assumpt_ast, assertions, *it);
 
   if (!assertions.empty())
-    smt_conv.assert_disjunct(assertions);
+    smt_conv.assert_ast(smt_conv.make_disjunct(assertions));
 
   return;
 }
@@ -380,7 +380,7 @@ runtime_encoded_equationt::convert(smt_convt &smt_conv)
 
   // Finally, we also want to assert the set of assertions.
   if(!assert_vec_list.back().empty())
-    smt_conv.assert_disjunct(assert_vec_list.back());
+    smt_conv.assert_ast(smt_conv.make_disjunct(assert_vec_list.back()));
 
   return;
 }

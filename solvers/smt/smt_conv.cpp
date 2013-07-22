@@ -162,15 +162,16 @@ smt_convt::pop_ctx(void)
   addr_space_data.pop_back();
 }
 
-void
-smt_convt::assert_disjunct(const ast_vec &v)
+const smt_ast *
+smt_convt::make_disjunct(const ast_vec &v)
 {
   const smt_ast *args[v.size()];
   const smt_ast *result = NULL;
   unsigned int i = 0;
 
+  // This is always true.
   if (v.size() == 0)
-    return;
+    return mk_smt_bool(true);
 
   // Slightly funky due to being morphed from lor:
   for (ast_vec::const_iterator it = v.begin(); it != v.end(); it++, i++) {
@@ -192,7 +193,7 @@ smt_convt::assert_disjunct(const ast_vec &v)
     result = args[0];
   }
 
-  assert_ast(result);
+  return result;
 }
 
 const smt_ast *
