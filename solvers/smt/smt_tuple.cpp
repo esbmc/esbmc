@@ -647,7 +647,8 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
       std::string valname = tv->name + struct_type.member_names[i].as_string();
       std::string resname = result->name +
                             struct_type.member_names[i].as_string();
-      type2tc this_arr_type(new array_type2t(*it, arr_width, false));
+      type2tc this_arr_type(new array_type2t(*it, arr_width,
+                                             is_nil_expr(arr_width)));
       // Take the source array variable and update it into an ast.
       symbol2tc arrsym(this_arr_type, arrname);
       expr2tc tmp_idx = fix_array_idx(idx, this_arr_type);
