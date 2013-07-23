@@ -119,10 +119,10 @@ public:
     : id(i), data_width(rwidth), domain_width(domwidth) { }
 
   virtual ~smt_sort() { }
-  virtual unsigned long get_domain_width(void) const {
+  unsigned long get_domain_width(void) const {
     return domain_width;
   }
-  virtual unsigned long get_range_width(void) const {
+  unsigned long get_range_width(void) const {
     return data_width;
   }
 };
