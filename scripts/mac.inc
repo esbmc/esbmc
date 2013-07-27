@@ -1,7 +1,7 @@
 CXXFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC -stdlib=libc++
 GCCFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
 OPTS ?= -O3
-PLATLIBS= -lgmp -ldl -lgcc
+PLATLIBS= -lgmp -ldl
 
 # Solvers
 ifdef USE_SOLVER_Z3
