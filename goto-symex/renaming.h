@@ -24,7 +24,7 @@ namespace renaming {
   {
   public:
     virtual void get_original_name(expr2tc &expr) const = 0;
-    virtual void rename(expr2tc &expr) const = 0;
+    virtual void rename(expr2tc &expr) = 0;
     virtual void remove(const expr2tc &symbol)=0;
 
     virtual void get_ident_name(expr2tc &symbol) const=0;
@@ -93,7 +93,7 @@ namespace renaming {
     current_namest current_names;
     unsigned int thread_id;
 
-    virtual void rename(expr2tc &expr) const;
+    virtual void rename(expr2tc &expr);
     virtual void get_ident_name(expr2tc &symbol) const;
     virtual void remove(const expr2tc &symbol)
     {
@@ -213,7 +213,7 @@ namespace renaming {
                                  const expr2tc &constant_value,
                                  const expr2tc &assigned_value);
 
-    virtual void rename(expr2tc &expr) const;
+    virtual void rename(expr2tc &expr);
     virtual void rename(expr2tc &expr, unsigned count)=0;
 
     virtual void get_ident_name(expr2tc &symbol) const;
