@@ -73,7 +73,7 @@ namespace renaming {
 
       irep_idt base_name;
 
-      friend class renaming::level1t::name_rec_hash;
+      friend struct renaming::level1t::name_rec_hash;
     };
 
     struct name_rec_hash
