@@ -107,6 +107,9 @@ int	elflvl;
 int	elslvl;
 usch *stringbuf = sbf;
 
+static usch    sbf[SBSIZE];
+/* C command */
+
 /*
  * Macro replacement list syntax:
  * - For object-type macros, replacement strings are stored as-is.
@@ -175,7 +178,7 @@ record_include(const char *fname)
        if ((w = calloc(sizeof(struct incs), 1)) == NULL)
                error("couldn't apply -I %s", optarg);
        w->dir = strdup(fname);
-       w2 = incdir[INCINC];
+       w2 = incdir[SYSINC];
 
        if (w2 != NULL) {
                while (w2->next)
@@ -559,6 +562,12 @@ fsrch(const usch *fn, int idx, struct incs *w)
 
 			savstr(w->dir); savch('/');
 			savstr(fn); savch(0);
+
+                         /* ESBMC: Hook some headers that would pull in system
+                          * environment info that we don't want */
+                         if (handle_hooked_header(nm))
+                                 return;
+
 			if (pushfile2(nm, fn, i, w->next) == 0)
 				return 1;
 			stringbuf = nm;
@@ -645,6 +654,7 @@ include(void)
 			prem();
 		if (c != '\n')
 			goto bad;
+
 		if (pushfile2(nm, safefn, 0, NULL) == 0)
 			goto okret;
 		/* XXX may lose stringbuf space */
@@ -2290,4 +2300,27 @@ xwrite(int fd, const void *buf, unsigned int len)
 			exit(2);
 		error("write error");
 	}
+}
+
+void
+cpp_clear(void)
+{
+
+  /* No attempt at memory managmenet */
+  stringbuf = sbf;
+  trulvl = flslvl = elflvl = elslvl = 0;
+  filloc = linloc = pragloc = NULL;
+  incdir[0] = NULL;
+  incdir[1] = NULL;
+  ofd = 0;
+  memset(outbuf, 0, sizeof(outbuf));
+  obufp = istty = Cflag = Mflag = dMflag = 0;
+  Mfile = NULL;
+  initar = NULL;
+  memset(sbf, 0, sizeof(sbf));
+  tflag = 0;
+  sympole = NULL;
+  numsyms = 0;
+
+  return;
 }
