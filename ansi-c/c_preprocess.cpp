@@ -139,8 +139,6 @@ static const char *cpp_normal_defs[] = {
 "_POSIX_C_SOURCE=200112L",
 #endif
 "__GNUC__",
-"__restrict__=/**/",
-"__restrict=/**/",
 "__VERIFIER_ASSUME=__ESBMC_assume",
 "__VERIFIER_assume=__ESBMC_assume",
 "__VERIFIER_atomic_begin=__ESBMC_atomic_begin",
@@ -160,11 +158,20 @@ static const char *cpp_linux_defs[] = {
 "__unix",
 "__unix__",
 "__null=0",
+"__restrict__=/**/",
+"__restrict=/**/",
 NULL
+};
+
+static const char *cpp_mac_defs[] = {
+"__APPLE__",
+NULL,
 };
 
 static const char *cpp_windows_defs[] = {
 "_WIN32",
+"__restrict__=/**/",
+"__restrict=/**/",
 NULL
 };
 
@@ -260,7 +267,15 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
-  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs, is_cpp));
+
+  const char **defs;
+#ifdef ONAMAC
+  defs = cpp_mac_defs;
+#else
+  defs = cpp_linux_defs;
+#endif
+
+  exit(configure_and_run_cpp(out_file_buf, path, defs, is_cpp));
 }
 
 #else /* __WIN32__ */
