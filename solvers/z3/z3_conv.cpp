@@ -255,7 +255,7 @@ z3_convt::init_addr_space_array(void)
   assert_formula(eq);
 
   tmp = ctx.constant("__ESBMC_ptr_obj_end_1", ctx.esbmc_int_sort());
-  num = ctx.esbmc_int_val((uint64_t)0xFFFFFFFFFFFFFFFFULL);
+  num = ctx.esbmc_int_val("18446744073709551615");
   eq = tmp == num;
   assert_formula(eq);
 
@@ -1593,7 +1593,7 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
   } else if (is_member2t(obj.ptr_obj)) {
     const member2t &memb = to_member2t(obj.ptr_obj);
 
-    int64_t offs;
+    long int offs;
     if (is_struct_type(memb.source_value)) {
       const struct_type2t &type = to_struct_type(memb.source_value->type);
       offs = member_offset(type, memb.member).to_long();
