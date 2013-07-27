@@ -10,8 +10,8 @@ extern unsigned int stdarg_buf_size;
 extern char stdbool_buf[];
 extern unsigned int stdbool_buf_size;
 
-extern char pthreads_buf[];
-extern unsigned int pthreads_buf_size;
+extern char pthread_buf[];
+extern unsigned int pthread_buf_size;
 
 extern char pthreadtypes_buf[];
 extern unsigned int pthreadtypes_buf_size;

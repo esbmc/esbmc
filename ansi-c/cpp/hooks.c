@@ -19,7 +19,7 @@ struct hooked_header headers[] = {
 /* Fairly self explanatory */
 { "bits/wordsize.h",	NULL,				NULL},
 /* Defines __WORDSIZE, which we define ourselves */
-{ "pthread.h",		pthreads_buf,	&pthreads_buf_size},
+{ "pthread.h",		pthread_buf,	&pthread_buf_size},
 /* Pthreads header */
 { "digitalfilter.h",    digitalfilter_buf, &digitalfilter_buf_size},
 /* digital filter header */
