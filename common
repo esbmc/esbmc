@@ -67,7 +67,7 @@ HOSTOBJ=
 endif
 
 $(MAINOBJ): $(OBJS) | $(HOSTOBJ)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
 ifndef LINUX
