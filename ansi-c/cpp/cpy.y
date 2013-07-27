@@ -1,4 +1,4 @@
-/*	$Id: cpy.y,v 1.15 2007/10/18 20:41:41 ragge Exp $	*/
+/*	$Id: cpy.y,v 1.20 2012/10/02 09:34:27 plunky Exp $	*/
 
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
@@ -62,11 +62,11 @@
  */
 
 %{
+#include "config.h"
 
 #include "cpp.h"
 
-void yyerror(char *);
-int cpplex(void);
+void yyerror(const char *);
 int setd(int l, int r);
 
 #define	EVALUNARY(tok, l, r) l.nd_val = tok r.nd_val; l.op = r.op
@@ -83,11 +83,11 @@ int setd(int l, int r);
 
 %term stop
 %term EQ NE LE GE LS RS
-%term ANDAND OROR IDENT NUMBER UNUMBER
+%term ANDAND OROR IDENT NUMBER UNUMBER DEFINED
 /*
  * The following terminals are not used in the yacc code.
  */
-%term STRING FPOINT WSPACE VA_ARGS CONCAT MKSTR ELLIPS
+%term STRING WSPACE CMNT
 
 %left ','
 %right '?' ':'
@@ -192,12 +192,16 @@ term:
 		{ EVALUNARY(~, $$, $2); }
 	| '(' e ')'
 		{$$ = $2;}
+	| DEFINED '(' NUMBER ')'
+		{$$= $3;}
+	| DEFINED NUMBER
+		{$$ = $2;}
 	| NUMBER
 		{$$ = $1;}
 %%
 
 void
-yyerror(char *err)
+yyerror(const char *err)
 {
 	error(err);
 }

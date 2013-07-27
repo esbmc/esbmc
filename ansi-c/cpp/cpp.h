@@ -1,7 +1,7 @@
-/*	$Id: cpp.h,v 1.32 2008/01/06 17:18:55 ragge Exp $	*/
+/*	$Id: cpp.h,v 1.67 2013/02/26 19:27:38 plunky Exp $	*/
 
 /*
- * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
+ * Copyright (c) 2004,2010 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,8 +12,6 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote products
- *    derived from this software without specific prior written permission
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
  * IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
@@ -27,26 +25,22 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <stdio.h> /* for obuf */
-
-#include "config.h"
-
-/* protection against recursion in #include */
-#define MAX_INCLEVEL    100
+#include <stdio.h>	/* for debug/printf */
 
 typedef unsigned char usch;
-extern char *cpptext;
+extern usch yytext[];
 extern usch *stringbuf;
 
 extern	int	trulvl;
 extern	int	flslvl;
 extern	int	elflvl;
 extern	int	elslvl;
-extern	int	tflag, Cflag;
-extern	int	Mflag, dMflag;
-extern	usch	*Mfile;
+extern	int	dflag;
+extern	int	tflag, Aflag, Cflag, Pflag;
+extern	int	Mflag, dMflag, MPflag;
+extern	usch	*Mfile, *MPfile;
 extern	int	ofd;
-extern  int	inclevel;
+extern	int	defining;
 
 /* args for lookup() */
 #define FIND    0
@@ -54,33 +48,84 @@ extern  int	inclevel;
 
 /* buffer used internally */
 #ifndef CPPBUF
-#ifdef __pdp11__
+#if defined(mach_pdp11)
 #define CPPBUF  BUFSIZ
+#define	BUF_STACK
+#elif defined(os_win32)
+/* winxp seems to fail > 26608 bytes */
+#define CPPBUF	16384
 #else
-#define CPPBUF	65536
+#define CPPBUF	(65536*2)
 #endif
 #endif
 
-#define	NAMEMAX	64 /* max len of identifier */
+#define	MAXARGS	128	/* Max # of args to a macro. Should be enough */
+
+#define	NAMEMAX	CPPBUF	/* currently pushbackbuffer */
+#define	BBUFSZ	(NAMEMAX+CPPBUF+1)
+
+#define GCCARG	0xfd	/* has gcc varargs that may be replaced with 0 */
+#define VARG	0xfe	/* has varargs */
+#define OBJCT	0xff
+#define WARN	1	/* SOH, not legal char */
+#define CONC	2	/* STX, not legal char */
+#define SNUFF	3	/* ETX, not legal char */
+#define	EBLOCK	4	/* EOT, not legal char */
+#define	PHOLD	5	/* ENQ, not legal char */
+
+/* Used in macro expansion */
+#define RECMAX	10000			/* max # of recursive macros */
+extern struct symtab *norep[RECMAX];
+extern int norepptr;
+extern unsigned short bptr[RECMAX];
+extern int bidx;
+#define	MKB(l,h)	(l+((h)<<8))
+
+/* quick checks for some characters */
+#define C_SPEC	0001		/* for fastscan() parsing */
+#define C_2	0002		/* for yylex() tokenizing */
+#define C_WSNL	0004		/* ' ','\t','\r','\n' */
+#define C_ID	0010		/* [_a-zA-Z0-9] */
+#define C_ID0	0020		/* [_a-zA-Z] */
+#define C_EP	0040		/* [epEP] */
+#define C_DIGIT	0100		/* [0-9] */
+#define C_HEX	0200		/* [0-9a-fA-F] */
+
+extern usch spechr[];
+
+#define iswsnl(x)	(spechr[x] & (C_WSNL))
 
 /* definition for include file info */
 struct includ {
 	struct includ *next;
-	usch *fname;	/* current fn, changed if #line found */
-	usch *orgfn;	/* current fn, not changed */
+	const usch *fname;	/* current fn, changed if #line found */
+	const usch *orgfn;	/* current fn, not changed */
 	int lineno;
+	int escln;		/* escaped newlines, to be added */
 	int infil;
 	usch *curptr;
 	usch *maxread;
+	usch *ostr;
 	usch *buffer;
-	usch bbuf[NAMEMAX+CPPBUF+1];
-} *ifiles;
+	int idx;
+	void *incs;
+	const usch *fn;
+#ifdef BUF_STACK
+	usch bbuf[BBUFSZ];
+#else
+	usch *bbuf;
+#endif
+};
+#define INCINC 0
+#define SYSINC 1
+
+extern struct includ *ifiles;
 
 /* Symbol table entry  */
 struct symtab {
-	usch *namep;    
-	usch *value;    
-	usch *file;
+	const usch *namep;    
+	const usch *value;    
+	const usch *file;
 	int line;
 };
 
@@ -107,35 +152,40 @@ struct nd {
 #define nd_val n.val
 #define nd_uval n.uval
 
-struct recur;	/* not used outside cpp.c */
-int subst(struct symtab *, struct recur *);
-struct symtab *lookup(usch *namep, int enterf);
+struct symtab *lookup(const usch *namep, int enterf);
 usch *gotident(struct symtab *nl);
-int slow;	/* scan slowly for new tokens */
+int submac(struct symtab *nl, int);
+int kfind(struct symtab *nl);
+int doexp(void);
+int donex(void);
+void ppdir(void);
 
+void define(void);
+void include(void);
+void include_next(void);
+void line(void);
+
+int pushfile(const usch *fname, const usch *fn, int idx, void *incs);
 void popfile(void);
 void prtline(void);
-int cpplex(void);
+int yylex(void);
+int sloscan(void);
 void cunput(int);
 int curline(void);
 char *curfile(void);
 void setline(int);
 void setfile(char *);
-int cppparse(void);
-void cpperror(char *);
-void unpstr(usch *);
-usch *savstr(usch *str);
+int yyparse(void);
+void unpstr(const usch *);
+usch *savstr(const usch *str);
 void savch(int c);
 void mainscan(void);
 void putch(int);
-void putstr(usch *s);
+void putstr(const usch *s);
 void line(void);
-usch *sheap(char *fmt, ...);
-void xwarning(usch *);
-void xerror(usch *);
-#define warning(...) xwarning(sheap(__VA_ARGS__))
-#define error(...) xerror(sheap(__VA_ARGS__))
-void expmac(struct recur *);
-
-/* ESBMC */
-int handle_hooked_header(usch *name);
+usch *sheap(const char *fmt, ...);
+void warning(const char *fmt, ...);
+void error(const char *fmt, ...);
+int cinput(void);
+void getcmnt(void);
+void xwrite(int, const void *, unsigned int);
