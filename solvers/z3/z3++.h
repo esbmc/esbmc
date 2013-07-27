@@ -356,7 +356,7 @@ namespace z3 {
     expr mk_bvxor(expr const &a, expr const &b);
     expr mk_bvnand(expr const &a, expr const &b);
     expr mk_bvnor(expr const &a, expr const &b);
-    expr mk_bvnxor(expr const &a, expr const &b);
+    expr mk_bvxnor(expr const &a, expr const &b);
     expr mk_add(expr const &a, expr const &b);
     expr mk_sub(expr const &a, expr const &b);
     expr mk_mul(expr const &a, expr const &b);
@@ -886,22 +886,6 @@ namespace z3 {
         friend expr operator>(expr const & a, int b) { return a > a.ctx().num_val(b, a.get_sort()); }
         friend expr operator>(int a, expr const & b) { return b.ctx().num_val(a, b.get_sort()) > a; }
 #endif
-
-        friend expr z3::mk_lt(expr const &a, expr const &b, bool is_unsigned);
-        friend expr z3::mk_gt(expr const &a, expr const &b, bool is_unsigned);
-        friend expr z3::mk_le(expr const &a, expr const &b, bool is_unsigned);
-        friend expr z3::mk_ge(expr const &a, expr const &b, bool is_unsigned);
-        friend expr z3::mk_bvand(expr const &a, expr const &b);
-        friend expr z3::mk_bvor(expr const &a, expr const &b);
-        friend expr z3::mk_bvxor(expr const &a, expr const &b);
-        friend expr z3::mk_bvnand(expr const &a, expr const &b);
-        friend expr z3::mk_bvnor(expr const &a, expr const &b);
-        friend expr z3::mk_bvxnor(expr const &a, expr const &b);
-
-        friend expr z3::mk_add(expr const &a, expr const &b);
-        friend expr z3::mk_sub(expr const &a, expr const &b);
-        friend expr z3::mk_mul(expr const &a, expr const &b);
-        friend expr z3::mk_div(expr const &a, expr const &b, bool is_unsigned);
 
         friend expr operator&(expr const & a, expr const & b) { check_context(a, b); Z3_ast r = Z3_mk_bvand(a.ctx(), a, b); return expr(a.ctx(), r); }
         friend expr operator&(expr const & a, int b) { return a & a.ctx().num_val(b, a.get_sort()); }
