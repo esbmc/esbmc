@@ -1737,7 +1737,9 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     if (is_struct_type(data.source_value)) {
       const struct_type2t &struct_type =to_struct_type(data.source_value->type);
       unsigned i = 0, num_elems = struct_type.members.size();
-      z3::expr struct_elem[num_elems + 1], struct_elem_inv[num_elems + 1];
+      std::vector<z3::expr> struct_elem, struct_elem_inv;
+      struct_elem.resize(num_elems+1);
+      struct_elem_inv.resize(num_elems+1);
 
       forall_types(it, struct_type.members) {
         struct_elem[i] = mk_tuple_select(source, i);
@@ -2343,9 +2345,12 @@ z3_convt::convert_typecast_to_ptr(const typecast2t &cast, z3::expr &output)
   convert_bv(cast_to_unsigned, target);
 
   // Construct array for all possible object outcomes
-  z3::expr is_in_range[addr_space_data.back().size()];
-  z3::expr obj_ids[addr_space_data.back().size()];
-  z3::expr obj_starts[addr_space_data.back().size()];
+  std::vector<z3::expr> is_in_range;
+  std::vector<z3::expr> obj_ids;
+  std::vector<z3::expr> obj_starts;
+  is_in_range.resize(addr_space_data.back().size());
+  obj_ids.resize(addr_space_data.back().size());
+  obj_starts.resize(addr_space_data.back().size());
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
@@ -3039,9 +3044,10 @@ z3_convt::land(const bvt &bv)
 
   literalt l = new_variable();
   uint size = bv.size();
-  z3::expr args[size];
+  std::vector<z3::expr> args;
   Z3_ast args_ast[size];
   z3::expr result, formula;
+  args.resize(size);
 
   for (unsigned int i = 0; i < bv.size(); i++) {
     args[i] = z3_literal(bv[i]);
@@ -3062,9 +3068,10 @@ z3_convt::lor(const bvt &bv)
 
   literalt l = new_variable();
   uint size = bv.size();
-  z3::expr args[size];
+  std::vector<z3::expr> args;
   Z3_ast args_ast[size];
   z3::expr result, formula;
+  args.resize(size);
 
   for (unsigned int i = 0; i < bv.size(); i++) {
     args[i] = z3_literal(bv[i]);
@@ -3203,7 +3210,9 @@ z3_convt::lcnf(const bvt &bv)
   if (new_bv.size() == 0)
     return;
 
-  z3::expr lor_var, args[new_bv.size()];
+  std::vector<z3::expr> args;
+  args.resize(new_bv.size());
+  z3::expr lor_var;
   Z3_ast args_ast[new_bv.size()];
   unsigned int i = 0;
 
@@ -3314,7 +3323,8 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
     abort();
   }
 
-  z3::expr new_fields[num_fields];
+  std::vector<z3::expr> new_fields;
+  new_fields.resize(num_fields);
   for (j = 0; j < num_fields; j++) {
     if (i == j) {
       /* use new_val at position i */
@@ -3330,7 +3340,7 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   z3::func_decl mk_tuple_decl =
     z3::to_func_decl(ctx, Z3_get_tuple_sort_mk_decl(ctx, ty));
 
-  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields);
+  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields.data());
 }
 
 z3::expr
