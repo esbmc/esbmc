@@ -1,5 +1,5 @@
-CXXFLAGS += -Wall -Wextra -Wno-deprecated
-GCCFLAGS += -Wall -Wextra -Wno-deprecated
+CXXFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
+GCCFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
 OPTS ?= -O3
 PLATLIBS= -lgmp -ldl -lgcc
 
