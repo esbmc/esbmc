@@ -42,9 +42,9 @@ PLATLIBS+= -lgomp -pthread -lrt -lpthread
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
 
-HOSTCC=     gcc
-HOSTCXX=    g++
-HOSTDEPCXX= g++
+HOSTCC=     clang
+HOSTCXX=    clang++
+HOSTDEPCXX= clang++
 HOSTLD=     ld
 HOSTAR=     ar
 HOPTBLOBGENLD= ld
