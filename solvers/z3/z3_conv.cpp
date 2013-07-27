@@ -7,7 +7,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 #include <assert.h>
 #include <ctype.h>
-#include <malloc.h>
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>
