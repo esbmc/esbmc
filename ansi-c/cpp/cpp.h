@@ -28,8 +28,10 @@
 #include <stdio.h>	/* for debug/printf */
 
 typedef unsigned char usch;
-extern usch yytext[];
+extern char *yytext;
 extern usch *stringbuf;
+
+extern int slow;
 
 extern	int	trulvl;
 extern	int	flslvl;
@@ -165,7 +167,7 @@ void include(void);
 void include_next(void);
 void line(void);
 
-int pushfile(const usch *fname, const usch *fn, int idx, void *incs);
+//int pushfile(const usch *fname, const usch *fn, int idx, void *incs);
 void popfile(void);
 void prtline(void);
 int yylex(void);

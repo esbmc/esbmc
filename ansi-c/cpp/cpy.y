@@ -84,6 +84,7 @@ int setd(int l, int r);
 %term stop
 %term EQ NE LE GE LS RS
 %term ANDAND OROR IDENT NUMBER UNUMBER DEFINED
+%term CONCAT MKSTR ELLIPS VA_ARGS FPOINT
 /*
  * The following terminals are not used in the yacc code.
  */

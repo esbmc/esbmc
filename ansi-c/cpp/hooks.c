@@ -4,6 +4,8 @@
 
 #include "../headers.h"
 
+extern int inclevel; // Good grief
+
 struct hooked_header {
 	const char *basename;
 	char *textstart;
@@ -55,7 +57,7 @@ handle_hooked_header(usch *name)
 			ifiles = &buf;
 
 			/* Largely copied from pushfile */
-			if (++inclevel > MAX_INCLEVEL)
+			if (++inclevel > 100)
 				error("Limit for nested includes exceeded");
 
 			prtline(); /* Output file loc */

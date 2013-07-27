@@ -118,7 +118,7 @@ int yylex_destroy  (void);
 #define PRTOUT(x) if (YYSTATE || slow) return x; if (!flslvl) putstr((usch *)yytext);
 /* protection against recursion in #include */
 #define MAX_INCLEVEL	100
-static int inclevel;
+int inclevel;
 %}
 
 D	[0-9]
@@ -173,14 +173,14 @@ WS	[\t ]
 
 <IFR>{WS}+		{ ; }
 <IFR>{L}({L}|{D})*	{
-				yylval.node.op = NUMBER;
+				cpplval.node.op = NUMBER;
 				if (gotdef) {
-					yylval.node.nd_val
+					cpplval.node.nd_val
 					    = lookup((usch *)yytext, FIND) != 0;
 					gotdef = 0;
 					return IDENT;
 				}
-				yylval.node.nd_val = 0;
+				cpplval.node.nd_val = 0;
 				return NUMBER;
 			}
 
@@ -200,8 +200,8 @@ WS	[\t ]
 {D}+{IS}?		{ scale = 10; goto num; }
 '(\\.|[^\\'])+'		{
 				if (YYSTATE || slow) {
-					yylval.node.op = NUMBER;
-					yylval.node.nd_val = charcon((usch *)yytext);
+					cpplval.node.op = NUMBER;
+					cpplval.node.nd_val = charcon((usch *)yytext);
 					return (NUMBER);
 				}
 				if (tflag)
@@ -576,11 +576,11 @@ cvtdig(int rad)
 	y--;
 	while (*y == 'l' || *y == 'L')
 		y++;
-	yylval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
-	yylval.node.nd_uval = rv;
-	if ((rad == 8 || rad == 16) && yylval.node.nd_val < 0)
-		yylval.node.op = UNUMBER;
-	if (yylval.node.op == NUMBER && yylval.node.nd_val < 0)
+	cpplval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
+	cpplval.node.nd_uval = rv;
+	if ((rad == 8 || rad == 16) && cpplval.node.nd_val < 0)
+		cpplval.node.op = UNUMBER;
+	if (cpplval.node.op == NUMBER && cpplval.node.nd_val < 0)
 		/* too large for signed */
 		error("Constant \"%s\" is out of range", yytext);
 }
