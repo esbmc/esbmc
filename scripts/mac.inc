@@ -34,7 +34,7 @@ ifdef STATICLINK
 $(error Can't statically link anything on a mac)
 endif
 
-PLATLIBS+= -lgomp -pthread -lrt -lpthread
+PLATLIBS+= -pthread -lpthread
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
 
