@@ -44,6 +44,13 @@ ifeq "$(AMONCYGWIN)" "CYGWIN"
 ONCYGWIN=1
 endif
 
+# Detect macs
+
+AMONAMAC:= $(shell uname -s | grep -o Darwin)
+ifeq "$(AMONAMAC)" "Darwin"
+ONAMAC=1
+endif
+
 # Defaults:
 
 CC=     gcc
@@ -112,6 +119,10 @@ endif
 
 ifdef WIN_MINGW32
 include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
+ifdef ONAMAC
+include $(ESBMCDIR)/scripts/mac.inc
 endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs
