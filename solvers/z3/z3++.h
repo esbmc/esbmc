@@ -343,6 +343,25 @@ namespace z3 {
         expr operator()(expr const & a1, expr const & a2, expr const & a3, expr const & a4, expr const & a5) const;
     };
 
+    expr mk_and(expr const &a, expr const &b);
+    expr mk_or(expr const &a, expr const &b);
+    expr mk_xor(expr const &a, expr const &b);
+    expr mk_implies(expr const &a, expr const &b);
+    expr mk_lt(expr const &a, expr const &b, bool _unsigned);
+    expr mk_gt(expr const &a, expr const &b, bool _unsigned);
+    expr mk_le(expr const &a, expr const &b, bool _unsigned);
+    expr mk_ge(expr const &a, expr const &b, bool _unsigned);
+    expr mk_bvand(expr const &a, expr const &b);
+    expr mk_bvor(expr const &a, expr const &b);
+    expr mk_bvxor(expr const &a, expr const &b);
+    expr mk_bvnand(expr const &a, expr const &b);
+    expr mk_bvnor(expr const &a, expr const &b);
+    expr mk_bvnxor(expr const &a, expr const &b);
+    expr mk_add(expr const &a, expr const &b);
+    expr mk_sub(expr const &a, expr const &b);
+    expr mk_mul(expr const &a, expr const &b);
+    expr mk_div(expr const &a, expr const &b, bool _unsigned);
+
     class expr : public ast {
     public:
         expr(void) : ast() { } // jmorse - uninitialized cons
@@ -384,10 +403,243 @@ namespace z3 {
             return expr(a.ctx(), r);
         }
 
-        friend expr z3::mk_and(expr const &a, expr const &b);
-        friend expr z3::mk_or(expr const &a, expr const &b);
-        friend expr z3::mk_xor(expr const &a, expr const &b);
-        friend expr z3::mk_implies(expr const &a, expr const &b);
+        friend expr mk_and(expr const &a, expr const &b) {
+	      check_context(a, b);
+	      assert(a.is_bool() && b.is_bool());
+	      Z3_ast args[2] = { a, b };
+	      Z3_ast r = Z3_mk_and(a.ctx(), 2, args);
+	      a.check_error();
+	      return expr(a.ctx(), r);
+	    }
+
+        friend expr mk_or(expr const &a, expr const &b) {
+	      check_context(a, b);
+	      assert(a.is_bool() && b.is_bool());
+	      Z3_ast args[2] = { a, b };
+	      Z3_ast r = Z3_mk_or(a.ctx(), 2, args);
+	      a.check_error();
+	      return expr(a.ctx(), r);
+	    }
+
+        friend expr mk_xor(expr const &a, expr const &b) {
+	      check_context(a, b);
+	      assert(a.is_bool() && b.is_bool());
+	      Z3_ast r = Z3_mk_xor(a.ctx(), a, b);
+	      a.check_error();
+	      return expr(a.ctx(), r);
+	    }
+
+        friend expr mk_implies(expr const &a, expr const &b) {
+	      check_context(a, b);
+	      assert(a.is_bool() && b.is_bool());
+	      Z3_ast r = Z3_mk_implies(a.ctx(), a, b);
+	      a.check_error();
+	      return expr(a.ctx(), r);
+	    }
+
+    friend inline expr mk_lt(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_lt(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned)
+          r = Z3_mk_bvult(a.ctx(), a, b);
+        else
+          r = Z3_mk_bvslt(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+     friend inline expr mk_gt(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_gt(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned)
+          r = Z3_mk_bvugt(a.ctx(), a, b);
+        else
+          r = Z3_mk_bvsgt(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_le(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_le(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned)
+          r = Z3_mk_bvule(a.ctx(), a, b);
+        else
+          r = Z3_mk_bvsle(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_ge(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_ge(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned)
+          r = Z3_mk_bvuge(a.ctx(), a, b);
+        else
+          r = Z3_mk_bvsge(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+    friend inline expr mk_bvand(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvand(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_bvor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_bvxor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvxor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_bvnand(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvnand(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_bvnor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvnor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_bvxnor(expr const &a, expr const &b) {
+      check_context(a, b);
+      assert(a.is_bv() && b.is_bv());
+      Z3_ast r = Z3_mk_bvxnor(a.ctx(), a, b);
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_add(expr const &a, expr const &b) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+          Z3_ast args[2] = { a, b };
+          r = Z3_mk_add(a.ctx(), 2, args);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+          r = Z3_mk_bvadd(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_sub(expr const &a, expr const &b) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+          Z3_ast args[2] = { a, b };
+          r = Z3_mk_sub(a.ctx(), 2, args);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+          r = Z3_mk_bvsub(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_mul(expr const &a, expr const &b) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+          Z3_ast args[2] = { a, b };
+          r = Z3_mk_mul(a.ctx(), 2, args);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+          r = Z3_mk_bvmul(a.ctx(), a, b);
+      }
+      else {
+          // operator is not supported by given arguments.
+          assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+    friend inline expr mk_div(expr const &a, expr const &b, bool is_unsigned) {
+      check_context(a, b);
+      Z3_ast r;
+      if (a.is_arith() && b.is_arith()) {
+        r = Z3_mk_div(a.ctx(), a, b);
+      }
+      else if (a.is_bv() && b.is_bv()) {
+        if (is_unsigned) {
+          r = Z3_mk_bvudiv(a.ctx(), a, b);
+        } else {
+          r = Z3_mk_bvsdiv(a.ctx(), a, b);
+        }
+      }
+      else {
+        // operator is not supported by given arguments.
+        assert(false);
+      }
+      a.check_error();
+      return expr(a.ctx(), r);
+    }
+
+
 
         friend expr operator&&(expr const & a, expr const & b) {
             check_context(a, b);
@@ -668,243 +920,6 @@ namespace z3 {
         expr simplify() const { Z3_ast r = Z3_simplify(ctx(), m_ast); check_error(); return expr(ctx(), r); }
         expr simplify(params const & p) const { Z3_ast r = Z3_simplify_ex(ctx(), m_ast, p); check_error(); return expr(ctx(), r); }
     };
-
-    inline expr mk_lt(expr const &a, expr const &b, bool is_unsigned) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-        r = Z3_mk_lt(a.ctx(), a, b);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned)
-          r = Z3_mk_bvult(a.ctx(), a, b);
-        else
-          r = Z3_mk_bvslt(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-     inline expr mk_gt(expr const &a, expr const &b, bool is_unsigned) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-        r = Z3_mk_gt(a.ctx(), a, b);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned)
-          r = Z3_mk_bvugt(a.ctx(), a, b);
-        else
-          r = Z3_mk_bvsgt(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_le(expr const &a, expr const &b, bool is_unsigned) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-        r = Z3_mk_le(a.ctx(), a, b);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned)
-          r = Z3_mk_bvule(a.ctx(), a, b);
-        else
-          r = Z3_mk_bvsle(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_ge(expr const &a, expr const &b, bool is_unsigned) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-        r = Z3_mk_ge(a.ctx(), a, b);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned)
-          r = Z3_mk_bvuge(a.ctx(), a, b);
-        else
-          r = Z3_mk_bvsge(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_and(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bool() && b.is_bool());
-      Z3_ast args[2] = { a, b };
-      Z3_ast r = Z3_mk_and(a.ctx(), 2, args);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_or(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bool() && b.is_bool());
-      Z3_ast args[2] = { a, b };
-      Z3_ast r = Z3_mk_or(a.ctx(), 2, args);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_xor(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bool() && b.is_bool());
-      Z3_ast r = Z3_mk_xor(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_implies(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bool() && b.is_bool());
-      Z3_ast r = Z3_mk_implies(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvand(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvand(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvor(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvor(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvxor(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvxor(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvnand(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvnand(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvnor(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvnor(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_bvxnor(expr const &a, expr const &b) {
-      check_context(a, b);
-      assert(a.is_bv() && b.is_bv());
-      Z3_ast r = Z3_mk_bvxnor(a.ctx(), a, b);
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_add(expr const &a, expr const &b) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-          Z3_ast args[2] = { a, b };
-          r = Z3_mk_add(a.ctx(), 2, args);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-          r = Z3_mk_bvadd(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_sub(expr const &a, expr const &b) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-          Z3_ast args[2] = { a, b };
-          r = Z3_mk_sub(a.ctx(), 2, args);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-          r = Z3_mk_bvsub(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_mul(expr const &a, expr const &b) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-          Z3_ast args[2] = { a, b };
-          r = Z3_mk_mul(a.ctx(), 2, args);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-          r = Z3_mk_bvmul(a.ctx(), a, b);
-      }
-      else {
-          // operator is not supported by given arguments.
-          assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
-
-    inline expr mk_div(expr const &a, expr const &b, bool is_unsigned) {
-      check_context(a, b);
-      Z3_ast r;
-      if (a.is_arith() && b.is_arith()) {
-        r = Z3_mk_div(a.ctx(), a, b);
-      }
-      else if (a.is_bv() && b.is_bv()) {
-        if (is_unsigned) {
-          r = Z3_mk_bvudiv(a.ctx(), a, b);
-        } else {
-          r = Z3_mk_bvsdiv(a.ctx(), a, b);
-        }
-      }
-      else {
-        // operator is not supported by given arguments.
-        assert(false);
-      }
-      a.check_error();
-      return expr(a.ctx(), r);
-    }
 
     /**
        \brief Wraps a Z3_ast as an expr object. It also checks for errors.
