@@ -203,6 +203,46 @@ open_output_file(const char *name)
 }
 
 void
+record_builtin_macros()
+{
+	time_t t;
+	struct symtab *nl;
+	usch *n;
+
+	filloc = lookup((usch *)"__FILE__", ENTER);
+	linloc = lookup((usch *)"__LINE__", ENTER);
+	pragloc = lookup((usch *)"_Pragma", ENTER);
+	filloc->value = linloc->value = (usch *)""; /* Just something */
+	pragloc->value = (usch *)"";
+
+	t = time(NULL);
+	n = (usch *)ctime(&t);
+
+	/*
+	 * Manually move in the predefined macros.
+	 */
+	nl = lookup((usch *)"__TIME__", ENTER);
+	savch(0); savch('"');  n[19] = 0; savstr(&n[11]); savch('"');
+	savch(OBJCT);
+	nl->value = stringbuf-1;
+
+	nl = lookup((usch *)"__DATE__", ENTER);
+	savch(0); savch('"'); n[24] = n[11] = 0; savstr(&n[4]);
+	savstr(&n[20]); savch('"'); savch(OBJCT);
+	nl->value = stringbuf-1;
+
+	nl = lookup((usch *)"__STDC__", ENTER);
+	savch(0); savch('1'); savch(OBJCT);
+	nl->value = stringbuf-1;
+
+	nl = lookup((usch *)"__STDC_VERSION__", ENTER);
+	savch(0); savstr((usch *)"199901L"); savch(OBJCT);
+	nl->value = stringbuf-1;
+
+	return;
+}
+
+void
 fin()
 {
 
