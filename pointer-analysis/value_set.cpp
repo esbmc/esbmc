@@ -31,7 +31,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "value_set.h"
 
-const value_sett::object_map_dt value_sett::object_map_dt::empty;
+const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;
 
 void value_sett::output(
