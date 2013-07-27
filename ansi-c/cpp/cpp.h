@@ -167,7 +167,7 @@ void include(void);
 void include_next(void);
 void line(void);
 
-//int pushfile(const usch *fname, const usch *fn, int idx, void *incs);
+int pushfile2(const usch *fname, const usch *fn, int idx, void *incs);
 void popfile(void);
 void prtline(void);
 int yylex(void);

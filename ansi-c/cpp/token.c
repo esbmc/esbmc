@@ -815,7 +815,7 @@ prinit(struct initar *it, struct includ *ic)
  * Return 0 on success, -1 if file to be included is not found.
  */
 int
-pushfile(const usch *file, const usch *fn, int idx, void *incs)
+pushfile2(const usch *file, const usch *fn, int idx, void *incs)
 {
 	extern struct initar *initar;
 	struct includ ibuf;

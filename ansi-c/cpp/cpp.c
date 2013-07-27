@@ -35,10 +35,11 @@
 
 #include <sys/stat.h>
 
+#include <errno.h>
+#include <stdbool.h>
+#include <stddef.h>
 #include <fcntl.h>
-#ifdef HAVE_UNISTD_H
 #include <unistd.h>
-#endif
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -50,6 +51,8 @@
 #include "compat.h"
 #include "cpp.h"
 #include "y.tab.h"
+
+#include "iface.h"
 
 #ifndef S_ISDIR
 #define S_ISDIR(m)	(((m) & S_IFMT) == S_IFDIR)
@@ -150,6 +153,65 @@ static usch *xstrdup(const usch *str);
 static void addidir(char *idir, struct incs **ww);
 static void vsheap(const char *, va_list);
 
+void
+record_define(const char *value)
+{
+       struct initar *it;
+
+       if ((it = malloc(sizeof(struct initar))) == NULL)
+               error("couldn't apply -D %s", optarg);
+       it->type = 'D';
+       it->str = strdup(value);
+       it->next = initar;
+       initar = it;
+       return;
+}
+
+void
+record_include(const char *fname)
+{
+       struct incs *w, *w2;
+
+       if ((w = calloc(sizeof(struct incs), 1)) == NULL)
+               error("couldn't apply -I %s", optarg);
+       w->dir = strdup(fname);
+       w2 = incdir[INCINC];
+
+       if (w2 != NULL) {
+               while (w2->next)
+                       w2 = w2->next;
+               w2->next = w;
+       } else {
+               incdir[INCINC] = w;
+       }
+
+       return;
+}
+
+int
+open_output_file(const char *name)
+{
+
+        ofd = open(name, O_WRONLY|O_CREAT, 0600);
+        if (ofd < 0) {
+                perror("Can't open preprocessing output file");
+                return errno;
+        }
+
+        istty = false;
+        return 0;
+}
+
+void
+fin()
+{
+
+        flbuf();
+        close(ofd);
+        return;
+}
+
+#if 0
 int
 main(int argc, char **argv)
 {
@@ -358,6 +420,7 @@ main(int argc, char **argv)
 
 	return 0;
 }
+#endif
 
 static void
 addidir(char *idir, struct incs **ww)
@@ -456,7 +519,7 @@ fsrch(const usch *fn, int idx, struct incs *w)
 
 			savstr(w->dir); savch('/');
 			savstr(fn); savch(0);
-			if (pushfile(nm, fn, i, w->next) == 0)
+			if (pushfile2(nm, fn, i, w->next) == 0)
 				return 1;
 			stringbuf = nm;
 		}
@@ -542,7 +605,7 @@ include(void)
 			prem();
 		if (c != '\n')
 			goto bad;
-		if (pushfile(nm, safefn, 0, NULL) == 0)
+		if (pushfile2(nm, safefn, 0, NULL) == 0)
 			goto okret;
 		/* XXX may lose stringbuf space */
 	} else
