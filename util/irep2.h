@@ -197,7 +197,10 @@ public:
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref), boost::detail::polymorphic_cast_tag()) {}
+    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+  {
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+  }
 
   irep_container &operator=(irep_container const &ref)
   {
@@ -216,7 +219,8 @@ public:
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    *this = boost::shared_polymorphic_cast<T, Y>
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    *this = boost::static_pointer_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
     return *this;
   }
