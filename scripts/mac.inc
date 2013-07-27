@@ -1,4 +1,4 @@
-CXXFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
+CXXFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC -stdlib=libc++
 GCCFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
 OPTS ?= -O3
 PLATLIBS= -lgmp -ldl -lgcc
@@ -37,6 +37,11 @@ endif
 PLATLIBS+= -lgomp -pthread -lrt -lpthread
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
+
+
+CC=     clang
+CXX=    clang++
+DEPCXX= clang++
 
 HOSTCC=     clang
 HOSTCXX=    clang++
