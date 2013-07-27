@@ -8,7 +8,7 @@ OBJS= $(PLAINOBJS:%.o=$(OBJDIR)/%.o)
 HOSTOBJS= $(PLAINOBJS:%.o=$(HOSTOBJDIR)/%.o)
 
 $(OBJDIR)/%.o : %.h
-	$(BLOBGENLD) $(LDFLAGS) -b binary $< -o $@ -r
+	./flail.sh "$(<:.h=)_buf" stddef.h | $(CXX) -x c - -c -o $@
 
 ifdef CROSSCOMPILE
 $(HOSTOBJDIR)/%.o : %.h
