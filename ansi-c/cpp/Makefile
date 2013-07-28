@@ -1,7 +1,7 @@
 ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 
-SRCS=cpp.c compat.c hooks.c
+SRCS=cpp.c compat.c hooks.c token.c
 OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
 HOSTOBJS=$(HOSTOBJDIR)/y.tab.o $(HOSTOBJDIR)/lex.cpp.o
 HEADERS=cpp.h
