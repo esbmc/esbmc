@@ -373,7 +373,7 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     exit(1);
   }
 
-  ret = pushfile((unsigned char *)strdup(path.c_str()));
+  ret = pushfile2((unsigned char *)strdup(path.c_str()), "", 0, NULL);
   fin();
 
   return ret;
