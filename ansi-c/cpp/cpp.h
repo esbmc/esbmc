@@ -27,6 +27,10 @@
 
 #include <stdio.h>	/* for debug/printf */
 
+#ifndef yyparse
+#define yyparse cppparse
+#endif
+
 typedef unsigned char usch;
 extern char *yytext;
 extern usch *stringbuf;
