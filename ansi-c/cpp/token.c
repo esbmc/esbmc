@@ -51,7 +51,7 @@
 
 #include "compat.h"
 #include "cpp.h"
-#include "cpy.h"
+#include "y.tab.h"
 
 static void cvtdig(int rad);
 static int charcon(usch *);
@@ -71,7 +71,8 @@ static void elifstmt(void);
 #define MAX_INCLEVEL	100
 static int inclevel;
 
-usch yytext[CPPBUF];
+char _yytext[CPPBUF];
+char *yytext = _yytext;
 
 struct includ *ifiles;
 
@@ -721,8 +722,8 @@ yylex(void)
 
 	case NUMBER:
 		if (yytext[0] == '\'') {
-			yylval.node.op = NUMBER;
-			yylval.node.nd_val = charcon(yytext);
+			cpplval.node.op = NUMBER;
+			cpplval.node.nd_val = charcon(yytext);
 		} else
 			cvtdig(yytext[0] != '0' ? 10 :
 			    yytext[1] == 'x' || yytext[1] == 'X' ? 16 : 8);
@@ -735,7 +736,7 @@ yylex(void)
 		}
 		nl = lookup(yytext, FIND);
 		if (ifdef) {
-			yylval.node.nd_val = nl != NULL;
+			cpplval.node.nd_val = nl != NULL;
 			ifdef = 0;
 		} else if (nl && noex == 0) {
 			usch *och = stringbuf;
@@ -751,9 +752,9 @@ yylex(void)
 			noex = 1;
 			return yylex();
 		} else {
-			yylval.node.nd_val = 0;
+			cpplval.node.nd_val = 0;
 		}
-		yylval.node.op = NUMBER;
+		cpplval.node.op = NUMBER;
 		return NUMBER;
 	case WARN:
 		noex = 0;
@@ -951,11 +952,11 @@ cvtdig(int rad)
 	y--;
 	while (*y == 'l' || *y == 'L')
 		y++;
-	yylval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
-	yylval.node.nd_uval = rv;
-	if ((rad == 8 || rad == 16) && yylval.node.nd_val < 0)
-		yylval.node.op = UNUMBER;
-	if (yylval.node.op == NUMBER && yylval.node.nd_val < 0)
+	cpplval.node.op = *y == 'u' || *y == 'U' ? UNUMBER : NUMBER;
+	cpplval.node.nd_uval = rv;
+	if ((rad == 8 || rad == 16) && cpplval.node.nd_val < 0)
+		cpplval.node.op = UNUMBER;
+	if (cpplval.node.op == NUMBER && cpplval.node.nd_val < 0)
 		/* too large for signed, see 6.4.4.1 */
 		error("constant \"%s\" is out of range", yytext);
 }
