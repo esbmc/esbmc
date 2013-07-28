@@ -47,10 +47,11 @@ handle_hooked_header(usch *name)
 				return 1;
 
 			buf.curptr = (usch*)h->textstart;
-			buf.maxread = (usch*)h->textstart + *h->textsize;
 			buf.buffer = (usch*)h->textstart;
+			buf.maxread = (usch*)h->textstart + *h->textsize;
 			buf.infil = -1;
 			buf.fname = (usch*)h->basename;
+			buf.fn = (usch*)h->basename;
 			buf.orgfn = (usch*)h->basename;
 			buf.lineno = 0;
 			buf.next = ifiles;
@@ -63,8 +64,8 @@ handle_hooked_header(usch *name)
 			prtline(); /* Output file loc */
 
 			otrulvl = trulvl;
-			if ((c = cpplex()) != 0)
-				error("cpplex returned %d", c);
+
+                        fastscan();
 
 			if (otrulvl != trulvl || flslvl)
 				error("Unterminated conditional");

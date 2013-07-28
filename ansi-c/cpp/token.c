@@ -273,7 +273,7 @@ eatcmnt(void)
  *	Only data from pp files are scanned here, never any rescans.
  *	TODO: Only print out strings before calling other functions.
  */
-static void
+void
 fastscan(void)
 {
 	struct symtab *nl;
