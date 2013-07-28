@@ -510,6 +510,7 @@ pushfile(usch *file)
 /*
  * Print current position to output file.
  */
+#if 0
 void
 prtline()
 {
@@ -536,6 +537,7 @@ cunput(int c)
 #endif
 	unput(c);
 }
+#endif
 
 int yywrap(void) { return 1; }
 
@@ -932,8 +934,10 @@ badop(const char *op)
 	error("invalid operator in preprocessor expression: %s", op);
 }
 
+#if 0
 int
 cinput()
 {
 	return input();
 }
+#endif
