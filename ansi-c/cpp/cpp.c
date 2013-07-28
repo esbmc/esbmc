@@ -90,6 +90,11 @@ int readmac;
 int defining;
 int warnings;
 
+struct includ *ifiles;
+int slow;
+int expmac;
+int inmac;
+
 /* include dirs */
 struct incs {
 	struct incs *next;
