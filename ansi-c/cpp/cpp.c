@@ -559,6 +559,12 @@ fsrch(const usch *fn, int idx, struct incs *w)
 {
 	int i;
 
+
+       /* ESBMC: Hook some headers that would pull in system
+        * environment info that we don't want */
+       if (handle_hooked_header(fn))
+               return;
+
 	for (i = idx; i < 2; i++) {
 		if (i > idx)
 			w = incdir[i];
@@ -567,11 +573,6 @@ fsrch(const usch *fn, int idx, struct incs *w)
 
 			savstr(w->dir); savch('/');
 			savstr(fn); savch(0);
-
-                         /* ESBMC: Hook some headers that would pull in system
-                          * environment info that we don't want */
-                         if (handle_hooked_header(nm))
-                                 return;
 
 			if (pushfile2(nm, fn, i, w->next) == 0)
 				return 1;
