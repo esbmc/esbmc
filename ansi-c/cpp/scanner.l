@@ -310,7 +310,7 @@ L?\"(\\.|[^\\"])*\"	{ PRTOUT(STRING); }
 				} else if (isdigit((int)yytext[0]) == 0 &&
 				    (nl = lookup((usch *)yytext, FIND)) != 0) {
 					usch *op = stringbuf;
-					putstr(gotident(nl));
+					putstr(nl->value);
 					stringbuf = op;
 				} else
 					putstr((usch *)yytext);
@@ -330,12 +330,12 @@ L?\"(\\.|[^\\"])*\"	{ PRTOUT(STRING); }
 					return yytext[0];
 				if (yytext[0] == 6) { /* PRAGS */
 					usch *obp = stringbuf;
-					extern usch *prtprag(usch *);
+					//extern usch *prtprag(usch *);
 					*stringbuf++ = yytext[0];
 					do {
 						*stringbuf = input();
 					} while (*stringbuf++ != 14);
-					prtprag(obp);
+					//prtprag(obp);
 					stringbuf = obp;
 				} else {
 					PRTOUT(yytext[0]);
@@ -479,6 +479,11 @@ pushfile(usch *file)
 		ic->infil = 0;
 		ic->orgfn = ic->fname = (usch *)"<stdin>";
 	}
+
+#ifndef BUF_STACK
+        ic->bbuf = malloc(BBUFSZ);
+#endif
+
 	ic->buffer = ic->bbuf+NAMEMAX;
 	ic->curptr = ic->buffer;
 	ifiles = ic;
@@ -504,6 +509,11 @@ pushfile(usch *file)
 	ifiles = ic->next;
 	close(ic->infil);
 	inclevel--;
+
+#ifndef BUF_STACK
+        free(ic->bbuf);
+#endif
+
 	return 0;
 }
 
