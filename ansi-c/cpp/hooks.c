@@ -46,15 +46,23 @@ handle_hooked_header(usch *name)
 			if (h->textstart == NULL)
 				return 1;
 
-			buf.curptr = (usch*)h->textstart;
-			buf.buffer = (usch*)h->textstart;
-			buf.maxread = (usch*)h->textstart + *h->textsize;
+			// Due to some horror, it looks like there needs to
+			// be a leading lump of buffer space ahead of the text
+			// being parsed.
+			buf.bbuf = malloc(*h->textsize + NAMEMAX);
+                        memcpy(buf.bbuf + NAMEMAX, h->textstart, *h->textsize);
+			buf.curptr = buf.bbuf + NAMEMAX;
+			buf.buffer = buf.curptr;
+			buf.maxread = buf.curptr + *h->textsize;
 			buf.infil = -1;
 			buf.fname = (usch*)h->basename;
 			buf.fn = (usch*)h->basename;
 			buf.orgfn = (usch*)h->basename;
 			buf.lineno = 0;
+			buf.escln = 0;
 			buf.next = ifiles;
+			buf.idx = SYSINC;
+			buf.incs = NULL;
 			ifiles = &buf;
 
 			/* Largely copied from pushfile */

@@ -2,22 +2,14 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 
 SRCS=cpp.c compat.c hooks.c token.c
-OBJS=$(OBJDIR)/y.tab.o $(OBJDIR)/lex.cpp.o
-HOSTOBJS=$(HOSTOBJDIR)/y.tab.o $(HOSTOBJDIR)/lex.cpp.o
+OBJS=$(OBJDIR)/y.tab.o
+HOSTOBJS=$(HOSTOBJDIR)/y.tab.o
 HEADERS=cpp.h
 
 all: $(OBJDIR)/preproc.o
 
-lex.cpp.c: scanner.l
-	$(LEX) -Pcpp $(LFLAGS) $<
-
-# Warcrime: yacc/bison won't produce y.tab.h unless lex/flex was already run :|
-y.tab.c: cpy.y lex.cpp.c
+y.tab.c: cpy.y
 	$(YACC) -d $(YFLAGS) -pcpp $<
-
-# Another dependancy: can only build lex.cpp.o after bison has run to generate
-# y.tab.h
-$(OBJDIR)/lex.cpp.o: y.tab.c
 
 cpp.c: y.tab.c # Includes y.tab.h
 
@@ -27,7 +19,6 @@ cpp.o: cpy.o
 
 clean:
 	-rm $(OBJDIR)/*.o
-	-rm lex.cpp.c
 	-rm y.tab.c
 	-rm y.tab.h
 	-rm y.output

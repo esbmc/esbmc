@@ -62,6 +62,8 @@
  */
 
 %{
+#define cpplex yylex
+
 #include "config.h"
 
 #include "cpp.h"

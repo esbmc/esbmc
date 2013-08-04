@@ -53,23 +53,23 @@
 #include "cpp.h"
 #include "y.tab.h"
 
-static void cvtdig(int rad);
-static int charcon(usch *);
-static void elsestmt(void);
-static void ifdefstmt(void);
-static void ifndefstmt(void);
-static void endifstmt(void);
-static void ifstmt(void);
-static void cpperror(void);
-static void cppwarning(void);
-static void undefstmt(void);
-static void pragmastmt(void);
-static void elifstmt(void);
+ void cvtdig(int rad);
+ int charcon(usch *);
+ void elsestmt(void);
+ void ifdefstmt(void);
+ void ifndefstmt(void);
+ void endifstmt(void);
+void ifstmt(void);
+ void cpperror2(void);
+ void cppwarning(void);
+ void undefstmt(void);
+ void pragmastmt(void);
+ void elifstmt(void);
 
 #define	PUTCH(ch) if (!flslvl) putch(ch)
 /* protection against recursion in #include */
 #define MAX_INCLEVEL	100
-static int inclevel;
+ int inclevel;
 
 char _yytext[CPPBUF];
 char *yytext = _yytext;
@@ -109,7 +109,7 @@ usch spechr[256] = {
 /*
  * fill up the input buffer
  */
-static int
+ int
 inpbuf(void)
 {
 	int len;
@@ -130,7 +130,7 @@ inpbuf(void)
 /*
  * return a raw character from the input stream
  */
-static inline int
+ inline int
 inpch(void)
 {
 
@@ -145,7 +145,7 @@ inpch(void)
 /*
  * push a character back to the input stream
  */
-static void
+ void
 unch(int c)
 {
 	if (c == -1)
@@ -160,7 +160,7 @@ unch(int c)
 /*
  * Check for (and convert) trigraphs.
  */
-static int
+ int
 chktg(void)
 {
 	int ch;
@@ -190,7 +190,7 @@ chktg(void)
 /*
  * check for (and eat) end-of-line
  */
-static int
+ int
 chkeol(void)
 {
 	int ch;
@@ -216,7 +216,7 @@ chkeol(void)
  * return next char, after converting trigraphs and
  * skipping escaped line endings
  */
-static inline int
+ inline int
 inch(void)
 {
 	int ch;
@@ -231,7 +231,7 @@ inch(void)
 	}
 }
 
-static void
+ void
 eatcmnt(void)
 {
 	int ch;
@@ -771,7 +771,7 @@ yylex(void)
 /*
  * Let the command-line args be faked defines at beginning of file.
  */
-static void
+ void
 prinit(struct initar *it, struct includ *ic)
 {
 	const char *pre, *post;
@@ -915,7 +915,7 @@ cunput(int c)
 	unch(c);
 }
 
-static int
+ int
 dig2num(int c)
 {
 	if (c >= 'a')
@@ -930,7 +930,7 @@ dig2num(int c)
 /*
  * Convert string numbers to unsigned long long and check overflow.
  */
-static void
+ void
 cvtdig(int rad)
 {
 	unsigned long long rv = 0;
@@ -961,7 +961,7 @@ cvtdig(int rad)
 		error("constant \"%s\" is out of range", yytext);
 }
 
-static int
+ int
 charcon(usch *p)
 {
 	int val, c;
@@ -1002,7 +1002,7 @@ charcon(usch *p)
 	return val;
 }
 
-static void
+ void
 chknl(int ignore)
 {
 	int t;
@@ -1028,7 +1028,7 @@ chknl(int ignore)
 	}
 }
 
-static void
+ void
 elsestmt(void)
 {
 	if (flslvl) {
@@ -1049,7 +1049,7 @@ elsestmt(void)
 	chknl(1);
 }
 
-static void
+ void
 skpln(void)
 {
 	int ch;
@@ -1063,7 +1063,7 @@ skpln(void)
 	}
 }
 
-static void
+ void
 ifdefstmt(void)		 
 { 
 	int t;
@@ -1085,7 +1085,7 @@ ifdefstmt(void)
 	chknl(0);
 }
 
-static void
+ void
 ifndefstmt(void)	  
 { 
 	int t;
@@ -1107,7 +1107,7 @@ ifndefstmt(void)
 	chknl(0);
 }
 
-static void
+ void
 endifstmt(void)		 
 {
 	if (flslvl)
@@ -1122,7 +1122,7 @@ endifstmt(void)
 	chknl(1);
 }
 
-static void
+void
 ifstmt(void)
 {
 	if (flslvl || yyparse() == 0)
@@ -1131,7 +1131,7 @@ ifstmt(void)
 		trulvl++;
 }
 
-static void
+ void
 elifstmt(void)
 {
 	if (flslvl == 0)
@@ -1153,7 +1153,7 @@ elifstmt(void)
 }
 
 /* save line into stringbuf */
-static usch *
+ usch *
 savln(void)
 {
 	int c;
@@ -1171,8 +1171,8 @@ savln(void)
 	return cp;
 }
 
-static void
-cpperror(void)
+ void
+cpperror2(void)
 {
 	usch *cp;
 	int c;
@@ -1186,7 +1186,7 @@ cpperror(void)
 	error("#error %s", cp);
 }
 
-static void
+ void
 cppwarning(void)
 {
 	usch *cp;
@@ -1202,7 +1202,7 @@ cppwarning(void)
 	stringbuf = cp;
 }
 
-static void
+ void
 undefstmt(void)
 {
 	struct symtab *np;
@@ -1216,7 +1216,7 @@ undefstmt(void)
 	chknl(0);
 }
 
-static void
+ void
 pragmastmt(void)
 {
 	usch *sb;
@@ -1239,7 +1239,7 @@ cinput(void)
 	return inch();
 }
 
-static struct {
+ struct {
 	const char *name;
 	void (*fun)(void);
 } ppd[] = {
@@ -1249,7 +1249,7 @@ static struct {
 	{ "include", include },
 	{ "else", elsestmt },
 	{ "endif", endifstmt },
-	{ "error", cpperror },
+	{ "error", cpperror2 },
 	{ "warning", cppwarning },
 	{ "define", define },
 	{ "undef", undefstmt },
