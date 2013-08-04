@@ -563,7 +563,7 @@ fsrch(const usch *fn, int idx, struct incs *w)
        /* ESBMC: Hook some headers that would pull in system
         * environment info that we don't want */
        if (handle_hooked_header(fn))
-               return;
+               return 1;
 
 	for (i = idx; i < 2; i++) {
 		if (i > idx)
