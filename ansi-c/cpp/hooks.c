@@ -4,6 +4,8 @@
 
 #include "../headers.h"
 
+extern int inclevel; // Good grief
+
 struct hooked_header {
 	const char *basename;
 	char *textstart;
@@ -44,25 +46,34 @@ handle_hooked_header(usch *name)
 			if (h->textstart == NULL)
 				return 1;
 
-			buf.curptr = (usch*)h->textstart;
-			buf.maxread = (usch*)h->textstart + *h->textsize;
-			buf.buffer = (usch*)h->textstart;
+			// Due to some horror, it looks like there needs to
+			// be a leading lump of buffer space ahead of the text
+			// being parsed.
+			buf.bbuf = malloc(*h->textsize + NAMEMAX);
+                        memcpy(buf.bbuf + NAMEMAX, h->textstart, *h->textsize);
+			buf.curptr = buf.bbuf + NAMEMAX;
+			buf.buffer = buf.curptr;
+			buf.maxread = buf.curptr + *h->textsize;
 			buf.infil = -1;
 			buf.fname = (usch*)h->basename;
+			buf.fn = (usch*)h->basename;
 			buf.orgfn = (usch*)h->basename;
 			buf.lineno = 0;
+			buf.escln = 0;
 			buf.next = ifiles;
+			buf.idx = SYSINC;
+			buf.incs = NULL;
 			ifiles = &buf;
 
 			/* Largely copied from pushfile */
-			if (++inclevel > MAX_INCLEVEL)
+			if (++inclevel > 100)
 				error("Limit for nested includes exceeded");
 
 			prtline(); /* Output file loc */
 
 			otrulvl = trulvl;
-			if ((c = cpplex()) != 0)
-				error("cpplex returned %d", c);
+
+                        fastscan();
 
 			if (otrulvl != trulvl || flslvl)
 				error("Unterminated conditional");
