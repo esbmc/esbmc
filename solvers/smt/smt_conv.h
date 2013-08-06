@@ -47,6 +47,7 @@
  *    * Casts
  *    * Byte operations on objects (extract/update)
  *    * FixedBV representation of floats
+ *    * Unions -> something else
  *
  *  While these problems are supported by some SMT solvers, but are flattened
  *  in others (as SMT doesn't support these):
