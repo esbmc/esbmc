@@ -70,6 +70,11 @@
  *  @see smt_convt
  *  @see symex_target_equationt
  */
+
+/** Identifier for SMT sort kinds
+ *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
+ *  identifier. To be able to describe multiple kinds at the same time, they
+ *  take binary values, so that they can be used as bits in an integer. */
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
   SMT_SORT_REAL = 2,
@@ -82,6 +87,18 @@ enum smt_sort_kind {
 
 #define SMT_SORT_ALLINTS (SMT_SORT_INT | SMT_SORT_REAL | SMT_SORT_BV)
 
+/** Identifiers for SMT functions.
+ *  Each SMT function gets a unique identifier, representing its interpretation
+ *  when applied to some arguments. This can be used to describe a function
+ *  application when joined with some arguments. Initial values such as
+ *  terminal functions (i.e. bool, int, symbol literals) shouldn't normally
+ *  be encountered and instead converted to an smt_ast before use. The
+ *  'HACKS' function represents some kind of special case, according to where
+ *  it is encountered; the same for 'INVALID'.
+ *
+ *  @see smt_convt::convert_terminal
+ *  @see smt_convt::convert_ast
+ */
 enum smt_func_kind {
   // Terminals
   SMT_FUNC_HACKS = 0, // indicate the solver /has/ to use the temp expr.
@@ -157,12 +174,28 @@ enum smt_func_kind {
   SMT_FUNC_IS_INT,
 };
 
+/** A class for storing an SMT sort.
+ *  This class abstractly represents an SMT sort: solver converter classes are
+ *  expected to extend this and add fields that store their solvers
+ *  representation of the sort. Then, this base class is used as a handle
+ *  through the rest of the SMT conversion code.
+ *
+ *  Only a few piece of sort information are used to make conversion decisions,
+ *  and are thus actually stored in the sort object itself.
+ *  @see smt_ast
+ */
 class smt_sort {
-  // Same story as smt_ast.
 public:
+  /** Identifies what /kind/ of sort this is.
+   *  The specific sort itself may be parameterised with widths and domains,
+   *  for example. */
   smt_sort_kind id;
-  unsigned long data_width; // BV width for BVs, range width for arrays
-  unsigned long domain_width; // Domain width for arrays.
+  /** Data size of the sort.
+   *  For bitvectors this is the bit width, for arrays the range BV bit width.
+   *  For everything else, undefined */
+  unsigned long data_width;
+  /** BV Width of array domain. For everything else, undefined */
+  unsigned long domain_width;
 
   smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0) { }
   smt_sort(smt_sort_kind i, unsigned long width)
@@ -171,9 +204,12 @@ public:
     : id(i), data_width(rwidth), domain_width(domwidth) { }
 
   virtual ~smt_sort() { }
+
+  /** Deprecated array domain width accessor */
   virtual unsigned long get_domain_width(void) const {
     return domain_width;
   }
+  /** Deprecated array range width accessor */
   virtual unsigned long get_range_width(void) const {
     return data_width;
   }
