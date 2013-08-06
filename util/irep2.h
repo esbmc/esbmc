@@ -320,6 +320,8 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  virtual ~type2t() { };
+
   /** Despatcher for SMT conversion.
    *  Each subclass of type2t overrides this method, and provides a routine
    *  that will invoke a method in the class prop_convt that will convert it
@@ -572,6 +574,8 @@ protected:
   expr2t(const expr2t &ref);
 
 public:
+  virtual ~expr2t() { };
+
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
