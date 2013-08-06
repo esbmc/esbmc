@@ -1824,6 +1824,7 @@ inline bool is_number_type(const expr2tc &e)
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type2tc bool_type;
   type2tc empty_type;
@@ -4587,6 +4588,9 @@ is_false(const expr2tc &expr)
   else
     return false;
 }
+
+// To initialize the below at a defined time...
+void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;

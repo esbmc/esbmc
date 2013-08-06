@@ -19,6 +19,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 */
 
 #include <stdint.h>
+
+#include <irep2.h>
+
 #include <langapi/mode.h>
 
 #include "parseoptions.h"
@@ -37,6 +40,10 @@ Function: main
 
 int main(int argc, const char **argv)
 {
+  // To avoid the static initialization order fiasco:
+  type_pool = type_poolt(true);
+  init_expr_constants();
+
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }

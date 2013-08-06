@@ -761,6 +761,11 @@ object_descriptor2t::get_root_object(void) const
 
 type_poolt::type_poolt(void)
 {
+  // This space is deliberately left blank
+}
+
+type_poolt::type_poolt(bool yolo __attribute__((unused)))
+{
   bool_type = type2tc(new bool_type2t());
   empty_type = type2tc(new empty_type2t());
 
@@ -907,7 +912,7 @@ type_poolt::get_int(unsigned int size)
   }
 }
 
-type_poolt type_pool __attribute__((init_priority(102)));
+type_poolt type_pool;
 
 // For CRCing to actually be accurate, expr/type ids mustn't overflow out of
 // a byte. If this happens then a) there are too many exprs, and b) the expr
@@ -2255,19 +2260,30 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   return;
 }
 
-const expr2tc true_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(true));
-const expr2tc false_expr __attribute__((init_priority(103)))
-  = expr2tc(new constant_bool2t(false));
+const expr2tc true_expr;
+const expr2tc false_expr;
 
-const constant_int2tc zero_uint __attribute__((init_priority(103)))
-  = constant_int2tc(type_pool.get_uint(32), BigInt(0));
-const constant_int2tc one_uint __attribute__((init_priority(103)))
-  = constant_int2tc(type_pool.get_uint(32), BigInt(1));
-const constant_int2tc zero_int __attribute__((init_priority(103)))
-  = constant_int2tc(type_pool.get_int(32), BigInt(0));
-const constant_int2tc one_int __attribute__((init_priority(103)))
-  = constant_int2tc(type_pool.get_int(32), BigInt(1));
+const constant_int2tc zero_uint;
+const constant_int2tc one_uint;
+const constant_int2tc zero_int;
+const constant_int2tc one_int;
+
+// More avoidance of static initialization order fiasco
+void
+init_expr_constants(void)
+{
+  const_cast<expr2tc&>(true_expr) = expr2tc(new constant_bool2t(true));
+  const_cast<expr2tc&>(false_expr) = expr2tc(new constant_bool2t(false));
+
+  const_cast<constant_int2tc&>(zero_uint)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_uint)
+    = constant_int2tc(type_pool.get_uint(32), BigInt(1));
+  const_cast<constant_int2tc&>(zero_int)
+    = constant_int2tc(type_pool.get_int(32), BigInt(0));
+  const_cast<constant_int2tc&>(one_int)
+    = constant_int2tc(type_pool.get_int(32), BigInt(1));
+}
 
 std::string bool_type2t::field_names [esbmct::num_type_fields]  = {"","","","", ""};
 std::string empty_type2t::field_names [esbmct::num_type_fields]  =
