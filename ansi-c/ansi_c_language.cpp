@@ -130,6 +130,8 @@ static void internal_additions(std::string &code)
     "signed char __VERIFIER_nondet_schar();\n"
 
     "const char *__PRETTY_FUNCTION__;\n"
+    "const char *__FILE__ = \"\";\n"
+    "unsigned int __LINE__ = 0;\n"
 
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
