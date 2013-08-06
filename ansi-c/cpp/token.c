@@ -130,7 +130,7 @@ inpbuf(void)
 /*
  * return a raw character from the input stream
  */
- inline int
+int
 inpch(void)
 {
 
@@ -216,7 +216,7 @@ chkeol(void)
  * return next char, after converting trigraphs and
  * skipping escaped line endings
  */
- inline int
+int
 inch(void)
 {
 	int ch;
