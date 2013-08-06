@@ -18,6 +18,56 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 
+/** SMT conversion tools and utilities.
+ *  smt_convt is the base class for everything that attempts to convert the
+ *  contents of an SSA program into something else, generally SMT or SAT based.
+ *
+ *  The class itself does various accounting and structuring of the conversion,
+ *  however the challenge is that as we convert the SSA program into anything
+ *  else, we must deal with the fact that expressions in ESBMC are somewhat
+ *  bespoke, and don't follow any particular formalism or logic. Therefore
+ *  a lot of translation has to occur to reduce it to the desired logic, a
+ *  process that Kroening refers to in CBMC as 'Flattenning'.
+ *
+ *  The conceptual data flow is that an SSA program held by
+ *  symex_target_equationt is converted into a series of boolean propositions
+ *  in some kind of solver context, the handle to which are objects of class 
+ *  smt_ast. These are then asserted as appropriate (or conjoined or
+ *  disjuncted), after which the solver may be asked whether the formula is
+ *  or not. If it is, the value of symbols in the formula may be retrieved
+ *  from the solver.
+ *
+ *  In no particular order, the following expression translation problems exist
+ *  and are solved at various layers:
+ *
+ *  For all solvers, the following problems are flattenned:
+ *    * The C memory address space
+ *    * Representation of pointer types
+ *    * Casts
+ *    * Byte operations on objects (extract/update)
+ *    * FixedBV representation of floats
+ *
+ *  While these problems are supported by some SMT solvers, but are flattened
+ *  in others (as SMT doesn't support these):
+ *    * Bitvector integer overflow detection
+ *    * Tuple representation (and arrays of them)
+ *
+ *  SAT solvers have the following aspects flattened:
+ *    * Arrays (using Kroenings array decision procedure)
+ *    * First order logic bitvector calculations to boolean formulas
+ *    * Boolean formulas to CNF
+ *
+ *  If you find yourself having to make the SMT translation translate more than
+ *  these things, ask yourself whether what you're doing is better handled at
+ *  a different layer, such as symbolic execution. A nonexhaustive list of these
+ *  include:
+ *    * Anything involving pointer dereferencing at all
+ *    * Anything that considers the control flow guard at any point
+ *    * Pointer liveness or dynamic allocation consideration
+ *
+ *  @see smt_convt
+ *  @see symex_target_equationt
+ */
 enum smt_sort_kind {
   SMT_SORT_INT = 1,
   SMT_SORT_REAL = 2,
