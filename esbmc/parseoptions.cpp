@@ -74,7 +74,7 @@ timeout_handler(int dummy __attribute__((unused)))
 
 /*******************************************************************\
 
-Function: cbmc_parseoptionst::set_verbosity
+Function: cbmc_parseoptionst::set_verbosity_msg
 
   Inputs:
 
@@ -84,7 +84,7 @@ Function: cbmc_parseoptionst::set_verbosity
 
 \*******************************************************************/
 
-void cbmc_parseoptionst::set_verbosity(messaget &message)
+void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
 
@@ -426,7 +426,7 @@ int cbmc_parseoptionst::doit()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   goto_functionst goto_functions;
 
@@ -456,7 +456,7 @@ int cbmc_parseoptionst::doit()
 
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity(bmc);
+  set_verbosity_msg(bmc);
   return do_bmc(bmc);
 }
 
@@ -497,7 +497,7 @@ int cbmc_parseoptionst::doit_k_induction()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   if(cmdline.isset("preprocess"))
   {
@@ -535,7 +535,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_base_case(goto_functions_base_case, opts1,
       context_base_case, ui_message_handler);
-  set_verbosity(bmc_base_case);
+  set_verbosity_msg(bmc_base_case);
 
   context.clear(); // We need to clear the previous context
 
@@ -569,7 +569,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
       context_forward_condition, ui_message_handler);
-  set_verbosity(bmc_forward_condition);
+  set_verbosity_msg(bmc_forward_condition);
 
   context.clear(); // We need to clear the previous context
 
@@ -603,7 +603,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
       context_inductive_step, ui_message_handler);
-  set_verbosity(bmc_inductive_step);
+  set_verbosity_msg(bmc_inductive_step);
 
   // do actual BMC
   bool res;
@@ -1186,6 +1186,7 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
+#if 0
 static void
 relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 {
@@ -1205,6 +1206,7 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 
   return;
 }
+#endif
 
 bool cbmc_parseoptionst::process_goto_program(
   optionst &options,
