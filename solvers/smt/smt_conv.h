@@ -18,7 +18,8 @@
 #include <boost/multi_index/member.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 
-/** SMT conversion tools and utilities.
+/** @file smt_conv.h
+ *  SMT conversion tools and utilities.
  *  smt_convt is the base class for everything that attempts to convert the
  *  contents of an SSA program into something else, generally SMT or SAT based.
  *
