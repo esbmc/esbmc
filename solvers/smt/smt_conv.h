@@ -353,15 +353,45 @@ public:
 class smt_convt : public messaget
 {
 public:
+  /** Shorthand for a vector of smt_ast's */
   typedef std::vector<const smt_ast *> ast_vec;
 
+  /** Primary constructor. After construction, smt_post_init must be called
+   *  before the object is used as a solver converter.
+   *
+   *  @param enable_cache Whether or not to store a map of exprs to smt_ast's
+   *         in a cache, and return the cached smt_ast if we attempt to convert
+   *         an expr a second time.
+   *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
+   *  @param _ns Namespace for looking up the type of certain symbols.
+   *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
+   *         cpp:: prefix to their symbols.
+   *  @param tuple_support True if the underlying solver has native tuple
+   *         support.
+   *  @param no_bools_in_arrays Whether or not the solver supports having
+   *         arrays with booleans as the range, which isn't strictly permitted
+   *         by SMT, but is by C.
+   *  @param can_init_inf_arrs Whether the solver can efficiently initialize
+   *         infinite arrays. If it can, the convert_array_of method is used
+   *         to create them. If not, a free array is used, and when we fiddle
+   *         with pointer tracking modelling arrays we assert that the elements
+   *         we use were initialized to a particular value. Ugly, but works on
+   *         various solvers. */
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
             bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
             bool can_init_inf_arrs);
   ~smt_convt();
-  void smt_post_init(void); // smt init stuff that calls into subclass.
 
+  /** Post-constructor setup method. We must create various pieces of memory
+   *  model data for tracking, however can't do it from the constructor because
+   *  the solver converter itself won't have been initialized itself at that
+   *  point. So, once it's ready, the solver converter should call this from
+   *  it's constructor. */
+  void smt_post_init(void);
+
+  /** Push one context on the SMT assertion stack. */
   virtual void push_ctx(void);
+  /** Pop one context on the SMT assertion stack. */
   virtual void pop_ctx(void);
 
   virtual const smt_ast *make_disjunct(const ast_vec &v);
