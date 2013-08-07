@@ -480,9 +480,34 @@ public:
   /** @{
    *  @name Internal conversion API between smt_convt and solver converter */
 
+  /** Create an SMT function application. Using the provided information,
+   *  the solver converter should create a function application in the solver
+   *  being used, then wrap it in an smt_ast, and return it. If the desired
+   *  function application is not supported by the solver, print an error and
+   *  abort.
+   *
+   *  @param s The resulting sort of the func app we are creating.
+   *  @param k The kind of function application to create.
+   *  @param args Array of function apps to use as arguments to this one.
+   *  @param numargs The number of elements in args. Should be consistent with
+   *         the function kind k.
+   *  @return The resulting function application, wrapped in an smt_ast. */
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs) = 0;
+
+  /** Create an SMT sort. The sort kind k indicates what kind of sort to create,
+   *  and the parameters of the sort are passed in as varargs. Briefly, these
+   *  arguments are:
+   *  * Bools: None
+   *  * Int's: None
+   *  * BV's:  Width as a machine integer, and a bool that's true if it's signed
+   *  * Arrays: Two pointers to smt_sort's: the domain sort, and the range sort
+   *
+   *  Structs and unions use @ref mk_struct_sort and @ref mk_union_sort.
+   *
+   *  @param k The kind of SMT sort that will be created.
+   *  @return The smt_sort wrapper for the sort. Lifetime currently undefined */
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
   virtual smt_ast *mk_smt_real(const std::string &str) = 0;
