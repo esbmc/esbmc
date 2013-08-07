@@ -315,6 +315,41 @@ public:
   const std::string name;
 };
 
+/** The base SMT-conversion class/interface.
+ *  smt_convt handles a number of decisions that must be made when
+ *  deconstructing ESBMC expressions down into SMT representation. See
+ *  smt_conv.h for more high level documentation of this.
+ *
+ *  The basic flow is thus: a class that can create SMT formula in some solver
+ *  subclasses smt_convt, implementing abstract methods, in particular
+ *  mk_func_app. The rest of ESBMC then calls convert with an expression, and
+ *  this class deconstructs it into a series of applications, as documented by
+ *  the smt_func_kind enumeration. These are then created via mk_func_app or
+ *  some more specific method calls. Boolean sorted ASTs are then asserted
+ *  into the solver context.
+ *
+ *  The exact lifetime of smt asts here is currently undefined, unfortunately,
+ *  although smt_convt posesses a cache, so they generally have a reference
+ *  in there. This will probably be fixed in the future.
+ *
+ *  In theory this class supports pushing and popping of solver contexts,
+ *  although of course that depends too on the subclass supporting it. However,
+ *  this hasn't really been tested since everything here was rewritten from
+ *  The Old Way, so don't trust it.
+ *
+ *  While mk_func_app is supposed to be the primary interface to making SMT
+ *  function applications, in some cases we want to introduce some
+ *  abstractions, and this becomes unweildy. Thus, tuple and array operations
+ *  are performed via virtual function calls. By default, array operations are
+ *  then passed through to mk_func_app, while tuples are decomposed into sets
+ *  of variables which are then created through mk_func_app. If this isn't
+ *  what a solver wants to happen, it can override this and handle that itself.
+ *  The idea is that, in the manner of metaSMT, you can then compose a series
+ *  of subclasses that perform the desired amount of flattening, and then work
+ *  from there. (Some of this is still WIP though).
+ *
+ *  @see smt_conv.h
+ *  @see smt_func_kind */
 class smt_convt : public messaget
 {
 public:
