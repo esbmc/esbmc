@@ -392,6 +392,8 @@ public:
   void smt_post_init(void);
 
   // The API that we provide to the rest of the world:
+  /** @{
+   *  @name External API to smt_convt. */
 
   /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
    *  historic case that needs to go. */
@@ -473,6 +475,11 @@ public:
    *  @return A three-valued return val, of the assignment to a. */
   virtual tvt l_get(const smt_ast *a)=0;
 
+  /** @} */
+
+  /** @{
+   *  @name Internal conversion API between smt_convt and solver converter */
+
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs) = 0;
@@ -489,11 +496,15 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
-  virtual void set_to(const expr2tc &expr, bool value);
+  virtual expr2tc get_bool(const smt_ast *a) = 0;
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
+  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
+                                 const smt_sort *sort) = 0;
 
-  // Things that the SMT converter can flatten to SMT, but that the specific
-  // solver being used might have its own support for (in which case it should
-  // override the below).
+  /** @} */
+
+  /** @{
+   *  @name Tuple solver-converter API. */
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_fresh(const smt_sort *s);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
@@ -520,12 +531,18 @@ public:
   virtual const smt_ast *tuple_array_of(const expr2tc &init_value,
                                         unsigned long domain_width);
 
+  /** @} */
+
+  /** @{
+   *  @name Integer overflow solver-converter API. */
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
-  virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
-  std::string mk_fresh_name(const std::string &tag);
+  /** @} */
+
+  /** @{
+   *  @name Array operations solver-converter API. */
 
   virtual const smt_ast *convert_array_index(const expr2tc &expr,
                                              const smt_sort *ressort);
@@ -544,7 +561,15 @@ public:
   virtual const smt_ast *convert_array_equality(const expr2tc &a,
                                                 const expr2tc &b);
 
-  // Internal foo
+  /** @} */
+
+  /** @{
+   *  @name Internal foo. */
+
+  virtual void set_to(const expr2tc &expr, bool value);
+
+  virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
+  std::string mk_fresh_name(const std::string &tag);
 
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
@@ -632,15 +657,10 @@ public:
 
   std::string get_fixed_point(const unsigned width, std::string value) const;
 
-  // The wreckage of prop_convt:
-
-  virtual expr2tc get_bool(const smt_ast *a) = 0;
-  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
-  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const smt_sort *sort) = 0;
-
   // Ours:
   expr2tc get_array(const smt_ast *array, const type2tc &t);
+
+  /** @} */
 
   // Types
 
