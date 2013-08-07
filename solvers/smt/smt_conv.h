@@ -348,6 +348,8 @@ public:
  *  of subclasses that perform the desired amount of flattening, and then work
  *  from there. (Some of this is still WIP though).
  *
+ *  NB: the whole smt_asts-are-const situation needs to be resolved too.
+ *
  *  @see smt_conv.h
  *  @see smt_func_kind */
 class smt_convt : public messaget
@@ -389,17 +391,87 @@ public:
    *  it's constructor. */
   void smt_post_init(void);
 
+  // The API that we provide to the rest of the world:
+
+  /** Result of a call to dec_solve. Either sat, unsat, or error. SMTLIB is
+   *  historic case that needs to go. */
+  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
+
   /** Push one context on the SMT assertion stack. */
   virtual void push_ctx(void);
   /** Pop one context on the SMT assertion stack. */
   virtual void pop_ctx(void);
 
+  /** Main interface to SMT conversion.
+   *  Takes one expression, and converts it into the underlying SMT solver,
+   *  returning a single smt_ast that represents the converted expressions
+   *  value. The lifetime of the returned pointer is currently undefined.
+   *
+   *  @param expr The expression to convert into the SMT solver
+   *  @return The resulting handle to the SMT value. */
+  const smt_ast *convert_ast(const expr2tc &expr);
+
+  /** Make an n-ary 'or' function application.
+   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
+   *  'or' function app over all the smt_ast's.
+   *  @param v The vector of converted boolean expressions to be 'or''d.
+   *  @return The smt_ast handle to the 'or' func app. */
   virtual const smt_ast *make_disjunct(const ast_vec &v);
+
+  /** Make an n-ary 'and' function application.
+   *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
+   *  'and' function app over all the smt_ast's.
+   *  @param v The vector of converted boolean expressions to be 'and''d.
+   *  @return The smt_ast handle to the 'and' func app. */
   virtual const smt_ast *make_conjunct(const ast_vec &v);
+
+  /** Create the inverse of an smt_ast. Equivalent to a 'not' operation.
+   *  @param a The ast to invert. Must be boolean sorted.
+   *  @return The inverted piece of AST. */
   const smt_ast *invert_ast(const smt_ast *a);
+
+  /** Create an ipmlication between two smt_ast's. 
+   *  @param a The ast that implies the truth of the other. Boolean.
+   *  @param b The ast whos truth is implied. Boolean.
+   *  @return The resulting piece of AST. */
   const smt_ast *imply_ast(const smt_ast *a, const smt_ast *b);
 
+  /** Assert the truth of an ast. Equivalent to the 'assert' directive in the
+   *  SMTLIB language, this informs the solver that in the satisfying
+   *  assignment it attempts to produce, the formula corresponding to the
+   *  smt_ast argument must evaluate to true.
+   *  @param a A handle to the formula that must be true. */
   virtual void assert_ast(const smt_ast *a) = 0;
+
+  /** Solve the formula given to the solver. The solver will attempt to produce
+   *  a satisfying assignment for all of the variables / symbols used in the
+   *  formula, where all the asserted sub-formula are true. Results are either
+   *  unsat (the formula is inconsistent), sat (an assignment exists), or that
+   *  an error occurred.
+   *  @return Result code of the call to the solver. */
+  virtual resultt dec_solve() = 0;
+
+  /** Fetch a satisfying assignment from the solver. If a previous call to
+   *  dec_solve returned satisfiable, then the solver has a set of assignments
+   *  to symbols / variables used in the formula. This method retrieves the
+   *  value of a symbol, and formats it into an ESBMC expression.
+   *  @param expr Variable to get the value of. Must be a symbol expression.
+   *  @return Explicit assigned value of expr in the solver. May be nil, in
+   *          which case the solver did not assign a value to it for some
+   *          reason. */
+  virtual expr2tc get(const expr2tc &expr);
+
+  /** Solver name fetcher. Returns a string naming the solver being used, and
+   *  potentially it's version, if available.
+   *  @return The name of the solver this smt_convt uses. */
+  virtual const std::string solver_text()=0;
+
+  /** Fetch the value of a boolean sorted smt_ast. (The 'l' is for literal, and
+   *  is historic). Returns a three valued result, of true, false, or
+   *  unassigned.
+   *  @param a The boolean sorted ast to fetch the value of.
+   *  @return A three-valued return val, of the assignment to a. */
+  virtual tvt l_get(const smt_ast *a)=0;
 
   virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
@@ -476,7 +548,6 @@ public:
 
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
-  const smt_ast *convert_ast(const expr2tc &expr);
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
   const smt_ast *convert_ptr_cmp(const expr2tc &expr, const expr2tc &expr2,
                                  const expr2tc &templ_expr);
@@ -562,14 +633,6 @@ public:
   std::string get_fixed_point(const unsigned width, std::string value) const;
 
   // The wreckage of prop_convt:
-  typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
-
-  virtual resultt dec_solve() = 0;
-  virtual expr2tc get(const expr2tc &expr);
-
-  virtual const std::string solver_text()=0;
-
-  virtual tvt l_get(const smt_ast *a)=0;
 
   virtual expr2tc get_bool(const smt_ast *a) = 0;
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
