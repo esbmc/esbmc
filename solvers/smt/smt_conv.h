@@ -215,10 +215,18 @@ public:
   }
 };
 
+/** Storage for flattened tuple sorts.
+ *  When flattening tuples (and arrays of them) down to SMT, we need to store
+ *  additional type data. This sort is used in tuple code to record that data.
+ *  @see smt_tuple.cpp */
 class tuple_smt_sort : public smt_sort
 {
 public:
+  /** Actual type (struct or array of structs) of the tuple that's been
+   * flattened */
   const type2tc thetype;
+  /** Domain width of tuple arrays. Out of date, needs to be merged with
+   *  smt_sort's record of this. */
   unsigned long domain_width;
 
   tuple_smt_sort(const type2tc &type)
@@ -241,43 +249,56 @@ public:
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
 #define is_tuple_array_ast_type(x) (is_array_type(x) && (is_structure_type(to_array_type(x).subtype) || is_pointer_type(to_array_type(x).subtype)))
 
+/** Storage of an SMT function application.
+ *  This class represents a single SMT function app, abstractly. Solver
+ *  converter classes must extend this and add whatever fields are necessary
+ *  to represent a function application in the solver they support. A converted
+ *  expression becomes an SMT function application; that is then handed around
+ *  the rest of the SMT conversion code as an smt_ast.
+ *
+ *  While an expression becomes an smt_ast, the inverse is not true, and a
+ *  single expression may in fact become many smt_asts in various places. See
+ *  smt_convt for more detail on how conversion occurs.
+ *
+ *  The function arguments, and the actual function application itself are all
+ *  abstract and dealt with by the solver converter class. Only the sort needs
+ *  to be available for us to make conversion decisions.
+ *  @see smt_convt
+ *  @see smt_sort
+ */
 class smt_ast {
-  // Mostly opaque class for storing whatever data the backend solver feels
-  // is appropriate. I orignally thought this should contain useful tracking
-  // data for what kind of AST this is, but then realised that this is just
-  // overhead and whatever the solver stores should be enough for that too
-  //
-  // Question - should this AST node (or what it represents) not be the same as
-  // any other expression in ESBMC and just use the existing expr
-  // representations?  Answer - Perhaps, but there's a semantic shift between
-  // what ESBMC uses expressions for and what the SMT language actually /has/,
-  // i.e. just some function applications and suchlike. Plus an additional
-  // layer of type safety can be applied here that can't in the expression
-  // stuff.
-  //
-  // In particular, things where multiple SMT functions map onto one expression
-  // operator are troublesome. This means multiple integer operators for
-  // different integer modes, signed and unsigned comparisons, the multitude of
-  // things that an address-of can turn into, and so forth.
-
-  // We /do/ need some sort information in conversion.
 public:
+  /** The sort of this function application. */
   const smt_sort *sort;
 
   smt_ast(const smt_sort *s) : sort(s) { }
   virtual ~smt_ast() { }
 };
 
+/** Function app representing a tuple sorted value.
+ *  This AST represents any kind of SMT function that results in something of
+ *  a tuple sort. As documented in smt_tuple.c, the result of any kind of
+ *  tuple operation that gets flattened is a symbol prefix, which is what this
+ *  ast actually stores.
+ *
+ *  This AST should only be used in smt_tuple.c, if you're using it elsewhere
+ *  think very hard about what you're trying to do. Its creation should also
+ *  only occur if there is no tuple support in the solver being used, and a
+ *  tuple creating method has been called.
+ *
+ *  @see smt_tuple.c */
 class tuple_smt_ast : public smt_ast {
 public:
-  // A class for representing tuple-typed ASTs. In circumstances where the SMT
-  // solver doesn't have a tuple extension, we have to perform all tuple
-  // operations ourselves. That requires some data storage; that data will live
-  // in this ast class.
+  /** Primary constructor.
+   *  @param s The sort of the tuple, of type tuple_smt_sort.
+   *  @param _name The symbol prefix of the variables representing this tuples
+   *               value. */
   tuple_smt_ast (const smt_sort *s, const std::string &_name) : smt_ast(s),
             name(_name) { }
   virtual ~tuple_smt_ast() { }
 
+  /** The symbol prefix of the variables representing this tuples value, as a
+   *  string (i.e., no associated type). */
   const std::string name;
 };
 
