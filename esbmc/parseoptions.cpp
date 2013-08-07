@@ -18,7 +18,9 @@ extern "C" {
 #include <unistd.h>
 
 #include <sys/resource.h>
+#ifndef ONAMAC
 #include <sys/sendfile.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 }
@@ -1351,7 +1353,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(ONAMAC)
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
