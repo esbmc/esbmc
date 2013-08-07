@@ -38,6 +38,17 @@
  *  or not. If it is, the value of symbols in the formula may be retrieved
  *  from the solver.
  *
+ *  To do that, the user must allocate a solver converter object, which extends
+ *  the class smt_convt. Current, create_solver_factory will do this, in the
+ *  factory-pattern manner (ish). Each solver converter implements all the
+ *  abstract methods of smt_convt. When handed an expression to convert,
+ *  smt_convt deconstructs it into a series of function applications, which it
+ *  creates by calling various abstract methods implemented by the converter
+ *  (in particular mk_func_app).
+ *
+ *  The actual function applications are in smt_ast objects. Following the
+ *  SMTLIB definition, these are basically a term.
+ *
  *  In no particular order, the following expression translation problems exist
  *  and are solved at various layers:
  *
@@ -69,6 +80,8 @@
  *
  *  @see smt_convt
  *  @see symex_target_equationt
+ *  @see create_solver_factory
+ *  @see smt_convt::mk_func_app
  */
 
 /** Identifier for SMT sort kinds
