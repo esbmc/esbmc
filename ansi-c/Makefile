@@ -66,12 +66,12 @@ $(OBJDIR)/clib64.o: $(HOSTOBJDIR)/c2goto library/*.c
 	./headers/flail.sh clib64_buf clib64.goto | $(CXX) -x c - -c -o $@
 
 $(OBJDIR)/clib.o: $(HOSTOBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
-	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT)$(OBJDIR)/clib.o $(PARTLINKOPTS)
+	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT) $(OBJDIR)/clib.o $(PARTLINKOPTS)
 
 ###############################################################################
 
 $(OBJDIR)/ansi-c.o: $(OBJS) $(OBJDIR)/cprover_library.o $(OBJDIR)/clib.o cpp/$(OBJDIR)/preproc.o headers/$(OBJDIR)/headers.o
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	$(MAKE) -C cpp clean
