@@ -166,6 +166,7 @@ NULL
 
 static const char *cpp_mac_defs[] = {
 "__APPLE__",
+"__GNUC__",
 NULL,
 };
 
