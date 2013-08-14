@@ -171,6 +171,7 @@ static const char *cpp_mac_defs[] = {
 "__APPLE__",
 "__GNUC__",
 "__asm(x)= ",
+"_FORTIFY_SOURCE=0",
 NULL,
 };
 
