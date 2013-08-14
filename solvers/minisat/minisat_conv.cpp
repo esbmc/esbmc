@@ -141,5 +141,5 @@ minisat_convt::assert_lit(const literalt &l)
 void
 minisat_convt::assign_array_symbol(const std::string &str, const smt_ast *a)
 {
-  sym_table[str] = a;
+  sym_table[str] = const_cast<smt_ast*>(a); // Naughty, yes.
 }

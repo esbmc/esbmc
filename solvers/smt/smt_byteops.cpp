@@ -101,7 +101,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
   const smt_ast *tuple, *value;
-  uint width_op0, width_op2;
+  unsigned int width_op0, width_op2;
 
   tuple = convert_ast(data.source_value);
   value = convert_ast(data.update_value);

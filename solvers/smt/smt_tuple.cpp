@@ -93,7 +93,7 @@ smt_convt::tuple_fresh(const smt_sort *s)
   std::string name = mk_fresh_name("tuple_fresh::") + ".";
 
   smt_ast *a = mk_smt_symbol(name, s);
-  a = a;
+  (void)a;
   return new tuple_smt_ast(s, name);
 }
 

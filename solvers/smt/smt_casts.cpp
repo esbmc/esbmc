@@ -267,9 +267,12 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   expr2tc target = cast_to_unsigned;
 
   // Construct array for all possible object outcomes
-  expr2tc is_in_range[addr_space_data.back().size()];
-  expr2tc obj_ids[addr_space_data.back().size()];
-  expr2tc obj_starts[addr_space_data.back().size()];
+  std::vector<expr2tc> is_in_range;
+  std::vector<expr2tc> obj_ids;
+  std::vector<expr2tc> obj_starts;
+  is_in_range.resize(addr_space_data.back().size());
+  obj_ids.resize(addr_space_data.back().size());
+  obj_starts.resize(addr_space_data.back().size());
 
   std::map<unsigned,unsigned>::const_iterator it;
   unsigned int i;
