@@ -97,15 +97,15 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   smtlibparse(TOK_START_INFO);
 
   // As a result we should have a single entry in a list of sexprs.
-  struct sexpr *sexpr = smtlib_output;
+  class sexpr *sexpr = smtlib_output;
   assert(sexpr->sexpr_list.size() == 1 &&
          "More than one sexpr response to get-info name");
-  struct sexpr &s = sexpr->sexpr_list.front();
+  class sexpr &s = sexpr->sexpr_list.front();
 
   // Should have a keyword followed by a string?
   assert(s.token == 0 && s.sexpr_list.size() == 2 && "Bad solver name format");
-  struct sexpr &keyword = s.sexpr_list.front();
-  struct sexpr &value = s.sexpr_list.back();
+  class sexpr &keyword = s.sexpr_list.front();
+  class sexpr &value = s.sexpr_list.back();
   assert(keyword.token == TOK_KEYWORD && keyword.data == ":name" &&
          "Bad get-info :name response from solver");
   assert(value.token == TOK_STRINGLIT && "Non-string solver name response");
@@ -121,11 +121,11 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   sexpr = smtlib_output;
   assert(sexpr->sexpr_list.size() == 1 &&
          "More than one sexpr response to get-info version");
-  struct sexpr &v = sexpr->sexpr_list.front();
+  class sexpr &v = sexpr->sexpr_list.front();
 
   assert(v.token == 0 && v.sexpr_list.size() == 2 && "Bad solver version fmt");
-  struct sexpr &kw = v.sexpr_list.front();
-  struct sexpr &val = v.sexpr_list.back();
+  class sexpr &kw = v.sexpr_list.front();
+  class sexpr &val = v.sexpr_list.back();
   assert(kw.token == TOK_KEYWORD && kw.data == ":version" &&
          "Bad get-info :version response from solver");
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
