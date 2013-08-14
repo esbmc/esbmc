@@ -192,7 +192,7 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
   case SMT_FUNC_REAL:
     // Give up
     ss << ast->realval;
-    output == ss.str();
+    output = ss.str();
     return 0;
   case SMT_FUNC_SYMBOL:
     // All symbols to be emitted braced within |'s
