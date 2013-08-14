@@ -1,7 +1,7 @@
 CXXFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC -stdlib=libc++
 GCCFLAGS += -Wall -Wextra -Wno-deprecated -DONAMAC
 OPTS ?= -O3
-PLATLIBS= -lgmp -ldl
+PLATLIBS=
 
 # Solvers
 ifdef USE_SOLVER_Z3
@@ -33,7 +33,7 @@ ifdef STATICLINK
 $(error Can't statically link anything on a mac)
 endif
 
-PLATLIBS+= -pthread -lpthread
+PLATLIBS+= -lpthread
 
 SOLVER_LIBS+=$(Z3_SOLVER_LIBS)
 
