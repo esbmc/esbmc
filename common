@@ -32,9 +32,9 @@ INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 # which will result in additional strictness compile flags being used.
 
 ifndef STRICTCOMPILE
-EXTRACXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
+CXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
 else
-EXTRACXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
+CXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
 endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
@@ -90,7 +90,7 @@ $(OBJDIR)/.depends:
 	touch $(OBJDIR)/.depends
 
 $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+	unset CFLAGS && unset CXXFLAGS && $(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else
