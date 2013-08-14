@@ -17,9 +17,10 @@ CXXFLAGS+= -DBOOLECTOR
 SOLVER_LIBS+= -L$(BOOLECTOR)/lib -lboolector
 endif
 
-ifdef USE_SOLVER_MINISAT1
-MINISAT = $(SATDIR)/MiniSat-p_v1.14
+ifdef USE_SOLVER_MINISAT
+MINISAT = $(MINISAT_PATH)
 CXXFLAGS+= -DMINISAT
+LIBS+=$(MINISAT_PATH)/core/lib_release.a
 endif
 
 # Other goo
