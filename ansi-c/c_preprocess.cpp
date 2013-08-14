@@ -246,7 +246,12 @@ bool c_preprocess(
 
     close(fd);
 
-    if (waitpid(pid, &status, 0) < 0) {
+    // Loop around this, because while under gdb, macs for some reason receive
+    // a lot of EINTRs without restarting the syscall. Hmm.
+    pid_t foo;
+    while ((foo = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+      ;
+    if ((foo) < 0) {
       message_stream.error("Failed to wait for preprocessing process");
       return true;
     }
