@@ -27,7 +27,6 @@ endif
 ifdef TARGET32
 CXXFLAGS += -m32
 GCCFLAGS += -m32
-LDFLAGS += -m elf_i386
 endif
 
 ifdef STATICLINK
