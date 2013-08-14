@@ -1,6 +1,8 @@
 #include "solve.h"
 
+#ifdef Z3
 #include <solvers/z3/z3_conv.h>
+#endif
 #include <solvers/smtlib/smtlib_conv.h>
 
 // For the purpose of vastly reducing build times:
@@ -28,7 +30,9 @@ smt_convt *
 create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
 
 static smt_convt *
-create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
+create_z3_solver(bool is_cpp __attribute__((unused)),
+                 bool int_encoding __attribute__((unused)),
+                 const namespacet &ns __attribute__((unused)))
 {
 #ifndef Z3
     std::cerr << "Sorry, Z3 support was not built into this version of ESBMC"
@@ -40,10 +44,12 @@ create_z3_solver(bool is_cpp, bool int_encoding, const namespacet &ns)
 }
 
 static smt_convt *
-create_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                      const optionst &options)
+create_minisat_solver(bool int_encoding __attribute__((unused)),
+                      const namespacet &ns __attribute__((unused)),
+                      bool is_cpp __attribute__((unused)),
+                      const optionst &options __attribute__((unused)))
 {
-#ifndef Z3
+#ifndef MINISAT
     std::cerr << "Sorry, MiniSAT support was not built into this version of "
               "ESBMC" << std::endl;
     abort();
