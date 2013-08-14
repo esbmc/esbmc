@@ -8,7 +8,7 @@ OBJS= $(PLAINOBJS:%.o=$(OBJDIR)/%.o)
 HOSTOBJS= $(PLAINOBJS:%.o=$(HOSTOBJDIR)/%.o)
 
 $(OBJDIR)/%.o : %.h
-	./flail.sh "$(<:.h=)_buf" $< | $(CXX) -x c - -c -o $@
+	./flail.sh "$(<:.h=)_buf" $< | $(CC) $(CFLAGS) -x c - -c -o $@
 
 ifdef CROSSCOMPILE
 $(HOSTOBJDIR)/%.o : %.h

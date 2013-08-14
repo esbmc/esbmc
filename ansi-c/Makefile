@@ -59,11 +59,11 @@ $(HOSTOBJDIR)/c2goto: c2goto.cpp $(HOSTOBJDIR)/cprover_blank_library.o | $(C2GOT
 
 $(OBJDIR)/clib32.o: $(HOSTOBJDIR)/c2goto library/*.c
 	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB32FLAG) --output clib32.goto --no-lock-check $(C2GOTO_INCS)
-	./headers/flail.sh clib32_buf clib32.goto | $(CXX) -x c - -c -o $@
+	./headers/flail.sh clib32_buf clib32.goto | $(CC) $(CFLAGS) -x c - -c -o $@
 
 $(OBJDIR)/clib64.o: $(HOSTOBJDIR)/c2goto library/*.c
 	./$(HOSTOBJDIR)/c2goto library/*.c $(CLIB64FLAG) --output clib64.goto --no-lock-check $(C2GOTO_INCS)
-	./headers/flail.sh clib64_buf clib64.goto | $(CXX) -x c - -c -o $@
+	./headers/flail.sh clib64_buf clib64.goto | $(CC) $(CFLAGS) -x c - -c -o $@
 
 $(OBJDIR)/clib.o: $(HOSTOBJDIR)/c2goto $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o
 	$(PARTLINKLD) $(OBJDIR)/clib32.o $(OBJDIR)/clib64.o $(PARTLINKOUT) $(OBJDIR)/clib.o $(PARTLINKOPTS)
