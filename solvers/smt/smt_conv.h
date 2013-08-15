@@ -704,8 +704,27 @@ public:
 
   /** @{
    *  @name Integer overflow solver-converter API. */
+
+  /** Detect integer arithmetic overflows. Takes an expression, that is one of
+   *  add / sub / mul, and evaluates whether its operation applied to its
+   *  operands will result in an integer overflow or underflow.
+   *  @param expr Expression to test for arithmetic overflows in.
+   *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
+
+  /** Detect integer overflows in a cast. Takes a typecast2tc as an argument,
+   *  and if it causes a decrease in integer width, then encodes a test that
+   *  the dropped bits are never significant / used.
+   *  @param expr Cast to test for dropped / overflowed data in.
+   *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual smt_ast *overflow_cast(const expr2tc &expr);
+
+  /** Detects integer overflows in negation. This only tests for the case where
+   *  MIN_INT is being negated, in which case there is no positive
+   *  representation of that number, and an overflow occurs. Evaluates to true
+   *  if that can occur in the operand.
+   *  @param expr A neg2tc to test for overflows in.
+   *  @return Boolean valued AST representing whether an overflow occurs. */
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
   /** @} */
