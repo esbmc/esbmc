@@ -732,20 +732,65 @@ public:
   /** @{
    *  @name Array operations solver-converter API. */
 
+  /** High level index expression conversion. Deals with several annoying
+   *  corner cases that must be addressed, such as flattening multidimensional
+   *  arrays into one domain sort, or turning bool arrays into bit arrays.
+   *  XXX, why is this virtual?
+   *  @param expr An index2tc expression to convert to an SMT AST.
+   *  @param ressort The resulting sort of this operation.
+   *  @return An AST representing the index operation in the expression. */
   virtual const smt_ast *convert_array_index(const expr2tc &expr,
                                              const smt_sort *ressort);
+
+  /** Partner method to convert_array_index, for stores.
+   *  XXX, why is this virtual?
+   *  @param expr with2tc operation to convert to SMT.
+   *  @param ressort Sort of the resulting array ast.
+   *  @return AST representing the result of evaluating expr. */
   virtual const smt_ast *convert_array_store(const expr2tc &expr,
                                              const smt_sort *ressort);
 
+  /** Create a 'Select' AST. Called from convert_array_index after special
+   *  cases are handled. Default action is to call mk_func_app, unless
+   *  overridden by the subclass.
+   *  @param array The array-typed expression to select an element from.
+   *  @param idx Index of the element to select.
+   *  @param ressort Resulting sort of this operation.
+   *  @return AST representing this select operation. */
   virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
                                    const smt_sort *ressort);
+
+  /** Create a 'Store' AST -- as with mk_select, this is called from the
+   *  higher level method convert_array_store, after high level wrangling has
+   *  been taken care of.
+   *  @param array Array expression that we are looking to update.
+   *  @param idx Index of the element that is to be modified.
+   *  @param value The value that we are going to insert into the array.
+   *  @param ressort Sort of the resulting AST from this method.
+   *  @return AST representation of the resulting store operation. */
   virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
                                   const expr2tc &value,
                                   const smt_sort *ressort);
 
+  /** Create an array with a single initializer. This may be a small, fixed
+   *  size array, or it may be a nondeterministically sized array with a
+   *  word-sized domain. Default implementation is to repeatedly store into
+   *  the array for as many elements as necessary; subclassing class should
+   *  override if it has a more efficient method.
+   *  Nondeterministically sized memory with an initializer is very rare;
+   *  the only real users of this are fixed sized (but large) static arrays
+   *  that are zero initialized, or some infinite-domain modelling arrays
+   *  used in ESBMC.
+   *  @param init_val The value to initialize each element with.
+   *  @param domain_width The size of the array to create, in domain bits.
+   *  @return An AST representing the created constant array. */
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
+  /** Comparison between two arrays.
+   *  @param a First array to compare.
+   *  @param b Second array to compare.
+   *  @return Boolean valued AST representing the result of this equality. */
   virtual const smt_ast *convert_array_equality(const expr2tc &a,
                                                 const expr2tc &b);
 
