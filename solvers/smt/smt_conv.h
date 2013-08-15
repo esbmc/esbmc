@@ -509,15 +509,68 @@ public:
    *  @param k The kind of SMT sort that will be created.
    *  @return The smt_sort wrapper for the sort. Lifetime currently undefined */
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
+
+  /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
+   *  a bitvector.
+   *  @param theint BigInt representation of the number to create.
+   *  @param sign Whether this integer is considered signed or not.
+   *  @return The newly created terminal smt_ast of this integer. */
   virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
+
+  /** Create a real in a smt_ast.
+   *  @param str String representation of the real, to be parsed by the solver.
+   *         Tends to be one integer divided ('/') by another. After inspecting
+   *         all other options, there are none that are good, this is a
+   *         legitimate use of strings.
+   *  @return The newly created terminal smt_ast of this real. */
   virtual smt_ast *mk_smt_real(const std::string &str) = 0;
+
+  /** Create a bitvector.
+   *  @param theint Integer representation of the bitvector. Any excess bits
+   *         in the stored integer should be ignored.
+   *  @param sign Whether this bitvector is to be considered signed or not.
+   *  @param w Width, in bits, of the bitvector to create.
+   *  @return The newly created terminal smt_ast of this bitvector. */
   virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
+
+  /** Create a boolean.
+   *  @param val Whether to create a true or false boolean.
+   *  @return The newly created terminal smt_ast of this boolean. */
   virtual smt_ast *mk_smt_bool(bool val) = 0;
+
+  /** Create a symbol / variable. These correspond to renamed SSA variables in
+   *  the SSA program, although any other names can be used too, so long as they
+   *  don't conflict with anything else.
+   *  @param name Textual name of the symbol to create.
+   *  @param s The sort of the symbol we're creating.
+   *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) =0;
+
+  /** Create a sort representing a struct. i.e., a tuple. Ideally this should
+   *  actually be part of the overridden tuple api, but due to history it isn't
+   *  yet. If solvers don't support tuples, implement this to abort.
+   *  @param type The struct type to create a tuple representation of.
+   *  @return The tuple representation of the type, wrapped in an smt_sort. */
   virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;
+
   // XXX XXX XXX -- turn this into a formulation on top of structs.
+
+  /** Create a sort representing a union. i.e., a tuple. Ideally this should
+   *  actually be part of the overridden tuple api, but due to history it isn't
+   *  yet. If solvers don't support tuples, implement this to abort.
+   *  @param type The union type to create a tuple representation of.
+   *  @return The tuple representation of the type, wrapped in an smt_sort. */
   virtual smt_sort *mk_union_sort(const type2tc &type) = 0;
+
+  /** Create an 'extract' func app. Due to the fact that we can't currently
+   *  encode integer constants as function arguments without serious faff,
+   *  this can't be performed via the medium of mk_func_app. Hence, this api
+   *  call.
+   *  @param a The source piece of ast to extract a value from.
+   *  @param high The topmost bit to select from the source, down to low.
+   *  @param low The lowest bit to select from the source.
+   *  @param s The sort of the resulting piece of ast. */
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
