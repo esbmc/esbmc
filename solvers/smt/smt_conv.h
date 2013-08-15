@@ -574,8 +574,21 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s) = 0;
 
+  /** Extract the assignment to a boolean variable from the SMT solvers model.
+   *  @param a The AST whos value we wish to know.
+   *  @return Expression representation of a's value, as a constant_bool2tc */
   virtual expr2tc get_bool(const smt_ast *a) = 0;
+
+  /** Extract the assignment to a bitvector from the SMT solvers model.
+   *  @param a The AST whos value we wish to know.
+   *  @return Expression representation of a's value, as a constant_int2tc */
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
+
+  /** Extract an element from the model of an array, at an explicit index.
+   *  @param array AST representing the array we are extracting from
+   *  @param index The index of the element we wish to expect
+   *  @param sort The sort of the element we are extracting, i.e. array range
+   *  @return Expression representation of the element */
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
                                  const smt_sort *sort) = 0;
 
