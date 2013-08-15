@@ -596,29 +596,107 @@ public:
 
   /** @{
    *  @name Tuple solver-converter API. */
+
+  /** Create a new tuple from a struct definition.
+   *  @param structdef A constant_struct2tc, describing all the members of the
+   *         tuple to create.
+   *  @return AST representing the created tuple */
   virtual smt_ast *tuple_create(const expr2tc &structdef);
+
+  /** Create a fresh tuple, with freely valued fields.
+   *  @param s Sort of the tuple to create
+   *  @return AST representing the created tuple */
   virtual smt_ast *tuple_fresh(const smt_sort *s);
+
+  /** Project a field from a tuple.
+   *  @param a AST handle for the tuple to project from.
+   *  @param s Sort of the field that we are projecting.
+   *  @param field Index of the field in the tuple to project.
+   *  @return AST handle to the element of the tuple we've projected */
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
+
+  /** Update a field in a tuple.
+   *  @param a The source tuple that we are going to be updating.
+   *  @param field The index of the field to update.
+   *  @param val The expression to update the field with.
+   *  @return An AST representing the source tuple with the updated field */
   virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                       const expr2tc &val);
+
+  /** Evaluate whether two tuples are equal.
+   *  @param a An AST handle to a tuple.
+   *  @param b Another AST handle to a tuple, of the same sort as a.
+   *  @result A boolean valued AST representing the equality of a and b. */
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
+
+  /** Select operation for tuples. Identical to the 'ITE' smt func, or 'if'
+   *  irep, but for tuples instead of single values.
+   *  @param cond The condition to switch the resulting AST on. Boolean valued.
+   *  @param trueval The tuple to evaluate to if cond is true.
+   *  @param falseval The tuple to evaluate to if cond is false.
+   *  @param sort The type of the tuple being operated upon.
+   *  @return AST representation of the created ITE. */
   virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
                              const expr2tc &false_val, const type2tc &sort);
 
+  /** Create an array of tuple values. Takes a type, and an array of ast's,
+   *  and creates an array where the elements have the value of the input asts.
+   *  Essentially a way of converting a constant_array2tc, with tuple type.
+   *  @param array_type Type of the array we will be creating, with size.
+   *  @param input_args Array of ASTs to form the elements of this array. Must
+   *         have the size indicated by array_type. (This method can't be
+   *         used to create nondeterministically or infinitely sized arrays).
+   *  @param const_array If true, only the first element of input_args is valid,
+   *         and is repeated for every element in this (fixed size) array.
+   *  @param domain Sort of the domain of this array. */
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,
                                             bool const_array,
                                             const smt_sort *domain);
+
+  /** Select an element from a tuple array. i.e., given a tuple array, and an
+   *  element, return the tuple at that index.
+   *  @param a The tuple array to select values from
+   *  @param s The sort of the array element we are selecting.
+   *  @param field An expression that evaluates to the field of array that we
+   *         are going to be selecting.
+   *  @return An AST of tuple sort, the result of this select. */
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const expr2tc &field);
+
+  /** Update an element in a tuple array.
+   *  @param a The tuple array to update an element in.
+   *  @param field Expression evaluating to the index we wish to update.
+   *  @param val AST representing tuple value to store into tuple array.
+   *  @param s Sort of the value we will be inserting into this array.
+   *  @return AST of tuple array, with element at field updated. */
   virtual const smt_ast *tuple_array_update(const smt_ast *a,
                                       const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
+
+  /** Compute the equality of two tuple arrays.
+   *  @param a First tuple array to compare.
+   *  @param b Second tuple array to compare.
+   *  @return Boolean valued AST representing the outcome of this equality. */
   virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
+
+  /** ITE operation between two tuple arrays. Note that this doesn't accept
+   *  any smt_ast's (can't remember why).
+   *  @param cond Condition to switch this ite operation on.
+   *  @param trueval Tuple array to evaluate to if cond is true.
+   *  @param falaseval Tuple array to evaluate to if cond is false.
+   *  @return AST representing the result of this ITE operation. */
   virtual const smt_ast *tuple_array_ite(const expr2tc &cond,
                                          const expr2tc &trueval,
                                          const expr2tc &false_val);
+
+  /** Create a potentially /large/ array of tuples. This is called when we
+   *  encounter an array_of operation, with a very large array size, of tuple
+   *  sort.
+   *  @param Expression of tuple value to populate this array with.
+   *  @param domain_width The size of array to create, in domain bits.
+   *  @return An AST representing an array of the tuple value, init_value. */
   virtual const smt_ast *tuple_array_of(const expr2tc &init_value,
                                         unsigned long domain_width);
 
