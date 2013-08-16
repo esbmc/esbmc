@@ -967,25 +967,52 @@ public:
   /** Convert a bitvector with one bit to boolean. */
   const smt_ast *make_bit_bool(const smt_ast *a);
 
+  /** Given an array index, extract the lower n bits of it, where n is the
+   *  bitwidth of the array domain. */
   expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
+  /** Convert the size of an array to its bit width. Essential log2 with
+   *  some rounding. */
   unsigned long size_to_bit_width(unsigned long sz);
+  /** Given an array type, calculate the domain bitwidth it should have. For
+   *  nondeterministically or infinite sized arrays, this defaults to the
+   *  machine integer width. */
   unsigned long calculate_array_domain_width(const array_type2t &arr);
+  /** Given an array type, create an smt sort representing its domain. */
   const smt_sort *make_array_domain_sort(const array_type2t &arr);
+  /** Like make_array_domain_sort, but a type2tc not an smt_sort */
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
+  /** Cast the given expression to the domain width of the array in type */
   expr2tc twiddle_index_width(const expr2tc &expr, const type2tc &type);
+  /** For a multi-dimensional array, convert the type into a single dimension
+   *  array. This works by concatenating the domain widths together into one
+   *  large domain. */
   type2tc flatten_array_type(const type2tc &type);
+  /** Fetch the number of elements in an array (the domain). */
   expr2tc array_domain_to_width(const type2tc &type);
 
+  /** When dealing with multi-dimensional arrays, and selecting one element
+   *  out of several dimensions, reduce it to an expression on a single
+   *  dimensional array, by concatonating the indexes. Works in conjunction
+   *  with flatten_array_type. */
   expr2tc decompose_select_chain(const expr2tc &expr, expr2tc &base);
+  /** Like decompose_select_chain, but for multidimensional stores. */
   expr2tc decompose_store_chain(const expr2tc &expr, expr2tc &base);
 
+  /** Prepare an array_of expression by flattening its dimensions, if it
+   *  has more than one. */
   const smt_ast *convert_array_of_prep(const expr2tc &expr);
+  /** Create an array of pointers; expects the init_val to be null, because
+   *  there's no other way to initialize a pointer array in C, AFAIK. */
   const smt_ast *pointer_array_of(const expr2tc &init_val,
                                   unsigned long array_width);
 
+  /** Given a textual representation of a real, as one number divided by
+   *  another, create a fixedbv representation of it. For use in counterexample
+   *  formatting. */
   std::string get_fixed_point(const unsigned width, std::string value) const;
 
-  // Ours:
+  /** Given an array expression, attempt to extract its valuation from the
+   *  solver model, computing a constant_array2tc by calling get_array_elem. */
   expr2tc get_array(const smt_ast *array, const type2tc &t);
 
   /** @} */
