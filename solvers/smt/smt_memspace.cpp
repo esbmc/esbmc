@@ -2,6 +2,33 @@
 
 #include "smt_conv.h"
 
+/** @file smt_memspace.cpp
+ *  Modelling the memory address space of C isn't something that is handled
+ *  during any of the higher levels of ESBMC; it's instead left until the
+ *  conversion to SMT to be handled. This is potentially a bad piece of design,
+ *  and there are a couple of things that would be better handled elsewhere,
+ *  but here we are.
+ *
+ *  The substance of what's done in this file orientates around the correct
+ *  manipulations of anything in an expression that has a pointer type. This is
+ *  then complicated by the C requirement that all pointers have some kind of
+ *  integer representation (i.e., an address) that fits in the machine word.
+ *  Furthermore, we have to be able to:
+ *    * Cast pointers to and from these two representations.
+ *    * Compare pointers, add pointers, and subtract pointers.
+ *    * Identify pointers, for the 'same-object' test.
+ *    * Take the address of expressions and produce a pointer.
+ *    * Allow the integer representation of a pointer to be anywhere in the
+ *      C memory address space, but for memory allocations to not overlap.
+ *
+ *  All of this is quite difficult, but do-able. We could instead just use an
+ *  integer as the representation of any pointers, but that quickly becomes
+ *  inefficient for some of the operations above. The substance of the solution
+ *  is two things: firstly, we define a representation of a pointer type that
+ *  is convenient for our operations. Secondly, we record enough information to
+ *  map a pointer to its integer representation, and back again.
+ */
+
 const smt_ast *
 smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
                            const expr2tc &templ_expr)
