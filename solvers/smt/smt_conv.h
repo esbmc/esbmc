@@ -1069,35 +1069,90 @@ public:
   };
 
   // Members
+  /** Number of un-popped context pushes encountered so far. */
   unsigned int ctx_level;
 
+  /** The set of union variables assigned in the program, along with which
+   *  element of the union has been written most recently. Danger: this isn't
+   *  actually nondeterministic :| */
   union_varst union_vars;
+  /** A cache mapping expressions to converted SMT ASTs. */
   smt_cachet smt_cache;
+  /** Pointer_logict object, which contains some code for formatting how
+   *  pointers are displayed in counter-examples. This is a list so that we
+   *  can push and pop data when context push/pop operations occur. */
   std::list<pointer_logict> pointer_logic;
+  /** Constant struct representing the implementation of the pointer type --
+   *  i.e., the struct type that pointers get translated to. */
   type2tc pointer_struct;
+  /** Raw pointer to the type2t in pointer_struct, for convenience. */
   const struct_type2t *pointer_type_data; // ptr of pointer_struct
+  /** The type of the machine integer type. */
   type2tc machine_int;
+  /** The type of the machine unsigned integer type. */
   type2tc machine_uint;
+  /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
+  /** The SMT sort of this machines integer type. */
   const smt_sort *machine_int_sort;
+  /** The SMT sort of this machines unsigned integer type. */
   const smt_sort *machine_uint_sort;
+  /** Whether or not we are using the SMT cache. */
   bool caching;
+  /** Whether we are encoding expressions in integer mode or not. */
   bool int_encoding;
+  /** A namespace containing all the types in the program. Used to resolve the
+   *  rare case where we're doing some pointer arithmetic and need to have the
+   *  concrete type of a pointer. */
   const namespacet &ns;
+  /** True if the solver in use supports tuples itself, false if we should be
+   *  using the tuple flattener in smt_convt. */
   bool tuple_support;
+  /** True if the SMT solver does not support arrays with boolean range.
+   *  Technically, the spec does not require this, but most solvers have
+   *  support anyway. */
   bool no_bools_in_arrays;
+  /** Whether or not the solver can initialize an unbounded array. See:
+   *  the constructor. */
   bool can_init_unbounded_arrs;
+  /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
+   *  stuff may make some assertions using it, see the discussion in the
+   *  constructor. */
   std::string dyn_info_arr_name;
 
+  /** Mapping of name prefixes to use counts: when we want a fresh new name
+   *  with a particular prefix, this map stores how many times that prefix has
+   *  been used, and thus what number should be appended to make the name
+   *  unique. */
   std::map<std::string, unsigned int> fresh_map;
 
+  /** Integer recording how many times the address space allocation record
+   *  array has been modified. Essentially, this is like the SSA variable
+   *  number, for an array we build / modify at conversion time. In a list so
+   *  that we can support push/pop operations. */
   std::list<unsigned int> addr_space_sym_num;
+  /** Type of the address space allocation records. Currently a start address
+   *  integer and an end address integer. */
   type2tc addr_space_type;
+  /** Pointer to type2t object in addr_space_type, for convenience */
   const struct_type2t *addr_space_type_data;
+  /** Type of the array of address space allocation records. */
   type2tc addr_space_arr_type;
+  /** List of address space allocation sizes. A map from the object number to
+   *  the nubmer of bytes allocated. In a list to support pushing and
+   *  popping. */
   std::list<std::map<unsigned, unsigned> > addr_space_data;
 
+  /** Table containing information about how to handle expressions to convert
+   *  them to SMT. There are various options -- convert all the operands and
+   *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
+   *  function id (depending on the integer encoding mode). Alternately, it
+   *  might be a terminal. Alternately, a special case may be required, and
+   *  that special case may only be required for certain types of operands.
+   *
+   *  There are a /lot/ of special cases. */
   static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
+  /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
 
