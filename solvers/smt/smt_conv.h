@@ -799,77 +799,172 @@ public:
   /** @{
    *  @name Internal foo. */
 
+  /** Convert expression and assert that it is true or false, according to the
+   *  value argument */
   virtual void set_to(const expr2tc &expr, bool value);
 
+  /** Create a free variable with the given sort, and a unique name, with the
+   *  prefix given in 'tag' */
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
+  /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
+  /** Convert a type2tc into an smt_sort. This despatches control to the
+   *  appropriate method in the subclassing solver converter for type
+   *  conversion */
   smt_sort *convert_sort(const type2tc &type);
+  /** Convert a terminal expression into an SMT AST. This despatches control to
+   *  the appropriate method in the subclassing solver converter for terminal
+   *  conversion */
   smt_ast *convert_terminal(const expr2tc &expr);
+
+  /** Flatten pointer arithmetic. When faced with an addition or subtraction
+   *  between a pointer and some integer or other pointer, perform whatever
+   *  multiplications or casting is requried to honour the C semantics of
+   *  pointer arith. */
   const smt_ast *convert_pointer_arith(const expr2tc &expr, const type2tc &t);
+  /** Compare two pointers. This attempts to optimise cases where we can avoid
+   *  comparing the integer representation of a pointer, as that's hugely
+   *  inefficient sometimes (and gets bitblasted).
+   *  @param expr First pointer to compare
+   *  @param expr2 Second pointer to compare
+   *  @param templ_expr The comparision expression -- this method will look at
+   *         the kind of comparison being performed, and make an appropriate
+   *         decision.
+   *  @return Boolean valued AST as appropriate to the requested comparision */
   const smt_ast *convert_ptr_cmp(const expr2tc &expr, const expr2tc &expr2,
                                  const expr2tc &templ_expr);
+  /** Take the address of some kind of expression. This will abort if the given
+   *  expression isn't based on some symbol in some way. (i.e., you can't take
+   *  the address of an addition, but you can take the address of a member of
+   *  a struct, for example). */
   const smt_ast *convert_addr_of(const expr2tc &expr);
+  /** Handle union/struct based corner cases for member2tc expressions */
   const smt_ast *convert_member(const expr2tc &expr, const smt_ast *src);
+  /** Convert an identifier to a pointer. When given the name of a variable
+   *  that we want to take the address of, this inspects our current tracking
+   *  of addresses / variables, and returns a pointer for the given symbol.
+   *  If it hasn't had its address taken before, performs any computations or
+   *  address space juggling required to make a new pointer.
+   *  @param expr The symbol2tc expression of this symbol.
+   *  @param sym The textual representation of this symbol.
+   *  @return A pointer-typed AST representing the address of this symbol. */
   const smt_ast *convert_identifier_pointer(const expr2tc &expr,
                                             std::string sym);
+  /** Given a signed, upwards cast, extends the sign of the given AST to the
+   *  desired length.
+   *  @param a The bitvector to upcast.
+   *  @param s The resulting sort of this extension operation
+   *  @param topbit The highest bit of the bitvector (1-based)
+   *  @param topwidth The number of bits to extend the input by
+   *  @return A bitvector with topwidth more bits, of the appropriate sign. */
   const smt_ast *convert_sign_ext(const smt_ast *a, const smt_sort *s,
                                   unsigned int topbit, unsigned int topwidth);
+  /** Identical to convert_sign_ext, but extends AST with zeros */
   const smt_ast *convert_zero_ext(const smt_ast *a, const smt_sort *s,
                                   unsigned int topwidth);
+  /** Checks for equality with NaN representation. Nto sure if this works. */
   const smt_ast *convert_is_nan(const expr2tc &expr, const smt_ast *oper);
+  /** Convert a byte_extract2tc, pulling a byte from the byte representation
+   *  of some piece of data. */
   const smt_ast *convert_byte_extract(const expr2tc &expr);
+  /** Convert a byte_update2tc, inserting a byte into the byte representation
+   *  of some piece of data. */
   const smt_ast *convert_byte_update(const expr2tc &expr);
+  /** Convert the given expr to AST, then assert that AST */
   void assert_expr(const expr2tc &e);
+  /** Convert constant_array2tc's and constant_array_of2tc's */
   const smt_ast *array_create(const expr2tc &expr);
+  /** Mangle constant_array / array_of data with tuple array type, into a
+   *  more convenient format, acceptable by tuple_array_create */
   const smt_ast *tuple_array_create_despatch(const expr2tc &expr,
                                              const smt_sort *domain);
+  /** Convert a symbol2tc to a tuple_smt_ast */
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
+  /** Like mk_tuple_symbol, but for arrays */
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
+  /** Create a new, constant tuple, from the given arguments. */
   void tuple_create_rec(const std::string &name, const type2tc &structtype,
                         const smt_ast **inputargs);
+  /** Compute an ITE between tuples into the result symbol2tc */
   void tuple_ite_rec(const expr2tc &result, const expr2tc &cond,
                      const expr2tc &true_val, const expr2tc &false_val);
+  /** Select data from input array into the tuple ast result */
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
                               const tuple_smt_ast *result, const expr2tc &field,
                               const expr2tc &arr_width);
+  /** Update data from the tuple ast into the given tuple array */
   void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
                               const expr2tc &idx, const tuple_smt_ast *res,
                               const expr2tc &arr_width,
                               const type2tc &subtype);
+  /** Compute an equality between all the elements of the given tuple array */
   const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
                                            const tuple_smt_ast *b,
                                            const expr2tc &arr_width,
                                            const type2tc &subtype);
+  /** Compute an ITE between two tuple arrays, store output into symbol given
+   *  by the res symbol2tc */
   void tuple_array_ite_rec(const expr2tc &true_val, const expr2tc &false_val,
                            const expr2tc &cond, const type2tc &type,
                            const type2tc &dom_sort,
                            const expr2tc &res);
+  /** Extract the assignment to a tuple-typed symbol from the SMT solvers
+   *  model */
   expr2tc tuple_get(const expr2tc &expr);
+  /** Extract the assignment to a tuple-array symbol from the SMT solvers
+   *  model */
   expr2tc tuple_array_get(const expr2tc &expr);
+  /** Given a tuple_smt_ast, create a new name that identifies the f'th element
+   *  of the tuple. 'dot' identifies whether to tack a dot on the end of the
+   *  symbol (it might already have one). */
   expr2tc tuple_project_sym(const smt_ast *a, unsigned int f, bool dot = false);
+  /** Like the other tuple_project_sym, but for exprs */
   expr2tc tuple_project_sym(const expr2tc &a, unsigned int f, bool dot = false);
 
+  /** Initialize tracking data for the address space records. This also sets
+   *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
   void init_addr_space_array(void);
+  /** Store a new address-allocation record into the address space accounting.
+   *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
+  /** Get the symbol name for the current address-allocation record array. */
   std::string get_cur_addrspace_ident(void);
+  /** Create and assert address space constraints on the given object ID
+   *  number. Essentially, this asserts that all the objects to date don't
+   *  overlap with /this/ one. */
   void finalize_pointer_chain(unsigned int obj_num);
 
+  /** Typecast data to bools */
   const smt_ast *convert_typecast_bool(const typecast2t &cast);
+  /** Typecast to a fixedbv in bitvector mode */
   const smt_ast *convert_typecast_fixedbv_nonint(const expr2tc &cast);
+  /** Typecast anything to an integer (but not pointers) */
   const smt_ast *convert_typecast_to_ints(const typecast2t &cast);
+  /** Typecast something (i.e. an integer) to a pointer */
   const smt_ast *convert_typecast_to_ptr(const typecast2t &cast);
+  /** Typecast a pointer to an integer */
   const smt_ast *convert_typecast_from_ptr(const typecast2t &cast);
+  /** Typecast structs to other structs */
   const smt_ast *convert_typecast_struct(const typecast2t &cast);
+  /** Despatch a typecast expression to a more specific typecast mkethod */
   const smt_ast *convert_typecast(const expr2tc &expr);
+  /** Round a real to an integer; not straightforwards at all. */
   const smt_ast *round_real_to_int(const smt_ast *a);
+  /** Round a fixedbv to an integer. */
   const smt_ast *round_fixedbv_to_int(const smt_ast *a, unsigned int width,
                                       unsigned int towidth);
 
+  /** Extract a type definition (i.e. a struct_union_data object) from a type.
+   *  This method abstracts the fact that a pointer type is in fact a tuple. */
   const struct_union_data &get_type_def(const type2tc &type);
+  /** Ensure that the given symbol is a tuple symbol, rather than any other
+   *  kind of expression */
   expr2tc force_expr_to_tuple_sym(const expr2tc &expr);
 
+  /** Convert a boolean to a bitvector with one bit. */
   const smt_ast *make_bool_bit(const smt_ast *a);
+  /** Convert a bitvector with one bit to boolean. */
   const smt_ast *make_bit_bool(const smt_ast *a);
 
   expr2tc fix_array_idx(const expr2tc &idx, const type2tc &array_type);
