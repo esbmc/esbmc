@@ -1,6 +1,8 @@
 AC_INIT([ESBMC], [1.22], [esbmc@ecs.soton.ac.uk])
 AC_CONFIG_AUX_DIR([build-aux])
 AM_INIT_AUTOMAKE([-Wall -Werror foreign])
+LT_INIT
+AC_CONFIG_MACRO_DIR([build-aux/m4])
 
 AC_ARG_VAR([Z3PATH], [Path to Z3 installation directory])
 
@@ -9,7 +11,6 @@ AC_PROG_CXX
 AC_PROG_SED
 AC_PROG_YACC
 AC_PROG_LEX
-AC_PROG_RANLIB
 
 AC_LANG(C++)
 
