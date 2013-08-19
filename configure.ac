@@ -7,6 +7,7 @@ AC_PROG_CXX
 AC_PROG_SED
 AC_PROG_YACC
 AC_PROG_LEX
+AC_PROG_RANLIB
 
 AC_LANG(C++)
 
@@ -16,5 +17,5 @@ AC_CHECK_HEADERS([boost/crc.hpp])
 AC_CHECK_HEADERS([boost/utility/enable_if.hpp])
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp])
 
-AC_CONFIG_FILES([Makefile])
+AC_CONFIG_FILES([Makefile util/Makefile])
 AC_OUTPUT

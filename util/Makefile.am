@@ -1,9 +1,6 @@
-all: realall
-ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/config.inc
-MAINOBJNAME=util.o
-
-SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
+noinst_LIBRARIES = libutil.a
+libutil_a_SOURCES = \
+      arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp\
       expr_util.cpp i2string.cpp language.cpp \
       location.cpp message.cpp language_file.cpp \
       mp_arith.cpp namespace.cpp parseoptions.cpp rename.cpp \
@@ -21,18 +18,3 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
       bv_arithmetic.cpp irep2.cpp migrate.cpp
-
-ifdef MODULE_FLOATBV
-  CXXFLAGS += -DHAVE_FLOATBV
-endif
-
-clean:
-	-rm -f $(OBJS) ieee_float_test $(MAINOBJ) irep2.h.gch
-	-rm -f $(OBJDIR)/.deps
-#
-#ieee_float_test: ieee_float_test.o ieee_float.o util.o
-#	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
-
-include $(ESBMCDIR)/common
-
-realall: $(OBJDIR)/.deps $(MAINOBJ)
