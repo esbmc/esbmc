@@ -1,9 +1,5 @@
-all: realall
-ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/config.inc
-MAINOBJNAME=cpp.o
-
-SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
+noinst_LIBRARIES = libcxx.a
+libcxx_a_SOURCES = cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_typecheck.cpp cpp_convert_type.cpp \
       cpp_typecheck_expr.cpp cpp_typecheck_code.cpp \
       cpp_typecheck_type.cpp parse.cpp cpp_parse_tree.cpp \
@@ -22,22 +18,5 @@ SRCS= cpp_id.cpp cpp_language.cpp expr2cpp.cpp cpp_parser.cpp \
       cpp_declaration.cpp cpp_namespace_spec.cpp \
       cpp_typecheck_using.cpp cpp_exception_id.cpp \
       cpp_typecheck_enum_type.cpp cpp_typecheck_bases.cpp \
-      cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp
-
-# lex.yy.cpp isn't a source file we actually have for dependancy purposes,
-# so instead put it in the object list.
-OBJS= $(OBJDIR)/lex.yy.o
-
-###############################################################################
-
-lex.yy.cpp: scanner.l
-	$(LEX) -Pyycpp -olex.yy.cpp scanner.l
-
-$(OBJDIR)/lex.yy.o: lex.yy.cpp
-
-clean:
-	-rm -f $(OBJS) lex.yy.cpp y.tab.cpp.output $(OBJDIR)/.deps $(MAINOBJ)
-
-include $(ESBMCDIR)/common
-
-realall: $(OBJDIR)/.deps $(MAINOBJ)
+      cpp_typecheck_constructor.cpp cpp_typecheck_virtual_table.cpp \
+      lex.yy.cpp
