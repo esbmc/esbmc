@@ -26,5 +26,5 @@ if test -z "$Z3PATH"; then
   exit 1;
 fi
 
-AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile])
+AC_CONFIG_FILES([Makefile big-int/Makefile util/Makefile langapi/Makefile solvers/Makefile solvers/prop/Makefile solvers/z3/Makefile goto-symex/Makefile ansi-c/Makefile ansi-c/cpp/Makefile cpp/Makefile esbmc/Makefile])
 AC_OUTPUT
