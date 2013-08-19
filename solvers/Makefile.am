@@ -1,0 +1,1 @@
+SUBDIRS = prop z3
