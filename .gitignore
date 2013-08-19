@@ -7,3 +7,11 @@
 .cproject
 .ctags
 .cscope
+config.*
+configure
+Makefile
+Makefile.in
+aclocal.m4
+autom4te.cache
+install-sh
+missing
