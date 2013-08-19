@@ -1,9 +1,6 @@
-all: realall
-ESBMCDIR= $(shell pwd)/..
-include $(ESBMCDIR)/config.inc
-MAINOBJNAME=goto-programs.o
-
-SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
+noinst_LIBRARIES = libgotoprograms.a
+libgotoprograms_a_SOURCES = \
+      goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       goto_program.cpp goto_check.cpp goto_inline.cpp \
       remove_skip.cpp goto_convert_functions.cpp string_instrumentation.cpp \
       builtin_functions.cpp show_claims.cpp destructor.cpp set_claims.cpp \
@@ -14,10 +11,3 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       flow_insensitive_analysis.cpp \
       format_strings.cpp loop_numbers.cpp \
       goto_program_template.cpp write_goto_binary.cpp
-
-clean:
-	-rm -f $(OBJS) $(OBJDIR)/.deps $(MAINOBJ)
-
-include $(ESBMCDIR)/common
-
-realall: $(OBJDIR)/.deps $(MAINOBJ)

@@ -15,3 +15,9 @@ libansic_a_SOURCES = \
       preprocessor_line.cpp convert_character_literal.cpp \
       convert_string_literal.cpp ansi_c_convert.cpp ansi_c_convert_type.cpp \
       type2name.cpp fix_symbol.cpp printf_formatter.cpp
+
+noinst_PROGRAMS = c2goto
+c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES)
+c2goto_LDADD = ../big-int/libbigint.a ../util/libutil.a ../langapi/liblangapi.a cpp/libcpp.a ./headers/.objs/headers.o
+
+.PHONY: c2goto
