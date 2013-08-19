@@ -20,6 +20,8 @@ AC_CHECK_HEADERS([boost/crc.hpp])
 AC_CHECK_HEADERS([boost/utility/enable_if.hpp])
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp])
 
+LT_LIB_DLLOAD
+
 AC_SUBST([AM_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -I `pwd` -I `pwd`/util"]])
 
 if test -z "$Z3PATH"; then
