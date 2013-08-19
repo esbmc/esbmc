@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 #define CPROVER_LANGUAGE_UI_H
 
 #include <message.h>
-#include <parseoptions.h>
+#include <util/parseoptions.h>
 #include <language_file.h>
 #include <language.h>
 #include <ui_message.h>
