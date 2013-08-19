@@ -19,5 +19,3 @@ libansic_a_SOURCES = \
 noinst_PROGRAMS = c2goto
 c2goto_SOURCES = c2goto.cpp cprover_blank_library.cpp $(libansic_a_SOURCES)
 c2goto_LDADD = ../big-int/libbigint.a ../goto-programs/libgotoprograms.a ../langapi/liblangapi.a ../util/libutil.a cpp/libcpp.a ./headers/.objs/headers.o
-
-.PHONY: c2goto
