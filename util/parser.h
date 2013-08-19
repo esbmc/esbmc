@@ -95,7 +95,8 @@ private:
       return true;
     }
     
-    return in->read(&ch, 1);
+    in->read(&ch, 1);
+    return !in->fail();
   }
    
   std::list<char> char_buffer;

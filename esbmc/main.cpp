@@ -19,6 +19,9 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 */
 
 #include <stdint.h>
+
+#include <irep2.h>
+
 #include <langapi/mode.h>
 
 #include "parseoptions.h"
@@ -37,6 +40,10 @@ Function: main
 
 int main(int argc, const char **argv)
 {
+  // To avoid the static initialization order fiasco:
+  type_pool = type_poolt(true);
+  init_expr_constants();
+
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();
 }
@@ -54,10 +61,5 @@ const mode_table_et mode_table[] =
   LANGAPI_HAVE_MODE_END
 };
 
-#if defined(_WIN32) && !defined(__MINGW64__)
-extern "C" uint8_t binary___buildidobj_s_start;
-uint8_t *version_string = &binary___buildidobj_s_start;
-#else
-extern "C" uint8_t _binary___buildidobj_s_start;
-uint8_t *version_string = &_binary___buildidobj_s_start;
-#endif
+extern "C" uint8_t *buildidstring;
+uint8_t *version_string = buildidstring;

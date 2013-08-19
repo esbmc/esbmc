@@ -4,10 +4,11 @@
 
 ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 
-LINUX=1
+# These should be autodetected; one can also override them if needed.
+#LINUX=1
 #WIN_MINGW32=1
-
-# 32 or 64 bits? If left unset, default to whatever your host machine is.
+#ONAMAC
+#
 #TARGET64=1
 #TARGET32=1
 
@@ -25,24 +26,8 @@ USE_SOLVER_Z3=1
 
 endif #EXTERN_ESBMC_CONFIG
 
-# Might need to guess what bitwidth target to build.
-ifndef TARGET64
-ifndef TARGET32
-THEMACHINE:=$(shell uname -m)
-ifeq ($(THEMACHINE),x86_64)
-  TARGET64=1
-else
-  TARGET32=1
-endif
-endif
-endif
-
-# Detect cygwin
-
-AMONCYGWIN:= $(shell uname -a | grep -o CYGWIN)
-ifeq "$(AMONCYGWIN)" "CYGWIN"
-ONCYGWIN=1
-endif
+# If no OS or patform was specified, try to guess
+include $(ESBMCDIR)/scripts/os_detect.inc
 
 # Defaults:
 
@@ -112,6 +97,10 @@ endif
 
 ifdef WIN_MINGW32
 include $(ESBMCDIR)/scripts/mingw.inc
+endif
+
+ifdef ONAMAC
+include $(ESBMCDIR)/scripts/mac.inc
 endif
 
 # Unless someone else has set OBJDIR, default to `pwd`/.objs

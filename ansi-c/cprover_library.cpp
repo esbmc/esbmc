@@ -33,21 +33,15 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-#if defined(_WIN32) && !defined(__MINGW64__)
-#define p(x) (x)
-#else
-#define p(x) _##x
-#endif
-
 extern "C" {
-extern uint8_t p(binary_clib32_goto_start);
-extern uint8_t p(binary_clib64_goto_start);
-extern uint8_t p(binary_clib32_goto_end);
-extern uint8_t p(binary_clib64_goto_end);
+extern uint8_t clib32_buf[1];
+extern uint8_t clib64_buf[1];
+extern unsigned int clib32_buf_size;
+extern unsigned int clib64_buf_size;
 
 uint8_t *clib_ptrs[2][2] = {
-{ &p(binary_clib32_goto_start), &p(binary_clib32_goto_end)},
-{ &p(binary_clib64_goto_start), &p(binary_clib64_goto_end)},
+{ &clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
+{ &clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
 };
 }
 

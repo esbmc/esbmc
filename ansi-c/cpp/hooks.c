@@ -4,40 +4,28 @@
 
 #include "../headers.h"
 
+extern int inclevel; // Good grief
+
 struct hooked_header {
 	const char *basename;
 	char *textstart;
-	char *textend;
+	unsigned int *textsize;
 };
 
-/* Drama: when building with mingw, an additional '_' character is placed at the
- * beginning of all symbols. Wheras the header objects produced by ld in
- * ansi-c/headers will only ever have one '_' character at the start. So, some
- * hackery is required */
-
-#if defined(_WIN32) && !defined(__MINGW64__)
-#define p(x) x
-#else
-#define p(x) _##x
-#endif
-
 struct hooked_header headers[] = {
-{ "stddef.h",		&p(binary_stddef_h_start),	&p(binary_stddef_h_end) },
+{ "stddef.h",		stddef_buf,	&stddef_buf_size},
 /* stddef.h contains a variety of compiler-specific functions */
-{ "stdarg.h",		&p(binary_stdarg_h_start),	&p(binary_stdarg_h_end)},
+{ "stdarg.h",		stdarg_buf,	&stdarg_buf_size},
 /* contains va_start and similar functionality */
-{ "stdbool.h",		&p(binary_stdbool_h_start),	&p(binary_stdbool_h_end)},
+{ "stdbool.h",		stdbool_buf,	&stdbool_buf_size},
 /* Fairly self explanatory */
 { "bits/wordsize.h",	NULL,				NULL},
 /* Defines __WORDSIZE, which we define ourselves */
-{ "pthread.h",		&p(binary_pthread_h_start),	&p(binary_pthread_h_end)
-},
+{ "pthread.h",		pthread_buf,	&pthread_buf_size},
 /* Pthreads header */
-{ "digitalfilter.h",		&p(binary_digitalfilter_h_start),	&p(binary_digitalfilter_h_end)
-},
+{ "digitalfilter.h",    digitalfilter_buf, &digitalfilter_buf_size},
 /* digital filter header */
-{ "pthreadtypes.h",	&p(binary_pthreadtypes_h_start),&p(binary_pthreadtypes_h_end)
-},
+{ "pthreadtypes.h",	pthreadtypes_buf, &pthreadtypes_buf_size},
 /*  Additional pthread data header */
 { NULL, NULL, NULL}
 };
@@ -58,25 +46,34 @@ handle_hooked_header(usch *name)
 			if (h->textstart == NULL)
 				return 1;
 
-			buf.curptr = (usch*)h->textstart;
-			buf.maxread = (usch*)h->textend;
-			buf.buffer = (usch*)h->textstart;
+			// Due to some horror, it looks like there needs to
+			// be a leading lump of buffer space ahead of the text
+			// being parsed.
+			buf.bbuf = malloc(*h->textsize + NAMEMAX);
+                        memcpy(buf.bbuf + NAMEMAX, h->textstart, *h->textsize);
+			buf.curptr = buf.bbuf + NAMEMAX;
+			buf.buffer = buf.curptr;
+			buf.maxread = buf.curptr + *h->textsize;
 			buf.infil = -1;
 			buf.fname = (usch*)h->basename;
+			buf.fn = (usch*)h->basename;
 			buf.orgfn = (usch*)h->basename;
 			buf.lineno = 0;
+			buf.escln = 0;
 			buf.next = ifiles;
+			buf.idx = SYSINC;
+			buf.incs = NULL;
 			ifiles = &buf;
 
 			/* Largely copied from pushfile */
-			if (++inclevel > MAX_INCLEVEL)
+			if (++inclevel > 100)
 				error("Limit for nested includes exceeded");
 
 			prtline(); /* Output file loc */
 
 			otrulvl = trulvl;
-			if ((c = cpplex()) != 0)
-				error("cpplex returned %d", c);
+
+                        fastscan();
 
 			if (otrulvl != trulvl || flslvl)
 				error("Unterminated conditional");

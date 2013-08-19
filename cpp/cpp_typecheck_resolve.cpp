@@ -1966,9 +1966,11 @@ void cpp_typecheck_resolvet::guess_template_args(
       }
       else
       {
-        const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
-        const exprt &template_arguments=
-          static_cast<const exprt&>(s.type.find("#template_arguments"));
+        symbolt &s =
+          const_cast<symbolt&>(cpp_typecheck.lookup(desired_type.identifier()));
+        exprt &template_arguments=
+          const_cast<exprt&>(
+          static_cast<const exprt&>(s.type.find("#template_arguments")));
 
         if(template_arguments.is_not_nil())
         {
