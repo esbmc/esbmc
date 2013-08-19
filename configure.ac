@@ -17,5 +17,7 @@ AC_CHECK_HEADERS([boost/crc.hpp])
 AC_CHECK_HEADERS([boost/utility/enable_if.hpp])
 AC_CHECK_HEADERS([boost/fusion/include/equal_to.hpp])
 
+AC_SUBST([AM_CXXFLAGS],[["-Wall -Wextra -W -std=c++0x -I `pwd` -I `pwd`/util"]])
+
 AC_CONFIG_FILES([Makefile util/Makefile])
 AC_OUTPUT
