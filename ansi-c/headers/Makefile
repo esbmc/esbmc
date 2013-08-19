@@ -24,3 +24,4 @@ include $(ESBMCDIR)/common
 
 realall: $(OBJDIR)/headers.o
 
+distclean: clean
