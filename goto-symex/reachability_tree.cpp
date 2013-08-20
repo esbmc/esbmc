@@ -112,9 +112,6 @@ bool
 reachability_treet::check_for_hash_collision(void) const
 {
 
-  if (!state_hashing)
-    return false;
-
   const execution_statet &ex_state = get_cur_state();
 
   crypto_hash hash;
@@ -139,9 +136,6 @@ reachability_treet::post_hash_collision_cleanup(void)
 void
 reachability_treet::update_hash_collision_set(void)
 {
-
-  if (!state_hashing)
-    return;
 
   execution_statet &ex_state = get_cur_state();
 
@@ -649,11 +643,13 @@ reachability_treet::get_next_formula()
            get_cur_state().can_execution_continue())
       get_cur_state().symex_step(*this);
 
-    if (check_for_hash_collision()) {
-      post_hash_collision_cleanup();
-      break;
-    } else {
-      update_hash_collision_set();
+    if (state_hashing) {
+      if (check_for_hash_collision()) {
+        post_hash_collision_cleanup();
+        break;
+      } else {
+        update_hash_collision_set();
+      }
     }
 
     if (por) {
@@ -702,12 +698,14 @@ reachability_treet::generate_schedule_formula()
       get_cur_state().symex_step(*this);
     }
 
-    if (check_for_hash_collision()) {
-      post_hash_collision_cleanup();
-      go_next_state();
-      continue;
-    } else {
-      update_hash_collision_set();
+    if (state_hashing) {
+      if (check_for_hash_collision()) {
+        post_hash_collision_cleanup();
+        go_next_state();
+        continue;
+      } else {
+        update_hash_collision_set();
+      }
     }
 
     next_thread_id = decide_ileave_direction(get_cur_state());
