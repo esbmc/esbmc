@@ -1,5 +1,7 @@
 /*	$Id: cpp.h,v 1.67 2013/02/26 19:27:38 plunky Exp $	*/
 
+#define GCC_COMPAT
+
 /*
  * Copyright (c) 2004,2010 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

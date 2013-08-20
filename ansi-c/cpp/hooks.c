@@ -27,6 +27,8 @@ struct hooked_header headers[] = {
 /* digital filter header */
 { "pthreadtypes.h",	pthreadtypes_buf, &pthreadtypes_buf_size},
 /*  Additional pthread data header */
+{ "limits.h",		limits_buf, &limits_buf_size},
+ /* Integer limits */
 { NULL, NULL, NULL}
 };
 
