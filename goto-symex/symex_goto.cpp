@@ -373,3 +373,5 @@ goto_symext::get_unwind(
   return this_loop_max_unwind != 0 &&
          unwind >= this_loop_max_unwind;
 }
+
+hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;
