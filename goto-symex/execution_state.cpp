@@ -628,6 +628,9 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
                                    std::set<expr2tc> &globals_list)
 {
 
+  if (is_nil_expr(expr))
+    return;
+
   if (is_address_of2t(expr) || is_pointer_type(expr) ||
       is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
       is_dynamic_size2t(expr) || is_zero_string2t(expr) ||
