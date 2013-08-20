@@ -190,7 +190,7 @@ record_include(const char *fname)
                        w2 = w2->next;
                w2->next = w;
        } else {
-               incdir[INCINC] = w;
+               incdir[SYSINC] = w;
        }
 
        return;
