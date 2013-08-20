@@ -89,7 +89,7 @@ protected:
   bool rAttribute();
   bool optIntegralTypeOrClassSpec(typet &);
   bool rConstructorDecl(cpp_declaratort &, typet &);
-  bool optThrowDecl(irept &);
+  bool optThrowDecl(exprt &);
 
   bool rDeclarators(cpp_declarationt::declaratorst &, bool, bool=false);
   bool rDeclaratorWithInit(cpp_declaratort &, bool, bool);
@@ -357,6 +357,10 @@ bool Parser::rTypedef(cpp_declarationt &declaration)
   if(lex->GetToken(tk)!=TOK_TYPEDEF)
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 1\n";
+  #endif
+
   declaration=cpp_declarationt();
   set_location(declaration, tk);
 
@@ -367,11 +371,19 @@ bool Parser::rTypedef(cpp_declarationt &declaration)
 
   merge_types(type_name, declaration.type());
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 2\n";
+  #endif
+
   if(!rDeclarators(declaration.declarators(), true))
     return false;
 
   if(lex->GetToken(tk)!=';')
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypedef 3\n";
+  #endif
 
   return true;
 }
@@ -393,14 +405,30 @@ bool Parser::rTypeSpecifier(typet &tspec, bool check)
 
   cv_q.make_nil();
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 0\n";
+  #endif
+
   if(!optCvQualify(cv_q))
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 1\n";
+  #endif
 
   if(!optIntegralTypeOrClassSpec(tspec))
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 2\n";
+  #endif
+
   if(tspec.is_nil())
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rTypeSpecifier 3\n";
+    #endif
+
     Token tk;
     lex->LookAhead(0, tk);
 
@@ -408,9 +436,17 @@ bool Parser::rTypeSpecifier(typet &tspec, bool check)
       if(!MaybeTypeNameOrClassTemplate(tk))
         return false;
 
+    #ifdef DEBUG
+    std::cout << "Parser::rTypeSpecifier 4\n";
+    #endif
+
     if(!rName(tspec))
       return false;
   }
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeSpecifier 5\n";
+  #endif
 
   if(!optCvQualify(cv_q))
     return false;
@@ -832,19 +868,12 @@ bool Parser::rTempArgDeclaration(cpp_declarationt &declaration)
        lex->GetToken(tk2)!=TOK_IDENTIFIER)
       return false;
 
-    //irept cspec=new ireptClassSpec(new LeafReserved(tk1),
-    //                                  irept::Cons(new Leaf(tk2),nil),
-    //                                  nil);
-    //decl=irept::Snoc(decl, cspec);
     if(lex->LookAhead(0)=='=')
     {
       typet default_type;
       lex->GetToken(tk1);
       if(!rTypeName(default_type))
           return false;
-
-      //decl=irept::Nconc(decl, irept::List(new Leaf(tk1),
-      //                                      default_type));
     }
   }
   else
@@ -896,8 +925,6 @@ bool Parser::rExternTemplateDecl(irept &decl)
   if(!rDeclaration(body))
     return false;
 
-  //decl=new ireptExternTemplate(new Leaf(tk1),
-  //                               irept::List(new Leaf(tk2), body));
   return true;
 }
 
@@ -958,7 +985,7 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
       return false;
 
   #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 3\n";
+  std::cout << "Parser::rDeclaration 2\n";
   #endif
 
   typet cv_q, integral;
@@ -974,6 +1001,10 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
   if(!optCvQualify(cv_q))
     return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rDeclaration 3\n";
+  #endif
+
   if(!optIntegralTypeOrClassSpec(integral))
     return false;
 
@@ -982,14 +1013,10 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     if(!optMemberSpec(member_spec))
       return false;
 
-  #ifdef DEBUG
-  std::cout << "Parser::rDeclaration 4\n";
-  #endif
-
   if(integral.is_not_nil())
   {
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 5\n";
+    std::cout << "Parser::rDeclaration 4\n";
     #endif
     return rIntegralDeclaration(declaration, storage_spec, member_spec, integral, cv_q);
   }
@@ -998,11 +1025,11 @@ bool Parser::rDeclaration(cpp_declarationt &declaration)
     int t=lex->LookAhead(0);
 
     #ifdef DEBUG
-    std::cout << "Parser::rDeclaration 6 " << t << "\n";
+    std::cout << "Parser::rDeclaration 5 " << t << "\n";
     #endif
 
-    if(cv_q.is_not_nil() &&
-       ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
+    if(cv_q.is_not_nil()
+      && ((t==TOK_IDENTIFIER && lex->LookAhead(1)=='=') || t=='*'))
       return rConstDeclaration(declaration, storage_spec, member_spec, cv_q);
     else
       return rOtherDeclaration(declaration, storage_spec, member_spec, cv_q);
@@ -1034,7 +1061,7 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
 
   if(integral.is_nil() &&
      !rName(integral))
-      return false;
+    return false;
 
   if(cv_q.is_not_nil() && integral.is_not_nil())
     merge_types(cv_q, integral);
@@ -1045,9 +1072,15 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
   if(integral.is_nil())
     return false;
 
+  merge_types(cv_q, integral);
+
+  declaration.type().swap(integral);
+
   cpp_declaratort declarator;
   if(!rDeclarator(declarator, kDeclarator, false, true, true))
     return false;
+
+  // there really _has_ to be an initializer!
 
   if(lex->LookAhead(0)!='=')
     return false;
@@ -1055,17 +1088,11 @@ bool Parser::rSimpleDeclaration(cpp_declarationt &declaration)
   Token eqs;
   lex->GetToken(eqs);
 
-  //int t=lex->LookAhead(0);
-
-  exprt e;
-  if(!rExpression(e))
+  if(!rExpression(declarator.value()))
     return false;
 
-  //irept::Nconc(d, irept::List(new Leaf(eqs), e));
+  declaration.declarators().push_back(declarator);
 
-  //statement=new ireptDeclaration(0, irept::List(integral,
-  //                                                irept::List(d)));
-  // TODO
   return true;
 }
 
@@ -1235,11 +1262,19 @@ bool Parser::rOtherDeclaration(
     if(!optStorageSpec(storage_spec))
       return false;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rOtherDeclaration 2\n";
+  #endif
+
   bool is_constructor = isConstructorDecl();
   bool is_operator = false;
 
   if(is_constructor)
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 3\n";
+    #endif
+
     assert(!type_name.get_sub().empty());
 
     for(unsigned i=0; i < type_name.get_sub().size(); i++)
@@ -1254,6 +1289,10 @@ bool Parser::rOtherDeclaration(
 
   if(is_operator && is_constructor)
   {
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 4\n";
+    #endif
+
     // it's a conversion operator
     typet type = type_name;
     type.get_sub().erase(type.get_sub().begin());
@@ -1269,7 +1308,7 @@ bool Parser::rOtherDeclaration(
   else if(cv_q.is_nil() && is_constructor)
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 2\n";
+    std::cout << "Parser::rOtherDeclaration 5\n";
     #endif
 
     assert(!type_name.get_sub().empty());
@@ -1282,6 +1321,10 @@ bool Parser::rOtherDeclaration(
     if(!rConstructorDecl(constructor_declarator, type_name))
       return false;
 
+    #ifdef DEBUG
+    std::cout << "Parser::rOtherDeclaration 6\n";
+    #endif
+
     // it's the name (declarator), not the return type
 
     type_name=typet(is_destructor?"destructor":"constructor");
@@ -1290,7 +1333,7 @@ bool Parser::rOtherDeclaration(
   else if(!member_spec.is_empty() && lex->LookAhead(0)==';')
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 3\n";
+    std::cout << "Parser::rOtherDeclaration 7\n";
     #endif
 
     // FRIEND name ';'
@@ -1298,8 +1341,6 @@ bool Parser::rOtherDeclaration(
     {
       Token tk;
       lex->GetToken(tk);
-      //statement=new ireptDeclaration(head, irept::List(type_name,
-      //                                                   new Leaf(tk)));
       return true;
     }
     //else
@@ -1308,7 +1349,7 @@ bool Parser::rOtherDeclaration(
   else
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 4\n";
+    std::cout << "Parser::rOtherDeclaration 8\n";
     #endif
 
     if(!optCvQualify(cv_q))
@@ -1325,13 +1366,13 @@ bool Parser::rOtherDeclaration(
   declaration.member_spec().swap(member_spec);
 
   #ifdef DEBUG
-  std::cout << "Parser::rOtherDeclaration 5\n";
+  std::cout << "Parser::rOtherDeclaration 9\n";
   #endif
 
   if(lex->LookAhead(0)==';')
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 6\n";
+    std::cout << "Parser::rOtherDeclaration 10\n";
     #endif
 
     Token tk;
@@ -1340,7 +1381,7 @@ bool Parser::rOtherDeclaration(
   else
   {
     #ifdef DEBUG
-    std::cout << "Parser::rOtherDeclaration 7\n";
+    std::cout << "Parser::rOtherDeclaration 11\n";
     #endif
 
     if(declaration.declarators().size()!=1)
@@ -1348,6 +1389,17 @@ bool Parser::rOtherDeclaration(
 
     if(!rFunctionBody((codet &)declaration.declarators().front().value()))
       return false;
+
+    // If there was member initializers on function try blocks
+    // We should move it up from the try statement
+    irept mi=
+      declaration.declarators().front().value().find("member_initializers");
+
+    if(mi.is_not_nil())
+    {
+      declaration.declarators().front().value().remove("member_initializers");
+      declaration.declarators().front().member_initializers().swap(mi);
+    }
   }
 
   return true;
@@ -1807,26 +1859,27 @@ bool Parser::rConstructorDecl(
   throw.decl : THROW '(' (name {','})* {name} ')'
              : THROW '(' '...' ')'
 */
-bool Parser::optThrowDecl(irept &throw_decl)
+bool Parser::optThrowDecl(exprt &throw_decl)
 {
   Token tk;
   int t;
-  irept p=get_nil_irep();
+  codet p=codet("throw_decl");
 
   if(lex->LookAhead(0)==TOK_THROW)
   {
     lex->GetToken(tk);
-    //p=irept::Snoc(p, new LeafReserved(tk));
+    set_location(p, tk);
 
     if(lex->GetToken(tk)!='(')
       return false;
 
-    //p=irept::Snoc(p, new Leaf(tk));
-
     for(;;)
     {
       irept q;
+      cpp_declarationt declaration;
+
       t=lex->LookAhead(0);
+
       if(t=='\0')
         return false;
       else if(t==')')
@@ -1835,9 +1888,17 @@ bool Parser::optThrowDecl(irept &throw_decl)
       {
         lex->GetToken(tk);
       }
-      else if(rName(q))
+      else if(rArgDeclaration(declaration))
       {
-        //  p=irept::Snoc(p, q);
+        // We need the type declaration but we can't have any initializer
+        assert(declaration.declarators().size()==1);
+
+        if(declaration.declarators().at(0).name().is_not_nil())
+          if(!SyntaxError())
+            return false;        // too many errors
+
+        // We don't them anymore
+        declaration.declarators().clear();
       }
       else
         return false;
@@ -1845,19 +1906,20 @@ bool Parser::optThrowDecl(irept &throw_decl)
       if(lex->LookAhead(0)==',')
       {
         lex->GetToken(tk);
-        //p=irept::Snoc(p, new Leaf(tk));
       }
-      else
-        break;
+
+      codet statement=codet("decl");
+      statement.operands().push_back(declaration);
+
+      p.operands().push_back(statement);
     }
 
     if(lex->GetToken(tk)!=')')
       return false;
 
-    //p=irept::Snoc(p, new Leaf(tk));
+    throw_decl=p;
   }
 
-  throw_decl=p;
   return true;
 }
 
@@ -1907,7 +1969,6 @@ bool Parser::rDeclaratorWithInit(
     if(!rExpression(e))
       return false;
 
-    //dw=irept::List(new Leaf(tk), e);
     return true;
   }
   else
@@ -1946,15 +2007,13 @@ bool Parser::rDeclaratorWithInit(
     else if(t==':')
     {
       // bit field
-      exprt e;
-
       Token tk;
-      lex->GetToken(tk);
+      lex->GetToken(tk); // get :
+
+      exprt e;
       if(!rExpression(e))
         return false;
 
-      //dw=irept::Nconc(d, irept::List(new Leaf(tk), e));
-      // TODO
       dw.swap(declarator);
       return true;
     }
@@ -2089,6 +2148,7 @@ bool Parser::rDeclarator(
 
   exprt init_args(static_cast<const exprt &>(get_nil_irep()));
   typet method_qualifier(static_cast<const typet &>(get_nil_irep())); // const...
+  codet throw_decl("nil");
 
   for(;;)
   {
@@ -2128,8 +2188,7 @@ bool Parser::rDeclarator(
         // loop should end here
       }
 
-      irept throw_decl;
-      optThrowDecl(throw_decl); // ignore in this version
+      optThrowDecl(throw_decl);
 
       if(lex->LookAhead(0)==':')
       {
@@ -2168,6 +2227,7 @@ bool Parser::rDeclarator(
         typet array_type("array");
         array_type.add("size").swap(expr);
         array_type.subtype().swap(tl.back());
+        set_location(array_type,ob);
         tl.pop_back();
         d_outer.swap(array_type);
         while(!tl.empty())
@@ -2190,6 +2250,9 @@ bool Parser::rDeclarator(
 
   if(method_qualifier.is_not_nil())
     declarator.method_qualifier().swap(method_qualifier);
+
+  if(throw_decl.statement()!="nil")
+    declarator.throw_decl().swap(throw_decl);
 
   declarator.type().swap(d_outer);
 
@@ -3344,8 +3407,6 @@ bool Parser::rClassBody(exprt &body)
   if(lex->GetToken(tk)!='{')
     return false;
 
-  //irept ob=new Leaf(tk);
-
   exprt members=exprt("cpp-class-body");
 
   set_location(members, tk);
@@ -3361,12 +3422,8 @@ bool Parser::rClassBody(exprt &body)
 
       SkipTo('}');
       lex->GetToken(tk);
-      //body=irept::List(ob, nil, new Leaf(tk));
       return true;        // error recovery
     }
-
-    //lex->GetComments();
-    //mems=irept::Snoc(mems, m);
 
     #ifdef DEBUG
     std::cout << "Parser::rClassBody " << member << std::endl;
@@ -3466,8 +3523,6 @@ bool Parser::rAccessDecl(irept &mem)
   if(lex->GetToken(tk)!=';')
     return false;
 
-  //mem=new ireptAccessDecl(new ireptName(name, encode),
-  //                           irept::List(new Leaf(tk)));
   return true;
 }
 
@@ -4129,8 +4184,16 @@ bool Parser::rTypeName(typet &tname)
 {
   typet type_name;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 0\n";
+  #endif
+
   if(!rTypeSpecifier(type_name, true))
     return false;
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 1\n";
+  #endif
 
   cpp_declaratort declarator;
 
@@ -4138,6 +4201,10 @@ bool Parser::rTypeName(typet &tname)
     return false;
 
   tname.swap(declarator.type());
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTypeName 2\n";
+  #endif
 
   // make type_name subtype of arg
   make_subtype(type_name, tname);
@@ -4266,7 +4333,8 @@ bool Parser::rThrowExpr(exprt &exp)
 
   int t=lex->LookAhead(0);
 
-  exp=exprt("cpp-throw");
+  exp=exprt("sideeffect");
+  exp.statement("cpp-throw");
   set_location(exp, tk);
 
   if(t==':' || t==';')
@@ -4302,6 +4370,22 @@ bool Parser::rTypeidExpr(exprt &exp)
   if(lex->GetToken(tk)!=TOK_TYPEID)
     return false;
 
+  exp=exprt("sideeffect");
+  exp.statement("typeid");
+
+  // Op0 must be the function typeid(*)
+  exprt typeid_exp("cpp-name");
+  set_location(typeid_exp, tk);
+
+  irept typeid_name("name");
+  typeid_name.identifier(tk.text);
+  set_location(typeid_name, tk);
+
+  typeid_exp.get_sub().push_back(typeid_name);
+
+  // Set Op0
+  exp.move_to_operands(typeid_exp);
+
   if(lex->LookAhead(0)=='(')
   {
     typet tname;
@@ -4310,14 +4394,19 @@ bool Parser::rTypeidExpr(exprt &exp)
 
     cpp_token_buffert::post pos=lex->Save();
     lex->GetToken(op);
+
+    // typeid for variables
     if(rTypeName(tname))
       if(lex->GetToken(cp)==')')
       {
-        //exp=new ireptTypeidExpr(new Leaf(tk),
-        //                        irept::List(new Leaf(op), tname,
-        //                        new Leaf(cp)));
+        // The second argument is the function parameter
+        irept tmp_irept = static_cast<irept>(tname);
+        exprt &tmp_exprt = static_cast<exprt&>(tmp_irept);
 
-        exp=exprt("typeid");
+        exprt arguments_exprt("arguments");
+        arguments_exprt.operands().push_back(tmp_exprt);
+
+        exp.move_to_operands(arguments_exprt);
         set_location(exp, tk);
         return true;
       }
@@ -4328,12 +4417,7 @@ bool Parser::rTypeidExpr(exprt &exp)
     if(rExpression(subexp))
       if(lex->GetToken(cp)==')')
       {
-        // exp=new ireptTypeidExpr(new Leaf(tk),
-        //                              irept::List(
-        //                                  irept::List(new Leaf(op), subexp, new Leaf(cp))
-        //                              ));
-
-        exp=exprt("typeid");
+        exp.move_to_operands(subexp);
         set_location(exp, tk);
         return true;
       }
@@ -4479,10 +4563,8 @@ bool Parser::rAllocateExpr(exprt &exp)
     std::cout << "Parser::rAllocateExpr 4\n";
     #endif
 
-    // TODO: CBMC
-    //exp.add("initializer").swap(initializer);
-    //exp.operands().swap(arguments.operands());
-    exp.operands().swap(initializer.operands());
+    exp.add("initializer").swap(initializer);
+    exp.operands().swap(arguments.operands());
     return true;
   }
   else
@@ -5126,9 +5208,6 @@ bool Parser::rPrimaryExpr(exprt &exp)
         if(lex->LookAhead(0)==TOK_SCOPE)
         {
           lex->GetToken(tk);
-
-          //exp=new ireptStaticUserStatementExpr(exp,
-          //                        irept::Cons(new Leaf(tk), exp2));
           // TODO
         }
       }
@@ -5387,6 +5466,10 @@ bool Parser::rCompoundStatement(codet &statement)
   std::cout << "Parser::rCompoundStatement 1\n";
   #endif
 
+  // Function try block
+  if(lex->LookAhead(0)==TOK_TRY)
+    return rTryStatement(statement);
+
   if(lex->GetToken(ob)!='{')
     return false;
 
@@ -5395,6 +5478,7 @@ bool Parser::rCompoundStatement(codet &statement)
   #endif
 
   statement=code_blockt();
+  set_location(statement, ob);
 
   while(lex->LookAhead(0)!='}')
   {
@@ -5842,7 +5926,7 @@ bool Parser::rForStatement(codet &statement)
     if(!rCommaExpression(tmp))
       return false;
 
-	// TODO: Remove?
+    // TODO: Remove?
     exp3=exprt("code");
     exp3.statement("expression");
     exp3.location()=tmp.location();
@@ -5877,18 +5961,40 @@ bool Parser::rTryStatement(codet &statement)
 {
   Token tk;
 
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 1\n";
+  #endif
+
   if(lex->GetToken(tk)!=TOK_TRY)
     return false;
 
   statement=codet("cpp-catch");
   set_location(statement, tk);
 
-  codet body;
+  {
+    // Function try block inside constructor
+    if(lex->LookAhead(0)==':')
+    {
+      irept mi;
+      if(!rMemberInitializers(mi))
+        return false;
 
-  if(!rCompoundStatement(body))
-    return false;
+      statement.set("member_initializers",mi);
+    }
 
-  statement.move_to_operands(body);
+    codet body;
+
+    if(!rCompoundStatement(body))
+      return false;
+
+    statement.move_to_operands(body);
+  }
+
+  #ifdef DEBUG
+  std::cout << "Parser::rTryStatement 2\n";
+  #endif
+
+  bool has_catch_ellipsis = false;
 
   // iterate while there are catch clauses
   do
@@ -5905,20 +6011,76 @@ bool Parser::rTryStatement(codet &statement)
 
     if(lex->LookAhead(0)==TOK_ELLIPSIS)
     {
+      has_catch_ellipsis = true;
+
       lex->GetToken(cp);
-      // TODO
+
+      declaration = cpp_declarationt();
+
+      typet kw=typet("ellipsis");
+      set_location(kw, cp);
+      declaration.type().swap(kw);
+
+      cpp_declaratort arg_declarator;
+      if(!rDeclarator(arg_declarator, kArgDeclarator, false, true))
+      	return false;
+
+      declaration.declarators().push_back(arg_declarator);
     }
     else
     {
+      // catch(...) must always be the last catch
+      if(has_catch_ellipsis)
+      {
+        std::string message=
+          "‘...’ handler must be the last handler for its try block";
+
+        locationt location;
+        location.set_file(op.filename);
+        location.set_line(i2string(op.line_no));
+
+        parser->print(1, message, -1, location);
+        return false;
+      }
+
       if(!rArgDeclaration(declaration))
         return false;
     }
 
+    // No name in the declarator? Make one.
+    assert(declaration.declarators().size()==1);
+
+    if(declaration.declarators().front().name().is_nil())
+    {
+      irept name("name");
+      name.identifier("#anon");
+      name.set("#location", declaration.type().location());
+      declaration.declarators().front().name()=cpp_namet();
+      declaration.declarators().front().name().get_sub().push_back(name);
+    }
+
+    // Flag to delay object initialization
+    declaration.declarators().front().name().set("catch_decl",true);
+
     if(lex->GetToken(cp)!=')')
       return false;
 
+    codet body;
+
     if(!rCompoundStatement(body))
       return false;
+
+    // We prepend the declaration to the body
+    // as a declaration statement
+    assert(body.get_statement()=="block");
+
+    code_declt code_decl;
+    code_decl.move_to_operands(declaration);
+
+    codet::operandst &ops=body.operands();
+    ops.insert(ops.begin(), code_decl);
+
+    statement.move_to_operands(body);
   }
   while(lex->LookAhead(0)==TOK_CATCH);
 
@@ -6222,6 +6384,8 @@ bool Parser::rExprStatement(codet &statement)
 bool Parser::rCondition(exprt &statement)
 {
   cpp_token_buffert::post pos=lex->Save();
+
+  // C++ conditions can be a declaration!
 
   cpp_declarationt declaration;
 

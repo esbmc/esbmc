@@ -35,9 +35,10 @@ void prop_convt::ignoring(const expr2tc &expr)
 {
   // fall through
 
-  std::string msg="warning: ignoring "+expr->pretty();
+  std::string msg="error: ignoring "+expr->pretty();
 
   print(2, msg);
+  abort();
 }
 
 void prop_convt::convert_smt_type(const type2t &type,

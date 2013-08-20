@@ -63,10 +63,22 @@ void convert_character_literal(
   std::string value;
   convert_character_literal(src, value);
 
+  //std::cout << "src.c_str(): " << src.c_str() << std::endl;
+  //std::cout << "value.size(): " << value.size() << std::endl;
+
+  typet type;
+  irep_idt cpp_type;
+
+  type=typet("unsignedbv");
+
   if(value.size()==0)
     throw "empty character literal";
   else if(value.size()==1)
-    dest=from_integer(value[0], char_type());
+  {
+    type = char_type();
+    type.set("#cpp_type", "char");
+    dest=from_integer(value[0], type);
+  }
   else if(value.size()>=2 && value.size()<=4)
   {
     mp_integer x=0;

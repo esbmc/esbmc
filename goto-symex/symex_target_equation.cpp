@@ -40,7 +40,7 @@ void symex_target_equationt::assignment(
   SSA_step.original_lhs = original_lhs;
   SSA_step.rhs = rhs;
   SSA_step.assignment_type=assignment_type;
-  SSA_step.cond = expr2tc(new equality2t(lhs, rhs));
+  SSA_step.cond = equality2tc(lhs, rhs);
   SSA_step.type=goto_trace_stept::ASSIGNMENT;
   SSA_step.source=source;
   SSA_step.stack_trace = stack_trace;
@@ -155,10 +155,8 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
         step.converted_output_args.push_back(tmp);
       else
       {
-        expr2tc sym = expr2tc(new symbol2t(tmp->type,
-                                 "symex::output::"+i2string(output_count++)));
-
-        expr2tc eq = expr2tc(new equality2t(tmp, sym));
+        symbol2tc sym(tmp->type, "symex::output::"+i2string(output_count++));
+        equality2tc eq(tmp, sym);
         prop_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }
@@ -259,6 +257,36 @@ std::ostream &operator<<(
 {
   equation.output(out);
   return out;
+}
+
+void
+symex_target_equationt::check_for_duplicate_assigns() const
+{
+  std::map<std::string, unsigned int> countmap;
+  unsigned int i = 0;
+
+  for (SSA_stepst::const_iterator it = SSA_steps.begin();
+      it != SSA_steps.end(); it++) {
+    i++;
+    if (!it->is_assignment())
+      continue;
+
+    const equality2t &ref = to_equality2t(it->cond);
+    const symbol2t &sym = to_symbol2t(ref.side_1);
+    countmap[sym.get_symbol_name()]++;
+  }
+
+  for (std::map<std::string, unsigned int>::const_iterator it =countmap.begin();
+       it != countmap.end(); it++) {
+    if (it->second != 1) {
+      std::cerr << "Symbol \"" << it->first << "\" appears " << it->second
+                << " times" << std::endl;
+    }
+  }
+
+  std::cerr << "Checked " << i << " insns" << std::endl;
+
+  return;
 }
 
 runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
@@ -363,7 +391,7 @@ runtime_encoded_equationt::ask_solver_question(const expr2tc &question)
   push_ctx();
 
   // Convert the question (must be a bool).
-  assert(is_bool_type(question->type));
+  assert(is_bool_type(question));
   literalt q = conv.convert(question);
 
   // The proposition also needs to be guarded with the in-program assumptions,

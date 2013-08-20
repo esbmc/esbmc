@@ -57,14 +57,14 @@ protected:
 
   typedef hash_map_cont<irep_idt, std::string, irep_id_hash> id_replace_mapt;
   id_replace_mapt id_replace_map;
-  
+
   // apply id_replace_map
   void replace_symbol(irept &symbol);
-  
+
   // overload to use language specific syntax
   virtual std::string to_string(const exprt &expr);
   virtual std::string to_string(const typet &type);
-  
+
   //
   // service functions
   //
@@ -76,27 +76,27 @@ protected:
     const exprt array;
     unsigned pos;
 
-  public:    
+  public:
     explicit init_statet(const exprt &_array):array(_array), pos(0)
     {
     }
-  
+
     unsigned remaining() const
     {
       return array.operands().size()-pos;
     }
-    
+
     bool has_next() const
     {
       return pos<array.operands().size();
     }
-    
+
     init_statet &operator ++(int x __attribute__((unused)))
     {
       pos++;
       return *this;
     }
-    
+
     const exprt &operator *() const
     {
       return array.operands()[pos];
@@ -107,7 +107,7 @@ protected:
       return &(array.operands()[pos]);
     }
   };
-  
+
   virtual bool zero_initializer(exprt &value, const typet &type) const;
 
   virtual void do_initializer(
@@ -145,10 +145,15 @@ protected:
     init_statet &state,
     const typet &type,
     bool force_constant);
-  
+
   virtual exprt do_designated_initializer(
     const exprt &value,
     const struct_typet &type,
+    bool force_constant);
+
+  virtual exprt do_designated_union_initializer(
+    const exprt &value,
+    const union_typet &type,
     bool force_constant);
 
   // typecasts
@@ -161,12 +166,11 @@ protected:
   {
     implicit_typecast(expr, typet("bool"));
   }
-  
+
   // code
   virtual void start_typecheck_code();
   virtual void typecheck_code(codet &code);
 
-  virtual void typecheck_cpptry(codet &expr);
   virtual void typecheck_assign(codet &expr);
   virtual void typecheck_asm(codet &code);
   virtual void typecheck_block(codet &code);
@@ -183,13 +187,13 @@ protected:
   virtual void typecheck_switch(codet &code);
   virtual void typecheck_while(codet &code);
   virtual void typecheck_start_thread(codet &code);
-  
+
   bool break_is_allowed;
   bool continue_is_allowed;
   bool case_is_allowed;
   typet switch_op_type;
   typet return_type;
-  
+
   // expressions
   virtual void typecheck_expr_builtin_va_arg(exprt &expr);
   virtual void typecheck_expr_builtin_offsetof(exprt &expr);
@@ -221,15 +225,15 @@ protected:
   virtual void typecheck_side_effect_statement_expression(side_effect_exprt &expr);
   virtual void typecheck_function_call_arguments(side_effect_expr_function_callt &expr);
   virtual void do_special_functions(side_effect_expr_function_callt &expr);
-  
+
   virtual void make_constant(exprt &expr);
   virtual void make_constant_index(exprt &expr);
   virtual void make_constant_rec(exprt &expr);
-  
+
   // types
   virtual void typecheck_type(typet &type);
   virtual void adjust_function_argument(typet &type) const;
-  
+
   void make_index_type(exprt &expr);
 
   // environment
@@ -239,7 +243,7 @@ protected:
   bool move_symbol(symbolt &symbol, symbolt *&new_symbol);
   bool move_symbol(symbolt &symbol)
   { symbolt *new_symbol; return move_symbol(symbol, new_symbol); }
-  
+
   // top level stuff
   void typecheck_symbol(symbolt &symbol);
   void typecheck_new_symbol(symbolt &symbol);

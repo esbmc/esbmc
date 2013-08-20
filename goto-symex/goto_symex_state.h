@@ -122,12 +122,10 @@ public:
       guard(s.guard),
       thread_id(s.thread_id) {}
 
-  // Deny the use of goto_statet copy constructors
-  private:
-  goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
-  {
-    assert(0);
-  }
+    goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+    {
+      assert(0);
+    }
 
   public:
     ~goto_statet() {
@@ -199,14 +197,39 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
-    framet(unsigned int thread_id)
+    framet(unsigned int thread_id) :
+      return_value(expr2tc())
     {
       level1.thread_id = thread_id;
     }
   };
 
-  // Macros
+  // Exception Handling
 
+  class exceptiont
+  {
+  public:
+    exceptiont() :
+      has_throw_decl(false)
+    {
+    }
+
+    // types -> locations
+    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
+    catch_mapt catch_map;
+
+    // types -> what order they were declared in, important for polymorphism etc
+    typedef std::map<irep_idt, unsigned> catch_ordert;
+    catch_ordert catch_order;
+
+    // list of exception types than can be thrown
+    typedef std::set<irep_idt> throw_list_sett;
+    throw_list_sett throw_list_set;
+
+    bool has_throw_decl;
+  };
+
+  // Macros
   /**
    *  Perform both levels of renaming.
    *  @param symirep Symbol to perform renaming on.
@@ -353,7 +376,7 @@ public:
    *  original c-level identifier for a symbol. This method applies this to
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.
-   */  
+   */
   void get_original_name(expr2tc &expr) const;
 
   /**
@@ -386,9 +409,11 @@ public:
   guardt global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
-  /** Invocation count for each function name. Tracks how many times a function
-   *  has been called, used by l1 renaming as an activation record. */
-  std::map<irep_idt, unsigned> function_frame;
+  /** Counter for how many times a particular variable has been declared:
+   *  becomes the l1 renaming number in renamed variables. Used to be a counter
+   *  for each function invocation, but the existance of decl insns makes l1
+   *  re-naming out of step with function invocations. */
+  std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many loop unwinds we've performed. For each target in the
    *  program that contains a loop, record how many times we've unwound round
    *  it. */

@@ -114,14 +114,21 @@ bool c_main(
       return true; // give up
     }
 
+
     if(matches.size()>=2)
     {
       messaget message(message_handler);
-      message.error("main symbol `"+config.main+"' is ambiguous");
-      return true;
+      if (matches.size()==2)
+        std::cerr << "warning: main symbol `" << config.main << "' is ambiguous" << std::endl;
+      else
+      {
+    	message.error("main symbol `"+config.main+"' is ambiguous");
+        return true;
+      }
     }
 
     main_symbol=matches.front();
+
   }
   else
     main_symbol=standard_main;

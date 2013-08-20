@@ -42,6 +42,10 @@ bool base_type_eq(
   const exprt &expr2,
   const namespacet &ns);
 
+bool
+is_subclass_of(const type2tc &subclass, const type2tc &superclass,
+               const namespacet &ns);
+
 /*******************************************************************\
 
    Class: base_type_eqt

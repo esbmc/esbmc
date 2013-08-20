@@ -22,19 +22,22 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <expr_util.h>
 #include <std_expr.h>
 #include <config.h>
+#include <message.h>
 
 #include "crypto_hash.h"
 
 reachability_treet::reachability_treet(
     const goto_functionst &goto_functions,
     const namespacet &ns,
-    const optionst &opts,
+    optionst &opts,
     symex_targett *target,
-    contextt &context) :
+    contextt &context,
+    message_handlert &_message_handler) :
     goto_functions(goto_functions),
     permanent_context(context),
     ns(ns),
-    options(opts)
+    options(opts),
+    message_handler(_message_handler)
 {
   CS_bound = atoi(options.get_option("context-switch").c_str());
   TS_slice = atoi(options.get_option("time-slice").c_str());
@@ -67,13 +70,14 @@ reachability_treet::setup_for_new_explore(void)
                                                this, schedule_target,
                                                permanent_context,
                                                options, &schedule_total_claims,
-                                               &schedule_remaining_claims));
+                                               &schedule_remaining_claims,
+                                               message_handler));
   } else {
     targ = target_template->clone();
     s = reinterpret_cast<execution_statet*>(
                          new dfs_execution_statet(goto_functions, ns, this,
-                                               targ,
-                                               permanent_context, options));
+                                               targ, permanent_context, options,
+                                               message_handler));
     schedule_target = NULL;
   }
 
@@ -223,6 +227,8 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state)
   for(; tid < ex_state.threads_state.size(); tid++)
   {
     /* For all threads: */
+    if (!check_thread_viable(tid, true))
+      continue;
 
     if (!ex_state.dfs_explore_thread(tid))
       continue;
@@ -591,7 +597,7 @@ reachability_treet::get_ileave_direction_from_scheduling(void) const
 //end - H.Savino
 
 bool
-reachability_treet::check_thread_viable(int tid, bool quiet) const
+reachability_treet::check_thread_viable(unsigned int tid, bool quiet) const
 {
   const execution_statet &ex = get_cur_state();
 
@@ -620,6 +626,12 @@ reachability_treet::check_thread_viable(int tid, bool quiet) const
     return false;
   }
 #endif
+
+  if (ex.tid_is_set && ex.monitor_tid == tid) {
+    if (!quiet)
+      std::cout << "Can't context switch to a monitor thread" << std::endl;
+    return false;
+  }
 
   return true;
 }
@@ -660,6 +672,8 @@ reachability_treet::get_next_formula()
     if (get_cur_state().interleaving_unviable)
       break;
   }
+
+  (*cur_state_it)->finish_formula();
 
   has_complete_formula = false;
 
@@ -702,6 +716,8 @@ reachability_treet::generate_schedule_formula()
 
     go_next_state();
   }
+
+  (*cur_state_it)->finish_formula();
 
   return new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
                                         schedule_remaining_claims);

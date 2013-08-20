@@ -46,8 +46,6 @@ public:
     cpp_idt::id_classt id_class,
     id_sett &id_set);
 
-
-
   bool contains(const irep_idt& base_name);
 
   bool is_root_scope() const

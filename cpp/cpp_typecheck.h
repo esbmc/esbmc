@@ -132,6 +132,9 @@ protected:
   //
   // Templates
   //
+  void salvage_default_parameters(
+    const template_typet &old_type,
+    template_typet &new_type);
 
   void check_template_restrictions(
     const irept &cpp_name,
@@ -145,16 +148,16 @@ protected:
   void convert_template_function_or_member_specialization(
     cpp_declarationt &declaration);
 
-  void convert_template_class_specialization(
+  void convert_class_template_specialization(
     cpp_declarationt &declaration);
 
-  void typecheck_template_class(cpp_declarationt &declaration);
+  void typecheck_class_template(cpp_declarationt &declaration);
 
   void typecheck_function_template(cpp_declarationt &declaration);
 
-  void typecheck_template_member_function(cpp_declarationt &declaration);
+  void typecheck_class_template_member(cpp_declarationt &declaration);
 
-  std::string template_class_identifier(
+  std::string class_template_identifier(
     const irep_idt &base_name,
     const template_typet &template_type,
     const cpp_template_args_non_tct &partial_specialization_args);
@@ -163,8 +166,6 @@ protected:
     const irep_idt &base_name,
     const template_typet &template_type,
     const typet &function_type);
-
-  void typecheck_template_args(irept &template_args);
 
   cpp_template_args_tct typecheck_template_args(
     const locationt &location,
@@ -205,23 +206,13 @@ protected:
 
   const symbolt &instantiate_template(
     const locationt &location,
-    const irep_idt &identifier,
-    const irept &template_args,
-    const typet &specialization = typet("nil"));
-
-  const symbolt &instantiate_template(
-    const locationt &location,
     const symbolt &template_symbol,
     const cpp_template_args_tct &specialization_template_args,
     const cpp_template_args_tct &full_template_args,
-    const typet &specialization = typet("nil"));
+    const typet &specialization=typet("nil"));
 
   unsigned template_counter;
   unsigned anon_counter;
-
-  void build_template_map(
-    const typet &type,
-    const irept &template_args);
 
   template_mapt template_map;
 
@@ -362,15 +353,9 @@ protected:
   // determine the scope into which a tag goes
   // (enums, structs, union, classes)
   cpp_scopet &tag_scope(
-    const irep_idt &_elaborated_base_name, // includes template instance
     const irep_idt &_base_name,
     bool has_body,
     bool tag_only_declaration);
-
-  irep_idt compound_identifier(
-    const irep_idt &_identifier,
-    const irep_idt &_base_name,
-    bool has_body);
 
   void typecheck_compound_declarator(
     const symbolt &symbol,
@@ -398,17 +383,20 @@ protected:
     const typet &type,
     exprt &value);
 
+  static bool has_const(const typet &type);
+  static bool has_volatile(const typet &type);
+
   void typecheck_member_function(
     const irep_idt &compound_symbol,
     struct_typet::componentt  &component,
     irept &initializers,
-    typet &method_qualifier,
+    const typet &method_qualifier,
     exprt &value);
 
   void adjust_method_type(
     const irep_idt &compound_symbol,
     typet &method_type,
-    typet &type);
+    const typet &method_qualifier);
 
   // for function overloading
   irep_idt function_identifier(const typet &type);
@@ -422,9 +410,13 @@ protected:
   // code conversion
   virtual void typecheck_code(codet &code);
   virtual void typecheck_catch(codet &code);
+  virtual void typecheck_throw_decl(codet &code);
   virtual void typecheck_member_initializer(codet &code);
   virtual void typecheck_decl(codet &code);
   virtual void typecheck_block(codet &code);
+  virtual void typecheck_ifthenelse(codet &code);
+  virtual void typecheck_while(codet &code);
+  virtual void typecheck_switch(codet &code);
 
   const struct_typet &this_struct_type();
 
@@ -437,6 +429,7 @@ protected:
   void typecheck_expr_main(exprt &expr);
   void typecheck_expr_member(exprt &expr);
   void typecheck_expr_ptrmember(exprt &expr);
+  void typecheck_expr_throw(exprt &expr);
   void typecheck_function_expr(exprt &expr,
                       const cpp_typecheck_fargst &fargs);
   void typecheck_expr_cpp_name(exprt &expr,
@@ -452,6 +445,7 @@ protected:
   void typecheck_expr_explicit_constructor_call(exprt &expr);
   void typecheck_expr_address_of(exprt &expr);
   void typecheck_expr_dereference(exprt &expr);
+  void typecheck_expr_typeid(exprt &expr);
   void typecheck_expr_function_identifier(exprt &expr);
   void typecheck_expr_reference_to(exprt &expr);
   void typecheck_expr_this(exprt &expr);

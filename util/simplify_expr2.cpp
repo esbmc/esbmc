@@ -19,25 +19,25 @@ decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
 {
 
   // For some arithmetic expr, decide on the result of operating on them.
-  if (is_pointer_type(side1->type))
+  if (is_pointer_type(side1))
     return side1->type;
-  if (is_pointer_type(side2->type))
+  if (is_pointer_type(side2))
     return side2->type;
 
   // Fixedbv's take precedence.
-  if (is_fixedbv_type(side1->type))
+  if (is_fixedbv_type(side1))
     return side1->type;
-  if (is_fixedbv_type(side2->type))
+  if (is_fixedbv_type(side2))
     return side2->type;
 
   // If one operand is bool, return the other, as that's either bool or will
   // have a higher rank.
-  if (is_bool_type(side1->type))
+  if (is_bool_type(side1))
     return side2->type;
-  else if (is_bool_type(side2->type))
+  else if (is_bool_type(side2))
     return side1->type;
 
-  assert(is_bv_type(side1->type) && is_bv_type(side2->type));
+  assert(is_bv_type(side1) && is_bv_type(side2));
 
   unsigned int side1_width = side1->type->get_width();
   unsigned int side2_width = side2->type->get_width();
@@ -50,14 +50,14 @@ decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
   }
 
   // Differing between signed/unsigned bv type. Take unsigned if greatest.
-  if (is_unsignedbv_type(side1->type) && side1_width >= side2_width)
+  if (is_unsignedbv_type(side1) && side1_width >= side2_width)
     return side1->type;
 
-  if (is_unsignedbv_type(side2->type) && side2_width >= side1_width)
+  if (is_unsignedbv_type(side2) && side2_width >= side1_width)
     return side2->type;
 
   // Otherwise return the signed one;
-  if (is_signedbv_type(side1->type))
+  if (is_signedbv_type(side1))
     return side1->type;
   else
     return side2->type;
@@ -66,6 +66,11 @@ decide_on_expr_type(const expr2tc &side1, const expr2tc &side2)
 static void
 to_fixedbv(const expr2tc &op, fixedbvt &bv)
 {
+
+  // XXX XXX XXX -- this would appear to be broken in a couple of cases.
+  // Take a look at the typecast cvt code -- where we're taking the target
+  // type, fetching the fixedbv spec from that, and constructing from there.
+  // Which turns out not to break test cases like 01_cbmc_Fixedbv8
 
   switch (op->expr_id) {
   case expr2t::constant_int_id:
@@ -169,8 +174,8 @@ fetch_ops_from_this_type(std::list<expr2tc> &ops, expr2t::expr_ids id,
 {
 
   if (expr->expr_id == id) {
-    forall_operands2(it, expr_ops, expr)
-      fetch_ops_from_this_type(ops, id, **it);
+    forall_operands2(it, idx, expr)
+      fetch_ops_from_this_type(ops, id, *it);
   } else {
     ops.push_back(expr);
   }
@@ -611,6 +616,9 @@ member2t::do_simplify(bool second __attribute__((unused))) const
     expr2tc s;
     if (is_constant_struct2t(source_value)) {
       s = to_constant_struct2t(source_value).datatype_members[no];
+
+      assert(is_pointer_type(type) ||
+             base_type_eq(type, s->type, namespacet(contextt())));
     } else {
       // XXX jmorse HHHNNGGGGGG, it would appear that the constant arrays spat
       // out by the parser are somewhat undefined; to the extent that there are
@@ -621,10 +629,16 @@ member2t::do_simplify(bool second __attribute__((unused))) const
         return expr2tc();
 
       s = uni.datatype_members[no];
+
+      // If the type we just selected isn't compatible, it means that whatever
+      // field is in the constant union /isn't/ the field we're selecting from
+      // it. So don't simplify it, because we can't.
+      if (!is_pointer_type(type) &&
+          !base_type_eq(type, s->type, namespacet(contextt())))
+        return expr2tc();
     }
 
-    assert(is_pointer_type(type) ||
-           base_type_eq(type, s->type, namespacet(contextt())));
+
     return s;
   } else {
     return expr2tc();
@@ -690,17 +704,17 @@ pointer_offset2t::do_simplify(bool second) const
 
     // So, one of these should be a ptr type, or there isn't any point in this
     // being a pointer_offset irep.
-    if (!is_pointer_type(add.side_1->type) &&
-        !is_pointer_type(add.side_2->type))
+    if (!is_pointer_type(add.side_1) &&
+        !is_pointer_type(add.side_2))
       return expr2tc();
 
     // Can't have pointer-on-pointer arith.
-    assert(!(is_pointer_type(add.side_1->type) &&
-             is_pointer_type(add.side_2->type)));
+    assert(!(is_pointer_type(add.side_1) &&
+             is_pointer_type(add.side_2)));
 
-    const expr2tc ptr_op = (is_pointer_type(add.side_1->type))
+    const expr2tc ptr_op = (is_pointer_type(add.side_1))
                            ? add.side_1 : add.side_2;
-    const expr2tc non_ptr_op = (is_pointer_type(add.side_1->type))
+    const expr2tc non_ptr_op = (is_pointer_type(add.side_1))
                                ? add.side_2 : add.side_1;
 
     // Turn the pointer one into pointer_offset.
@@ -1068,7 +1082,7 @@ typecast2t::do_simplify(bool second) const
   } else if (is_bool_type(type)) {
     // Bool type -> turn into equality with zero
     expr2tc zero;
-    if (is_pointer_type(from->type)) {
+    if (is_pointer_type(from)) {
       zero = expr2tc(new symbol2t(from->type, irep_idt("NULL")));
     } else {
       fixedbvt bv;
@@ -1085,7 +1099,7 @@ typecast2t::do_simplify(bool second) const
     // simplify that away, we end up with Z3 type errors.
     // Use of strings here is inefficient XXX jmorse
     return from;
-  } else if (is_pointer_type(type) && is_pointer_type(from->type)) {
+  } else if (is_pointer_type(type) && is_pointer_type(from)) {
     // Casting from one pointer to another is meaningless
     return from;
   } else if (is_constant_expr(from)) {
@@ -1105,8 +1119,23 @@ typecast2t::do_simplify(bool second) const
       } else {
         return true_expr;
       }
+    } else if (is_bv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f;
+      f.spec = to_fixedbv_type(migrate_type_back(type)); // Dodgy.
+      f.from_integer(to_constant_int2t(from).constant_value);
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
+    } else if (is_fixedbv_type(from) && is_fixedbv_type(type)) {
+      fixedbvt f(to_constant_fixedbv2t(from).value);
+      f.round(to_fixedbv_type(migrate_type_back(type)));
+      exprt ref = f.to_expr();
+      expr2tc cvt;
+      migrate_expr(ref, cvt);
+      return cvt;
     } else if ((is_bv_type(type) || is_fixedbv_type(type)) &&
-                (is_bv_type(from->type) || is_fixedbv_type(from->type))) {
+                (is_bv_type(from) || is_fixedbv_type(from))) {
       fixedbvt bv;
       to_fixedbv(from, bv);
       return from_fixedbv(bv, type);
@@ -1117,7 +1146,7 @@ typecast2t::do_simplify(bool second) const
     // Typecast from a typecast can be eliminated. We'll be simplified even
     // further by the caller.
     return expr2tc(new typecast2t(type, to_typecast2t(from).from));
-  } else if (second && is_bv_type(type) && is_bv_type(from->type) &&
+  } else if (second && is_bv_type(type) && is_bv_type(from) &&
              (is_add2t(from) || is_sub2t(from) || is_mul2t(from) ||
               is_neg2t(from)) && from->type->get_width() <= type->get_width()) {
     // So, if this is an integer type, performing an integer arith operation,
@@ -1127,8 +1156,8 @@ typecast2t::do_simplify(bool second) const
     // a good plan, but this is what CBMC was doing, so don't change
     // behaviour.
     std::list<expr2tc> set2;
-    forall_operands2(it, expr_operands, from) {
-      expr2tc cast = expr2tc(new typecast2t(type, **it));
+    forall_operands2(it, idx, from) {
+      expr2tc cast = expr2tc(new typecast2t(type, *it));
       set2.push_back(cast);
     }
 
@@ -1137,8 +1166,8 @@ typecast2t::do_simplify(bool second) const
     newobj.get()->type = type;
 
     std::list<expr2tc>::const_iterator it2 = set2.begin();
-    Forall_operands2(it, expr_ops, newobj) {
-      **it = *it2;
+    Forall_operands2(it3, idx2, newobj) {
+      *it3 = *it2;
       it2++;
     }
 
@@ -1152,6 +1181,8 @@ typecast2t::do_simplify(bool second) const
   } else {
     return expr2tc();
   }
+
+  assert(0 && "Fell through typecast2t::do_simplify");
 }
 
 expr2tc
@@ -1334,10 +1365,10 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   // to remain the operation we expect (i.e., add2t shouldn't distribute itself)
   // so simplify its operands instead.
   expr2tc new_operand = operand->clone();
-  Forall_operands2(it, expr_ops, new_operand) {
-    expr2tc tmp = (***it).simplify(); // Yep, three stars. Whatchagonnado?
+  Forall_operands2(it, idx, new_operand) {
+    expr2tc tmp = (**it).simplify();
     if (!is_nil_expr(tmp)) {
-      **it= tmp;
+      *it= tmp;
       changed = true;
       if (is_constant_expr(tmp))
         num_const++;
@@ -1355,7 +1386,7 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
     return expr2tc(new overflow2t(new_operand));
 
   // Can only simplify ints
-  if (!is_bv_type(new_operand->type))
+  if (!is_bv_type(new_operand))
     return expr2tc(new overflow2t(new_operand));
 
 #if 0
@@ -1386,7 +1417,7 @@ overflow2t::do_simplify(bool second __attribute__((unused))) const
   expr2tc simpl_op = new_operand->simplify();
   assert(is_constant_expr(simpl_op));
   expr2tc op_with_big_type = new_operand->clone();
-  op_with_big_type.get()->type = (is_signedbv_type(new_operand->type))
+  op_with_big_type.get()->type = (is_signedbv_type(new_operand))
                                  ? type_pool.get_int(128)
                                  : type_pool.get_uint(128);
   op_with_big_type = op_with_big_type->simplify();

@@ -153,6 +153,8 @@ public:
 
   void output(std::ostream &out) const;
   
+  void check_for_duplicate_assigns() const;
+
   void clear()
   {
     SSA_steps.clear();

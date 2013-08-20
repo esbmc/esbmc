@@ -24,6 +24,12 @@
 
 #include <pthreadtypes.h>
 
+#ifdef __cplusplus
+
+extern "C" {
+
+#endif
+
 /* Detach state.  */
 enum
 {
@@ -710,6 +716,12 @@ __NTH (pthread_equal (pthread_t __thread1, pthread_t __thread2))
 {
   return __thread1 == __thread2;
 }
+#endif
+
+#ifdef __cplusplus
+
+}
+
 #endif
 
 #endif	/* pthread.h */

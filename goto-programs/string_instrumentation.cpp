@@ -50,8 +50,7 @@ public:
     const expr2tc &what,
     bool write=false)
   {
-    expr2tc result = expr2tc(new zero_string2t(what));
-    return result;
+    return zero_string2tc(what);
 #warning XXXjmorse, string copy write?
     //result.lhs(write);
   }
@@ -60,7 +59,7 @@ public:
     const expr2tc &what,
     bool write=false)
   {
-    expr2tc result = expr2tc(new zero_length_string2t(what));
+    zero_length_string2tc result(what);
     return result;
 #warning XXXjmorse, string copy write?
     //result.lhs(write);
@@ -82,7 +81,7 @@ protected:
   void make_type(expr2tc &dest, const type2tc &type)
   {
     if (dest->type != type)
-      dest = expr2tc(new typecast2t(type, dest));
+      dest = typecast2tc(type, dest);
   }
 
   void instrument(goto_programt &dest, goto_programt::targett it);
@@ -301,8 +300,7 @@ void string_instrumentationt::do_function_call(
     else if (identifier=="c::fscanf")
       do_fscanf(dest, target, call);
 
-    dest.compute_targets();
-    dest.number_targets();
+    dest.update();
   }
 }
 
@@ -351,11 +349,10 @@ void string_instrumentationt::do_sprintf(
     return_assignment->local_variables=target->local_variables;
 
     std::vector<expr2tc> args;
-    expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(),
-                                           expr2tc(), type2tc(),
-                                           sideeffect2t::nondet, args));
+    sideeffect2tc rhs(call.ret->type, expr2tc(), expr2tc(), args, type2tc(),
+                      sideeffect2t::nondet);
 
-    return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
+    return_assignment->code = code_assign2tc(call.ret, rhs);
   }
 
   target->make_skip();
@@ -458,11 +455,10 @@ void string_instrumentationt::do_fscanf(
     return_assignment->local_variables=target->local_variables;
 
     std::vector<expr2tc> args;
-    expr2tc rhs = expr2tc(new sideeffect2t(call.ret->type, expr2tc(), expr2tc(),
-                                           type2tc(), sideeffect2t::nondet,
-                                           args));
+    sideeffect2tc rhs(call.ret->type, expr2tc(), expr2tc(), args, type2tc(),
+                      sideeffect2t::nondet);
 
-    return_assignment->code = expr2tc(new code_assign2t(call.ret, rhs));
+    return_assignment->code = code_assign2tc(call.ret, rhs);
   }
 
   target->make_skip();
@@ -1010,14 +1006,13 @@ void string_instrumentationt::do_strerror(
   {
     goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
     std::vector<expr2tc> args;
-    expr2tc nondet_size = expr2tc(new sideeffect2t(uint_type2(), expr2tc(),
-                                                   expr2tc(), type2tc(),
-                                                   sideeffect2t::nondet, args));
+    sideeffect2tc nondet_size(uint_type2(), expr2tc(), expr2tc(), args,
+                              type2tc(), sideeffect2t::nondet);
 
     exprt sym = symbol_expr(symbol_size);
     expr2tc new_sym;
     migrate_expr(sym, new_sym);
-    expr2tc code = expr2tc(new code_assign2t(new_sym, nondet_size));
+    code_assign2tc code(new_sym, nondet_size);
     assignment1->code = code;
     assignment1->location=it->location;
     assignment1->local_variables=it->local_variables;
@@ -1030,7 +1025,7 @@ void string_instrumentationt::do_strerror(
     migrate_expr(sym_expr, new_expr);
     expr2tc new_zero;
     migrate_expr(zero, new_zero);
-    expr2tc noneq = expr2tc(new notequal2t(new_expr, new_zero));
+    notequal2tc noneq(new_expr, new_zero);
 
     assumption1->make_assumption(noneq);
     assumption1->location=it->location;
@@ -1044,15 +1039,15 @@ void string_instrumentationt::do_strerror(
   exprt zero = gen_zero(uint_type());
   migrate_expr(zero, new_zero);
 
-  expr2tc index = expr2tc(new index2t(char_type2(), new_sym, new_zero));
-  expr2tc ptr = expr2tc(new address_of2t(char_type2(), index));
+  index2tc index = index2tc(char_type2(), new_sym, new_zero);
+  address_of2tc ptr = address_of2tc(char_type2(), index);
 
   // make that zero-terminated
   {
     goto_programt::targett assignment2=tmp.add_instruction(ASSIGN);
-    expr2tc zero_string = expr2tc(new zero_string2t(ptr));
+    zero_string2tc zero_string = zero_string2tc(ptr);
     expr2tc true_val = true_expr;
-    expr2tc assign = expr2tc(new code_assign2t(zero_string, true_val));
+    code_assign2tc assign = code_assign2tc(zero_string, true_val);
 
     assignment2->code = assign;
     assignment2->location=it->location;
@@ -1065,7 +1060,7 @@ void string_instrumentationt::do_strerror(
     expr2tc rhs = ptr;
     make_type(rhs, call.ret->type);
 
-    expr2tc assign = expr2tc(new code_assign2t(call.ret, rhs));
+    code_assign2tc assign = code_assign2tc(call.ret, rhs);
     assignment3->code = assign;
     assignment3->location=it->location;
     assignment3->local_variables=it->local_variables;

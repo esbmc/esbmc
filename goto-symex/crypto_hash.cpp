@@ -107,7 +107,7 @@ extern "C" {
 /* Generate some dummy implementations that complain and abort if used */
 
 bool
-crypto_hash::operator<(const crypto_hash h2) const
+crypto_hash::operator<(const crypto_hash h2 __attribute__((unused))) const
 {
 
   abort();
@@ -123,7 +123,8 @@ crypto_hash::to_string() const
 }
 
 void
-crypto_hash::init(const uint8_t *data, int sz)
+crypto_hash::init(const uint8_t *data __attribute__((unused)),
+                  int sz __attribute__((unused)))
 {
 
   std::cerr << "This version of ESBMC was not built with OpenSSL support";
@@ -131,13 +132,14 @@ crypto_hash::init(const uint8_t *data, int sz)
   abort();
 }
 
-crypto_hash::crypto_hash(const uint8_t *data, int sz)
+crypto_hash::crypto_hash(const uint8_t *data __attribute__((unused)),
+                         int sz __attribute__((unused)))
 {
 
   init(NULL, 0);
 }
 
-crypto_hash::crypto_hash(std::string str)
+crypto_hash::crypto_hash(std::string str __attribute__((unused)))
 {
 
   init(NULL, 0);

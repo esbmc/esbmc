@@ -141,6 +141,9 @@ void cpp_typecheckt::typecheck_type(typet &type)
     else
       typecheck_expr(size_expr);
 
+    // TODO: If is a incomplete_array, it should always
+    // have initializers, except for catch declaration
+
     typecheck_type(type.subtype());
 
     if(type.subtype().cmt_constant())
@@ -248,6 +251,9 @@ void cpp_typecheckt::typecheck_type(typet &type)
   else if(type.id()=="unassigned")
   {
     // ignore, for template argument guessing
+  }
+  else if(type.id()=="ellipsis")
+  {
   }
   else
   {

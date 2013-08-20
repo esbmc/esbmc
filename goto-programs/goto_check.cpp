@@ -611,17 +611,20 @@ void goto_checkt::check_rec(
           expr.id()=="unary-" ||
           expr.id()=="typecast")
   {
-    if(expr.type().id()=="signedbv")
-    {
-      overflow_check(expr, guard);
-      if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
-      {
-   		if (!options.get_bool_option("z3-bv")
-   			&& !options.get_bool_option("z3-ir"))
-   		{
-   		  options.set_option("int-encoding", false);
-   		}
-      }
+    //if (expr.id()=="typecast")
+   	  //options.set_option("int-encoding", false);
+
+     if(expr.type().id()=="signedbv")
+     {
+       overflow_check(expr, guard);
+       if (expr.id()=="typecast" && expr.op0().type().id()!="signedbv")
+       {
+   		   if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
+   			     && !options.get_bool_option("z3-ir"))
+   		   {
+   		     options.set_option("int-encoding", false);
+   		   }
+       }
     }
     else if(expr.type().id()=="floatbv")
       nan_check(expr, guard);
@@ -630,7 +633,6 @@ void goto_checkt::check_rec(
           expr.id()==">=" || expr.id()==">")
   {
     pointer_rel_check(expr, guard);
-
   }
 
   if (expr.id() == "ashr" || expr.id() == "lshr" ||
@@ -671,7 +673,12 @@ void goto_checkt::check_rec(
   }
   else if (expr.type().id()=="fixedbv")
   {
-	if (!options.get_bool_option("eager"))
+	options.set_option("z3", true);
+
+  if (!options.get_bool_option("z3-ir"))
+    options.set_option("int-encoding", false);
+
+  if (!options.get_bool_option("eager"))
 	  options.set_option("no-assume-guarantee", false);
   }
 
@@ -680,6 +687,21 @@ void goto_checkt::check_rec(
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", false);
   }
+
+  if (options.get_bool_option("qf_auflira"))
+  {
+    options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
+    options.set_option("int-encoding", true);
+  }
+#if 0
+  if (options.get_bool_option("k-induction")) {
+    if (options.get_bool_option("z3-ir")) {
+      options.set_option("int-encoding", true);
+	  } else {
+      options.set_option("int-encoding", false);
+    }
+  }
+#endif
 }
 
 /*******************************************************************\
@@ -731,8 +753,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
       if (is_code_expression2t(i.code)) {
         check(migrate_expr_back(i.code));
       } else if (is_code_printf2t(i.code)) {
-        forall_operands2(it, expr_list, i.code)
-          check(migrate_expr_back(**it));
+        forall_operands2(it, idx, i.code)
+          check(migrate_expr_back(*it));
       }
     }
     else if (i.is_assign())
@@ -743,8 +765,8 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     }
     else if (i.is_function_call())
     {
-      forall_operands2(it, expr_list, i.code)
-        check(migrate_expr_back(**it));
+      forall_operands2(it, idx, i.code)
+        check(migrate_expr_back(*it));
     }
     else if (i.is_return())
     {

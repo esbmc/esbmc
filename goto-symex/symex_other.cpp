@@ -36,7 +36,7 @@ void goto_symext::symex_other(void)
   }
   else if (is_code_free2t(code2))
   {
-    // ignore
+    symex_free(to_code_free2t(code2));
   }
   else if (is_code_printf2t(code2))
   {
@@ -57,7 +57,7 @@ void goto_symext::symex_other(void)
     const irep_idt &identifier = decl_code.value;
 
     // Generate dummy symbol as a vehicle for renaming.
-    expr2tc l1_sym = expr2tc(new symbol2t(type_pool.get_empty(), identifier));
+    symbol2tc l1_sym(get_empty_type(), identifier);
 
     cur_state->top().level1.get_ident_name(l1_sym);
     symbol2t &l1_symbol = to_symbol2t(l1_sym);
@@ -66,9 +66,9 @@ void goto_symext::symex_other(void)
     while(cur_state->top().declaration_history.find(renaming::level2t::name_record(l1_symbol))!=
           cur_state->top().declaration_history.end())
     {
-      unsigned index = cur_state->top().level1.current_number(identifier);
-      cur_state->top().level1.rename(l1_sym, index+1);
-      l1_symbol.level1_num = index + 1;
+      unsigned &index = cur_state->variable_instance_nums[identifier];
+      cur_state->top().level1.rename(l1_sym, ++index);
+      l1_symbol.level1_num = index;
     }
 
     renaming::level2t::name_record tmp_name(l1_symbol);

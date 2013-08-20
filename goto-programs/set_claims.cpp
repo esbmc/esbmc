@@ -136,8 +136,7 @@ void set_claims(
       it!=goto_functions.function_map.end();
       it++)
   {
-    if(!it->second.is_inlined())
-      set_claims(it->second.body, unsigned_claims, count);
+    set_claims(it->second.body, unsigned_claims, count);
   }
 
   unsigned largest=*(--unsigned_claims.end());

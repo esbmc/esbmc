@@ -138,10 +138,6 @@ void c_typecheck_baset::typecheck_expr_main(exprt &expr)
     // already fine, just set type
     expr.type()=empty_typet();
   }
-  else if(expr.id()=="cpp-throw")
-  {
-	  // @TODO: we should still handle the cpp-throw, see test case ch13_8
-  }
   else
   {
     err_location(expr);
@@ -1395,9 +1391,8 @@ void c_typecheck_baset::typecheck_expr_side_effect(side_effect_exprt &expr)
     if(type0.cmt_constant())
     {
       err_location(op0);
-      str << "error: `" << to_string(op0)
-          << "' is constant";
-      throw 0;
+      std::string msg =  "warning: `" + to_string(op0) + "' is constant";
+      warning(msg);
     }
 
     if(is_number(final_type0) ||
@@ -2238,9 +2233,8 @@ void c_typecheck_baset::typecheck_side_effect_assignment(exprt &expr)
   if(o_type0.cmt_constant())
   {
     err_location(expr);
-    str << "error: `" << to_string(op0)
-        << "' is constant";
-    throw 0;
+    std::string msg = "warning: `" + to_string(op0) + "' is constant";
+    warning(msg);
   }
 
   if(statement=="assign")

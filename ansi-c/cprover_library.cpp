@@ -33,21 +33,15 @@ extern "C" {
 
 #ifndef NO_CPROVER_LIBRARY
 
-#if defined(__MINGW32__) && !defined(__MINGW64_VERSION_MAJOR)
-#define p(x) (x)
-#else
-#define p(x) _##x
-#endif
-
 extern "C" {
-extern uint8_t p(binary_clib32_goto_start);
-extern uint8_t p(binary_clib64_goto_start);
-extern uint8_t p(binary_clib32_goto_end);
-extern uint8_t p(binary_clib64_goto_end);
+extern uint8_t clib32_buf[1];
+extern uint8_t clib64_buf[1];
+extern unsigned int clib32_buf_size;
+extern unsigned int clib64_buf_size;
 
 uint8_t *clib_ptrs[2][2] = {
-{ &p(binary_clib32_goto_start), &p(binary_clib32_goto_end)},
-{ &p(binary_clib64_goto_start), &p(binary_clib64_goto_end)},
+{ &clib32_buf[0], ((&clib32_buf[0]) + clib32_buf_size)},
+{ &clib64_buf[0], ((&clib64_buf[0]) + clib64_buf_size)},
 };
 }
 
@@ -207,6 +201,11 @@ void add_cprover_library(
     condcheck(dstring("c::pthread_cond_wait"),
               dstring("c::pthread_cond_wait_check"));
   symbol_deps.insert(condcheck);
+
+  std::pair<irep_idt,irep_idt>
+    joincheck(dstring("c::pthread_join"),
+              dstring("c::pthread_join_noswitch"));
+  symbol_deps.insert(joincheck);
 
   /* The code just pulled into store_ctx might use other symbols in the C
    * library. So, repeatedly search for new C library symbols that we use but

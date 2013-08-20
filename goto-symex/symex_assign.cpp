@@ -34,7 +34,10 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   new_context(_new_context),
   goto_functions(_goto_functions),
   target(_target),
-  cur_state(NULL)
+  cur_state(NULL),
+  last_throw(NULL),
+  inside_unexpected(false),
+  unwinding_recursion_assumption(false)
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -73,7 +76,10 @@ goto_symext::goto_symext(const goto_symext &sym) :
   ns(sym.ns),
   options(sym.options),
   new_context(sym.new_context),
-  goto_functions(sym.goto_functions)
+  goto_functions(sym.goto_functions),
+  last_throw(NULL),
+  inside_unexpected(false),
+  unwinding_recursion_assumption(false)
 {
   *this = sym;
 }
@@ -92,6 +98,8 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   alloc_size_arr_name = sym.alloc_size_arr_name;
   deallocd_arr_name = sym.deallocd_arr_name;
   dyn_info_arr_name = sym.dyn_info_arr_name;
+
+  dynamic_memory = sym.dynamic_memory;
 
   // Art ptr is shared
   art1 = sym.art1;
@@ -191,7 +199,7 @@ void goto_symext::symex_assign_symbol(
 
   if (!guard.empty())
   {
-    rhs = expr2tc(new if2t(rhs->type, guard.as_expr(), rhs, lhs));
+    rhs = if2tc(rhs->type, guard.as_expr(), rhs, lhs);
   }
 
   expr2tc orig_name_lhs = lhs;
@@ -226,7 +234,7 @@ void goto_symext::symex_assign_typecast(
 
   const typecast2t &cast = to_typecast2t(lhs);
   expr2tc rhs_typecasted = rhs;
-  rhs_typecasted = expr2tc(new typecast2t(cast.from->type, rhs));
+  rhs_typecasted = typecast2tc(cast.from->type, rhs);
 
   symex_assign_rec(cast.from, rhs_typecasted, guard);
 }
@@ -242,18 +250,16 @@ void goto_symext::symex_assign_array(
 
   const index2t &index = to_index2t(lhs);
 
-  assert(is_array_type(index.source_value->type) ||
-         is_string_type(index.source_value->type));
+  assert(is_array_type(index.source_value) ||
+         is_string_type(index.source_value));
 
   // turn
   //   a[i]=e
   // into
   //   a'==a WITH [i:=e]
 
-  expr2tc new_rhs = expr2tc(new with2t(index.source_value->type,
-                                       index.source_value,
-                                       index.index,
-                                       rhs));
+  with2tc new_rhs(index.source_value->type, index.source_value,
+                  index.index, rhs);
 
   symex_assign_rec(index.source_value, new_rhs, guard);
 }
@@ -270,8 +276,8 @@ void goto_symext::symex_assign_member(
 
   const member2t &member = to_member2t(lhs);
 
-  assert(is_struct_type(member.source_value->type) ||
-         is_union_type(member.source_value->type));
+  assert(is_struct_type(member.source_value) ||
+         is_union_type(member.source_value));
 
   const irep_idt &component_name = member.member;
   expr2tc real_lhs = member.source_value;
@@ -288,7 +294,7 @@ void goto_symext::symex_assign_member(
     {
       // remove the type cast, we assume that the member is there
       real_lhs = cast.from;
-      assert(is_struct_type(real_lhs->type) || is_union_type(real_lhs->type));
+      assert(is_struct_type(real_lhs) || is_union_type(real_lhs));
     }
   }
 
@@ -299,9 +305,9 @@ void goto_symext::symex_assign_member(
 
   type2tc str_type =
     type2tc(new string_type2t(component_name.as_string().size()));
-  expr2tc new_rhs = expr2tc(new with2t(real_lhs->type, real_lhs,
-                       expr2tc(new constant_string2t(str_type, component_name)),
-                       rhs));
+  with2tc new_rhs(real_lhs->type, real_lhs,
+                       constant_string2tc(str_type, component_name),
+                       rhs);
 
   symex_assign_rec(member.source_value, new_rhs, guard);
 }
@@ -325,7 +331,7 @@ void goto_symext::symex_assign_if(
   symex_assign_rec(ifval.true_value, rhs, guard);
   guard.resize(old_guard_size);
 
-  expr2tc not_cond = expr2tc(new not2t(cond));
+  not2tc not_cond(cond);
 
   guard.add(not_cond);
   symex_assign_rec(ifval.false_value, rhs_copy, guard);
@@ -341,11 +347,9 @@ void goto_symext::symex_assign_byte_extract(
   // turn into l=byte_update_X(l, b, r)
 
   const byte_extract2t &extract = to_byte_extract2t(lhs);
-  expr2tc new_rhs = expr2tc(new byte_update2t(extract.source_value->type,
-                                              extract.big_endian,
-                                              extract.source_value,
-                                              extract.source_offset,
-                                              rhs));
+  byte_update2tc new_rhs(extract.source_value->type, extract.source_value,
+                         extract.source_offset, rhs,
+                         extract.big_endian);
 
   symex_assign_rec(extract.source_value, new_rhs, guard);
 }
@@ -356,12 +360,14 @@ void goto_symext::replace_nondet(expr2tc &expr)
       to_sideeffect2t(expr).kind == sideeffect2t::nondet)
   {
     unsigned int &nondet_count = get_dynamic_counter();
-    expr = expr2tc(new symbol2t(expr->type,
-                              "nondet$symex::nondet"+i2string(nondet_count++)));
+    expr = symbol2tc(expr->type,
+                              "nondet$symex::nondet"+i2string(nondet_count++));
   }
   else
   {
-    Forall_operands2(it, oper_list, expr)
-      replace_nondet(**it);
+    Forall_operands2(it, idx, expr) {
+      if (!is_nil_expr(*it))
+        replace_nondet(*it);
+    }
   }
 }

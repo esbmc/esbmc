@@ -1,43 +1,60 @@
-default: tests.log
+# Directories
+algorithm := esbmc-algorithm
+cpp := esbmc-cpp
+inheritance := esbmc-inheritance
+stream := esbmc-stream
+string := esbmc-string
+trycatch := esbmc-try_catch
+vector := esbmc-vector
+deque := esbmc-deque
+list := esbmc-list
+stack := esbmc-stack
+queue := esbmc-queue
+priority_queue := esbmc-priority_queue
+map := esbmc-map
+set := esbmc-set
+multimap := esbmc-multimap
+multiset := esbmc-multiset
 
-test:
-	@./test.pl
+# Clean
+ifneq ($(filter clean,$(MAKECMDGOALS)),)
+        TARGET := clean
+endif
+clean: all
 
-tests.log: test.pl
-	@./test.pl
+# llbmc
+ifneq ($(filter llvm,$(MAKECMDGOALS)),)
+        TARGET := llvm
+endif
+llvm: all
 
-llvm: test.pl
-	@./llvmconvert.sh
-	@./test.pl --llvm
+# Make them all
+all: $(algorithm) $(cpp) $(inheritance) $(stream)  $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)
 
-show:
-	@for dir in *; do \
-		if [ -d "$$dir" ]; then \
-			vim -o "$$dir/main.cpp" "$$dir/main.out"; \
-		fi; \
-	done;
+$(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set)  $(multimap) $(multiset) $(string):
+	$(MAKE) --directory=$@ $(TARGET)
 
-clean:
-	@for dir in *; do \
-		if [ -d "$$dir" ]; then \
-			rm -f "$$dir/main.out"; \
-		fi; \
-	done;
-	@for dir in *; do \
-		if [ -d "$$dir" ]; then \
-			rm -f "$$dir/smt*.tmp"; \
-		fi; \
-	done;
-	find . -name *.*~ | xargs rm -f
-	find . -name *.out | xargs rm -f
-	find . -name *.smt | xargs rm -f
-	find . -name txt | xargs rm -f
-	find . -name *.txt | xargs rm -f
-	find . -name *.log | xargs rm -f
-	find . -name *.trace | xargs rm -f
-	find . -name *.o | xargs rm -f
-	find . -name *.bc | xargs rm -f
-	find . -name *.ll | xargs rm -f
-	find . -name *.c | xargs rm -f
-	find . -name *.dat | xargs rm -f
-	rm -f tests.log	
+#Make only STL directories
+stl: $(algorithm) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset)
+
+# Make each directory
+algorithm: $(algorithm)
+cpp: $(cpp)
+inheritance: $(inheritance)
+stream: $(stream)
+string: $(string)
+trycatch: $(trycatch)
+vector: $(vector)
+deque: $(deque)
+list: $(list)
+stack: $(stack)
+queue: $(queue) 
+priority_queue: $(priority_queue)
+map: $(map)
+set: $(set)
+multimap: $(multimap)
+multiset: $(multiset)
+
+# Allow parallel make
+
+.PHONY: all $(algorithm) $(cpp) $(inheritance) $(stream) $(trycatch) $(vector) $(deque) $(list) $(stack) $(queue) $(priority_queue) $(map) $(set) $(multimap) $(multiset) $(string)

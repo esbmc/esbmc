@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "string_container.h"
 
-string_containert string_container __attribute__((init_priority(100)));
+string_containert string_container __attribute__((init_priority(101)));
 
 /*******************************************************************\
 
@@ -119,3 +119,7 @@ unsigned string_containert::get(const std::string &s)
 
   return r;
 }
+
+#include "irep.cpp"
+#include "expr.cpp"
+#include "type.cpp"

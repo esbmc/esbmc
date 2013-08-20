@@ -173,6 +173,7 @@ void goto_convertt::remove_sideeffects(
   goto_programt &dest,
   bool result_is_used)
 {
+
   if(!has_sideeffect(expr))
     return;
 
@@ -354,6 +355,10 @@ void goto_convertt::remove_sideeffects(
     else if(statement=="nondet")
     {
       // these are fine
+    }
+    else if(statement=="typeid")
+    {
+      // Let's handle typeid later (goto_function.cpp, do_function_call)
     }
     else
     {

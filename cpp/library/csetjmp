@@ -1,0 +1,27 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: September 2012
+
+ \*******************************************************************/
+
+#ifndef STL_CSETJMP
+#define STL_CSETJMP
+
+#ifndef jmp_buf
+typedef int jmp_buf;
+#endif
+
+int setjmp(jmp_buf env) {
+	env = 0;
+	return env;
+}
+
+void longjmp(jmp_buf env, int val) {
+	env = val;
+	return (void) env;
+}
+
+#endif

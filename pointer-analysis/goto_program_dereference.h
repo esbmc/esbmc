@@ -111,6 +111,7 @@ void pointer_checks(
 void pointer_checks(
   goto_functionst &goto_functions,
   const namespacet &ns,
+  contextt &context,
   const optionst &options,
   value_setst &value_sets);
 

@@ -103,6 +103,36 @@ static void internal_additions(std::string &code)
     "void pthread_start_main_hook(void);\n"
     "void pthread_end_main_hook(void);\n"
 
+    // Forward declarations for nondeterministic types.
+    "int nondet_int();\n"
+    "unsigned int nondet_uint();\n"
+    "long nondet_long();\n"
+    "unsigned long nondet_ulong();\n"
+    "short nondet_short();\n"
+    "unsigned short nondet_ushort();\n"
+    "short nondet_short();\n"
+    "unsigned short nondet_ushort();\n"
+    "char nondet_char();\n"
+    "unsigned char nondet_uchar();\n"
+    "signed char nondet_schar();\n"
+
+    // And again, for TACAS VERIFIER versions,
+    "int __VERIFIER_nondet_int();\n"
+    "unsigned int __VERIFIER_nondet_uint();\n"
+    "long __VERIFIER_nondet_long();\n"
+    "unsigned long __VERIFIER_nondet_ulong();\n"
+    "short __VERIFIER_nondet_short();\n"
+    "unsigned short __VERIFIER_nondet_ushort();\n"
+    "short __VERIFIER_nondet_short();\n"
+    "unsigned short __VERIFIER_nondet_ushort();\n"
+    "char __VERIFIER_nondet_char();\n"
+    "unsigned char __VERIFIER_nondet_uchar();\n"
+    "signed char __VERIFIER_nondet_schar();\n"
+
+    "const char *__PRETTY_FUNCTION__;\n"
+    "const char *__FILE__ = \"\";\n"
+    "unsigned int __LINE__ = 0;\n"
+
     // GCC junk stuff
     GCC_BUILTIN_HEADERS
 

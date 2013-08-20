@@ -100,7 +100,7 @@ goto_symext::argument_assignments(
 	    (is_number_type(f_rhs_type) ||
              is_bool_type(f_rhs_type) ||
              is_pointer_type(f_rhs_type))) {
-          rhs = expr2tc(new typecast2t(arg_type, rhs));
+          rhs = typecast2tc(arg_type, rhs);
 	} else   {
 	  std::string error = "function call: argument \"" +
 	                      id2string(identifier) +
@@ -168,9 +168,14 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
   // see if it's too much
   if (get_unwind_recursion(identifier, unwinding_counter)) {
+    bool base_case=
+      options.get_bool_option("base-case");
+
     if (!options.get_bool_option("no-unwinding-assertions"))
       claim(false_expr,
             "recursion unwinding assertion");
+    else if (base_case)
+			unwinding_recursion_assumption=true;
 
     cur_state->source.pc++;
     return;
@@ -185,8 +190,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
 
     if (!is_nil_expr(call.ret)) {
       unsigned int &nondet_count = get_nondet_counter();
-      expr2tc rhs = expr2tc(new symbol2t(call.ret->type,
-                                  "nondet$symex::" + i2string(nondet_count++)));
+      symbol2tc rhs(call.ret->type, "nondet$symex::"+i2string(nondet_count++));
 
       guardt guard;
       symex_assign_rec(call.ret, rhs, guard);
@@ -214,13 +218,10 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   frame.level1 = cur_state->previous_frame().level1;
   frame.level1.thread_id = cur_state->source.thread_nr;
 
-  unsigned &frame_nr = cur_state->function_frame[identifier];
-  frame_nr++;
-
   frame.calling_location = cur_state->source;
 
   // preserve locality of local variables
-  locality(frame_nr, goto_function);
+  locality(goto_function);
 
   // assign arguments
   type2tc tmp_type;
@@ -254,7 +255,7 @@ get_function_list(const expr2tc &expr)
     std::list<std::pair<guardt, symbol2tc> > l1, l2;
     const if2t &ifexpr = to_if2t(expr);
     expr2tc guardexpr = ifexpr.cond;
-    expr2tc notguardexpr = expr2tc(new not2t(guardexpr));
+    not2tc notguardexpr(guardexpr);
 
     // Get sub items, them iterate over adding the relevant guard
     l1 = get_function_list(ifexpr.true_value);
@@ -431,8 +432,8 @@ goto_symext::pop_frame(void)
 
     // Construct an l1 name on the fly - this is a temporary hack for when
     // the value set is storing things in a not-an-irep-idt form.
-    expr2tc tmp_expr(new symbol2t(type_pool.get_empty(), it->base_name,
-                                  it->lev, it->l1_num, 0, it->t_num, 0));
+    symbol2tc tmp_expr(get_empty_type(), it->base_name, it->lev, it->l1_num,
+                       0, it->t_num, 0);
     cur_state->value_set.erase(to_symbol2t(tmp_expr).get_symbol_name());
   }
 
@@ -450,29 +451,33 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(unsigned frame_nr,
-  const goto_functionst::goto_functiont &goto_function)
+goto_symext::locality(const goto_functionst::goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 
+  // For all insns...
   for (goto_programt::instructionst::const_iterator
        it = goto_function.body.instructions.begin();
        it != goto_function.body.instructions.end();
-       it++)
-    local_identifiers.insert(
-      it->local_variables.begin(),
-      it->local_variables.end());
+       it++) {
+    local_identifiers.insert(it->local_variables.begin(),
+                             it->local_variables.end());
+  }
 
   statet::framet &frame = cur_state->top();
 
+  // For each local variable, set its frame number to frame_nr, ensuring all new
+  // references to it look up a new variable.
   for (goto_programt::local_variablest::const_iterator
        it = local_identifiers.begin();
        it != local_identifiers.end();
        it++)
   {
     // Temporary, for symbol migration,
-    expr2tc tmp_sym = expr2tc(new symbol2t(type_pool.get_empty(), *it));
-    frame.level1.rename(tmp_sym, frame_nr);
+    symbol2tc tmp_sym(get_empty_type(), *it);
+
+    unsigned int &frame_nr = cur_state->variable_instance_nums[*it];
+    frame.level1.rename(tmp_sym, ++frame_nr);
     frame.level1.get_ident_name(tmp_sym);
     frame.local_variables.insert(renaming::level2t::name_record(to_symbol2t(tmp_sym)));
   }
@@ -490,11 +495,11 @@ goto_symext::make_return_assignment(expr2tc &assign, const expr2tc &code)
     dereference(value, false);
 
     if (!is_nil_expr(frame.return_value)) {
-      assign = expr2tc(new code_assign2t(frame.return_value, value));
+      assign = code_assign2tc(frame.return_value, value);
 
       if (frame.return_value->type != value->type) {
-        expr2tc cast = expr2tc(new typecast2t(frame.return_value->type, value));
-        assign = expr2tc(new code_assign2t(frame.return_value, cast));
+        typecast2tc cast(frame.return_value->type, value);
+        code_assign2tc assign(frame.return_value, cast);
       }
 
       return true;

@@ -902,6 +902,9 @@ bool simplify_exprt::simplify_addition_substraction(
   bool result=true;
 
   exprt::operandst &operands=expr.operands();
+  Forall_operands(it, expr) {
+    it->remove(irept::a_cformat);
+  }
 
   if(expr.id()=="+")
   {

@@ -112,11 +112,10 @@ void goto_symext::dereference_rec(
     expr = deref.value;
   }
   else if (is_index2t(expr) &&
-           is_pointer_type(to_index2t(expr).source_value->type))
+           is_pointer_type(to_index2t(expr).source_value))
   {
     index2t &index = to_index2t(expr);
-    expr2tc tmp = expr2tc(new add2t(index.source_value->type,
-                                    index.source_value, index.index));
+    add2tc tmp(index.source_value->type, index.source_value, index.index);
 
     // first make sure there are no dereferences in there
     dereference_rec(tmp, guard, dereference, false);
@@ -127,8 +126,12 @@ void goto_symext::dereference_rec(
   }
   else
   {
-    Forall_operands2(it, expr_list, expr)
-      dereference_rec(**it, guard, dereference, write);
+    Forall_operands2(it, idx, expr) {
+      if (is_nil_expr(*it))
+        continue;
+
+      dereference_rec(*it, guard, dereference, write);
+    }
   }
 }
 

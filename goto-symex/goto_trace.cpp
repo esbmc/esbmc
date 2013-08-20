@@ -119,11 +119,11 @@ counterexample_value(
     value_string = from_expr(ns, identifier, value);
 
     if (is_constant_expr(value)) {
-      if (is_bv_type(value->type)) {
+      if (is_bv_type(value)) {
 	value_string += " (" +
 	                integer2string(to_constant_int2t(value).constant_value)
 	                + ")";
-      } else if (is_fixedbv_type(value->type)) {
+      } else if (is_fixedbv_type(value)) {
 	value_string += " (" +
 	                to_constant_fixedbv2t(value).value.to_ansi_c_string() +
 	                ")";
@@ -265,7 +265,7 @@ get_metada_from_llvm(
 {
   char line[it->pc->location.get_line().as_string().length()];
   strcpy(line, it->pc->location.get_line().c_str());
-  if (!is_nil_expr(it->rhs) && is_struct_type(it->rhs->type)) {
+  if (!is_nil_expr(it->rhs) && is_struct_type(it->rhs)) {
     struct_type2t &struct_type =
       const_cast<struct_type2t&>(to_struct_type(it->original_lhs->type));
 
@@ -327,7 +327,7 @@ get_metada_from_llvm(
 	tok = strtok(NULL, "::");
 	j++;
       }
-      lhs = expr2tc(new symbol2t(lhs->type, irep_idt(newidentifier)));
+      lhs = symbol2tc(lhs->type, irep_idt(newidentifier));
     }
     //**********************************************************************/
 
@@ -389,7 +389,7 @@ show_goto_trace(
       break;
 
     case goto_trace_stept::ASSIGNMENT:
-      if (it->pc->is_assign() ||
+      if (it->pc->is_assign() || it->pc->is_return() ||
           (it->pc->is_other() && is_nil_expr(it->lhs))) {
 	if (prev_step_nr != it->step_nr || first_step) {
 	  first_step = false;
@@ -419,6 +419,10 @@ show_goto_trace(
       out << std::endl;
     }
     break;
+
+    case goto_trace_stept::SKIP:
+      // Something deliberately ignored
+      break;
 
     default:
       assert(false);

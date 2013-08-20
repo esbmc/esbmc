@@ -38,12 +38,12 @@ bool dereferencet::has_dereference(const expr2tc &expr) const
   if (is_nil_expr(expr))
     return false;
 
-  forall_operands2(it, expr_list, expr)
-    if(has_dereference(**it))
+  forall_operands2(it, idx, expr)
+    if(has_dereference(*it))
       return true;
 
   if (is_dereference2t(expr) ||
-     (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value->type)))
+     (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value)))
     return true;
 
   return false;
@@ -64,7 +64,7 @@ void dereferencet::dereference(
   const guardt &guard,
   const modet mode)
 {
-  assert(is_pointer_type(dest->type));
+  assert(is_pointer_type(dest));
 
   // Pointers type won't have been resolved; do that now.
   pointer_type2t &dest_type = to_pointer_type(dest.get()->type);
@@ -117,7 +117,7 @@ void dereferencet::dereference(
         value = new_value;
       } else {
         // Chain a big if-then-else case.
-        value = expr2tc(new if2t(type, pointer_guard, new_value, value));
+        value = if2tc(type, pointer_guard, new_value, value);
       }
     }
   }
@@ -149,9 +149,12 @@ void dereferencet::dereference(
       get_new_name(symbol, ns);
 
       exprt tmp_sym_expr = symbol_expr(symbol);
-      migrate_expr(tmp_sym_expr, value);
 
       new_context.move(symbol);
+
+      // Due to migration hiccups, migration must occur after the symbol
+      // appears in the symbol table.
+      migrate_expr(tmp_sym_expr, value);
     }
   }
 
@@ -170,8 +173,16 @@ bool dereferencet::dereference_type_compare(
     // Ok, they just match. However, the SMT solver that receives this formula
     // in the end may object to taking an equivalent type and instead demand
     // that the types are exactly the same. So, slip in a typecast.
-    object = expr2tc(new typecast2t(dereference_type, object));
+    object = typecast2tc(dereference_type, object);
     return true;
+  }
+
+  // Check for C++ subclasses; we can cast derived up to base safely.
+  if (is_struct_type(object) && is_struct_type(dereference_type)) {
+    if (is_subclass_of(object->type, dereference_type, ns)) {
+      object = typecast2tc(dereference_type, object);
+      return true;
+    }
   }
 
   // check for struct prefixes
@@ -188,7 +199,7 @@ bool dereferencet::dereference_type_compare(
     if (to_struct_type(tmp_dt_base).is_prefix_of(
          to_struct_type(tmp_ot_base)))
     {
-      object = expr2tc(new typecast2t(dereference_type, object));
+      object = typecast2tc(dereference_type, object);
       return true; // ok, dt is a prefix of ot
     }
   }
@@ -220,7 +231,7 @@ void dereferencet::build_reference_to(
     {
       // constraint that it actually is an invalid pointer
 
-      expr2tc invalid_pointer_expr = expr2tc(new invalid_pointer2t(deref_expr));
+      invalid_pointer2tc invalid_pointer_expr(deref_expr);
 
       // produce new guard
 
@@ -250,9 +261,9 @@ void dereferencet::build_reference_to(
     if(!options.get_bool_option("no-pointer-check"))
     {
       type2tc nullptrtype = type2tc(new pointer_type2t(type));
-      expr2tc null_ptr = expr2tc(new symbol2t(nullptrtype, "NULL"));
+      symbol2tc null_ptr(nullptrtype, "NULL");
 
-      expr2tc pointer_guard = expr2tc(new same_object2t(deref_expr, null_ptr));
+      same_object2tc pointer_guard(deref_expr, null_ptr);
 
       guardt tmp_guard(guard);
       tmp_guard.add(pointer_guard);
@@ -261,29 +272,35 @@ void dereferencet::build_reference_to(
         "pointer dereference",
         "NULL pointer", tmp_guard);
     }
+
+    // Don't build a reference to this. You can't actually access NULL, and the
+    // solver will only get confused.
+    return;
   }
   else if (is_dynamic_object2t(root_object))
   {
     const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
 
-    value = expr2tc(new dereference2t(type, deref_expr));
+    value = dereference2tc(type, deref_expr);
 
     if(!options.get_bool_option("no-pointer-check"))
     {
       // constraint that it actually is a dynamic object
 
-      type2tc arr_type = type2tc(new array_type2t(type_pool.get_bool(),
+      type2tc arr_type = type2tc(new array_type2t(get_bool_type(),
                                                   expr2tc(), true));
-      expr2tc sym = expr2tc(new symbol2t(arr_type, "c::__ESBMC_is_dynamic"));
-      expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), deref_expr));
-      expr2tc is_dyn_obj = expr2tc(new index2t(type_pool.get_bool(), sym,
-                                               ptr_obj));
+      const symbolt *sp;
+      irep_idt dyn_name = (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
+        ? "c::__ESBMC_is_dynamic" : "cpp::__ESBMC_is_dynamic";
+      symbol2tc sym(arr_type, dyn_name);
+      pointer_object2tc ptr_obj(int_type2(), deref_expr);
+      index2tc is_dyn_obj(get_bool_type(), sym, ptr_obj);
 
       if (dyn_obj.invalid || dyn_obj.unknown)
       {
         // check if it is still alive
-        expr2tc valid_expr = expr2tc(new valid_object2t(deref_expr));
-        expr2tc not_valid_expr = expr2tc(new not2t(valid_expr));
+        valid_object2tc valid_expr(deref_expr);
+        not2tc not_valid_expr(valid_expr);
 
         guardt tmp_guard(guard);
         tmp_guard.add(is_dyn_obj);
@@ -301,11 +318,8 @@ void dereferencet::build_reference_to(
       {
         {
           // check lower bound
-          expr2tc zero = expr2tc(new constant_int2t(index_type2(), 0));
-          expr2tc obj_offset = expr2tc(new pointer_offset2t(index_type2(),
-                                                            deref_expr));
-
-          expr2tc lt = expr2tc(new lessthan2t(obj_offset, zero));
+          pointer_offset2tc obj_offset(index_type2(), deref_expr);
+          lessthan2tc lt(obj_offset, zero_int);
 
           guardt tmp_guard(guard);
           tmp_guard.add(is_dyn_obj);
@@ -318,13 +332,11 @@ void dereferencet::build_reference_to(
         {
           // check upper bound
           //nec: ex37.c
-          expr2tc size_expr = expr2tc(new dynamic_size2t(deref_expr));
+          dynamic_size2tc size_expr(deref_expr);
 
-          expr2tc obj_offs = expr2tc(new pointer_offset2t(index_type2(),
-                                                          deref_expr));
-          obj_offs = expr2tc(new typecast2t(int_type2(), obj_offs));
-
-          expr2tc lte = expr2tc(new lessthanequal2t(size_expr, obj_offs));
+          expr2tc obj_offs = pointer_offset2tc(index_type2(), deref_expr);
+          obj_offs = typecast2tc(int_type2(), obj_offs);
+          lessthanequal2tc lte(size_expr, obj_offs);
 
           guardt tmp_guard(guard);
           tmp_guard.add(is_dyn_obj);
@@ -343,9 +355,9 @@ void dereferencet::build_reference_to(
     value = object;
 
     type2tc ptr_type = type2tc(new pointer_type2t(object->type));
-    expr2tc obj_ptr = expr2tc(new address_of2t(ptr_type, object));
+    address_of2tc obj_ptr(ptr_type, object);
 
-    pointer_guard = expr2tc(new same_object2t(deref_expr, obj_ptr));
+    pointer_guard = same_object2tc(deref_expr, obj_ptr);
 
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
@@ -358,12 +370,11 @@ void dereferencet::build_reference_to(
       offset = o.offset;
     else
     {
-      expr2tc ptr_offs = expr2tc(new pointer_offset2t(index_type2(),
-                                                      deref_expr));
-      expr2tc base = expr2tc(new pointer_offset2t(index_type2(), obj_ptr));
+      pointer_offset2tc ptr_offs(index_type2(), deref_expr);
+      pointer_offset2tc base(index_type2(), obj_ptr);
 
       // need to subtract base address
-      offset = expr2tc(new sub2t(index_type2(), ptr_offs, base));
+      offset = sub2tc(index_type2(), ptr_offs, base);
     }
 
     // See whether or not we need to munge the object into the desired type;
@@ -385,7 +396,7 @@ void dereferencet::build_reference_to(
           if (    (is_pointer_type(type) &&
                    is_empty_type(to_pointer_type(type).subtype))
               ||
-                  (is_pointer_type(value->type) &&
+                  (is_pointer_type(value) &&
                    is_empty_type(to_pointer_type(value->type).subtype)))
             return;
 
@@ -428,8 +439,7 @@ void dereferencet::build_reference_to(
       {
         if(!options.get_bool_option("no-pointer-check"))
         {
-          expr2tc zero = expr2tc(new constant_int2t(offset->type, BigInt(0)));
-          expr2tc offs_is_not_zero = expr2tc(new notequal2t(offset, zero));
+          notequal2tc offs_is_not_zero(offset, zero_int);
 
           guardt tmp_guard2(guard);
           tmp_guard2.move(offs_is_not_zero);
@@ -498,8 +508,8 @@ void dereferencet::bounds_check(
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr.source_value->type) ||
-         is_string_type(expr.source_value->type));
+  assert(is_array_type(expr.source_value) ||
+         is_string_type(expr.source_value));
 
   std::string name = array_name(ns, expr.source_value);
 
@@ -511,8 +521,7 @@ void dereferencet::bounds_check(
     }
     else
     {
-      expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
-      expr2tc lt = expr2tc(new lessthan2t(expr.index, zero));
+      lessthan2tc lt(expr.index, zero_int);
 
       guardt tmp_guard(guard);
       tmp_guard.move(lt);
@@ -523,7 +532,7 @@ void dereferencet::bounds_check(
   }
 
   expr2tc arr_size;
-  if (is_array_type(expr.source_value->type)) {
+  if (is_array_type(expr.source_value)) {
     if (to_array_type(expr.source_value->type).size_is_infinite)
       // Can't overflow an infinitely sized array
       return;
@@ -540,8 +549,7 @@ void dereferencet::bounds_check(
     const array_type2t &arr_type_2 = to_array_type(index.source_value->type);
 
     assert(!arr_type_2.size_is_infinite);
-    arr_size = expr2tc(new mul2t(index_type2(), arr_size,
-                                 arr_type_2.array_size));
+    arr_size = mul2tc(index_type2(), arr_size, arr_type_2.array_size);
   }
 
   // Irritating - I don't know what c_implicit_typecast does, and it modifies
@@ -555,7 +563,7 @@ void dereferencet::bounds_check(
 
   expr2tc new_index;
   migrate_expr(tmp_op0, new_index);
-  expr2tc gte = expr2tc(new greaterthanequal2t(new_index, arr_size));
+  greaterthanequal2tc gte(new_index, arr_size);
 
   guardt tmp_guard(guard);
   tmp_guard.move(gte);
@@ -599,21 +607,21 @@ bool dereferencet::memory_model_conversion(
   // cast to float
   if (is_fixedbv_type(to_type))
   {
-    value = expr2tc(new to_bv_typecast2t(to_type, value));
+    value = expr2tc(new typecast2t(to_type, value));
   }
   else
   {
     // only doing type conversion
     // just do the typecast
-    value = expr2tc(new typecast2t(to_type, value));
+    value = typecast2tc(to_type, value);
   }
 
   // also assert that offset is zero
 
   if(!options.get_bool_option("no-pointer-check"))
   {
-    expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
-    expr2tc offs_not_zero = expr2tc(new notequal2t(new_offset, zero));
+    expr2tc zero = constant_int2tc(new_offset->type, BigInt(0));
+    expr2tc offs_not_zero = notequal2tc(new_offset, zero);
 
     guardt tmp_guard(guard);
     tmp_guard.move(offs_not_zero);
@@ -651,14 +659,14 @@ bool dereferencet::memory_model_bytes(
       (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
 
     // Byte extract currently produced one byte, regardless of given type.
-    value = expr2tc(new byte_extract2t(type_pool.get_uint(8), is_big_endian,
-                                       value, new_offset));
+    value = byte_extract2tc(type_pool.get_uint(8), value, new_offset,
+                            is_big_endian);
 
     // XXX jmorse - upcast the extracted byte to whatever type we're supposed to
     // have. In a correct world, we'd be stitching together the type from a
     // series of extracted bytes.
     if (to_type->get_width() != 8)
-      value = expr2tc(new typecast2t(to_type, value));
+      value = typecast2tc(to_type, value);
 
     if (!is_constant_int2t(new_offset) ||
         !to_constant_int2t(new_offset).constant_value.is_zero())
@@ -666,10 +674,8 @@ bool dereferencet::memory_model_bytes(
       if(!options.get_bool_option("no-pointer-check"))
       {
         unsigned long width = orig_value->type->get_width();
-        expr2tc const_val =
-          expr2tc(new constant_int2t(new_offset->type, BigInt(width)));
-        expr2tc offs_upper_bound =
-          expr2tc(new greaterthanequal2t(new_offset, const_val));
+        expr2tc const_val = constant_int2tc(new_offset->type, BigInt(width));
+        expr2tc offs_upper_bound = greaterthanequal2tc(new_offset, const_val);
 
         guardt tmp_guard(guard);
         tmp_guard.move(offs_upper_bound);
@@ -680,8 +686,8 @@ bool dereferencet::memory_model_bytes(
 
       if(!options.get_bool_option("no-pointer-check"))
       {
-        expr2tc zero = expr2tc(new constant_int2t(new_offset->type, BigInt(0)));
-        expr2tc offs_lower_bound = expr2tc(new lessthan2t(new_offset, zero));
+        expr2tc zero = constant_int2tc(new_offset->type, BigInt(0));
+        expr2tc offs_lower_bound = lessthan2tc(new_offset, zero);
 
         guardt tmp_guard(guard);
         tmp_guard.move(offs_lower_bound);
@@ -696,4 +702,3 @@ bool dereferencet::memory_model_bytes(
 
   return false;
 }
-

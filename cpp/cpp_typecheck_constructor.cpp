@@ -510,7 +510,7 @@ void cpp_typecheckt::default_assignop_value(
   locationt location=declarator.location();
   declarator.make_nil();
 
-  declarator.value().location() = location;
+  declarator.value().location()=location;
   declarator.value().id("code");
   declarator.value().statement("block");
   declarator.value().type()=code_typet();
@@ -651,7 +651,6 @@ void cpp_typecheckt::check_member_initializers(
     }
 
     member_name.convert(identifier, base_name);
-
     bool ok = false;
 
     for(struct_typet::componentst::const_iterator
@@ -659,7 +658,7 @@ void cpp_typecheckt::check_member_initializers(
         c_it!=components.end();
         c_it++)
     {
-      if(c_it->base_name() != base_name ) continue;
+      if(c_it->base_name()!=base_name) continue;
 
       // Data member
       if(!c_it->get_bool("from_base") &&
@@ -695,7 +694,7 @@ void cpp_typecheckt::check_member_initializers(
       }
 
       // Parent constructor
-      if( c_it->get_bool("from_base")
+      if(c_it->get_bool("from_base")
         && !c_it->is_type()
         && !c_it->get_bool("is_static")
         && c_it->get("type") == "code"
@@ -704,16 +703,34 @@ void cpp_typecheckt::check_member_initializers(
         typet member_type = (typet&) initializer.member_irep();
         typecheck_type(member_type);
 
-        // check for a direct parent
+        // check for a direct/indirect parent
         forall_irep(parent_it, bases.get_sub())
         {
           assert(parent_it->get("type") == "symbol" );
 
+          // check for a direct parent
           if(member_type.identifier()
              == parent_it->type().identifier())
           {
             ok = true;
             break;
+          }
+          else { // check for a indirect parent
+            irep_idt identifier=parent_it->type().identifier();
+            const symbolt &isymb=lookup(identifier);
+            const typet &type = isymb.type;
+            assert(type.id()=="struct");
+            const irept &ibase = type.find("bases");
+            forall_irep(iparent_it, ibase.get_sub())
+            {
+              assert(iparent_it->get("type") == "symbol" );
+              if(member_type.identifier()
+                  == iparent_it->type().identifier())
+              {
+                ok = true;
+                break;
+              }
+            }
           }
         }
         break;
@@ -722,6 +739,7 @@ void cpp_typecheckt::check_member_initializers(
 
     if(!ok)
     {
+      std::cout<<"ERROR "<<std::endl;
       err_location(member_name.location());
       str << "invalid initializer `" << base_name << "'";
       throw 0;
@@ -743,7 +761,7 @@ Function: full_member_initialization
           First, all the direct-parent constructors are called.
           Second, all the non-pod data members are initialized.
 
- Note: The initialization order follows the decalration order.
+ Note: The initialization order follows the declaration order.
 
 \*******************************************************************/
 
@@ -844,9 +862,9 @@ void cpp_typecheckt::full_member_initialization(
         for(struct_typet::componentst::const_iterator c_it =
             components.begin(); c_it != components.end(); c_it++)
         {
-          if (c_it->base_name() == base_name
-              && c_it->get("type") != "code"
-              && !c_it->is_type())
+          if(c_it->base_name()==base_name
+             && c_it->get("type")!="code"
+             && !c_it->is_type())
           {
             is_data = true;
             break;
@@ -871,6 +889,24 @@ void cpp_typecheckt::full_member_initialization(
         final_initializers.move_to_sub(initializer);
         found = true;
         break;
+      }
+      else { // initialize the indirect parent
+		  irep_idt identifier=parent_it->type().identifier();
+		  const symbolt &isymb=lookup(identifier);
+		  const typet &type = isymb.type;
+		  assert(type.id()=="struct");
+		  const irept &ibase = type.find("bases");
+		  forall_irep(iparent_it, ibase.get_sub())
+		  {
+			  assert(iparent_it->get("type") == "symbol" );
+			  if(member_type.identifier()
+				 == iparent_it->type().identifier())
+			  {
+				  final_initializers.move_to_sub(initializer);
+				  found = true;
+				  break;
+			  }
+		  }
       }
     }
 
@@ -1040,7 +1076,7 @@ bool cpp_typecheckt::find_cpctor(const symbolt &symbol) const
     const struct_typet::componentt& component = *cit;
 
     if(component.type().id() != "code"
-      || to_code_type(component.type()).return_type().id() !="constructor")
+      || to_code_type(component.type()).return_type().id()!="constructor")
       continue;
 
     // Skip inherited constructor
@@ -1245,7 +1281,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
       cpp_namet cppname;
       cppname.move_to_sub(name);
 
-      const symbolt &virtual_table_symbol_type =
+      const symbolt &virtual_table_symbol_type=
         namespacet(context).lookup(
           cit->type().subtype().identifier());
 
@@ -1269,7 +1305,7 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
     }
   }
 
-  // call the data member destructor in the reverse order
+  // call the data member destructors in the reverse order
   for(struct_typet::componentst::const_reverse_iterator
       cit=components.rbegin();
       cit!=components.rend();
@@ -1329,4 +1365,3 @@ codet cpp_typecheckt::dtor(const symbolt &symb)
 
   return block;
 }
-

@@ -114,8 +114,8 @@ void base_type(expr2tc &expr, const namespacet &ns)
 {
   base_type(expr.get()->type, ns);
 
-  Forall_operands2(it, tmpops, expr)
-    base_type(**it, ns);
+  Forall_operands2(it, idx, expr)
+    base_type(*it, ns);
 }
 
 void base_type(exprt &expr, const namespacet &ns)
@@ -177,7 +177,25 @@ bool base_type_eqt::base_type_eq_rec(
     migrate_type(symbol.type, tmp);
     return base_type_eq_rec(type1, tmp);
   }
-  
+
+  if (type1->type_id == type2t::string_id) {
+    if (is_array_type(type2) && is_bv_type(to_array_type(type2).subtype)) {
+      const array_type2t &ref = to_array_type(type2);
+      if (static_cast<const bv_data &>(*ref.subtype.get()).width == 8)
+        // Both are strings, technically
+        return true;
+    }
+  }
+
+  if (type2->type_id == type2t::string_id) {
+    if (is_array_type(type1) && is_bv_type(to_array_type(type1).subtype)) {
+      const array_type2t &ref = to_array_type(type1);
+      if (static_cast<const bv_data &>(*ref.subtype.get()).width == 8)
+        // Both are strings, technically
+        return true;
+    }
+  }
+
   if (type1->type_id != type2->type_id)
     return false;
 
@@ -290,8 +308,21 @@ bool base_type_eqt::base_type_eq_rec(
     return base_type_eq_rec(type1, symbol.type);
   }
   
+
   if(type1.id()!=type2.id())
+  {
+	if (type1.is_struct())
+	{
+      const struct_union_typet::componentst &components=
+	    to_struct_union_type(type1).components();
+      if (components.size()==1)
+      {
+        const typet &subtype=components[0].type().subtype();
+        if(base_type_eq_rec(subtype, type2)) return true;
+      }
+	}
     return false;
+  }
 
   if(type1.id()=="struct" ||
      type1.id()=="class" ||
@@ -392,18 +423,22 @@ bool base_type_eqt::base_type_eq_rec(
   if (!base_type_eq(expr1->type, expr2->type))
     return false;
 
-  expr2t::expr_operands ops1, ops2;
-  expr1->list_operands(ops1);
-  expr2->list_operands(ops2);
-
-  if (ops1.size() != ops2.size())
+  if (expr1->get_num_sub_exprs() != expr2->get_num_sub_exprs())
     return false;
     
-  expr2t::expr_operands::const_iterator it1 = ops1.begin();
-  expr2t::expr_operands::const_iterator it2 = ops2.begin();
-  for (; it1 != ops1.end(); it1++, it2++)
-    if (!base_type_eq(**it1, **it2))
+  for (unsigned int idx = 0; idx < expr1->get_num_sub_exprs(); idx++) {
+    const expr2tc *e1 = expr1->get_sub_expr(idx);
+    const expr2tc *e2 = expr2->get_sub_expr(idx);
+
+    // Check for nil exprs, which are permitted.
+    if (is_nil_expr(*e1) && is_nil_expr(*e2))
+      continue;
+    else if (is_nil_expr(*e1) || is_nil_expr(*e2))
       return false;
+
+    if (!base_type_eq(*e1, *e2))
+      return false;
+  }
   
   return true;
 }
@@ -486,4 +521,63 @@ bool base_type_eq(
 {
   base_type_eqt base_type_eq(ns);
   return base_type_eq.base_type_eq(expr1, expr2);
+}
+
+static std::string
+reformat_class_name(const std::string &from)
+{
+
+  size_t pos = from.rfind(':');
+  std::string classname;
+  if (pos == std::string::npos) {
+    classname = "cpp::tag." + from;
+  } else {
+    pos++;
+    classname = "cpp::" + from.substr(0, pos) + "tag." + from.substr(pos);
+  }
+
+  return classname;
+}
+
+static bool
+is_subclass_of_rec(const std::string &supername, const std::string &subname,
+                   const namespacet &ns)
+{
+
+  const symbolt *symbol = NULL;
+  if (!ns.lookup(supername, symbol)) {
+    // look at the list of bases; see if the subclass name is a base of this
+    // object. Currently, old-irep.
+    forall_irep(it, symbol->type.find("bases").get_sub()) {
+      const typet &base_type = (const typet&)*it;
+      assert(base_type.id() == "base");
+      assert(base_type.type().id() == "struct");
+      const std::string &basename = base_type.type().name().as_string();
+
+      // Is this a C++ class?
+
+      if (basename == subname) {
+        // Success
+        return true;
+      } else if (is_subclass_of_rec(basename, subname, ns)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+bool
+is_subclass_of(const type2tc &subclass, const type2tc &superclass,
+               const namespacet &ns)
+{
+  const struct_type2t &subclass_r = to_struct_type(subclass);
+  const struct_type2t &superclass_r = to_struct_type(superclass);
+
+  // Irritatingly, namespace prefixes in the struct name get flipped to the
+  // following:
+  std::string supername = reformat_class_name(superclass_r.name.as_string());
+  std::string subname = reformat_class_name(subclass_r.name.as_string());
+  return is_subclass_of_rec(subname, supername, ns);
 }

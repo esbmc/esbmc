@@ -1,0 +1,20 @@
+/*******************************************************************
+ Module:
+
+ Author: Felipe Rodrigues
+
+ Date: November 2012
+
+\*******************************************************************/
+
+#include "QTextEdit"
+#include "QPushButton"
+
+class QVBoxLayout : public QLayout {
+public:
+	QVBoxLayout (){}
+	QVBoxLayout ( QWidget * parent ){}
+	~QVBoxLayout (){}
+	QVBoxLayout	addWidget ( QTextEdit * w ){}
+	QVBoxLayout	addWidget ( QPushButton * w ){}
+};

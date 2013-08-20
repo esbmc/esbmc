@@ -485,6 +485,19 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   symbol.pretty_name=pretty_name;
   symbol.mode=cpp_typecheck.current_mode;
 
+  // We always insert throw_decl to the begin of the function
+  if(declarator.throw_decl().statement()=="throw_decl")
+  {
+    symbol.value.operands().insert(
+      symbol.value.operands().begin(),
+      declarator.throw_decl());
+
+    // Insert flag to end of constructor
+    // so we know when to remove throw_decl
+    symbol.value.operands().push_back(
+      codet("throw_decl_end"));
+  }
+
   // Constant? These are propagated.
   if(symbol.type.cmt_constant() &&
      symbol.value.is_not_nil())
@@ -501,8 +514,8 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       symbol.is_statevar=true;
       symbol.lvalue = !is_reference(symbol.type) &&
                       !(symbol.type.cmt_constant() &&
-                        is_number(symbol.type) &&
-                        symbol.value.id() == "constant");
+                      is_number(symbol.type) &&
+                      symbol.value.id() == "constant");
 
       if(cpp_typecheck.cpp_scopes.current_scope().is_global_scope())
       {
@@ -515,7 +528,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
       {
         if(storage_spec.is_static())
         {
-          symbol.static_lifetime=true;
+          //symbol.static_lifetime=true;
           symbol.file_local=true;
         }
         else if(storage_spec.is_extern())
@@ -538,11 +551,29 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
   if(cpp_typecheck.context.move(symbol, new_symbol))
     throw "cpp_typecheckt::convert_declarator: context.move() failed";
 
-  if(!is_code && cpp_typecheck.cpp_scopes.current_scope().contains(base_name))
+  if(!is_code)
   {
-    std::string error(base_name.c_str());
-    error = "`" + error + "' already in scope";
-    throw error.c_str();
+    cpp_scopest::id_sett id_set;
+
+    cpp_typecheck.cpp_scopes.current_scope().lookup(
+      base_name, cpp_scopet::SYMBOL, id_set);
+
+    for(cpp_scopest::id_sett::const_iterator
+        id_it=id_set.begin();
+        id_it!=id_set.end();
+        id_it++)
+    {
+      const cpp_idt &id=**id_it;
+      // the name is already in the scope
+      // this is ok if they belong to different categories
+
+      if(!id.is_class() && !id.is_enum())
+      {
+        cpp_typecheck.err_location(new_symbol->location);
+        cpp_typecheck.str << "`" << base_name << "' already in scope";
+        throw 0;
+      }
+    }
   }
 
   // put into scope
@@ -564,7 +595,7 @@ symbolt &cpp_declarator_convertert::convert_new_symbol(
     if(is_code && declarator.type().id()!="template")
       cpp_typecheck.add_function_body(new_symbol);
 
-    if(!is_code)
+    if(!is_code && !declarator.find("name").get_bool("catch_decl"))
       cpp_typecheck.convert_initializer(*new_symbol);
   }
 

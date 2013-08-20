@@ -62,6 +62,13 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
           << "' is declared as reference but is not initialized";
       throw 0;
     }
+    else if(symbol.type.id()=="incomplete_array")
+    {
+      err_location(symbol.location);
+      str << "storage size of `" << symbol.base_name
+          << "' isn't know";
+      throw 0;
+    }
 
     // done
     return;
@@ -88,7 +95,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
       cpp_typecheck_fargst fargs;
       fargs.in_use = true;
 
-      const code_typet& code_type = to_code_type(symbol.type.subtype());
+      const code_typet &code_type=to_code_type(symbol.type.subtype());
 
       for(code_typet::argumentst::const_iterator
           ait=code_type.arguments().begin();
@@ -114,15 +121,16 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
 
       assert(symbol.type.subtype() == resolved_expr.type());
 
-      if(resolved_expr.id() == "symbol")
+      if(resolved_expr.id()=="symbol")
       {
         symbol.value=
           address_of_exprt(resolved_expr);
       }
-      else if(resolved_expr.id() == "member")
+      else if(resolved_expr.id()=="member")
       {
         symbol.value =
           address_of_exprt(symbol_expr(lookup(resolved_expr.component_name())));
+
         symbol.value.type().add("to-member") = resolved_expr.op0().type();
       }
       else
@@ -143,7 +151,7 @@ void cpp_typecheckt::convert_initializer(symbolt &symbol)
     typecheck_expr(symbol.value);
 
     if(symbol.value.type().id()=="incomplete_array"
-       || symbol.value.id() == "string-constant")
+       || symbol.value.id()=="string-constant")
     {
       do_initializer(symbol.value, symbol.type, true);
     }
@@ -227,9 +235,9 @@ void cpp_typecheckt::zero_initializer(
       exprt obj=object;
       typecheck_expr(obj);
 
-      codet assign;
-      assign.statement("assign");
-      assign.copy_to_operands(obj, value);
+      code_assignt assign;
+      assign.lhs()=obj;
+      assign.rhs()=value;
       assign.location()=location;
       ops.push_back(assign);
     }
@@ -258,13 +266,12 @@ void cpp_typecheckt::zero_initializer(
   }
   else if(final_type.id()=="union")
   {
-    c_sizeoft so(*this);
+    c_sizeoft c_sizeof(*this);
 
     // Select the largest component
     mp_integer comp_size=0;
 
-    exprt comp;
-    comp.make_nil();
+    exprt comp=nil_exprt();
 
     forall_irep(it, final_type.components().get_sub())
     {
@@ -275,7 +282,7 @@ void cpp_typecheckt::zero_initializer(
       if(component.type().id()=="code")
         continue;
 
-      exprt exs=so(component.type());
+      exprt exs=c_sizeof(component.type());
 
       mp_integer size;
       bool to_int = !to_integer(exs,size);
@@ -292,6 +299,8 @@ void cpp_typecheckt::zero_initializer(
     {
       irept name("name");
       name.identifier(comp.base_name());
+      name.set("#location", location);
+
       cpp_namet cpp_name;
       cpp_name.move_to_sub(name);
 
@@ -310,30 +319,37 @@ void cpp_typecheckt::zero_initializer(
     zero.make_typecast(type);
     already_typechecked(zero);
 
-    codet assign;
-    assign.statement("assign");
-    assign.copy_to_operands(object, zero);
+    code_assignt assign;
+    assign.lhs()=object;
+    assign.rhs()=zero;
     assign.location()=location;
 
-    typecheck_expr(assign.op0());
-    assign.op0().type().cmt_constant(false);
-    already_typechecked(assign.op0());
+    typecheck_expr(assign.lhs());
+    assign.lhs().type().cmt_constant(false);
+    already_typechecked(assign.lhs());
 
     typecheck_code(assign);
     ops.push_back(assign);
+  }
+  else if(final_type.id()=="incomplete_struct" ||
+          final_type.id()=="incomplete_union")
+  {
+    err_location(location);
+    str << "cannot zero-initialize incomplete compound";
+    throw 0;
   }
   else
   {
     assert(gen_zero(final_type).is_not_nil());
 
-    codet assign;
-    assign.statement("assign");
-    assign.copy_to_operands(object, gen_zero(final_type));
+    code_assignt assign;
+    assign.lhs()=object;
+    assign.rhs()=gen_zero(final_type);
     assign.location()=location;
 
     typecheck_expr(assign.op0());
-    assign.op0().type().cmt_constant(false);
-    already_typechecked(assign.op0());
+    assign.lhs().type().cmt_constant(false);
+    already_typechecked(assign.lhs());
 
     typecheck_code(assign);
     ops.push_back(assign);

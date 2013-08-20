@@ -28,7 +28,7 @@ void goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
-    
+
   if (is_nil_expr(lhs))
     return; // ignore
 
@@ -46,7 +46,7 @@ void goto_symext::symex_malloc(
     if (is_constant_int2t(size) && to_constant_int2t(size).as_ulong() == 1)
       size_is_one = true;
   }
-  
+
   if (is_nil_type(type))
     type = char_type2();
 
@@ -61,7 +61,7 @@ void goto_symext::symex_malloc(
 
   symbol.name = "symex_dynamic::" + id2string(symbol.base_name);
   symbol.lvalue = true;
-  
+
   typet renamedtype = ns.follow(migrate_type_back(type));
   if(size_is_one)
     symbol.type=renamedtype;
@@ -80,48 +80,55 @@ void goto_symext::symex_malloc(
 
   type2tc new_type;
   migrate_type(symbol.type, new_type);
-  
-  expr2tc rhs = expr2tc(new address_of2t(type_pool.get_empty(), expr2tc()));
-  address_of2t &rhs_ref = to_address_of2t(rhs);
+
+  address_of2tc rhs_addrof(get_empty_type(), expr2tc());
 
   if(size_is_one)
   {
-    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type));
-    rhs_ref.ptr_obj = expr2tc(new symbol2t(new_type, symbol.name));
+    rhs_addrof.get()->type = get_pointer_type(pointer_typet(symbol.type));
+    rhs_addrof.get()->ptr_obj = symbol2tc(new_type, symbol.name);
   }
   else
   {
     type2tc subtype;
     migrate_type(symbol.type.subtype(), subtype);
-    expr2tc sym = expr2tc(new symbol2t(new_type, symbol.name));
-    expr2tc idx_val = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
-    expr2tc idx = expr2tc(new index2t(subtype, sym, idx_val));
-    rhs_ref.type = type_pool.get_pointer(pointer_typet(symbol.type.subtype()));
-    rhs_ref.ptr_obj = idx;
+    expr2tc sym = symbol2tc(new_type, symbol.name);
+    expr2tc idx_val = zero_uint;
+    expr2tc idx = index2tc(subtype, sym, idx_val);
+    rhs_addrof.get()->type =
+      get_pointer_type(pointer_typet(symbol.type.subtype()));
+    rhs_addrof.get()->ptr_obj = idx;
   }
-  
-  if (rhs_ref.type != lhs->type)
-    rhs = expr2tc(new typecast2t(lhs->type, rhs));
 
-  // Pas this point, rhs_ref may be an invalid reference.
+  expr2tc rhs = rhs_addrof;
+  if (rhs->type != lhs->type)
+    rhs = typecast2tc(lhs->type, rhs);
 
   cur_state->rename(rhs);
-  
+  expr2tc rhs_copy(rhs);
+
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
-  type2tc sym_type = type2tc(new array_type2t(type_pool.get_bool(),
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  expr2tc sym = expr2tc(new symbol2t(sym_type, "c::__ESBMC_is_dynamic"));
+  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
 
-  expr2tc ptr_obj = expr2tc(new pointer_object2t(int_type2(), lhs));
-
-  expr2tc idx = expr2tc(new index2t(type_pool.get_bool(), sym, ptr_obj));
-
+  pointer_object2tc ptr_obj(int_type2(), lhs);
+  index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
-
   symex_assign_rec(idx, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+}
+
+void goto_symext::symex_free(const code_free2t &code)
+{
+
+  pointer_offset2tc ptr_obj(uint_type2(), code.operand);
+  equality2tc eq(ptr_obj, zero_uint);
+  claim(eq, "Operand of free must have zero pointer offset");
 }
 
 void goto_symext::symex_printf(
@@ -133,11 +140,8 @@ void goto_symext::symex_printf(
   expr2tc new_rhs = rhs;
   cur_state->rename(new_rhs);
 
-  expr2t::expr_operands operands;
-  new_rhs->list_operands(operands);
+  const expr2tc &format = *new_rhs->get_sub_expr(0);
 
-  const expr2tc &format = **operands.begin();
-  
   if (is_address_of2t(format)) {
     const address_of2t &addrof = to_address_of2t(format);
     if (is_index2t(addrof.ptr_obj)) {
@@ -149,8 +153,8 @@ void goto_symext::symex_printf(
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args; 
-        forall_operands2(it, op_list, new_rhs)
-          args.push_back(**it);
+        forall_operands2(it, idx, new_rhs)
+          args.push_back(*it);
 
         target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
       }
@@ -165,7 +169,7 @@ void goto_symext::symex_cpp_new(
   bool do_array;
 
   do_array = (code.kind == sideeffect2t::cpp_new_arr);
-      
+
   unsigned int &dynamic_counter = get_dynamic_counter();
   dynamic_counter++;
 
@@ -179,7 +183,7 @@ void goto_symext::symex_cpp_new(
   symbol.name="symex_dynamic::"+id2string(symbol.base_name);
   symbol.lvalue=true;
   symbol.mode="C++";
-  
+
   const pointer_type2t &ptr_ref = to_pointer_type(code.type);
   typet renamedtype = ns.follow(migrate_type_back(ptr_ref.subtype));
   type2tc newtype, renamedtype2;
@@ -195,28 +199,40 @@ void goto_symext::symex_cpp_new(
   symbol.type = migrate_type_back(newtype);
 
   symbol.type.dynamic(true);
-  
+
   new_context.add(symbol);
 
   // make symbol expression
 
-  expr2tc rhs = expr2tc(new address_of2t(type2tc(renamedtype2), expr2tc()));
-  address_of2t &addrof = to_address_of2t(rhs);
+  address_of2tc rhs(renamedtype2, expr2tc());
 
   if(do_array)
   {
-    expr2tc sym = expr2tc(new symbol2t(newtype, symbol.name));
-    expr2tc zero = expr2tc(new constant_int2t(int_type2(), BigInt(0)));
-    expr2tc idx = expr2tc(new index2t(renamedtype2, sym, zero));
-    addrof.ptr_obj = idx;
+    symbol2tc sym(newtype, symbol.name);
+    index2tc idx(renamedtype2, sym, zero_uint);
+    rhs.get()->ptr_obj = idx;
   }
   else
-    addrof.ptr_obj = expr2tc(new symbol2t(newtype, symbol.name));
-  
+    rhs.get()->ptr_obj = symbol2tc(newtype, symbol.name);
+
   cur_state->rename(rhs);
+  expr2tc rhs_copy(rhs);
 
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
+
+  // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
+                                              expr2tc(), true));
+  symbol2tc sym(sym_type, "cpp::__ESBMC_is_dynamic");
+
+  pointer_object2tc ptr_obj(int_type2(), lhs);
+  index2tc idx(get_bool_type(), sym, ptr_obj);
+  expr2tc truth = true_expr;
+
+  symex_assign_rec(idx, truth, guard);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
 // XXX - implement as a call to free?
@@ -276,11 +292,11 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
   unsigned int thread_id;
 
   thread_id = art.get_cur_state().get_active_state_number();
-  expr2tc tid = expr2tc(new constant_int2t(uint_type2(), BigInt(thread_id)));
+  constant_int2tc tid(uint_type2(), BigInt(thread_id));
 
   state.value_set.assign(call.ret, tid, ns);
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, tid));
+  code_assign2tc assign(call.ret, tid);
   assert(call.ret->type == tid->type);
   symex_assign(assign);
   return;
@@ -325,7 +341,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
   const expr2tc &startdata = art.get_cur_state().get_thread_start_data(tid);
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, startdata));
+  code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
   state.value_set.assign(call.ret, startdata, ns);
@@ -337,6 +353,12 @@ void
 goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
+
+  if (options.get_bool_option("k-induction")) {
+    std::cerr << "Sorry, can't perform k-induction on multithreaded code";
+    std::cerr  << std::endl;
+    abort();
+  }
 
   // As an argument, we expect the address of a symbol.
   const expr2tc &addr = call.operands[0];
@@ -364,10 +386,9 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
 
   statet &state = art.get_cur_state().get_active_state();
 
-  expr2tc thread_id_exp = expr2tc(new constant_int2t(int_type2(),
-                                                     BigInt(thread_id)));
+  constant_int2tc thread_id_exp(int_type2(), BigInt(thread_id));
 
-  expr2tc assign = expr2tc(new code_assign2t(call.ret, thread_id_exp));
+  code_assign2tc assign(call.ret, thread_id_exp);
   state.value_set.assign(call.ret, thread_id_exp, ns);
 
   symex_assign(assign);
@@ -388,4 +409,99 @@ goto_symext::intrinsic_terminate_thread(reachability_treet &art)
   // No need to force a context switch; an ended thread will cause the run to
   // end and the switcher to be invoked.
   return;
+}
+
+void
+goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art)
+{
+  statet &state = art.get_cur_state().get_active_state();
+  expr2tc threadid = call.operands[0];
+  state.level2.rename(threadid);
+
+  if (!is_constant_int2t(threadid)) {
+    std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  // Possibly we should handle this error; but meh.
+  assert(art.get_cur_state().threads_state.size() >= tid);
+
+  // Thread state is simply whether the thread is ended or not.
+  unsigned int flags = (art.get_cur_state().threads_state[tid].thread_ended)
+                       ? 1 : 0;
+
+  // Reuse threadid
+  constant_int2tc flag_expr(get_uint_type(config.ansi_c.int_width), flags);
+  code_assign2tc assign(call.ret, flag_expr);
+  symex_assign(assign);
+  return;
+}
+
+void
+goto_symext::intrinsic_really_atomic_begin(reachability_treet &art)
+{
+
+  art.get_cur_state().increment_active_atomic_number();
+  return;
+}
+
+void
+goto_symext::intrinsic_really_atomic_end(reachability_treet &art)
+{
+
+  art.get_cur_state().decrement_active_atomic_number();
+  return;
+}
+
+void
+goto_symext::intrinsic_switch_to_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+
+  // Don't do this if we're in the initialization function.
+  if (cur_state->source.pc->function == "main")
+    return;
+
+  ex_state.switch_to_monitor();
+  return;
+}
+
+void
+goto_symext::intrinsic_switch_from_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+  ex_state.switch_away_from_monitor();
+}
+
+void
+goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+
+  if (ex_state.tid_is_set)
+    assert(0 && "Monitor thread ID was already set (__ESBMC_register_monitor)\n");
+
+  statet &state = art.get_cur_state().get_active_state();
+  expr2tc threadid = call.operands[0];
+  state.level2.rename(threadid);
+
+  if (!is_constant_int2t(threadid)) {
+    std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
+    std::cerr << std::endl;
+    abort();
+  }
+
+  unsigned int tid = to_constant_int2t(threadid).constant_value.to_ulong();
+  assert(art.get_cur_state().threads_state.size() >= tid);
+  ex_state.monitor_tid = tid;
+  ex_state.tid_is_set = true;
+}
+
+void
+goto_symext::intrinsic_kill_monitor(reachability_treet &art)
+{
+  execution_statet &ex_state = art.get_cur_state();
+  ex_state.kill_monitor_thread();
 }

@@ -42,12 +42,12 @@ static const char *cpp_defines_16[] ={
 "__LDBL_MAX__=1.18973149535723176502e+4932L",
 "__DBL_MIN__=2.2250738585072014e-308",
 "__DBL_MAX__=1.7976931348623157e+308",
-"__SIZE_TYPE__=\"unsigned int\"",
+"__SIZE_TYPE__=unsigned int",
 "__PTRDIFF_TYPE__=int",
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
-"__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__INTMAX_TYPE__=long long int",
+"__UINTMAX_TYPE__=long long unsigned int",
 "__WORDSIZE=16",
 NULL
 };
@@ -66,14 +66,15 @@ static const char *cpp_defines_32[] ={
 "__LDBL_MAX__=1.18973149535723176502e+4932L",
 "__DBL_MIN__=2.2250738585072014e-308",
 "__DBL_MAX__=1.7976931348623157e+308",
-" __SIZE_TYPE__=\"long unsigned int\"",
+"__SIZE_TYPE__=long unsigned int",
 "__PTRDIFF_TYPE__=int",
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
-"__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__INTMAX_TYPE__=long long int",
+"__UINTMAX_TYPE__=long long unsigned int",
 "__WORDSIZE=32",
 "_X86_",
+"__i386__",
 NULL
 };
 
@@ -95,12 +96,12 @@ static const char *cpp_defines_64[] ={
 "__LP64__=1",
 "__x86_64__=1",
 "_LP64=1",
-"__SIZE_TYPE__=\"long unsigned int\"",
+"__SIZE_TYPE__=long unsigned int",
 "__PTRDIFF_TYPE__=int",
 "__WCHAR_TYPE__=int",
 "__WINT_TYPE__=int",
-"__INTMAX_TYPE__=\"long long int\"",
-"__UINTMAX_TYPE__=\"long long unsigned int\"",
+"__INTMAX_TYPE__=long long int",
+"__UINTMAX_TYPE__=long long unsigned int",
 "__WORDSIZE=64",
 "__x86_64",
 "__x86_64__",
@@ -135,12 +136,17 @@ static const char *cpp_normal_defs[] = {
 "__ESBMC__",
 "__STRICT_ANSI__=1",
 "_POSIX_SOURCE=1",
-#ifndef __WIN32__ // mingw sched/pthread headers choke and die upon this.
+// mingw sched/pthread headers choke and die upon this.
+// Mac's attempt to spam inline assembly everywhere if this is defined, to
+// alias some deprecated function symbols
+#if !defined(__WIN32__) && !defined(ONAMAC)
 "_POSIX_C_SOURCE=200112L",
 #endif
 "__GNUC__",
-"__restrict__=/**/",
-"__restrict=/**/",
+"__VERIFIER_ASSUME=__ESBMC_assume",
+"__VERIFIER_assume=__ESBMC_assume",
+"__VERIFIER_atomic_begin=__ESBMC_atomic_begin",
+"__VERIFIER_atomic_end=__ESBMC_atomic_end",
 NULL
 };
 
@@ -156,11 +162,23 @@ static const char *cpp_linux_defs[] = {
 "__unix",
 "__unix__",
 "__null=0",
+"__restrict__=/**/",
+"__restrict=/**/",
 NULL
+};
+
+static const char *cpp_mac_defs[] = {
+"__APPLE__",
+"__GNUC__",
+"__asm(x)= ",
+"_FORTIFY_SOURCE=0",
+NULL,
 };
 
 static const char *cpp_windows_defs[] = {
 "_WIN32",
+"__restrict__=/**/",
+"__restrict=/**/",
 NULL
 };
 
@@ -230,7 +248,12 @@ bool c_preprocess(
 
     close(fd);
 
-    if (waitpid(pid, &status, 0) < 0) {
+    // Loop around this, because while under gdb, macs for some reason receive
+    // a lot of EINTRs without restarting the syscall. Hmm.
+    pid_t foo;
+    while ((foo = waitpid(pid, &status, 0)) == -1 && errno == EINTR)
+      ;
+    if ((foo) < 0) {
       message_stream.error("Failed to wait for preprocessing process");
       return true;
     }
@@ -256,7 +279,15 @@ bool c_preprocess(
   dup2(fd, STDERR_FILENO);
   close(fd);
 
-  exit(configure_and_run_cpp(out_file_buf, path, cpp_linux_defs, is_cpp));
+
+  const char **defs;
+#ifdef ONAMAC
+  defs = cpp_mac_defs;
+#else
+  defs = cpp_linux_defs;
+#endif
+
+  exit(configure_and_run_cpp(out_file_buf, path, defs, is_cpp));
 }
 
 #else /* __WIN32__ */
@@ -324,6 +355,16 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
   if (is_cpp)
     setup_cpp_defs(cpp_cpp_defs);
 
+  if (config.options.get_bool_option("deadlock-check")) {
+    record_define("pthread_mutex_lock=pthread_mutex_lock_check");
+    record_define("pthread_cond_wait=pthread_cond_waith_check");
+    record_define("pthread_join=pthread_join_switch");
+  } else {
+    record_define("pthread_join=pthread_join_noswitch");
+    record_define("pthread_mutex_lock=pthread_mutex_lock_nocheck");
+    record_define("pthread_cond_wait=pthread_cond_waith_nocheck");
+  }
+
   for(std::list<std::string>::const_iterator
       it=config.ansi_c.defines.begin();
       it!=config.ansi_c.defines.end();
@@ -344,7 +385,8 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
     exit(1);
   }
 
-  ret = pushfile((unsigned char *)strdup(path.c_str()));
+  const unsigned char *ourpath = (const unsigned char *)path.c_str();
+  ret = pushfile2(ourpath, ourpath, 0, NULL);
   fin();
 
   return ret;

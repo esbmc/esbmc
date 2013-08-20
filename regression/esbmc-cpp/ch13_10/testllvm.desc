@@ -1,3 +1,0 @@
-main.c 
---unwind 100 --no-pointer-check --no-unwinding-assertions -I ~/libraries/ --llvm-metadata varmap.dat
-^VERIFICATION FAILED$

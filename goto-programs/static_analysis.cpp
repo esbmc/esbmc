@@ -40,7 +40,7 @@ expr2tc abstract_domain_baset::get_guard(
 
   if(next==to)
   {
-    expr2tc tmp = expr2tc(new not2t(from->guard));
+    expr2tc tmp = not2tc(from->guard);
     return tmp;
   }
   
@@ -375,6 +375,9 @@ bool static_analysis_baset::visit(
   
     statet &new_values=*tmp_state;
 
+    // Do we want to pull new variables into the new state when tracking?
+    bool merge_new_vals = true;
+
     if(l->is_function_call())
     {
       // this is a big special case
@@ -386,6 +389,11 @@ bool static_analysis_baset::visit(
         code.operands,
         new_values,
         goto_functions);
+
+      // Don't track variables that are new in the callee into the callers
+      // state. We don't want its arguments and local variables cluttering
+      // our own value set.
+      merge_new_vals = false;
     }
     else
       new_values.transform(ns, l, to_l);
@@ -393,7 +401,7 @@ bool static_analysis_baset::visit(
     statet &other=get_state(to_l);
 
     bool have_new_values=
-      merge(other, new_values);
+      merge(other, new_values, merge_new_vals);
   
     if(have_new_values)
       new_data=true;
@@ -442,8 +450,10 @@ void static_analysis_baset::do_function_call(
 
     bool new_data=false;
 
-    // merge the new stuff
-    if(merge(begin_state, new_state))
+    // merge the new stuff. Place local state of callers into the value set of
+    // the callee, it might end up accessing a pointer to the callers local
+    // variables.
+    if(merge(begin_state, new_state, true))
       new_data=true;
 
     // do each function at least once

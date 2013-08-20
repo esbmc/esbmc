@@ -46,8 +46,8 @@ public:
   irept &member_initializers() { return add("member_initializers"); }
   const irept &member_initializers() const { return find("member_initializers"); }
 
-  irept &throw_decl() { return add("throw_decl"); }
-  const irept &throw_decl() const { return find("throw_decl"); }
+  exprt &throw_decl() { return static_cast<exprt&>(add("throw_decl")); }
+  const exprt &throw_decl() const { return static_cast<const exprt&>(find("throw_decl")); }
 
   void output(std::ostream &out) const;
 

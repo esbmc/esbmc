@@ -72,7 +72,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-void renaming::level1t::rename(expr2tc &expr) const
+void renaming::level1t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -92,8 +92,8 @@ void renaming::level1t::rename(expr2tc &expr) const
       current_names.find(name_record(sym));
 
     if (it != current_names.end()) {
-      expr = expr2tc(new symbol2t(sym.type, sym.thename, symbol2t::level1,
-                                  it->second, 0, thread_id, 0));
+      expr = symbol2tc(sym.type, sym.thename, symbol2t::level1,
+                       it->second, 0, thread_id, 0);
     } else {
       // This isn't an l1 declared name, so it's a global.
       to_symbol2t(expr).rlevel = symbol2t::level1_global;
@@ -106,12 +106,12 @@ void renaming::level1t::rename(expr2tc &expr) const
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it);
+    Forall_operands2(it, idx, expr)
+      rename(*it);
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr) const
+void renaming::level2t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -147,9 +147,9 @@ void renaming::level2t::rename(expr2tc &expr) const
       if (!is_nil_expr(it->second.constant))
         expr = it->second.constant; // sym is now invalid reference
       else
-        expr = expr2tc(new symbol2t(sym.type, sym.thename, lev,
-                                    sym.level1_num, it->second.count,
-                                    sym.thread_num, it->second.node_id));
+        expr = symbol2tc(sym.type, sym.thename, lev,
+                         sym.level1_num, it->second.count,
+                         sym.thread_num, it->second.node_id);
     }
     else
     {
@@ -160,8 +160,8 @@ void renaming::level2t::rename(expr2tc &expr) const
       else
         lev = symbol2t::level2;
 
-      expr = expr2tc(new symbol2t(sym.type, sym.thename, lev,
-                                  sym.level1_num, 0, sym.thread_num, 0));
+      expr = symbol2tc(sym.type, sym.thename, lev, sym.level1_num,
+                       0, sym.thread_num, 0);
     }
   }
   else if (is_address_of2t(expr))
@@ -171,8 +171,9 @@ void renaming::level2t::rename(expr2tc &expr) const
   else
   {
     // do this recursively
-    Forall_operands2(it, oper_list, expr)
-      rename(**it);
+    Forall_operands2(it, idx, expr)
+      if (!is_nil_expr(*it))
+        rename(*it);
   }
 }
 
@@ -185,6 +186,7 @@ void renaming::level2t::coveredinbees(expr2tc &lhs_sym, unsigned count, unsigned
 #endif
 
   valuet &entry=current_names[name_record(to_symbol2t(lhs_sym))];
+  assert(entry.count <= count);
   entry.count=count;
   entry.node_id = node_id;
 }
@@ -193,8 +195,11 @@ void renaming::renaming_levelt::get_original_name(expr2tc &expr,
                                             symbol2t::renaming_level lev) const
 {
 
-  Forall_operands2(it, oper_list, expr)
-    get_original_name(**it);
+  if (is_nil_expr(expr))
+    return;
+
+  Forall_operands2(it, idx, expr)
+    get_original_name(*it);
 
   if (is_symbol2t(expr))
   {
