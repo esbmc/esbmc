@@ -306,20 +306,8 @@ pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 
 /************************ condvar mainpulation routines ***********************/
 
-#if 0
-int
-pthread_cond_broadcast(pthread_cond_t *cond)
-{
-  //__ESBMC_HIDE:
-  //printf("broadcast_counter: %d", __ESBMC_cond_broadcast_seq_field(*cond));
-  //__ESBMC_cond_broadcast_seq_field(*cond)=1;
-  //printf("broadcast_counter: %d", __ESBMC_cond_broadcast_seq_field(*cond));
-  __ESBMC_cond_broadcast_seq_field(*cond) = 1;
-  __ESBMC_assert(__ESBMC_cond_broadcast_seq_field(
-                   *cond), "__ESBMC_cond_broadcast_seq_field(*cond)");
-  return 0; // we never fail
-}
-#endif
+// this is currently unimplemented.
+int pthread_cond_broadcast(pthread_cond_t *cond);
 
 int
 pthread_cond_init(
