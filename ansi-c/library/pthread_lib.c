@@ -220,10 +220,14 @@ __ESBMC_HIDE:
     __ESBMC_mutex_lock_field(*mutex) = 1;
   } else {
     // Deadlock foo
-    __ESBMC_assume(0);
+    blocked_threads_count++;
   }
+
+  // Switch away for deadlock detection and so forth...
   __ESBMC_atomic_end();
 
+  // ... but don't allow execution further if it was locked.
+  __ESBMC_assume(unlocked);
 
   return 0;
 }
