@@ -359,20 +359,29 @@ __ESBMC_HIDE:
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
+
+  // Technically in the gap below, we are blocked. So mark ourselves thus. If
+  // all other threads are (or become) blocked, then deadlock occurred, which
+  // this helps detect.
+  blocked_threads_count++;
+
   __ESBMC_atomic_end();
 
   // Other thread activity to happen in this gap
 
   __ESBMC_atomic_begin();
 
-  if (assrt && __ESBMC_cond_lock_field(*cond) == 1) {
-    // If we're _not_ unlocked, check for deadlock.
-    __ESBMC_assume(0);
-  }
+  // Have we been signalled?
+  bool signalled = __ESBMC_cond_lock_field(*cond) == 1;
 
-  // Assume that we've been signaled. If we weren't, guard becomes false, and
-  // deadlock assertions possibly trigger.
-  __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
+  // Don't consider any other interleavings aside from the ones where we've
+  // been signalled. As with mutexes, we should discard this trace and look
+  // for one where we /have/ been signalled instead. There's no use in
+  // switching away from this thread and looking for deadlock; if that's
+  // reachable, it'll be found by the context switch earlier in this function.
+  __ESBMC_assume(signalled);
+  // We're no longer blocked.
+  blocked_threads_count--;
 
   __ESBMC_atomic_end();
 
