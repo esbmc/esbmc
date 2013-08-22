@@ -29,9 +29,6 @@ static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
 static unsigned int num_total_threads = 0;
 static unsigned int num_threads_running = 0;
-static unsigned int count_wait = 0;
-static unsigned int count_lock = 0;
-static unsigned int join_wait = 0;
 
 /************************** Thread creation and exit **************************/
 
@@ -136,17 +133,13 @@ __ESBMC_hide:
   // elsewhere.
   bool ended = pthread_thread_ended[thread];
   if (!ended)
-    join_wait++;
+    __ESBMC_assume(0);
 
   // Fetch exit code
   if (retval != NULL)
     *retval = pthread_end_values[thread];
 
   __ESBMC_atomic_end();
-
-  // Discard any interleavings where the other thread wasn't halted.
-  if (!ended)
-    __ESBMC_assume(false);
 
   return 0;
 }
@@ -162,7 +155,7 @@ __ESBMC_hide:
   // elsewhere.
   bool ended = pthread_thread_ended[thread];
   if (!ended)
-    join_wait++;
+    __ESBMC_assume(0);
 
   // Fetch exit code
   if (retval != NULL)
@@ -170,14 +163,8 @@ __ESBMC_hide:
 
   __ESBMC_really_atomic_end();
 
-  // Discard any interleavings where the other thread wasn't halted.
-  if (!ended)
-    __ESBMC_assume(false);
-
   return 0;
 }
-
-
 
 /************************* Mutex manipulation routines ************************/
 
@@ -219,7 +206,6 @@ pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   _Bool unlocked = 1;
-  _Bool deadlock_mutex = true;
 
   __ESBMC_atomic_begin();
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
@@ -228,13 +214,11 @@ __ESBMC_HIDE:
     __ESBMC_mutex_lock_field(*mutex) = 1;
     __ESBMC_mutex_count_field(*mutex) = 0;
   } else {
-    count_lock++;
-    deadlock_mutex = (count_lock + count_wait + join_wait == num_threads_running);
-    __ESBMC_assert(!deadlock_mutex, "deadlock detected with mutex lock");
+    // Deadlock foo
+    __ESBMC_assume(0);
   }
   __ESBMC_atomic_end();
 
-  __ESBMC_assume(deadlock_mutex);
 
   return 0;
 }
@@ -357,8 +341,6 @@ static void
 do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 {
 __ESBMC_HIDE:
-  _Bool deadlock_wait = 0;
-
   __ESBMC_atomic_begin();
 
   if (assrt)
@@ -368,28 +350,18 @@ __ESBMC_HIDE:
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
-  ++count_wait;
-
-  // If something failed to join in the meantime, stop exploration,
-  __ESBMC_assume(join_wait == 0);
-
   __ESBMC_atomic_end();
   // Other thread activity to happen in this gap
   __ESBMC_atomic_begin();
 
   if (assrt && __ESBMC_cond_lock_field(*cond) == 1) {
     // If we're _not_ unlocked, check for deadlock.
-    deadlock_wait = (count_lock + count_wait + join_wait == num_threads_running);
-    __ESBMC_assert(!deadlock_wait, "deadlock detected with pthread_cond_wait");
+    __ESBMC_assume(0);
   }
 
   // Assume that we've been signaled. If we weren't, guard becomes false, and
   // deadlock assertions possibly trigger.
   __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
-  --count_wait;
-
-  // If something failed to join in the meantime, stop exploration,
-  __ESBMC_assume(join_wait == 0);
 
   __ESBMC_atomic_end();
 
