@@ -381,7 +381,7 @@ __ESBMC_HIDE:
   __ESBMC_atomic_begin();
 
   // Have we been signalled?
-  bool signalled = __ESBMC_cond_lock_field(*cond) == 1;
+  bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
   // Don't consider any other interleavings aside from the ones where we've
   // been signalled. As with mutexes, we should discard this trace and look
