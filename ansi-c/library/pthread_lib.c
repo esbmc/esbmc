@@ -135,6 +135,9 @@ __ESBMC_hide:
   bool ended = pthread_thread_ended[thread];
   if (!ended) {
     blocked_threads_count++;
+    // If there are now no more threads unblocked, croak.
+    __ESBMC_assert(blocked_threads_count != num_threads_running,
+                   "Deadlocked state in pthread_join");
   }
 
   // Fetch exit code
@@ -221,6 +224,9 @@ __ESBMC_HIDE:
   } else {
     // Deadlock foo
     blocked_threads_count++;
+    // No more threads to run -> croak.
+    __ESBMC_assert(blocked_threads_count != num_threads_running,
+                   "Deadlocked state in pthread_mutex_lock");
   }
 
   // Switch away for deadlock detection and so forth...
@@ -364,6 +370,9 @@ __ESBMC_HIDE:
   // all other threads are (or become) blocked, then deadlock occurred, which
   // this helps detect.
   blocked_threads_count++;
+  // No more threads to run -> croak.
+  __ESBMC_assert(blocked_threads_count != num_threads_running,
+                 "Deadlocked state in pthread_mutex_lock");
 
   __ESBMC_atomic_end();
 
