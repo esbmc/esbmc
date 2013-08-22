@@ -360,7 +360,9 @@ __ESBMC_HIDE:
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
   __ESBMC_atomic_end();
+
   // Other thread activity to happen in this gap
+
   __ESBMC_atomic_begin();
 
   if (assrt && __ESBMC_cond_lock_field(*cond) == 1) {
