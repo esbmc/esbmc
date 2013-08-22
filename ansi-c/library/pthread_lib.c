@@ -203,6 +203,17 @@ __ESBMC_HIDE:
 }
 
 int
+pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
+  __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int
 pthread_mutex_lock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
@@ -229,13 +240,7 @@ __ESBMC_HIDE:
 }
 
 int
-pthread_mutex_trylock(pthread_mutex_t *mutex)
-{
-  return 0; // we never fail
-}
-
-int
-pthread_mutex_unlock(pthread_mutex_t *mutex)
+pthread_mutex_unlock_check(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   __ESBMC_atomic_begin();
@@ -243,6 +248,12 @@ __ESBMC_HIDE:
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
+}
+
+int
+pthread_mutex_trylock(pthread_mutex_t *mutex)
+{
+  return 0; // we never fail
 }
 
 int
