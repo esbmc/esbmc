@@ -224,12 +224,11 @@ __ESBMC_HIDE:
   __ESBMC_atomic_begin();
   unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
 
-  if (unlocked)
+  if (unlocked) {
     __ESBMC_mutex_lock_field(*mutex) = 1;
-  else
+    __ESBMC_mutex_count_field(*mutex) = 0;
+  } else {
     count_lock++;
-
-  if (!unlocked) {
     deadlock_mutex = (count_lock + count_wait + join_wait == num_threads_running);
     __ESBMC_assert(!deadlock_mutex, "deadlock detected with mutex lock");
   }
