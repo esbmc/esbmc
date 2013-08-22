@@ -1,27 +1,20 @@
 /* This file defines pointers to the locations in ESBMC of headers-as-object
  * files */
 
-/* There's additional pain in that the number of '_' characters at the start of
- * the symbol varies when compiling for windows, but doesn't when using LD to
- * produce the header blobs. So, hacks: */
+extern char stddef_buf[];
+extern unsigned int stddef_buf_size;
 
-#if defined(_WIN32) && !defined(__MINGW64__)
-#define p(x) (x)
-#else
-#define p(x) _##x
-#endif
+extern char stdarg_buf[];
+extern unsigned int stdarg_buf_size;
 
-extern char p(binary_stddef_h_start);
-extern char p(binary_stddef_h_end);
-extern char p(binary_stdarg_h_start);
-extern char p(binary_stdarg_h_end);
-extern char p(binary_stdbool_h_start);
-extern char p(binary_stdbool_h_end);
-extern char p(binary_pthread_h_start);
-extern char p(binary_pthread_h_end);
-extern char p(binary_pthreadtypes_h_start);
-extern char p(binary_pthreadtypes_h_end);
-extern char p(binary_digitalfilter_h_start);
-extern char p(binary_digitalfilter_h_end);
+extern char stdbool_buf[];
+extern unsigned int stdbool_buf_size;
 
-#undef p
+extern char pthread_buf[];
+extern unsigned int pthread_buf_size;
+
+extern char pthreadtypes_buf[];
+extern unsigned int pthreadtypes_buf_size;
+
+extern char digitalfilter_buf[];
+extern unsigned int digitalfilter_buf_size;

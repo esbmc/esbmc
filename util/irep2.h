@@ -196,7 +196,10 @@ public:
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref), boost::detail::polymorphic_cast_tag()) {}
+    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+  {
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+  }
 
   irep_container &operator=(irep_container const &ref)
   {
@@ -215,7 +218,8 @@ public:
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    *this = boost::shared_polymorphic_cast<T, Y>
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    *this = boost::static_pointer_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
     return *this;
   }
@@ -319,6 +323,8 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  virtual ~type2t() { };
+
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
    *  itself. May throw various exceptions depending on whether this operation
@@ -559,6 +565,8 @@ protected:
   expr2t(const expr2t &ref);
 
 public:
+  virtual ~expr2t() { };
+
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
@@ -1794,6 +1802,7 @@ inline bool is_number_type(const expr2tc &e)
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type2tc bool_type;
   type2tc empty_type;
@@ -4586,6 +4595,9 @@ is_false(const expr2tc &expr)
   else
     return false;
 }
+
+// To initialize the below at a defined time...
+void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;

@@ -122,12 +122,10 @@ public:
       guard(s.guard),
       thread_id(s.thread_id) {}
 
-  // Deny the use of goto_statet copy constructors
-  private:
-  goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
-  {
-    assert(0);
-  }
+    goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+    {
+      assert(0);
+    }
 
   public:
     ~goto_statet() {

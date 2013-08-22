@@ -50,7 +50,7 @@ dirs:
 	done
 
 $(OBJDIR)/solvers.o: $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o

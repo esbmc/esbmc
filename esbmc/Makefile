@@ -29,6 +29,7 @@ export LD LDFLAGS
 ifndef STATICLINK
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/ansi-c/headers/flail.sh buildidstring $(OBJDIR)/buildidobj.txt | $(CC) $(CFLAGS) -x c - -c -o $(OBJDIR)/buildidobj.o
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
 else
