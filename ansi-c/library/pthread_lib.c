@@ -218,7 +218,6 @@ __ESBMC_HIDE:
 
   if (unlocked) {
     __ESBMC_mutex_lock_field(*mutex) = 1;
-    __ESBMC_mutex_count_field(*mutex) = 0;
   } else {
     // Deadlock foo
     __ESBMC_assume(0);
