@@ -29,6 +29,7 @@ static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
 static unsigned int num_total_threads = 0;
 static unsigned int num_threads_running = 0;
+static int blocked_threads_count = 0;
 
 /************************** Thread creation and exit **************************/
 
@@ -132,14 +133,20 @@ __ESBMC_hide:
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
   bool ended = pthread_thread_ended[thread];
-  if (!ended)
-    __ESBMC_assume(0);
+  if (!ended) {
+    blocked_threads_count++;
+  }
 
   // Fetch exit code
   if (retval != NULL)
     *retval = pthread_end_values[thread];
 
+  // In all circumstances, allow a switch away from this thread to permit
+  // deadlock checking,
   __ESBMC_atomic_end();
+
+  // But if this thread is blocked, don't allow for any further execution.
+  __ESBMC_assume(ended);
 
   return 0;
 }
@@ -150,12 +157,11 @@ pthread_join_noswitch(pthread_t thread, void **retval)
 __ESBMC_hide:
   __ESBMC_atomic_begin();
 
-  // Detect whether the target thread has ended or not. If it isn't, mark us as
-  // waiting for its completion. That fact can be used for deadlock detection
-  // elsewhere.
+  // If the other thread hasn't ended, assume false, because further progress
+  // isn't going to be made. Wait for an interleaving where this is true
+  // instead. This function isn't designed for deadlock detection.
   bool ended = pthread_thread_ended[thread];
-  if (!ended)
-    __ESBMC_assume(0);
+  __ESBMC_assume(ended);
 
   // Fetch exit code
   if (retval != NULL)
