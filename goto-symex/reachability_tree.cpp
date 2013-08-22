@@ -310,6 +310,11 @@ void reachability_treet::go_next_state()
     {
       it = cur_state_it;
       cur_state_it--;
+
+      // For the last one:
+      if (execution_states.size() == 1)
+        (*it)->finish_formula();
+
       delete *it;
       execution_states.erase(it);
     }
@@ -714,8 +719,6 @@ reachability_treet::generate_schedule_formula()
 
     go_next_state();
   }
-
-  (*cur_state_it)->finish_formula();
 
   return new goto_symext::symex_resultt(schedule_target, schedule_total_claims,
                                         schedule_remaining_claims);
