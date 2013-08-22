@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdbool.h>
 #include <pthread.h>
 
@@ -253,7 +254,12 @@ __ESBMC_HIDE:
 int
 pthread_mutex_trylock(pthread_mutex_t *mutex)
 {
-  return 0; // we never fail
+  if (__ESBMC_mutex_lock_field(*mutex) != 0) {
+    return EBUSY;
+  } else {
+    pthread_mutex_lock(mutex);
+    return 0;
+  }
 }
 
 int
