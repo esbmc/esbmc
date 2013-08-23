@@ -38,37 +38,28 @@ crypto_hash::to_string() const
   return std::string(hex);
 }
 
-void
-crypto_hash::init(const uint8_t *data, int sz)
+crypto_hash::crypto_hash()
 {
-  SHA256_CTX c;
 
   if (!have_pointers)
     setup_pointers();
 
   sha_init(&c);
-  sha_update(&c, data, sz);
-  sha_final(hash, &c);
-  valid = true;
+}
+
+void
+crypto_hash::ingest(const void *data, unsigned int size)
+{
+
+  sha_update(&c, data, size);
   return;
 }
 
-crypto_hash::crypto_hash(const uint8_t *data, int sz)
+void
+crypto_hash::fin(void)
 {
 
-  init(data, sz);
-}
-
-crypto_hash::crypto_hash(std::string str)
-{
-
-  init((const uint8_t *)str.data(), str.length());
-}
-
-crypto_hash::crypto_hash()
-{
-
-  valid = false;
+  sha_final(hash, &c);
 }
 
 void

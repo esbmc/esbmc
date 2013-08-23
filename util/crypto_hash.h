@@ -20,19 +20,19 @@ extern "C" {
 class crypto_hash {
   public:
   uint8_t hash[32];
-  bool valid;
+#ifndef NO_OPENSSL
+  SHA256_CTX c;
+#endif
 
   bool operator<(const crypto_hash h2) const;
 
   std::string to_string() const;
 
-  crypto_hash(const uint8_t *data, int sz);
-  crypto_hash(std::string str);
   crypto_hash();
+  void ingest(const void *data, unsigned int size);
+  void fin();
 
   protected:
-  void init(const uint8_t *data, int sz);
-
 #ifndef NO_OPENSSL
   static bool have_pointers;
   static int (*sha_init)(SHA256_CTX *c);

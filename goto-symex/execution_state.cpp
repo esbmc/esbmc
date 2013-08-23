@@ -41,14 +41,6 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   message_handler(_message_handler)
 {
 
-  // XXXjmorse - C++s static initialization order trainwreck means
-  // we can't initialize the id -> serializer map statically. Instead,
-  // manually inspect and initialize. This is not thread safe.
-  if (!execution_statet::expr_id_map_initialized) {
-    execution_statet::expr_id_map_initialized = true;
-    execution_statet::expr_id_map = init_expr_id_map();
-  }
-
   CS_number = 0;
   TS_number = 0;
   node_id = 0;
@@ -685,248 +677,21 @@ execution_statet::generate_hash(void) const
     str += "!" + s.str();
   }
 
-  crypto_hash h = crypto_hash(str);
+  crypto_hash h;
+  h.ingest(str.c_str(), str.size());
+  h.fin();
 
   return h;
 }
 
-static std::string state_to_ignore[8] =
-{
-  "\\guard", "trds_count", "trds_in_run", "deadlock_wait", "deadlock_mutex",
-  "count_lock", "count_wait", "unlocked"
-};
-
-std::string
-execution_statet::serialise_expr(const exprt &rhs __attribute__((unused)))
-{
-  // FIXME: some way to disambiguate what's part of a hash / const /whatever,
-  // and what's part of an operator
-
-  // The plan: serialise this expression into the identifiers of its operations,
-  // replacing symbol names with the hash of their value.
-  std::cerr << "Serialise expr is a victim of string migration" << std::endl;
-  abort();
-#if 0
-
-  std::string str;
-  uint64_t val;
-  int i;
-
-  if (rhs.id() == exprt::symbol) {
-
-    str = rhs.identifier().as_string();
-    for (i = 0; i < 8; i++)
-      if (str.find(state_to_ignore[i]) != std::string::npos)
-	return "(ignore)";
-
-    // If this is something we've already encountered, use the hash of its
-    // value.
-    exprt tmp = rhs;
-    expr2tc new_tmp;
-    migrate_expr(tmp, new_tmp);
-    get_active_state().get_original_name(new_tmp);
-    tmp = migrate_expr_back(new_tmp);
-    if (state_level2->current_hashes.find(tmp.identifier().as_string()) !=
-        state_level2->current_hashes.end()) {
-      crypto_hash h = state_level2->current_hashes.find(
-        tmp.identifier().as_string())->second;
-      return "hash(" + h.to_string() + ")";
-    }
-
-    /* Otherwise, it's something that's been assumed, or some form of
-       nondeterminism. Just return its name. */
-    return rhs.identifier().as_string();
-  } else if (rhs.id() == exprt::arrayof) {
-    /* An array of the same set of values: generate all of them. */
-    str = "array(";
-    irept array = rhs.type();
-    exprt size = (exprt &)array.size_irep();
-    str += "sz(" + serialise_expr(size) + "),";
-    str += "elem(" + serialise_expr(rhs.op0()) + "))";
-  } else if (rhs.id() == exprt::with) {
-    exprt rec = rhs;
-
-    if (rec.type().id() == typet::t_array) {
-      str = "array(";
-      str += "prev(" + serialise_expr(rec.op0()) + "),";
-      str += "idx(" + serialise_expr(rec.op1()) + "),";
-      str += "val(" + serialise_expr(rec.op2()) + "))";
-    } else if (rec.type().id() == typet::t_struct) {
-      str = "struct(";
-      str += "prev(" + serialise_expr(rec.op0()) + "),";
-      str += "member(" + serialise_expr(rec.op1()) + "),";
-      str += "val(" + serialise_expr(rec.op2()) + "),";
-    } else if (rec.type().id() ==  typet::t_union) {
-      /* We don't care about previous assignments to this union, because they're
-         overwritten by this one, and leads to undefined side effects anyway.
-         So, just serialise the identifier, the member assigned to, and the
-         value assigned */
-      str = "union_set(";
-      str += "union_sym(" + rec.op0().identifier().as_string() + "),";
-      str += "field(" + serialise_expr(rec.op1()) + "),";
-      str += "val(" + serialise_expr(rec.op2()) + "))";
-    } else {
-      throw "Unrecognised type of with expression: " +
-            rec.op0().type().id().as_string();
-    }
-  } else if (rhs.id() == exprt::index) {
-    str = "index(";
-    str += serialise_expr(rhs.op0());
-    str += ",idx(" + serialise_expr(rhs.op1()) + ")";
-  } else if (rhs.id() == "member_name") {
-    str = "component(" + rhs.component_name().as_string() + ")";
-  } else if (rhs.id() == exprt::member) {
-    str = "member(entity(" + serialise_expr(rhs.op0()) + "),";
-    str += "member_name(" + rhs.component_name().as_string() + "))";
-  } else if (rhs.id() == "nondet_symbol") {
-    /* Just return the identifier: it'll be unique to this particular piece of
-       entropy */
-    exprt tmp = rhs;
-    expr2tc new_tmp;
-    migrate_expr(tmp, new_tmp);
-    get_active_state().get_original_name(new_tmp);
-    tmp = migrate_expr_back(new_tmp);
-    str = "nondet_symbol(" + tmp.identifier().as_string() + ")";
-  } else if (rhs.id() == exprt::i_if) {
-    str = "cond(if(" + serialise_expr(rhs.op0()) + "),";
-    str += "then(" + serialise_expr(rhs.op1()) + "),";
-    str += "else(" + serialise_expr(rhs.op2()) + "))";
-  } else if (rhs.id() == "struct") {
-    str = rhs.type().tag().as_string();
-    str = "struct(tag(" + str + "),";
-    forall_operands(it, rhs) {
-      str = str + "(" + serialise_expr(*it) + "),";
-    }
-    str += ")";
-  } else if (rhs.id() == "union") {
-    str = rhs.type().tag().as_string();
-    str = "union(tag(" + str + "),";
-    forall_operands(it, rhs) {
-      str = str + "(" + serialise_expr(*it) + "),";
-    }
-  } else if (rhs.id() == exprt::constant) {
-    // It appears constants can be "true", "false", or a bit vector. Parse that,
-    // and then print the value as a base 10 integer.
-
-    irep_idt idt_val = rhs.value();
-    if (idt_val == exprt::i_true) {
-      val = 1;
-    } else if (idt_val == exprt::i_false) {
-      val = 0;
-    } else {
-      val = strtol(idt_val.c_str(), NULL, 2);
-    }
-
-    std::stringstream tmp;
-    tmp << val;
-    str = "const(" + tmp.str() + ")";
-  } else if (rhs.id() == "pointer_offset") {
-    str = "pointer_offset(" + serialise_expr(rhs.op0()) + ")";
-  } else if (rhs.id() == "string-constant") {
-    exprt tmp;
-    string2array(rhs, tmp);
-    return serialise_expr(tmp);
-  } else if (rhs.id() == "same-object") {
-    str = "same-obj((" + serialise_expr(rhs.op0()) + "),(";
-    str += serialise_expr(rhs.op1()) + "))";
-  } else if (rhs.id() == "byte_update_little_endian") {
-    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
-    str += serialise_expr(rhs.op1()) + "))";
-  } else if (rhs.id() == "byte_update_big_endian") {
-    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
-    str += serialise_expr(rhs.op1()) + "))";
-  } else if (rhs.id() == "byte_extract_little_endian") {
-    str = "byte_up_le((" + serialise_expr(rhs.op0()) + "),(";
-    str += serialise_expr(rhs.op1()) + "),";
-    str += serialise_expr(rhs.op2()) + "))";
-  } else if (rhs.id() == "byte_extract_big_endian") {
-    str = "byte_up_be((" + serialise_expr(rhs.op0()) + "),(";
-    str += serialise_expr(rhs.op1()) + "),";
-    str += serialise_expr(rhs.op2()) + "))";
-  } else if (rhs.id() == "infinity") {
-    return "inf";
-  } else if (rhs.id() == "nil") {
-    return "nil";
-  } else {
-    execution_statet::expr_id_map_t::const_iterator it;
-    it = expr_id_map.find(rhs.id());
-    if (it != expr_id_map.end())
-      return it->second(*this, rhs);
-
-    std::cout << "Unrecognized expression when generating state hash:\n";
-    std::cout << rhs.pretty(0) << std::endl;
-    abort();
-  }
-
-  return str;
-#endif
-}
-
-// If we have a normal expression, either arithmatic, binary, comparision,
-// or whatever, just take the operator and append its operands.
-std::string
-serialise_normal_operation(execution_statet &ex_state, const exprt &rhs)
-{
-  std::string str;
-
-  str = rhs.id().as_string();
-  forall_operands(it, rhs) {
-    str = str + "(" + ex_state.serialise_expr(*it) + ")";
-  }
-
-  return str;
-}
-
-
 crypto_hash
-execution_statet::update_hash_for_assignment(const exprt &rhs)
+execution_statet::update_hash_for_assignment(const expr2tc &rhs)
 {
 
-  return crypto_hash(serialise_expr(rhs));
-}
-
-execution_statet::expr_id_map_t execution_statet::expr_id_map;
-
-execution_statet::expr_id_map_t
-execution_statet::init_expr_id_map()
-{
-  execution_statet::expr_id_map_t m;
-  m[exprt::plus] = serialise_normal_operation;
-  m[exprt::minus] = serialise_normal_operation;
-  m[exprt::mult] = serialise_normal_operation;
-  m[exprt::div] = serialise_normal_operation;
-  m[exprt::mod] = serialise_normal_operation;
-  m[exprt::equality] = serialise_normal_operation;
-  m[exprt::implies] = serialise_normal_operation;
-  m[exprt::i_and] = serialise_normal_operation;
-  m[exprt::i_xor] = serialise_normal_operation;
-  m[exprt::i_or] = serialise_normal_operation;
-  m[exprt::i_not] = serialise_normal_operation;
-  m[exprt::notequal] = serialise_normal_operation;
-  m["unary-"] = serialise_normal_operation;
-  m["unary+"] = serialise_normal_operation;
-  m[exprt::abs] = serialise_normal_operation;
-  m[exprt::isnan] = serialise_normal_operation;
-  m[exprt::i_ge] = serialise_normal_operation;
-  m[exprt::i_gt] = serialise_normal_operation;
-  m[exprt::i_le] = serialise_normal_operation;
-  m[exprt::i_lt] = serialise_normal_operation;
-  m[exprt::i_bitand] = serialise_normal_operation;
-  m[exprt::i_bitor] = serialise_normal_operation;
-  m[exprt::i_bitxor] = serialise_normal_operation;
-  m[exprt::i_bitnand] = serialise_normal_operation;
-  m[exprt::i_bitnor] = serialise_normal_operation;
-  m[exprt::i_bitnxor] = serialise_normal_operation;
-  m[exprt::i_bitnot] = serialise_normal_operation;
-  m[exprt::i_shl] = serialise_normal_operation;
-  m[exprt::i_lshr] = serialise_normal_operation;
-  m[exprt::i_ashr] = serialise_normal_operation;
-  m[exprt::typecast] = serialise_normal_operation;
-  m[exprt::addrof] = serialise_normal_operation;
-  m["pointer_obj"] = serialise_normal_operation;
-  m["pointer_object"] = serialise_normal_operation;
-
-  return m;
+  crypto_hash h;
+  rhs->hash(h);
+  h.fin();
+  return h;
 }
 
 void
@@ -1076,8 +841,6 @@ execution_statet::init_property_monitors(void)
   }
 }
 
-bool execution_statet::expr_id_map_initialized = false;
-
 execution_statet::ex_state_level2t::ex_state_level2t(
     execution_statet &ref)
   : renaming::level2t(),
@@ -1207,14 +970,14 @@ execution_statet::state_hashing_level2t::make_assignment(expr2tc &lhs_sym,
 
   renaming::level2t::make_assignment(lhs_sym, const_value, assigned_value);
 
-  // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
-#if 0
-#warning XXXjmorse - state hashing is a casualty of irep2
-  hash = owner->update_hash_for_assignment(assigned_value);
-  std::string orig_name =
-    owner->get_active_state().get_original_name(l1_ident).as_string();
-  current_hashes[orig_name] = hash;
-#endif
+  // If there's no body to the assignment, don't hash.
+  if (!is_nil_expr(assigned_value)) {
+
+    // XXX - consider whether to use l1 names instead. Recursion, reentrancy.
+    crypto_hash hash = owner->update_hash_for_assignment(assigned_value);
+    std::string orig_name = to_symbol2t(lhs_sym).thename.as_string();
+    current_hashes[orig_name] = hash;
+  }
 }
 
 crypto_hash
@@ -1227,15 +990,12 @@ execution_statet::state_hashing_level2t::generate_l2_state_hash() const
   total = 0;
   for (current_state_hashest::const_iterator it = current_hashes.begin();
         it != current_hashes.end(); it++) {
-    int j;
-
-    for (j = 0 ; j < 8; j++)
-      if (it->first.as_string().find(state_to_ignore[j]) != std::string::npos)
-        continue;
-
     memcpy(&data[total * CRYPTO_HASH_SIZE], it->second.hash, CRYPTO_HASH_SIZE);
     total++;
   }
 
-  return crypto_hash(data, total * CRYPTO_HASH_SIZE);
+  crypto_hash c;
+  c.ingest(data, total * CRYPTO_HASH_SIZE);
+  c.fin();
+  return c;
 }

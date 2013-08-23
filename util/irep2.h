@@ -21,6 +21,8 @@
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
+#include <crypto_hash.h>
+
 // XXXjmorse - abstract, access modifies, need consideration
 
 /** Iterate over all expr2tc's in a vector.
@@ -434,12 +436,22 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 
   mutable uint32_t crc_val;
 };
-
 
 /** Fetch identifying name for a type.
  *  I.E., this is the class of the type, what you'd get if you called type.id()
@@ -693,6 +705,17 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
   /** Generate a list of expr operands.
    *  Use forall_operands2 instead; this method is overridden by subclasses and
    *  when invoked fills the inp list with pointers to any exprs that make up
@@ -859,7 +882,7 @@ namespace esbmct {
    *
    *  In fact, we can make type generic implementations of all the following
    *  methods in expr2t: convert_smt, clone, tostring, cmp, lt, do_crc,
-   *  list_operands.
+   *  list_operands, hash.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -1001,6 +1024,7 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
     virtual expr2tc *get_sub_expr_nc(unsigned int i);
@@ -1096,6 +1120,7 @@ namespace esbmct {
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
   };
 
   // Meta goo
