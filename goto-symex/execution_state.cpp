@@ -702,14 +702,23 @@ execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l) const
 void
 execution_statet::calculate_mpor_constraints(void)
 {
-
-  std::vector<std::vector<int> > new_dep_chain = dependancy_chain;
   // Primary bit of MPOR logic - to be executed at the end of a transition to
   // update dependancy tracking and suchlike.
 
   // MPOR paper, page 12, create new dependancy chain record for this time step.
 
-  // Start new dependancy chain for this thread
+  // 2D Vector of relations, T x T, i.e. threads on each axis:
+  //    -1 signifies that no relation exists.
+  //    0 that the thread hasn't run yet.
+  //    1 that there is a dependency between these threads.
+  //
+  //  dependancy_chain contains the state from the previous transition taken;
+  //  here we update it to reflect the latest transition, and make a decision
+  //  about progress later.
+  std::vector<std::vector<int> > new_dep_chain = dependancy_chain;
+
+  // Start new dependancy chain for this thread. Default to there being no
+  // relation.
   for (unsigned int i = 0; i < new_dep_chain.size(); i++)
     new_dep_chain[active_thread][i] = -1;
 
