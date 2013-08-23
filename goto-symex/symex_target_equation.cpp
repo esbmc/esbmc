@@ -289,6 +289,24 @@ symex_target_equationt::check_for_duplicate_assigns() const
   return;
 }
 
+unsigned int
+symex_target_equationt::clear_assertions(void)
+{
+  unsigned int num_asserts = 0;
+
+  for (SSA_stepst::iterator it = SSA_steps.begin();
+      it != SSA_steps.end(); it++) {
+    if (it->type == goto_trace_stept::ASSERT) {
+      SSA_stepst::iterator it2 = it;
+      it--;
+      SSA_steps.erase(it2);
+      num_asserts++;
+    }
+  }
+
+  return num_asserts;
+}
+
 runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
                                                      prop_convt &_conv)
   : symex_target_equationt(_ns),
