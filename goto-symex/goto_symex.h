@@ -69,6 +69,7 @@ public:
 
   friend class symex_dereference_statet;
   friend class bmct;
+  friend class reachability_treet;
 
   typedef goto_symex_statet statet;
 

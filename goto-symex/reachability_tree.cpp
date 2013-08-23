@@ -294,6 +294,21 @@ bool reachability_treet::reset_to_unexplored_state()
   if (execution_states.size() > 0)
     cur_state_it++;
 
+  if (execution_states.size() != 0) {
+    // When backtracking, erase all the assertions from the equation before
+    // continuing forwards. They've all already been checked, in the trace we
+    // just backtracked from. Thus there's no point in checking them again.
+    symex_target_equationt *eq =
+      static_cast<symex_target_equationt*>((*cur_state_it)->target);
+    unsigned int num_asserts = eq->clear_assertions();
+
+    // Remove them from the count of remaining assertions to check. This allows
+    // for more traces to be discarded because they do not contain any
+    // unchecked assertions.
+    (*cur_state_it)->total_claims -= num_asserts;
+    (*cur_state_it)->remaining_claims -= num_asserts;
+  }
+
   return execution_states.size() != 0;
 }
 
