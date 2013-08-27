@@ -149,6 +149,9 @@ execution_statet::operator=(const execution_statet &ex)
   monitor_from_tid = ex.monitor_from_tid;
   mon_from_tid = ex.mon_from_tid;
   thread_cswitch_threshold = ex.thread_cswitch_threshold;
+  symex_trace = ex.symex_trace;
+  smt_during_symex = ex.smt_during_symex;
+  smt_thread_guard = ex.smt_thread_guard;
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
