@@ -662,6 +662,9 @@ protected:
   /** Flag as to whether we're not enabling partial loops. Corresponds to
    *  the option --partial-loops */
   bool partial_loops;
+  /** Flag as to whether we're doing a k-induction. Corresponds to
+   *  the option --k-induction */
+  bool k_induction;
   /** Flag as to whether we're doing a k-induction base case. Corresponds to
    *  the option --base-case */
   bool base_case;
