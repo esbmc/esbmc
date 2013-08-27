@@ -322,7 +322,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
   else if(!partial_loops)
   {
-    if(unwinding_assertions)
+    if(!no_unwinding_assertions)
     {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));

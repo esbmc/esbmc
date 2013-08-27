@@ -44,6 +44,7 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   deadlock_check(options.get_bool_option("deadlock-check")),
   no_assertions(options.get_bool_option("no-assertions")),
   no_simplify(options.get_bool_option("no-simplify")),
+  no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
   base_case(options.get_bool_option("base-case")),
   forward_condition(options.get_bool_option("forward-condition"))
 {
@@ -107,7 +108,7 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   deadlock_check = sym.deadlock_check;
   no_assertions = sym.no_assertions;
   no_simplify = sym.no_simplify;
-  unwinding_assertions = sym.unwinding_assertions;
+  no_unwinding_assertions = sym.no_unwinding_assertions;
   partial_loops = sym.partial_loops;
   base_case = sym.base_case;
   forward_condition = sym.forward_condition;

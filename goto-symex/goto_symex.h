@@ -658,7 +658,7 @@ protected:
   bool no_simplify;
   /** Flag as to whether we're inserting unwinding assertions. Corresponds to
    *  the option --no-unwinding-assertions */
-  bool unwinding_assertions;
+  bool no_unwinding_assertions;
   /** Flag as to whether we're not enabling partial loops. Corresponds to
    *  the option --partial-loops */
   bool partial_loops;
