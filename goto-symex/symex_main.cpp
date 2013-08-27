@@ -79,8 +79,6 @@ goto_symext::symex_step(reachability_treet & art)
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  merge_gotos();
-
   // depth exceeded?
   {
     if (depth_limit != 0 && cur_state->depth > depth_limit)
