@@ -37,7 +37,9 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   cur_state(NULL),
   last_throw(NULL),
   inside_unexpected(false),
-  unwinding_recursion_assumption(false)
+  unwinding_recursion_assumption(false),
+  depth_limit(atol(options.get_option("depth").c_str())),
+  break_insn(atol(options.get_option("break-at").c_str()))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -93,6 +95,8 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   guard_identifier_s = sym.guard_identifier_s;
+  depth_limit = sym.depth_limit;
+  break_insn = sym.break_insn;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;

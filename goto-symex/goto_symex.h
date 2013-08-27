@@ -637,6 +637,14 @@ protected:
 
   /** Flag to indicate if we have an unwinding recursion assumption. */
   bool unwinding_recursion_assumption;
+
+  /** Depth limit, as given by the --depth option */
+  unsigned long depth_limit;
+
+  /** Instruction number we are to break at -- that is, trap, to the debugger.
+   *  Zero means no trap; there is a zero instruction, but there are better
+   *  ways of trapping at the start of symbolic execution to get at that. */
+  unsigned long break_insn;
 };
 
 #endif

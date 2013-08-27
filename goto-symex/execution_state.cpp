@@ -188,18 +188,15 @@ execution_statet::symex_step(reachability_treet &art)
 
   merge_gotos();
 
-  if (config.options.get_option("break-at") != "") {
-    unsigned int insn_num = strtol(config.options.get_option("break-at").c_str(), NULL, 10);
-    if (instruction.location_number == insn_num) {
-      // If you're developing ESBMC on a machine that isn't x86, I'll send you
-      // cookies.
+  if (break_insn != 0 && break_insn == instruction.location_number) {
+    // If you're developing ESBMC on a machine that isn't x86, I'll send you
+    // cookies.
 #ifndef _WIN32
-      __asm__("int $3");
+    __asm__("int $3");
 #else
-      std::cerr << "Can't trap on windows, sorry" << std::endl;
-      abort();
+    std::cerr << "Can't trap on windows, sorry" << std::endl;
+    abort();
 #endif
-    }
   }
 
   if (options.get_bool_option("symex-trace")) {
