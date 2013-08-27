@@ -42,7 +42,7 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   // first try simplifier on it
   do_simplify(new_expr);
 
-  if (is_true(new_expr) && !options.get_bool_option("all-assertions"))
+  if (is_true(new_expr))
     return;
 
   cur_state->guard.guard_expr(new_expr);
