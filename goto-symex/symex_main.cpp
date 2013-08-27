@@ -144,9 +144,9 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSERT:
     if (!cur_state->guard.is_false()) {
-      if (!options.get_bool_option("no-assertions") ||
+      if (!no_assertions ||
           !cur_state->source.pc->location.user_provided()
-          || options.get_bool_option("deadlock-check")) {
+          || deadlock_check) {
 
 	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
@@ -328,7 +328,7 @@ void
 goto_symext::finish_formula(void)
 {
 
-  if (!options.get_bool_option("memory-leak-check"))
+  if (!memory_leak_check)
     return;
 
   std::list<allocated_obj>::const_iterator it;
