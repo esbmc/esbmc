@@ -43,6 +43,9 @@ reachability_treet::reachability_treet(
   TS_slice = atoi(options.get_option("time-slice").c_str());
   state_hashing = options.get_bool_option("state-hashing");
   directed_interleavings = options.get_bool_option("direct-interleavings");
+  interactive_ileaves = options.get_bool_option("interactive-ileaves");
+  round_robin = options.get_bool_option("round-robin");
+  schedule = options.get_bool_option("schedule");
 
   if (options.get_bool_option("no-por") || options.get_bool_option("control-flow-test"))
     por = false;
@@ -63,7 +66,7 @@ reachability_treet::setup_for_new_explore(void)
   has_complete_formula = false;
 
   execution_statet *s;
-  if (options.get_bool_option("schedule")) {
+  if (schedule) {
     schedule_target = target_template->clone();
     targ = schedule_target;
     s = reinterpret_cast<execution_statet*>(
@@ -189,7 +192,7 @@ reachability_treet::create_next_state(void)
     execution_states.push_back(new_state);
 
     //begin - H.Savino
-    if (config.options.get_bool_option("round-robin")){
+    if (round_robin) {
         if(next_thread_id == ex_state.active_thread)
             new_state->increment_time_slice();
         else
@@ -229,11 +232,11 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
 {
   unsigned int tid = 0, user_tid = 0;
 
-  if (config.options.get_bool_option("interactive-ileaves")) {
+  if (interactive_ileaves) {
     user_tid = tid = get_ileave_direction_from_user(expr);
   }
   //begin - H.Savino
-  else if (config.options.get_bool_option("round-robin")) {
+  else if (round_robin) {
 
     user_tid = tid = get_ileave_direction_from_scheduling(expr);
     if(tid != ex_state.active_thread){
@@ -269,7 +272,7 @@ reachability_treet::decide_ileave_direction(execution_statet &ex_state,
     break;
   }
 
-  if (config.options.get_bool_option("interactive-ileaves") && tid != user_tid){
+  if (interactive_ileaves && tid != user_tid){
     std::cerr << "Ileave code selected different thread from user choice";
     std::cerr << std::endl;
   }
