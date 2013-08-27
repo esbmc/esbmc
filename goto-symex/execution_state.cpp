@@ -50,6 +50,9 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   monitor_from_tid = 0;
   guard_execution = "execution_statet::\\guard_exec";
   interleaving_unviable = false;
+  symex_trace = options.get_bool_option("symex-trace");
+  smt_during_symex = options.get_bool_option("smt-during-symex");
+  smt_thread_guard = options.get_bool_option("smt-thread-guard");
 
   goto_functionst::function_mapt::const_iterator it =
     goto_functions.function_map.find("main");
@@ -199,7 +202,7 @@ execution_statet::symex_step(reachability_treet &art)
 #endif
   }
 
-  if (options.get_bool_option("symex-trace")) {
+  if (symex_trace) {
     const goto_programt p_dummy;
     goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
       goto_functions.function_map.find(instruction.function);
@@ -478,7 +481,7 @@ execution_statet::is_cur_state_guard_false(void)
 {
 
   // So, can the assumption actually be true? If enabled, ask the solver.
-  if (options.get_bool_option("smt-thread-guard")) {
+  if (smt_thread_guard) {
     expr2tc parent_guard = threads_state[active_thread].guard.as_expr();
 
     runtime_encoded_equationt *rte = dynamic_cast<runtime_encoded_equationt*>
@@ -872,7 +875,7 @@ dfs_execution_statet::~dfs_execution_statet(void)
 {
 
   // Delete target; or if we're encoding at runtime, pop a context.
-  if (options.get_bool_option("smt-during-symex"))
+  if (smt_during_symex)
     target->pop_ctx();
   else
     delete target;
@@ -885,7 +888,7 @@ dfs_execution_statet* dfs_execution_statet::clone(void) const
   d = new dfs_execution_statet(*this);
 
   // Duplicate target equation; or if we're encoding at runtime, push a context.
-  if (options.get_bool_option("smt-during-symex")) {
+  if (smt_during_symex) {
     d->target = target;
     d->target->push_ctx();
   } else {

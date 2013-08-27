@@ -537,6 +537,14 @@ class execution_statet : public goto_symext
   /** Number of context switches performed by this ex_state */
   int CS_number;
 
+  /** Are we tracing / printing symex instructions? */
+  bool symex_trace;
+  /** Are we encoding SMT during exploration? */
+  bool smt_during_symex;
+  /** Are we evaluating the thread guard in the SMT solver during context
+   *  switching? */
+  bool smt_thread_guard;
+
   // Static stuff:
 
   public:
