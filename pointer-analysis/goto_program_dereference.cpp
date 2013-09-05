@@ -179,6 +179,19 @@ void goto_program_dereferencet::dereference_rec(
   if (is_dereference2t(expr)) {
     dereference2t &deref = to_dereference2t(expr);
 
+    if (is_array_type(to_pointer_type(deref.value->type).subtype)) {
+      // Dereferencing yeilding an array means we're actually performing pointer
+      // arithmetic, on a multi-dimensional array. The operand is performing
+      // said arith. Simply drop this dereference, and massage the type.
+      expr2tc tmp = deref.value;
+      const array_type2t &arr =
+        to_array_type(to_pointer_type(deref.value->type).subtype);
+
+      tmp.get()->type = type2tc(new pointer_type2t(arr.subtype));
+      expr = tmp;
+      return;
+    }
+
     expr2tc tmp_obj = deref.value;
     dereference.dereference(tmp_obj, guard, mode);
     expr = tmp_obj;
