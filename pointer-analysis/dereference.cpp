@@ -663,7 +663,14 @@ bool dereferencet::memory_model_bytes(
                         compute_pointer_offset(value));
 
     expr2tc base_object = get_base_object(value);
-    value = byte_extract2tc(to_type, base_object, new_offset, is_big_endian);
+
+
+    const type2tc &bytetype = get_uint8_type();
+    value = byte_extract2tc(bytetype, base_object, new_offset, is_big_endian);
+
+    // XXX jmorse - temporary, while byte extract is still covered in bees.
+    value = typecast2tc(to_type, value);
+
 
     if (!is_constant_int2t(new_offset) ||
         !to_constant_int2t(new_offset).constant_value.is_zero())
