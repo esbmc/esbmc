@@ -20,17 +20,63 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "object_numbering.h"
 #include "value_sets.h"
 
+/** Code for tracking "value sets" across assignments in ESBMC.
+ *
+ *  The values in a value set are /references/ to /objects/, and additional data
+ *  about the reference itself. You can consider any level 1 renamed variable
+ *  to be such an object; and a set of them can identify the set of things that
+ *  a pointer points at.
+ *
+ *  The way ESBMC uses this is by keeping a mapping of (l1) pointer variables,
+ *  and the set of data objects that they can point at. This mapping is then
+ *  updated during the execution of the program, during which the assignments
+ *  made are interpreted by the code in value_sett: pointer variable assignments
+ *  are detected, their right hand sides interpreted to determine what objects
+ *  may be referred to, and the mapping updated to show that the left hand side
+ *  variable may point at those objects. Phi nodes are handled by merging the
+ *  mappings of each pointer variable.
+ *
+ *  As well as keeping track of pointer variables and the set of things they can
+ *  point at during symbolic execution, a static analysis also uses value_sett
+ *  to track pointer variable assignments. This is on an even more abstract
+ *  level, to compute a points-to analysis of all the code under test.
+ *  That is, the outcome is a set of what all (l0) variables /might/ point at,
+ *  This is done using exactly the same mapping/interpretation code, as well
+ *  as logic (elsewhere) for computing a fixedpoint, and some black magic that
+ *  attempts to statically track dynamically allocated memory.
+ *
+ *  The only data element stored is a map from l1 variable names (as strings)
+ *  to a record of what objects are stored. Data objects are numbered, with the
+ *  mapping for that stored in a global variable, value_sett::object_numbering,
+ *  which will explode into multithreaded death cakes in the future. The primary
+ *  interfaces to the value_sett object itself are the 'assign' method (for
+ *  interpreting a variable assignment) and the get_value_set method, that takes
+ *  a variable and returns the set of things it might point at.
+ */
+
 class value_sett
 {
 public:
+  /** Primary constructor. Does approximately nothing non-standard. */
   value_sett():location_number(0)
   {
   }
 
 //*********************************** Types ************************************
 
+  /** A type for a set of expressions */
   typedef std::set<expr2tc> expr_sett;
 
+  /** Record for an object reference. Any reference to an object is stored as
+   *  an objectt, as a map element in an object_mapt. The actual object that
+   *  this refers to is determined by the /key/ of this objectt in the
+   *  object_mapt map.
+   *
+   *  This class itself just stores additional information about that reference:
+   *  how far into the object does the pointer reference point, if there's an
+   *  offset. Alternately, if the offset is not known, due to nondeterminism or
+   *  otherwise, then this records that the offset can't be determined
+   *  statically and must be evaluated at solver time. */
   class objectt
   {
   public:
@@ -44,24 +90,50 @@ public:
     {
     }
 
+    /** Record of the explicit offset into the object. Only valid when
+     *  offset_is_set is true. */
     mp_integer offset;
+    /** Whether or not the offset field of this objectt is valid; if this is
+     *  true, then the reference has a fixed offset into the object, the value
+     *  of which is in the offset field. If not, then the offset isn't
+     *  statically known, and must be handled at solver time. */
     bool offset_is_set;
     bool offset_is_zero() const
     { return offset_is_set && offset.is_zero(); }
   };
 
+  /** Datatype for a value set: stores a mapping between some integers and
+   *  additional reference data in an objectt object. The integers are indexes
+   *  into value_sett::object_numbering, which identifies the l1 variable
+   *  being referred to.
+   *
+   *  This code commits the sin of extending an STL type. Bad. */
   class object_map_dt:public std::map<unsigned, objectt>
   {
   public:
     const static object_map_dt empty;
   };
 
+  /** Reference counting wrapper around an object_map_dt. */
   typedef reference_counting<object_map_dt> object_mapt;
 
+  /** Record for a particular value set: stores the identity of the variable
+   *  that points at this set of objects, and the objects themselves (with
+   *  associated offset data).
+   */
   struct entryt
   {
+    /** The map of objects -> their offset data. Any key/value pair in this
+     *  map represents a object/offset-data (respectively) that this variable
+     *  can point at. */
     object_mapt object_map;
+    /** The L1 name of the pointer variable that's doing the pointing. */
     std::string identifier;
+    /** Additional suffix data -- an L1 variable might actually contain several
+     *  pointers. For example, an array of pointer, or a struct with multiple
+     *  pointer members. This suffix uniquely distinguishes which pointer
+     *  variable (within the l1 variable) this record is for. As an example,
+     *  it might read '.ptr' to identify the ptr field of a struct. */
     std::string suffix;
 
     entryt()
@@ -75,12 +147,20 @@ public:
     }
   };
 
+  /** Type of the value-set containing structure. A hash map mapping variables
+   *  to an entryt, storing the value set of objects a variable might point
+   *  at. */
   typedef hash_map_cont<string_wrapper, entryt, string_wrap_hash> valuest;
 
 //********************************** Methods ***********************************
 
+  /** Convert an object map element to an expression. Formulates either an
+   *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
   expr2tc to_expr(object_map_dt::const_iterator it) const;
 
+  /** Insert an object record element into an object map.
+   *  @param dest The map to insert this record into.
+   *  @param it Iterator of existing object record to insert into dest. */
   void set(object_mapt &dest, object_map_dt::const_iterator it) const
   {
     dest.write()[it->first]=it->second;
@@ -101,6 +181,23 @@ public:
     return insert(dest, object_numbering.number(src), objectt(offset));
   }
 
+  /** Insert an object record into the given object map. This method has
+   *  various overloaded instances, that all descend to this particular method.
+   *  The essential elements are a) an object map, b) an l1 data object or
+   *  the index number (in value_sett::object_numbering) that identifies
+   *  it, and c) the offset data for this record.
+   *
+   *  Rather than just adding this pointer record to the object map, this
+   *  method attempts to merge the data in. That is, if the variable might
+   *  already point at the same object, attempt to merge the two offset
+   *  records. If that fails, then record the offset as being nondeterministic,
+   *  and let the SMT solver work it out.
+   *
+   *  @param dest The object map to insert this record into.
+   *  @param n The identifier for the object being referrred to, as indexed by
+   *         the value_set::object_numbering mapping.
+   *  @param object The offset data for the pointer record being inserted.
+   */
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
     if(dest.read().find(n)==dest.read().end())
@@ -138,11 +235,15 @@ public:
     return insert(dest, object_numbering.number(expr), object);
   }
 
+  /** Remove the given pointer value set from the map.
+   *  @param name The name of the variable, including suffix, to erase.
+   *  @return True when the erase succeeds, false otherwise. */
   bool erase(const std::string &name)
   {
     return (values.erase(string_wrapper(name)) == 1);
   }
 
+  /**  */
   void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &dest,
