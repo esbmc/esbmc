@@ -113,6 +113,12 @@ public:
      *  of which is in the offset field. If not, then the offset isn't
      *  statically known, and must be handled at solver time. */
     bool offset_is_set;
+    /** Least alignment of the offset. When offset_is_set is false, we state
+     *  what we think the alignment of this pointer is. This becomes massively
+     *  useful if we point at an array, but can know that the pointer is aligned
+     *  to the array element edges.
+     *  Units are bytes. */
+    unsigned int offset_alignment;
     bool offset_is_zero() const
     { return offset_is_set && offset.is_zero(); }
   };
