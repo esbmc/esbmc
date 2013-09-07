@@ -649,15 +649,22 @@ void value_sett::get_reference_set_rec(
 
         objectt o = a_it->second;
 
-        std::cerr << "Manual update of objectt offset" << std::endl;
-        abort();
         if (is_constant_int2t(index.index) &&
-            to_constant_int2t(index.index).constant_value.is_zero())
+            to_constant_int2t(index.index).constant_value.is_zero()) {
           ;
-        else if (is_constant_int2t(index.index) && o.offset_is_zero())
+        } else if (is_constant_int2t(index.index) && o.offset_is_zero()) {
           o.offset = to_constant_int2t(index.index).constant_value;
-        else
+        } else {
           o.offset_is_set = false;
+          // Non constant offset -- work out what the lowest alignment is.
+          // Fetch the type size of the array index element.
+          const array_type2t &a = to_array_type(index.source_value->type);
+          mp_integer m = pointer_offset_size(a);
+          // This index operation, whatever the offset, will always multiply
+          // by the size of the element type.
+          o.offset_alignment = std::min(o.offset_alignment,
+                                        (unsigned int)m.to_ulong());
+        }
           
         insert(dest, new_index, o);
       } else {
