@@ -24,8 +24,17 @@ public:
   }
 
   ~value_set_domaint() {
-    delete value_set;
+    if (value_set)
+      delete value_set;
     return;
+  }
+
+  value_set_domaint(const value_set_domaint &ref)
+  {
+    if (ref.value_set)
+      value_set = new value_sett(*ref.value_set);
+    else
+      value_set = NULL;
   }
 
   value_sett *value_set;
