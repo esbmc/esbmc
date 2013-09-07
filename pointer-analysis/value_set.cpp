@@ -34,9 +34,7 @@ Author: Daniel Kroening, kroening@kroening.com
 const value_sett::object_map_dt value_sett::object_map_dt::empty = { };
 object_numberingt value_sett::object_numbering;
 
-void value_sett::output(
-  const namespacet &ns,
-  std::ostream &out) const
+void value_sett::output(std::ostream &out) const
 {
   for(valuest::const_iterator
       v_it=values.begin();
@@ -191,11 +189,10 @@ bool value_sett::make_union(object_mapt &dest, const object_mapt &src) const
 
 void value_sett::get_value_set(
   const expr2tc &expr,
-  value_setst::valuest &dest,
-  const namespacet &ns) const
+  value_setst::valuest &dest) const
 {
   object_mapt object_map;
-  get_value_set(expr, object_map, ns);
+  get_value_set(expr, object_map);
   
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
@@ -206,23 +203,21 @@ void value_sett::get_value_set(
 
 void value_sett::get_value_set(
   const expr2tc &expr,
-  object_mapt &dest,
-  const namespacet &ns) const
+  object_mapt &dest) const
 {
   expr2tc new_expr = expr->simplify();
   if (is_nil_expr(new_expr))
     new_expr = expr;
 
   // Otherwise, continue on as normal.
-  get_value_set_rec(new_expr, dest, "", new_expr->type, ns);
+  get_value_set_rec(new_expr, dest, "", new_expr->type);
 }
 
 void value_sett::get_value_set_rec(
   const expr2tc &expr,
   object_mapt &dest,
   const std::string &suffix,
-  const type2tc &original_type,
-  const namespacet &ns) const
+  const type2tc &original_type) const
 {
 
   if (is_unknown2t(expr) || is_invalid2t(expr))
@@ -237,7 +232,7 @@ void value_sett::get_value_set_rec(
 
     assert(is_array_type(source_type) || is_string_type(source_type));
            
-    get_value_set_rec(idx.source_value, dest, "[]"+suffix, original_type, ns);
+    get_value_set_rec(idx.source_value, dest, "[]"+suffix, original_type);
     
     return;
   }
@@ -250,7 +245,7 @@ void value_sett::get_value_set_rec(
            
     get_value_set_rec(memb.source_value, dest,
                       "." + memb.member.as_string() + suffix,
-                      original_type, ns);
+                      original_type);
     return;
   }
   else if (is_symbol2t(expr))
@@ -285,21 +280,21 @@ void value_sett::get_value_set_rec(
   {
     const if2t &ifval = to_if2t(expr);
 
-    get_value_set_rec(ifval.true_value, dest, suffix, original_type, ns);
-    get_value_set_rec(ifval.false_value, dest, suffix, original_type, ns);
+    get_value_set_rec(ifval.true_value, dest, suffix, original_type);
+    get_value_set_rec(ifval.false_value, dest, suffix, original_type);
 
     return;
   }
   else if (is_address_of2t(expr))
   {
     const address_of2t &addrof = to_address_of2t(expr);
-    get_reference_set(addrof.ptr_obj, dest, ns);
+    get_reference_set(addrof.ptr_obj, dest);
     return;
   }
   else if (is_dereference2t(expr))
   {
     object_mapt reference_set;
-    get_reference_set(expr, reference_set, ns);
+    get_reference_set(expr, reference_set);
     const object_map_dt &object_map=reference_set.read();
     
     if(object_map.begin()!=object_map.end())
@@ -310,7 +305,7 @@ void value_sett::get_value_set_rec(
           it1++)
       {
         const expr2tc &object = object_numbering[it1->first];
-        get_value_set_rec(object, dest, suffix, original_type, ns);
+        get_value_set_rec(object, dest, suffix, original_type);
       }
 
       return;
@@ -324,7 +319,7 @@ void value_sett::get_value_set_rec(
   else if (is_typecast2t(expr))
   {
     const typecast2t &cast = to_typecast2t(expr);
-    get_value_set_rec(cast.from, dest, suffix, original_type, ns);
+    get_value_set_rec(cast.from, dest, suffix, original_type);
     return;
   }
   else if (is_add2t(expr) || is_sub2t(expr))
@@ -347,7 +342,7 @@ void value_sett::get_value_set_rec(
       const expr2tc &non_ptr_op= (is_pointer_type(op0)) ? op1 : op0;
 
       object_mapt pointer_expr_set;
-      get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type, ns);
+      get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type);
 
       for(object_map_dt::const_iterator
           it=pointer_expr_set.read().begin();
@@ -426,11 +421,11 @@ void value_sett::get_value_set_rec(
 
     // this is the array/struct
     object_mapt tmp_map0;
-    get_value_set_rec(with.source_value, tmp_map0, suffix, original_type, ns);
+    get_value_set_rec(with.source_value, tmp_map0, suffix, original_type);
 
     // this is the update value -- note NO SUFFIX
     object_mapt tmp_map2;
-    get_value_set_rec(with.update_value, tmp_map2, "", original_type, ns);
+    get_value_set_rec(with.update_value, tmp_map2, "", original_type);
 
     make_union(dest, tmp_map0);
     make_union(dest, tmp_map2);
@@ -466,11 +461,10 @@ void value_sett::get_value_set_rec(
 
 void value_sett::get_reference_set(
   const expr2tc &expr,
-  value_setst::valuest &dest,
-  const namespacet &ns) const
+  value_setst::valuest &dest) const
 {
   object_mapt object_map;
-  get_reference_set(expr, object_map, ns);
+  get_reference_set(expr, object_map);
   
   for(object_map_dt::const_iterator
       it=object_map.read().begin();
@@ -481,8 +475,7 @@ void value_sett::get_reference_set(
 
 void value_sett::get_reference_set_rec(
   const expr2tc &expr,
-  object_mapt &dest,
-  const namespacet &ns) const
+  object_mapt &dest) const
 {
 
   if (is_symbol2t(expr) || is_dynamic_object2t(expr) ||
@@ -499,7 +492,7 @@ void value_sett::get_reference_set_rec(
   else if (is_dereference2t(expr))
   {
     const dereference2t &deref = to_dereference2t(expr);
-    get_value_set_rec(deref.value, dest, "", deref.type, ns);
+    get_value_set_rec(deref.value, dest, "", deref.type);
     return;
   }
   else if (is_index2t(expr))
@@ -510,7 +503,7 @@ void value_sett::get_reference_set_rec(
            is_string_type(index.source_value));
     
     object_mapt array_references;
-    get_reference_set(index.source_value, array_references, ns);
+    get_reference_set(index.source_value, array_references);
         
     const object_map_dt &object_map=array_references.read();
     
@@ -558,7 +551,7 @@ void value_sett::get_reference_set_rec(
     const member2t &memb = to_member2t(expr);
 
     object_mapt struct_references;
-    get_reference_set(memb.source_value, struct_references, ns);
+    get_reference_set(memb.source_value, struct_references);
     
     const object_map_dt &object_map=struct_references.read();
 
@@ -597,14 +590,14 @@ void value_sett::get_reference_set_rec(
   else if (is_if2t(expr))
   {
     const if2t &anif = to_if2t(expr);
-    get_reference_set_rec(anif.true_value, dest, ns);
-    get_reference_set_rec(anif.false_value, dest, ns);
+    get_reference_set_rec(anif.true_value, dest);
+    get_reference_set_rec(anif.false_value, dest);
     return;
   }
   else if (is_typecast2t(expr))
   {
     const typecast2t &cast = to_typecast2t(expr);
-    get_reference_set_rec(cast.from, dest, ns);
+    get_reference_set_rec(cast.from, dest);
     return;
   }
 
@@ -615,15 +608,14 @@ void value_sett::get_reference_set_rec(
 void value_sett::assign(
   const expr2tc &lhs,
   const expr2tc &rhs,
-  const namespacet &ns,
   bool add_to_sets)
 {
 
   if (is_if2t(rhs))
   {
     const if2t &ifref = to_if2t(rhs);
-    assign(lhs, ifref.true_value, ns, add_to_sets);
-    assign(lhs, ifref.false_value, ns, true);
+    assign(lhs, ifref.true_value, add_to_sets);
+    assign(lhs, ifref.false_value, true);
     return;
   }
 
@@ -667,8 +659,8 @@ void value_sett::assign(
       else
       {
         assert(base_type_eq(rhs->type, lhs_type, ns) || is_subclass_of(lhs_type, rhs->type, ns));
-        expr2tc rhs_member = make_member(rhs, name, ns);
-        assign(lhs_member, rhs_member, ns, add_to_sets);
+        expr2tc rhs_member = make_member(rhs, name);
+        assign(lhs_member, rhs_member, add_to_sets);
       }
     }
   }
@@ -682,7 +674,7 @@ void value_sett::assign(
     {
       // Assign an uknown subtype value to the array's (unknown) index.
       unknown2tc unknown_field(arr_type.subtype);
-      assign(lhs_index, unknown_field, ns, add_to_sets);
+      assign(lhs_index, unknown_field, add_to_sets);
     }
     else
     {
@@ -691,7 +683,7 @@ void value_sett::assign(
       if (is_constant_array_of2t(rhs))
       {
         assign(lhs_index, to_constant_array_of2t(rhs).initializer,
-               ns, add_to_sets);
+               add_to_sets);
       }
       else if (is_constant_array2t(rhs) || is_constant_expr(rhs))
       {
@@ -699,12 +691,12 @@ void value_sett::assign(
 #if 0
         forall_operands(o_it, rhs)
         {
-          assign(lhs_index, *o_it, ns, add_to_sets);
+          assign(lhs_index, *o_it, add_to_sets);
           add_to_sets=true;
         }
 #endif
         forall_operands2(it, idx, rhs) {
-          assign(lhs_index, *it, ns, add_to_sets);
+          assign(lhs_index, *it, add_to_sets);
           add_to_sets = true;
         }
       }
@@ -715,14 +707,14 @@ void value_sett::assign(
         unknown2tc unknown(index_type2());
         index2tc idx(arr_type.subtype, with.source_value, unknown);
 
-        assign(lhs_index, idx, ns, add_to_sets);
-        assign(lhs_index, with.update_value, ns, true);
+        assign(lhs_index, idx, add_to_sets);
+        assign(lhs_index, with.update_value, true);
       }
       else
       {
         unknown2tc unknown(index_type2());
         index2tc rhs_idx(arr_type.subtype, rhs, unknown);
-        assign(lhs_index, rhs_idx, ns, true);
+        assign(lhs_index, rhs_idx, true);
       }
     }
   }
@@ -731,22 +723,20 @@ void value_sett::assign(
     // basic type
     object_mapt values_rhs;
     
-    get_value_set(rhs, values_rhs, ns);
+    get_value_set(rhs, values_rhs);
     
-    assign_rec(lhs, values_rhs, "", ns, add_to_sets);
+    assign_rec(lhs, values_rhs, "", add_to_sets);
   }
 }
 
-void value_sett::do_free(
-  const expr2tc &op,
-  const namespacet &ns)
+void value_sett::do_free(const expr2tc &op)
 {
   // op must be a pointer
   assert(is_pointer_type(op));
 
   // find out what it points to    
   object_mapt value_set;
-  get_value_set(op, value_set, ns);
+  get_value_set(op, value_set);
   
   const object_map_dt &object_map=value_set.read();
   
@@ -820,7 +810,6 @@ void value_sett::assign_rec(
   const expr2tc &lhs,
   const object_mapt &values_rhs,
   const std::string &suffix,
-  const namespacet &ns,
   bool add_to_sets)
 {
 
@@ -850,7 +839,7 @@ void value_sett::assign_rec(
   else if (is_dereference2t(lhs))
   {
     object_mapt reference_set;
-    get_reference_set(lhs, reference_set, ns);
+    get_reference_set(lhs, reference_set);
 
     if(reference_set.read().size()!=1)
       add_to_sets=true;
@@ -864,7 +853,7 @@ void value_sett::assign_rec(
       const expr2tc obj = object_numbering[it->first];
 
       if (!is_unknown2t(obj))
-        assign_rec(obj, values_rhs, suffix, ns, add_to_sets);
+        assign_rec(obj, values_rhs, suffix, add_to_sets);
     }
   }
   else if (is_index2t(lhs))
@@ -873,7 +862,7 @@ void value_sett::assign_rec(
            is_string_type(to_index2t(lhs).source_value) ||
            is_dynamic_object2t(to_index2t(lhs).source_value));
 
-    assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, ns, true);
+    assign_rec(to_index2t(lhs).source_value, values_rhs, "[]"+suffix, true);
   }
   else if (is_member2t(lhs))
   {
@@ -893,7 +882,7 @@ void value_sett::assign_rec(
            is_dynamic_object2t(member.source_value));
            
     assign_rec(to_member2t(lhs).source_value, values_rhs,
-               "."+component_name+suffix, ns, add_to_sets);
+               "."+component_name+suffix, add_to_sets);
   }
   else if (is_zero_string2t(lhs) || is_zero_length_string2t(lhs) ||
            is_constant_string2t(lhs) || is_null_object2t(lhs) ||
@@ -904,23 +893,20 @@ void value_sett::assign_rec(
   }
   else if (is_typecast2t(lhs))
   {
-    assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, ns, add_to_sets);
+    assign_rec(to_typecast2t(lhs).from, values_rhs, suffix, add_to_sets);
   }
   else if (is_byte_extract2t(lhs))
   {
-    assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix,
-               ns, true);
+    assign_rec(to_byte_extract2t(lhs).source_value, values_rhs, suffix, true);
   }
   else
     throw "assign NYI: `" + get_expr_id(lhs)+ "'";
 }
 
 void value_sett::do_function_call(
-  const irep_idt &function,
-  const std::vector<expr2tc> &arguments,
-  const namespacet &ns)
+  const symbolt &symbol,
+  const std::vector<expr2tc> &arguments)
 {
-  const symbolt &symbol=ns.lookup(function);
 
   const code_typet &type=to_code_type(symbol.type);
 
@@ -954,7 +940,7 @@ void value_sett::do_function_call(
       dummy_lhs = symbol2tc(arguments[i]->type, identifier);
     }
 
-    assign(dummy_lhs, tmp_arg, ns, true);
+    assign(dummy_lhs, tmp_arg, true);
   }
 
   // now assign to 'actual actuals'
@@ -973,7 +959,7 @@ void value_sett::do_function_call(
     symbol2tc v_expr(*it2, "value_set::dummy_arg_"+i2string(i));
 
     symbol2tc actual_lhs(*it2, identifier);
-    assign(actual_lhs, v_expr, ns, true);
+    assign(actual_lhs, v_expr, true);
     i++;
   }
 
@@ -985,45 +971,41 @@ void value_sett::do_function_call(
   }
 }
 
-void value_sett::do_end_function(
-  const expr2tc &lhs,
-  const namespacet &ns)
+void value_sett::do_end_function(const expr2tc &lhs)
 {
   if (is_nil_expr(lhs))
     return;
 
   symbol2tc rhs(lhs->type, irep_idt("value_set::return_value"));
 
-  assign(lhs, rhs, ns);
+  assign(lhs, rhs);
 }
 
-void value_sett::apply_code(
-  const expr2tc &code,
-  const namespacet &ns)
+void value_sett::apply_code(const expr2tc &code)
 {
 
   if (is_code_block2t(code))
   {
     const code_block2t &ref = to_code_block2t(code);
     forall_exprs(it, ref.operands)
-      apply_code(*it, ns);
+      apply_code(*it);
   }
   else if (is_code_assign2t(code))
   {
     const code_assign2t &ref = to_code_assign2t(code);
-    assign(ref.target, ref.source, ns);
+    assign(ref.target, ref.source);
   }
   else if (is_code_init2t(code))
   {
     const code_init2t &ref = to_code_init2t(code);
-    assign(ref.target, ref.source, ns);
+    assign(ref.target, ref.source);
   }
   else if (is_code_decl2t(code))
   {
     const code_decl2t &ref = to_code_decl2t(code);
     symbol2tc sym(ref.type, ref.value);
     invalid2tc invalid(ref.type);
-    assign(sym, invalid, ns);
+    assign(sym, invalid);
   }
   else if (is_code_expression2t(code))
   {
@@ -1033,7 +1015,7 @@ void value_sett::apply_code(
   {
     // this may kill a valid bit
     const code_free2t &ref = to_code_free2t(code);
-    do_free(ref.operand, ns);
+    do_free(ref.operand);
   }
   else if (is_code_printf2t(code))
   {
@@ -1046,7 +1028,7 @@ void value_sett::apply_code(
     if (!is_nil_expr(ref.operand))
     {
       symbol2tc sym(ref.operand->type, "value_set::return_value");
-      assign(sym, ref.operand, ns);
+      assign(sym, ref.operand);
     }
   }
   else if (is_code_asm2t(code))
@@ -1067,8 +1049,7 @@ void value_sett::apply_code(
 
 expr2tc value_sett::make_member(
   const expr2tc &src,
-  const irep_idt &component_name,
-  const namespacet &ns)
+  const irep_idt &component_name)
 {
   const type2tc &type = src->type;
   assert(is_struct_type(type) || is_union_type(type));
@@ -1093,12 +1074,12 @@ expr2tc value_sett::make_member(
       return with.update_value;
     else
       // no! do this recursively
-      return make_member(with.source_value, component_name, ns);
+      return make_member(with.source_value, component_name);
   }
   else if (is_typecast2t(src))
   {
     // push through typecast
-    return make_member(to_typecast2t(src).from, component_name, ns);
+    return make_member(to_typecast2t(src).from, component_name);
   }
 
   // give up
@@ -1110,7 +1091,7 @@ expr2tc value_sett::make_member(
 }
 
 void
-value_sett::dump(const namespacet &ns) const
+value_sett::dump(void) const
 {
-  output(ns, std::cout);
+  output(std::cout);
 }

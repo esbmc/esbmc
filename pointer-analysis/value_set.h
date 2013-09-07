@@ -13,8 +13,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <set>
 
-#include <mp_arith.h>
 #include <namespace.h>
+#include <mp_arith.h>
 #include <reference_counting.h>
 
 #include "object_numbering.h"
@@ -58,8 +58,23 @@ class value_sett
 {
 public:
   /** Primary constructor. Does approximately nothing non-standard. */
-  value_sett():location_number(0)
+  value_sett(const namespacet &_ns):location_number(0), ns(_ns)
   {
+  }
+
+  value_sett(const value_sett &ref) :
+    location_number(ref.location_number),
+    values(ref.values),
+    ns(ref.ns)
+  {
+  }
+
+  value_sett &operator=(const value_sett &ref)
+  {
+    location_number = ref.location_number;
+    values = ref.values;
+    // No need to copy ns, it should be the same in all contexts.
+    return *this;
   }
 
 //*********************************** Types ************************************
@@ -268,12 +283,8 @@ public:
    *  @param expr The expression to evaluate and determine the set of values
    *         it points to.
    *  @param dest A list to store pointed-at object expressions into.
-   *  @param ns The namespace to perform type lookups in.
    *  */
-  void get_value_set(
-    const expr2tc &expr,
-    value_setst::valuest &dest,
-    const namespacet &ns) const;
+  void get_value_set(const expr2tc &expr, value_setst::valuest &dest) const;
 
   /** Clear all value records from this value set. */
   void clear()
@@ -330,14 +341,11 @@ public:
   }
 
   /** Dump the value set's textual representation to the given iostream.
-   *  @param ns The namespace to perform type lookups again.
    *  @param out Output stream to write the textual representation too. */
-  void output(
-    const namespacet &ns,
-    std::ostream &out) const;
+  void output(std::ostream &out) const;
 
   /** Write a textual representation of the value set to stderr. */
-  void dump(const namespacet &ns) const;
+  void dump(void) const;
 
   /** Join the two given object maps. Takes all the pointer records from src
    *  and stores them into the dest object map.
@@ -361,46 +369,36 @@ public:
 
   /** When using value_sett for static analysis, takes a code statement and
    *  sends any assignments contained within to the assign method. 
-   *  @param code The statement to interpret.
-   *  @param ns The namespace to perform type lookups against. */
-  void apply_code(
-    const expr2tc &code,
-    const namespacet &ns);
+   *  @param code The statement to interpret. */
+  void apply_code(const expr2tc &code);
 
   /** Interpret an assignment, and update value sets to reflect it.
    *  @param lhs Assignment target expression.
    *  @param rhs Assignment expression, to be interpreted, and its pointer
    *             records assigned to lhs.
-   *  @param ns Namespace to perform type lookups against.
    *  @param add_to_sets If true, merge the pointer set from rhs into the
    *         pointer set for lhs. Otherwise, overwrite it. Used for the static
    *         analysis. */
   void assign(
     const expr2tc &lhs,
     const expr2tc &rhs,
-    const namespacet &ns,
     bool add_to_sets=false);
 
   /** Interpret a function call during static analysis. Looks up the given
    *  function, and simulates the assignment of all the arguments to the
    *  argument variables in the target function (for pointer tracking).
-   *  @param function Name of the function to bind arguments into.
+   *  @param function Symbol of the function to bind arguments into.
    *  @param arguments Vector of argument expressions, will have their pointer
    *         tracking values merged into the corresponding argument variables
-   *         in the target function.
-   *  @param ns Namespace to perform type lookups against. */
+   *         in the target function. */
   void do_function_call(
-    const irep_idt &function,
-    const std::vector<expr2tc> &arguments,
-    const namespacet &ns);
+    const symbolt &symbol,
+    const std::vector<expr2tc> &arguments);
 
   /** During static analysis, simulate the return values assignment to the
    *  given lhs at the end of the function execution.
-   *  @param lhs Variable to take the (pointer) values of the returned value.
-   *  @param ns Namespace to perform type lookups against. */
-  void do_end_function(
-    const expr2tc &lhs,
-    const namespacet &ns);
+   *  @param lhs Variable to take the (pointer) values of the returned value. */
+  void do_end_function(const expr2tc &lhs);
 
   /** Determine the set of variables that expr refers to. The difference between
    *  this and get_value_set, is that this accumulates the set of variables
@@ -414,12 +412,8 @@ public:
    *
    *  @param expr The expression to evaluate the reference set for.
    *  @param dest The expression list to store the results into.
-   *  @param ns Namespace for performing type lookups against.
    */
-  void get_reference_set(
-    const expr2tc &expr,
-    value_setst::valuest &dest,
-    const namespacet &ns) const;
+  void get_reference_set(const expr2tc &expr, value_setst::valuest &dest) const;
 
 protected:
   /** Recursive body of get_value_set.
@@ -433,48 +427,36 @@ protected:
    *  @param original_type Type of the top level expression. If any part of the
    *         interpreted expression isn't recognized, then an unknown2t expr is
    *         put in the value tracking set to represent the fact that
-   *         interpretation failed, and it might point at something crazy.
-   *  @param ns Namespace to look up types against. */
+   *         interpretation failed, and it might point at something crazy. */
   void get_value_set_rec(
     const expr2tc &expr,
     object_mapt &dest,
     const std::string &suffix,
-    const type2tc &original_type,
-    const namespacet &ns) const;
+    const type2tc &original_type) const;
 
   /** Internal get_value_set method. Just the same as the other get_value_set
    *  method, but collects into an object_mapt instead of a list of exprs.
    *  @param expr The expression to evaluate the value set of.
-   *  @param dest Destination value set object map to store the result into.
-   *  @param ns Namespace to lookup types against. */
+   *  @param dest Destination value set object map to store the result into. */
   void get_value_set(
     const expr2tc &expr,
-    object_mapt &dest,
-    const namespacet &ns) const;
+    object_mapt &dest) const;
 
   /** Internal get_reference_set method. Just the same as the other
    *  get_reference_set method, but collects into an object_mapt instead of a
    *  list of exprs.
    *  @param expr The expression to evaluate the reference set of.
-   *  @param dest Destination value set object map to store results into.
-   *  @param ns Namespace to look up types against. */
-  void get_reference_set(
-    const expr2tc &expr,
-    object_mapt &dest,
-    const namespacet &ns) const
+   *  @param dest Destination value set object map to store results into. */
+  void get_reference_set(const expr2tc &expr, object_mapt &dest) const
   {
-    get_reference_set_rec(expr, dest, ns);
+    get_reference_set_rec(expr, dest);
   }
 
   /** Recursive implementation of get_reference_set.
    *  @param expr The (portion of the) expression we're evaluating the reference
    *         set of.
-   *  @param dest Destination value set map to store results into.
-   *  @param ns Namespace to look up types against. */
-  void get_reference_set_rec(
-    const expr2tc &expr,
-    object_mapt &dest,
-    const namespacet &ns) const;
+   *  @param dest Destination value set map to store results into. */
+  void get_reference_set_rec(const expr2tc &expr, object_mapt &dest) const;
 
   /** Recursive assign method implementation -- descends through the left hand
    *  side looking for symbols to assign values to.
@@ -484,35 +466,26 @@ protected:
    *         i.e. all the things the rhs points at.
    *  @param suffix Accumulated suffix of the lhs up to this point. See docs for
    *         @ref entryt and @get_value_set_rec.
-   *  @param ns Namespace to look up types against.
    *  @param add_to_sets See @ref assign. */
   void assign_rec(
     const expr2tc &lhs,
     const object_mapt &values_rhs,
     const std::string &suffix,
-    const namespacet &ns,
     bool add_to_sets);
 
   /** Mark dynamic objects as (possibly) deallocated, and thus invalid.
    *  Something to do with the black magic that allows the static analysis to
    *  deal with dynamically allocated memory.
-   *  @param op Operand evaluating to the pointer to free.
-   *  @param ns Namespace, types, etc. */
-  void do_free(
-    const expr2tc &op,
-    const namespacet &ns);
+   *  @param op Operand evaluating to the pointer to free. */
+  void do_free(const expr2tc &op);
 
   /** Attempt to extract the member of an expression statically. If it's a
    *  chain of with's, or a constant struct, then pick out the actual expression
    *  value of the given struct component. If not, just formulate a member2t
    *  expression.
    *  @param src Structure type'd expr to extract a member from.
-   *  @param component_name Name of the component to extract from src.
-   *  @param ns Namespace, types, etc. */
-  expr2tc make_member(
-    const expr2tc &src,
-    const irep_idt &component_name,
-    const namespacet &ns);
+   *  @param component_name Name of the component to extract from src. */
+  expr2tc make_member(const expr2tc &src, const irep_idt &component_name);
 
 public:
 //********************************** Members ***********************************
@@ -525,6 +498,9 @@ public:
   /** Storage for all the value sets for all the variables in the program. See
    *  @ref entryt for the format of the string used as an index. */
   valuest values;
+
+  /** Namespace for looking up types against. */
+  const namespacet &ns;
 };
 
 #endif
