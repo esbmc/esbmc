@@ -38,6 +38,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   goto_symext(ns, context, goto_functions, _target, options),
   owning_rt(art),
   state_level2(l2init),
+  global_value_set(ns),
   message_handler(_message_handler)
 {
 
@@ -102,6 +103,7 @@ execution_statet::execution_statet(const execution_statet &ex) :
   goto_symext(ex),
   owning_rt(ex.owning_rt),
   state_level2(ex.state_level2->clone()),
+  global_value_set(ex.global_value_set),
   message_handler(ex.message_handler)
 {
 
