@@ -117,7 +117,7 @@ public:
      *  what we think the alignment of this pointer is. This becomes massively
      *  useful if we point at an array, but can know that the pointer is aligned
      *  to the array element edges.
-     *  Units are bytes. */
+     *  Units are bytes. Zero means N/A. */
     unsigned int offset_alignment;
     bool offset_is_zero() const
     { return offset_is_set && offset.is_zero(); }
@@ -198,9 +198,11 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const expr2tc &src) const
+  bool insert(object_mapt &dest, const expr2tc &src, unsigned int align) const
   {
-    return insert(dest, object_numbering.number(src), objectt());
+    objectt t;
+    t.offset_alignment = align;
+    return insert(dest, object_numbering.number(src), t);
   }
 
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
@@ -243,14 +245,21 @@ public:
           return false;
         else
         {
+          std::cerr << "Calcumalate offset alignment" << __FILE__ << __LINE__ << std::endl;
+          abort();
           old.offset_is_set=false;
           return true;
         }
       }
-      else if(!old.offset_is_set)
+      else if(!old.offset_is_set) {
+          std::cerr << "Update offset alignment" << __FILE__ << __LINE__ << std::endl;
+          abort();
         return false;
+      }
       else
       {
+        std::cerr << "Assign offset alignment" << __FILE__ << __LINE__ << std::endl;
+        abort();
         old.offset_is_set=false;
         return true;
       }

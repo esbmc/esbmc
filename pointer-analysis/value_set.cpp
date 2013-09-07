@@ -237,8 +237,8 @@ void value_sett::get_value_set_rec(
   if (is_unknown2t(expr) || is_invalid2t(expr))
   {
     // Unknown / invalid exprs mean we just point at something unknown (and
-    // potentially invalid).
-    insert(dest, unknown2tc(original_type));
+    // potentially invalid). No alignment.
+    insert(dest, unknown2tc(original_type), 0);
     return;
   }
   else if (is_index2t(expr))
@@ -438,6 +438,8 @@ void value_sett::get_value_set_rec(
         }
       }
 
+      std::cerr << "Manual pointer arith offset update" << std::endl;
+      abort();
       // For each object, update its offset data according to the integer
       // offset to this expr. Potential outcomes are keeping it nondet, making
       // it nondet, or calculating a new static offset.
@@ -563,9 +565,9 @@ void value_sett::get_value_set_rec(
   }
 
   // If none of those expressions matched, then we don't really know what this
-  // expression evaluates to. So just record it as being unknown.
+  // expression evaluates to. So just record it as being unknown. No alignment.
   unknown2tc tmp(original_type);
-  insert(dest, tmp);
+  insert(dest, tmp, 0);
 }
 
 void value_sett::get_reference_set(
@@ -594,9 +596,11 @@ void value_sett::get_reference_set_rec(
   {
     // Any symbol we refer to, store into the destination object map.
     if (is_array_type(expr) &&
-        is_array_type(to_array_type(expr->type).subtype))
-      insert(dest, expr);
-    else    
+        is_array_type(to_array_type(expr->type).subtype)) {
+      std::cerr << "Work out array alignment rules" << std::endl;
+      abort();
+      insert(dest, expr, 0);
+    } else
       insert(dest, expr, 0);
 
     return;
@@ -633,7 +637,7 @@ void value_sett::get_reference_set_rec(
 
       if (is_unknown2t(object)) {
         unknown2tc unknown(expr->type);
-        insert(dest, unknown);
+        insert(dest, unknown, 0);
       } else if (is_array_type(object) || is_string_type(object)) {
         index2tc new_index(index.type, object, zero_uint);
         
@@ -645,6 +649,8 @@ void value_sett::get_reference_set_rec(
 
         objectt o = a_it->second;
 
+        std::cerr << "Manual update of objectt offset" << std::endl;
+        abort();
         if (is_constant_int2t(index.index) &&
             to_constant_int2t(index.index).constant_value.is_zero())
           ;
@@ -689,7 +695,7 @@ void value_sett::get_reference_set_rec(
           (is_typecast2t(object) &&
            is_null_object2t(to_typecast2t(object).from))) {
         unknown2tc unknown(memb.type);
-        insert(dest, unknown);
+        insert(dest, unknown, 0);
       } else {
         objectt o=it->second;
 
@@ -730,6 +736,8 @@ void value_sett::get_reference_set_rec(
     const byte_extract2t &extract = to_byte_extract2t(expr);
 
     // This may or may not have a constant offset
+    std::cerr << "Manual update of byte extract objectt" << std::endl;
+    abort();
     objectt o;
     if (is_constant_int2t(extract.source_offset)) {
       o.offset = to_constant_int2t(extract.source_offset).constant_value;
@@ -745,7 +753,7 @@ void value_sett::get_reference_set_rec(
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
   unknown2tc unknown(expr->type);
-  insert(dest, unknown);
+  insert(dest, unknown, 0);
 }
 
 void value_sett::assign(
