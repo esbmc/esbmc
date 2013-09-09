@@ -691,7 +691,9 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
   const tuple_smt_ast *tb = to_tuple_ast(b);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
-  const array_type2t &array_type = to_array_type(ts->thetype);
+  // Descend through multidimensional arrays.
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
   return tuple_array_equality_rec(ta, tb, array_type.array_size,
                                   array_type.subtype);
 }
