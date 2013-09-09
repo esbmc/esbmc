@@ -623,9 +623,9 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
   std::string name = mk_fresh_name("tuple_array_update[]::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
-  const array_type2t &arrtype = to_array_type(ts->thetype);
-  const array_type2t &array_type = to_array_type(ts->thetype);
-  tuple_array_update_rec(ta, tv, index, result, arrtype.array_size,
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
+  tuple_array_update_rec(ta, tv, index, result, array_type.array_size,
                          array_type.subtype);
   return result;
 }
