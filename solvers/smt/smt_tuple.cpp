@@ -196,6 +196,24 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   // a new tuple_smt_ast containing its name.
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
+
+  if (is_array_type(ts->thetype)) {
+    // Project, then wrap in an array.
+    const array_type2t &arr = to_array_type(ts->thetype);
+    const smt_sort *oldsort = a->sort;
+    const smt_sort *subtype = convert_sort(arr.subtype);
+    smt_ast *a2 = const_cast<smt_ast*>(a);
+    a2->sort = subtype;
+    smt_ast *result = tuple_project(a2, s, i);
+    a2->sort = oldsort;
+
+    // Perform array wrapping
+    const smt_sort *s2 = mk_sort(SMT_SORT_ARRAY, make_array_domain_sort(arr),
+                                result->sort);
+    result->sort = s2;
+    return result;
+  }
+
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
