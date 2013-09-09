@@ -1832,8 +1832,11 @@ smt_convt::get(const expr2tc &expr)
 expr2tc
 smt_convt::get_array(const smt_ast *array, const type2tc &t)
 {
+  // XXX -- printing multidimensional arrays?
 
-  const array_type2t &ar = to_array_type(t);
+  type2tc newtype = flatten_array_type(t);
+
+  const array_type2t &ar = to_array_type(newtype);
   if (is_tuple_ast_type(ar.subtype)) {
     std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
     return expr2tc();
