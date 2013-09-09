@@ -195,6 +195,7 @@ public:
   inline unsigned int get_natural_alignment(const expr2tc &e) const
   {
     const type2tc &t = e->type;
+    assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
       return pointer_offset_size(*arr.subtype).to_ulong();
