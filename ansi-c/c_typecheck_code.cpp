@@ -49,8 +49,8 @@ void c_typecheck_baset::typecheck_code(codet &code)
 
   const irep_idt &statement=code.statement();
 
-  //std::cout << "statement: " << statement << std::endl;
-  //std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
+//  std::cout << "statement: " << statement << std::endl;
+//  std::cout << "typecheck_code::code.pretty(): " << code.pretty() << std::endl;
 
   if(statement=="expression")
     typecheck_expression(code);
