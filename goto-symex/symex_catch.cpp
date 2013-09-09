@@ -41,19 +41,6 @@ void goto_symext::symex_catch()
 
     // Increase the program counter
     cur_state->source.pc++;
-
-    if(exception.has_throw_target)
-    {
-      // the next instruction is always a goto
-      goto_programt::instructiont &goto_instruction =
-        const_cast<goto_programt::instructiont&>(*cur_state->source.pc);
-
-      // Update target
-      goto_instruction.targets.pop_back();
-      goto_instruction.targets.push_back(exception.throw_target);
-
-      exception.has_throw_target = false;
-    }
   }
   else // The first catch, push it to the stack
   {
