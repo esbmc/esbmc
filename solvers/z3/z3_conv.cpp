@@ -2718,7 +2718,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
   //      P        N          P            "
   //      P        P          P         Not permitted by C spec
   //      NPP is the most dangerous - there's the possibility that an integer
-  //      arithmatic is going to lead to an invalid pointer, that falls out of
+  //      arithmetic is going to lead to an invalid pointer, that falls out of
   //      all dereference switch cases. So, we need to verify that all derefs
   //      have a finally case that asserts the val was a valid ptr XXXjmorse.
   int ret_is_ptr, op1_is_ptr, op2_is_ptr;
@@ -2769,7 +2769,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       expr2tc non_ptr_op = (op1_is_ptr) ? side2 : side1;
 
       add2tc add(ptr_op->type, ptr_op, non_ptr_op);
-      // That'll generate the correct pointer arithmatic; now typecast
+      // That'll generate the correct pointer arithmetic; now typecast
       typecast2tc cast(type, add);
       convert_bv(cast, output);
       break;
@@ -2805,7 +2805,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
         newexpr = sub2tc(inttype, tmp_op1, tmp_op2);
       }
 
-      // Voila, we have our pointer arithmatic
+      // Voila, we have our pointer arithmetic
       convert_bv(newexpr, output);
 
       // That calculated the offset; update field in pointer.
