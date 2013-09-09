@@ -987,12 +987,22 @@ smt_convt::convert_terminal(const expr2tc &expr)
         (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
       // Perform smt-tuple hacks.
       return mk_tuple_symbol(expr);
-    } else if (!tuple_support && is_array_type(expr) &&
-                (is_struct_type(to_array_type(expr->type).subtype) ||
-                 is_union_type(to_array_type(expr->type).subtype) ||
-                 is_pointer_type(to_array_type(expr->type).subtype))) {
-      return mk_tuple_array_symbol(expr);
+    } else if (!tuple_support && is_array_type(expr)) {
+      // Determine the range if we have arrays of arrays.
+      const array_type2t &arr = to_array_type(expr->type);
+      type2tc range = arr.subtype;
+      while (is_array_type(range))
+        range = to_array_type(range).subtype;
+
+      // If this is an array of structs, we have a tuple array sym.
+      if (is_structure_type(range) || is_pointer_type(range)) {
+        return mk_tuple_array_symbol(expr);
+      } else {
+        ; // continue onwards;
+      }
     }
+
+    // Just a normal symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     const smt_sort *sort = convert_sort(sym.type);
