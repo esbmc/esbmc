@@ -37,7 +37,17 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
   cur_state(NULL),
   last_throw(NULL),
   inside_unexpected(false),
-  unwinding_recursion_assumption(false)
+  unwinding_recursion_assumption(false),
+  depth_limit(atol(options.get_option("depth").c_str())),
+  break_insn(atol(options.get_option("break-at").c_str())),
+  memory_leak_check(options.get_bool_option("memory-leak-check")),
+  deadlock_check(options.get_bool_option("deadlock-check")),
+  no_assertions(options.get_bool_option("no-assertions")),
+  no_simplify(options.get_bool_option("no-simplify")),
+  no_unwinding_assertions(options.get_bool_option("no-unwinding-assertions")),
+  k_induction(options.get_bool_option("k-induction")),
+  base_case(options.get_bool_option("base-case")),
+  forward_condition(options.get_bool_option("forward-condition"))
 {
   const std::string &set = options.get_option("unwindset");
   unsigned int length = set.length();
@@ -93,6 +103,17 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
   total_claims = sym.total_claims;
   remaining_claims = sym.remaining_claims;
   guard_identifier_s = sym.guard_identifier_s;
+  depth_limit = sym.depth_limit;
+  break_insn = sym.break_insn;
+  memory_leak_check = sym.memory_leak_check;
+  deadlock_check = sym.deadlock_check;
+  no_assertions = sym.no_assertions;
+  no_simplify = sym.no_simplify;
+  no_unwinding_assertions = sym.no_unwinding_assertions;
+  partial_loops = sym.partial_loops;
+  k_induction = sym.k_induction;
+  base_case = sym.base_case;
+  forward_condition = sym.forward_condition;
 
   valid_ptr_arr_name = sym.valid_ptr_arr_name;
   alloc_size_arr_name = sym.alloc_size_arr_name;
@@ -113,13 +134,13 @@ goto_symext& goto_symext::operator=(const goto_symext &sym)
 
 void goto_symext::do_simplify(exprt &expr)
 {
-  if(!options.get_bool_option("no-simplify"))
+  if(!no_simplify)
     simplify(expr);
 }
 
 void goto_symext::do_simplify(expr2tc &expr)
 {
-  if(!options.get_bool_option("no-simplify")) {
+  if(!no_simplify) {
     expr2tc tmp = expr->simplify();
     if (!is_nil_expr(tmp))
       expr = tmp;

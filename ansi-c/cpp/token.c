@@ -1295,8 +1295,12 @@ redo:	while ((ch = inch()) == ' ' || ch == '\t')
 		unch(ch);
 		return;
 	}
-	if (ch < 'a' || ch > 'z')
+	if (ch < 'a' || ch > 'z') {
+		if (ch >= '0' && ch <= '9') {
+			goto out1; /* jmorse: It's a line number line */
+		}
 		goto out; /* something else, ignore */
+	}
 	i = 0;
 	do {
 		bp[i++] = (usch)ch;
@@ -1318,6 +1322,8 @@ redo:	while ((ch = inch()) == ' ' || ch == '\t')
 out:
 	if (flslvl == 0 && Aflag == 0)
 		error("invalid preprocessor directive");
+
+out1:
 
 	unch(ch);
 	skpln();

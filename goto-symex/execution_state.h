@@ -97,10 +97,6 @@ class execution_statet : public goto_symext
 
   // Types
 
-  typedef std::string (*serialise_fxn)(execution_statet &ex_state,
-                                       const exprt &rhs);
-  typedef std::map<const irep_idt, serialise_fxn> expr_id_map_t;
-
   /**
    *  execution_statet specific level2t.
    *  The feature of this class is that we maintain a pointer to the ex_state
@@ -427,14 +423,7 @@ class execution_statet : public goto_symext
    *  @param rhs Expression to hash.
    *  @return Hash of passed in expression.
    */
-  crypto_hash update_hash_for_assignment(const exprt &rhs);
-
-  /**
-   *  Serialise expressions contents into a string.
-   *  @param rhs Expresson to serialise
-   *  @return String, serialised version of rhs.
-   */
-  std::string serialise_expr(const exprt &rhs);
+  crypto_hash update_hash_for_assignment(const expr2tc &rhs);
 
   /**
    *  Print stack trace of each thread to stdout.
@@ -548,12 +537,17 @@ class execution_statet : public goto_symext
   /** Number of context switches performed by this ex_state */
   int CS_number;
 
+  /** Are we tracing / printing symex instructions? */
+  bool symex_trace;
+  /** Are we encoding SMT during exploration? */
+  bool smt_during_symex;
+  /** Are we evaluating the thread guard in the SMT solver during context
+   *  switching? */
+  bool smt_thread_guard;
+
   // Static stuff:
 
   public:
-  static expr_id_map_t init_expr_id_map();
-  static bool expr_id_map_initialized;
-  static expr_id_map_t expr_id_map;
   static unsigned int node_count;
 };
 

@@ -90,7 +90,7 @@ void symex_dereference_statet::get_value_set(
   value_setst::valuest &value_set)
 {
 
-  state.value_set.get_value_set(expr, value_set, goto_symex.ns);
+  state.value_set.get_value_set(expr, value_set);
 }
 
 void goto_symext::dereference_rec(

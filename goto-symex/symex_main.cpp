@@ -42,7 +42,7 @@ goto_symext::claim(const expr2tc &claim_expr, const std::string &msg) {
   // first try simplifier on it
   do_simplify(new_expr);
 
-  if (is_true(new_expr) && !options.get_bool_option("all-assertions"))
+  if (is_true(new_expr))
     return;
 
   cur_state->guard.guard_expr(new_expr);
@@ -79,12 +79,9 @@ goto_symext::symex_step(reachability_treet & art)
 
   const goto_programt::instructiont &instruction = *cur_state->source.pc;
 
-  merge_gotos();
-
   // depth exceeded?
   {
-    unsigned max_depth = atoi(options.get_option("depth").c_str());
-    if (max_depth != 0 && cur_state->depth > max_depth)
+    if (depth_limit != 0 && cur_state->depth > depth_limit)
       cur_state->guard.add(false_expr);
     cur_state->depth++;
   }
@@ -145,9 +142,9 @@ goto_symext::symex_step(reachability_treet & art)
 
   case ASSERT:
     if (!cur_state->guard.is_false()) {
-      if (!options.get_bool_option("no-assertions") ||
+      if (!no_assertions ||
           !cur_state->source.pc->location.user_provided()
-          || options.get_bool_option("deadlock-check")) {
+          || deadlock_check) {
 
 	std::string msg = cur_state->source.pc->location.comment().as_string();
 	if (msg == "") msg = "assertion";
@@ -329,7 +326,7 @@ void
 goto_symext::finish_formula(void)
 {
 
-  if (!options.get_bool_option("memory-leak-check"))
+  if (!memory_leak_check)
     return;
 
   std::list<allocated_obj>::const_iterator it;

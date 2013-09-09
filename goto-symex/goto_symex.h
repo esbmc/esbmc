@@ -69,6 +69,7 @@ public:
 
   friend class symex_dereference_statet;
   friend class bmct;
+  friend class reachability_treet;
 
   typedef goto_symex_statet statet;
 
@@ -636,6 +637,40 @@ protected:
 
   /** Flag to indicate if we have an unwinding recursion assumption. */
   bool unwinding_recursion_assumption;
+
+  /** Depth limit, as given by the --depth option */
+  unsigned long depth_limit;
+  /** Instruction number we are to break at -- that is, trap, to the debugger.
+   *  Zero means no trap; there is a zero instruction, but there are better
+   *  ways of trapping at the start of symbolic execution to get at that. */
+  unsigned long break_insn;
+  /** Flag as to whether we're performing memory leak checks. Corresponds to
+   *  the option --memory-leak-check */
+  bool memory_leak_check;
+  /** Flag as to whether we're performing deadlock checking. Corresponds to
+   *  the option --deadlock-check */
+  bool deadlock_check;
+  /** Flag as to whether we're checking user assertions. Corresponds to
+   *  the option --no-assertions */
+  bool no_assertions;
+  /** Flag as to whether we're not simplifying exprs. Corresponds to
+   *  the option --no-simplify */
+  bool no_simplify;
+  /** Flag as to whether we're inserting unwinding assertions. Corresponds to
+   *  the option --no-unwinding-assertions */
+  bool no_unwinding_assertions;
+  /** Flag as to whether we're not enabling partial loops. Corresponds to
+   *  the option --partial-loops */
+  bool partial_loops;
+  /** Flag as to whether we're doing a k-induction. Corresponds to
+   *  the option --k-induction */
+  bool k_induction;
+  /** Flag as to whether we're doing a k-induction base case. Corresponds to
+   *  the option --base-case */
+  bool base_case;
+  /** Flag as to whether we're doing a k-induction forward condition.
+   *  Corresponds to the option --forward-condition */
+  bool forward_condition;
 };
 
 #endif

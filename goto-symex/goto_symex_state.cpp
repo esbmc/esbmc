@@ -22,7 +22,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "crypto_hash.h"
 
 goto_symex_statet::goto_symex_statet(renaming::level2t &l2, value_sett &vs,
                                      const namespacet &_ns)
@@ -184,7 +183,6 @@ void goto_symex_statet::assignment(
   const expr2tc &rhs,
   bool record_value)
 {
-  crypto_hash hash;
   assert(is_symbol2t(lhs));
   symbol2t &lhs_sym = to_symbol2t(lhs);
 
@@ -212,7 +210,7 @@ void goto_symex_statet::assignment(
     expr2tc l1_rhs = rhs; // rhs is const; Rename into new container.
     level2.get_original_name(l1_rhs);
 
-    value_set.assign(l1_lhs, l1_rhs, ns);
+    value_set.assign(l1_lhs, l1_rhs);
   }
 }
 

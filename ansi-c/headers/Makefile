@@ -3,7 +3,7 @@ ESBMCDIR= $(shell pwd)/../..
 include $(ESBMCDIR)/config.inc
 MAINOBJNAME=headers.o
 
-PLAINOBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o digitalfilter.o
+PLAINOBJS= stddef.o stdarg.o stdbool.o pthread.o pthreadtypes.o digitalfilter.o limits.o
 OBJS= $(PLAINOBJS:%.o=$(OBJDIR)/%.o)
 HOSTOBJS= $(PLAINOBJS:%.o=$(HOSTOBJDIR)/%.o)
 

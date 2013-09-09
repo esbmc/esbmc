@@ -340,18 +340,6 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     negated_cond = not2tc(guard);
   }
 
-  bool unwinding_assertions =
-    !options.get_bool_option("no-unwinding-assertions");
-
-  bool partial_loops =
-    options.get_bool_option("partial-loops");
-
-  bool base_case=
-    options.get_bool_option("base-case");
-
-  bool forward_condition=
-    options.get_bool_option("forward-condition");
-
   if (base_case)
   {
     // generate unwinding assumption
@@ -373,7 +361,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
   else if(!partial_loops)
   {
-    if(unwinding_assertions)
+    if(!no_unwinding_assertions)
     {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));

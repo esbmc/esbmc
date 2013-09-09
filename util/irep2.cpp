@@ -204,6 +204,15 @@ type2t::do_crc(hacky_hash &hash) const
   return;
 }
 
+void
+type2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(type2t::end_type_id < 256);
+  uint8_t tid = type_id;
+  hash.ingest(&tid, sizeof(tid));
+  return;
+}
+
 unsigned int
 bool_type2t::get_width(void) const
 {
@@ -459,6 +468,16 @@ expr2t::do_crc(hacky_hash &hash) const
 {
   hash.ingest((uint8_t)expr_id);
   type->do_crc(hash);
+  return;
+}
+
+void
+expr2t::hash(crypto_hash &hash) const
+{
+  BOOST_STATIC_ASSERT(expr2t::end_expr_id < 256);
+  uint8_t eid = expr_id;
+  hash.ingest(&eid, sizeof(eid));
+  type->hash(hash);
   return;
 }
 
@@ -1373,7 +1392,29 @@ do_type_crc(const bool &thebool, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const bool &thebool, crypto_hash &hash)
+{
+
+  if (thebool) {
+    uint8_t tval = 1;
+    hash.ingest(&tval, sizeof(tval));
+  } else {
+    uint8_t tval = 0;
+    hash.ingest(&tval, sizeof(tval));
+  }
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const unsigned int &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const unsigned int &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
@@ -1389,7 +1430,23 @@ do_type_crc(const sideeffect_data::allockind &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const sideeffect_data::allockind &theval, crypto_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const symbol_data::renaming_level &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)&theval, sizeof(theval));
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const symbol_data::renaming_level &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)&theval, sizeof(theval));
@@ -1420,10 +1477,40 @@ do_type_crc(const BigInt &theint, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const BigInt &theint, crypto_hash &hash)
+{
+  unsigned char buffer[256];
+
+  if (theint.dump(buffer, sizeof(buffer))) {
+    // Zero has no data in bigints.
+    if (theint.is_zero()) {
+      uint8_t val = 0;
+      hash.ingest(&val, sizeof(val));
+    } else {
+      hash.ingest(buffer, theint.get_len());
+    }
+  } else {
+    // bigint is too large to fit in that static buffer. This is insane; but
+    // rather than wasting time heap allocing we'll just skip recording data,
+    // at the price of possible crc collisions.
+    ;
+  }
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const fixedbvt &theval, hacky_hash &hash)
 {
 
   do_type_crc(theval.get_value(), hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const fixedbvt &theval, crypto_hash &hash)
+{
+
+  do_type_hash(theval.to_integer(), hash);
   return;
 }
 
@@ -1435,10 +1522,24 @@ do_type_crc(const std::vector<expr2tc> &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<expr2tc> &theval, crypto_hash &hash)
+{
+  forall_exprs(it, theval)
+    (*it)->hash(hash);
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const std::vector<type2tc> &theval, hacky_hash &hash)
 {
   forall_types(it, theval)
     (*it)->do_crc(hash);
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<type2tc> &theval, crypto_hash &hash)
+{
+  forall_types(it, theval)
+    (*it)->hash(hash);
 }
 
 static inline __attribute__((always_inline)) void
@@ -1449,7 +1550,22 @@ do_type_crc(const std::vector<irep_idt> &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<irep_idt> &theval, crypto_hash &hash)
+{
+  forall_names(it, theval)
+    hash.ingest((void*)(*it).as_string().c_str(), (*it).as_string().size());
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const std::vector<unsigned int> &theval, hacky_hash &hash)
+{
+  for (std::vector<unsigned int>::const_iterator it = theval.begin();
+       it != theval.end(); it++)
+    hash.ingest((void*)&(*it), sizeof(unsigned int));
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const std::vector<unsigned int> &theval, crypto_hash &hash)
 {
   for (std::vector<unsigned int>::const_iterator it = theval.begin();
        it != theval.end(); it++)
@@ -1466,6 +1582,15 @@ do_type_crc(const expr2tc &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const expr2tc &theval, crypto_hash &hash)
+{
+
+  if (theval.get() != NULL)
+    theval->hash(hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const type2tc &theval, hacky_hash &hash)
 {
 
@@ -1475,7 +1600,24 @@ do_type_crc(const type2tc &theval, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const type2tc &theval, crypto_hash &hash)
+{
+
+  if (theval.get() != NULL)
+    theval->hash(hash);
+  return;
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const irep_idt &theval, hacky_hash &hash)
+{
+
+  hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
+  return;
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const irep_idt &theval, crypto_hash &hash)
 {
 
   hash.ingest((void*)theval.as_string().c_str(), theval.as_string().size());
@@ -1489,7 +1631,19 @@ do_type_crc(const type2t::type_ids &i, hacky_hash &hash)
 }
 
 static inline __attribute__((always_inline)) void
+do_type_hash(const type2t::type_ids &i, crypto_hash &hash)
+{
+  return; // Dummy field crc
+}
+
+static inline __attribute__((always_inline)) void
 do_type_crc(const expr2t::expr_ids &i, hacky_hash &hash)
+{
+  return; // Dummy field crc
+}
+
+static inline __attribute__((always_inline)) void
+do_type_hash(const expr2t::expr_ids &i, crypto_hash &hash)
 {
   return; // Dummy field crc
 }
@@ -1903,6 +2057,36 @@ esbmct::expr_methods<derived, subclass,
   field4_type, field4_class, field4_ptr,
   field5_type, field5_class, field5_ptr,
   field6_type, field6_class, field6_ptr>
+  ::hash
+          (crypto_hash &hash) const
+{
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  derived_this->expr2t::hash(hash);
+  do_type_hash(derived_this->*field1_ptr, hash);
+  do_type_hash(derived_this->*field2_ptr, hash);
+  do_type_hash(derived_this->*field3_ptr, hash);
+  do_type_hash(derived_this->*field4_ptr, hash);
+  do_type_hash(derived_this->*field5_ptr, hash);
+  do_type_hash(derived_this->*field6_ptr, hash);
+  return;
+}
+
+template <class derived, class subclass,
+typename field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+typename field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+typename field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+typename field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+typename field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+typename field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+void
+esbmct::expr_methods<derived, subclass,
+  field1_type, field1_class, field1_ptr,
+  field2_type, field2_class, field2_ptr,
+  field3_type, field3_class, field3_ptr,
+  field4_type, field4_class, field4_ptr,
+  field5_type, field5_class, field5_ptr,
+  field6_type, field6_class, field6_ptr>
   ::list_operands
           (std::list<const expr2tc *> &inp) const
 {
@@ -2217,6 +2401,35 @@ esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
   do_type_crc(derived_this->*field4_ptr, hash);
   do_type_crc(derived_this->*field5_ptr, hash);
   do_type_crc(derived_this->*field6_ptr, hash);
+  return;
+}
+
+template <class derived, class subclass,
+  class field1_type, class field1_class, field1_type field1_class::*field1_ptr,
+  class field2_type, class field2_class, field2_type field2_class::*field2_ptr,
+  class field3_type, class field3_class, field3_type field3_class::*field3_ptr,
+  class field4_type, class field4_class, field4_type field4_class::*field4_ptr,
+  class field5_type, class field5_class, field5_type field5_class::*field5_ptr,
+  class field6_type, class field6_class, field6_type field6_class::*field6_ptr>
+void
+esbmct::type_methods<derived, subclass, field1_type, field1_class, field1_ptr,
+                                        field2_type, field2_class, field2_ptr,
+                                        field3_type, field3_class, field3_ptr,
+                                        field4_type, field4_class, field4_ptr,
+                                        field5_type, field5_class, field5_ptr,
+                                        field6_type, field6_class, field6_ptr>
+      ::hash(crypto_hash &hash) const
+{
+
+  const derived *derived_this = static_cast<const derived*>(this);
+
+  derived_this->type2t::hash(hash);
+  do_type_hash(derived_this->*field1_ptr, hash);
+  do_type_hash(derived_this->*field2_ptr, hash);
+  do_type_hash(derived_this->*field3_ptr, hash);
+  do_type_hash(derived_this->*field4_ptr, hash);
+  do_type_hash(derived_this->*field5_ptr, hash);
+  do_type_hash(derived_this->*field6_ptr, hash);
   return;
 }
 

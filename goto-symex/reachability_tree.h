@@ -411,6 +411,13 @@ protected:
   std::set<crypto_hash>hit_hashes;
   /** Message handler reference. */
   message_handlert &message_handler;
+  /** Flag as to whether we're picking interleaving directions explicitly.
+   *  Corresponds to the --interactive-ileaves option. */
+  bool interactive_ileaves;
+  /** Flag as to whether we're scheduling using round-robin. */
+  bool round_robin;
+  /** Are we using the --schedule scheduling method? */
+  bool schedule;
 
   friend class execution_statet;
 };
