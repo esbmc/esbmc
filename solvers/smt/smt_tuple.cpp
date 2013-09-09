@@ -554,7 +554,8 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   std::string name = mk_fresh_name("tuple_array_select::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
-  const array_type2t &array_type = to_array_type(ts->thetype);
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
   tuple_array_select_rec(ta, array_type.subtype, result, field,
                          array_type.array_size);
   return result;
