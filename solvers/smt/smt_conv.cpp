@@ -869,11 +869,6 @@ smt_convt::convert_sort(const type2tc &type)
   {
     const array_type2t &arr = to_array_type(type);
 
-    if (!tuple_support &&
-        (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
-      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
-    }
-
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
@@ -884,6 +879,10 @@ smt_convt::convert_sort(const type2tc &type)
     type2tc range = arr.subtype;
     while (is_array_type(range))
       range = to_array_type(range).subtype;
+
+    if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
+      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
+    }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;

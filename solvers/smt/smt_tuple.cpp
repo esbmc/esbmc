@@ -1027,5 +1027,9 @@ smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   args[0] = convert_ast(a);
   args[1] = convert_ast(b);
 
-  return mk_func_app(s, SMT_FUNC_EQ, args, 2);
+  if (is_array_type(a->type)) {
+    return tuple_array_equality(args[0], args[1]);
+  } else {
+    return mk_func_app(s, SMT_FUNC_EQ, args, 2);
+  }
 }
