@@ -553,7 +553,7 @@ expr_handle_table:
   {
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
-    if (is_struct_type(expr) || is_pointer_type(expr)) {
+    if (is_structure_type(expr) || is_pointer_type(expr)) {
       a = tuple_ite(if_ref.cond, if_ref.true_value, if_ref.false_value,
                     if_ref.type);
     } else {
