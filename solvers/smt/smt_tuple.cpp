@@ -952,21 +952,21 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 
   constant_int2tc arrsize(index_type2(), BigInt(array_size));
   type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
-  const smt_sort *sort = convert_sort(arrtype);
   std::string name = mk_fresh_name("tuple_array_of::") + ".";
+  symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
+
+  const smt_sort *sort = convert_sort(arrtype);
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
-  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++) {
     const expr2tc &val = data.datatype_members[i];
-    const smt_ast *sub_arr_of = convert_array_of(val, array_size);
-    const smt_ast *args[2];
+    type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
+    constant_array_of2tc sub_array_of(subarr_type, val);
 
-    const smt_sort *this_sort = convert_sort(subtype.members[i]);
-    args[0] = tuple_project(newsym, this_sort, i);
-    args[1] = sub_arr_of;
-    assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
+    expr2tc target_array = tuple_project_sym(tuple_arr_of_sym, i);
+
+    assert_ast(convert_array_equality(target_array, sub_array_of));
   }
 
   return newsym;
