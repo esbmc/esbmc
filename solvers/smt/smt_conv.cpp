@@ -388,6 +388,11 @@ expr_handle_table:
     a = tuple_create(expr);
     break;
   }
+  case expr2t::constant_union_id:
+  {
+    a = union_create(expr);
+    break;
+  }
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {

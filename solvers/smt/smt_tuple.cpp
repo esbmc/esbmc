@@ -2,6 +2,8 @@
 
 #include <ansi-c/c_types.h>
 
+#include <base_type.h>
+
 #include "smt_conv.h"
 
 // So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
@@ -85,6 +87,37 @@ smt_convt::tuple_create(const expr2tc &structdef)
   tuple_create_rec(name, structdef->type, args);
 
   return new tuple_smt_ast(convert_sort(structdef->type), name);
+}
+
+smt_ast *
+smt_convt::union_create(const expr2tc &unidef)
+{
+  // Unions are known to be brok^W fragile. Create a free new structure, and
+  // assign in any members where the type matches the single member of the
+  // initializer members. No need to worry about subtypes; this is a union.
+  std::string name = mk_fresh_name("union_create::");
+  // Add a . suffix because this is of tuple type.
+  name += ".";
+  symbol2tc result(unidef->type, irep_idt(name));
+
+  const constant_union2t &uni = to_constant_union2t(unidef);
+  const struct_union_data &def = get_type_def(uni.type);
+  assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
+         "initializer");
+  const expr2tc &init = uni.datatype_members[0];
+
+  unsigned int i = 0;
+  forall_types(it, def.members) {
+    if (base_type_eq(*it, init->type, ns)) {
+      // Assign in.
+      expr2tc target_memb = tuple_project_sym(result, i);
+      equality2tc eq(target_memb, init);
+      assert_ast(convert_ast(eq));
+    }
+    i++;
+  }
+
+  return new tuple_smt_ast(convert_sort(unidef->type), name);
 }
 
 smt_ast *

@@ -248,6 +248,7 @@ public:
   // solver being used might have its own support for (in which case it should
   // override the below).
   virtual smt_ast *tuple_create(const expr2tc &structdef);
+  virtual smt_ast *union_create(const expr2tc &unidef);
   virtual smt_ast *tuple_fresh(const smt_sort *s);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
