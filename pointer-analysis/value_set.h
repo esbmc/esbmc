@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 #include <mp_arith.h>
 #include <reference_counting.h>
+#include <pointer_offset_size.h>
 
 #include "object_numbering.h"
 #include "value_sets.h"
@@ -113,6 +114,12 @@ public:
      *  of which is in the offset field. If not, then the offset isn't
      *  statically known, and must be handled at solver time. */
     bool offset_is_set;
+    /** Least alignment of the offset. When offset_is_set is false, we state
+     *  what we think the alignment of this pointer is. This becomes massively
+     *  useful if we point at an array, but can know that the pointer is aligned
+     *  to the array element edges.
+     *  Units are bytes. Zero means N/A. */
+    unsigned int offset_alignment;
     bool offset_is_zero() const
     { return offset_is_set && offset.is_zero(); }
   };
@@ -176,6 +183,28 @@ public:
 
 //********************************** Methods ***********************************
 
+  /** Get the natural alignment unit of a reference to e. I don't know a more
+   *  appropriate term, but if we were to have an offset into e, then what is
+   *  the greatest alignment guarentee that would make sense? i.e., an offset
+   *  of 404 into an array of integers gives an alignment guarentee of 4 bytes,
+   *  not 404.
+   *
+   *  For arrays, this is the element size.
+   *  For structs, I imagine it's the machine word size (?). Depends on padding.
+   *  For integers / other things, it's the machine / word size (?).
+   */
+  inline unsigned int get_natural_alignment(const expr2tc &e) const
+  {
+    const type2tc &t = e->type;
+    assert(!is_symbol_type(t));
+    if (is_array_type(t)) {
+      const array_type2t &arr = to_array_type(t);
+      return pointer_offset_size(*arr.subtype).to_ulong();
+    } else {
+      return config.ansi_c.word_size;
+    }
+  }
+
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
   expr2tc to_expr(object_map_dt::const_iterator it) const;
@@ -193,9 +222,11 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const expr2tc &src) const
+  bool insert(object_mapt &dest, const expr2tc &src, unsigned int align) const
   {
-    return insert(dest, object_numbering.number(src), objectt());
+    objectt t;
+    t.offset_alignment = align;
+    return insert(dest, object_numbering.number(src), t);
   }
 
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
@@ -238,14 +269,33 @@ public:
           return false;
         else
         {
+          std::cerr << "Calcumalate offset alignment" << __FILE__ << __LINE__ << std::endl;
+          abort();
           old.offset_is_set=false;
           return true;
         }
+      } else if(!old.offset_is_set) {
+        unsigned int oldalign = old.offset_alignment;
+        if (!object.offset_is_set) {
+          // Both object offsets not set; update alignment to minimum of the two
+          old.offset_alignment =
+            std::min(old.offset_alignment, object.offset_alignment);
+          return !(old.offset_alignment == oldalign);
+        } else {
+          // Old offset unset; new offset set. Compute the alignment of the
+          // new object's offset, and take the minimum of that and the old
+          // alignment.
+          const expr2tc &expr_obj = object_numbering[n];
+          unsigned int natural_align = get_natural_alignment(expr_obj);
+          unsigned int new_alignment = object.offset.to_ulong() % natural_align;
+          old.offset_alignment = std::min(old.offset_alignment, new_alignment);
+          return !(old.offset_alignment == oldalign);
+        }
       }
-      else if(!old.offset_is_set)
-        return false;
       else
       {
+        std::cerr << "Assign offset alignment" << __FILE__ << __LINE__ << std::endl;
+        abort();
         old.offset_is_set=false;
         return true;
       }
