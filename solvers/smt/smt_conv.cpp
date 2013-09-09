@@ -1537,8 +1537,6 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     typecast2tc cast(get_uint_type(1), update_val);
     return mk_store(with.source_value, newidx, cast, ressort);
   } else if (is_tuple_array_ast_type(with.type)) {
-    assert(is_structure_type(arrtype.subtype) ||
-           is_pointer_type(arrtype.subtype));
     const smt_sort *sort = convert_sort(with.update_value->type);
     const smt_ast *src, *update;
     src = convert_ast(with.source_value);
