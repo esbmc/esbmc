@@ -1027,7 +1027,11 @@ smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   args[0] = convert_ast(a);
   args[1] = convert_ast(b);
 
-  if (is_array_type(a->type)) {
+  // Did we generate a tuple ast?
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(args[0]);
+
+  // If we did, we need to do a tuple array equality.
+  if (ta != NULL) {
     return tuple_array_equality(args[0], args[1]);
   } else {
     return mk_func_app(s, SMT_FUNC_EQ, args, 2);
