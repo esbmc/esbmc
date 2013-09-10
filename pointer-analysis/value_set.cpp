@@ -388,7 +388,7 @@ void value_sett::get_value_set_rec(
                            : to_sub2t(expr).side_2;
 
       assert(!(is_pointer_type(op0) && is_pointer_type(op1)) &&
-              "Cannot have pointer arithmatic with two pointers as operands");
+              "Cannot have pointer arithmetic with two pointers as operands");
 
       const expr2tc &ptr_op= (is_pointer_type(op0)) ? op0 : op1;
       const expr2tc &non_ptr_op= (is_pointer_type(op0)) ? op1 : op0;
