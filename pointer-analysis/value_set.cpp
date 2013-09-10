@@ -438,8 +438,6 @@ void value_sett::get_value_set_rec(
         }
       }
 
-      std::cerr << "Manual pointer arith offset update" << std::endl;
-      abort();
       // For each object, update its offset data according to the integer
       // offset to this expr. Potential outcomes are keeping it nondet, making
       // it nondet, or calculating a new static offset.
@@ -450,11 +448,36 @@ void value_sett::get_value_set_rec(
       {
         objectt object=it->second;
 
+        unsigned int nat_align =
+            get_natural_alignment(object_numbering[it->first]);
         if (is_const && object.offset_is_set) {
           // Both are const; we can accumulate offsets;
           object.offset += total_offs;
-        } else {
+        } else if (is_const && !object.offset_is_set) {
+          // Offset is const, but existing pointer isn't. The alignment is now
+          // at least as small as the operand alignment.
+          object.offset_alignment =
+            std::min(nat_align, object.offset_alignment);
+        } else if (!is_const && object.offset_is_set) {
+          // Nondet but aligned offset from arithmetic; but offset set in
+          // current object. Take the minimum alignment again.
+          unsigned int offset_align = 0;
+          if ((object.offset_alignment % nat_align) != 0) {
+            // XXX -- what to do when we have something, say a struct, how
+            // do I reduce this offset to an alignment within it.
+            // Answer for the moment it to clamp it to work alignment; that
+            // might work sometimes.
+            offset_align = object.offset_alignment % config.ansi_c.word_size;
+          } else {
+            offset_align = nat_align;
+          }
+
           object.offset_is_set=false;
+          object.offset_alignment = std::min(nat_align, offset_align);
+        } else {
+          // Final case: nondet offset from operation, and nondet offset in
+          // the current object. So, just take the minimum available.
+          object.offset_alignment = std::min(nat_align,object.offset_alignment);
         }
 
         // Once updated, store object reference into destination map.
