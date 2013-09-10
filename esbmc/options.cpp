@@ -125,6 +125,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"dump-z3-assigns",	switc,		""	},
 { 0,	"ltl",			switc,		""	},
 { 0,	"symex-ssa-trace",	switc,		""	},
+{ 0,	"git-hash",		switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
