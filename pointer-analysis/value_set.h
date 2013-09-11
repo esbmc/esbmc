@@ -298,8 +298,10 @@ public:
       }
       else
       {
-        std::cerr << "Assign offset alignment" << __FILE__ << __LINE__ << std::endl;
-        abort();
+        // Old offset alignment is set; new isn't.
+        unsigned int natural_align = get_natural_alignment(expr_obj);
+        unsigned int old_align = old.offset.to_ulong() % natural_align;
+        old.offset_alignment = std::min(old_align, object.offset_alignment);
         old.offset_is_set=false;
         return true;
       }
