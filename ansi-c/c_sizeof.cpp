@@ -18,10 +18,10 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <migrate.h>
 #include <pointer_offset_size.h>
 
-exprt c_sizeof(const typet &src, const namespacet &ns __attribute__((unused)))
+exprt c_sizeof(const typet &src, const namespacet &ns)
 {
   type2tc t;
-  migrate_type(src, t);
+  migrate_type(src, t, &ns);
 
   // Array size simplification and so forth will have already occurred in
   // migration, but we might still run into a nondeterministically sized
