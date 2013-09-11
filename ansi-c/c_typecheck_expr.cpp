@@ -246,7 +246,6 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
   bool found=false;
   mp_integer offset=0;
 
-  c_sizeoft csize(*this);
   forall_irep(it, components.get_sub())
   {
     if(it->name()==member)
@@ -257,7 +256,7 @@ void c_typecheck_baset::typecheck_expr_builtin_offsetof(exprt &expr)
     else
     {
       const typet &type=it->type();
-      exprt size_expr=csize(type);
+      exprt size_expr=c_sizeof(type, *this);
 
       mp_integer i;
       to_integer(size_expr, i);
@@ -510,9 +509,7 @@ void c_typecheck_baset::typecheck_expr_sizeof(exprt &expr)
     throw 0;
   }
 
-  c_sizeoft c_sizeof(*this);
-
-  exprt new_expr=c_sizeof(type);
+  exprt new_expr=c_sizeof(type, *this);
 
   if(new_expr.is_nil())
   {

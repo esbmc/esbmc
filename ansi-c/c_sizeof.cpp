@@ -14,7 +14,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_typecast.h"
 #include "c_types.h"
 
-exprt c_sizeoft::sizeof_rec(const typet &type)
+exprt sizeof_rec(const typet &type, const namespacet &ns)
 {
   exprt dest;
 
@@ -36,7 +36,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   else if(type.id()=="pointer")
   {
     if(type.reference())
-      return sizeof_rec(type.subtype());
+      return sizeof_rec(type.subtype(), ns);
 
     unsigned bits=config.ansi_c.pointer_width;
     dest=from_integer(bits/8, uint_type());
@@ -51,7 +51,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
     const exprt &size_expr=
       static_cast<const exprt &>(type.size_irep());
 
-    exprt tmp_dest(sizeof_rec(type.subtype()));
+    exprt tmp_dest(sizeof_rec(type.subtype(), ns));
 
     if(tmp_dest.is_nil())
       return tmp_dest;
@@ -89,7 +89,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
       }
       else
       {
-        exprt tmp(sizeof_rec(sub_type));
+        exprt tmp(sizeof_rec(sub_type, ns));
 
         if(tmp.is_nil())
           return tmp;
@@ -120,7 +120,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
       }
       else
       {
-        exprt tmp(sizeof_rec(sub_type));
+        exprt tmp(sizeof_rec(sub_type, ns));
 
         if(tmp.is_nil())
           return tmp;
@@ -138,7 +138,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
   }
   else if(type.id()=="symbol")
   {
-    return sizeof_rec(ns.follow(type));
+    return sizeof_rec(ns.follow(type), ns);
   }
   else
     dest.make_nil();
@@ -148,8 +148,7 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
 exprt c_sizeof(const typet &src, const namespacet &ns)
 {
-  c_sizeoft c_sizeof_inst(ns);
-  exprt tmp=c_sizeof_inst(src);
+  exprt tmp=sizeof_rec(src, ns);
   // TODO: cbmc: simplify(tmp, ns);
   simplify(tmp);
   return tmp;
