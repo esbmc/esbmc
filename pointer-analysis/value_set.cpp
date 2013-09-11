@@ -731,7 +731,10 @@ void value_sett::get_reference_set_rec(
           object = typecast2tc(memb.source_value->type, object);
           new_memb = member2tc(memb.type, object, memb.member);
         }
-        
+
+        // XXX -- in terms of alignment, I believe this doesn't require
+        // anything, as we're constructing an expression that takes account
+        // of this. Also the same for references to indexes?
         insert(dest, new_memb, o);
       }
     }
