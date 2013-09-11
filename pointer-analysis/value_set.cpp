@@ -618,14 +618,9 @@ void value_sett::get_reference_set_rec(
       is_constant_string2t(expr))
   {
     // Any symbol we refer to, store into the destination object map.
-    if (is_array_type(expr) &&
-        is_array_type(to_array_type(expr->type).subtype)) {
-      std::cerr << "Work out array alignment rules" << std::endl;
-      abort();
-      insert(dest, expr, 0);
-    } else
-      insert(dest, expr, 0);
-
+    // Given that this is a simple symbol, we can be sure that the offset to
+    // it is zero.
+    insert(dest, expr, objectt(0));
     return;
   }
   else if (is_dereference2t(expr))
