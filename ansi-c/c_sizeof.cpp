@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 exprt c_sizeof(const typet &src, const namespacet &ns)
 {
   type2tc t;
-  migrate_type(src, t, &ns);
+  migrate_type(src, t, &ns, false);
 
   // Array size simplification and so forth will have already occurred in
   // migration, but we might still run into a nondeterministically sized

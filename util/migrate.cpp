@@ -37,7 +37,7 @@ binary2bigint(irep_idt binary, bool is_signed)
 
 void
 real_migrate_type(const typet &type, type2tc &new_type_ref,
-                  const namespacet *ns)
+                  const namespacet *ns, bool cache)
 {
 
   if (type.id() == typet::t_bool) {
@@ -62,7 +62,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     expr2tc size((expr2t *)NULL);
     bool is_infinite = false;
 
-    migrate_type(type.subtype(), subtype, ns);
+    migrate_type(type.subtype(), subtype, ns, cache);
 
     if (type.find(typet::a_size).id() == "infinity") {
       is_infinite = true;
@@ -77,7 +77,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == typet::t_pointer) {
     type2tc subtype;
 
-    migrate_type(type.subtype(), subtype, ns);
+    migrate_type(type.subtype(), subtype, ns, cache);
 
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
@@ -85,8 +85,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     empty_type2t *e = new empty_type2t();
     new_type_ref = type2tc(e);
   } else if (type.id() == typet::t_symbol) {
-    symbol_type2t *s = new symbol_type2t(type.identifier());
-    new_type_ref = type2tc(s);
+    if (ns) {
+      typet followed = ns->follow(type);
+      real_migrate_type(followed, new_type_ref, ns, cache);
+    } else {
+      symbol_type2t *s = new symbol_type2t(type.identifier());
+      new_type_ref = type2tc(s);
+    }
   } else if (type.id() == typet::t_struct) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
@@ -96,7 +101,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref, ns);
+      migrate_type((const typet&)it->type(), ref, ns, cache);
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
@@ -117,7 +122,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref, ns);
+      migrate_type((const typet&)it->type(), ref, ns, cache);
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
@@ -153,12 +158,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     for (code_typet::argumentst::const_iterator it = old_args.begin();
          it != old_args.end(); it++) {
       type2tc tmp;
-      migrate_type(it->type(), tmp, ns);
+      migrate_type(it->type(), tmp, ns, cache);
       args.push_back(tmp);
       arg_names.push_back(it->get_identifier());
     }
 
-    migrate_type(static_cast<const typet &>(type.return_type()), ret_type, ns);
+    migrate_type(static_cast<const typet &>(type.return_type()), ret_type, ns, cache);
 
     code_type2t *c = new code_type2t(args, ret_type, arg_names, ellipsis);
     new_type_ref = type2tc(c);
@@ -175,7 +180,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
       forall_irep(it, cpy.get_sub()) {
         assert((*it).id() == "type");
         type2tc tmptype;
-        migrate_type((*it).type(), tmptype, ns);
+        migrate_type((*it).type(), tmptype, ns, cache);
         template_args.push_back(tmptype);
       }
     }
@@ -193,8 +198,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
 }
 
 void
-migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns)
+migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
+             bool cache)
 {
+
+  if (!cache)
+    return real_migrate_type(type, new_type_ref, ns, cache);
 
   if (type.id() == typet::t_bool) {
     new_type_ref = type_pool.get_bool();
@@ -214,7 +223,7 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns)
   } else if (type.id() == typet::t_symbol) {
     if (ns) {
       typet followed = ns->follow(type);
-      return migrate_type(followed, new_type_ref, ns);
+      return migrate_type(followed, new_type_ref, ns, cache);
     } else {
       new_type_ref = type_pool.get_symbol(type);
     }
@@ -237,10 +246,10 @@ migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns)
     // something.
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == "cpp-name") {
-    real_migrate_type(type, new_type_ref, ns);
+    real_migrate_type(type, new_type_ref, ns, cache);
     // No caching; no reason, just not doing it right now.
   } else if (type.id() == "ellipsis") {
-    real_migrate_type(type, new_type_ref, ns);
+    real_migrate_type(type, new_type_ref, ns, cache);
   } else {
     type.dump();
     assert(0);
