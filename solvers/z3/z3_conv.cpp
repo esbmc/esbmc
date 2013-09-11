@@ -1777,6 +1777,10 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
         output = z3::to_expr(ctx,
                   Z3_mk_extract(ctx, upper, lower, source));
       }
+    } else {
+      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
+      data.dump();
+      abort();
     }
 
     unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, output));
