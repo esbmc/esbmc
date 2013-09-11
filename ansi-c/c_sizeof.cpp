@@ -14,142 +14,33 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_typecast.h"
 #include "c_types.h"
 
-exprt sizeof_rec(const typet &type, const namespacet &ns)
+#include <irep2.h>
+#include <migrate.h>
+#include <pointer_offset_size.h>
+
+exprt c_sizeof(const typet &src, const namespacet &ns __attribute__((unused)))
 {
-  exprt dest;
+  type2tc t;
+  migrate_type(src, t);
 
-  if(type.id()=="signedbv" ||
-     type.id()=="unsignedbv" ||
-     type.id()=="floatbv" ||
-     type.id()=="fixedbv")
-  {
-    unsigned bits=atoi(type.width().c_str());
-    unsigned bytes=bits/8;
-    if((bits%8)!=0) bytes++;
-    dest=from_integer(bits/8, uint_type());
+  // Array size simplification and so forth will have already occurred in
+  // migration, but we might still run into a nondeterministically sized
+  // array.
+  mp_integer size;
+  try {
+    size = pointer_offset_size(*t);
+  } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+    std::cerr << "Sizeof nondeterministically sized array encountered"
+              << std::endl;
+    abort();
+  } catch (array_type2t::inf_sized_array_excp *e) {
+    std::cerr << "Sizeof infinite sized array encountered" << std::endl;
+    abort();
+  } catch (type2t::symbolic_type_excp *e) {
+    std::cerr << "Sizeof symbolic type encountered" << std::endl;
+    abort();
   }
-  else if(type.id()=="c_enum" ||
-          type.id()=="incomplete_c_enum")
-  {
-    dest=from_integer(config.ansi_c.int_width/8, uint_type());
-  }
-  else if(type.id()=="pointer")
-  {
-    if(type.reference())
-      return sizeof_rec(type.subtype(), ns);
 
-    unsigned bits=config.ansi_c.pointer_width;
-    dest=from_integer(bits/8, uint_type());
-    if((bits%8)!=0) dest.make_nil();
-  }
-  else if(type.is_bool())
-  {
-    dest=from_integer(1, uint_type());
-  }
-  else if(type.is_array())
-  {
-    const exprt &size_expr=
-      static_cast<const exprt &>(type.size_irep());
-
-    exprt tmp_dest(sizeof_rec(type.subtype(), ns));
-
-    if(tmp_dest.is_nil())
-      return tmp_dest;
-
-    mp_integer a, b;
-
-    if(!to_integer(tmp_dest, a) &&
-       !to_integer(size_expr, b))
-    {
-      dest=from_integer(a*b, uint_type());
-    }
-    else
-    {
-      dest.id("*");
-      dest.type()=uint_type();
-      dest.copy_to_operands(size_expr);
-      dest.move_to_operands(tmp_dest);
-      c_implicit_typecast(dest.op0(), dest.type(), ns);
-      c_implicit_typecast(dest.op1(), dest.type(), ns);
-    }
-  }
-  else if(type.id()=="struct")
-  {
-    const irept::subt &components=
-      type.components().get_sub();
-
-    mp_integer sum=0;
-
-    forall_irep(it, components)
-    {
-      const typet &sub_type=it->type();
-
-      if(sub_type.is_code())
-      {
-      }
-      else
-      {
-        exprt tmp(sizeof_rec(sub_type, ns));
-
-        if(tmp.is_nil())
-          return tmp;
-
-        mp_integer tmp_int;
-        if(to_integer(tmp, tmp_int))
-          return static_cast<const exprt &>(get_nil_irep());
-
-        sum+=tmp_int;
-      }
-    }
-
-    dest=from_integer(sum, uint_type());
-  }
-  else if(type.id()=="union")
-  {
-    const irept::subt &components=
-      type.components().get_sub();
-
-    mp_integer max_size=0;
-
-    forall_irep(it, components)
-    {
-      const typet &sub_type=it->type();
-
-      if(sub_type.is_code())
-      {
-      }
-      else
-      {
-        exprt tmp(sizeof_rec(sub_type, ns));
-
-        if(tmp.is_nil())
-          return tmp;
-
-        mp_integer tmp_int;
-
-        if(to_integer(tmp, tmp_int))
-          return static_cast<const exprt &>(get_nil_irep());
-
-        if(tmp_int>max_size) max_size=tmp_int;
-      }
-    }
-
-    dest=from_integer(max_size, uint_type());
-  }
-  else if(type.id()=="symbol")
-  {
-    return sizeof_rec(ns.follow(type), ns);
-  }
-  else
-    dest.make_nil();
-
-  return dest;
-}
-
-exprt c_sizeof(const typet &src, const namespacet &ns)
-{
-  exprt tmp=sizeof_rec(src, ns);
-  // TODO: cbmc: simplify(tmp, ns);
-  simplify(tmp);
-  return tmp;
+  constant_int2tc theval(get_uint32_type(), size);
+  return migrate_expr_back(theval);
 }
