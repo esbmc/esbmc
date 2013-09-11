@@ -679,6 +679,9 @@ expr2tc
 pointer_offset2t::do_simplify(bool second) const
 {
 
+  // XXX - this could be better. But the current implementation catches most
+  // cases that ESBMC produces internally.
+
   if (second && is_address_of2t(ptr_obj)) {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
     return pointer_offs_simplify_2(addrof.ptr_obj, type);
