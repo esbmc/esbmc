@@ -1760,7 +1760,8 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       }
 
       output = struct_elem_inv[num_elems];
-    } else if (is_array_type(data.source_value)) {
+    } else if (is_array_type(data.source_value) ||
+               is_string_type(data.source_value)) {
       z3::expr idx;
       convert_bv(data.source_offset, idx);
       output = select(source, idx);
