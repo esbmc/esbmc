@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 
 #include "expr.h"
+#include <irep2.h>
 
 class c_sizeoft
 {
@@ -17,15 +18,10 @@ public:
   {
   }
   
-  virtual ~c_sizeoft()
-  {
-  }
-
   exprt operator()(const typet &type)
   {
     return c_sizeof(type);
   }
-
 
 protected:
   const namespacet &ns;

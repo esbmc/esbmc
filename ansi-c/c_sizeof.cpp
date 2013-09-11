@@ -14,18 +14,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "c_typecast.h"
 #include "c_types.h"
 
-/*******************************************************************\
-
-Function: c_sizeoft::sizeof_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 exprt c_sizeoft::sizeof_rec(const typet &type)
 {
   exprt dest;
@@ -157,18 +145,6 @@ exprt c_sizeoft::sizeof_rec(const typet &type)
 
   return dest;
 }
-
-/*******************************************************************\
-
-Function: c_sizeof
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 exprt c_sizeof(const typet &src, const namespacet &ns)
 {
