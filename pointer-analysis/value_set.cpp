@@ -764,14 +764,14 @@ void value_sett::get_reference_set_rec(
     const byte_extract2t &extract = to_byte_extract2t(expr);
 
     // This may or may not have a constant offset
-    std::cerr << "Manual update of byte extract objectt" << std::endl;
-    abort();
     objectt o;
     if (is_constant_int2t(extract.source_offset)) {
       o.offset = to_constant_int2t(extract.source_offset).constant_value;
       o.offset_is_set = true;
     } else {
       o.offset_is_set = false;
+      // Don't know what to do about alignments right now; default to nothing.
+      o.offset_alignment = 1;
     }
 
     insert(dest, extract.source_value, o);
