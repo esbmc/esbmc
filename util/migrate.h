@@ -10,8 +10,10 @@
 class namespacet;
 extern namespacet *migrate_namespace_lookup;
 
-void real_migrate_type(const typet &type, type2tc &new_type);
-void migrate_type(const typet &type, type2tc &new_type);
+void real_migrate_type(const typet &type, type2tc &new_type,
+                  const namespacet *ns = NULL);
+void migrate_type(const typet &type, type2tc &new_type,
+                  const namespacet *ns = NULL);
 void migrate_expr(const exprt &expr, expr2tc &new_expr);
 typet migrate_type_back(const type2tc &ref);
 exprt migrate_expr_back(const expr2tc &ref);
