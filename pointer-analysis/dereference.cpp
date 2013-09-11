@@ -661,6 +661,9 @@ bool dereferencet::memory_model_bytes(
     // this dereference. It'll get simplified at some point in the future.
     new_offset = add2tc(new_offset->type, new_offset,
                         compute_pointer_offset(value));
+    expr2tc tmp = new_offset->simplify();
+    if (!is_nil_expr(tmp))
+      new_offset = tmp;
 
     expr2tc base_object = get_base_object(value);
 
