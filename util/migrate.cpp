@@ -77,7 +77,8 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == typet::t_pointer) {
     type2tc subtype;
 
-    migrate_type(type.subtype(), subtype, ns, cache);
+    // Don't recursively look up anything through pointers.
+    migrate_type(type.subtype(), subtype, NULL, true);
 
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
