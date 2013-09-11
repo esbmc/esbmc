@@ -262,6 +262,7 @@ public:
     else
     {
       objectt &old=dest.write()[n];
+      const expr2tc &expr_obj = object_numbering[n];
 
       if(old.offset_is_set && object.offset_is_set)
       {
@@ -269,9 +270,13 @@ public:
           return false;
         else
         {
-          std::cerr << "Calcumalate offset alignment" << __FILE__ << __LINE__ << std::endl;
-          abort();
-          old.offset_is_set=false;
+          // Merge the tracking for two offsets; take the minimum alignment
+          // guarenteed by them.
+          unsigned int natural_align = get_natural_alignment(expr_obj);
+          unsigned long old_align = old.offset.to_ulong() % natural_align;
+          unsigned long new_align = object.offset.to_ulong() % natural_align;
+          old.offset_is_set = false;
+          old.offset_alignment = std::min(old_align, new_align);
           return true;
         }
       } else if(!old.offset_is_set) {
@@ -285,7 +290,6 @@ public:
           // Old offset unset; new offset set. Compute the alignment of the
           // new object's offset, and take the minimum of that and the old
           // alignment.
-          const expr2tc &expr_obj = object_numbering[n];
           unsigned int natural_align = get_natural_alignment(expr_obj);
           unsigned int new_alignment = object.offset.to_ulong() % natural_align;
           old.offset_alignment = std::min(old.offset_alignment, new_alignment);
