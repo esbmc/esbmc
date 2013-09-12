@@ -346,6 +346,10 @@ public:
    *  itself. May throw various exceptions depending on whether this operation
    *  is viable - for example, for symbol types, infinite sized or dynamically
    *  sized arrays.
+   *
+   *  Note that the bit width is _not_ the same as the ansi-c byte model
+   *  representation of this type.
+   *
    *  @throws symbolic_type_excp
    *  @throws array_type2t::inf_sized_array_excp
    *  @throws array_type2t::dyn_sized_array_excp
