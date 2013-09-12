@@ -15,6 +15,21 @@
 
 #include "type_byte_size.h"
 
+static inline void
+round_up_to_word(mp_integer &mp)
+{
+  const unsigned int align_mask = config.ansi_c.word_size - 1;
+
+  if (mp < config.ansi_c.word_size) {
+    mp = mp_integer(config.ansi_c.word_size);
+  // Or if it's an array of chars etc. that doesn't end on a boundry,
+  } else if (mp.to_ulong() & align_mask) {
+    mp += config.ansi_c.word_size - (mp.to_ulong() & align_mask);
+  }
+
+  return;
+}
+
 mp_integer
 member_offset(const struct_type2t &type, const irep_idt &member)
 {
@@ -117,14 +132,7 @@ type_byte_size(const type2t &type)
     forall_types(it, t2.members) {
       mp_integer memb_size = type_byte_size(**it);
 
-      // If that's smaller than a word...
-      if (memb_size < config.ansi_c.word_size) {
-        memb_size = mp_integer(config.ansi_c.word_size);
-      // Or if it's an array of chars etc. that doesn't end on a boundry,
-      } else if (memb_size.to_ulong() & align_mask) {
-        memb_size +=
-          config.ansi_c.word_size - (memb_size.to_ulong() & align_mask);
-      }
+      round_up_to_word(memb_size);
 
       accumulated_size += memb_size;
     }
@@ -146,11 +154,7 @@ type_byte_size(const type2t &type)
       max_size = std::max(max_size, memb_size);
     }
 
-    // Round upwards to word alignment.
-    const unsigned int align_mask = config.ansi_c.word_size - 1;
-    if (max_size.to_ulong() & align_mask)
-      max_size += config.ansi_c.word_size - (max_size.to_ulong() & align_mask);
-
+    round_up_to_word(max_size);
     return max_size;
   }
   default:
