@@ -18,13 +18,14 @@
 static inline void
 round_up_to_word(mp_integer &mp)
 {
-  const unsigned int align_mask = config.ansi_c.word_size - 1;
+  const unsigned int word_bytes = config.ansi_c.word_size / 8;
+  const unsigned int align_mask = word_bytes - 1;
 
-  if (mp < config.ansi_c.word_size) {
-    mp = mp_integer(config.ansi_c.word_size);
+  if (mp < word_bytes) {
+    mp = mp_integer(word_bytes);
   // Or if it's an array of chars etc. that doesn't end on a boundry,
   } else if (mp.to_ulong() & align_mask) {
-    mp += config.ansi_c.word_size - (mp.to_ulong() & align_mask);
+    mp += word_bytes - (mp.to_ulong() & align_mask);
   }
 
   return;
@@ -122,8 +123,6 @@ type_byte_size(const type2t &type)
     // so that they all start on wourd boundries. Also add any trailing bytes
     // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
 
-    const unsigned int align_mask = config.ansi_c.word_size - 1;
-
     const struct_type2t &t2 = static_cast<const struct_type2t&>(type);
     mp_integer accumulated_size(0);
     forall_types(it, t2.members) {
@@ -137,7 +136,7 @@ type_byte_size(const type2t &type)
     // At the end of that, the tests above should have rounded accumulated size
     // up to a size that contains the required trailing padding for array
     // allocation alignment.
-    assert((accumulated_size % config.ansi_c.word_size) == 0);
+    assert((accumulated_size % (config.ansi_c.word_size / 8)) == 0);
     return accumulated_size;
   }
   case type2t::union_id:
