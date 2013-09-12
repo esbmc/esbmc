@@ -48,7 +48,116 @@ mp_integer
 type_byte_size(const type2t &type)
 {
 
-  return type.get_width() / 8;
+  switch (type.type_id) {
+  case type2t::bool_id:
+    return 1;
+  case type2t::empty_id:
+    std::cerr << "Void type id in type_byte_size" <<std::endl;
+    abort();
+  case type2t::symbol_id:
+    std::cerr << "Symbolic type id in type_byte_size" <<std::endl;
+    type.dump();
+    abort();
+  case type2t::code_id:
+    std::cerr << "Code type id in type_byte_size" <<std::endl;
+    type.dump();
+    abort();
+  case type2t::cpp_name_id:
+    std::cerr << "C++ symbolic type id in type_byte_size" <<std::endl;
+    type.dump();
+    abort();
+  case type2t::unsignedbv_id:
+  case type2t::signedbv_id:
+  case type2t::fixedbv_id:
+    return mp_integer(type.get_width() / 8);
+  case type2t::pointer_id:
+    return mp_integer(config.ansi_c.pointer_width / 8);
+  case type2t::string_id:
+  {
+    const string_type2t &t2 = static_cast<const string_type2t&>(type);
+    return mp_integer(t2.width);
+  }
+  case type2t::array_id:
+  {
+    // Array width is the subtype width, rounded up to whatever alignment is
+    // necessary, multiplied by the size.
+
+    // type_byte_size will handle all alignment and trailing padding byte
+    // problems.
+    const array_type2t &t2 = static_cast<const array_type2t&>(type);
+    mp_integer subsize = type_byte_size(*t2.subtype);
+
+    // Attempt to compute constant array offset. If we can't, we can't
+    // reasonably return anything anyway, so throw.
+    expr2tc arrsize;
+    if (!t2.size_is_infinite) {
+     arrsize = t2.array_size->simplify();
+      if (is_nil_expr(arrsize))
+        arrsize = t2.array_size;
+
+      if (!is_constant_int2t(arrsize))
+        throw new array_type2t::dyn_sized_array_excp(arrsize);
+    } else {
+      throw new array_type2t::inf_sized_array_excp();
+    }
+
+    const constant_int2t &arrsize_int = to_constant_int2t(arrsize);
+    return subsize * arrsize_int.constant_value;
+  }
+  case type2t::struct_id:
+  {
+    // Compute the size of all members of this struct, and add padding bytes
+    // so that they all start on wourd boundries. Also add any trailing bytes
+    // necessary to make arrays align properly if malloc'd, see C89 6.3.3.4.
+
+    const unsigned int align_mask = config.ansi_c.word_size - 1;
+
+    const struct_type2t &t2 = static_cast<const struct_type2t&>(type);
+    mp_integer accumulated_size(0);
+    forall_types(it, t2.members) {
+      mp_integer memb_size = type_byte_size(**it);
+
+      // If that's smaller than a word...
+      if (memb_size < config.ansi_c.word_size) {
+        memb_size = mp_integer(config.ansi_c.word_size);
+      // Or if it's an array of chars etc. that doesn't end on a boundry,
+      } else if (memb_size.to_ulong() & align_mask) {
+        memb_size +=
+          config.ansi_c.word_size - (memb_size.to_ulong() & align_mask);
+      }
+
+      accumulated_size += memb_size;
+    }
+
+    // At the end of that, the tests above should have rounded accumulated size
+    // up to a size that contains the required trailing padding for array
+    // allocation alignment.
+    assert((accumulated_size % config.ansi_c.word_size) == 0);
+    return accumulated_size;
+  }
+  case type2t::union_id:
+  {
+    // Very simple: the largest field size, rounded up to a word boundry for
+    // array allocation alignment.
+    const union_type2t &t2 = static_cast<const union_type2t&>(type);
+    mp_integer max_size(0);
+    forall_types(it, t2.members) {
+      mp_integer memb_size = type_byte_size(**it);
+      max_size = std::max(max_size, memb_size);
+    }
+
+    // Round upwards to word alignment.
+    const unsigned int align_mask = config.ansi_c.word_size - 1;
+    if (max_size.to_ulong() & align_mask)
+      max_size += config.ansi_c.word_size - (max_size.to_ulong() & align_mask);
+
+    return max_size;
+  }
+  default:
+    std::cerr << "Unrecognised type in type_byte_size:" << std::endl;
+    type.dump();
+    abort();
+  }
 }
 
 expr2tc
