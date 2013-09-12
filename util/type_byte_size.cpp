@@ -40,17 +40,11 @@ member_offset(const struct_type2t &type, const irep_idt &member)
     if (type.member_names[idx] == member.as_string())
       break;
 
-    // XXXjmorse - just assume we break horribly on bitfields.
-#if 0
-    if (it->get_bool("#is_bit_field")) {
-      bit_field_bits +=
-        binary2integer(it->type().get("width").as_string(), 2).to_long();
-    }
-#endif
+    // XXX 100% unhandled: bitfields.
 
     mp_integer sub_size = type_byte_size(**it);
-    if (sub_size == -1)
-      return -1;  // give up
+    // Handle padding: we need to observe the usual struct constraints.
+    round_up_to_word(sub_size);
 
     result += sub_size;
     idx++;
