@@ -28,7 +28,7 @@ exprt c_sizeof(const typet &src, const namespacet &ns)
   // array.
   mp_integer size;
   try {
-    size = pointer_offset_size(*t);
+    size = type_byte_size(*t);
   } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
     std::cerr << "Sizeof nondeterministically sized array encountered"
               << std::endl;

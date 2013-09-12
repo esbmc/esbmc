@@ -34,7 +34,7 @@ mp_integer member_offset(
     }
 #endif
 
-    mp_integer sub_size=pointer_offset_size(**it);
+    mp_integer sub_size=type_byte_size(**it);
     if (sub_size==-1)
       return -1; // give up
 
@@ -45,7 +45,7 @@ mp_integer member_offset(
   return result;
 }
 
-mp_integer pointer_offset_size(const type2t &type)
+mp_integer type_byte_size(const type2t &type)
 {
 
   return type.get_width() / 8;
@@ -62,7 +62,7 @@ compute_pointer_offset(const expr2tc &expr)
     mp_integer sub_size;
     if (is_array_type(index.source_value)) {
       const array_type2t &arr_type = to_array_type(index.source_value->type);
-      sub_size = pointer_offset_size(*arr_type.subtype.get());
+      sub_size = type_byte_size(*arr_type.subtype.get());
     } else if (is_string_type(index.source_value)) {
       sub_size = 8;
     } else {

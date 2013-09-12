@@ -2790,7 +2790,7 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
       type2tc followed_type;
       migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+      mp_integer type_size = type_byte_size(*followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
@@ -2955,8 +2955,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     }
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() +=
-      pointer_offset_size(*expr->type.get()).to_long() + 1;
+    total_mem_space.back() += type_byte_size(*expr->type.get()).to_long() + 1;
 
     // Assert that start + offs == end
     z3::expr offs_eq;
@@ -2975,7 +2974,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     finalize_pointer_chain(obj_num);
 
     addr_space_data.back()[obj_num] =
-          pointer_offset_size(*expr->type.get()).to_long() + 1;
+          type_byte_size(*expr->type.get()).to_long() + 1;
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);

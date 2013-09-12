@@ -182,7 +182,7 @@ bool dereferencet::dereference_type_compare(
     // element size.
     try {
       mp_integer i = to_constant_int2t(offset).constant_value;
-      i %= pointer_offset_size(*object_type);
+      i %= type_byte_size(*object_type);
       if (!i.is_zero())
         return false;
     } catch (array_type2t::dyn_sized_array_excp *e) { // Nondetly sized.
@@ -448,7 +448,7 @@ void dereferencet::build_reference_to(
         if (is_string_type(indexed_type))
           elem_size = 1;
         else
-          elem_size = pointer_offset_size(*to_array_type(indexed_type).subtype);
+          elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
 
         constant_int2tc factor(uint_type2(), elem_size);
         div2tc new_offset(uint_type2(), offset, factor);

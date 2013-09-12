@@ -411,7 +411,7 @@ void value_sett::get_value_set_rec(
           } else {
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
-            mp_integer elem_size = pointer_offset_size(*renamed);
+            mp_integer elem_size = type_byte_size(*renamed);
             const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
             total_offs = val * elem_size;
             if (is_sub2t(expr))
@@ -677,7 +677,7 @@ void value_sett::get_reference_set_rec(
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
           const array_type2t &a = to_array_type(index.source_value->type);
-          mp_integer m = pointer_offset_size(a);
+          mp_integer m = type_byte_size(a);
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
           o.offset_alignment = std::min(o.offset_alignment,

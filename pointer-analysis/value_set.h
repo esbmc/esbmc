@@ -199,7 +199,7 @@ public:
     assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
-      return pointer_offset_size(*arr.subtype).to_ulong();
+      return type_byte_size(*arr.subtype).to_ulong();
     } else {
       return config.ansi_c.word_size;
     }
