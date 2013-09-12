@@ -43,7 +43,7 @@ main()
   assert(sizeof(fa) == 1476);
 
   // Arrays also need to do trailing bytes
-  struct face fb[123];
+  struct loltrails fb[123];
   assert(sizeof(fb) == 984);
 
   // Unions max size is the size of the largest member.
