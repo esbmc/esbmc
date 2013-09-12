@@ -138,7 +138,8 @@ value_sett::to_expr(object_map_dt::const_iterator it) const
   else
     offs = unknown2tc(index_type2());
 
-  expr2tc obj = object_descriptor2tc(object->type, object, offs);
+  expr2tc obj = object_descriptor2tc(object->type, object, offs,
+                                     it->second.offset_alignment);
   return obj;
 }
 

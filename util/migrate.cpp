@@ -1175,7 +1175,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.op0().type(), type);
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1));
+    new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1, 0));
   } else if (expr.id() == irept::id_code &&
              expr.statement() == "function_call") {
     expr2tc op0, op1;
