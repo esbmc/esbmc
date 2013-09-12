@@ -463,12 +463,13 @@ void value_sett::get_value_set_rec(
           // Nondet but aligned offset from arithmetic; but offset set in
           // current object. Take the minimum alignment again.
           unsigned int offset_align = 0;
-          if ((object.offset_alignment % nat_align) != 0) {
+          if ((object.offset % nat_align) != 0) {
             // XXX -- what to do when we have something, say a struct, how
             // do I reduce this offset to an alignment within it.
             // Answer for the moment it to clamp it to work alignment; that
             // might work sometimes.
-            offset_align = object.offset_alignment % config.ansi_c.word_size;
+            offset_align =
+              object.offset.to_ulong() % (config.ansi_c.word_size / 8);
           } else {
             offset_align = nat_align;
           }

@@ -201,7 +201,7 @@ public:
       const array_type2t &arr = to_array_type(t);
       return type_byte_size(*arr.subtype).to_ulong();
     } else {
-      return config.ansi_c.word_size;
+      return config.ansi_c.word_size / 8;
     }
   }
 
