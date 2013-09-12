@@ -1,8 +1,8 @@
 /*******************************************************************\
 
-Module: Pointer Logic
+   Module: Pointer Logic
 
-Author: Daniel Kroening, kroening@kroening.com
+   Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
@@ -15,12 +15,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "type_byte_size.h"
 
-mp_integer member_offset(
-  const struct_type2t &type,
-  const irep_idt &member)
+mp_integer
+member_offset(const struct_type2t &type, const irep_idt &member)
 {
-  mp_integer result=0;
-  unsigned bit_field_bits=0, idx = 0;
+  mp_integer result = 0;
+  unsigned bit_field_bits = 0, idx = 0;
 
   forall_types(it, type.members) {
     if (type.member_names[idx] == member.as_string())
@@ -28,15 +27,15 @@ mp_integer member_offset(
 
     // XXXjmorse - just assume we break horribly on bitfields.
 #if 0
-    if(it->get_bool("#is_bit_field"))
-    {
-      bit_field_bits+=binary2integer(it->type().get("width").as_string(), 2).to_long();
+    if (it->get_bool("#is_bit_field")) {
+      bit_field_bits +=
+        binary2integer(it->type().get("width").as_string(), 2).to_long();
     }
 #endif
 
-    mp_integer sub_size=type_byte_size(**it);
-    if (sub_size==-1)
-      return -1; // give up
+    mp_integer sub_size = type_byte_size(**it);
+    if (sub_size == -1)
+      return -1;  // give up
 
     result += sub_size;
     idx++;
@@ -45,7 +44,8 @@ mp_integer member_offset(
   return result;
 }
 
-mp_integer type_byte_size(const type2t &type)
+mp_integer
+type_byte_size(const type2t &type)
 {
 
   return type.get_width() / 8;
@@ -56,8 +56,7 @@ compute_pointer_offset(const expr2tc &expr)
 {
   if (is_symbol2t(expr))
     return zero_uint;
-  else if (is_index2t(expr))
-  {
+  else if (is_index2t(expr)) {
     const index2t &index = to_index2t(expr);
     mp_integer sub_size;
     if (is_array_type(index.source_value)) {
@@ -83,9 +82,7 @@ compute_pointer_offset(const expr2tc &expr)
     }
 
     return result;
-  }
-  else if (is_member2t(expr))
-  {
+  } else if (is_member2t(expr))   {
     const member2t &memb = to_member2t(expr);
 
     mp_integer result;
@@ -97,15 +94,11 @@ compute_pointer_offset(const expr2tc &expr)
     }
 
     return constant_int2tc(uint_type2(), result);
-  }
-  else if (is_constant_array2t(expr))
-  {
+  } else if (is_constant_array2t(expr))   {
     // Some code, somewhere, is renaming a constant array into a dereference
     // target. The offset into the base object is nothing.
     return zero_uint;
-  }
-  else
-  {
+  } else   {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
     std::cerr << expr->pretty() << std::endl;
     abort();
