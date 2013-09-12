@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 #include <mp_arith.h>
 #include <reference_counting.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 
 #include "object_numbering.h"
 #include "value_sets.h"

@@ -25,7 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>

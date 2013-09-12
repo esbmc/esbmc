@@ -11,7 +11,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <config.h>
 #include <i2string.h>
 #include <arith_tools.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 #include <std_expr.h>
 #include <prefix.h>
 

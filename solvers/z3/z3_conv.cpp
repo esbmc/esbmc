@@ -18,7 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <i2string.h>
 #include <expr_util.h>
 #include <string2array.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>

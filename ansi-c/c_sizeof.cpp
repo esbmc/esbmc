@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <irep2.h>
 #include <migrate.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 
 exprt c_sizeof(const typet &src, const namespacet &ns)
 {

@@ -13,7 +13,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_types.h>
 #include <ansi-c/c_types.h>
 
-#include "pointer_offset_size.h"
+#include "type_byte_size.h"
 
 mp_integer member_offset(
   const struct_type2t &type,

@@ -21,7 +21,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <config.h>
 #include <std_expr.h>
 #include <cprover_prefix.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 
 #include <ansi-c/c_types.h>
 #include <ansi-c/c_typecast.h>
