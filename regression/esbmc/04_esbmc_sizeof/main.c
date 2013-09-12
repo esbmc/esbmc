@@ -10,7 +10,7 @@ struct loltrails {
 };
 
 union deathcakes {
-  struct loltrails;
+  struct loltrails wat;
   int beans;
   char policy;
 };
