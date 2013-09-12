@@ -50,6 +50,9 @@ member_offset(const struct_type2t &type, const irep_idt &member)
     idx++;
   }
 
+  assert(idx != type.members.size() && "Attempted to find member offset of "
+         "member not in a struct");
+
   return result;
 }
 
