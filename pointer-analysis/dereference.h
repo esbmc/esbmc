@@ -97,6 +97,11 @@ private:
   void bounds_check(const index2t &expr, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
 
+  void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
+                                   const type2tc &type, const guardt &guard);
+  void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
+                                 const type2tc &type, const guardt &guard);
+
   bool memory_model(
     expr2tc &value,
     const type2tc &type,

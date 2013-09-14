@@ -387,99 +387,117 @@ void dereferencet::build_reference_to(
 
     valid_check(object, tmp_guard, mode);
 
-    expr2tc offset;
+    if (is_constant_expr(o.offset)) {
+      construct_from_const_offset(value, o.offset, type, tmp_guard);
+    } else {
+      expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
+      construct_from_dyn_offset(value, offset, type, tmp_guard);
+    }
+  }
+}
 
-    if (is_constant_expr(o.offset))
-      offset = o.offset;
-    else
-      offset = pointer_offset2tc(index_type2(), deref_expr);
+void
+dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
+                                          const type2tc &type,
+                                          const guardt &guard)
+{
 
-    // See whether or not we need to munge the object into the desired type;
-    // this will return false if we need to juggle the type in a significant
-    // way, true if they're either the same type or extremely similar. value
-    // may be replaced with a typecast.
-    expr2tc orig_value = value;
-    if (!dereference_type_compare(value, type, offset))
+  // See whether or not we need to munge the object into the desired type;
+  // this will return false if we need to juggle the type in a significant
+  // way, true if they're either the same type or extremely similar. value
+  // may be replaced with a typecast.
+  expr2tc orig_value = value;
+  if (!dereference_type_compare(value, type, offset))
+  {
+    // Not a compatible thing; stitch it together in the memory model.
+    construct_from_dyn_offset(value, offset, type, guard);
+  }
+  else
+  {
+    // The dereference types match closely enough; make some bounds checks
+    // on the base object, not the possibly typecasted object.
+    if (is_index2t(orig_value))
     {
-      if (memory_model(value, type, tmp_guard, offset))
-      {
-        // ok
-      }
+      // So; we're working on an index, which might be wrapped in a typecast.
+      // Update the offset; then encode a bounds check. Also divide the index,
+      // as it's now a byte offset into the array. dereference_type_compare
+      // guarentees us that it's an offset corresponding to the start of
+      // an element.
+      mp_integer elem_size;
+      const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
+      if (is_string_type(indexed_type))
+        elem_size = 1;
       else
-      {
-        if(!options.get_bool_option("no-pointer-check"))
-        {
-          //nec: ex29
-          if (    (is_pointer_type(type) &&
-                   is_empty_type(to_pointer_type(type).subtype))
-              ||
-                  (is_pointer_type(value) &&
-                   is_empty_type(to_pointer_type(value->type).subtype)))
-            return;
+        elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
 
-          std::string msg="memory model not applicable (got `";
-          msg+=from_type(ns, "", value->type);
-          msg+="', expected `";
-          msg+=from_type(ns, "", type);
-          msg+="')";
+      constant_int2tc factor(uint_type2(), elem_size);
+      div2tc new_offset(uint_type2(), offset, factor);
 
-          dereference_callback.dereference_failure(
-            "pointer dereference",
-            msg, tmp_guard);
-        }
-
-        value = expr2tc();
-        return; // give up, no way that this is ok
+      if (is_typecast2t(value)) {
+        typecast2t &cast = to_typecast2t(value);
+        index2t &idx = to_index2t(cast.from);
+        idx.index = new_offset;
+        bounds_check(idx, guard);
+      } else {
+        index2t &idx = to_index2t(value);
+        idx.index = new_offset;
+        bounds_check(idx, guard);
       }
     }
-    else
+    else if (!is_constant_int2t(offset) ||
+             !to_constant_int2t(offset).constant_value.is_zero())
     {
-      // The dereference types match closely enough; make some bounds checks
-      // on the base object, not the possibly typecasted object.
-      if (is_index2t(orig_value))
+      if(!options.get_bool_option("no-pointer-check"))
       {
-        // So; we're working on an index, which might be wrapped in a typecast.
-        // Update the offset; then encode a bounds check. Also divide the index,
-        // as it's now a byte offset into the array. dereference_type_compare
-        // guarentees us that it's an offset corresponding to the start of
-        // an element.
-        mp_integer elem_size;
-        const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
-        if (is_string_type(indexed_type))
-          elem_size = 1;
-        else
-          elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
+        notequal2tc offs_is_not_zero(offset, zero_int);
 
-        constant_int2tc factor(uint_type2(), elem_size);
-        div2tc new_offset(uint_type2(), offset, factor);
+        guardt tmp_guard2(guard);
+        tmp_guard2.move(offs_is_not_zero);
 
-        if (is_typecast2t(value)) {
-          typecast2t &cast = to_typecast2t(value);
-          index2t &idx = to_index2t(cast.from);
-          idx.index = new_offset;
-          bounds_check(idx, tmp_guard);
-        } else {
-          index2t &idx = to_index2t(value);
-          idx.index = new_offset;
-          bounds_check(idx, tmp_guard);
-        }
-      }
-      else if (!is_constant_int2t(offset) ||
-               !to_constant_int2t(offset).constant_value.is_zero())
-      {
-        if(!options.get_bool_option("no-pointer-check"))
-        {
-          notequal2tc offs_is_not_zero(offset, zero_int);
-
-          guardt tmp_guard2(guard);
-          tmp_guard2.move(offs_is_not_zero);
-
-          dereference_callback.dereference_failure(
-            "pointer dereference",
-            "offset not zero (non-array-object)", tmp_guard2);
-        }
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "offset not zero (non-array-object)", tmp_guard2);
       }
     }
+  }
+}
+
+void
+dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
+                                        const type2tc &type,
+                                        const guardt &guard)
+{
+
+  expr2tc new_offset = offset;
+  if (memory_model(value, type, guard, new_offset))
+  {
+    // ok
+  }
+  else
+  {
+    if(!options.get_bool_option("no-pointer-check"))
+    {
+      //nec: ex29
+      if (    (is_pointer_type(type) &&
+               is_empty_type(to_pointer_type(type).subtype))
+          ||
+              (is_pointer_type(value) &&
+               is_empty_type(to_pointer_type(value->type).subtype)))
+        return;
+
+      std::string msg="memory model not applicable (got `";
+      msg+=from_type(ns, "", value->type);
+      msg+="', expected `";
+      msg+=from_type(ns, "", type);
+      msg+="')";
+
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        msg, guard);
+    }
+
+    value = expr2tc();
+    return; // give up, no way that this is ok
   }
 }
 
