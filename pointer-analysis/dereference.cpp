@@ -321,7 +321,6 @@ void dereferencet::build_reference_to(
           tmp_guard);
       }
 
-#if 1
       if (!options.get_bool_option("no-bounds-check") &&
               (!is_constant_int2t(o.offset) ||
                !to_constant_int2t(o.offset).constant_value.is_zero()))
@@ -357,7 +356,6 @@ void dereferencet::build_reference_to(
             "dynamic object upper bound", tmp_guard);
         }
       }
-#endif
     }
   }
   else
