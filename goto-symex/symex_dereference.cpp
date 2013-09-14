@@ -107,6 +107,8 @@ void goto_symext::dereference_rec(
 
   if (is_dereference2t(expr))
   {
+    assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
+
     dereference2t &deref = to_dereference2t(expr);
 
     // first make sure there are no dereferences in there
@@ -119,6 +121,7 @@ void goto_symext::dereference_rec(
   else if (is_index2t(expr) &&
            is_pointer_type(to_index2t(expr).source_value))
   {
+    assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
     index2t &index = to_index2t(expr);
     add2tc tmp(index.source_value->type, index.source_value, index.index);
 
@@ -150,18 +153,79 @@ void goto_symext::dereference_rec(
 
 void
 goto_symext::dereference_rec_nonscalar(
-  expr2tc &expr __attribute__((unused)),
-  const expr2tc &top_scalar __attribute__((unused)),
-  guardt &guard __attribute__((unused)),
-  dereferencet &dereference __attribute__((unused)),
-  const bool write __attribute__((unused)))
+  expr2tc &expr,
+  const expr2tc &top_scalar,
+  guardt &guard,
+  dereferencet &dereference,
+  const bool write)
 {
-  abort();
+
+  if (is_dereference2t(expr))
+  {
+    dereference2t &deref = to_dereference2t(expr);
+    // first make sure there are no dereferences in there
+    dereference_rec(deref.value, guard, dereference, false);
+    dereference.dereference(deref.value, guard,
+                            write ? dereferencet::WRITE : dereferencet::READ);
+    expr = deref.value;
+  }
+  else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
+  {
+    index2t &index = to_index2t(expr);
+    add2tc tmp(index.source_value->type, index.source_value, index.index);
+
+    // first make sure there are no dereferences in there
+    dereference_rec(tmp, guard, dereference, false);
+
+    dereference.dereference(tmp, guard,
+                            write ? dereferencet::WRITE : dereferencet::READ);
+    expr = tmp;
+  }
+  else if (is_non_scalar_expr(expr))
+  {
+    if (is_member2t(expr)) {
+      dereference_rec_nonscalar(to_member2t(expr).source_value, top_scalar,
+                                guard, dereference, write);
+    } else if (is_index2t(expr)) {
+      dereference_rec_nonscalar(to_index2t(expr).source_value, top_scalar,
+                                guard, dereference, write);
+    } else if (is_if2t(expr)) {
+      guardt g1 = guard, g2 = guard;
+      if2t &theif = to_if2t(expr);
+      g1.add(theif.cond);
+      g2.add(not2tc(theif.cond));
+      dereference_rec_nonscalar(theif.true_value, top_scalar, g1, dereference,
+                                write);
+      dereference_rec_nonscalar(theif.false_value, top_scalar, g1, dereference,
+                                write);
+    } else {
+      std::cerr << "Unexpected expression in dereference_rec_nonscalar"
+                << std::endl;
+      expr->dump();
+      abort();
+    }
+  }
+  else if (is_typecast2t(expr))
+  {
+    // Just blast straight through
+    dereference_rec_nonscalar(to_typecast2t(expr).from, top_scalar, guard,
+                              dereference, write);
+  }
+  else
+  {
+    // This should end up being either a constant or a symbol; either way
+    // there should be no sudden transition back to scalars, except through
+    // dereferences.
+    expr->dump();
+    top_scalar->dump();
+    assert(!is_scalar_type(expr) &&
+           (is_constant_expr(expr) || is_symbol2t(expr)));
+    return;
+  }
 }
 
 void goto_symext::dereference(expr2tc &expr, const bool write)
 {
-  assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
 
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
 
