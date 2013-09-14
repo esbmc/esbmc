@@ -399,13 +399,13 @@ void dereferencet::build_reference_to(
 
 void
 dereferencet::construct_from_zero_offset(expr2tc &value, const expr2tc &offset,
-                                          const type2tc &type __attribute__((unused)),
+                                          const type2tc &type,
                                           const guardt &guard)
 {
 
-  // The dereference types match closely enough; make some bounds checks
-  // on the base object, not the possibly typecasted object.
-  if (is_index2t(value) || (is_typecast2t(value) && is_index2t(to_typecast2t(value).from)))
+  if (is_scalar_type(type)) {
+    // dereference_type_compare will have slipped in a typecast.
+  } else if (is_index2t(value) || (is_typecast2t(value) && is_index2t(to_typecast2t(value).from)))
   {
     // So; we're working on an index, which might be wrapped in a typecast.
     // Update the offset; then encode a bounds check. Also divide the index,
