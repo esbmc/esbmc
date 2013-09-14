@@ -373,10 +373,65 @@ void dereferencet::build_reference_to(
     valid_check(object, tmp_guard, mode);
 
     if (is_constant_expr(o.offset)) {
-      construct_from_const_offset(value, o.offset, type, tmp_guard);
+
+      // See whether or not we need to munge the object into the desired type;
+      // this will return false if we need to juggle the type in a significant
+      // way, true if they're either the same type or extremely similar. value
+      // may be replaced with a typecast.
+      expr2tc orig_value = value;
+      if (!dereference_type_compare(value, type, o.offset))
+      {
+        // Not a compatible thing; stitch it together in the memory model.
+        construct_from_dyn_offset(value, o.offset, type, guard);
+      }
+
+      const constant_int2t &theint = to_constant_int2t(o.offset);
+      if (theint.constant_value.to_ulong() == 0 || is_index2t(value))
+        construct_from_zero_offset(value, o.offset, type, tmp_guard);
+      else
+        construct_from_const_offset(value, o.offset, type, tmp_guard);
     } else {
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
       construct_from_dyn_offset(value, offset, type, tmp_guard);
+    }
+  }
+}
+
+void
+dereferencet::construct_from_zero_offset(expr2tc &value, const expr2tc &offset,
+                                          const type2tc &type __attribute__((unused)),
+                                          const guardt &guard)
+{
+
+  // The dereference types match closely enough; make some bounds checks
+  // on the base object, not the possibly typecasted object.
+  expr2tc orig_value = value;
+  if (is_index2t(orig_value))
+  {
+    // So; we're working on an index, which might be wrapped in a typecast.
+    // Update the offset; then encode a bounds check. Also divide the index,
+    // as it's now a byte offset into the array. dereference_type_compare
+    // guarentees us that it's an offset corresponding to the start of
+    // an element.
+    mp_integer elem_size;
+    const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
+    if (is_string_type(indexed_type))
+      elem_size = 1;
+    else
+      elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
+
+    constant_int2tc factor(uint_type2(), elem_size);
+    div2tc new_offset(uint_type2(), offset, factor);
+
+    if (is_typecast2t(value)) {
+      typecast2t &cast = to_typecast2t(value);
+      index2t &idx = to_index2t(cast.from);
+      idx.index = new_offset;
+      bounds_check(idx, guard);
+    } else {
+      index2t &idx = to_index2t(value);
+      idx.index = new_offset;
+      bounds_check(idx, guard);
     }
   }
 }
@@ -387,67 +442,23 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const guardt &guard)
 {
 
-  // See whether or not we need to munge the object into the desired type;
-  // this will return false if we need to juggle the type in a significant
-  // way, true if they're either the same type or extremely similar. value
-  // may be replaced with a typecast.
-  expr2tc orig_value = value;
-  if (!dereference_type_compare(value, type, offset))
-  {
-    // Not a compatible thing; stitch it together in the memory model.
-    construct_from_dyn_offset(value, offset, type, guard);
-  }
+  // XXX This isn't taking account of the additional offset being torn through
+  expr2tc base_object = get_base_object(value);
 
   const constant_int2t &theint = to_constant_int2t(offset);
-  if (theint.constant_value.to_ulong() == 0 || is_index2t(orig_value)) {
-    // The dereference types match closely enough; make some bounds checks
-    // on the base object, not the possibly typecasted object.
-    if (is_index2t(orig_value))
-    {
-      // So; we're working on an index, which might be wrapped in a typecast.
-      // Update the offset; then encode a bounds check. Also divide the index,
-      // as it's now a byte offset into the array. dereference_type_compare
-      // guarentees us that it's an offset corresponding to the start of
-      // an element.
-      mp_integer elem_size;
-      const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
-      if (is_string_type(indexed_type))
-        elem_size = 1;
-      else
-        elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
+  const type2tc &bytetype = get_uint8_type();
+  value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
 
-      constant_int2tc factor(uint_type2(), elem_size);
-      div2tc new_offset(uint_type2(), offset, factor);
+  unsigned long sz = type_byte_size(*value->type).to_ulong();
+  unsigned long access_sz =  type_byte_size(*type).to_ulong();
+  if (sz + access_sz > theint.constant_value.to_ulong()) {
+    if(!options.get_bool_option("no-pointer-check")) {
+      guardt tmp_guard2(guard);
+      tmp_guard2.add(false_expr);
 
-      if (is_typecast2t(value)) {
-        typecast2t &cast = to_typecast2t(value);
-        index2t &idx = to_index2t(cast.from);
-        idx.index = new_offset;
-        bounds_check(idx, guard);
-      } else {
-        index2t &idx = to_index2t(value);
-        idx.index = new_offset;
-        bounds_check(idx, guard);
-      }
-    }
-  } else {
-    // XXX This isn't taking account of the additional offset being torn through
-    expr2tc base_object = get_base_object(value);
-
-    const type2tc &bytetype = get_uint8_type();
-    value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
-
-    unsigned long sz = type_byte_size(*value->type).to_ulong();
-    unsigned long access_sz =  type_byte_size(*type).to_ulong();
-    if (sz + access_sz > theint.constant_value.to_ulong()) {
-      if(!options.get_bool_option("no-pointer-check")) {
-        guardt tmp_guard2(guard);
-        tmp_guard2.add(false_expr);
-
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "Offset out of bounds", tmp_guard2);
-      }
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "Offset out of bounds", tmp_guard2);
     }
   }
 }
