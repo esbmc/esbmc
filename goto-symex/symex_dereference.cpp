@@ -14,6 +14,11 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "goto_symex.h"
 
+static inline bool is_non_scalar_expr(const expr2tc &e)
+{
+  return is_member2t(e) || is_index2t(e) || is_if2t(e);
+}
+
 class symex_dereference_statet:
   public dereference_callbackt
 {
