@@ -386,7 +386,7 @@ void dereferencet::build_reference_to(
       }
 
       const constant_int2t &theint = to_constant_int2t(o.offset);
-      if (theint.constant_value.to_ulong() == 0 || is_index2t(value))
+      if (theint.constant_value.to_ulong() == 0 || is_index2t(orig_value))
         construct_from_zero_offset(value, o.offset, type, tmp_guard);
       else
         construct_from_const_offset(value, o.offset, type, tmp_guard);
@@ -405,8 +405,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const expr2tc &offset,
 
   // The dereference types match closely enough; make some bounds checks
   // on the base object, not the possibly typecasted object.
-  expr2tc orig_value = value;
-  if (is_index2t(orig_value))
+  if (is_index2t(value) || (is_typecast2t(value) && is_index2t(to_typecast2t(value).from)))
   {
     // So; we're working on an index, which might be wrapped in a typecast.
     // Update the offset; then encode a bounds check. Also divide the index,
@@ -414,6 +413,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const expr2tc &offset,
     // guarentees us that it's an offset corresponding to the start of
     // an element.
     mp_integer elem_size;
+    expr2tc orig_value = (is_index2t(value)) ? value : to_typecast2t(value).from;
     const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
     if (is_string_type(indexed_type))
       elem_size = 1;
