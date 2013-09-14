@@ -431,6 +431,15 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
       }
     }
   } else {
+    // XXX This isn't taking account of the additional offset being torn through
+    expr2tc base_object = get_base_object(value);
+
+    bool is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+    const type2tc &bytetype = get_uint8_type();
+    value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+
+#if 0
     if(!options.get_bool_option("no-pointer-check"))
     {
       notequal2tc offs_is_not_zero(offset, zero_int);
@@ -442,6 +451,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         "pointer dereference",
         "offset not zero (non-array-object)", tmp_guard2);
     }
+#endif
   }
 }
 
