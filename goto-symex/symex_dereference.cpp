@@ -107,7 +107,8 @@ void goto_symext::dereference_rec(
 
   if (is_dereference2t(expr))
   {
-    assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
+    assert((is_scalar_type(expr) || is_code_type(expr))
+           && "Can't dereference to a nonscalar type");
 
     dereference2t &deref = to_dereference2t(expr);
 
@@ -121,7 +122,8 @@ void goto_symext::dereference_rec(
   else if (is_index2t(expr) &&
            is_pointer_type(to_index2t(expr).source_value))
   {
-    assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
+    assert((is_scalar_type(expr) || is_code_type(expr))
+           && "Can't dereference to a nonscalar type");
     index2t &index = to_index2t(expr);
     add2tc tmp(index.source_value->type, index.source_value, index.index);
 
