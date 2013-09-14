@@ -1853,6 +1853,9 @@ inline bool is_number_type(const expr2tc &e)
 inline bool is_scalar_type(const type2tc &t)
 { return is_number_type(t) || is_pointer_type(t) || is_bool_type(t); }
 
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants

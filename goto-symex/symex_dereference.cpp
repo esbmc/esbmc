@@ -129,6 +129,14 @@ void goto_symext::dereference_rec(
                             write ? dereferencet::WRITE : dereferencet::READ);
     expr = tmp;
   }
+  else if (is_non_scalar_expr(expr))
+  {
+    // The result of this expression should be scalar: we're transitioning
+    // from a scalar result to a nonscalar result.
+    assert(is_scalar_type(expr));
+
+    dereference_rec_nonscalar(expr, expr, guard, dereference, write);
+  }
   else
   {
     Forall_operands2(it, idx, expr) {
@@ -140,8 +148,21 @@ void goto_symext::dereference_rec(
   }
 }
 
+void
+goto_symext::dereference_rec_nonscalar(
+  expr2tc &expr __attribute__((unused)),
+  const expr2tc &top_scalar __attribute__((unused)),
+  guardt &guard __attribute__((unused)),
+  dereferencet &dereference __attribute__((unused)),
+  const bool write __attribute__((unused)))
+{
+  abort();
+}
+
 void goto_symext::dereference(expr2tc &expr, const bool write)
 {
+  assert(is_scalar_type(expr) && "Can't dereference to a nonscalar type");
+
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
 
   dereferencet dereference(

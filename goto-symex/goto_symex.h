@@ -172,6 +172,26 @@ protected:
     class dereferencet &dereference,
     const bool write);
 
+  /**
+   *  Recursive implementation of dereference method -- but in a circumstance
+   *  where we've started from a scalar type, and are descending through some
+   *  non-scalar expressions towards what might be a dereference. We can then
+   *  give the pointer and the surrounding non-scalar exprs to the dereference
+   *  class, so  that it can work out the most efficient deref calculation, and
+   *  avoid having to dereference to a struct type, for example.
+   *  @param expr Expression to eliminate dereferences from.
+   *  @param top_scalar Top level scalar typed expression that we're working on
+   *  @param guard Some guard (defunct?).
+   *  @param dereference Dereferencet object to operate with.
+   *  @param write Whether or not we're writing to this object.
+   */
+  void dereference_rec_nonscalar(
+    expr2tc &expr,
+    const expr2tc &top_scalar,
+    guardt &guard,
+    class dereferencet &dereference,
+    const bool write);
+
   // symex
 
   /**
