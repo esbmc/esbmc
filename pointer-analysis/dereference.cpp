@@ -439,19 +439,18 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     const type2tc &bytetype = get_uint8_type();
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
 
-#if 0
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      notequal2tc offs_is_not_zero(offset, zero_int);
+    unsigned long sz = type_byte_size(*value->type).to_ulong();
+    unsigned long access_sz =  type_byte_size(*type).to_ulong();
+    if (sz + access_sz > theint.constant_value.to_ulong()) {
+      if(!options.get_bool_option("no-pointer-check")) {
+        guardt tmp_guard2(guard);
+        tmp_guard2.add(false_expr);
 
-      guardt tmp_guard2(guard);
-      tmp_guard2.move(offs_is_not_zero);
-
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "offset not zero (non-array-object)", tmp_guard2);
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "Offset out of bounds", tmp_guard2);
+      }
     }
-#endif
   }
 }
 
