@@ -222,6 +222,8 @@ get_base_object(const expr2tc &expr)
     return get_base_object(to_index2t(expr).source_value);
   } else if (is_member2t(expr)) {
     return get_base_object(to_member2t(expr).source_value);
+  } else if (is_typecast2t(expr)) {
+    return get_base_object(to_typecast2t(expr).from);
   } else {
     return expr;
   }
