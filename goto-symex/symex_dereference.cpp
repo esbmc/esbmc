@@ -196,6 +196,7 @@ goto_symext::dereference_rec_nonscalar(
     } else if (is_index2t(expr)) {
       dereference_rec_nonscalar(to_index2t(expr).source_value, top_scalar,
                                 guard, dereference, write);
+      dereference_rec(to_index2t(expr).index, guard, dereference, write);
     } else if (is_if2t(expr)) {
       guardt g1 = guard, g2 = guard;
       if2t &theif = to_if2t(expr);
