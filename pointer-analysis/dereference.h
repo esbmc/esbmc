@@ -83,10 +83,6 @@ private:
     const type2tc &dereference_type,
     const expr2tc &offset) const;
 
-  void offset_sum(
-    exprt &dest,
-    const exprt &offset) const;
-  
   void build_reference_to(
     const expr2tc &what,
     const modet mode,
@@ -96,13 +92,8 @@ private:
     expr2tc &pointer_guard,
     const guardt &guard);
 
-  bool get_value_guard(
-    const exprt &symbol,
-    const exprt &premise,
-    exprt &value);
-             
   static const expr2tc &get_symbol(const expr2tc &object);
-  
+
   void bounds_check(const index2t &expr, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
 
