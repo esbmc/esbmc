@@ -397,8 +397,9 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     // Not a compatible thing; stitch it together in the memory model.
     construct_from_dyn_offset(value, offset, type, guard);
   }
-  else
-  {
+
+  const constant_int2t &theint = to_constant_int2t(offset);
+  if (theint.constant_value.to_ulong() == 0 || is_index2t(orig_value)) {
     // The dereference types match closely enough; make some bounds checks
     // on the base object, not the possibly typecasted object.
     if (is_index2t(orig_value))
@@ -429,20 +430,17 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         bounds_check(idx, guard);
       }
     }
-    else if (!is_constant_int2t(offset) ||
-             !to_constant_int2t(offset).constant_value.is_zero())
+  } else {
+    if(!options.get_bool_option("no-pointer-check"))
     {
-      if(!options.get_bool_option("no-pointer-check"))
-      {
-        notequal2tc offs_is_not_zero(offset, zero_int);
+      notequal2tc offs_is_not_zero(offset, zero_int);
 
-        guardt tmp_guard2(guard);
-        tmp_guard2.move(offs_is_not_zero);
+      guardt tmp_guard2(guard);
+      tmp_guard2.move(offs_is_not_zero);
 
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "offset not zero (non-array-object)", tmp_guard2);
-      }
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "offset not zero (non-array-object)", tmp_guard2);
     }
   }
 }
