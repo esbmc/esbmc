@@ -666,6 +666,7 @@ bool dereferencet::memory_model_bytes(
     if (!is_nil_expr(tmp))
       new_offset = tmp;
 
+    // XXX This isn't taking account of the additional offset being torn through
     expr2tc base_object = get_base_object(value);
 
 
