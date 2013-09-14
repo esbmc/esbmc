@@ -2955,7 +2955,10 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     }
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() += type_byte_size(*expr->type.get()).to_long() + 1;
+    unsigned int mem_size = 1;
+    if (!is_code_type(expr))
+      mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
+    total_mem_space.back() += mem_size;
 
     // Assert that start + offs == end
     z3::expr offs_eq;
@@ -2973,8 +2976,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] =
-          type_byte_size(*expr->type.get()).to_long() + 1;
+    addr_space_data.back()[obj_num] = mem_size;
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
