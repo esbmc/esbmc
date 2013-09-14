@@ -16,7 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 
 static inline bool is_non_scalar_expr(const expr2tc &e)
 {
-  return is_member2t(e) || is_index2t(e) || is_if2t(e);
+  return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
 }
 
 class symex_dereference_statet:
