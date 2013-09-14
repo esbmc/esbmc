@@ -223,8 +223,6 @@ goto_symext::dereference_rec_nonscalar(
     // This should end up being either a constant or a symbol; either way
     // there should be no sudden transition back to scalars, except through
     // dereferences.
-    expr->dump();
-    top_scalar->dump();
     assert(!is_scalar_type(expr) &&
            (is_constant_expr(expr) || is_symbol2t(expr)));
     return;
