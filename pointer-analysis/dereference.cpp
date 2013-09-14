@@ -89,19 +89,6 @@ void dereferencet::dereference(
 
   expr2tc value;
 
-  // if it's empty, we have a problem
-  //lucas: nec: ex33.c
-#if 0
-  if(points_to_set.empty())
-  {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalid pointer", guard);
-    }
-  }
-#endif
   for(value_setst::valuest::const_iterator
       it=points_to_set.begin();
       it!=points_to_set.end();
