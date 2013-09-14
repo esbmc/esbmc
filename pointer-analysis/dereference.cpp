@@ -434,8 +434,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     // XXX This isn't taking account of the additional offset being torn through
     expr2tc base_object = get_base_object(value);
 
-    bool is_big_endian =
-      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
     const type2tc &bytetype = get_uint8_type();
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
 
@@ -664,9 +662,6 @@ bool dereferencet::memory_model_bytes(
   if (is_bv_type(to_type) || is_pointer_type(to_type) ||
         is_fixedbv_type(to_type))
   {
-    bool is_big_endian =
-      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
-
     // Take existing pointer offset, add to the pointer offset produced by
     // this dereference. It'll get simplified at some point in the future.
     new_offset = add2tc(new_offset->type, new_offset,

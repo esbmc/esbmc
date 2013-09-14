@@ -56,7 +56,10 @@ public:
     new_context(_new_context),
     options(_options),
     dereference_callback(_dereference_callback)
-  { }
+  {
+    is_big_endian =
+      (config.ansi_c.endianess == configt::ansi_ct::IS_BIG_ENDIAN);
+  }
 
   virtual ~dereferencet() { }
   
@@ -77,6 +80,7 @@ private:
   const optionst &options;
   dereference_callbackt &dereference_callback;
   static unsigned invalid_counter;
+  bool is_big_endian;
 
   bool dereference_type_compare(
     expr2tc &object,
