@@ -136,6 +136,13 @@ void goto_symext::dereference_rec(
   {
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.
+    // Unless we're doing something crazy with multidimensional arrays and
+    // address_of, for example, where no dereference is involved. In that case,
+    // bail.
+    bool contains_deref = dereference.has_dereference(expr);
+    if (!contains_deref)
+      return;
+
     assert(is_scalar_type(expr));
 
     dereference_rec_nonscalar(expr, expr, guard, dereference, write);
