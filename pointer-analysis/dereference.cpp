@@ -386,8 +386,8 @@ void dereferencet::build_reference_to(
       }
 
       const constant_int2t &theint = to_constant_int2t(o.offset);
-      if (theint.constant_value.to_ulong() == 0 || is_index2t(orig_value))
-        construct_from_zero_offset(value, o.offset, type, tmp_guard);
+      if (theint.constant_value.to_ulong() == 0)
+        construct_from_zero_offset(value, type, tmp_guard);
       else
         construct_from_const_offset(value, o.offset, type, tmp_guard);
     } else {
@@ -398,41 +398,59 @@ void dereferencet::build_reference_to(
 }
 
 void
-dereferencet::construct_from_zero_offset(expr2tc &value, const expr2tc &offset,
-                                          const type2tc &type,
+dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
                                           const guardt &guard)
 {
 
-  if (is_scalar_type(type)) {
+  expr2tc orig_value = get_base_object(value);
+
+  if (is_scalar_type(orig_value)) {
     // dereference_type_compare will have slipped in a typecast.
-  } else if (is_index2t(value) || (is_typecast2t(value) && is_index2t(to_typecast2t(value).from)))
-  {
-    // So; we're working on an index, which might be wrapped in a typecast.
-    // Update the offset; then encode a bounds check. Also divide the index,
-    // as it's now a byte offset into the array. dereference_type_compare
-    // guarentees us that it's an offset corresponding to the start of
-    // an element.
-    mp_integer elem_size;
-    expr2tc orig_value = (is_index2t(value)) ? value : to_typecast2t(value).from;
-    const type2tc &indexed_type = to_index2t(orig_value).source_value->type;
-    if (is_string_type(indexed_type))
-      elem_size = 1;
-    else
-      elem_size = type_byte_size(*to_array_type(indexed_type).subtype);
+  } else if (is_array_type(orig_value)) {
+    // We have zero offset. Just select things out.
+    const array_type2t &arr = to_array_type(value->type);
+    assert(!is_array_type(arr.subtype) && "Can't cope with multidimensional arrays right now captain1");
+    assert(!is_structure_type(arr.subtype) && "Also not considering arrays of structs at this time, sorry");
 
-    constant_int2tc factor(uint_type2(), elem_size);
-    div2tc new_offset(uint_type2(), offset, factor);
+    // So we're left with scalars. First, are they in bounds?
+    unsigned long deref_size_int = type->get_width();
+    unsigned long subtype_size_int = type_byte_size(*arr.subtype).to_ulong();
+    constant_int2tc deref_size(get_uint32_type(), BigInt(deref_size_int));
+    constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
+    mul2tc arrsize(get_uint32_type(), arr.array_size, subtype_size);
+    lessthanequal2tc le(deref_size, arrsize);
+    expr2tc result = le->simplify();
+    if (is_nil_expr(result))
+      result = le;
 
-    if (is_typecast2t(value)) {
-      typecast2t &cast = to_typecast2t(value);
-      index2t &idx = to_index2t(cast.from);
-      idx.index = new_offset;
-      bounds_check(idx, guard);
-    } else {
-      index2t &idx = to_index2t(value);
-      idx.index = new_offset;
-      bounds_check(idx, guard);
+    if (result != true_expr && !options.get_bool_option("no-bounds-check")) {
+      // We're not guarenteed that the given dereference doesn't go over the
+      // end of the array.
+      guardt tmp_guard2(guard);
+      tmp_guard2.add(result);
+
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "Oversized read from array", tmp_guard2);
     }
+
+    // Now, if the subtype size is >= the read size, we can just either cast
+    // or extract out. If not, we have to extract by conjoining elements.
+    if (!is_big_endian && subtype_size_int >= deref_size_int) {
+      // Voila, one can just select and cast. This works because little endian
+      // just allows for this to happen.
+      index2tc idx(arr.subtype, orig_value, zero_uint);
+      typecast2tc cast(type, idx);
+      value = cast;
+    } else {
+      // Nope, one must byte extract this.
+      const type2tc &bytetype = get_uint8_type();
+      value = byte_extract2tc(bytetype, orig_value, zero_uint, is_big_endian);
+      if (type != bytetype)
+        value = typecast2tc(type, value);
+    }
+  } else {
+    assert(0 && "Dereferencing zero offset to a struct?");
   }
 }
 
