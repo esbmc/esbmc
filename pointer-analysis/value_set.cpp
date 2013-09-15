@@ -410,6 +410,9 @@ void value_sett::get_value_set_rec(
           if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
             total_offs = 0;
           } else {
+            if (is_empty_type(subtype))
+              throw new type2t::symbolic_type_excp();
+
             // Potentially rename,
             const type2tc renamed = ns.follow(subtype);
             mp_integer elem_size = type_byte_size(*renamed);
