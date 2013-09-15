@@ -121,6 +121,11 @@ private:
     const type2tc &type,
     const guardt &guard,
     expr2tc &new_offset);
+
+  void decompose_top_scalar_expr(const expr2tc &top_scalar_expr,
+                                 const expr2tc &base,
+                                 std::list<expr2tc> &step_list,
+                                 const guardt &guard);
 };
 
 #endif

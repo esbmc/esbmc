@@ -707,3 +707,42 @@ bool dereferencet::memory_model_bytes(
 
   return false;
 }
+
+void
+dereferencet::decompose_top_scalar_expr(const expr2tc &top_scalar_expr,
+                                        const expr2tc &base,
+                                        std::list<expr2tc> &step_list,
+                                        const guardt &guard)
+{
+  assert(step_list.size() == 0);
+  assert(top_scalar_expr != base);
+
+  if (is_nil_expr(top_scalar_expr))
+    return;
+
+  // Descend through the top scalar expression, extracting each index or member
+  // that we encounter, down to the base thing we're dereferencing.
+  expr2tc cur_tip = top_scalar_expr;
+  do {
+    step_list.push_front(cur_tip);
+    if (is_member2t(cur_tip)) {
+      cur_tip = to_member2t(cur_tip).source_value;
+    } else if (is_index2t(cur_tip)) {
+      cur_tip = to_index2t(cur_tip).source_value;
+    } else if (is_if2t(cur_tip)) {
+      // Erk -- we've shuttled down one path of an if2t, but which one?
+      const if2t &theif = to_if2t(cur_tip);
+      if (guard.contains(theif.cond)) {
+        cur_tip = theif.true_value;
+      } else {
+        assert(guard.contains(not2tc(theif.cond)));
+        cur_tip = theif.false_value;
+      }
+    } else {
+      std::cerr << "Unexpected expression in decompose_top_scalar_expr"
+                << std::endl;
+      cur_tip->dump();
+      abort();
+    }
+  } while (cur_tip != base);
+}
