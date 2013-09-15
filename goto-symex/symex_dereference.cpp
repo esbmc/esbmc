@@ -181,7 +181,8 @@ goto_symext::dereference_rec_nonscalar(
     // first make sure there are no dereferences in there
     dereference_rec(deref.value, guard, dereference, false);
     expr2tc result = dereference.dereference(deref.value, guard,
-                            write ? dereferencet::WRITE : dereferencet::READ);
+                            write ? dereferencet::WRITE : dereferencet::READ,
+                            top_scalar);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -193,7 +194,8 @@ goto_symext::dereference_rec_nonscalar(
     dereference_rec(tmp, guard, dereference, false);
 
     expr2tc result = dereference.dereference(tmp, guard,
-                            write ? dereferencet::WRITE : dereferencet::READ);
+                            write ? dereferencet::WRITE : dereferencet::READ,
+                            top_scalar);
     return result;
   }
   else if (is_non_scalar_expr(expr))
