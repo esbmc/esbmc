@@ -84,8 +84,7 @@ private:
 
   bool dereference_type_compare(
     expr2tc &object,
-    const type2tc &dereference_type,
-    const expr2tc &offset) const;
+    const type2tc &dereference_type) const;
 
   void build_reference_to(
     const expr2tc &what,
