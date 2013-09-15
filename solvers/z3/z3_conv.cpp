@@ -1652,8 +1652,48 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
+  z3::expr source;
+
+  convert_bv(data.source_value, source);
+
   unsigned width;
-  width = data.source_value->type->get_width();
+  try {
+    width = data.source_value->type->get_width();
+  } catch (array_type2t::dyn_sized_array_excp *p) {
+    // Dynamically sized array. How to handle -- for now, assume that it's a
+    // byte array, and select the relevant portions out.
+    const array_type2t &arr_type = to_array_type(data.source_value->type);
+    assert(is_scalar_type(arr_type.subtype) && "Can't cope with dynamic "
+           "nonscalar arrays right now, sorry");
+    unsigned long result_sz = data.type->get_width() / 8;
+    unsigned long subtype_sz = arr_type.subtype->get_width() / 8;
+    unsigned long idx_bits = data.source_offset->type->get_width();
+
+    // XXX -- unaligned?
+
+    z3::expr expr, idx;
+    unsigned long sofar;
+    convert_bv(data.source_offset, idx);
+    expr = select(source, idx);
+    sofar = subtype_sz;
+    while (sofar < result_sz) {
+      idx = idx + ctx.esbmc_int_val(1, idx_bits);
+      z3::expr tmp;
+      tmp = select(source, idx);
+
+      if (data.big_endian) {
+        expr = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, expr, tmp));
+      } else {
+        expr = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, expr));
+      }
+
+      sofar += subtype_sz;
+    }
+
+    output = expr;
+    return;
+  }
+
   // XXXjmorse - looks like this only ever reads a single byte, not the desired
   // number of bytes to fill the type.
 
@@ -1666,10 +1706,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
-
-  z3::expr source;
-
-  convert_bv(data.source_value, source);
 
   if (int_encoding) {
     if (is_fixedbv_type(data.source_value->type)) {
