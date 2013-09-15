@@ -744,11 +744,11 @@ dereferencet::decompose_top_scalar_expr(const expr2tc &top_scalar_expr,
                                         std::list<expr2tc> &step_list,
                                         const guardt &guard)
 {
-  assert(step_list.size() == 0);
-  assert(top_scalar_expr != base);
-
   if (is_nil_expr(top_scalar_expr))
     return;
+
+  assert(step_list.size() == 0);
+  assert(top_scalar_expr != base);
 
   // Descend through the top scalar expression, extracting each index or member
   // that we encounter, down to the base thing we're dereferencing.
