@@ -156,8 +156,6 @@ bool dereferencet::dereference_type_compare(
   if (is_empty_type(dereference_type))
     return true; // always ok
 
-  if (!is_constant_int2t(offset))
-    return false;
   if (!to_constant_int2t(offset).constant_value.is_zero()) {
     // We have a non-zero offset into this... thing. Now, if it's an array and
     // has a constant offset that's a multiple of the element size, that's just
