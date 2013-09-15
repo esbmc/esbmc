@@ -63,7 +63,8 @@ expr2tc
 dereferencet::dereference(
   const expr2tc &src,
   const guardt &guard,
-  const modet mode)
+  const modet mode,
+  expr2tc top_scalar_expr)
 {
   expr2tc dest = src;
   assert(is_pointer_type(dest));
@@ -98,7 +99,8 @@ dereferencet::dereference(
   {
     expr2tc new_value, pointer_guard;
 
-    build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard);
+    build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard,
+                       top_scalar_expr);
 
     if (!is_nil_expr(new_value))
     {
@@ -210,7 +212,8 @@ void dereferencet::build_reference_to(
   const type2tc &type,
   expr2tc &value,
   expr2tc &pointer_guard,
-  const guardt &guard)
+  const guardt &guard,
+  const expr2tc &top_scalar_expr __attribute__((unused)))
 {
   value = expr2tc();
   pointer_guard = false_expr;

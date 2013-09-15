@@ -68,7 +68,8 @@ public:
   virtual expr2tc dereference(
     const expr2tc &dest,
     const guardt &guard,
-    const modet mode);
+    const modet mode,
+    expr2tc top_scalar_expr = expr2tc());
     
   bool has_dereference(const expr2tc &expr) const;
 
@@ -93,7 +94,8 @@ private:
     const type2tc &type,
     expr2tc &value,
     expr2tc &pointer_guard,
-    const guardt &guard);
+    const guardt &guard,
+    const expr2tc &top_scalar_expr);
 
   static const expr2tc &get_symbol(const expr2tc &object);
 
