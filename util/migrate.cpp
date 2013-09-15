@@ -378,7 +378,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
 {
   const symbolt *sym;
   symbol2t::renaming_level target_level;
-  unsigned int level1_num, thread_num, node_num, level2_num;
+  unsigned int level1_num = 0, thread_num = 0, node_num = 0, level2_num = 0;
 
   const std::string &thestr = init.as_string();
   // If this is an existing symbol name, then we're not renamed at all. Can't
@@ -416,22 +416,30 @@ sym_name_to_symbol(irep_idt init, type2tc type)
     and_pos = thestr.size();
     hash_pos = thestr.size();
   } else {
+    // Level 2
     target_level = symbol2t::level2;
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
+
+    if (at_pos == std::string::npos) {
+      // However, it's L2 global.
+      target_level = symbol2t::level2_global;
+    }
   }
 
   // Whatever level we're at, set the base name to be nonrenamed.
   irep_idt thename = irep_idt(thestr.substr(0, at_pos));
 
-  std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
-  std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
+  if (target_level != symbol2t::level2_global) {
+    std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
+    std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
 
-  char *endatptr, *endexmptr;
-  level1_num = strtol(atstr.c_str(), &endatptr, 10);
-  assert(endatptr != atstr.c_str());
-  thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
-  assert(endexmptr != exmstr.c_str());
+    char *endatptr, *endexmptr;
+    level1_num = strtol(atstr.c_str(), &endatptr, 10);
+    assert(endatptr != atstr.c_str());
+    thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
+    assert(endexmptr != exmstr.c_str());
+  }
 
   if (target_level == symbol2t::level1) {
     return expr2tc(new symbol2t(type, thename, target_level, level1_num,
