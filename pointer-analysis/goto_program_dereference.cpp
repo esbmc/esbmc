@@ -193,14 +193,14 @@ void goto_program_dereferencet::dereference_rec(
     }
 
     expr2tc tmp_obj = deref.value;
-    dereference.dereference(tmp_obj, guard, mode);
-    expr = tmp_obj;
+    expr2tc result = dereference.dereference(tmp_obj, guard, mode);
+    expr = result;
   } else if (is_index2t(expr)) {
     index2t &idx = to_index2t(expr);
 
     if (is_pointer_type(idx.source_value)) {
       add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
-      dereference.dereference(tmp, guard, mode);
+      dereference.dereference(tmp, guard, mode); // Result discarded.
     }
   }
 }
@@ -339,6 +339,7 @@ void goto_program_dereferencet::dereference_instruction(
       expr2tc operand = free.operand;
 
       guardt guard;
+      // Result discarded
       dereference.dereference(operand, guard, dereferencet::FREE);
     }
   }

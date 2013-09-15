@@ -59,11 +59,13 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
   return expr;
 }
 
-void dereferencet::dereference(
-  expr2tc &dest,
+expr2tc
+dereferencet::dereference(
+  const expr2tc &src,
   const guardt &guard,
   const modet mode)
 {
+  expr2tc dest = src;
   assert(is_pointer_type(dest));
 
   // Pointers type won't have been resolved; do that now.
@@ -146,6 +148,7 @@ void dereferencet::dereference(
   }
 
   dest = value;
+  return dest;
 }
 
 bool dereferencet::dereference_type_compare(
