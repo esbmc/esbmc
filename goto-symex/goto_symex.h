@@ -184,8 +184,10 @@ protected:
    *  @param guard Some guard (defunct?).
    *  @param dereference Dereferencet object to operate with.
    *  @param write Whether or not we're writing to this object.
+   *  @return The dereferenced expression, extracted back to the scalar type
+   *          of top_scalar.
    */
-  void dereference_rec_nonscalar(
+  expr2tc dereference_rec_nonscalar(
     expr2tc &expr,
     const expr2tc &top_scalar,
     guardt &guard,
