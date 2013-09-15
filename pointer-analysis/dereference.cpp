@@ -362,11 +362,7 @@ void dereferencet::build_reference_to(
       // way, true if they're either the same type or extremely similar. value
       // may be replaced with a typecast.
       expr2tc orig_value = value;
-      if (!dereference_type_compare(value, type))
-      {
-        // Not a compatible thing; stitch it together in the memory model.
-        construct_from_dyn_offset(value, o.offset, type, guard);
-      }
+      value = get_base_object(value);
 
       const constant_int2t &theint = to_constant_int2t(o.offset);
       if (theint.constant_value.to_ulong() == 0)
@@ -387,7 +383,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
                                           std::list<expr2tc> *scalar_step_list)
 {
 
-  expr2tc orig_value = get_base_object(value);
+  expr2tc orig_value = value;
 
   if (is_scalar_type(orig_value)) {
     // dereference_type_compare will have slipped in a typecast.
@@ -453,7 +449,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 {
 
   // XXX This isn't taking account of the additional offset being torn through
-  expr2tc base_object = get_base_object(value);
+  expr2tc base_object = value;
 
   const constant_int2t &theint = to_constant_int2t(offset);
   const type2tc &bytetype = get_uint8_type();
