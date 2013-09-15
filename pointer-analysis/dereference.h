@@ -104,9 +104,11 @@ private:
   void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
 
   void construct_from_zero_offset(expr2tc &value, const type2tc &type,
-                                  const guardt &guard);
+                                  const guardt &guard,
+                                  std::list<expr2tc> &scalar_step_list);
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
-                                   const type2tc &type, const guardt &guard);
+                                   const type2tc &type, const guardt &guard,
+                                  std::list<expr2tc> &scalar_step_list);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard);
 

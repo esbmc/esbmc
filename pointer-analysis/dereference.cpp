@@ -213,7 +213,7 @@ void dereferencet::build_reference_to(
   expr2tc &value,
   expr2tc &pointer_guard,
   const guardt &guard,
-  const expr2tc &top_scalar_expr __attribute__((unused)))
+  const expr2tc &top_scalar_expr)
 {
   value = expr2tc();
   pointer_guard = false_expr;
@@ -353,6 +353,10 @@ void dereferencet::build_reference_to(
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
 
+    std::list<expr2tc> scalar_step_list;
+    decompose_top_scalar_expr(top_scalar_expr, deref_expr, scalar_step_list,
+                              tmp_guard);
+
     valid_check(object, tmp_guard, mode);
 
     if (is_constant_expr(o.offset)) {
@@ -370,9 +374,10 @@ void dereferencet::build_reference_to(
 
       const constant_int2t &theint = to_constant_int2t(o.offset);
       if (theint.constant_value.to_ulong() == 0)
-        construct_from_zero_offset(value, type, tmp_guard);
+        construct_from_zero_offset(value, type, tmp_guard, scalar_step_list);
       else
-        construct_from_const_offset(value, o.offset, type, tmp_guard);
+        construct_from_const_offset(value, o.offset, type, tmp_guard,
+                                    scalar_step_list);
     } else {
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
       construct_from_dyn_offset(value, offset, type, tmp_guard);
@@ -382,7 +387,8 @@ void dereferencet::build_reference_to(
 
 void
 dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
-                                          const guardt &guard)
+                                          const guardt &guard,
+                                          std::list<expr2tc> &scalar_step_list __attribute__((unused)))
 {
 
   expr2tc orig_value = get_base_object(value);
@@ -423,7 +429,8 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
-                                          const guardt &guard)
+                                          const guardt &guard,
+                                          std::list<expr2tc> &scalar_step_list __attribute__((unused)))
 {
 
   // XXX This isn't taking account of the additional offset being torn through
