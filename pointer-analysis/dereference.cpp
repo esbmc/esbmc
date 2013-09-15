@@ -453,7 +453,24 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 
   const constant_int2t &theint = to_constant_int2t(offset);
   const type2tc &bytetype = get_uint8_type();
-  value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+
+  if (is_array_type(base_object) || is_string_type(base_object)) {
+    const array_type2t &arr_type = (is_array_type(base_object))
+      ? to_array_type(base_object->type)
+      : to_array_type(to_constant_string2t(base_object).to_array()->type);
+
+    unsigned long subtype_size = type_byte_size(*arr_type.subtype).to_ulong();
+    unsigned long deref_size = type->get_width() / 8;
+    if (subtype_size >= deref_size) {
+      std::cerr << "Insert here: dereference handler for reasonable arrays"
+                << std::endl;
+      abort();
+    } else {
+      value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+    }
+  } else {
+    value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+  }
 
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
   if (is_array_type(base_object) || is_string_type(base_object)) {
