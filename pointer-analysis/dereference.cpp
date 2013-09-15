@@ -450,16 +450,20 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   const type2tc &bytetype = get_uint8_type();
   value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
 
-  unsigned long sz = type_byte_size(*value->type).to_ulong();
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
-  if (sz + access_sz > theint.constant_value.to_ulong()) {
-    if(!options.get_bool_option("no-pointer-check")) {
-      guardt tmp_guard2(guard);
-      tmp_guard2.add(false_expr);
+  if (is_array_type(base_object) || is_string_type(base_object)) {
+    bounds_check(base_object->type, offset, access_sz, guard);
+  } else {
+    unsigned long sz = type_byte_size(*value->type).to_ulong();
+    if (sz + access_sz > theint.constant_value.to_ulong()) {
+      if(!options.get_bool_option("no-pointer-check")) {
+        guardt tmp_guard2(guard);
+        tmp_guard2.add(false_expr);
 
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "Offset out of bounds", tmp_guard2);
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "Offset out of bounds", tmp_guard2);
+      }
     }
   }
 }
