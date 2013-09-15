@@ -464,8 +464,14 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error.
-      index2tc res(type, base_object, offset);
+      index2tc res(arr_type.subtype, base_object, offset);
       value = res;
+
+      if (!base_type_eq(type, res->type, ns)) {
+        // Wrong type but matching size; typecast.
+        typecast2tc cast(type, value);
+        value = cast;
+      }
     } else if (subtype_size > deref_size) {
       std::cerr << "Insert here: dereference handler for reasonable arrays"
                 << std::endl;
