@@ -64,7 +64,7 @@ dereferencet::dereference(
   const expr2tc &src,
   const guardt &guard,
   const modet mode,
-  expr2tc top_scalar_expr)
+  std::list<expr2tc> *scalar_step_list)
 {
   expr2tc dest = src;
   assert(is_pointer_type(dest));
@@ -100,7 +100,7 @@ dereferencet::dereference(
     expr2tc new_value, pointer_guard;
 
     build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard,
-                       top_scalar_expr);
+                       scalar_step_list);
 
     if (!is_nil_expr(new_value))
     {
@@ -213,7 +213,7 @@ void dereferencet::build_reference_to(
   expr2tc &value,
   expr2tc &pointer_guard,
   const guardt &guard,
-  const expr2tc &top_scalar_expr)
+  std::list<expr2tc> *scalar_step_list)
 {
   value = expr2tc();
   pointer_guard = false_expr;
@@ -353,10 +353,6 @@ void dereferencet::build_reference_to(
     guardt tmp_guard(guard);
     tmp_guard.add(pointer_guard);
 
-    std::list<expr2tc> scalar_step_list;
-    decompose_top_scalar_expr(top_scalar_expr, deref_expr, scalar_step_list,
-                              tmp_guard);
-
     valid_check(object, tmp_guard, mode);
 
     if (is_constant_expr(o.offset)) {
@@ -388,7 +384,7 @@ void dereferencet::build_reference_to(
 void
 dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
                                           const guardt &guard,
-                                          std::list<expr2tc> &scalar_step_list)
+                                          std::list<expr2tc> *scalar_step_list)
 {
 
   expr2tc orig_value = get_base_object(value);
@@ -423,18 +419,18 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     }
   } else {
     assert(is_structure_type(orig_value));
-    assert(scalar_step_list.size() != 0); // XXX this is a liability.
+    assert(scalar_step_list->size() != 0); // XXX this is a liability.
     // We have zero offset; If the base types here are compatible, then we can
     // just apply the set of scalar steps to this expr.
 
     // Fetch what's either the source of the index, or member, in the first
     // step.
-    expr2tc base_of_steps = *scalar_step_list.front()->get_sub_expr(0);
+    expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
     if (base_type_eq(orig_value->type, base_of_steps->type, ns)) {
       // We can just reconstruct this.
       expr2tc accuml = orig_value;
-      for (std::list<expr2tc>::const_iterator it = scalar_step_list.begin();
-           it != scalar_step_list.end(); it++) {
+      for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
+           it != scalar_step_list->end(); it++) {
         expr2tc tmp = *it;
         *tmp.get()->get_sub_expr_nc(0) = accuml;
         accuml = tmp;
@@ -453,7 +449,7 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,
-                                          std::list<expr2tc> &scalar_step_list __attribute__((unused)))
+                                          std::list<expr2tc> *scalar_step_list __attribute__((unused)))
 {
 
   // XXX This isn't taking account of the additional offset being torn through
@@ -736,46 +732,4 @@ bool dereferencet::memory_model_bytes(
   }
 
   return false;
-}
-
-void
-dereferencet::decompose_top_scalar_expr(const expr2tc &top_scalar_expr,
-                                        const expr2tc &base,
-                                        std::list<expr2tc> &step_list,
-                                        const guardt &guard)
-{
-  if (is_nil_expr(top_scalar_expr))
-    return;
-
-  assert(step_list.size() == 0);
-  assert(top_scalar_expr != base);
-
-  // Descend through the top scalar expression, extracting each index or member
-  // that we encounter, down to the base thing we're dereferencing.
-  expr2tc cur_tip = top_scalar_expr;
-  do {
-    if (is_member2t(cur_tip)) {
-      step_list.push_front(cur_tip);
-      cur_tip = to_member2t(cur_tip).source_value;
-    } else if (is_index2t(cur_tip)) {
-      step_list.push_front(cur_tip);
-      cur_tip = to_index2t(cur_tip).source_value;
-    } else if (is_if2t(cur_tip)) {
-      // Erk -- we've shuttled down one path of an if2t, but which one?
-      // Don't add this if2t to the list of steps, otherwise we'll be repeatedly
-      // asking this question.
-      const if2t &theif = to_if2t(cur_tip);
-      if (guard.contains(theif.cond)) {
-        cur_tip = theif.true_value;
-      } else {
-        assert(guard.contains(not2tc(theif.cond)));
-        cur_tip = theif.false_value;
-      }
-    } else {
-      std::cerr << "Unexpected expression in decompose_top_scalar_expr"
-                << std::endl;
-      cur_tip->dump();
-      abort();
-    }
-  } while (cur_tip != base);
 }

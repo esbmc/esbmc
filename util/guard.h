@@ -27,7 +27,6 @@ public:
 
   void add(const expr2tc &expr);
   void move(expr2tc &expr);
-  bool contains(const expr2tc &expr) const;
 
   void append(const guardt &guard)
   {

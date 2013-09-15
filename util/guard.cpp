@@ -47,15 +47,6 @@ void guardt::add(const expr2tc &expr)
   }
 }
 
-bool guardt::contains(const expr2tc &expr) const
-{
-  forall_guard(it, guard_list)
-    if (*it == expr)
-      return true;
-
-  return false;
-}
-
 void guardt::move(expr2tc &expr)
 {
   if (is_constant_bool2t(expr) && to_constant_bool2t(expr).constant_value)

@@ -69,7 +69,7 @@ public:
     const expr2tc &dest,
     const guardt &guard,
     const modet mode,
-    expr2tc top_scalar_expr = expr2tc());
+    std::list<expr2tc> *scalar_step_list = NULL);
     
   bool has_dereference(const expr2tc &expr) const;
 
@@ -95,7 +95,7 @@ private:
     expr2tc &value,
     expr2tc &pointer_guard,
     const guardt &guard,
-    const expr2tc &top_scalar_expr);
+    std::list<expr2tc> *scalar_step_list);
 
   static const expr2tc &get_symbol(const expr2tc &object);
 
@@ -105,10 +105,10 @@ private:
 
   void construct_from_zero_offset(expr2tc &value, const type2tc &type,
                                   const guardt &guard,
-                                  std::list<expr2tc> &scalar_step_list);
+                                  std::list<expr2tc> *scalar_step_list);
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
-                                  std::list<expr2tc> &scalar_step_list);
+                                  std::list<expr2tc> *scalar_step_list);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard);
 
@@ -123,11 +123,6 @@ private:
     const type2tc &type,
     const guardt &guard,
     expr2tc &new_offset);
-
-  void decompose_top_scalar_expr(const expr2tc &top_scalar_expr,
-                                 const expr2tc &base,
-                                 std::list<expr2tc> &step_list,
-                                 const guardt &guard);
 };
 
 #endif

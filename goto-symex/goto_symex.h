@@ -180,19 +180,20 @@ protected:
    *  class, so  that it can work out the most efficient deref calculation, and
    *  avoid having to dereference to a struct type, for example.
    *  @param expr Expression to eliminate dereferences from.
-   *  @param top_scalar Top level scalar typed expression that we're working on
    *  @param guard Some guard (defunct?).
    *  @param dereference Dereferencet object to operate with.
    *  @param write Whether or not we're writing to this object.
+   *  @param scalar_step_list accumulating list of steps to extract the base
+   *         back to a scalar type. Passed into first instance blank.
    *  @return The dereferenced expression, extracted back to the scalar type
    *          of top_scalar.
    */
   expr2tc dereference_rec_nonscalar(
     expr2tc &expr,
-    const expr2tc &top_scalar,
     guardt &guard,
     class dereferencet &dereference,
-    const bool write);
+    const bool write,
+    std::list<expr2tc> &scalar_step_list);
 
   // symex
 

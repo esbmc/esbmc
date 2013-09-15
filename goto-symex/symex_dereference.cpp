@@ -147,8 +147,10 @@ void goto_symext::dereference_rec(
 
     assert(is_scalar_type(expr));
 
-    expr2tc res =
-      dereference_rec_nonscalar(expr, expr, guard, dereference, write);
+    std::list<expr2tc> scalar_step_list;
+    expr2tc res = dereference_rec_nonscalar(expr, guard, dereference,
+                                            write, scalar_step_list);
+    assert(scalar_step_list.size() == 0); // Should finish empty.
 
     // If a dereference successfully occurred, replace expr at this level.
     // XXX -- explain this better.
@@ -169,10 +171,10 @@ void goto_symext::dereference_rec(
 expr2tc
 goto_symext::dereference_rec_nonscalar(
   expr2tc &expr,
-  const expr2tc &top_scalar,
   guardt &guard,
   dereferencet &dereference,
-  const bool write)
+  const bool write,
+  std::list<expr2tc> &scalar_step_list)
 {
 
   if (is_dereference2t(expr))
@@ -182,7 +184,7 @@ goto_symext::dereference_rec_nonscalar(
     dereference_rec(deref.value, guard, dereference, false);
     expr2tc result = dereference.dereference(deref.value, guard,
                             write ? dereferencet::WRITE : dereferencet::READ,
-                            top_scalar);
+                            &scalar_step_list);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -195,41 +197,57 @@ goto_symext::dereference_rec_nonscalar(
 
     expr2tc result = dereference.dereference(tmp, guard,
                             write ? dereferencet::WRITE : dereferencet::READ,
-                            top_scalar);
+                            &scalar_step_list);
     return result;
   }
   else if (is_non_scalar_expr(expr))
   {
+    expr2tc res;
     if (is_member2t(expr)) {
-      return dereference_rec_nonscalar(to_member2t(expr).source_value,
-                                       top_scalar, guard, dereference, write);
+      scalar_step_list.push_front(expr);
+      res =  dereference_rec_nonscalar(to_member2t(expr).source_value, guard,
+                                        dereference, write, scalar_step_list);
+      scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
       dereference_rec(to_index2t(expr).index, guard, dereference, write);
-      return dereference_rec_nonscalar(to_index2t(expr).source_value,
-                                       top_scalar, guard, dereference, write);
+      scalar_step_list.push_front(expr);
+      res = dereference_rec_nonscalar(to_index2t(expr).source_value, guard,
+                                      dereference, write, scalar_step_list);
+      scalar_step_list.pop_front();
     } else if (is_if2t(expr)) {
       guardt g1 = guard, g2 = guard;
       if2t &theif = to_if2t(expr);
       g1.add(theif.cond);
       g2.add(not2tc(theif.cond));
-      expr2tc res1 = dereference_rec_nonscalar(theif.true_value, top_scalar, g1,
-                                               dereference, write);
-      expr2tc res2 = dereference_rec_nonscalar(theif.false_value, top_scalar,
-                                               g1, dereference, write);
+
+      scalar_step_list.push_front(theif.true_value);
+      expr2tc res1 = dereference_rec_nonscalar(theif.true_value, g1,
+                                               dereference, write,
+                                               scalar_step_list);
+      scalar_step_list.pop_front();
+
+      scalar_step_list.push_front(theif.false_value);
+      expr2tc res2 = dereference_rec_nonscalar(theif.false_value, g2,
+                                               dereference, write,
+                                               scalar_step_list);
+      scalar_step_list.pop_front();
+
       if2tc fin(res1->type, theif.cond, res1, res2);
-      return fin;
+      res = fin;
     } else {
       std::cerr << "Unexpected expression in dereference_rec_nonscalar"
                 << std::endl;
       expr->dump();
       abort();
     }
+
+    return res;
   }
   else if (is_typecast2t(expr))
   {
     // Just blast straight through
-    return dereference_rec_nonscalar(to_typecast2t(expr).from, top_scalar,
-                                     guard, dereference, write);
+    return dereference_rec_nonscalar(to_typecast2t(expr).from, guard,
+                                     dereference, write, scalar_step_list);
   }
   else
   {
