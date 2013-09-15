@@ -412,31 +412,14 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     assert(!is_array_type(arr.subtype) && "Can't cope with multidimensional arrays right now captain1");
     assert(!is_structure_type(arr.subtype) && "Also not considering arrays of structs at this time, sorry");
 
-    // So we're left with scalars. First, are they in bounds?
-    unsigned long deref_size_int = type->get_width();
+    unsigned int access_size_int = type->get_width() / 8;
     unsigned long subtype_size_int = type_byte_size(*arr.subtype).to_ulong();
-    constant_int2tc deref_size(get_uint32_type(), BigInt(deref_size_int));
-    constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
-    mul2tc arrsize(get_uint32_type(), arr.array_size, subtype_size);
-    lessthanequal2tc le(deref_size, arrsize);
-    expr2tc result = le->simplify();
-    if (is_nil_expr(result))
-      result = le;
 
-    if (result != true_expr && !options.get_bool_option("no-bounds-check")) {
-      // We're not guarenteed that the given dereference doesn't go over the
-      // end of the array.
-      guardt tmp_guard2(guard);
-      tmp_guard2.add(result);
-
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "Oversized read from array", tmp_guard2);
-    }
+    bounds_check(orig_value->type, zero_int, access_size_int, guard);
 
     // Now, if the subtype size is >= the read size, we can just either cast
     // or extract out. If not, we have to extract by conjoining elements.
-    if (!is_big_endian && subtype_size_int >= deref_size_int) {
+    if (!is_big_endian && subtype_size_int >= access_size_int) {
       // Voila, one can just select and cast. This works because little endian
       // just allows for this to happen.
       index2tc idx(arr.subtype, orig_value, zero_uint);
@@ -568,76 +551,62 @@ void dereferencet::valid_check(
   }
 }
 
-void dereferencet::bounds_check(
-  const index2t &expr,
-  const guardt &guard)
+void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
+                                unsigned int access_size, const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(expr.source_value) ||
-         is_string_type(expr.source_value));
+  assert(is_array_type(type) || is_string_type(type));
 
-  std::string name = array_name(ns, expr.source_value);
-
-  {
-    if (is_constant_int2t(expr.index) &&
-        !to_constant_int2t(expr.index).constant_value.is_negative())
-    {
-      ;
-    }
-    else
-    {
-      lessthan2tc lt(expr.index, zero_int);
-
-      guardt tmp_guard(guard);
-      tmp_guard.move(lt);
-      dereference_callback.dereference_failure(
-        "array bounds",
-        "`"+name+"' lower bound", tmp_guard);
-    }
-  }
-
-  expr2tc arr_size;
-  if (is_array_type(expr.source_value)) {
-    if (to_array_type(expr.source_value->type).size_is_infinite)
-      // Can't overflow an infinitely sized array
-      return;
-
-    arr_size = to_array_type(expr.source_value->type).array_size;
+  // Dance around getting the array type normalised.
+  type2tc new_string_type;
+  const array_type2t *arr_type_p = NULL;
+  if (is_array_type(type)) {
+    arr_type_p = &to_array_type(type);
   } else {
-    expr2tc tmp_str_arr = to_constant_string2t(expr.source_value).to_array();
-    arr_size = to_array_type(tmp_str_arr->type).array_size;
+    const string_type2t &str_type = to_string_type(type);
+    expr2tc str_size = gen_uint(str_type.width);
+    new_string_type =
+      type2tc(new array_type2t(get_uint8_type(), str_size, false));
+    arr_type_p = &to_array_type(new_string_type);
   }
 
-  if (is_index2t(expr.source_value))
-  {
-    const index2t &index = to_index2t(expr.source_value);
-    const array_type2t &arr_type_2 = to_array_type(index.source_value->type);
+  const array_type2t &arr_type = *arr_type_p;
 
-    assert(!arr_type_2.size_is_infinite);
-    arr_size = mul2tc(index_type2(), arr_size, arr_type_2.array_size);
-  }
+  // XXX --  arrays were assigned names, but we're skipping that for the moment
+  // std::string name = array_name(ns, expr.source_value);
 
-  // Irritating - I don't know what c_implicit_typecast does, and it modifies
-  // tmp_op0 it appears.
-  exprt tmp_op0 = migrate_expr_back(expr.index);
-  exprt tmp_op1 = migrate_expr_back(arr_size);
-  if (c_implicit_typecast(tmp_op0, tmp_op1.type(), ns)) {
-    std::cerr << "index address of wrong type in bounds_check" << std::endl;
-    abort();
-  }
+  // Firstly, bail if this is an infinite sized array. There are no bounds
+  // checks to be performed.
+  if (arr_type.size_is_infinite)
+    return;
 
-  expr2tc new_index;
-  migrate_expr(tmp_op0, new_index);
-  greaterthanequal2tc gte(new_index, arr_size);
+  // Secondly, try to calc the size of the array.
+  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
+  constant_int2tc subtype_size(get_int32_type(), BigInt(subtype_size_int));
+  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
 
-  guardt tmp_guard(guard);
-  tmp_guard.move(gte);
+  // Then, expressions as to whether the access is over or under the array
+  // size.
+  constant_int2tc access_size_e(get_int32_type(), BigInt(access_size));
+  add2tc upper_byte(get_int32_type(), offset, access_size_e);
+  expr2tc lower_byte = offset;
 
-  dereference_callback.dereference_failure(
-    "array bounds",
-    "`"+name+"' upper bound", tmp_guard);
+  lessthanequal2tc le(upper_byte, arrsize);
+  greaterthanequal2tc ge(lower_byte, zero_int);
+
+  // Report these as assertions; they'll be simplified away if they're constant
+
+  guardt tmp_guard1(guard);
+  tmp_guard1.move(le);
+  dereference_callback.dereference_failure("array bounds", "array upper bound",
+                                           tmp_guard1);
+
+  guardt tmp_guard2(guard);
+  tmp_guard2.move(ge);
+  dereference_callback.dereference_failure("array bounds", "array upper bound",
+                                           tmp_guard1);
 }
 
 bool dereferencet::memory_model(
