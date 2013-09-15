@@ -388,7 +388,7 @@ void dereferencet::build_reference_to(
 void
 dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
                                           const guardt &guard,
-                                          std::list<expr2tc> &scalar_step_list __attribute__((unused)))
+                                          std::list<expr2tc> &scalar_step_list)
 {
 
   expr2tc orig_value = get_base_object(value);
@@ -422,7 +422,30 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
         value = typecast2tc(type, value);
     }
   } else {
-    assert(0 && "Dereferencing zero offset to a struct?");
+    assert(is_structure_type(orig_value));
+    assert(scalar_step_list.size() != 0); // XXX this is a liability.
+    // We have zero offset; If the base types here are compatible, then we can
+    // just apply the set of scalar steps to this expr.
+
+    // Fetch what's either the source of the index, or member, in the first
+    // step.
+    expr2tc base_of_steps = *scalar_step_list.front()->get_sub_expr(0);
+    if (base_type_eq(orig_value->type, base_of_steps->type, ns)) {
+      // We can just reconstruct this.
+      expr2tc accuml = orig_value;
+      for (std::list<expr2tc>::const_iterator it = scalar_step_list.begin();
+           it != scalar_step_list.end(); it++) {
+        expr2tc tmp = *it;
+        *tmp.get()->get_sub_expr_nc(0) = accuml;
+        accuml = tmp;
+      }
+      value = accuml;
+    } else {
+      // We can't reconstruct this. Go crazy instead.
+      std::cerr << "Noncompatible struct operation in deref" << std::endl;
+      orig_value->dump();
+      abort();
+    }
   }
 }
 
