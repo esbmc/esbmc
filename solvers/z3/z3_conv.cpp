@@ -2956,8 +2956,11 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Also record the amount of memory space we're working with for later usage
     unsigned int mem_size = 1;
-    if (!is_code_type(expr))
-      mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
+    try {
+      if (!is_code_type(expr))
+        mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
+    } catch (array_type2t::dyn_sized_array_excp *foo) {
+    }
     total_mem_space.back() += mem_size;
 
     // Assert that start + offs == end
