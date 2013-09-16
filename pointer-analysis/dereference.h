@@ -65,12 +65,23 @@ public:
   
   typedef enum { READ, WRITE, FREE } modet;
 
+  virtual void dereference_expr(
+    expr2tc &dest,
+    guardt &guard,
+    const modet mode);
+
+  virtual expr2tc dereference_expr_nonscalar(
+    expr2tc &dest,
+    guardt &guard,
+    const modet mode,
+    std::list<expr2tc> &scalar_step_list);
+
   virtual expr2tc dereference(
     const expr2tc &dest,
     const guardt &guard,
     const modet mode,
     std::list<expr2tc> *scalar_step_list = NULL);
-    
+
   bool has_dereference(const expr2tc &expr) const;
 
   typedef hash_set_cont<exprt, irep_hash> expr_sett;

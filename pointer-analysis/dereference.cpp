@@ -33,6 +33,11 @@ Author: Daniel Kroening, kroening@kroening.com
 // global data, horrible
 unsigned int dereferencet::invalid_counter=0;
 
+static inline bool is_non_scalar_expr(const expr2tc &e)
+{
+  return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
+}
+
 bool dereferencet::has_dereference(const expr2tc &expr) const
 {
   if (is_nil_expr(expr))
@@ -57,6 +62,256 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
     return get_symbol(to_index2t(expr).source_value);
 
   return expr;
+}
+
+void
+dereferencet::dereference_expr(
+  expr2tc &expr,
+  guardt &guard,
+  const modet mode)
+{
+
+  if (!has_dereference(expr))
+    return;
+
+  // Preliminary, guard munging tests. 
+  if (is_and2t(expr) || is_or2t(expr))
+  {
+    // If this is an and or or expression, then if the first operand short
+    // circuits the truth of the expression, then we shouldn't evaluate the
+    // second expression. That means that the dereference assertions in the
+    // 2nd should be guarded with the fact that the first operand didn't short
+    // circuit.
+    assert(is_bool_type(expr));
+    // Take the current size of the guard, so that we can reset it later.
+    unsigned old_guards=guard.size();
+
+    Forall_operands2(it, idx, expr) {
+      expr2tc &op = *it;
+
+      assert(is_bool_type(op));
+
+      // Handle any derererences in this operand
+      if (has_dereference(op))
+        dereference_expr(op, guard, dereferencet::READ);
+
+      // Guard the next operand against this operand short circuiting us.
+      if (is_or2t(expr)) {
+        not2tc tmp(op);
+        guard.move(tmp);
+      } else {
+        guard.add(op);
+      }
+    }
+
+    // Reset guard to where it was.
+    guard.resize(old_guards);
+    return;
+  }
+  else if (is_if2t(expr))
+  {
+    // Only one side of this if gets evaluated according to the condition, which
+    // means that pointer dereference assertion failures should have the
+    // relevant guard applied. This makes sure they don't fire even when their
+    // expression isn't evaluated.
+    if2t &ifref = to_if2t(expr);
+    dereference_expr(ifref.cond, guard, dereferencet::READ);
+
+    bool o1 = has_dereference(ifref.true_value);
+    bool o2 = has_dereference(ifref.false_value);
+
+    if (o1) {
+      unsigned old_guard=guard.size();
+      guard.add(ifref.cond);
+      dereference_expr(ifref.true_value, guard, mode);
+      guard.resize(old_guard);
+    }
+
+    if (o2) {
+      unsigned old_guard=guard.size();
+      not2tc tmp(ifref.cond);
+      guard.move(tmp);
+      dereference_expr(ifref.false_value, guard, mode);
+      guard.resize(old_guard);
+    }
+
+    return;
+  }
+
+  // Crazy combinations of & and * that don't actually lead to a deref:
+  if (is_address_of2t(expr))
+  {
+    // turn &*p to p
+    // this has *no* side effect!
+    // XXX jmorse -- how does this take account of an intervening member
+    // operation? i.e. &foo->bar;
+    address_of2t &addrof = to_address_of2t(expr);
+
+    if (is_dereference2t(addrof.ptr_obj)) {
+      dereference2t &deref = to_dereference2t(addrof.ptr_obj);
+      expr2tc result = deref.value;
+
+      if (result->type != expr->type)
+        result = typecast2tc(expr->type, result);
+
+      expr = result;
+    }
+  }
+
+  if (is_dereference2t(expr)) {
+    assert((is_scalar_type(expr) || is_code_type(expr))
+       && "Can't dereference to a nonscalar type");
+
+    dereference2t &deref = to_dereference2t(expr);
+    // first make sure there are no dereferences in there
+    dereference_expr(deref.value, guard, dereferencet::READ);
+
+    if (is_array_type(to_pointer_type(deref.value->type).subtype)) {
+      // Dereferencing yeilding an array means we're actually performing pointer
+      // arithmetic, on a multi-dimensional array. The operand is performing
+      // said arith. Simply drop this dereference, and massage the type.
+      expr2tc tmp = deref.value;
+      const array_type2t &arr =
+        to_array_type(to_pointer_type(deref.value->type).subtype);
+
+      tmp.get()->type = type2tc(new pointer_type2t(arr.subtype));
+      expr = tmp;
+//XXX -- test this! nonscalar handles this now?
+      return;
+    }
+
+    expr2tc tmp_obj = deref.value;
+    expr2tc result = dereference(tmp_obj, guard, mode);
+    expr = result;
+  } else if (is_index2t(expr) &&
+             is_pointer_type(to_index2t(expr).source_value)) {
+    assert((is_scalar_type(expr) || is_code_type(expr))
+           && "Can't dereference to a nonscalar type");
+    index2t &idx = to_index2t(expr);
+
+    // first make sure there are no dereferences in there
+    dereference_expr(idx.index, guard, dereferencet::READ);
+    dereference_expr(idx.source_value, guard, mode);
+
+    add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
+    expr = dereference(tmp, guard, mode); // Result discarded.
+  } else if (is_non_scalar_expr(expr)) {
+    // The result of this expression should be scalar: we're transitioning
+    // from a scalar result to a nonscalar result.
+    // Unless we're doing something crazy with multidimensional arrays and
+    // address_of, for example, where no dereference is involved. In that case,
+    // bail.
+    bool contains_deref = has_dereference(expr);
+    if (!contains_deref)
+      return;
+
+    assert(is_scalar_type(expr));
+
+    std::list<expr2tc> scalar_step_list;
+    expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
+                                             scalar_step_list);
+    assert(scalar_step_list.size() == 0); // Should finish empty.
+
+    // If a dereference successfully occurred, replace expr at this level.
+    // XXX -- explain this better.
+    if (!is_nil_expr(res))
+      expr = res;
+  } else {
+    Forall_operands2(it, idx, expr) {
+      if (is_nil_expr(*it))
+        continue;
+
+      dereference_expr(*it, guard, mode);
+    }
+  }
+}
+
+expr2tc
+dereferencet::dereference_expr_nonscalar(
+  expr2tc &expr,
+  guardt &guard,
+  const modet mode,
+  std::list<expr2tc> &scalar_step_list)
+{
+
+  if (is_dereference2t(expr))
+  {
+    dereference2t &deref = to_dereference2t(expr);
+    // first make sure there are no dereferences in there
+    dereference_expr(deref.value, guard, dereferencet::READ);
+    expr2tc result = dereference(deref.value, guard, mode, &scalar_step_list);
+    return result;
+  }
+  else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
+  {
+    index2t &index = to_index2t(expr);
+
+    // first make sure there are no dereferences in there
+    dereference_expr(index.source_value, guard, mode);
+    dereference_expr(index.index, guard, mode);
+
+    add2tc tmp(index.source_value->type, index.source_value, index.index);
+    expr2tc result = dereference(tmp, guard, mode, &scalar_step_list);
+    return result;
+  }
+  else if (is_non_scalar_expr(expr))
+  {
+    expr2tc res;
+    if (is_member2t(expr)) {
+      scalar_step_list.push_front(expr);
+      res =  dereference_expr_nonscalar(to_member2t(expr).source_value, guard,
+                                        mode, scalar_step_list);
+      scalar_step_list.pop_front();
+    } else if (is_index2t(expr)) {
+      dereference_expr(to_index2t(expr).index, guard, mode);
+      scalar_step_list.push_front(expr);
+      res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
+                                       mode, scalar_step_list);
+      scalar_step_list.pop_front();
+    } else if (is_if2t(expr)) {
+      // XXX - make this work similarly to dereference_expr.
+      guardt g1 = guard, g2 = guard;
+      if2t &theif = to_if2t(expr);
+      g1.add(theif.cond);
+      g2.add(not2tc(theif.cond));
+
+      scalar_step_list.push_front(theif.true_value);
+      expr2tc res1 = dereference_expr_nonscalar(theif.true_value, g1, mode,
+                                                scalar_step_list);
+      scalar_step_list.pop_front();
+
+      scalar_step_list.push_front(theif.false_value);
+      expr2tc res2 = dereference_expr_nonscalar(theif.false_value, g2, mode,
+                                                scalar_step_list);
+      scalar_step_list.pop_front();
+
+      if2tc fin(res1->type, theif.cond, res1, res2);
+      res = fin;
+    } else {
+      std::cerr << "Unexpected expression in dereference_expr_nonscalar"
+                << std::endl;
+      expr->dump();
+      abort();
+    }
+
+    return res;
+  }
+  else if (is_typecast2t(expr))
+  {
+    // Just blast straight through
+    return dereference_expr_nonscalar(to_typecast2t(expr).from, guard, mode,
+                                      scalar_step_list);
+  }
+  else
+  {
+    // This should end up being either a constant or a symbol; either way
+    // there should be no sudden transition back to scalars, except through
+    // dereferences. Return nil to indicate that there was no dereference at
+    // the bottom of this.
+    assert(!is_scalar_type(expr) &&
+           (is_constant_expr(expr) || is_symbol2t(expr)));
+    return expr2tc();
+  }
 }
 
 expr2tc
@@ -416,6 +671,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     }
   } else {
     assert(is_structure_type(orig_value));
+    assert(scalar_step_list != NULL);
     assert(scalar_step_list->size() != 0); // XXX this is a liability.
     // We have zero offset; If the base types here are compatible, then we can
     // just apply the set of scalar steps to this expr.
