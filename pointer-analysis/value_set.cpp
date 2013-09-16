@@ -678,15 +678,23 @@ void value_sett::get_reference_set_rec(
         } else if (is_constant_int2t(index.index) && o.offset_is_zero()) {
           o.offset = to_constant_int2t(index.index).constant_value;
         } else {
-          o.offset_is_set = false;
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
           const array_type2t &a = to_array_type(index.source_value->type);
           mp_integer m = type_byte_size(a);
+
           // This index operation, whatever the offset, will always multiply
           // by the size of the element type.
-          o.offset_alignment = std::min(o.offset_alignment,
-                                        (unsigned int)m.to_ulong());
+          unsigned int index_align = m.to_ulong();
+
+          // Extract an offset from the old offset if set, otherwise the
+          // alignment field.
+          unsigned int old_align = (o.offset_is_set)
+            ? offset2align(object, o.offset)
+            : o.offset_alignment;
+
+          o.offset_alignment = std::min(index_align, old_align);
+          o.offset_is_set = false;
         }
           
         insert(dest, new_index, o);
