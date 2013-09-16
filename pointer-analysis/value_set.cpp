@@ -625,7 +625,7 @@ void value_sett::get_reference_set_rec(
     // Any symbol we refer to, store into the destination object map.
     // Given that this is a simple symbol, we can be sure that the offset to
     // it is zero.
-    insert(dest, expr, objectt(0));
+    insert(dest, expr, objectt(true, 0));
     return;
   }
   else if (is_dereference2t(expr))

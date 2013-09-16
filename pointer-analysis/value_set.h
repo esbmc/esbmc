@@ -100,15 +100,22 @@ public:
     {
     }
 
-    objectt(unsigned int alignment)
-       :offset_is_set(false), offset_alignment(alignment)
+    objectt(bool offset_set, unsigned int operand)
     {
+      if (offset_set) {
+        offset_is_set = true;
+        offset = mp_integer(operand);
+      } else {
+        offset_is_set = false;
+        offset_alignment = operand;
+      }
     }
 
-    explicit objectt(const mp_integer &_offset):
+    explicit objectt(bool offset_set, const mp_integer &_offset):
       offset(_offset),
       offset_is_set(true)
     {
+      assert(offset_set);
     }
 
     /** Record of the explicit offset into the object. Only valid when
@@ -229,13 +236,13 @@ public:
 
   bool insert(object_mapt &dest, const expr2tc &src, unsigned int align) const
   {
-    objectt t(align);
+    objectt t(false, align);
     return insert(dest, object_numbering.number(src), t);
   }
 
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
-    return insert(dest, object_numbering.number(src), objectt(offset));
+    return insert(dest, object_numbering.number(src), objectt(true, offset));
   }
 
   /** Insert an object record into the given object map. This method has
