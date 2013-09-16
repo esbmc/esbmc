@@ -781,7 +781,7 @@ void value_sett::get_reference_set_rec(
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
   unknown2tc unknown(expr->type);
-  insert(dest, unknown, 0);
+  insert(dest, unknown, mp_integer(0));
 }
 
 void value_sett::assign(

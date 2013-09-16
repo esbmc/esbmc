@@ -258,12 +258,6 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const expr2tc &src, unsigned int align) const
-  {
-    objectt t(false, align);
-    return insert(dest, object_numbering.number(src), t);
-  }
-
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
     return insert(dest, object_numbering.number(src), objectt(true, offset));
