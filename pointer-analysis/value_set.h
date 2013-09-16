@@ -100,6 +100,11 @@ public:
     {
     }
 
+    objectt(unsigned int alignment)
+       :offset_is_set(false), offset_alignment(alignment)
+    {
+    }
+
     explicit objectt(const mp_integer &_offset):
       offset(_offset),
       offset_is_set(true)
@@ -224,8 +229,7 @@ public:
 
   bool insert(object_mapt &dest, const expr2tc &src, unsigned int align) const
   {
-    objectt t;
-    t.offset_alignment = align;
+    objectt t(align);
     return insert(dest, object_numbering.number(src), t);
   }
 
