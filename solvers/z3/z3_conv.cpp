@@ -1665,21 +1665,25 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     const array_type2t &arr_type = to_array_type(data.source_value->type);
     assert(is_scalar_type(arr_type.subtype) && "Can't cope with dynamic "
            "nonscalar arrays right now, sorry");
-    unsigned long result_sz = data.type->get_width() / 8;
-    unsigned long subtype_sz = arr_type.subtype->get_width() / 8;
-    type2tc elem_bv_type = get_uint_type(subtype_sz * 8);
+    //unsigned long result_sz = data.type->get_width() / 8;
+    //unsigned long subtype_sz = arr_type.subtype->get_width() / 8;
 
     // XXX -- unaligned? Probably would mean illegal access anyway.
     // Actually no, we can extract a single byte from any sized array.
 
-    unsigned long sofar;
     expr2tc src_offs = data.source_offset;
     expr2tc expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+
+    // XXX -- actually, byte extract only supports extracting bytes at the
+    // moment.
+
     if (!is_number_type(arr_type.subtype))
-      expr = typecast2tc(elem_bv_type, expr);
+      expr = typecast2tc(get_uint8_type(), expr);
 
     convert_bv(expr, output);
-    sofar = subtype_sz;
+
+#if 0
+    unsigned long sofar = subtype_sz;
     while (sofar < result_sz) {
       src_offs = add2tc(src_offs->type, src_offs, one_uint);
       expr = index2tc(arr_type.subtype, data.source_value, src_offs);
@@ -1697,6 +1701,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 
       sofar += subtype_sz;
     }
+#endif
 
     return;
   }
