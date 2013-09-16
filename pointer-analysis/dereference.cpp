@@ -522,8 +522,8 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
     if (alignment >= subtype_sz && access_sz <= subtype_sz) {
       // Aligned access; just issue an index.
-      constant_int2tc align_expr(offset->type, BigInt(alignment));
-      expr2tc new_offset = div2tc(offset->type, offset, align_expr);
+      constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_sz));
+      expr2tc new_offset = div2tc(offset->type, offset, subtype_sz_expr);
       index2tc idx(arr_type.subtype, value, new_offset);
       value = idx;
       return;
