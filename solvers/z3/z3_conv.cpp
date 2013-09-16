@@ -1667,30 +1667,37 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
            "nonscalar arrays right now, sorry");
     unsigned long result_sz = data.type->get_width() / 8;
     unsigned long subtype_sz = arr_type.subtype->get_width() / 8;
-    unsigned long idx_bits = data.source_offset->type->get_width();
+    type2tc elem_bv_type = get_uint_type(subtype_sz * 8);
 
-    // XXX -- unaligned?
+    // XXX -- unaligned? Probably would mean illegal access anyway.
+    // Actually no, we can extract a single byte from any sized array.
 
-    z3::expr expr, idx;
     unsigned long sofar;
-    convert_bv(data.source_offset, idx);
-    expr = select(source, idx);
+    expr2tc src_offs = data.source_offset;
+    expr2tc expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+    if (!is_number_type(arr_type.subtype))
+      expr = typecast2tc(elem_bv_type, expr);
+
+    convert_bv(expr, output);
     sofar = subtype_sz;
     while (sofar < result_sz) {
-      idx = idx + ctx.esbmc_int_val(1, idx_bits);
+      src_offs = add2tc(src_offs->type, src_offs, one_uint);
+      expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+      if (!is_number_type(arr_type.subtype))
+        expr = typecast2tc(elem_bv_type, expr);
+
       z3::expr tmp;
-      tmp = select(source, idx);
+      convert_bv(expr, tmp);
 
       if (data.big_endian) {
-        expr = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, expr, tmp));
+        output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, tmp));
       } else {
-        expr = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, expr));
+        output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
       }
 
       sofar += subtype_sz;
     }
 
-    output = expr;
     return;
   }
 
