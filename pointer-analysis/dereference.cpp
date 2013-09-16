@@ -766,6 +766,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const guardt &guard,
                                         unsigned long alignment)
 {
+  assert(alignment != 0);
   unsigned long access_sz = type->get_width() / 8;
 
   // If the base thing is an array, and we have an appropriately aligned
