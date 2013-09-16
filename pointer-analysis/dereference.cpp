@@ -715,18 +715,18 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   const type2tc &bytetype = get_uint8_type();
 
   if (is_array_type(base_object) || is_string_type(base_object)) {
-    const array_type2t &arr_type = (is_array_type(base_object))
-      ? to_array_type(base_object->type)
-      : to_array_type(to_constant_string2t(base_object).to_array()->type);
+    type2tc arr_subtype = (is_array_type(base_object))
+    ? to_array_type(base_object->type).subtype
+    : to_array_type(to_constant_string2t(base_object).to_array()->type).subtype;
 
-    unsigned long subtype_size = type_byte_size(*arr_type.subtype).to_ulong();
+    unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
     unsigned long deref_size = type->get_width() / 8;
     if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error?
       constant_int2tc subtype_size_expr(offset->type, BigInt(subtype_size));
       div2tc index(offset->type, offset, subtype_size_expr);
-      index2tc res(arr_type.subtype, base_object, index);
+      index2tc res(arr_subtype, base_object, index);
       value = res;
 
       if (!base_type_eq(type, res->type, ns)) {
