@@ -238,8 +238,8 @@ void value_sett::get_value_set_rec(
   if (is_unknown2t(expr) || is_invalid2t(expr))
   {
     // Unknown / invalid exprs mean we just point at something unknown (and
-    // potentially invalid). No alignment.
-    insert(dest, unknown2tc(original_type), 0);
+    // potentially invalid).
+    insert(dest, unknown2tc(original_type), mp_integer(0));
     return;
   }
   else if (is_index2t(expr))
@@ -290,7 +290,7 @@ void value_sett::get_value_set_rec(
         subtype = ns.follow(subtype);
 
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
-      insert(dest, tmp, 0);
+      insert(dest, tmp, mp_integer(0));
       return;
     }
 
@@ -593,9 +593,9 @@ void value_sett::get_value_set_rec(
   }
 
   // If none of those expressions matched, then we don't really know what this
-  // expression evaluates to. So just record it as being unknown. No alignment.
+  // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
-  insert(dest, tmp, 0);
+  insert(dest, tmp, mp_integer(0));
 }
 
 void value_sett::get_reference_set(
