@@ -511,7 +511,7 @@ void value_sett::get_value_set_rec(
       expr2tc locnum = gen_uint(location_number);
       dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
-      insert(dest, dynobj, 0);
+      insert(dest, dynobj, mp_integer(0));
       }
       return;          
  
@@ -527,7 +527,7 @@ void value_sett::get_value_set_rec(
 
       dynamic_object2tc dynobj(ptr.subtype, locnum, false, false);
 
-      insert(dest, dynobj, 0);
+      insert(dest, dynobj, mp_integer(0));
       }
       return;
     case sideeffect2t::nondet:
@@ -543,7 +543,7 @@ void value_sett::get_value_set_rec(
   {
     // The use of an explicit constant struct value evaluates to it's address.
     address_of2tc tmp(expr->type, expr);
-    insert(dest, tmp, 0);
+    insert(dest, tmp, mp_integer(0));
     return;
   }
   else if (is_with2t(expr))
@@ -660,7 +660,7 @@ void value_sett::get_reference_set_rec(
 
       if (is_unknown2t(object)) {
         unknown2tc unknown(expr->type);
-        insert(dest, unknown, 0);
+        insert(dest, unknown, mp_integer(0));
       } else if (is_array_type(object) || is_string_type(object)) {
         index2tc new_index(index.type, object, zero_uint);
         
@@ -725,7 +725,7 @@ void value_sett::get_reference_set_rec(
           (is_typecast2t(object) &&
            is_null_object2t(to_typecast2t(object).from))) {
         unknown2tc unknown(memb.type);
-        insert(dest, unknown, 0);
+        insert(dest, unknown, mp_integer(0));
       } else {
         objectt o=it->second;
 
