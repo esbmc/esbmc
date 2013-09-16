@@ -256,7 +256,7 @@ public:
     if(dest.read().find(n)==dest.read().end())
     {
       // new
-      dest.write()[n]=object;
+      dest.write().insert(object_map_dt::value_type(n, object));
       return true;
     }
     else
