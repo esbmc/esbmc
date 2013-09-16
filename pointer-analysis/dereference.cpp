@@ -643,14 +643,17 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
   if (is_scalar_type(orig_value)) {
     // dereference_type_compare will have slipped in a typecast.
-  } else if (is_array_type(orig_value)) {
+  } else if (is_array_type(orig_value) || is_string_type(orig_value)) {
     // We have zero offset. Just select things out.
-    const array_type2t &arr = to_array_type(value->type);
-    assert(!is_array_type(arr.subtype) && "Can't cope with multidimensional arrays right now captain1");
-    assert(!is_structure_type(arr.subtype) && "Also not considering arrays of structs at this time, sorry");
+    type2tc arr_subtype = (is_array_type(orig_value))
+     ? to_array_type(orig_value->type).subtype
+     : to_array_type(to_constant_string2t(orig_value).to_array()->type).subtype;
+
+    assert(!is_array_type(arr_subtype) && "Can't cope with multidimensional arrays right now captain1");
+    assert(!is_structure_type(arr_subtype) && "Also not considering arrays of structs at this time, sorry");
 
     unsigned int access_size_int = type->get_width() / 8;
-    unsigned long subtype_size_int = type_byte_size(*arr.subtype).to_ulong();
+    unsigned long subtype_size_int = type_byte_size(*arr_subtype).to_ulong();
 
     bounds_check(orig_value->type, zero_int, access_size_int, guard);
 
@@ -659,7 +662,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     if (!is_big_endian && subtype_size_int >= access_size_int) {
       // Voila, one can just select and cast. This works because little endian
       // just allows for this to happen.
-      index2tc idx(arr.subtype, orig_value, zero_uint);
+      index2tc idx(arr_subtype, orig_value, zero_uint);
       typecast2tc cast(type, idx);
       value = cast;
     } else {
