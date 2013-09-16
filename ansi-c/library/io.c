@@ -129,7 +129,8 @@ int feof(FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -137,7 +138,8 @@ int ferror(FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -145,7 +147,8 @@ int fileno(FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -153,7 +156,8 @@ int fputs(const char *s, FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   /* XXX - what? */
   return return_value;
 }
@@ -163,7 +167,8 @@ int fputs_strabs(const char *s, FILE *stream)
   // just return nondet
   int return_value;
   __ESBMC_assert(__ESBMC_is_zero_string(s), "fputs zero-termination of 1st argument");
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -171,7 +176,8 @@ int fflush(FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -179,7 +185,8 @@ int fpurge(FILE *stream)
 {
   // just return nondet
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -203,7 +210,8 @@ int fgetc(FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -211,7 +219,8 @@ int getc(FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
+// XXX jmorse - checking validity?
+//  *stream;
   return return_value;
 }
 
@@ -226,7 +235,8 @@ int getw(FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -234,7 +244,8 @@ int fseek(FILE *stream, long offset, int whence)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
@@ -242,14 +253,16 @@ long ftell(FILE *stream)
 {
   __ESBMC_HIDE:;
   int return_value;
-  *stream;
+// XXX pointer check
+//  *stream;
   return return_value;
 }
 
 void rewind(FILE *stream)
 {
-  __ESBMC_HIDE:
-  *stream;
+//  __ESBMC_HIDE:
+// XXX pointer check
+//  *stream;
 }
 
 size_t fwrite(
