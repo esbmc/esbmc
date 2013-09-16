@@ -96,10 +96,6 @@ public:
   class objectt
   {
   public:
-    objectt():offset_is_set(false), offset_alignment(0)
-    {
-    }
-
     objectt(bool offset_set, unsigned int operand)
     {
       if (offset_set) {
@@ -291,7 +287,8 @@ public:
    */
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
-    if(dest.read().find(n)==dest.read().end())
+    object_map_dt::const_iterator it = dest.read().find(n);
+    if (it == dest.read().end())
     {
       // new
       dest.write().insert(object_map_dt::value_type(n, object));
@@ -299,7 +296,8 @@ public:
     }
     else
     {
-      objectt &old=dest.write()[n];
+      object_map_dt::iterator it2 = dest.write().find(n);
+      objectt &old = it2->second;
       const expr2tc &expr_obj = object_numbering[n];
 
       if(old.offset_is_set && object.offset_is_set)
