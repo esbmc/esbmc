@@ -96,7 +96,7 @@ public:
   class objectt
   {
   public:
-    objectt():offset_is_set(false)
+    objectt():offset_is_set(false), offset_alignment(0)
     {
     }
 
