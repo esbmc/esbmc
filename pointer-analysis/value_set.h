@@ -217,6 +217,27 @@ public:
     }
   }
 
+  inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
+  {
+    unsigned int nat_align = get_natural_alignment(e);
+    if (m == 0) {
+      return nat_align;
+    } else if ((m % nat_align) == 0) {
+      return nat_align;
+    } else {
+      // What's the least alignment available?
+      unsigned int max_align = config.ansi_c.word_size / 8;
+      do {
+        // Repeatedly decrease the word size by powers of two, and test to see
+        // whether the offset meets that alignment. This will always succeed
+        // and exist the loop when the alignment reaches 1.
+        if ((m % max_align) == 0)
+          return max_align;
+        max_align /= 2;
+      } while (true);
+    }
+  }
+
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
   expr2tc to_expr(object_map_dt::const_iterator it) const;
@@ -283,9 +304,8 @@ public:
         {
           // Merge the tracking for two offsets; take the minimum alignment
           // guarenteed by them.
-          unsigned int natural_align = get_natural_alignment(expr_obj);
-          unsigned long old_align = old.offset.to_ulong() % natural_align;
-          unsigned long new_align = object.offset.to_ulong() % natural_align;
+          unsigned long old_align = offset2align(expr_obj, old.offset);
+          unsigned long new_align = offset2align(expr_obj, object.offset);
           old.offset_is_set = false;
           old.offset_alignment = std::min(old_align, new_align);
           return true;
@@ -301,8 +321,7 @@ public:
           // Old offset unset; new offset set. Compute the alignment of the
           // new object's offset, and take the minimum of that and the old
           // alignment.
-          unsigned int natural_align = get_natural_alignment(expr_obj);
-          unsigned int new_alignment = object.offset.to_ulong() % natural_align;
+          unsigned int new_alignment = offset2align(expr_obj, object.offset);
           old.offset_alignment = std::min(old.offset_alignment, new_alignment);
           return !(old.offset_alignment == oldalign);
         }
@@ -310,8 +329,7 @@ public:
       else
       {
         // Old offset alignment is set; new isn't.
-        unsigned int natural_align = get_natural_alignment(expr_obj);
-        unsigned int old_align = old.offset.to_ulong() % natural_align;
+        unsigned int old_align = offset2align(expr_obj, old.offset);
         old.offset_alignment = std::min(old_align, object.offset_alignment);
         old.offset_is_set=false;
         return true;
