@@ -104,6 +104,7 @@ public:
       } else {
         offset_is_set = false;
         offset_alignment = operand;
+        assert(offset_alignment != 0);
       }
     }
 
