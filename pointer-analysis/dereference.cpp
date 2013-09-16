@@ -505,8 +505,27 @@ void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
-                                        unsigned long alignment __attribute__((unused)))
+                                        unsigned long alignment)
 {
+  unsigned long access_sz = type->get_width() / 8;
+
+  // If the base thing is an array, and we have an appropriately aligned
+  // reference, then just extract from it.
+  if (is_array_type(value) || is_string_type(value)) {
+    const array_type2t &arr_type = (is_array_type(value))
+      ? to_array_type(value->type)
+      : to_array_type(to_constant_string2t(value).to_array()->type);
+
+    unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
+    if (alignment >= subtype_sz && access_sz <= subtype_sz) {
+      // Aligned access; just issue an index.
+      constant_int2tc align_expr(offset->type, BigInt(alignment));
+      expr2tc new_offset = div2tc(offset->type, offset, align_expr);
+      index2tc idx(arr_type.subtype, value, new_offset);
+      value = idx;
+      return;
+    }
+  }
 
   expr2tc new_offset = offset;
   if (memory_model(value, type, guard, new_offset))
