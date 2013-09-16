@@ -110,7 +110,8 @@ private:
                                    const type2tc &type, const guardt &guard,
                                   std::list<expr2tc> *scalar_step_list);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
-                                 const type2tc &type, const guardt &guard);
+                                 const type2tc &type, const guardt &guard,
+                                 unsigned long alignment);
 
   bool memory_model(
     expr2tc &value,

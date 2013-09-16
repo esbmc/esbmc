@@ -372,7 +372,7 @@ void dereferencet::build_reference_to(
                                     scalar_step_list);
     } else {
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
-      construct_from_dyn_offset(value, offset, type, tmp_guard);
+      construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
     }
   }
 }
@@ -504,7 +504,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
-                                        const guardt &guard)
+                                        const guardt &guard,
+                                        unsigned long alignment __attribute__((unused)))
 {
 
   expr2tc new_offset = offset;
