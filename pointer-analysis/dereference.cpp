@@ -371,6 +371,7 @@ void dereferencet::build_reference_to(
         construct_from_const_offset(value, o.offset, type, tmp_guard,
                                     scalar_step_list);
     } else {
+      value = get_base_object(value);
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
       construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
     }
