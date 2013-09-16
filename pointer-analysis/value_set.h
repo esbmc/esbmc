@@ -247,7 +247,13 @@ public:
    *  @param it Iterator of existing object record to insert into dest. */
   void set(object_mapt &dest, object_map_dt::const_iterator it) const
   {
-    dest.write()[it->first]=it->second;
+    // Fetch/insert iterator
+    std::pair<object_map_dt::iterator,bool> res =
+      dest.write().insert(object_map_dt::value_type(it->first, it->second));
+
+    // If element already existed, overwrite.
+    if (res.second)
+      res.first->second = it->second;
   }
 
   bool insert(object_mapt &dest, object_map_dt::const_iterator it) const
