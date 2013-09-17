@@ -181,7 +181,7 @@ dereferencet::dereference_expr(
     }
 
     expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, guard, mode);
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode);
     expr = result;
   } else if (is_index2t(expr) &&
              is_pointer_type(to_index2t(expr).source_value)) {
@@ -194,7 +194,7 @@ dereferencet::dereference_expr(
     dereference_expr(idx.source_value, guard, mode);
 
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
-    expr = dereference(tmp, guard, mode); // Result discarded.
+    expr = dereference(tmp, tmp->type, guard, mode); // Result discarded.
   } else if (is_non_scalar_expr(expr)) {
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.
@@ -239,7 +239,8 @@ dereferencet::dereference_expr_nonscalar(
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
-    expr2tc result = dereference(deref.value, guard, mode, &scalar_step_list);
+    expr2tc result = dereference(deref.value, type2tc(), guard, mode,
+                                 &scalar_step_list);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -251,7 +252,8 @@ dereferencet::dereference_expr_nonscalar(
     dereference_expr(index.index, guard, mode);
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
-    expr2tc result = dereference(tmp, guard, mode, &scalar_step_list);
+    expr2tc result = dereference(tmp, type2tc(), guard, mode,
+                                 &scalar_step_list);
     return result;
   }
   else if (is_non_scalar_expr(expr))
@@ -317,6 +319,7 @@ dereferencet::dereference_expr_nonscalar(
 expr2tc
 dereferencet::dereference(
   const expr2tc &src,
+  const type2tc &to_type,
   const guardt &guard,
   const modet mode,
   std::list<expr2tc> *scalar_step_list)
@@ -324,18 +327,15 @@ dereferencet::dereference(
   expr2tc dest = src;
   assert(is_pointer_type(dest));
 
-  // Pointers type won't have been resolved; do that now.
-  pointer_type2t &dest_type = to_pointer_type(dest.get()->type);
-  typet tmp_ptr_subtype = migrate_type_back(dest_type.subtype);
-  const typet dereftype = ns.follow(tmp_ptr_subtype);
-
-  migrate_type(dereftype, dest_type.subtype);
+  // Target type is either a scalar type passed down to us, or we have a chain
+  // of scalar steps available that end up at a scalar type. The result of this
+  // dereference should be a scalar, via whatever means.
+  type2tc type = (!is_nil_type(to_type))
+    ? to_type : scalar_step_list->back()->type;
+  assert(is_scalar_type(type));
 
   // save the dest for later, dest might be destroyed
   const expr2tc deref_expr(dest);
-
-  // type of the object
-  const type2tc &type = dest_type.subtype;
 
   // collect objects dest may point to
   value_setst::valuest points_to_set;

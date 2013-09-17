@@ -78,6 +78,7 @@ public:
 
   virtual expr2tc dereference(
     const expr2tc &dest,
+    const type2tc &type,
     const guardt &guard,
     const modet mode,
     std::list<expr2tc> *scalar_step_list = NULL);

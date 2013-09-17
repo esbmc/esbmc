@@ -228,7 +228,7 @@ void goto_program_dereferencet::dereference_instruction(
 
       guardt guard;
       // Result discarded
-      dereference.dereference(operand, guard, dereferencet::FREE);
+      dereference.dereference(operand, operand->type, guard, dereferencet::FREE);
     }
   }
 }
