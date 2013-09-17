@@ -926,18 +926,18 @@ void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
   add2tc upper_byte(get_int32_type(), offset, access_size_e);
   expr2tc lower_byte = offset;
 
-  lessthanequal2tc le(upper_byte, arrsize);
-  greaterthanequal2tc ge(lower_byte, zero_int);
+  greaterthan2tc gt(upper_byte, arrsize);
+  lessthan2tc lt(lower_byte, zero_int);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  tmp_guard1.move(le);
+  tmp_guard1.move(gt);
   dereference_callback.dereference_failure("array bounds", "array upper bound",
                                            tmp_guard1);
 
   guardt tmp_guard2(guard);
-  tmp_guard2.move(ge);
+  tmp_guard2.move(lt);
   dereference_callback.dereference_failure("array bounds", "array upper bound",
                                            tmp_guard1);
 }
