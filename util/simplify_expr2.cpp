@@ -1452,6 +1452,12 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   } else if (is_member2t(a) && is_member2t(b)) {
     return obj_equals_addr_of(to_member2t(a).source_value,
                               to_member2t(b).source_value);
+  } else if (is_constant_string2t(a) && is_constant_string2t(b)) {
+    bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
+    if (val)
+      return true_expr;
+    else
+      return false_expr;
   }
 
   return expr2tc();
