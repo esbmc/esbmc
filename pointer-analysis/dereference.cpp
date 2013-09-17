@@ -724,9 +724,16 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error?
-      constant_int2tc subtype_size_expr(offset->type, BigInt(subtype_size));
-      div2tc index(offset->type, offset, subtype_size_expr);
-      index2tc res(arr_subtype, base_object, index);
+      expr2tc idx = offset;
+
+      // Divide offset to an index if we're not an array of chars or something.
+      if (subtype_size != 1) {
+        constant_int2tc subtype_size_expr(offset->type, BigInt(subtype_size));
+        div2tc index(offset->type, offset, subtype_size_expr);
+        idx = index;
+      }
+
+      index2tc res(arr_subtype, base_object, idx);
       value = res;
 
       if (!base_type_eq(type, res->type, ns)) {
@@ -782,8 +789,14 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
     if (alignment >= subtype_sz && access_sz <= subtype_sz) {
       // Aligned access; just issue an index.
-      constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_sz));
-      expr2tc new_offset = div2tc(offset->type, offset, subtype_sz_expr);
+      expr2tc new_offset = offset;
+
+      // If not an array of bytes or something, scale offset to index.
+      if (subtype_sz != 1) {
+        constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_sz));
+        new_offset = div2tc(offset->type, offset, subtype_sz_expr);
+      }
+
       index2tc idx(arr_type.subtype, value, new_offset);
       value = idx;
       return;
