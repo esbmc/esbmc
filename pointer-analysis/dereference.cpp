@@ -770,7 +770,19 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     } else {
       value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
     }
+  } else if (is_code_type(base_object)) {
+    // Accessing anything but the start of a function is not permitted.
+    notequal2tc neq(offset, zero_uint);
+    if(!options.get_bool_option("no-pointer-check")) {
+      guardt tmp_guard2(guard);
+      tmp_guard2.add(false_expr);
+
+      dereference_callback.dereference_failure(
+        "Code separation",
+        "Dereferencing code pointer with nonzero offset", tmp_guard2);
+    }
   } else {
+    assert(is_scalar_type(base_object));
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
   }
 
@@ -823,6 +835,20 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       value = idx;
       return;
     }
+  } else if (is_code_type(value)) {
+    // No data is read out, we can only check for correctness here. And that
+    // correctness demands that the offset is always zero.
+    notequal2tc neq(offset, zero_uint);
+    if(!options.get_bool_option("no-pointer-check")) {
+      guardt tmp_guard2(guard);
+      tmp_guard2.add(false_expr);
+
+      dereference_callback.dereference_failure(
+        "Code separation",
+        "Dereferencing code pointer with nonzero offset", tmp_guard2);
+    }
+
+    return;
   }
 
   expr2tc new_offset = offset;

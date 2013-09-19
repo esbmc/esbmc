@@ -1852,7 +1852,7 @@ inline bool is_number_type(const expr2tc &e)
 
 inline bool is_scalar_type(const type2tc &t)
 { return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
-         is_empty_type(t); }
+         is_empty_type(t) || is_code_type(t); }
 
 inline bool is_scalar_type(const expr2tc &e)
 { return is_scalar_type(e->type); }
