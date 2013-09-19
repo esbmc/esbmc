@@ -1851,7 +1851,8 @@ inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
 inline bool is_scalar_type(const type2tc &t)
-{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t); }
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t); }
 
 inline bool is_scalar_type(const expr2tc &e)
 { return is_scalar_type(e->type); }
