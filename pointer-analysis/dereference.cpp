@@ -160,7 +160,7 @@ dereferencet::dereference_expr(
   }
 
   if (is_dereference2t(expr)) {
-    assert((is_scalar_type(expr) || is_code_type(expr))
+    assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
        && "Can't dereference to a nonscalar type");
 
     dereference2t &deref = to_dereference2t(expr);
@@ -187,7 +187,7 @@ dereferencet::dereference_expr(
     expr = result;
   } else if (is_index2t(expr) &&
              is_pointer_type(to_index2t(expr).source_value)) {
-    assert((is_scalar_type(expr) || is_code_type(expr))
+    assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
            && "Can't dereference to a nonscalar type");
     index2t &idx = to_index2t(expr);
 
