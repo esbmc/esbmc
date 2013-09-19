@@ -1053,3 +1053,51 @@ bool dereferencet::memory_model_bytes(
 
   return false;
 }
+
+unsigned int
+dereferencet::fabricate_scalar_access(const expr2tc &obj,
+                                      std::list<expr2tc> &scalar_step_list)
+{
+  // From the given type, insert a series of steps that reads out the first
+  // element in some way that doesn't trigger a futher deference.
+  assert(!is_scalar_type(obj->type));
+  // scalar_step_list may very well be empty, and that's fine.
+
+  unsigned int steps = 0;
+  expr2tc cur_obj = obj;
+  type2tc cur_type = obj->type;
+  do {
+    if (is_scalar_type(cur_obj->type))
+      break;
+
+    if (is_array_type(cur_type)) {
+      const array_type2t &arr_type = to_array_type(cur_type);
+
+      // A safe access to an array is to select the first element -- C89 doesn't
+      // allow for zero sized arrays (though GNUC does). XXX, this addition to
+      // the scalar step list is esoteric.
+      index2tc idx(arr_type.subtype, obj, zero_uint);
+      cur_obj = idx;
+    } else if (is_struct_type(cur_type)) {
+      const struct_type2t &struct_type = to_struct_type(cur_type);
+
+      // Safe access -- select the first member of the struct. C89 doesn't allow
+      // structs with no members.
+      assert(struct_type.members.size() != 0 &&
+             "C does not allow for zero sized structs");
+      member2tc memb(struct_type.members[0], cur_obj,
+                     struct_type.member_names[0]);
+      cur_obj = memb;
+    } else {
+      std::cerr << "Unrecognized type in fabricate_scalar_access" << std::endl;
+      cur_type->dump();
+      abort();
+    }
+
+    scalar_step_list.push_front(cur_obj);
+    cur_type = cur_obj->type;
+    steps++;
+  } while (true);
+
+  return steps;
+}
