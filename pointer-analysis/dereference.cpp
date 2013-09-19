@@ -348,7 +348,7 @@ dereferencet::dereference(
   // nonscalar dereferences.
   // XXX -- dest and scalar_step_list being out of sync is horrible.
   if (!is_scalar_type(type)) {
-    scalar_steps_to_pop = fabricate_scalar_access(dest, *scalar_step_list);
+    scalar_steps_to_pop = fabricate_scalar_access(type, *scalar_step_list);
     type = scalar_step_list->back()->type;
   }
 
@@ -1077,19 +1077,18 @@ bool dereferencet::memory_model_bytes(
 }
 
 unsigned int
-dereferencet::fabricate_scalar_access(const expr2tc &obj,
+dereferencet::fabricate_scalar_access(const type2tc &src_type,
                                       std::list<expr2tc> &scalar_step_list)
 {
   // From the given type, insert a series of steps that reads out the first
   // element in some way that doesn't trigger a futher deference.
-  assert(!is_scalar_type(obj->type));
+  assert(!is_scalar_type(src_type));
   // scalar_step_list may very well be empty, and that's fine.
 
   unsigned int steps = 0;
-  expr2tc cur_obj = obj;
-  type2tc cur_type = obj->type;
+  type2tc cur_type = src_type;
   do {
-    if (is_scalar_type(cur_obj->type))
+    if (is_scalar_type(cur_type))
       break;
 
     if (is_array_type(cur_type)) {
@@ -1097,9 +1096,10 @@ dereferencet::fabricate_scalar_access(const expr2tc &obj,
 
       // A safe access to an array is to select the first element -- C89 doesn't
       // allow for zero sized arrays (though GNUC does). XXX, this addition to
-      // the scalar step list is esoteric.
-      index2tc idx(arr_type.subtype, obj, zero_uint);
-      cur_obj = idx;
+      // the scalar step list is esoteric. Also, contains a nil expr.
+      index2tc idx(arr_type.subtype, expr2tc(), zero_uint);
+      scalar_step_list.push_front(idx);
+      cur_type = idx->type;
     } else if (is_struct_type(cur_type)) {
       const struct_type2t &struct_type = to_struct_type(cur_type);
 
@@ -1107,17 +1107,16 @@ dereferencet::fabricate_scalar_access(const expr2tc &obj,
       // structs with no members.
       assert(struct_type.members.size() != 0 &&
              "C does not allow for zero sized structs");
-      member2tc memb(struct_type.members[0], cur_obj,
+      member2tc memb(struct_type.members[0], expr2tc(),
                      struct_type.member_names[0]);
-      cur_obj = memb;
+      scalar_step_list.push_front(memb);
+      cur_type = memb->type;
     } else {
       std::cerr << "Unrecognized type in fabricate_scalar_access" << std::endl;
       cur_type->dump();
       abort();
     }
 
-    scalar_step_list.push_front(cur_obj);
-    cur_type = cur_obj->type;
     steps++;
   } while (true);
 

@@ -140,7 +140,7 @@ private:
     const guardt &guard,
     expr2tc &new_offset);
 
-  unsigned int fabricate_scalar_access(const expr2tc &object,
+  unsigned int fabricate_scalar_access(const type2tc &src_type,
                                        std::list<expr2tc> &scalar_step_list);
 };
 
