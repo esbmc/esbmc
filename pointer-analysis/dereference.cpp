@@ -160,6 +160,7 @@ dereferencet::dereference_expr(
   }
 
   if (is_dereference2t(expr)) {
+    std::list<expr2tc> scalar_step_list;
     assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
        && "Can't dereference to a nonscalar type");
 
@@ -182,11 +183,12 @@ dereferencet::dereference_expr(
     }
 
     expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, NULL,
-                                 checks_only);
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
+                                 &scalar_step_list, checks_only);
     expr = result;
   } else if (is_index2t(expr) &&
              is_pointer_type(to_index2t(expr).source_value)) {
+    std::list<expr2tc> scalar_step_list;
     assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
            && "Can't dereference to a nonscalar type");
     index2t &idx = to_index2t(expr);
@@ -197,7 +199,8 @@ dereferencet::dereference_expr(
 
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
     // Result discarded.
-    expr = dereference(tmp, tmp->type, guard, mode, NULL, checks_only);
+    expr = dereference(tmp, tmp->type, guard, mode, &scalar_step_list,
+                       checks_only);
   } else if (is_non_scalar_expr(expr)) {
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.

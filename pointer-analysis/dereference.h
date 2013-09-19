@@ -83,7 +83,7 @@ public:
     const type2tc &type,
     const guardt &guard,
     const modet mode,
-    std::list<expr2tc> *scalar_step_list = NULL,
+    std::list<expr2tc> *scalar_step_list,
     bool checks_only = false);
 
   bool has_dereference(const expr2tc &expr) const;
