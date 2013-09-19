@@ -6,6 +6,7 @@
 
 #include <ansi-c/c_types.h>
 #include <base_type.h>
+#include <type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -715,19 +716,22 @@ pointer_offset2t::do_simplify(bool second) const
     assert(!(is_pointer_type(add.side_1) &&
              is_pointer_type(add.side_2)));
 
-    const expr2tc ptr_op = (is_pointer_type(add.side_1))
-                           ? add.side_1 : add.side_2;
-    const expr2tc non_ptr_op = (is_pointer_type(add.side_1))
-                               ? add.side_2 : add.side_1;
+    expr2tc ptr_op = (is_pointer_type(add.side_1)) ? add.side_1 : add.side_2;
+    expr2tc non_ptr_op =
+      (is_pointer_type(add.side_1)) ? add.side_2 : add.side_1;
 
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
-    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, non_ptr_op));
+    // And multiply the non pointer one by the type size.
+    type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+    constant_int2tc type_size(ptr_int_type, type_byte_size(*ptr_op->type));
 
-    // XXX XXX XXX
-    // XXX XXX XXX  This may be the source of pointer arith fail. Or lack of
-    // XXX XXX XXX  consideration of pointer arithmetic.
-    // XXX XXX XXX
+    if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
+      non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
+
+    mul2tc new_non_ptr_op(ptr_int_type, non_ptr_op, type_size);
+
+    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, new_non_ptr_op));
 
     // So, this add is a valid simplification. We may be able to simplify
     // further though.
