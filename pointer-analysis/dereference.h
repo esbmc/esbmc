@@ -68,20 +68,23 @@ public:
   virtual void dereference_expr(
     expr2tc &dest,
     guardt &guard,
-    const modet mode);
+    const modet mode,
+    bool checks_only = false);
 
   virtual expr2tc dereference_expr_nonscalar(
     expr2tc &dest,
     guardt &guard,
     const modet mode,
-    std::list<expr2tc> &scalar_step_list);
+    std::list<expr2tc> &scalar_step_list,
+    bool checks_only = false);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
     const type2tc &type,
     const guardt &guard,
     const modet mode,
-    std::list<expr2tc> *scalar_step_list = NULL);
+    std::list<expr2tc> *scalar_step_list = NULL,
+    bool checks_only = false);
 
   bool has_dereference(const expr2tc &expr) const;
 

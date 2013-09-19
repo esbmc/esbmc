@@ -109,7 +109,7 @@ void goto_program_dereferencet::dereference_expr(
 
   if(checks_only) {
     expr2tc tmp = expr;
-    dereference.dereference_expr(tmp, guard, mode);
+    dereference.dereference_expr(tmp, guard, mode, true);
   } else {
     dereference.dereference_expr(expr, guard, mode);
   }
@@ -228,7 +228,9 @@ void goto_program_dereferencet::dereference_instruction(
 
       guardt guard;
       // Result discarded
-      dereference.dereference(operand, operand->type, guard, dereferencet::FREE);
+      std::list<expr2tc> scalar_step_list;
+      dereference.dereference(operand, operand->type, guard, dereferencet::FREE,
+                              &scalar_step_list, true);
     }
   }
 }

@@ -68,7 +68,8 @@ void
 dereferencet::dereference_expr(
   expr2tc &expr,
   guardt &guard,
-  const modet mode)
+  const modet mode,
+  bool checks_only)
 {
 
   if (!has_dereference(expr))
@@ -123,7 +124,7 @@ dereferencet::dereference_expr(
     if (o1) {
       unsigned old_guard=guard.size();
       guard.add(ifref.cond);
-      dereference_expr(ifref.true_value, guard, mode);
+      dereference_expr(ifref.true_value, guard, mode, checks_only);
       guard.resize(old_guard);
     }
 
@@ -131,7 +132,7 @@ dereferencet::dereference_expr(
       unsigned old_guard=guard.size();
       not2tc tmp(ifref.cond);
       guard.move(tmp);
-      dereference_expr(ifref.false_value, guard, mode);
+      dereference_expr(ifref.false_value, guard, mode, checks_only);
       guard.resize(old_guard);
     }
 
@@ -181,7 +182,8 @@ dereferencet::dereference_expr(
     }
 
     expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode);
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode, NULL,
+                                 checks_only);
     expr = result;
   } else if (is_index2t(expr) &&
              is_pointer_type(to_index2t(expr).source_value)) {
@@ -194,7 +196,8 @@ dereferencet::dereference_expr(
     dereference_expr(idx.source_value, guard, mode);
 
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
-    expr = dereference(tmp, tmp->type, guard, mode); // Result discarded.
+    // Result discarded.
+    expr = dereference(tmp, tmp->type, guard, mode, NULL, checks_only);
   } else if (is_non_scalar_expr(expr)) {
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.
@@ -209,7 +212,7 @@ dereferencet::dereference_expr(
 
     std::list<expr2tc> scalar_step_list;
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
-                                             scalar_step_list);
+                                             scalar_step_list, checks_only);
     assert(scalar_step_list.size() == 0); // Should finish empty.
 
     // If a dereference successfully occurred, replace expr at this level.
@@ -221,7 +224,7 @@ dereferencet::dereference_expr(
       if (is_nil_expr(*it))
         continue;
 
-      dereference_expr(*it, guard, mode);
+      dereference_expr(*it, guard, mode, checks_only);
     }
   }
 }
@@ -231,7 +234,8 @@ dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guardt &guard,
   const modet mode,
-  std::list<expr2tc> &scalar_step_list)
+  std::list<expr2tc> &scalar_step_list,
+  bool checks_only)
 {
 
   if (is_dereference2t(expr))
@@ -240,7 +244,7 @@ dereferencet::dereference_expr_nonscalar(
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
     expr2tc result = dereference(deref.value, type2tc(), guard, mode,
-                                 &scalar_step_list);
+                                 &scalar_step_list, checks_only);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -253,7 +257,7 @@ dereferencet::dereference_expr_nonscalar(
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
     expr2tc result = dereference(tmp, type2tc(), guard, mode,
-                                 &scalar_step_list);
+                                 &scalar_step_list, checks_only);
     return result;
   }
   else if (is_non_scalar_expr(expr))
@@ -262,13 +266,13 @@ dereferencet::dereference_expr_nonscalar(
     if (is_member2t(expr)) {
       scalar_step_list.push_front(expr);
       res =  dereference_expr_nonscalar(to_member2t(expr).source_value, guard,
-                                        mode, scalar_step_list);
+                                        mode, scalar_step_list, checks_only);
       scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
       dereference_expr(to_index2t(expr).index, guard, mode);
       scalar_step_list.push_front(expr);
       res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
-                                       mode, scalar_step_list);
+                                       mode, scalar_step_list, checks_only);
       scalar_step_list.pop_front();
     } else if (is_if2t(expr)) {
       // XXX - make this work similarly to dereference_expr.
@@ -279,12 +283,12 @@ dereferencet::dereference_expr_nonscalar(
 
       scalar_step_list.push_front(theif.true_value);
       expr2tc res1 = dereference_expr_nonscalar(theif.true_value, g1, mode,
-                                                scalar_step_list);
+                                                scalar_step_list, checks_only);
       scalar_step_list.pop_front();
 
       scalar_step_list.push_front(theif.false_value);
       expr2tc res2 = dereference_expr_nonscalar(theif.false_value, g2, mode,
-                                                scalar_step_list);
+                                                scalar_step_list, checks_only);
       scalar_step_list.pop_front();
 
       if2tc fin(res1->type, theif.cond, res1, res2);
@@ -302,7 +306,7 @@ dereferencet::dereference_expr_nonscalar(
   {
     // Just blast straight through
     return dereference_expr_nonscalar(to_typecast2t(expr).from, guard, mode,
-                                      scalar_step_list);
+                                      scalar_step_list, checks_only);
   }
   else
   {
@@ -322,8 +326,10 @@ dereferencet::dereference(
   const type2tc &to_type,
   const guardt &guard,
   const modet mode,
-  std::list<expr2tc> *scalar_step_list)
+  std::list<expr2tc> *scalar_step_list,
+  bool checks_only)
 {
+  unsigned int scalar_steps_to_pop = 0;
   expr2tc dest = src;
   assert(is_pointer_type(dest));
 
@@ -332,7 +338,16 @@ dereferencet::dereference(
   // dereference should be a scalar, via whatever means.
   type2tc type = (!is_nil_type(to_type))
     ? to_type : scalar_step_list->back()->type;
-  assert(is_scalar_type(type));
+  assert(is_scalar_type(type) || (checks_only && scalar_step_list));
+
+  // If we're just doing checks, and this is a nonscalar, fabricate a scalar
+  // expression dereference so that the rest of our dereference code can ignore
+  // nonscalar dereferences.
+  // XXX -- dest and scalar_step_list being out of sync is horrible.
+  if (!is_scalar_type(type)) {
+    scalar_steps_to_pop = fabricate_scalar_access(dest, *scalar_step_list);
+    type = scalar_step_list->back()->type;
+  }
 
   // save the dest for later, dest might be destroyed
   const expr2tc deref_expr(dest);
@@ -403,6 +418,10 @@ dereferencet::dereference(
       migrate_expr(tmp_sym_expr, value);
     }
   }
+
+
+  for (unsigned int i = 0; i < scalar_steps_to_pop; i++)
+    scalar_step_list->pop_front();
 
   dest = value;
   return dest;
