@@ -1810,9 +1810,23 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
       output = struct_elem_inv[num_elems];
     } else if (is_array_type(data.source_value) ||
                is_string_type(data.source_value)) {
-      z3::expr idx;
-      convert_bv(data.source_offset, idx);
-      output = select(source, idx);
+      // lololol special case: two dimensional arrays. deliberately not n.
+      if (is_array_type(data.source_value) &&
+          is_array_type(to_array_type(data.source_value->type).subtype)) {
+        // Double select.
+        unsigned int byte_size = data.source_value->type->get_width() / 8;
+        z3::expr index;
+        convert_bv(data.source_offset, index);
+        z3::expr byte_size_e = ctx.esbmc_int_val(byte_size);
+        z3::expr divindex = mk_div(index, byte_size_e, true);
+        output = select(source, divindex);
+        z3::expr subindex = index - (divindex * byte_size_e); // wat
+        output = select(output, subindex);
+      } else {
+        z3::expr idx;
+        convert_bv(data.source_offset, idx);
+        output = select(source, idx);
+      }
     } else if (is_bv_type(data.source_value)) {
       if (width >= upper)
         output = z3::to_expr(ctx, Z3_mk_extract(ctx, upper, lower, source));
