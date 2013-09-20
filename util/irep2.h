@@ -1857,6 +1857,19 @@ inline bool is_scalar_type(const type2tc &t)
 inline bool is_scalar_type(const expr2tc &e)
 { return is_scalar_type(e->type); }
 
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants
