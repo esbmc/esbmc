@@ -1903,9 +1903,38 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       throw new conv_error("1unsupported irep for convert_byte_update");
 
   } else if (is_array_type(data.source_value)) {
+    const array_type2t &arr_type = to_array_type(data.source_value->type);
     z3::expr index;
     convert_bv(data.source_offset, index);
-    output = store(tuple, index, value); // XXX where's index coming from?
+    assert(is_bv_type(arr_type.subtype) && "Byte updating an array of "
+           "non-bitvector types: you're going to have a bad time");
+    if (data.source_value->type->get_width() == 8) {
+      output = store(tuple, index, value);
+    } else {
+      // Update in some part of an element. Produce mask and or.
+      // First, select out the relevant element.
+      unsigned int byte_size = data.source_value->type->get_width() / 8;
+      z3::expr byte_size_e = ctx.esbmc_int_val(byte_size);
+      z3::expr divindex = mk_div(index, byte_size_e, true);
+      output = select(tuple, divindex);
+      z3::expr where = index - (divindex * byte_size_e); // wat
+
+      z3::expr mask = ctx.esbmc_int_val(0xFF);
+      z3::expr eight = ctx.esbmc_int_val(8);
+      z3::expr shiftsz = where * eight;
+      mask = z3::to_expr(ctx, Z3_mk_bvshl(ctx, mask, shiftsz));
+      output = mk_bvand(output, mask);
+
+      // Or in the given byte value.
+      typecast2tc cast(get_uint_type(config.ansi_c.int_width),
+                       data.update_value);
+      z3::expr value;
+      convert_bv(cast, value);
+      value = z3::to_expr(ctx, Z3_mk_bvshl(ctx, value, shiftsz));
+      output = mk_bvor(output, value);
+
+      output = store(tuple, divindex, output);
+    }
   } else if (is_fixedbv_type(data.source_value)) {
     width_op0 = data.source_value->type->get_width();
     if (width_op0 > width_op2) {
