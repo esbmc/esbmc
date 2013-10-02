@@ -1922,7 +1922,8 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
     convert_bv(data.source_offset, index);
     assert(is_bv_type(arr_type.subtype) && "Byte updating an array of "
            "non-bitvector types: you're going to have a bad time");
-    if (data.source_value->type->get_width() == 8) {
+    if (arr_type.subtype->get_width() == 8) {
+      // This is just a byte array.
       output = store(tuple, index, value);
     } else {
       // Update in some part of an element. Produce mask and or.
