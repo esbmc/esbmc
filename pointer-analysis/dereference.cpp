@@ -916,7 +916,35 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       index2tc idx(arr_type.subtype, value, new_offset);
       value = idx;
     } else {
-      // XXX ???
+      // Hurrrr. Assume that this is a character array, select things out, and
+      // concat them. Disgusting.
+      assert(arr_type.subtype->get_width() == 8 && "unaligned access to non "
+             "byte array?");
+      unsigned int target_bytes = type->get_width() / 8;
+      expr2tc accuml;
+      expr2tc accuml_offs = offset;
+      type2tc byte_type = get_uint8_type();
+
+      for (unsigned int i = 0; i < target_bytes; i++) {
+        expr2tc byte = index2tc(byte_type, value, accuml_offs);
+
+        if (is_nil_expr(accuml)) {
+          accuml = byte;
+        } else {
+          // XXX -- byte order.
+          accuml = concat2tc(get_uint_type((i+1)*8), accuml, byte);
+        }
+
+        accuml_offs = add2tc(offset->type, accuml_offs, one_uint);
+      }
+
+      // That's going to come out as a bitvector;
+      if (type != accuml->type) {
+        assert(base_type_eq(type, accuml->type, ns));
+        accuml = typecast2tc(type, accuml);
+      }
+
+      value = accuml;
     }
 
     if (checks)
