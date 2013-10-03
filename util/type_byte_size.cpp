@@ -190,6 +190,10 @@ compute_pointer_offset(const expr2tc &expr)
       result = mul2tc(uint_type2(), tmp_size, index.index);
     }
 
+    // Also accumulate any pointer offset in the source object.
+    result = add2tc(result->type, result,
+                    compute_pointer_offset(index.source_value));
+
     return result;
   } else if (is_member2t(expr))   {
     const member2t &memb = to_member2t(expr);
@@ -201,6 +205,11 @@ compute_pointer_offset(const expr2tc &expr)
     } else {
       result = 0; // Union offsets are always 0.
     }
+
+    // Also accumulate any pointer offset in the source object.
+    expr2tc res_expr = constant_int2tc(index_type2(), result);
+    res_expr = add2tc(res_expr->type, res_expr,
+                      compute_pointer_offset(memb.source_value));
 
     return constant_int2tc(uint_type2(), result);
   } else if (is_constant_array2t(expr))   {
