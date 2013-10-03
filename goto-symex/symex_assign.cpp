@@ -191,24 +191,24 @@ void goto_symext::symex_assign_rec(
 
   if (is_symbol2t(lhs)) {
     symex_assign_symbol(lhs, rhs, guard);
-  } else if (is_index2t(lhs))
+  } else if (is_index2t(lhs)) {
     symex_assign_array(lhs, rhs, guard);
-  else if (is_member2t(lhs))
+  } else if (is_member2t(lhs)) {
     symex_assign_member(lhs, rhs, guard);
-  else if (is_if2t(lhs))
+  } else if (is_if2t(lhs)) {
     symex_assign_if(lhs, rhs, guard);
-  else if (is_typecast2t(lhs))
+  } else if (is_typecast2t(lhs)) {
     symex_assign_typecast(lhs, rhs, guard);
-  else if (is_constant_string2t(lhs) ||
+   } else if (is_constant_string2t(lhs) ||
            is_null_object2t(lhs) ||
            is_zero_string2t(lhs))
   {
     // ignore
-  }
-  else if (is_byte_extract2t(lhs))
+  } else if (is_byte_extract2t(lhs)) {
     symex_assign_byte_extract(lhs, rhs, guard);
-  else
+  } else {
     throw "assignment to " + get_expr_id(lhs) + " not handled";
+  }
 }
 
 void goto_symext::symex_assign_symbol(
