@@ -207,7 +207,9 @@ void goto_symext::symex_assign_rec(
   } else if (is_byte_extract2t(lhs)) {
     symex_assign_byte_extract(lhs, rhs, guard);
   } else {
-    throw "assignment to " + get_expr_id(lhs) + " not handled";
+    std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
+              << std::endl;
+    abort();
   }
 }
 
