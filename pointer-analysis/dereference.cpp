@@ -781,6 +781,14 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         "Code separation",
         "Dereferencing code pointer with nonzero offset", tmp_guard2);
     }
+  } else if (is_struct_type(base_object)) {
+    // Just to be sure:
+    assert(is_scalar_type(type));
+
+    // Right. Hand off control to a specialsed function that goes through
+    // structs recursively, determining what object we're operating on at
+    // each point.
+    value = construct_from_const_struct_offset(value, offset, type, guard);
   } else {
     assert(is_scalar_type(base_object));
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
@@ -790,7 +798,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   if (is_array_type(base_object) || is_string_type(base_object)) {
     bounds_check(base_object->type, offset, access_sz, guard);
   } else {
-    unsigned long sz = type_byte_size(*value->type).to_ulong();
+    unsigned long sz = type_byte_size(*base_object->type).to_ulong();
     if (sz + access_sz > theint.constant_value.to_ulong()) {
       if(!options.get_bool_option("no-pointer-check")) {
         guardt tmp_guard2(guard);
