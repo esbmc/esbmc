@@ -127,6 +127,10 @@ private:
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
                                  unsigned long alignment);
+  expr2tc construct_from_const_struct_offset(expr2tc &value,
+                                             const expr2tc &offset,
+                                             const type2tc &type,
+                                             const guardt &guard);
 
   bool memory_model(
     expr2tc &value,

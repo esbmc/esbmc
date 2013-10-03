@@ -804,6 +804,64 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   }
 }
 
+expr2tc
+dereferencet::construct_from_const_struct_offset(expr2tc &value,
+                        const expr2tc &offset, const type2tc &type,
+                        const guardt &guard __attribute__((unused)))
+{
+  assert(is_struct_type(value->type));
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  const mp_integer int_offset = to_constant_int2t(offset).constant_value;
+  mp_integer access_size = type_byte_size(*type.get());
+
+  unsigned int i = 0;
+  forall_types(it, struct_type.members) {
+    mp_integer m_offs = member_offset(struct_type, struct_type.member_names[i]);
+    mp_integer m_size  = type_byte_size(*it->get());
+
+    if (int_offset < m_offs) {
+      // The offset is behind this field, but wasn't accepted by the previous
+      // member. That means that the offset falls in the undefined gap in the
+      // middled. Which is an error.
+      std::cerr << "Implement read-from-padding error in structs" << std::endl;
+      abort();
+    } else if (int_offset == m_offs) {
+      // Does this over-read?
+      if (access_size > m_size) {
+        std::cerr << "Implement over-read of struct fields" << std::endl;
+        abort();
+      }
+
+      // If it's at the start of a field, there's no need for further alignment
+      // concern.
+      member2tc memb(*it, value, struct_type.member_names[i]);
+      return memb;
+    } else if (int_offset > m_offs &&
+              (int_offset - m_offs + access_size < m_size)) {
+      // This access is in the bounds of this member, but isn't at the start.
+      // XXX that might be an alignment error.
+      // In the meantime, byte extract.
+      member2tc memb(*it, value, struct_type.member_names[i]);
+      constant_int2tc new_offs(index_type2(), int_offset - m_offs);
+      byte_extract2tc be(type, memb, new_offs, is_big_endian);
+      return be;
+    } else if (int_offset < (m_offs + m_size)) {
+      // This access starts in this field, but by process of elimination,
+      // doesn't end in it. Which means reading padding data (or an alignment
+      // error), which are both bad.
+      std::cerr << "Implement over-read starting in struct fields" << std::endl;
+      abort();
+    }
+
+    // Wasn't that field.
+    i++;
+  }
+
+  // Fell out of that struct -- means we've accessed out of bounds. Code at
+  // a higher level will encode an assertion to this effect.
+  return expr2tc();
+}
+
 void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
