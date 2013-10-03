@@ -2797,6 +2797,17 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
   output = z3::to_expr(ctx, Z3_mk_not(z3_ctx, no_over));
 }
 
+
+void
+z3_convt::convert_smt_expr(const concat2t &cat, void *_bv)
+{
+  z3::expr &output = cast_to_z3(_bv);
+  z3::expr op1, op2;
+  convert_bv(cat.side_1, op1);
+  convert_bv(cat.side_2, op2);
+  output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, op1, op2));
+}
+
 void
 z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
                                 const expr2tc &side2,
