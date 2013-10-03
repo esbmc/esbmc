@@ -199,8 +199,8 @@ compute_pointer_offset(const expr2tc &expr)
     const member2t &memb = to_member2t(expr);
 
     mp_integer result;
-    if (is_struct_type(expr)) {
-      const struct_type2t &type = to_struct_type(expr->type);
+    if (is_struct_type(memb.source_value->type)) {
+      const struct_type2t &type = to_struct_type(memb.source_value->type);
       result = member_offset(type, memb.member);
     } else {
       result = 0; // Union offsets are always 0.
