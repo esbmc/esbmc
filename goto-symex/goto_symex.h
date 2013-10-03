@@ -525,6 +525,18 @@ protected:
   void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
                                  guardt &guard);
 
+  /**
+   *  Assign through a 'concat' operation. These are generated when we fail to
+   *  dereference something correctly, and generate a series of byte operations
+   *  that we then stitch back together. When that's on the left hand side of an
+   *  expression, this means that we have to decompose the right hand side into
+   *  a series of byte assignments.
+   *  @param lhs Concat to assign to
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
+
   /** Symbolic implementation of malloc. */
   void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of free */

@@ -206,6 +206,8 @@ void goto_symext::symex_assign_rec(
     // ignore
   } else if (is_byte_extract2t(lhs)) {
     symex_assign_byte_extract(lhs, rhs, guard);
+  } else if (is_concat2t(lhs)) {
+    symex_assign_concat(lhs, rhs, guard);
   } else {
     std::cerr <<  "assignment to " << get_expr_id(lhs) << " not handled"
               << std::endl;
@@ -394,6 +396,52 @@ void goto_symext::symex_assign_byte_extract(
                            extract.big_endian);
 
     symex_assign_rec(extract.source_value, new_rhs, guard);
+  }
+}
+
+void goto_symext::symex_assign_concat(
+  const expr2tc &lhs,
+  expr2tc &rhs,
+  guardt &guard)
+{
+  // Right: generate a series of symex assigns.
+  const concat2t &cat = to_concat2t(lhs);
+  assert(cat.type->get_width() > 8);
+  assert(is_scalar_type(rhs));
+
+  // Ensure we're dealing with a bitvector.
+  if (!is_bv_type(rhs))
+    rhs = typecast2tc(get_uint_type(rhs->type->get_width()), rhs);
+
+  if (cat.side_1->type->get_width() == 8) {
+    unsigned int shift_distance = cat.type->get_width() - 8;
+    expr2tc shift_dist = gen_uint(shift_distance);
+    shift_dist = typecast2tc(rhs->type, shift_dist);
+    ashr2tc shr(rhs->type, rhs, shift_dist);
+
+    // Assign byte from rhs to first lhs operand.
+    symex_assign_rec(cat.side_1, shr, guard);
+
+    // Assign the remainder of the rhs to the lhs's second operand.
+    // XXX -- am I assuming little endian here?
+    typecast2tc cast(get_uint_type(shift_distance), rhs);
+    symex_assign_rec(cat.side_2, cast, guard);
+  } else {
+    assert(cat.side_2->type->get_width() == 8);
+    // Extract lower byte
+    typecast2tc cast(get_uint8_type(), rhs);
+    symex_assign_rec(cat.side_2, cast, guard);
+
+    // Shift one byte off the end, and assign the remainder to the other
+    // operand.
+    unsigned int shift_distance = 8;
+    expr2tc shift_dist = gen_uint(shift_distance);
+    shift_dist = typecast2tc(rhs->type, shift_dist);
+    ashr2tc shr(rhs->type, rhs, shift_dist);
+
+    unsigned int cast_size = cat.type->get_width() - 8;
+    typecast2tc cast2(get_uint_type(cast_size), rhs);
+    symex_assign_rec(cat.side_1, cast2, guard);
   }
 }
 
