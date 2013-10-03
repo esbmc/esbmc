@@ -850,17 +850,25 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       // If it's at the start of a field, there's no need for further alignment
       // concern.
-      member2tc memb(*it, value, struct_type.member_names[i]);
-      return memb;
+      expr2tc res = member2tc(*it, value, struct_type.member_names[i]);
+
+      if (!is_scalar_type(*it)) {
+        // We have to do even more extraction...
+        construct_from_const_offset(res, zero_uint, type, guard, NULL, false);
+      }
+
+      return res;
     } else if (int_offset > m_offs &&
               (int_offset - m_offs + access_size < m_size)) {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
       // In the meantime, byte extract.
-      member2tc memb(*it, value, struct_type.member_names[i]);
+      expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
       constant_int2tc new_offs(index_type2(), int_offset - m_offs);
-      byte_extract2tc be(type, memb, new_offs, is_big_endian);
-      return be;
+
+      // Extract.
+      construct_from_const_offset(memb, new_offs, type, guard, NULL, false);
+      return memb;
     } else if (int_offset < (m_offs + m_size)) {
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
