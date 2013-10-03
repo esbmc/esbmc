@@ -697,28 +697,34 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
   } else {
     assert(is_structure_type(orig_value));
     assert(scalar_step_list != NULL);
-    assert(scalar_step_list->size() != 0); // XXX this is a liability.
-    // We have zero offset; If the base types here are compatible, then we can
-    // just apply the set of scalar steps to this expr.
+    if (scalar_step_list->size() != 0) {
+      // We have zero offset; If the base types here are compatible, then we can
+      // just apply the set of scalar steps to this expr.
 
-    // Fetch what's either the source of the index, or member, in the first
-    // step.
-    expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-    if (base_type_eq(orig_value->type, base_of_steps->type, ns)) {
-      // We can just reconstruct this.
-      expr2tc accuml = orig_value;
-      for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
-           it != scalar_step_list->end(); it++) {
-        expr2tc tmp = *it;
-        *tmp.get()->get_sub_expr_nc(0) = accuml;
-        accuml = tmp;
+      // Fetch what's either the source of the index, or member, in the first
+      // step.
+      expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
+      if (base_type_eq(orig_value->type, base_of_steps->type, ns)) {
+        // We can just reconstruct this.
+        expr2tc accuml = orig_value;
+        for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
+             it != scalar_step_list->end(); it++) {
+          expr2tc tmp = *it;
+          *tmp.get()->get_sub_expr_nc(0) = accuml;
+          accuml = tmp;
+        }
+        value = accuml;
+      } else {
+        // We can't reconstruct this. Go crazy instead.
+        std::cerr << "Noncompatible struct operation in deref" << std::endl;
+        orig_value->dump();
+        abort();
       }
-      value = accuml;
     } else {
-      // We can't reconstruct this. Go crazy instead.
-      std::cerr << "Noncompatible struct operation in deref" << std::endl;
-      orig_value->dump();
-      abort();
+      // No set of scalar steps: what this means is that we're accessing the
+      // first element of this struct as it's natural type. Build the access
+      // ourself.
+      value = construct_from_const_struct_offset(value, zero_uint, type, guard);
     }
   }
 }
