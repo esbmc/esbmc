@@ -212,11 +212,11 @@ compute_pointer_offset(const expr2tc &expr)
                       compute_pointer_offset(memb.source_value));
 
     return constant_int2tc(uint_type2(), result);
-  } else if (is_constant_array2t(expr))   {
-    // Some code, somewhere, is renaming a constant array into a dereference
-    // target. The offset into the base object is nothing.
+  } else if (is_constant_expr(expr)) {
+    // This is a constant struct, array, union, string, etc. There's nothing
+    // at a lower level; the offset is zero.
     return zero_uint;
-  } else   {
+  } else {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
     std::cerr << expr->pretty() << std::endl;
     abort();
