@@ -911,8 +911,12 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
       index2tc idx(arr_type.subtype, value, new_offset);
       value = idx;
-      return;
+    } else {
+      // XXX ???
     }
+
+    bounds_check(orig_value->type, offset, access_sz, guard);
+    return;
   } else if (is_code_type(value)) {
     // No data is read out, we can only check for correctness here. And that
     // correctness demands that the offset is always zero.
