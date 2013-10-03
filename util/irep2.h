@@ -576,6 +576,7 @@ public:
     code_cpp_throw_decl_end_id,
     isinf_id,
     isnormal_id,
+    concat_id,
     end_expr_id
   };
 
@@ -2029,6 +2030,7 @@ class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
 class isinf2t;
 class isnormal2t;
+class concat2t;
 
 // Data definitions.
 
@@ -2957,6 +2959,9 @@ irep_typedefs(isinf, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
 irep_typedefs(isnormal, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(concat, bit_2ops, esbmct::takestype,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4423,6 +4428,17 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
+class concat2t : public concat_expr_methods
+{
+public:
+  concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
+    : concat_expr_methods(type, concat_id, forward, aft) { }
+  concat2t(const concat2t &ref)
+    : concat_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
 inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
@@ -4580,6 +4596,7 @@ expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
 expr_macros(isinf);
 expr_macros(isnormal);
+expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast

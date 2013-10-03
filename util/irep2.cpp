@@ -649,6 +649,7 @@ static const char *expr_names[] = {
   "cpp_throw_decl_end",
   "isinf",
   "isnormal",
+  "concat",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2701,6 +2702,8 @@ std::string isinf2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string isnormal2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
+std::string concat2t::field_names [esbmct::num_type_fields]  =
+{ "forward", "aft", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2976,3 +2979,6 @@ template class esbmct::expr_methods<isinf2t,
     arith_1op, expr2tc, arith_1op, &arith_1op::value>;
 template class esbmct::expr_methods<isnormal2t,
     arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<concat2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;
