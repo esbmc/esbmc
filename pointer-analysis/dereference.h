@@ -123,7 +123,8 @@ private:
                                   std::list<expr2tc> *scalar_step_list);
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
-                                  std::list<expr2tc> *scalar_step_list);
+                                  std::list<expr2tc> *scalar_step_list,
+                                  bool checks = true);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
                                  unsigned long alignment);

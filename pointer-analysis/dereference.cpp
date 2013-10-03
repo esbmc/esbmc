@@ -732,7 +732,8 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,
-                                          std::list<expr2tc> *scalar_step_list __attribute__((unused)))
+                                          std::list<expr2tc> *scalar_step_list __attribute__((unused)),
+                                          bool checks)
 {
 
   expr2tc base_object = value;
@@ -797,6 +798,9 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     assert(is_scalar_type(base_object));
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
   }
+
+  if (!checks)
+    return;
 
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
   if (is_array_type(base_object) || is_string_type(base_object)) {
