@@ -397,6 +397,11 @@ dereferencet::dereference(
       // yes!
       exprt tmp_val = symbol_expr(*failed_symbol);
       migrate_expr(tmp_val, value);
+
+    // Wrap it in the scalar step list, to ensure it has the right type.
+    if (scalar_step_list->size() != 0)
+      wrap_in_scalar_step_list(value, scalar_step_list);
+
     }
     else
     {
@@ -420,10 +425,6 @@ dereferencet::dereference(
       // appears in the symbol table.
       migrate_expr(tmp_sym_expr, value);
     }
-
-    // Wrap it in the scalar step list, to ensure it has the right type.
-    if (scalar_step_list->size() != 0)
-      wrap_in_scalar_step_list(value, scalar_step_list);
   }
 
 
