@@ -735,7 +735,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           std::list<expr2tc> *scalar_step_list __attribute__((unused)))
 {
 
-  // XXX This isn't taking account of the additional offset being torn through
   expr2tc base_object = value;
 
   const constant_int2t &theint = to_constant_int2t(offset);
