@@ -422,7 +422,8 @@ dereferencet::dereference(
     }
 
     // Wrap it in the scalar step list, to ensure it has the right type.
-    wrap_in_scalar_step_list(value, scalar_step_list);
+    if (scalar_step_list->size() != 0)
+      wrap_in_scalar_step_list(value, scalar_step_list);
   }
 
 
