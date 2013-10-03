@@ -663,7 +663,14 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
   expr2tc orig_value = value;
 
   if (is_scalar_type(orig_value)) {
-    // dereference_type_compare will have slipped in a typecast.
+    if (type != orig_value->type) {
+      if (base_type_eq(value->type, type, ns)) {
+        value = typecast2tc(type, value);
+      } else {
+        // XXX -- uh, byte swapping? FIXME
+        value = typecast2tc(type, value);
+      }
+    }
   } else if (is_array_type(orig_value) || is_string_type(orig_value)) {
     // We have zero offset. Just select things out.
     type2tc arr_subtype = (is_array_type(orig_value))
