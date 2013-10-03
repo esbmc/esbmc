@@ -147,6 +147,8 @@ private:
 
   unsigned int fabricate_scalar_access(const type2tc &src_type,
                                        std::list<expr2tc> &scalar_step_list);
+  void wrap_in_scalar_step_list(expr2tc &value,
+                                std::list<expr2tc> *scalar_step_list);
 };
 
 #endif

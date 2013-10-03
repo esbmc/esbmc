@@ -420,6 +420,9 @@ dereferencet::dereference(
       // appears in the symbol table.
       migrate_expr(tmp_sym_expr, value);
     }
+
+    // Wrap it in the scalar step list, to ensure it has the right type.
+    wrap_in_scalar_step_list(value, scalar_step_list);
   }
 
 
@@ -709,23 +712,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
       // Fetch what's either the source of the index, or member, in the first
       // step.
-      expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-      if (base_type_eq(orig_value->type, base_of_steps->type, ns)) {
-        // We can just reconstruct this.
-        expr2tc accuml = orig_value;
-        for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
-             it != scalar_step_list->end(); it++) {
-          expr2tc tmp = *it;
-          *tmp.get()->get_sub_expr_nc(0) = accuml;
-          accuml = tmp;
-        }
-        value = accuml;
-      } else {
-        // We can't reconstruct this. Go crazy instead.
-        std::cerr << "Noncompatible struct operation in deref" << std::endl;
-        orig_value->dump();
-        abort();
-      }
+      wrap_in_scalar_step_list(value, scalar_step_list);
     } else {
       // No set of scalar steps: what this means is that we're accessing the
       // first element of this struct as it's natural type. Build the access
@@ -1236,4 +1223,27 @@ dereferencet::fabricate_scalar_access(const type2tc &src_type,
   } while (true);
 
   return steps;
+}
+
+void
+dereferencet::wrap_in_scalar_step_list(expr2tc &value,
+                                       std::list<expr2tc> *scalar_step_list)
+{
+  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
+  if (base_type_eq(value->type, base_of_steps->type, ns)) {
+    // We can just reconstruct this.
+    expr2tc accuml = value;
+    for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
+         it != scalar_step_list->end(); it++) {
+      expr2tc tmp = *it;
+      *tmp.get()->get_sub_expr_nc(0) = accuml;
+      accuml = tmp;
+    }
+    value = accuml;
+  } else {
+    // We can't reconstruct this. Go crazy instead.
+    std::cerr << "Noncompatible struct operation in deref" << std::endl;
+    value->dump();
+    abort();
+  }
 }
