@@ -940,7 +940,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
       // That's going to come out as a bitvector;
       if (type != accuml->type) {
-        assert(base_type_eq(type, accuml->type, ns));
+        assert(base_type_eq(type, accuml->type, ns) || is_pointer_type(type));
         accuml = typecast2tc(type, accuml);
       }
 
