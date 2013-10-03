@@ -127,11 +127,15 @@ private:
                                   bool checks = true);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
-                                 unsigned long alignment);
+                                 unsigned long alignment, bool checks = true);
   expr2tc construct_from_const_struct_offset(expr2tc &value,
                                              const expr2tc &offset,
                                              const type2tc &type,
                                              const guardt &guard);
+  void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
+                                        const type2tc &type,
+                                        const guardt &guard,
+                                        unsigned long alignment);
 
   bool memory_model(
     expr2tc &value,

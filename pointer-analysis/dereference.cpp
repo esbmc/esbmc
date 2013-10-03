@@ -886,10 +886,12 @@ void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
-                                        unsigned long alignment)
+                                        unsigned long alignment,
+                                        bool checks)
 {
   assert(alignment != 0);
   unsigned long access_sz = type->get_width() / 8;
+  expr2tc orig_value = value;
 
   // If the base thing is an array, and we have an appropriately aligned
   // reference, then just extract from it.
@@ -897,9 +899,11 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     const array_type2t &arr_type = (is_array_type(value))
       ? to_array_type(value->type)
       : to_array_type(to_constant_string2t(value).to_array()->type);
-
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
-    if (alignment >= subtype_sz && access_sz <= subtype_sz) {
+
+    if (is_array_type(arr_type.subtype)) {
+      construct_from_multidir_array(value, offset, type, guard, alignment);
+    } else if (alignment >= subtype_sz && access_sz <= subtype_sz) {
       // Aligned access; just issue an index.
       expr2tc new_offset = offset;
 
@@ -915,7 +919,8 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       // XXX ???
     }
 
-    bounds_check(orig_value->type, offset, access_sz, guard);
+    if (checks)
+      bounds_check(orig_value->type, offset, access_sz, guard);
     return;
   } else if (is_code_type(value)) {
     // No data is read out, we can only check for correctness here. And that
@@ -1257,5 +1262,46 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     std::cerr << "Noncompatible struct operation in deref" << std::endl;
     value->dump();
     abort();
+  }
+}
+
+void
+dereferencet::construct_from_multidir_array(expr2tc &value,
+                              const expr2tc &offset,
+                              const type2tc &type, const guardt &guard,
+                              unsigned long alignment)
+{
+  assert(is_array_type(value) || is_string_type(value));
+  const array_type2t &arr_type = (is_array_type(value))
+    ? to_array_type(value->type)
+    : to_array_type(to_constant_string2t(value).to_array()->type);
+
+  // Right: any access across the boundry of the outer dimension of this array
+  // is an alignment violation, I think. (It isn't for byte arrays, worry about
+  // that later XXX).
+  // So, divide the offset by size of the inner dimention, make an index2t, and
+  // construct a reference to that.
+  mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
+  constant_int2tc subtype_sz_expr(index_type2(), subtype_sz);
+  div2tc div(index_type2(), offset, subtype_sz_expr);
+  modulus2tc mod(index_type2(), offset, subtype_sz_expr);
+
+  expr2tc idx = div->simplify();
+  if (is_nil_expr(idx))
+    idx = div;
+
+  index2tc outer_idx(arr_type.subtype, value, idx);
+  value = outer_idx;
+
+  idx = mod->simplify();
+  if (is_nil_expr(idx))
+    idx = mod;
+
+  if (is_constant_expr(idx)) {
+    std::cerr << "Constant outcome to multidimension dyn offset dereference"
+              << std::endl;
+    abort();
+  } else {
+    construct_from_dyn_offset(value, idx, type, guard, alignment, false);
   }
 }
