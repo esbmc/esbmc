@@ -632,23 +632,22 @@ void dereferencet::build_reference_to(
 
     valid_check(object, tmp_guard, mode);
 
-    if (is_constant_expr(o.offset)) {
+    expr2tc orig_value = value;
+    value = get_base_object(value);
+    expr2tc additional_offset = compute_pointer_offset(orig_value);
+    add2tc add(o.offset->type, o.offset, additional_offset);
+    expr2tc final_offset = add->simplify();
+    if (is_nil_expr(final_offset))
+      final_offset = add;
 
-      // See whether or not we need to munge the object into the desired type;
-      // this will return false if we need to juggle the type in a significant
-      // way, true if they're either the same type or extremely similar. value
-      // may be replaced with a typecast.
-      expr2tc orig_value = value;
-      value = get_base_object(value);
-
-      const constant_int2t &theint = to_constant_int2t(o.offset);
+    if (is_constant_expr(final_offset)) {
+      const constant_int2t &theint = to_constant_int2t(final_offset);
       if (theint.constant_value.to_ulong() == 0)
         construct_from_zero_offset(value, type, tmp_guard, scalar_step_list);
       else
-        construct_from_const_offset(value, o.offset, type, tmp_guard,
+        construct_from_const_offset(value, final_offset, type, tmp_guard,
                                     scalar_step_list);
     } else {
-      value = get_base_object(value);
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
       construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
     }
