@@ -821,7 +821,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     bounds_check(base_object->type, offset, access_sz, guard);
   } else {
     unsigned long sz = type_byte_size(*base_object->type).to_ulong();
-    if (sz + access_sz > theint.constant_value.to_ulong()) {
+    if (sz < theint.constant_value.to_ulong() + access_sz) {
       if(!options.get_bool_option("no-pointer-check")) {
         // This is statically known to be out of bounds.
         dereference_callback.dereference_failure(
