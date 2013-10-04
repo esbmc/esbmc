@@ -1276,7 +1276,7 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
   // fabricate_scalar_access, so be less strenuous.
   expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
   if (is_nil_expr(base_of_steps) ||
-      base_type_eq(value->type, base_of_steps->type, ns)) {
+      dereference_type_compare(value, base_of_steps->type)) {
     // We can just reconstruct this.
     expr2tc accuml = value;
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
