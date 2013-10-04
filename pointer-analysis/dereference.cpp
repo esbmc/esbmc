@@ -556,7 +556,14 @@ void dereferencet::build_reference_to(
   {
     const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
 
-    value = dereference2tc(type, deref_expr);
+    if (scalar_step_list && scalar_step_list->size() > 0) {
+      type2tc subtype = to_pointer_type(deref_expr->type).subtype;
+      subtype = ns.follow(subtype);
+      value = dereference2tc(subtype, deref_expr);
+      wrap_in_scalar_step_list(value, scalar_step_list);
+    } else {
+      value = dereference2tc(type, deref_expr);
+    }
 
     if(!options.get_bool_option("no-pointer-check"))
     {
