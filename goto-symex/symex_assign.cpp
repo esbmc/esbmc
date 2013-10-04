@@ -418,9 +418,10 @@ void goto_symext::symex_assign_concat(
     expr2tc shift_dist = gen_uint(shift_distance);
     shift_dist = typecast2tc(rhs->type, shift_dist);
     ashr2tc shr(rhs->type, rhs, shift_dist);
+    typecast2tc shr_cast(get_uint8_type(), shr);
 
     // Assign byte from rhs to first lhs operand.
-    symex_assign_rec(cat.side_1, shr, guard);
+    symex_assign_rec(cat.side_1, shr_cast, guard);
 
     // Assign the remainder of the rhs to the lhs's second operand.
     // XXX -- am I assuming little endian here?
