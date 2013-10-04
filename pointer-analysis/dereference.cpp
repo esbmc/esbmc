@@ -721,7 +721,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     bounds_check(orig_value->type, zero_int, access_size_int, guard);
 
     //XXX uuhh, in desperate need of refactor.
-    if (scalar_step_list->size() != 0)
+    if (scalar_step_list->size() != 0 && !is_scalar_type(type))
       wrap_in_scalar_step_list(value, scalar_step_list);
   } else {
     assert(is_structure_type(orig_value));
