@@ -689,30 +689,40 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
     type2tc arr_subtype = (is_array_type(orig_value))
      ? to_array_type(orig_value->type).subtype
      : to_array_type(to_constant_string2t(orig_value).to_array()->type).subtype;
-
-    assert(!is_array_type(arr_subtype) && "Can't cope with multidimensional arrays right now captain1");
-    assert(!is_structure_type(arr_subtype) && "Also not considering arrays of structs at this time, sorry");
-
     unsigned int access_size_int = type->get_width() / 8;
     unsigned long subtype_size_int = type_byte_size(*arr_subtype).to_ulong();
 
+    if (is_array_type(arr_subtype)) {
+      construct_from_multidir_array(value, zero_uint, type, guard,
+                                    config.ansi_c.word_size);
+    } else if (is_structure_type(arr_subtype)) {
+      value = index2tc(arr_subtype, orig_value, zero_uint);
+      construct_from_const_struct_offset(value, zero_uint, type, guard);
+    } else {
+      assert(is_scalar_type(arr_subtype));
+
+      // Now, if the subtype size is >= the read size, we can just either cast
+      // or extract out. If not, we have to extract by conjoining elements.
+      if (!is_big_endian && subtype_size_int >= access_size_int) {
+        // Voila, one can just select and cast. This works because little endian
+        // just allows for this to happen.
+        index2tc idx(arr_subtype, orig_value, zero_uint);
+        typecast2tc cast(type, idx);
+        value = cast;
+      } else {
+        // Nope, one must byte extract this.
+        const type2tc &bytetype = get_uint8_type();
+        value = byte_extract2tc(bytetype, orig_value, zero_uint, is_big_endian);
+        if (type != bytetype)
+          value = typecast2tc(type, value);
+      }
+    }
+
     bounds_check(orig_value->type, zero_int, access_size_int, guard);
 
-    // Now, if the subtype size is >= the read size, we can just either cast
-    // or extract out. If not, we have to extract by conjoining elements.
-    if (!is_big_endian && subtype_size_int >= access_size_int) {
-      // Voila, one can just select and cast. This works because little endian
-      // just allows for this to happen.
-      index2tc idx(arr_subtype, orig_value, zero_uint);
-      typecast2tc cast(type, idx);
-      value = cast;
-    } else {
-      // Nope, one must byte extract this.
-      const type2tc &bytetype = get_uint8_type();
-      value = byte_extract2tc(bytetype, orig_value, zero_uint, is_big_endian);
-      if (type != bytetype)
-        value = typecast2tc(type, value);
-    }
+    //XXX uuhh, in desperate need of refactor.
+    if (scalar_step_list->size() != 0)
+      wrap_in_scalar_step_list(value, scalar_step_list);
   } else {
     assert(is_structure_type(orig_value));
     assert(scalar_step_list != NULL);
