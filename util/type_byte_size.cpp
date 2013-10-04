@@ -216,6 +216,13 @@ compute_pointer_offset(const expr2tc &expr)
     // This is a constant struct, array, union, string, etc. There's nothing
     // at a lower level; the offset is zero.
     return zero_uint;
+  } else if (is_typecast2t(expr)) {
+    // Blast straight through.
+    return compute_pointer_offset(to_typecast2t(expr).from);
+  } else if (is_dynamic_object2t(expr)) {
+    // This is a dynamic object represented something allocated; from the static
+    // pointer analysis. Assume that this is thet bottom of the expression.
+    return zero_uint;
   } else {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
     std::cerr << expr->pretty() << std::endl;
