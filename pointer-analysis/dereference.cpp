@@ -575,6 +575,7 @@ void dereferencet::build_reference_to(
       irep_idt dyn_name = (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
         ? "c::__ESBMC_is_dynamic" : "cpp::__ESBMC_is_dynamic";
       symbol2tc sym(arr_type, dyn_name);
+      assert(is_pointer_type(deref_expr));
       pointer_object2tc ptr_obj(int_type2(), deref_expr);
       index2tc is_dyn_obj(get_bool_type(), sym, ptr_obj);
 
