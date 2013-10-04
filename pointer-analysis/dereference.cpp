@@ -440,17 +440,6 @@ bool dereferencet::dereference_type_compare(
 {
   const type2tc object_type = object->type;
 
-  if (is_empty_type(dereference_type))
-    return true; // always ok
-
-  if (base_type_eq(object_type, dereference_type, ns)) {
-    // Ok, they just match. However, the SMT solver that receives this formula
-    // in the end may object to taking an equivalent type and instead demand
-    // that the types are exactly the same. So, slip in a typecast.
-    object = typecast2tc(dereference_type, object);
-    return true;
-  }
-
   // Check for C++ subclasses; we can cast derived up to base safely.
   if (is_struct_type(object) && is_struct_type(dereference_type)) {
     if (is_subclass_of(object->type, dereference_type, ns)) {
@@ -477,10 +466,6 @@ bool dereferencet::dereference_type_compare(
       return true; // ok, dt is a prefix of ot
     }
   }
-
-  // we are generous about code pointers
-  if (is_code_type(dereference_type) && is_code_type(object_type))
-    return true;
 
   // really different
 
