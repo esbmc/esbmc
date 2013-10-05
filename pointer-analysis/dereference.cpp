@@ -1123,7 +1123,7 @@ void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
 
   guardt tmp_guard2(guard);
   tmp_guard2.move(lt);
-  dereference_callback.dereference_failure("array bounds", "array upper bound",
+  dereference_callback.dereference_failure("array bounds", "array lower bound",
                                            tmp_guard1);
 }
 
