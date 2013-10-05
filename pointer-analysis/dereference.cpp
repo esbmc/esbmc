@@ -161,8 +161,6 @@ dereferencet::dereference_expr(
 
   if (is_dereference2t(expr)) {
     std::list<expr2tc> scalar_step_list;
-    assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
-       && "Can't dereference to a nonscalar type");
 
     dereference2t &deref = to_dereference2t(expr);
     // first make sure there are no dereferences in there
@@ -182,10 +180,31 @@ dereferencet::dereference_expr(
       return;
     }
 
-    expr2tc tmp_obj = deref.value;
-    expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                 &scalar_step_list, checks_only);
-    expr = result;
+    if ((is_scalar_type(expr) || is_code_type(expr) || checks_only)) {
+    //assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
+    //   && "Can't dereference to a nonscalar type");
+      expr2tc tmp_obj = deref.value;
+      expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
+                                   &scalar_step_list, checks_only);
+      expr = result;
+    } else {
+      // Nonscalar dereference; pretend we know what we're doing for a moment
+      expr2tc tmp_obj = deref.value;
+      expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
+                                   &scalar_step_list, true);
+      // And now, remove any intermediate indexes or members.
+      while (!dereference_type_compare(result, expr->type)) {
+        if (is_index2t(result)) {
+          result = to_index2t(result).source_value;
+        } else if (is_member2t(result)) {
+          result = to_member2t(result).source_value;
+        } else {
+          std::cerr << "Erronous struct dereference" << std::endl;
+          abort();
+        }
+      }
+      expr = result;
+    }
   } else if (is_index2t(expr) &&
              is_pointer_type(to_index2t(expr).source_value)) {
     std::list<expr2tc> scalar_step_list;
