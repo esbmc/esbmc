@@ -180,7 +180,10 @@ char *strdup_strabs(const char *str)
 void *memcpy(void *dst, const void *src, size_t n)
 {
   __ESBMC_HIDE:
-  for(size_t i=0; i<n ; i++) ((char*)dst)[i]=((char*)src)[i];
+  char *cdst = dst;
+  const char *csrc = src;
+  for(size_t i=0; i<n ; i++)
+    cdst[i] = csrc[i];
   return dst;
 }
 
@@ -238,13 +241,17 @@ void *memset_strabs(void *s, int c, size_t n)
 void *memmove(void *dest, const void *src, size_t n)
 {
   __ESBMC_HIDE:
+  char *cdest = dest;
+  const char *csrc = src;
   if (dest-src >= n)
   {
-    for(size_t i=0; i<n ; i++) dest[i]=src[i];
+    for(size_t i=0; i<n ; i++)
+      cdest[i] = csrc[i];
   }
   else
   {
-    for(size_t i=n; i>0 ; i--) dest[i-1]=src[i-1];
+    for(size_t i=n; i>0 ; i--)
+      cdest[i-1] = csrc[i-1];
   }
   return dest;
 }
