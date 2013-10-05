@@ -698,6 +698,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
     if (is_array_type(arr_subtype)) {
       construct_from_multidir_array(value, zero_uint, type, guard,
+                                    scalar_step_list,
                                     config.ansi_c.word_size);
     } else if (is_structure_type(arr_subtype)) {
       value = index2tc(arr_subtype, orig_value, zero_uint);
@@ -766,7 +767,20 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 
     unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
     unsigned long deref_size = type->get_width() / 8;
-    if (subtype_size == deref_size) {
+
+
+    if (is_array_type(arr_subtype)) {
+      construct_from_multidir_array(value, offset, type, guard,
+                                    scalar_step_list,
+                                    config.ansi_c.word_size);
+    } else if (is_structure_type(arr_subtype)) {
+      constant_int2tc subtype_sz_expr(index_type2(), BigInt(subtype_size));
+      div2tc div(index_type2(), offset, subtype_sz_expr);
+      modulus2tc mod(index_type2(), offset, subtype_sz_expr);
+
+      value = index2tc(arr_subtype, value, div);
+      construct_from_const_struct_offset(value, mod, type, guard);
+    } else if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error?
       expr2tc idx = offset;
@@ -924,7 +938,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
 
     if (is_array_type(arr_type.subtype)) {
-      construct_from_multidir_array(value, offset, type, guard, alignment);
+      construct_from_multidir_array(value, offset, type, guard, NULL,alignment);
     } else if (alignment >= subtype_sz && access_sz <= subtype_sz) {
       // Aligned access; just issue an index.
       expr2tc new_offset = offset;
@@ -1319,6 +1333,7 @@ void
 dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
                               const type2tc &type, const guardt &guard,
+                              std::list<expr2tc> *scalar_step_list,
                               unsigned long alignment)
 {
   assert(is_array_type(value) || is_string_type(value));
@@ -1348,9 +1363,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
     idx = mod;
 
   if (is_constant_expr(idx)) {
-    std::cerr << "Constant outcome to multidimension dyn offset dereference"
-              << std::endl;
-    abort();
+    construct_from_const_offset(value, idx, type, guard, scalar_step_list, false);
   } else {
     construct_from_dyn_offset(value, idx, type, guard, alignment, false);
   }

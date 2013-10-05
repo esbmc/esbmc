@@ -135,6 +135,7 @@ private:
   void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
+                                        std::list<expr2tc> *scalar_step_list,
                                         unsigned long alignment);
 
   bool memory_model(
