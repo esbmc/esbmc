@@ -722,7 +722,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
       // No set of scalar steps: what this means is that we're accessing the
       // first element of this struct as it's natural type. Build the access
       // ourself.
-      value = construct_from_const_struct_offset(value, zero_uint, type, guard);
+      construct_from_const_struct_offset(value, zero_uint, type, guard);
     }
   }
 }
@@ -792,7 +792,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     // Right. Hand off control to a specialsed function that goes through
     // structs recursively, determining what object we're operating on at
     // each point.
-    value = construct_from_const_struct_offset(value, offset, type, guard);
+    construct_from_const_struct_offset(value, offset, type, guard);
   } else {
     assert(is_scalar_type(base_object));
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
@@ -817,7 +817,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   }
 }
 
-expr2tc
+void
 dereferencet::construct_from_const_struct_offset(expr2tc &value,
                         const expr2tc &offset, const type2tc &type,
                         const guardt &guard __attribute__((unused)))
@@ -854,7 +854,8 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
         construct_from_const_offset(res, zero_uint, type, guard, NULL, false);
       }
 
-      return res;
+      value = res;
+      return;
     } else if (int_offset > m_offs &&
               (int_offset - m_offs + access_size < m_size)) {
       // This access is in the bounds of this member, but isn't at the start.
@@ -865,7 +866,8 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       // Extract.
       construct_from_const_offset(memb, new_offs, type, guard, NULL, false);
-      return memb;
+      value = memb;
+      return;
     } else if (int_offset < (m_offs + m_size)) {
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
@@ -880,7 +882,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
   // Fell out of that struct -- means we've accessed out of bounds. Code at
   // a higher level will encode an assertion to this effect.
-  return expr2tc();
+  value = expr2tc();
 }
 
 void
