@@ -729,7 +729,7 @@ pointer_offset2t::do_simplify(bool second) const
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
     // And multiply the non pointer one by the type size.
-    type2tc ptr_int_type = get_uint_type(config.ansi_c.pointer_width);
+    type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
     constant_int2tc type_size(ptr_int_type, type_byte_size(*ptr_subtype.get()));
 
