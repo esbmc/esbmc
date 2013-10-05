@@ -720,6 +720,12 @@ pointer_offset2t::do_simplify(bool second) const
     expr2tc non_ptr_op =
       (is_pointer_type(add.side_1)) ? add.side_2 : add.side_1;
 
+    // Can't do any kind of simplification if the ptr op has a symbolic type.
+    // Let the SMT layer handle this. In the future, can we pass around a
+    // namespace?
+    if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+      return expr2tc();
+
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
     // And multiply the non pointer one by the type size.
