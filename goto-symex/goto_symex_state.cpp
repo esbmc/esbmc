@@ -215,6 +215,12 @@ void goto_symex_statet::rename(expr2tc &expr)
   if (is_nil_expr(expr))
     return;
 
+  if (is_array_type(expr)) {
+    // Expr size might need to be renamed.
+    array_type2t &arr_type = to_array_type(expr.get()->type);
+    rename(arr_type.array_size);
+  }
+
   if (is_symbol2t(expr))
   {
     top().level1.rename(expr);
@@ -241,7 +247,14 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   {
     return;
   }
-  else if(is_symbol2t(expr))
+
+  if (is_array_type(expr)) {
+    // Expr size might need to be renamed.
+    array_type2t &arr_type = to_array_type(expr.get()->type);
+    rename(arr_type.array_size);
+  }
+
+  if(is_symbol2t(expr))
   {
     // only do L1
     top().level1.rename(expr);
