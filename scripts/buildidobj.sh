@@ -23,6 +23,8 @@ else
   echo -n " (dirty tree)" >> $SFILE;
 fi
 
+echo "0x00" | xxd -r >> $SFILE;
+
 OFILE="$1/buildiobj.o"
 
 cd $1;
