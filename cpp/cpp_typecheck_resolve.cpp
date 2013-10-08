@@ -1016,25 +1016,12 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
       {
         cpp_typecheck.cpp_scopes.get_ids(final_base_name,cpp_idt::TEMPLATE, id_set, !recursive);
 
-        symbolt template_symbol=
-          cpp_typecheck.context.symbols.find((*id_set.begin())->identifier)->second;
-
-        cpp_template_args_tct template_args_tc;
-        template_args_tc=
-          cpp_typecheck.typecheck_template_args(
-            location,
-            template_symbol,
-            template_args);
-
         const symbolt& symb_tmpl=
-          cpp_typecheck.instantiate_template(
-            cpp_name.location(),
-            template_symbol,
-            template_args_tc,
-            template_args_tc);
+          disambiguate_template_classes(base_name, id_set, template_args);
 
         cpp_typecheck.cpp_scopes.go_to(
           cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
+
         template_args.make_nil();
       }
       else
