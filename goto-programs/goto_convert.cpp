@@ -883,7 +883,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   if (exp.is_symbol() && exp.type().id()!="code")
   {
     if (is_for_block() || is_while_block())
-		  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+	  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
@@ -1138,10 +1138,10 @@ void goto_convertt::convert_assign(
 
   if (inductive_step) {
     get_struct_components(lhs, state);
-    if (rhs.is_constant() && is_ifthenelse) {
+    if (rhs.is_constant() && is_ifthenelse_block()) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
     }
-    else if ((is_for_block() || is_while_block()) && is_ifthenelse) {
+    else if ((is_for_block() || is_while_block()) && is_ifthenelse_block()) {
       nondet_varst::const_iterator cache_result;
       cache_result = nondet_vars.find(lhs);
       if (cache_result == nondet_vars.end())
@@ -2213,7 +2213,7 @@ void goto_convertt::init_nondet_expr(
   exprt nondet_expr=side_effect_expr_nondett(tmp.type());
   code_assignt new_assign_nondet(tmp,nondet_expr);
   copy(new_assign_nondet, ASSIGN, dest);
-  if (!is_ifthenelse)
+  if (!is_ifthenelse_block())
   nondet_vars.insert(std::pair<exprt,exprt>(tmp,nondet_expr));
 }
 
@@ -3512,7 +3512,7 @@ DEBUGLOC;
 
     loop_varst::const_iterator cache_result = loop_vars.find(expr.op0());
     if (cache_result == loop_vars.end())
-			 return ;
+	  return ;
 
     assert(expr.op0().type() == expr.op1().type());
 
@@ -3550,7 +3550,8 @@ void goto_convertt::convert_ifthenelse(
   const codet &code,
   goto_programt &dest)
 {
-  is_ifthenelse=true;
+      set_ifthenelse_block(true);
+
 	  if(code.operands().size()!=2 &&
 	     code.operands().size()!=3)
 	  {
@@ -3573,7 +3574,6 @@ void goto_convertt::convert_ifthenelse(
 	  if(has_else)
 	    convert(to_code(code.op2()), tmp_op2);
 
-#if 1
 	  exprt tmp_guard;
 	  if (options.get_bool_option("control-flow-test")
 		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
@@ -3616,18 +3616,13 @@ void goto_convertt::convert_ifthenelse(
 	    tmp_guard=code.op0();
 
 	  remove_sideeffects(tmp_guard, dest);
-	  if (inductive_step && (is_for_block() ||is_while_block()))
+	  if (inductive_step & (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
 	  //remove_sideeffects(tmp_guard, dest);
 	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
-#else
-	  exprt tmp_guard=code.op0();
-	  remove_sideeffects(tmp_guard, dest);
 
-	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
-#endif
-	  is_ifthenelse=false;
+	  set_ifthenelse_block(false);
 }
 
 /*******************************************************************\
