@@ -2007,7 +2007,13 @@ void cpp_typecheck_resolvet::guess_template_args(
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
       for(unsigned i=0; i<args.size();++i)
       {
-        resolve_scope(to_cpp_name(args[i].type()),base_name,template_args);
+        cpp_namet cpp_name;
+        if(args[i].id()=="unary-")
+          cpp_name=to_cpp_name(args[i].op0());
+        else
+          cpp_name=to_cpp_name(args[i].type());
+
+        resolve_scope(cpp_name,base_name,template_args);
 
         cpp_scopest::id_sett id_set;
         cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);
