@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstddef>
 // { dg-do run }
 
 // Copyright (C) 2002 Free Software Foundation, Inc.
@@ -12,7 +13,7 @@ template <typename T> int Foo (T const &)
 {
   return 2;
 }
-template <typename T, __SIZE_TYPE__ I> int Foo (T const (&ref)[I])
+template <typename T, size_t I> int Foo (T const (&ref)[I])
 {
   return 0;
 }

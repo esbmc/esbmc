@@ -1,10 +1,10 @@
 #include <cassert>
+#include <cstddef>
 // PR c++/54984
 // { dg-do run }
-
 int n = 1;
 
-void* operator new(__SIZE_TYPE__)
+void* operator new(size_t)
 {
   n = -1;
   return &n;
@@ -17,7 +17,7 @@ struct Foo
   : x(new int)
   {
     if (*x != -1)
-      __builtin_abort();
+	assert(0);
   }
 
   int* x;
