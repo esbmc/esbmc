@@ -945,6 +945,12 @@ exprt cpp_typecheck_resolvet::do_builtin(
                       << original_scope->prefix;
     cpp_typecheck.warning();
   }
+  else if(base_name=="context")
+  {
+    dest=exprt("constant", typet("empty"));
+    cpp_typecheck.context.show(cpp_typecheck.str);
+    cpp_typecheck.warning();
+  }
   else
   {
     cpp_typecheck.err_location(location);
@@ -2001,7 +2007,13 @@ void cpp_typecheck_resolvet::guess_template_args(
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
       for(unsigned i=0; i<args.size();++i)
       {
-        resolve_scope(to_cpp_name(args[i].type()),base_name,template_args);
+        cpp_namet cpp_name;
+        if(args[i].id()=="unary-")
+          cpp_name=to_cpp_name(args[i].op0());
+        else
+          cpp_name=to_cpp_name(args[i].type());
+
+        resolve_scope(cpp_name,base_name,template_args);
 
         cpp_scopest::id_sett id_set;
         cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);

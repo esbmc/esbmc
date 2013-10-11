@@ -55,6 +55,8 @@ extern "C" {
 #include "bmc.h"
 #include "version.h"
 
+#include "kinduction_parallel.h"
+
 // jmorse - could be somewhere better
 
 #ifndef _WIN32
@@ -606,7 +608,27 @@ int cbmc_parseoptionst::doit_k_induction()
   set_verbosity(bmc_inductive_step);
 
   // do actual BMC
-  bool res;
+  bool res=0;
+
+  if(cmdline.isset("parallel-k-induction"))
+  {
+    // First, create the threads
+    base_case_thread bc(bmc_base_case, goto_functions_base_case);
+    forward_condition_thread fc(bmc_forward_condition, goto_functions_forward_condition);
+    inductive_step_thread is(bmc_inductive_step, goto_functions_inductive_step);
+
+    // Start the threads
+    bc.start();
+    fc.start();
+    is.start();
+
+    // We should wait to see if some result is found
+    pthread_mutex_lock(&main_mutex);
+    pthread_cond_wait(&main_cond, &main_mutex);
+    pthread_mutex_unlock(&main_mutex);
+
+    return res;
+  }
 
   do {
     std::cout << std::endl << "*** K-Induction Loop Iteration ";
@@ -624,8 +646,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
       res = do_bmc(bmc_base_case, goto_functions_base_case);
 
-      if(k_step >= 1 && res)
-        return 0;
+      if(res)
+        return res;
 
       ++k_step;
 
@@ -643,7 +665,7 @@ int cbmc_parseoptionst::doit_k_induction()
       res = do_bmc(bmc_forward_condition, goto_functions_forward_condition);
 
       if (!res)
-        return 0;
+        return res;
 
       forward_condition = false; //disable forward condition
     }
@@ -658,7 +680,7 @@ int cbmc_parseoptionst::doit_k_induction()
       res = do_bmc(bmc_inductive_step, goto_functions_inductive_step);
 
       if (!res)
-        return 0;
+        return res;
 
       base_case = true; //enable base case
     }

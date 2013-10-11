@@ -115,6 +115,7 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"forward-condition",	switc,		""	},
 { 0,	"inductive-step",	switc,		""	},
 { 0,	"k-induction", switc, "" },
+{ 0,  "parallel-k-induction", switc, "" },
 { 0,	"break-at",		string,		""	},
 { 0,    "no-lit-cache",         switc,          ""      },
 { 0,	"decide",		switc,		""	},
