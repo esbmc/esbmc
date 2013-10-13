@@ -419,7 +419,7 @@ dereferencet::dereference(
 
       // Wrap it in the scalar step list, to ensure it has the right type.
       if (scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list);
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
 
     }
     else
@@ -571,7 +571,7 @@ void dereferencet::build_reference_to(
       type2tc subtype = to_pointer_type(deref_expr->type).subtype;
       subtype = ns.follow(subtype);
       value = dereference2tc(subtype, deref_expr);
-      wrap_in_scalar_step_list(value, scalar_step_list);
+      wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
       value = dereference2tc(type, deref_expr);
     }
@@ -734,7 +734,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
     //XXX uuhh, in desperate need of refactor.
     if (scalar_step_list->size() != 0 && !is_scalar_type(type))
-      wrap_in_scalar_step_list(value, scalar_step_list);
+      wrap_in_scalar_step_list(value, scalar_step_list, guard);
   } else {
     assert(is_structure_type(orig_value));
     assert(scalar_step_list != NULL);
@@ -744,7 +744,7 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
       // Fetch what's either the source of the index, or member, in the first
       // step.
-      wrap_in_scalar_step_list(value, scalar_step_list);
+      wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
       // No set of scalar steps: what this means is that we're accessing the
       // first element of this struct as it's natural type. Build the access
@@ -1417,7 +1417,8 @@ dereferencet::fabricate_scalar_access(const type2tc &src_type,
 
 void
 dereferencet::wrap_in_scalar_step_list(expr2tc &value,
-                                       std::list<expr2tc> *scalar_step_list)
+                                       std::list<expr2tc> *scalar_step_list,
+                                       const guardt &guard)
 {
   // Check that either the base type that these steps are applied to matches
   // the type of the object we're wrapping in these steps. It's a type error
@@ -1438,9 +1439,13 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     value = accuml;
   } else {
     // We can't reconstruct this. Go crazy instead.
-    std::cerr << "Noncompatible struct operation in deref" << std::endl;
-    value->dump();
-    abort();
+    // XXX -- there's a line in the C spec, appendix G or whatever, saying that
+    // accessing an object with an (incompatible) type other than its base type
+    // is undefined behaviour. Should totally put that in the error message.
+    dereference_callback.dereference_failure(
+      "Memory model",
+      "Object accessed with incompatible base type", guard);
+    value = expr2tc();
   }
 }
 
