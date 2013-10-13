@@ -785,8 +785,12 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
       div2tc div(index_type2(), offset, subtype_sz_expr);
       modulus2tc mod(index_type2(), offset, subtype_sz_expr);
 
+      expr2tc mod2 = mod->simplify();
+      assert(is_constant_int2t(mod2) && "Modulus of constant offset should "
+             "simplify to a constant");
+
       value = index2tc(arr_subtype, value, div);
-      construct_from_const_struct_offset(value, mod, type, guard);
+      construct_from_const_struct_offset(value, mod2, type, guard);
     } else if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error?
