@@ -919,6 +919,72 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 }
 
 void
+dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
+                                  const expr2tc &offset, const type2tc &type,
+                                  const guardt &guard, unsigned long alignment)
+{
+  // For each element of the struct, look at the alignment, and produce an
+  // appropriate access (that we'll switch on).
+  assert(is_struct_type(value->type));
+  const struct_type2t &struct_type = to_struct_type(value->type);
+  unsigned int access_sz = type->get_width() / 8;
+
+  // A list of guards, and outcomes. The result should be a gigantic
+  // if-then-else chain based on those guards.
+  std::list<std::pair<expr2tc, expr2tc> > extract_list;
+
+  unsigned int i = 0;
+  forall_types(it, struct_type.members) {
+    mp_integer offs = member_offset(struct_type, struct_type.member_names[i]);
+
+    // Compute some kind of guard
+    unsigned int field_size = (*it)->get_width() / 8;
+    // Round up to word size
+    unsigned int word_mask = config.ansi_c.word_size - 1;
+    field_size = (field_size + word_mask) & (~word_mask);
+    expr2tc field_offs = gen_uint(offs.to_ulong());
+    expr2tc field_top = gen_uint(offs.to_ulong() + field_size);
+    expr2tc lower_bound = greaterthanequal2tc(offset, field_offs);
+    expr2tc upper_bound = lessthan2tc(offset, field_top);
+    expr2tc field_guard = and2tc(lower_bound, upper_bound);
+
+    if (is_struct_type(*it)) {
+      // Handle recursive structs
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      construct_from_dyn_struct_offset(field, new_offset, type, guard,
+                                       alignment);
+      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+    } else if (access_sz > ((*it)->get_width() / 8)) {
+      guardt newguard(guard);
+      newguard.add(field_guard);
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "Oversized field offset", guard);
+      // Push nothing back, allow catch-all handler to insert a failed deref
+      // symbol? XXX.
+    } else if (alignment >= config.ansi_c.word_size) {
+      // This is fully aligned, just pull it out and possibly cast,
+      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+    } else {
+      // Not fully aligned; devolve to byte extract. There may be ways to
+      // optimise this further, but that's quite meh right now.
+      // XXX -- stitch together with concats?
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      field = byte_extract2tc(get_uint8_type(), field, new_offset,
+                              is_big_endian);
+      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+    }
+
+    i++;
+  }
+
+  abort();
+}
+
+void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
@@ -939,6 +1005,14 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
     if (is_array_type(arr_type.subtype)) {
       construct_from_multidir_array(value, offset, type, guard, NULL,alignment);
+    } else if (is_structure_type(arr_type.subtype)) {
+      mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
+      constant_int2tc subtype_sz_expr(index_type2(), subtype_sz);
+      div2tc div(index_type2(), offset, subtype_sz_expr);
+      modulus2tc mod(index_type2(), offset, subtype_sz_expr);
+
+      value = index2tc(arr_type.subtype, value, div);
+      construct_from_dyn_struct_offset(value, mod, type, guard, alignment);
     } else if (alignment >= subtype_sz && access_sz <= subtype_sz) {
       // Aligned access; just issue an index.
       expr2tc new_offset = offset;
