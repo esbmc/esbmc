@@ -1647,8 +1647,32 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte extract");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source)) {
+      source = typecast2tc(get_uint_type(src_width), source);
+    }
+
+    // The approach: the argument is now a bitvector. Just shift it the
+    // appropriate amount, according to the source offset, and select out the
+    // bottom byte.
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      // Z3 requires these two arguments to be the same width
+      offs = typecast2tc(source->type, data.source_offset);
+
+    z3::expr src, o;
+    convert_bv(source, src);
+    convert_bv(offs, o);
+    output = z3::to_expr(ctx, Z3_mk_bvlshr(ctx, src, o));
+    output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, 7, 0, output));
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
