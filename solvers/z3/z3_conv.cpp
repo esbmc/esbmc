@@ -1891,8 +1891,19 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   // op1 is the byte number
   // op2 is the value to update with
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    if (is_pointer_type(data.type)) {
+      // Just return a free pointer. Seriously, this is going to be faster,
+      // easier, and probably accurate than anything else.
+      z3::sort s;
+      convert_type(data.type, s);
+      output = ctx.fresh_const(NULL, s);
+      return;
+    }
+
+    std::cerr << "byte_update expects constant 2nd arg" << std::endl;
+    abort();
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
