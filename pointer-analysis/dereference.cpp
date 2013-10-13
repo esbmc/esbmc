@@ -921,8 +921,11 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
       // error), which are both bad.
-      std::cerr << "Implement over-read starting in struct fields" << std::endl;
-      abort();
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "Misaligned access to struct field", guard);
+      value = expr2tc();
+      return;
     } else {
       std::cerr << "Dereference offset fell through constant struct offs logic"
                 << std::endl;
