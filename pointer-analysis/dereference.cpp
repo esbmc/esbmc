@@ -979,8 +979,8 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       dereference_callback.dereference_failure(
         "pointer dereference",
         "Oversized field offset", guard);
-      // Push nothing back, allow catch-all handler to insert a failed deref
-      // symbol? XXX.
+      // Push nothing back, allow fall-through of the if-then-else chain to
+      // resolve to a failed deref symbol.
     } else if (alignment >= config.ansi_c.word_size) {
       // This is fully aligned, just pull it out and possibly cast,
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
