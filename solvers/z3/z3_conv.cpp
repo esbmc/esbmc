@@ -1901,8 +1901,42 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
       return;
     }
 
-    std::cerr << "byte_update expects constant 2nd arg" << std::endl;
-    abort();
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte update");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source))
+      source = typecast2tc(get_uint_type(src_width), source);
+
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      offs = typecast2tc(get_uint_type(src_width), offs);
+
+    expr2tc update = data.update_value;
+    if (update->type->get_width() != src_width)
+      update = typecast2tc(get_uint_type(src_width), update);
+
+    // The approach: mask, shift and or. XXX, byte order?
+    // Massively inefficient.
+    z3::expr src, o, u;
+    convert_bv(source, src);
+    convert_bv(offs, o);
+    convert_bv(update, u);
+
+    o = o * ctx.bv_val(8, src_width);
+
+    z3::expr effs = ctx.bv_val(0xFF, src_width);
+    effs = z3::expr(ctx, Z3_mk_bvshl(ctx, effs, o));
+    z3::expr noteffs = ~effs;
+    src = src & effs;
+
+    u = z3::expr(ctx, Z3_mk_bvshl(ctx, u, o));
+    src = src | u;
+
+    output = src;
+    return;
   }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
