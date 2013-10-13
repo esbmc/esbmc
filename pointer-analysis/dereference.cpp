@@ -817,6 +817,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
       abort();
     } else {
       value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+      if (type->get_width() != 8)
+        value = typecast2tc(type, value);
     }
   } else if (is_code_type(base_object)) {
     // Accessing anything but the start of a function is not permitted.
@@ -840,6 +842,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   } else {
     assert(is_scalar_type(base_object));
     value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+    if (type->get_width() != 8)
+      value = typecast2tc(type, value);
   }
 
   if (!checks)
@@ -1001,6 +1005,9 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       field = byte_extract2tc(get_uint8_type(), field, new_offset,
                               is_big_endian);
+      if (type->get_width() != 8)
+        field = typecast2tc(type, field);
+
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     }
 
