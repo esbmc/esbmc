@@ -424,25 +424,7 @@ dereferencet::dereference(
     }
     else
     {
-      // else, do new symbol
-
-      symbolt symbol;
-      symbol.name="symex::invalid_object"+i2string(invalid_counter++);
-      symbol.base_name="invalid_object";
-      symbol.type=migrate_type_back(type);
-
-      // make it a lvalue, so we can assign to it
-      symbol.lvalue=true;
-
-      get_new_name(symbol, ns);
-
-      exprt tmp_sym_expr = symbol_expr(symbol);
-
-      new_context.move(symbol);
-
-      // Due to migration hiccups, migration must occur after the symbol
-      // appears in the symbol table.
-      migrate_expr(tmp_sym_expr, value);
+      value = make_failed_symbol(type);
     }
   }
 
@@ -452,6 +434,31 @@ dereferencet::dereference(
 
   dest = value;
   return dest;
+}
+
+expr2tc
+dereferencet::make_failed_symbol(const type2tc &out_type)
+{
+  // else, do new symbol
+  symbolt symbol;
+  symbol.name="symex::invalid_object"+i2string(invalid_counter++);
+  symbol.base_name="invalid_object";
+  symbol.type=migrate_type_back(out_type);
+
+  // make it a lvalue, so we can assign to it
+  symbol.lvalue=true;
+
+  get_new_name(symbol, ns);
+
+  exprt tmp_sym_expr = symbol_expr(symbol);
+
+  new_context.move(symbol);
+
+  // Due to migration hiccups, migration must occur after the symbol
+  // appears in the symbol table.
+  expr2tc value;
+  migrate_expr(tmp_sym_expr, value);
+  return value;
 }
 
 bool dereferencet::dereference_type_compare(

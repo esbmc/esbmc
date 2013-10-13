@@ -102,6 +102,8 @@ private:
     expr2tc &object,
     const type2tc &dereference_type) const;
 
+  expr2tc make_failed_symbol(const type2tc &out_type);
+
   void build_reference_to(
     const expr2tc &what,
     const modet mode,
