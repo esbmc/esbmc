@@ -926,10 +926,6 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
         "Misaligned access to struct field", guard);
       value = expr2tc();
       return;
-    } else {
-      std::cerr << "Dereference offset fell through constant struct offs logic"
-                << std::endl;
-      abort();
     }
 
     // Wasn't that field.
