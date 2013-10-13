@@ -921,6 +921,10 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       // error), which are both bad.
       std::cerr << "Implement over-read starting in struct fields" << std::endl;
       abort();
+    } else {
+      std::cerr << "Dereference offset fell through constant struct offs logic"
+                << std::endl;
+      abort();
     }
 
     // Wasn't that field.
