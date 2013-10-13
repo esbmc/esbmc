@@ -928,13 +928,20 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 void
 dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
                                   const expr2tc &offset, const type2tc &type,
-                                  const guardt &guard, unsigned long alignment)
+                                  const guardt &guard, unsigned long alignment,
+                                  const expr2tc *failed_symbol)
 {
   // For each element of the struct, look at the alignment, and produce an
   // appropriate access (that we'll switch on).
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
   unsigned int access_sz = type->get_width() / 8;
+
+  expr2tc failed_container;
+  if (failed_symbol == NULL)
+    failed_container = make_failed_symbol(type);
+  else
+    failed_container = *failed_symbol;
 
   // A list of guards, and outcomes. The result should be a gigantic
   // if-then-else chain based on those guards.
@@ -960,7 +967,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
-                                       alignment);
+                                       alignment, &failed_container);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else if (access_sz > ((*it)->get_width() / 8)) {
       guardt newguard(guard);
@@ -988,7 +995,15 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
     i++;
   }
 
-  abort();
+  // Build up the new value, switching on the field guard, with the failed
+  // symbol at the base.
+  expr2tc new_value = failed_container;
+  for (std::list<std::pair<expr2tc, expr2tc> >::const_iterator
+       it = extract_list.begin(); it != extract_list.end(); it++) {
+    new_value = if2tc(type, it->first, it->second, new_value);
+  }
+
+  value = new_value;
 }
 
 void
