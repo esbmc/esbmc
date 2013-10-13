@@ -864,7 +864,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 void
 dereferencet::construct_from_const_struct_offset(expr2tc &value,
                         const expr2tc &offset, const type2tc &type,
-                        const guardt &guard __attribute__((unused)))
+                        const guardt &guard)
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
@@ -885,8 +885,11 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     } else if (int_offset == m_offs) {
       // Does this over-read?
       if (access_size > m_size) {
-        std::cerr << "Implement over-read of struct fields" << std::endl;
-        abort();
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "Over-sized read of struct field", guard);
+        value = expr2tc();
+        return;
       }
 
       // If it's at the start of a field, there's no need for further alignment
