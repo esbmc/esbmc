@@ -906,7 +906,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       value = res;
       return;
     } else if (int_offset > m_offs &&
-              (int_offset - m_offs + access_size < m_size)) {
+              (int_offset - m_offs + access_size <= m_size)) {
       // This access is in the bounds of this member, but isn't at the start.
       // XXX that might be an alignment error.
       // In the meantime, byte extract.
