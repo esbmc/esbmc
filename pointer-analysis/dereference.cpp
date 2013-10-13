@@ -892,6 +892,8 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
         return;
       }
 
+      // XXX -- what about under-reads?
+
       // If it's at the start of a field, there's no need for further alignment
       // concern.
       expr2tc res = member2tc(*it, value, struct_type.member_names[i]);
