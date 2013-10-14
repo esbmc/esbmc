@@ -1852,10 +1852,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
         output = select(source, idx);
       }
     } else if (is_bv_type(data.source_value)) {
-      if (width >= upper)
-        output = z3::to_expr(ctx, Z3_mk_extract(ctx, upper, lower, source));
-      else
-        output = z3::to_expr(ctx, Z3_mk_extract(ctx, upper - lower, 0, source));
+      output = source;
     } else if (is_fixedbv_type(data.source_value)) {
       if (width > data.type->get_width()) {
         output = z3::to_expr(ctx,
