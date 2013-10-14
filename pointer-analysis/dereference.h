@@ -146,6 +146,18 @@ private:
                                         std::list<expr2tc> *scalar_step_list,
                                         unsigned long alignment);
 
+  void construct_struct_ref_from_const_offset(expr2tc &value,
+                                        const expr2tc &offs,
+                                        const type2tc &type,
+                                        const guardt &guard,
+                                        std::list<expr2tc> *scalar_step_list);
+
+  void construct_struct_ref_from_dyn_offset(expr2tc &value,
+                                        const expr2tc &offs,
+                                        const type2tc &type,
+                                        const guardt &guard,
+                                        std::list<expr2tc> *scalar_step_list);
+
   bool memory_model(
     expr2tc &value,
     const type2tc &type,

@@ -706,15 +706,26 @@ void dereferencet::build_reference_to(
       final_offset = add;
 
     if (is_constant_expr(final_offset)) {
-      const constant_int2t &theint = to_constant_int2t(final_offset);
-      if (theint.constant_value.to_ulong() == 0)
-        construct_from_zero_offset(value, type, tmp_guard, scalar_step_list);
-      else
-        construct_from_const_offset(value, final_offset, type, tmp_guard,
-                                    scalar_step_list);
+      // Hurrrrrr
+      if (!is_scalar_type(value)) {
+        construct_struct_ref_from_const_offset(value, final_offset, type,
+                                               tmp_guard, scalar_step_list);
+      } else {
+        const constant_int2t &theint = to_constant_int2t(final_offset);
+        if (theint.constant_value.to_ulong() == 0)
+          construct_from_zero_offset(value, type, tmp_guard, scalar_step_list);
+        else
+          construct_from_const_offset(value, final_offset, type, tmp_guard,
+                                      scalar_step_list);
+      }
     } else {
-      expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
-      construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
+      if (!is_scalar_type(value)) {
+        construct_struct_ref_from_dyn_offset(value, final_offset, type,
+                                             tmp_guard, scalar_step_list);
+      } else {
+        expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
+        construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
+      }
     }
   }
 }
@@ -1528,4 +1539,105 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
   } else {
     construct_from_dyn_offset(value, idx, type, guard, alignment, false);
   }
+}
+
+void
+dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
+             const expr2tc &offs, const type2tc &type, const guardt &guard,
+             std::list<expr2tc> *scalar_step_list)
+{
+  // Minimal effort: the moment that we can throw this object out due to an
+  // incompatible type, we do.
+  const constant_int2t &intref = to_constant_int2t(offs);
+
+  if (is_array_type(value->type)) {
+    const array_type2t &arr_type = to_array_type(value->type);
+
+    if (!is_struct_type(arr_type.subtype) && !is_array_type(arr_type.subtype)) {
+      // Can't handle accesses to anything else.
+      dereference_callback.dereference_failure(
+        "Memory model",
+        "Object accessed with incompatible base type", guard);
+      return;
+    }
+
+    // Create an access to an array index. Alignment will be handled at a lower
+    // layer, because we might not be able to detect that it's valid (structs
+    // within structs).
+    mp_integer subtype_size = type_byte_size(*arr_type.subtype.get());
+    mp_integer idx = intref.constant_value / subtype_size;
+    mp_integer mod = intref.constant_value % subtype_size;
+
+    expr2tc idx_expr = gen_uint(idx.to_ulong());
+    expr2tc mod_expr = gen_uint(mod.to_ulong());
+
+    value = index2tc(arr_type.subtype, value, idx_expr);
+
+    construct_struct_ref_from_const_offset(value, mod_expr, type, guard,
+                                           scalar_step_list);
+  } else if (is_struct_type(value->type)) {
+    // Right. In this situation, there are several possibilities. First, if the
+    // offset is zero, and the struct type is compatible, we've succeeded.
+    // If the offset isn't zero, then there are some possibilities:
+    //
+    //   a) it's a misaligned access, which is an error
+    //   b) there's a struct within a struct here that we should recurse into.
+
+    if (intref.constant_value == 0) {
+      // Success?
+      if (dereference_type_compare(value, type)) {
+        // Good, just return this expression. Uh. Yeah, that is all.
+        return;
+      } else {
+        // Correctly aligned access to incompatible base type.
+        dereference_callback.dereference_failure(
+          "Memory model",
+          "Object accessed with incompatible base type", guard);
+        return;
+      }
+    } else {
+      // If the offset isn't zero; enumerate through all the fields in this
+      // struct, and work out whether or not it points into a sub-struct.
+      const struct_type2t &struct_type = to_struct_type(value->type);
+      unsigned int i = 0;
+      forall_types(it, struct_type.members) {
+        mp_integer offs = member_offset(struct_type,
+                                        struct_type.member_names[i]);
+        mp_integer size = type_byte_size(*(*it).get());
+
+        if (intref.constant_value >= offs &&
+              intref.constant_value <= (offs + size)) {
+          // It's this field. Don't make a decision about whether it's correct
+          // or not, recurse to make that happen.
+          mp_integer new_offs = intref.constant_value - offs;
+          expr2tc offs_expr = gen_uint(new_offs.to_ulong());
+          value = member2tc(*it, value, struct_type.member_names[i]);
+          construct_struct_ref_from_const_offset(value, offs_expr, type, guard,
+                                                 scalar_step_list);
+          return;
+        }
+        i++;
+      }
+
+      // Fell out of that loop. Either this offset is out of range, or lies in
+      // padding.
+      dereference_callback.dereference_failure(
+        "Memory model",
+        "Object accessed with illegal offset", guard);
+    }
+  } else {
+    dereference_callback.dereference_failure(
+      "Memory model",
+      "Object accessed with incompatible base type", guard);
+  }
+
+  return;
+}
+
+void
+dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value __attribute__((unused)),
+             const expr2tc &offs __attribute__((unused)), const type2tc &type __attribute__((unused)), const guardt &guard __attribute__((unused)),
+             std::list<expr2tc> *scalar_step_list __attribute__((unused)))
+{
+  abort();
 }
