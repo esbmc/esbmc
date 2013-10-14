@@ -1128,23 +1128,35 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       index2tc idx(arr_type.subtype, value, new_offset);
       value = idx;
     } else {
-      // Hurrrr. Assume that this is a character array, select things out, and
-      // concat them. Disgusting.
-      assert(arr_type.subtype->get_width() == 8 && "unaligned access to non "
-             "byte array?");
+      // Unstructured array access. First, check alignment.
+      unsigned int subtype_sz = arr_type.subtype->get_width() / 8;
+      if (subtype_sz != 1) {
+        expr2tc align_expr = gen_uint(subtype_sz - 1);
+        expr2tc masked_offs = bitand2tc(align_expr->type, align_expr, offset);
+        expr2tc is_aligned = equality2tc(masked_offs, zero_uint);
+
+        guardt tmp_guard = guard;
+        tmp_guard.add(not2tc(is_aligned));
+        dereference_callback.dereference_failure(
+          "Pointer alignment",
+          "Unaligned access to array", tmp_guard);
+      }
+
+      // From here on, assume aligned access.
       unsigned int target_bytes = type->get_width() / 8;
       expr2tc accuml;
       expr2tc accuml_offs = offset;
-      type2tc byte_type = get_uint8_type();
+      type2tc subtype = arr_type.subtype;
 
       for (unsigned int i = 0; i < target_bytes; i++) {
-        expr2tc byte = index2tc(byte_type, value, accuml_offs);
+        expr2tc elem = index2tc(subtype, value, accuml_offs);
 
         if (is_nil_expr(accuml)) {
-          accuml = byte;
+          accuml = elem;
         } else {
           // XXX -- byte order.
-          accuml = concat2tc(get_uint_type((i+1)*8), accuml, byte);
+          type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
+          accuml = concat2tc(res_type, accuml, elem);
         }
 
         accuml_offs = add2tc(offset->type, accuml_offs, one_uint);
@@ -1152,7 +1164,9 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
       // That's going to come out as a bitvector;
       if (type != accuml->type) {
-        assert(type->get_width() == accuml->type->get_width());
+        // XXX -- we might be selecting a char out of an int array, or something
+        // XXX -- byte order.
+        //assert(type->get_width() == accuml->type->get_width());
         accuml = typecast2tc(type, accuml);
       }
 
