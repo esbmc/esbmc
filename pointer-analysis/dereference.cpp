@@ -712,7 +712,7 @@ void dereferencet::build_reference_to(
 
     if (is_constant_expr(final_offset)) {
       // Hurrrrrr
-      if (!is_scalar_type(value)) {
+      if (is_struct_type(value)) {
         construct_struct_ref_from_const_offset(value, final_offset, type,
                                                tmp_guard, scalar_step_list);
         if (scalar_step_list->size() != 0)
@@ -726,7 +726,7 @@ void dereferencet::build_reference_to(
                                       scalar_step_list);
       }
     } else {
-      if (!is_scalar_type(value)) {
+      if (is_struct_type(value)) {
         construct_struct_ref_from_dyn_offset(value, final_offset, type,
                                              tmp_guard, scalar_step_list);
         if (scalar_step_list->size() != 0)
