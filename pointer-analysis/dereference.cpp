@@ -392,7 +392,9 @@ dereferencet::dereference(
   std::list<expr2tc> *scalar_step_list,
   bool checks_only)
 {
+#if 0
   unsigned int scalar_steps_to_pop = 0;
+#endif
   expr2tc dest = src;
   assert(is_pointer_type(dest));
 
@@ -403,6 +405,7 @@ dereferencet::dereference(
     ? to_type : scalar_step_list->back()->type;
   assert(is_scalar_type(type) || (checks_only && scalar_step_list));
 
+#if 0
   // If we're just doing checks, and this is a nonscalar, fabricate a scalar
   // expression dereference so that the rest of our dereference code can ignore
   // nonscalar dereferences.
@@ -411,6 +414,7 @@ dereferencet::dereference(
     scalar_steps_to_pop = fabricate_scalar_access(type, *scalar_step_list);
     type = scalar_step_list->back()->type;
   }
+#endif
 
   // save the dest for later, dest might be destroyed
   const expr2tc deref_expr(dest);
@@ -469,9 +473,10 @@ dereferencet::dereference(
     }
   }
 
-
+#if 0
   for (unsigned int i = 0; i < scalar_steps_to_pop; i++)
     scalar_step_list->pop_front();
+#endif
 
   dest = value;
   return dest;
