@@ -1673,6 +1673,8 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
     result = if2tc(type, it->first, it->second, result);
   }
 
+  value = result;
+
   // Finally, record an assertion that if none of those accesses were legal,
   // then it's an illegal access.
   expr2tc accuml = false_expr;
