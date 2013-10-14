@@ -223,6 +223,12 @@ compute_pointer_offset(const expr2tc &expr)
     // This is a dynamic object represented something allocated; from the static
     // pointer analysis. Assume that this is thet bottom of the expression.
     return zero_uint;
+  } else if (is_dereference2t(expr)) {
+    // This is a dereference at the base of a set of index/members. Here, we
+    // can in theory end up evaluating across a large set of object types. So
+    // there's no point continuing further or attempting to dereference, leave
+    // it up to the caller to handle that.
+    return zero_uint;
   } else {
     std::cerr << "compute_pointer_offset, unexpected irep:" << std::endl;
     std::cerr << expr->pretty() << std::endl;
