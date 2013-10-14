@@ -1635,9 +1635,124 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 }
 
 void
-dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value __attribute__((unused)),
-             const expr2tc &offs __attribute__((unused)), const type2tc &type __attribute__((unused)), const guardt &guard __attribute__((unused)),
+dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
+             const expr2tc &offs, const type2tc &type, const guardt &guard,
              std::list<expr2tc> *scalar_step_list __attribute__((unused)))
 {
-  abort();
+  // This is much more complicated -- because we don't know the offset here,
+  // we need to go through all the possible fields that this might (legally)
+  // resolve to and switch on them; then assert that one of them is accessed.
+  // So:
+  std::list<std::pair<expr2tc, expr2tc> > resolved_list;
+
+  construct_struct_ref_from_dyn_offs_rec(value, offs, type, true_expr,
+                                         resolved_list);
+
+  if (resolved_list.size() == 0) {
+    // No legal accesses.
+    value = expr2tc();
+    dereference_callback.dereference_failure(
+      "Memory model",
+      "Object accessed with incompatible base type", guard);
+    return;
+  }
+
+  // Switch on the available offsets.
+  expr2tc result = make_failed_symbol(type);
+  for (std::list<std::pair<expr2tc, expr2tc> >::const_iterator
+       it = resolved_list.begin(); it != resolved_list.end(); it++) {
+    result = if2tc(type, it->first, it->second, result);
+  }
+
+  // Finally, record an assertion that if none of those accesses were legal,
+  // then it's an illegal access.
+  expr2tc accuml = false_expr;
+  for (std::list<std::pair<expr2tc, expr2tc> >::const_iterator
+       it = resolved_list.begin(); it != resolved_list.end(); it++) {
+    accuml = or2tc(accuml, it->first);
+  }
+
+  accuml = not2tc(accuml); // Creates a new 'not' expr. Doesn't copy construct.
+  guardt tmp_guard = guard;
+  tmp_guard.add(accuml);
+  dereference_callback.dereference_failure(
+    "Memory model",
+    "Object accessed with incompatible base type", tmp_guard);
+}
+
+void
+dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
+                              const expr2tc &offs, const type2tc &type,
+                              const expr2tc &accuml_guard,
+                              std::list<std::pair<expr2tc, expr2tc> > &output)
+{
+  // Look for all the possible offsets that could result in a legitimate access
+  // to the given (struct?) type. Insert into the output list, with a guard
+  // based on the 'offs' argument, that identifies when this field is legally
+  // accessed.
+
+  if (is_array_type(value->type)) {
+    const array_type2t &arr_type = to_array_type(value->type);
+    // We can legally access various offsets into arrays. Generate an index
+    // and recurse. The complicate part is the new offset and guard: we need
+    // to guard for offsets that are inside this array, and modulus the offset
+    // by the array size.
+    mp_integer subtype_size = type_byte_size(*arr_type.subtype.get());
+    expr2tc sub_size = gen_uint(subtype_size.to_ulong());
+    expr2tc div = div2tc(offs->type, offs, sub_size);
+    expr2tc mod = modulus2tc(offs->type, offs, sub_size);
+    expr2tc index = index2tc(arr_type.subtype, value, div);
+
+    // We have our index; now compute guard/offset. Guard expression is
+    // (offs >= 0 && offs < size_of_this_array)
+    expr2tc new_offset = mod;
+    expr2tc gte = greaterthanequal2tc(offs, zero_uint);
+    expr2tc lt = lessthan2tc(offs, arr_type.array_size);
+    expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+
+    construct_struct_ref_from_dyn_offs_rec(index, new_offset, type, range_guard,
+                                           output);
+    return;
+  } else if (is_struct_type(value->type)) {
+    // OK. If this type is compatible and matches, we're good. There can't
+    // be any subtypes in this struct that match because then it'd be defined
+    // recursively (XXX -- is this true?).
+    expr2tc tmp = value;
+    if (dereference_type_compare(tmp, type)) {
+      // Excellent. Guard that the offset is zero and finish.
+      expr2tc offs_is_zero = and2tc(accuml_guard, equality2tc(offs, zero_uint));
+      output.push_back(std::pair<expr2tc, expr2tc>(offs_is_zero, tmp));
+      return;
+    }
+
+    // It's not compatible, but a subtype may be. Iterate over all of them.
+    const struct_type2t &struct_type = to_struct_type(value->type);
+    unsigned int i = 0;
+    forall_types(it, struct_type.members) {
+      // Quickly skip over scalar subtypes.
+      if (is_scalar_type(*it))
+        continue;
+
+      mp_integer memb_offs = member_offset(struct_type,
+                                      struct_type.member_names[i]);
+      mp_integer size = type_byte_size(*(*it).get());
+      expr2tc memb_offs_expr = gen_uint(memb_offs.to_ulong());
+      expr2tc limit_expr = gen_uint(memb_offs.to_ulong() + size.to_ulong());
+      expr2tc memb = member2tc(*it, value, struct_type.member_names[i]);
+
+      // Compute a guard and update the offset for an access to this field.
+      // Guard is that the offset is in the range of this field. Offset has
+      // offset to this field subtracted.
+      expr2tc new_offset = sub2tc(offs->type, offs, memb_offs_expr);
+      expr2tc gte = greaterthanequal2tc(offs, memb_offs_expr);
+      expr2tc lt = lessthan2tc(offs, limit_expr);
+      expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
+
+      construct_struct_ref_from_dyn_offs_rec(memb, new_offset, type,
+                                             range_guard, output);
+    }
+  } else {
+    // Not legal
+    return;
+  }
 }

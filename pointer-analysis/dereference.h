@@ -157,6 +157,10 @@ private:
                                         const type2tc &type,
                                         const guardt &guard,
                                         std::list<expr2tc> *scalar_step_list);
+  void construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
+                              const expr2tc &offs, const type2tc &type,
+                              const expr2tc &accuml_guard,
+                              std::list<std::pair<expr2tc, expr2tc> > &output);
 
   bool memory_model(
     expr2tc &value,
