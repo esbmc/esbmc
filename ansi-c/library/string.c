@@ -279,7 +279,7 @@ int memcmp(const void *s1, const void *s2, size_t n)
   const unsigned char *sc1=s1, *sc2=s2;
   for(; n!=0; n--)
   {
-    res = (s1++) - (s2++);
+    res = (sc1++) - (sc2++);
     if (res != 0)
       return res;
   }
