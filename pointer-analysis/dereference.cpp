@@ -715,6 +715,8 @@ void dereferencet::build_reference_to(
       if (!is_scalar_type(value)) {
         construct_struct_ref_from_const_offset(value, final_offset, type,
                                                tmp_guard, scalar_step_list);
+        if (scalar_step_list->size() != 0)
+          wrap_in_scalar_step_list(value, scalar_step_list, guard);
       } else {
         const constant_int2t &theint = to_constant_int2t(final_offset);
         if (theint.constant_value.to_ulong() == 0)
@@ -727,6 +729,8 @@ void dereferencet::build_reference_to(
       if (!is_scalar_type(value)) {
         construct_struct_ref_from_dyn_offset(value, final_offset, type,
                                              tmp_guard, scalar_step_list);
+        if (scalar_step_list->size() != 0)
+          wrap_in_scalar_step_list(value, scalar_step_list, guard);
       } else {
         expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
         construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
