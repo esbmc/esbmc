@@ -390,7 +390,7 @@ dereferencet::dereference(
   const guardt &guard,
   const modet mode,
   std::list<expr2tc> *scalar_step_list,
-  bool checks_only)
+  bool checks_only  __attribute__((unused)))
 {
 #if 0
   unsigned int scalar_steps_to_pop = 0;
@@ -403,7 +403,7 @@ dereferencet::dereference(
   // dereference should be a scalar, via whatever means.
   type2tc type = (!is_nil_type(to_type))
     ? to_type : scalar_step_list->back()->type;
-  assert(is_scalar_type(type) || (checks_only && scalar_step_list));
+//  assert(is_scalar_type(type) || (checks_only && scalar_step_list));
 
 #if 0
   // If we're just doing checks, and this is a nonscalar, fabricate a scalar
