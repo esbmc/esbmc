@@ -873,9 +873,30 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         value = cast;
       }
     } else if (subtype_size > deref_size) {
-      std::cerr << "Insert here: dereference handler for reasonable arrays"
-                << std::endl;
-      abort();
+      // Firstly, is this an aligned access?
+      if (subtype_size != 1) {
+        unsigned long submask = subtype_size - 1;
+        unsigned long res = theint.constant_value.to_ulong() & submask;
+        if (res != 0) {
+          dereference_callback.dereference_failure(
+            "pointer dereference",
+            "Unaligned access to non-byte array", guard);
+          value = expr2tc();
+          return;
+        }
+      }
+
+      // Now, assuming it's aligned, just select an element then byte extract
+      // from that.
+      expr2tc idx_expr =
+        gen_uint(theint.constant_value.to_ulong() / subtype_size);
+      expr2tc mod_expr =
+        gen_uint(theint.constant_value.to_ulong() % subtype_size);
+      value = index2tc(arr_subtype, value, idx_expr);
+      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod_expr,
+                              is_big_endian);
+      if (type != value->type)
+        value = typecast2tc(type, value);
     } else {
       value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
       if (type->get_width() != 8)
