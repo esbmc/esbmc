@@ -726,13 +726,13 @@ void dereferencet::build_reference_to(
                                       scalar_step_list);
       }
     } else {
+      expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
       if (is_struct_type(type)) {
-        construct_struct_ref_from_dyn_offset(value, final_offset, type,
+        construct_struct_ref_from_dyn_offset(value, offset, type,
                                              tmp_guard, scalar_step_list);
         if (scalar_step_list->size() != 0)
           wrap_in_scalar_step_list(value, scalar_step_list, guard);
       } else {
-        expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
         construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment);
       }
     }
