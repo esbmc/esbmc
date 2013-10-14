@@ -38,6 +38,24 @@ static inline bool is_non_scalar_expr(const expr2tc &e)
   return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
 }
 
+// Look for the base of an expression such as &a->b[1];, where all we're doing
+// is performing some pointer arithmetic, rather than actually performing some
+// dereference operation.
+static inline expr2tc get_base_dereference(const expr2tc &e)
+{
+
+  // XXX -- do we need to consider if2t's? And how?
+  if (is_member2t(e)) {
+    return get_base_dereference(to_member2t(e).source_value);
+  } else if (is_index2t(e)) {
+    return get_base_dereference(to_index2t(e).source_value);
+  } else if (is_dereference2t(e)) {
+    return to_dereference2t(e).value;
+  } else {
+    return expr2tc();
+  }
+}
+
 bool dereferencet::has_dereference(const expr2tc &expr) const
 {
   if (is_nil_expr(expr))
@@ -156,6 +174,29 @@ dereferencet::dereference_expr(
         result = typecast2tc(expr->type, result);
 
       expr = result;
+      return;
+    } else {
+      // This might, alternately, be a chain of member and indexes applied to
+      // a dereference. In which case what we're actually doing is computing
+      // some pointer arith, manually.
+      expr2tc base = get_base_dereference(addrof.ptr_obj);
+      if (!is_nil_expr(base)) {
+        //  We have a base. There may be additional dereferences in it.
+        dereference_expr(base, guard, mode, checks_only);
+        // Now compute the pointer offset involved.
+        expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
+        assert(!is_nil_expr(offs) && "Pointer offset of index/member "
+               "combination should be valid int");
+
+        // Cast to a byte pointer; add; cast back. Can't think of a better way
+        // to produce safe pointer arithmetic right now.
+        expr2tc output =
+          typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
+        output = add2tc(output->type, output, offs);
+        output = typecast2tc(base->type, output);
+        expr = output;
+        return;
+      }
     }
   }
 
