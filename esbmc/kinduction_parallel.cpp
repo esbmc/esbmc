@@ -51,7 +51,7 @@ void base_case_thread::run()
     res=_bmc.run(_goto_functions);
 
     // If the base case is false, the property is false
-    if(!res)
+    if(res)
     {
       finalize_multithread();
       return;
@@ -64,8 +64,7 @@ void base_case_thread::run()
     pthread_mutex_lock(&solution_mutex);
     found_solution=solution_found;
     pthread_mutex_unlock(&solution_mutex);
-
-  } while(_k<=50 && found_solution);
+  } while(_k<=50 && !found_solution);
 }
 
 /* Forward condition class implementation */
@@ -98,7 +97,7 @@ void forward_condition_thread::run()
     found_solution=solution_found;
     pthread_mutex_unlock(&solution_mutex);
 
-  } while(_k<=50 && found_solution);
+  } while(_k<=50 && !found_solution);
 }
 
 /* Inductive step class implementation */
@@ -131,7 +130,7 @@ void inductive_step_thread::run()
     found_solution=solution_found;
     pthread_mutex_unlock(&solution_mutex);
 
-  } while(_k<=50 && found_solution);
+  } while(_k<=50 && !found_solution);
 }
 
 /* class safe_queues */
