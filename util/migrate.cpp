@@ -408,6 +408,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   // Renamed to at least level 1,
   size_t at_pos = thestr.rfind("@");
   size_t exm_pos = thestr.rfind("!");
+  size_t end_of_name_pos = at_pos;
 
   size_t and_pos, hash_pos;
   if (thestr.find("#") == std::string::npos) {
@@ -424,11 +425,12 @@ sym_name_to_symbol(irep_idt init, type2tc type)
     if (at_pos == std::string::npos) {
       // However, it's L2 global.
       target_level = symbol2t::level2_global;
+      end_of_name_pos = and_pos;
     }
   }
 
   // Whatever level we're at, set the base name to be nonrenamed.
-  irep_idt thename = irep_idt(thestr.substr(0, at_pos));
+  irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
   if (target_level != symbol2t::level2_global) {
     std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
