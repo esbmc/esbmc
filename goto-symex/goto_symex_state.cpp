@@ -223,8 +223,40 @@ void goto_symex_statet::rename(expr2tc &expr)
 
   if (is_symbol2t(expr))
   {
+    type2tc origtype = expr->type;
     top().level1.rename(expr);
     level2.rename(expr);
+
+    if (is_pointer_type(origtype)) {
+      assert(is_pointer_type(expr->type));
+      const pointer_type2t &orig= to_pointer_type(origtype);
+      const pointer_type2t &newtype = to_pointer_type(expr->type);
+
+      // Huurr
+      unsigned int origsize, newsize;
+      try {
+        origsize = orig.subtype->get_width();
+      } catch (type2t::symbolic_type_excp* e) {
+        if (is_empty_type(orig.subtype))
+          origsize = 8;
+        else
+          throw;
+      }
+
+      try {
+        newsize = newtype.subtype->get_width();
+      } catch (type2t::symbolic_type_excp* e) {
+        if (is_empty_type(orig.subtype))
+          newsize = 8;
+        else
+          throw;
+      }
+
+      if (origsize != newsize) {
+        // This would break all kinds of pointer arith; insert a cast.
+        expr = typecast2tc(origtype, expr);
+      }
+    }
   }
   else if (is_address_of2t(expr))
   {
@@ -234,8 +266,9 @@ void goto_symex_statet::rename(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr)
+    Forall_operands2(it, idx, expr) {
       rename(*it);
+    }
   }
 }
 
@@ -257,7 +290,39 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   if(is_symbol2t(expr))
   {
     // only do L1
+    type2tc origtype = expr->type;
     top().level1.rename(expr);
+
+    if (is_pointer_type(origtype)) {
+      assert(is_pointer_type(expr->type));
+      const pointer_type2t &orig = to_pointer_type(origtype);
+      const pointer_type2t &newtype = to_pointer_type(expr->type);
+
+      // Huurr
+      unsigned int origsize, newsize;
+      try {
+        origsize = orig.subtype->get_width();
+      } catch (type2t::symbolic_type_excp* e) {
+        if (is_empty_type(orig.subtype))
+          origsize = 8;
+        else
+          throw;
+      }
+
+      try {
+        newsize = newtype.subtype->get_width();
+      } catch (type2t::symbolic_type_excp* e) {
+        if (is_empty_type(orig.subtype))
+          newsize = 8;
+        else
+          throw;
+      }
+
+      if (origsize != newsize) {
+        // This will break all kinds of pointer arith; insert a cast.
+        expr = typecast2tc(origtype, expr);
+      }
+    }
   }
   else if (is_index2t(expr))
   {
@@ -268,8 +333,9 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   else
   {
     // do this recursively
-    Forall_operands2(it, idx, expr)
+    Forall_operands2(it, idx, expr) {
       rename_address(*it);
+    }
   }
 }
 
