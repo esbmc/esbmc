@@ -226,13 +226,13 @@ dereferencet::dereference_expr(
     //   && "Can't dereference to a nonscalar type");
       expr2tc tmp_obj = deref.value;
       expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                   &scalar_step_list, checks_only);
+                                   &scalar_step_list);
       expr = result;
     } else {
       // Nonscalar dereference; pretend we know what we're doing for a moment
       expr2tc tmp_obj = deref.value;
       expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                   &scalar_step_list, true);
+                                   &scalar_step_list);
       // And now, remove any intermediate indexes or members.
       while (!dereference_type_compare(result, expr->type)) {
         if (is_index2t(result)) {
@@ -259,8 +259,7 @@ dereferencet::dereference_expr(
 
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
     // Result discarded.
-    expr = dereference(tmp, tmp->type, guard, mode, &scalar_step_list,
-                       checks_only);
+    expr = dereference(tmp, tmp->type, guard, mode, &scalar_step_list);
   } else if (is_non_scalar_expr(expr)) {
     // The result of this expression should be scalar: we're transitioning
     // from a scalar result to a nonscalar result.
@@ -307,7 +306,7 @@ dereferencet::dereference_expr_nonscalar(
     // first make sure there are no dereferences in there
     dereference_expr(deref.value, guard, dereferencet::READ);
     expr2tc result = dereference(deref.value, type2tc(), guard, mode,
-                                 &scalar_step_list, checks_only);
+                                 &scalar_step_list);
     return result;
   }
   else if (is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value))
@@ -320,7 +319,7 @@ dereferencet::dereference_expr_nonscalar(
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
     expr2tc result = dereference(tmp, type2tc(), guard, mode,
-                                 &scalar_step_list, checks_only);
+                                 &scalar_step_list);
     return result;
   }
   else if (is_non_scalar_expr(expr))
@@ -389,12 +388,8 @@ dereferencet::dereference(
   const type2tc &to_type,
   const guardt &guard,
   const modet mode,
-  std::list<expr2tc> *scalar_step_list,
-  bool checks_only  __attribute__((unused)))
+  std::list<expr2tc> *scalar_step_list)
 {
-#if 0
-  unsigned int scalar_steps_to_pop = 0;
-#endif
   expr2tc dest = src;
   assert(is_pointer_type(dest));
 
@@ -403,18 +398,6 @@ dereferencet::dereference(
   // dereference should be a scalar, via whatever means.
   type2tc type = (!is_nil_type(to_type))
     ? to_type : scalar_step_list->back()->type;
-//  assert(is_scalar_type(type) || (checks_only && scalar_step_list));
-
-#if 0
-  // If we're just doing checks, and this is a nonscalar, fabricate a scalar
-  // expression dereference so that the rest of our dereference code can ignore
-  // nonscalar dereferences.
-  // XXX -- dest and scalar_step_list being out of sync is horrible.
-  if (!is_scalar_type(type)) {
-    scalar_steps_to_pop = fabricate_scalar_access(type, *scalar_step_list);
-    type = scalar_step_list->back()->type;
-  }
-#endif
 
   // save the dest for later, dest might be destroyed
   const expr2tc deref_expr(dest);
@@ -472,11 +455,6 @@ dereferencet::dereference(
       value = make_failed_symbol(type);
     }
   }
-
-#if 0
-  for (unsigned int i = 0; i < scalar_steps_to_pop; i++)
-    scalar_step_list->pop_front();
-#endif
 
   dest = value;
   return dest;
