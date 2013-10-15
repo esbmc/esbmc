@@ -229,28 +229,28 @@ void goto_symex_statet::rename(expr2tc &expr)
 
     if (is_pointer_type(origtype)) {
       assert(is_pointer_type(expr->type));
-      const pointer_type2t &orig= to_pointer_type(origtype);
+      const pointer_type2t &orig = to_pointer_type(origtype);
       const pointer_type2t &newtype = to_pointer_type(expr->type);
 
-      // Huurr
-      unsigned int origsize, newsize;
-      try {
-        origsize = orig.subtype->get_width();
-      } catch (type2t::symbolic_type_excp* e) {
-        if (is_empty_type(orig.subtype))
-          origsize = 8;
-        else
-          throw;
-      }
+      type2tc origsubtype_s = orig.subtype;
+      type2tc newsubtype_s = newtype.subtype;
+      type2tc origsubtype = ns.follow(origsubtype_s);
+      type2tc newsubtype = ns.follow(newsubtype_s);
 
-      try {
-        newsize = newtype.subtype->get_width();
-      } catch (type2t::symbolic_type_excp* e) {
-        if (is_empty_type(orig.subtype))
-          newsize = 8;
-        else
-          throw;
-      }
+      if (is_code_type(origsubtype) || is_code_type(newsubtype))
+        return;
+
+      unsigned int origsize, newsize;
+
+      if (is_empty_type(origsubtype))
+        origsize = 8;
+      else
+        origsize = origsubtype->get_width();
+
+      if (is_empty_type(newsubtype))
+        newsize = 8;
+      else
+        newsize = newsubtype->get_width();
 
       if (origsize != newsize) {
         // This would break all kinds of pointer arith; insert a cast.
@@ -298,25 +298,25 @@ void goto_symex_statet::rename_address(expr2tc &expr)
       const pointer_type2t &orig = to_pointer_type(origtype);
       const pointer_type2t &newtype = to_pointer_type(expr->type);
 
-      // Huurr
-      unsigned int origsize, newsize;
-      try {
-        origsize = orig.subtype->get_width();
-      } catch (type2t::symbolic_type_excp* e) {
-        if (is_empty_type(orig.subtype))
-          origsize = 8;
-        else
-          throw;
-      }
+      type2tc origsubtype_s = orig.subtype;
+      type2tc newsubtype_s = newtype.subtype;
+      type2tc origsubtype = ns.follow(origsubtype_s);
+      type2tc newsubtype = ns.follow(newsubtype_s);
 
-      try {
-        newsize = newtype.subtype->get_width();
-      } catch (type2t::symbolic_type_excp* e) {
-        if (is_empty_type(orig.subtype))
-          newsize = 8;
-        else
-          throw;
-      }
+      if (is_code_type(origsubtype) || is_code_type(newsubtype))
+        return;
+
+      unsigned int origsize, newsize;
+
+      if (is_empty_type(origsubtype))
+        origsize = 8;
+      else
+        origsize = origsubtype->get_width();
+
+      if (is_empty_type(newsubtype))
+        newsize = 8;
+      else
+        newsize = newsubtype->get_width();
 
       if (origsize != newsize) {
         // This will break all kinds of pointer arith; insert a cast.
