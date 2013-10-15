@@ -3530,7 +3530,8 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   ty = t.get_sort();
 
   if (!ty.is_datatype()) {
-    throw new z3_convt::conv_error("argument must be a tuple");
+    std::cerr << "argument must be a tuple" << std::endl;
+    abort();
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(ctx, ty);
