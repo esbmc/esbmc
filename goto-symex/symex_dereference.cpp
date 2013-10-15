@@ -93,7 +93,7 @@ void symex_dereference_statet::get_value_set(
   state.value_set.get_value_set(expr, value_set);
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write)
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
 {
 
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
@@ -109,6 +109,7 @@ void goto_symext::dereference(expr2tc &expr, const bool write)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
+  dereference.dereference_expr(expr, guard, (free) ? dereferencet::FREE :
+                                            (write) ? dereferencet::WRITE
                                                     : dereferencet::READ);
 }

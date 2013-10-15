@@ -156,8 +156,9 @@ protected:
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param write Whether or not we're writing into this object.
+   *  @param free Whether we're freeing this pointer.
    */
-  void dereference(expr2tc &expr, const bool write);
+  void dereference(expr2tc &expr, const bool write, bool free = false);
 
   // symex
 
