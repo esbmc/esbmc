@@ -609,87 +609,6 @@ void dereferencet::build_reference_to(
     // solver will only get confused.
     return;
   }
-#if 0
-  else if (is_dynamic_object2t(root_object))
-  {
-    const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
-
-    if (scalar_step_list && scalar_step_list->size() > 0) {
-      type2tc subtype = to_pointer_type(deref_expr->type).subtype;
-      subtype = ns.follow(subtype);
-      value = dereference2tc(subtype, deref_expr);
-      wrap_in_scalar_step_list(value, scalar_step_list, guard);
-    } else {
-      value = dereference2tc(type, deref_expr);
-    }
-
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      // constraint that it actually is a dynamic object
-
-      type2tc arr_type = type2tc(new array_type2t(get_bool_type(),
-                                                  expr2tc(), true));
-      const symbolt *sp;
-      irep_idt dyn_name = (!ns.lookup(irep_idt("c::__ESBMC_alloc"), sp))
-        ? "c::__ESBMC_is_dynamic" : "cpp::__ESBMC_is_dynamic";
-      symbol2tc sym(arr_type, dyn_name);
-      assert(is_pointer_type(deref_expr));
-      pointer_object2tc ptr_obj(int_type2(), deref_expr);
-      index2tc is_dyn_obj(get_bool_type(), sym, ptr_obj);
-
-      if (dyn_obj.invalid || dyn_obj.unknown)
-      {
-        // check if it is still alive
-        valid_object2tc valid_expr(deref_expr);
-        not2tc not_valid_expr(valid_expr);
-
-        guardt tmp_guard(guard);
-        tmp_guard.add(is_dyn_obj);
-        tmp_guard.move(not_valid_expr);
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "invalidated dynamic object",
-          tmp_guard);
-      }
-
-      if (!options.get_bool_option("no-bounds-check") &&
-              (!is_constant_int2t(o.offset) ||
-               !to_constant_int2t(o.offset).constant_value.is_zero()))
-      {
-        {
-          // check lower bound
-          pointer_offset2tc obj_offset(index_type2(), deref_expr);
-          lessthan2tc lt(obj_offset, zero_int);
-
-          guardt tmp_guard(guard);
-          tmp_guard.add(is_dyn_obj);
-          tmp_guard.move(lt);
-          dereference_callback.dereference_failure(
-            "pointer dereference",
-            "dynamic object lower bound", tmp_guard);
-        }
-
-        {
-          // check upper bound
-          //nec: ex37.c
-          dynamic_size2tc size_expr(deref_expr);
-
-          expr2tc obj_offs = pointer_offset2tc(index_type2(), deref_expr);
-          obj_offs = typecast2tc(int_type2(), obj_offs);
-          lessthanequal2tc lte(size_expr, obj_offs);
-
-          guardt tmp_guard(guard);
-          tmp_guard.add(is_dyn_obj);
-          tmp_guard.move(lte);
-
-          dereference_callback.dereference_failure(
-            "pointer dereference",
-            "dynamic object upper bound", tmp_guard);
-        }
-      }
-    }
-  }
-#endif
   else
   {
     value = object;
@@ -1282,10 +1201,6 @@ void dereferencet::valid_check(
     if (has_prefix(to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
       return;
 
-#if 0
-    if (dereference_callback.is_valid_object(to_symbol2t(symbol).thename))
-      return; // always ok
-#endif
     const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
     if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
       // Assert thtat it hasn't (nondeterministically) been invalidated.
