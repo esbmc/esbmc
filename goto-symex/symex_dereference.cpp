@@ -53,11 +53,12 @@ protected:
 
 void symex_dereference_statet::dereference_failure(
   const std::string &property __attribute__((unused)),
-  const std::string &msg __attribute__((unused)),
-  const guardt &guard __attribute__((unused)))
+  const std::string &msg,
+  const guardt &guard)
 {
-  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
-  // we fix the memory model.
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
 bool symex_dereference_statet::has_failed_symbol(
@@ -109,7 +110,18 @@ void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  dereference.dereference_expr(expr, guard, (free) ? dereferencet::FREE :
-                                            (write) ? dereferencet::WRITE
-                                                    : dereferencet::READ);
+  if (free) {
+    expr2tc tmp = expr;
+    while (is_typecast2t(tmp))
+      tmp = to_typecast2t(tmp).from;
+
+    assert(is_pointer_type(tmp));
+    std::list<expr2tc> dummy;
+    // Dereference to byte type, because it's guarenteed to succeed.
+    dereference.dereference(expr, get_uint8_type(), guard, dereferencet::FREE,
+                            &dummy);
+  } else {
+    dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
+                                                      : dereferencet::READ);
+  }
 }

@@ -123,12 +123,17 @@ void goto_symext::symex_malloc(
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
-void goto_symext::symex_free(const code_free2t &code)
+void goto_symext::symex_free(const expr2tc &expr)
 {
-
+  const code_free2t &code = to_code_free2t(expr);
   pointer_offset2tc ptr_obj(uint_type2(), code.operand);
   equality2tc eq(ptr_obj, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
+
+  // Trigger 'free'-mode dereference of this pointer. Should generate various
+  // dereference failure callbacks.
+  expr2tc tmp = code.operand;
+  dereference(tmp, false, true);
 }
 
 void goto_symext::symex_printf(

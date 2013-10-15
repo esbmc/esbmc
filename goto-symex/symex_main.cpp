@@ -106,10 +106,10 @@ goto_symext::symex_step(reachability_treet & art)
   case GOTO:
   {
     expr2tc tmp(instruction.guard);
-    replace_dynamic_allocation(tmp);
     replace_nondet(tmp);
 
     dereference(tmp, false);
+    replace_dynamic_allocation(tmp);
 
     symex_goto(tmp);
   }
@@ -118,10 +118,10 @@ goto_symext::symex_step(reachability_treet & art)
   case ASSUME:
     if (!cur_state->guard.is_false()) {
       expr2tc tmp = instruction.guard;
-      replace_dynamic_allocation(tmp);
       replace_nondet(tmp);
 
       dereference(tmp, false);
+      replace_dynamic_allocation(tmp);
 
       cur_state->rename(tmp);
       do_simplify(tmp);
@@ -150,10 +150,10 @@ goto_symext::symex_step(reachability_treet & art)
 	if (msg == "") msg = "assertion";
 
         expr2tc tmp = instruction.guard;
-	replace_dynamic_allocation(tmp);
 	replace_nondet(tmp);
 
 	dereference(tmp, false);
+	replace_dynamic_allocation(tmp);
 
         claim(tmp, msg);
       }
@@ -184,13 +184,13 @@ goto_symext::symex_step(reachability_treet & art)
         thrown_obj_map.erase(cur_state->source.pc);
       }
 
-      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       code_assign2t &assign = to_code_assign2t(deref_code); 
 
       dereference(assign.target, true);
       dereference(assign.source, false);
+      replace_dynamic_allocation(deref_code);
 
       symex_assign(deref_code);
     }
@@ -201,7 +201,6 @@ goto_symext::symex_step(reachability_treet & art)
   case FUNCTION_CALL:
     if (!cur_state->guard.is_false()) {
       expr2tc deref_code = instruction.code;
-      replace_dynamic_allocation(deref_code);
       replace_nondet(deref_code);
 
       code_function_call2t &call = to_code_function_call2t(deref_code);
@@ -213,6 +212,8 @@ goto_symext::symex_step(reachability_treet & art)
            it != call.operands.end(); it++)
         if (!is_nil_expr(*it))
           dereference(*it, false);
+
+      replace_dynamic_allocation(deref_code);
 
       if (is_symbol2t(call.function) &&
         has_prefix(to_symbol2t(call.function).thename.as_string(),

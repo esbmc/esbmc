@@ -609,6 +609,7 @@ void dereferencet::build_reference_to(
     // solver will only get confused.
     return;
   }
+#if 0
   else if (is_dynamic_object2t(root_object))
   {
     const dynamic_object2t &dyn_obj = to_dynamic_object2t(root_object);
@@ -688,6 +689,7 @@ void dereferencet::build_reference_to(
       }
     }
   }
+#endif
   else
   {
     value = object;
@@ -1254,15 +1256,6 @@ void dereferencet::valid_check(
   if(options.get_bool_option("no-pointer-check"))
     return;
 
-  if(mode==FREE)
-  {
-    dereference_callback.dereference_failure(
-      "pointer dereference",
-      "free() of non-dynamic memory",
-      guard);
-    return;
-  }
-
   const expr2tc &symbol = get_symbol(object);
 
   if (is_constant_string2t(symbol))
@@ -1289,8 +1282,34 @@ void dereferencet::valid_check(
     if (has_prefix(to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
       return;
 
+#if 0
     if (dereference_callback.is_valid_object(to_symbol2t(symbol).thename))
       return; // always ok
+#endif
+    const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
+    if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+      // Assert thtat it hasn't (nondeterministically) been invalidated.
+      address_of2tc addrof(symbol->type, symbol);
+      valid_object2tc valid_expr(addrof);
+      not2tc not_valid_expr(valid_expr);
+
+      guardt tmp_guard(guard);
+      tmp_guard.move(not_valid_expr);
+      dereference_callback.dereference_failure(
+        "pointer dereference",
+        "invalidated dynamic object",
+        tmp_guard);
+    } else {
+      // Not dynamic; if we're in free mode, that's an error.
+      if(mode==FREE)
+      {
+        dereference_callback.dereference_failure(
+          "pointer dereference",
+          "free() of non-dynamic memory",
+          guard);
+        return;
+      }
+    }
   }
 }
 

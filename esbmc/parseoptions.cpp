@@ -1241,6 +1241,10 @@ bool cbmc_parseoptionst::process_goto_program(
         *get_message_handler(), goto_functions);
     }
 
+#if 0
+    // This disabled code used to run the pointer static analysis and produce
+    // pointer assertions appropriately. Disable now that we can run it at
+    // symex time.
     status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
     value_set_analysis(goto_functions);
@@ -1257,6 +1261,7 @@ bool cbmc_parseoptionst::process_goto_program(
     // add pointer checks
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
+#endif
 
     // add failed symbols
     add_failed_symbols(context, ns);
@@ -1273,6 +1278,9 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("data-races-check"))
     {
       status("Adding Data Race Checks");
+
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
 
       add_race_assertions(
         value_set_analysis,
