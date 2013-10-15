@@ -59,7 +59,7 @@ do
 
     unwind=`cat $file/test.desc | grep unwind | awk -F"--unwind" '{ print $2 }' | cut -d' ' -f2`
 
-    if ["$unwind" == ""]
+    if [ "$unwind" = "" ]
     then
       unwind=10
     fi
