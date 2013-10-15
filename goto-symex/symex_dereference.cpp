@@ -36,12 +36,12 @@ protected:
   {
     return true;
   }
-#if 1
+
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard);
-#endif
+
   virtual void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &value_set);
