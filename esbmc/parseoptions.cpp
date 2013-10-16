@@ -583,6 +583,10 @@ int cbmc_parseoptionst::doit_k_induction()
 
         context.clear(); // We need to clear the previous context
 
+        // Create and start base case checking
+        base_caset bc(bmc_base_case, goto_functions_base_case);
+        bc.startSolving();
+
         break;
       }
 
@@ -623,6 +627,10 @@ int cbmc_parseoptionst::doit_k_induction()
         set_verbosity(bmc_forward_condition);
 
         context.clear(); // We need to clear the previous context
+
+        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
+        fc.startSolving();
+
         break;
       }
 
@@ -661,6 +669,9 @@ int cbmc_parseoptionst::doit_k_induction()
         bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
             context_inductive_step, ui_message_handler);
         set_verbosity(bmc_inductive_step);
+
+        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
+        is.startSolving();
 
         break;
       }

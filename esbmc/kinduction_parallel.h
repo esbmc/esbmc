@@ -13,15 +13,12 @@
 #include <goto-programs/goto_functions.h>
 #include "bmc.h"
 
-extern pthread_mutex_t main_mutex;
-extern pthread_cond_t main_cond;
-
 const unsigned int MAX_STEPS=50;
 
-class base_case
+class base_caset
 {
   public:
-    base_case(bmct &bmc,
+    base_caset(bmct &bmc,
         goto_functionst &goto_functions);
 
     void startSolving();
@@ -32,10 +29,10 @@ class base_case
     goto_functionst &_goto_functions;
 };
 
-class forward_condition
+class forward_conditiont
 {
   public:
-    forward_condition(bmct &bmc,
+    forward_conditiont(bmct &bmc,
         goto_functionst &goto_functions);
 
     void startSolving();
@@ -46,10 +43,10 @@ class forward_condition
     goto_functionst &_goto_functions;
 };
 
-class inductive_step
+class inductive_stept
 {
   public:
-    inductive_step(bmct &bmc,
+    inductive_stept(bmct &bmc,
         goto_functionst &goto_functions);
 
     void startSolving();

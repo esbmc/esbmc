@@ -9,7 +9,7 @@
 
 /* Base case class implementation */
 
-base_case::base_case(bmct &bmc,
+base_caset::base_caset(bmct &bmc,
     goto_functionst &goto_functions)
   : _k(1),
     _bmc(bmc),
@@ -18,7 +18,7 @@ base_case::base_case(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void base_case::startSolving()
+void base_caset::startSolving()
 {
   bool res=0;
 
@@ -32,7 +32,7 @@ void base_case::startSolving()
 
 /* Forward condition class implementation */
 
-forward_condition::forward_condition(bmct &bmc,
+forward_conditiont::forward_conditiont(bmct &bmc,
     goto_functionst &goto_functions)
   : _k(2),
     _bmc(bmc),
@@ -41,7 +41,7 @@ forward_condition::forward_condition(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void forward_condition::startSolving()
+void forward_conditiont::startSolving()
 {
   bool res=0;
 
@@ -55,7 +55,7 @@ void forward_condition::startSolving()
 
 /* Inductive step class implementation */
 
-inductive_step::inductive_step(bmct &bmc,
+inductive_stept::inductive_stept(bmct &bmc,
     goto_functionst &goto_functions)
   : _k(2),
     _bmc(bmc),
@@ -64,7 +64,7 @@ inductive_step::inductive_step(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void inductive_step::startSolving()
+void inductive_stept::startSolving()
 {
   bool res=0;
 
