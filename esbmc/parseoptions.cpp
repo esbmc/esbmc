@@ -512,28 +512,34 @@ int cbmc_parseoptionst::doit_k_induction()
 
   if(cmdline.isset("parallel-k-induction"))
   {
-    // Get parent pid
-    pid_t myPid = getpid();
-
     unsigned whoAmI=-1;
+
+    // Pipe for communication between processes
+    int commPipe[2];
+
+    if (pipe(commPipe))
+    {
+      status("\nPipe Creation Failed, giving up.");
+      _exit(1);
+    }
 
     // We need to fork 3 times: one for each step
     for(unsigned p=0; p<3; ++p)
     {
-      // If we are the parent, start new processes
-      if(myPid == getpid())
+      pid_t pid = fork();
+
+      // TODO: count if 3 processes were created
+      if(pid == -1)
       {
-        pid_t pid = fork();
+        status("\nFork Failed, giving up.");
+        _exit(1);
+      }
 
-        if(pid == -1)
-        {
-          status("\nFork Failed, giving up.");
-          _exit(1);
-        }
-
-        // Child process
-        if(pid == 0)
-          whoAmI = p;
+      // Child process
+      if(!pid)
+      {
+        whoAmI = p;
+        break;
       }
     }
 
