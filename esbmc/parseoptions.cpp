@@ -507,25 +507,58 @@ int cbmc_parseoptionst::doit_k_induction()
     return 0;
   }
 
-//  if(cmdline.isset("parallel-k-induction"))
-//  {
-//    // First, create the threads
-//    base_case_thread bc(bmc_base_case, goto_functions_base_case);
-//    forward_condition_thread fc(bmc_forward_condition, goto_functions_forward_condition);
-//    inductive_step_thread is(bmc_inductive_step, goto_functions_inductive_step);
-//
-//    // Start the threads
-//    bc.start();
-//    fc.start();
-//    is.start();
-//
-//    // We should wait to see if some result is found
-//    pthread_mutex_lock(&main_mutex);
-//    pthread_cond_wait(&main_cond, &main_mutex);
-//    pthread_mutex_unlock(&main_mutex);
-//
-//    return res;
-//  }
+  // do actual BMC
+  bool res=0;
+
+  if(cmdline.isset("parallel-k-induction"))
+  {
+    // Get parent pid
+    pid_t myPid = getpid();
+
+    unsigned whoAmI=-1;
+
+    // We need to fork 3 times: one for each step
+    for(unsigned p=0; p<3; ++p)
+    {
+      // If we are the parent, start new processes
+      if(myPid == getpid())
+      {
+        pid_t pid = fork();
+
+        if(pid == -1)
+        {
+          status("\nFork Failed, giving up.");
+          _exit(1);
+        }
+
+        // Child process
+        if(pid == 0)
+          whoAmI = p;
+      }
+    }
+
+    switch(whoAmI)
+    {
+      case -1:
+        std::cout << "I am your father!" << std::endl;
+        break;
+
+      case 0:
+        status("Generated Base Case process");
+        break;
+
+      case 1:
+        status("Generated Forward Condition process");
+        break;
+
+      case 2:
+        status("Generated Inductive Step process");
+        break;
+
+    }
+
+    return res;
+  }
 
   //
   // do the base case
@@ -626,9 +659,6 @@ int cbmc_parseoptionst::doit_k_induction()
   bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
       context_inductive_step, ui_message_handler);
   set_verbosity(bmc_inductive_step);
-
-  // do actual BMC
-  bool res=0;
 
   do {
     std::cout << std::endl << "*** K-Induction Loop Iteration ";
