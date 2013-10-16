@@ -435,25 +435,10 @@ dereferencet::dereference(
 
   if (is_nil_expr(value))
   {
-    // first see if we have a "failed object" for this pointer
-
-    const symbolt *failed_symbol;
-
-    if (dereference_callback.has_failed_symbol(deref_expr, failed_symbol))
-    {
-      // yes!
-      exprt tmp_val = symbol_expr(*failed_symbol);
-      migrate_expr(tmp_val, value);
-
-      // Wrap it in the scalar step list, to ensure it has the right type.
-      if (scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
-
-    }
-    else
-    {
-      value = make_failed_symbol(type);
-    }
+    // Dereference failed entirely; various assertions will explode later down
+    // the line. To make this a valid formula though, return a failed symbol,
+    // so that this assignment gets a well typed free value.
+    value = make_failed_symbol(type);
   }
 
   dest = value;
