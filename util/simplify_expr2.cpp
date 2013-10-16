@@ -731,7 +731,9 @@ pointer_offset2t::do_simplify(bool second) const
     // And multiply the non pointer one by the type size.
     type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
-    constant_int2tc type_size(ptr_int_type, type_byte_size(*ptr_subtype.get()));
+    mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
+                          : type_byte_size(*ptr_subtype.get());
+    constant_int2tc type_size(ptr_int_type, thesize);
 
     if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
       non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
@@ -1120,7 +1122,8 @@ typecast2t::do_simplify(bool second) const
     const pointer_type2t &ptr_to = to_pointer_type(type);
     const pointer_type2t &ptr_from = to_pointer_type(from->type);
 
-    if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype))
+    if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
+        is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
       return expr2tc(); // Not worth thinking about
     unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
                             : ptr_to.subtype->get_width();
