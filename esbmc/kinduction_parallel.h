@@ -16,11 +16,15 @@
 extern pthread_mutex_t main_mutex;
 extern pthread_cond_t main_cond;
 
+const unsigned int MAX_STEPS=50;
+
 class base_case_thread : public Thread
 {
   public:
     base_case_thread(bmct &bmc,
         goto_functionst &goto_functions);
+
+    virtual ~base_case_thread();
 
   protected:
     virtual void run();
@@ -37,6 +41,8 @@ class forward_condition_thread : public Thread
     forward_condition_thread(bmct &bmc,
         goto_functionst &goto_functions);
 
+    virtual ~forward_condition_thread();
+
   protected:
     virtual void run();
 
@@ -52,6 +58,8 @@ class inductive_step_thread : public Thread
     inductive_step_thread(bmct &bmc,
         goto_functionst &goto_functions);
 
+    virtual ~inductive_step_thread();
+
   protected:
     virtual void run();
 
@@ -66,23 +74,24 @@ class safe_queues
   public:
     static safe_queues *get_instance();
 
-    void update_bc_queue(unsigned int k, int res);
-    void update_fc_queue(unsigned int k, int res);
-    void update_is_queue(unsigned int k, int res);
+    enum STEP { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP };
+
+    void update_queue(STEP s, unsigned int k, int res);
+    void update_finished(STEP s, bool finished);
 
   private:
     safe_queues();
     ~safe_queues();
 
-    short bc_queue[50];
-    short fc_queue[50];
-    short is_queue[50];
+    short bc_queue[MAX_STEPS];
+    short fc_queue[MAX_STEPS];
+    short is_queue[MAX_STEPS];
 
-    pthread_mutex_t _bcMutex;
-    pthread_mutex_t _fcMutex;
-    pthread_mutex_t _isMutex;
+    pthread_mutex_t _mutex;
 
     static safe_queues* instance;
+
+    bool bc_finished, fc_finished, is_finished;
 
     safe_queues(safe_queues const &);
     void operator=(safe_queues const &);
