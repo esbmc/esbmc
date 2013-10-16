@@ -178,6 +178,10 @@ private:
   void wrap_in_scalar_step_list(expr2tc &value,
                                 std::list<expr2tc> *scalar_step_list,
                                 const guardt &guard);
+
+  void dereference_failure(const std::string &error_class,
+                           const std::string &error_name,
+                           const guardt &guard);
 };
 
 #endif

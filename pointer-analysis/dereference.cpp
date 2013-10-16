@@ -522,22 +522,15 @@ void dereferencet::build_reference_to(
 
   if (is_unknown2t(what) || is_invalid2t(what))
   {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      // constraint that it actually is an invalid pointer
+    // constraint that it actually is an invalid pointer
 
-      invalid_pointer2tc invalid_pointer_expr(deref_expr);
+    invalid_pointer2tc invalid_pointer_expr(deref_expr);
 
-      // produce new guard
+    // produce new guard
 
-      guardt tmp_guard(guard);
-      tmp_guard.move(invalid_pointer_expr);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalid pointer",
-        tmp_guard);
-    }
-
+    guardt tmp_guard(guard);
+    tmp_guard.move(invalid_pointer_expr);
+    dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
     return;
   }
 
@@ -553,20 +546,15 @@ void dereferencet::build_reference_to(
 
   if (is_null_object2t(root_object))
   {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      type2tc nullptrtype = type2tc(new pointer_type2t(type));
-      symbol2tc null_ptr(nullptrtype, "NULL");
+    type2tc nullptrtype = type2tc(new pointer_type2t(type));
+    symbol2tc null_ptr(nullptrtype, "NULL");
 
-      same_object2tc pointer_guard(deref_expr, null_ptr);
+    same_object2tc pointer_guard(deref_expr, null_ptr);
 
-      guardt tmp_guard(guard);
-      tmp_guard.add(pointer_guard);
+    guardt tmp_guard(guard);
+    tmp_guard.add(pointer_guard);
 
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "NULL pointer", tmp_guard);
-    }
+    dereference_failure("pointer dereference", "NULL pointer", tmp_guard);
 
     // Don't build a reference to this. You can't actually access NULL, and the
     // solver will only get confused.
@@ -761,9 +749,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         unsigned long submask = subtype_size - 1;
         unsigned long res = theint.constant_value.to_ulong() & submask;
         if (res != 0) {
-          dereference_callback.dereference_failure(
-            "pointer dereference",
-            "Unaligned access to non-byte array", guard);
+          dereference_failure("pointer dereference",
+                              "Unaligned access to non-byte array", guard);
           value = expr2tc();
           return;
         }
@@ -788,14 +775,12 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   } else if (is_code_type(base_object)) {
     // Accessing anything but the start of a function is not permitted.
     notequal2tc neq(offset, zero_uint);
-    if(!options.get_bool_option("no-pointer-check")) {
-      guardt tmp_guard2(guard);
-      tmp_guard2.add(false_expr);
+    guardt tmp_guard2(guard);
+    tmp_guard2.add(false_expr);
 
-      dereference_callback.dereference_failure(
-        "Code separation",
-        "Dereferencing code pointer with nonzero offset", tmp_guard2);
-    }
+    dereference_failure("Code separation",
+                        "Dereferencing code pointer with nonzero offset",
+                        tmp_guard2);
   } else if (is_struct_type(base_object)) {
     // Just to be sure:
     assert(is_scalar_type(type));
@@ -820,12 +805,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   } else {
     unsigned long sz = type_byte_size(*base_object->type).to_ulong();
     if (sz < theint.constant_value.to_ulong() + access_sz) {
-      if(!options.get_bool_option("no-pointer-check")) {
-        // This is statically known to be out of bounds.
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "Offset out of bounds", guard);
-      }
+      // This is statically known to be out of bounds.
+      dereference_failure("pointer dereference", "Offset out of bounds", guard);
     }
   }
 }
@@ -854,9 +835,8 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     } else if (int_offset == m_offs) {
       // Does this over-read?
       if (access_size > m_size) {
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "Over-sized read of struct field", guard);
+        dereference_failure("pointer dereference",
+                            "Over-sized read of struct field", guard);
         value = expr2tc();
         return;
       }
@@ -890,9 +870,8 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
       // error), which are both bad.
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "Misaligned access to struct field", guard);
+      dereference_failure("pointer dereference",
+                          "Misaligned access to struct field", guard);
       value = expr2tc();
       return;
     }
@@ -953,9 +932,8 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
     } else if (access_sz > ((*it)->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "Oversized field offset", guard);
+      dereference_failure("pointer dereference",
+                          "Oversized field offset", guard);
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     } else if (alignment >= config.ansi_c.word_size) {
@@ -1041,9 +1019,8 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
         guardt tmp_guard = guard;
         tmp_guard.add(not2tc(is_aligned));
-        dereference_callback.dereference_failure(
-          "Pointer alignment",
-          "Unaligned access to array", tmp_guard);
+        dereference_failure("Pointer alignment",
+                            "Unaligned access to array", tmp_guard);
       }
 
       // From here on, assume aligned access.
@@ -1084,14 +1061,12 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     // No data is read out, we can only check for correctness here. And that
     // correctness demands that the offset is always zero.
     notequal2tc neq(offset, zero_uint);
-    if(!options.get_bool_option("no-pointer-check")) {
-      guardt tmp_guard2(guard);
-      tmp_guard2.add(false_expr);
+    guardt tmp_guard2(guard);
+    tmp_guard2.add(false_expr);
 
-      dereference_callback.dereference_failure(
-        "Code separation",
-        "Dereferencing code pointer with nonzero offset", tmp_guard2);
-    }
+    dereference_failure("Code separation",
+                        "Dereferencing code pointer with nonzero offset",
+                        tmp_guard2);
 
     return;
   }
@@ -1103,26 +1078,19 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   }
   else
   {
-    if(!options.get_bool_option("no-pointer-check"))
-    {
-      //nec: ex29
-      if (    (is_pointer_type(type) &&
-               is_empty_type(to_pointer_type(type).subtype))
-          ||
-              (is_pointer_type(value) &&
-               is_empty_type(to_pointer_type(value->type).subtype)))
-        return;
+    //nec: ex29
+    if ((is_pointer_type(type) && is_empty_type(to_pointer_type(type).subtype))
+        || (is_pointer_type(value) &&
+            is_empty_type(to_pointer_type(value->type).subtype)))
+      return;
 
-      std::string msg="memory model not applicable (got `";
-      msg+=from_type(ns, "", value->type);
-      msg+="', expected `";
-      msg+=from_type(ns, "", type);
-      msg+="')";
+    std::string msg="memory model not applicable (got `";
+    msg+=from_type(ns, "", value->type);
+    msg+="', expected `";
+    msg+=from_type(ns, "", type);
+    msg+="')";
 
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        msg, guard);
-    }
+    dereference_failure("pointer dereference", msg, guard);
 
     value = expr2tc();
     return; // give up, no way that this is ok
@@ -1134,8 +1102,6 @@ void dereferencet::valid_check(
   const guardt &guard,
   const modet mode)
 {
-  if(options.get_bool_option("no-pointer-check"))
-    return;
 
   const expr2tc &symbol = get_symbol(object);
 
@@ -1145,10 +1111,8 @@ void dereferencet::valid_check(
 
     if(mode==WRITE)
     {
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "write access to string constant",
-        guard);
+      dereference_failure("pointer dereference",
+                          "write access to string constant", guard);
     }
   }
   else if (is_nil_expr(symbol))
@@ -1172,18 +1136,14 @@ void dereferencet::valid_check(
 
       guardt tmp_guard(guard);
       tmp_guard.move(not_valid_expr);
-      dereference_callback.dereference_failure(
-        "pointer dereference",
-        "invalidated dynamic object",
-        tmp_guard);
+      dereference_failure("pointer dereference", "invalidated dynamic object",
+                          tmp_guard);
     } else {
       // Not dynamic; if we're in free mode, that's an error.
       if(mode==FREE)
       {
-        dereference_callback.dereference_failure(
-          "pointer dereference",
-          "free() of non-dynamic memory",
-          guard);
+        dereference_failure("pointer dereference",
+                            "free() of non-dynamic memory", guard);
         return;
       }
     }
@@ -1239,13 +1199,11 @@ void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
 
   guardt tmp_guard1(guard);
   tmp_guard1.move(gt);
-  dereference_callback.dereference_failure("array bounds", "array upper bound",
-                                           tmp_guard1);
+  dereference_failure("array bounds", "array upper bound", tmp_guard1);
 
   guardt tmp_guard2(guard);
   tmp_guard2.move(lt);
-  dereference_callback.dereference_failure("array bounds", "array lower bound",
-                                           tmp_guard2);
+  dereference_failure("array bounds", "array lower bound", tmp_guard2);
 }
 
 bool dereferencet::memory_model(
@@ -1288,8 +1246,8 @@ bool dereferencet::memory_model_bytes(
   // code via a pointer is never valid. Even though you /can/ do it on X86.
   if (is_code_type(from_type) || is_code_type(to_type)) {
     guardt tmp_guard(guard);
-    dereference_callback.dereference_failure("Code seperation",
-        "Dereference accesses code / program text", tmp_guard);
+    dereference_failure("Code seperation",
+                        "Dereference accesses code / program text", tmp_guard);
     return true;
   }
 
@@ -1340,17 +1298,15 @@ bool dereferencet::memory_model_bytes(
 
         guardt tmp_guard(guard);
         tmp_guard.move(upper_bound_eq);
-        dereference_callback.dereference_failure(
-            "byte model object boundries",
-            "byte access upper bound", tmp_guard);
+        dereference_failure("byte model object boundries",
+                            "byte access upper bound", tmp_guard);
 
         lessthan2tc offs_lower_bound(new_offset, zero_int);
 
         guardt tmp_guard2(guard);
         tmp_guard2.move(offs_lower_bound);
-        dereference_callback.dereference_failure(
-          "byte model object boundries",
-          "word offset lower bound", tmp_guard);
+        dereference_failure("byte model object boundries",
+                            "word offset lower bound", tmp_guard);
       }
     }
 
@@ -1434,9 +1390,8 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
     // XXX -- there's a line in the C spec, appendix G or whatever, saying that
     // accessing an object with an (incompatible) type other than its base type
     // is undefined behaviour. Should totally put that in the error message.
-    dereference_callback.dereference_failure(
-      "Memory model",
-      "Object accessed with incompatible base type", guard);
+    dereference_failure("Memory model",
+                        "Object accessed with incompatible base type", guard);
     value = expr2tc();
   }
 }
@@ -1495,9 +1450,8 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
     if (!is_struct_type(arr_type.subtype) && !is_array_type(arr_type.subtype)) {
       // Can't handle accesses to anything else.
-      dereference_callback.dereference_failure(
-        "Memory model",
-        "Object accessed with incompatible base type", guard);
+      dereference_failure("Memory model",
+                          "Object accessed with incompatible base type", guard);
       return;
     }
 
@@ -1530,9 +1484,9 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
         return;
       } else {
         // Correctly aligned access to incompatible base type.
-        dereference_callback.dereference_failure(
-          "Memory model",
-          "Object accessed with incompatible base type", guard);
+        dereference_failure("Memory model",
+                            "Object accessed with incompatible base type",
+                            guard);
         return;
       }
     } else {
@@ -1561,14 +1515,12 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       // Fell out of that loop. Either this offset is out of range, or lies in
       // padding.
-      dereference_callback.dereference_failure(
-        "Memory model",
-        "Object accessed with illegal offset", guard);
+      dereference_failure("Memory model", "Object accessed with illegal offset",
+                          guard);
     }
   } else {
-    dereference_callback.dereference_failure(
-      "Memory model",
-      "Object accessed with incompatible base type", guard);
+    dereference_failure("Memory model",
+                        "Object accessed with incompatible base type", guard);
   }
 
   return;
@@ -1591,9 +1543,8 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   if (resolved_list.size() == 0) {
     // No legal accesses.
     value = expr2tc();
-    dereference_callback.dereference_failure(
-      "Memory model",
-      "Object accessed with incompatible base type", guard);
+    dereference_failure("Memory model",
+                        "Object accessed with incompatible base type", guard);
     return;
   }
 
@@ -1617,9 +1568,8 @@ dereferencet::construct_struct_ref_from_dyn_offset(expr2tc &value,
   accuml = not2tc(accuml); // Creates a new 'not' expr. Doesn't copy construct.
   guardt tmp_guard = guard;
   tmp_guard.add(accuml);
-  dereference_callback.dereference_failure(
-    "Memory model",
-    "Object accessed with incompatible base type", tmp_guard);
+  dereference_failure("Memory model",
+                      "Object accessed with incompatible base type", tmp_guard);
 }
 
 void
@@ -1696,5 +1646,16 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
   } else {
     // Not legal
     return;
+  }
+}
+
+void
+dereferencet::dereference_failure(const std::string &error_class,
+                                  const std::string &error_name,
+                                  const guardt &guard)
+{
+  // This just wraps dereference failure in a no-pointer-check check.
+  if(!options.get_bool_option("no-pointer-check")) {
+    dereference_callback.dereference_failure( error_class, error_name, guard);
   }
 }
