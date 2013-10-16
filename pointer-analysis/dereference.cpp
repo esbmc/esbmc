@@ -735,7 +735,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
     unsigned long deref_size = type->get_width() / 8;
 
-
     if (is_array_type(arr_subtype)) {
       construct_from_multidir_array(value, offset, type, guard,
                                     scalar_step_list,
