@@ -2959,7 +2959,11 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
       type2tc followed_type;
       migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = type_byte_size(*followed_type);
+      mp_integer type_size;
+      if (is_empty_type(followed_type))
+        type_size = 1;
+      else
+        type_size = type_byte_size(*followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
