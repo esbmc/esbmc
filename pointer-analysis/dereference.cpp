@@ -831,9 +831,18 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
     if (int_offset < m_offs) {
       // The offset is behind this field, but wasn't accepted by the previous
       // member. That means that the offset falls in the undefined gap in the
-      // middled. Which is an error.
-      std::cerr << "Implement read-from-padding error in structs" << std::endl;
-      abort();
+      // middled. Which might be an error -- reading from it definitely is,
+      // but we might write to it in the course of memset.
+      value = expr2tc();
+      if (mode == WRITE) {
+        // This write goes to an invalid symbol, but no assertion is encoded,
+        // so it's entirely safe.
+      } else {
+        assert(mode == READ);
+        // Oh dear. Encode a failure assertion.
+        dereference_failure("pointer dereference",
+                            "Dereference reads between struct fields", guard);
+      }
     } else if (int_offset == m_offs) {
       // Does this over-read?
       if (access_size > m_size) {
