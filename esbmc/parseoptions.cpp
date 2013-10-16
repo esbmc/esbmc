@@ -550,17 +550,120 @@ int cbmc_parseoptionst::doit_k_induction()
         break;
 
       case 0:
+      {
         status("Generated Base Case process");
+
+        status("\n*** Generating Base Case ***");
+        goto_functionst goto_functions_base_case;
+
+        optionst opts1;
+        opts1.set_option("base-case", true);
+        opts1.set_option("forward-condition", false);
+        opts1.set_option("inductive-step", false);
+        get_command_line_options(opts1);
+
+        if(get_goto_program(opts1, goto_functions_base_case))
+          return 6;
+
+        if(cmdline.isset("show-claims"))
+        {
+          const namespacet ns(context);
+          show_claims(ns, get_ui(), goto_functions_base_case);
+          return 0;
+        }
+
+        if(set_claims(goto_functions_base_case))
+          return 7;
+
+        context_base_case = context;
+
+        bmct bmc_base_case(goto_functions_base_case, opts1,
+            context_base_case, ui_message_handler);
+        set_verbosity(bmc_base_case);
+
+        context.clear(); // We need to clear the previous context
+
         break;
+      }
 
       case 1:
+      {
         status("Generated Forward Condition process");
+
+        //
+        // do the forward condition
+        //
+
+        status("\n*** Generating Forward Condition ***");
+        goto_functionst goto_functions_forward_condition;
+
+        optionst opts2;
+        opts2.set_option("base-case", false);
+        opts2.set_option("forward-condition", true);
+        opts2.set_option("inductive-step", false);
+        get_command_line_options(opts2);
+
+        if(get_goto_program(opts2, goto_functions_forward_condition))
+          return 6;
+
+        if(cmdline.isset("show-claims"))
+        {
+          const namespacet ns(context);
+          show_claims(ns, get_ui(), goto_functions_forward_condition);
+          return 0;
+        }
+
+        if(set_claims(goto_functions_forward_condition))
+          return 7;
+
+        context_forward_condition = context;
+
+        bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
+            context_forward_condition, ui_message_handler);
+        set_verbosity(bmc_forward_condition);
+
+        context.clear(); // We need to clear the previous context
         break;
+      }
 
       case 2:
+      {
         status("Generated Inductive Step process");
-        break;
 
+        //
+        // do the inductive step
+        //
+
+        status("\n*** Generating Inductive Step ***");
+        goto_functionst goto_functions_inductive_step;
+
+        optionst opts3;
+        opts3.set_option("base-case", false);
+        opts3.set_option("forward-condition", false);
+        opts3.set_option("inductive-step", true);
+        get_command_line_options(opts3);
+
+        if(get_goto_program(opts3, goto_functions_inductive_step))
+          return 6;
+
+        if(cmdline.isset("show-claims"))
+        {
+          const namespacet ns(context);
+          show_claims(ns, get_ui(), goto_functions_inductive_step);
+          return 0;
+        }
+
+        if(set_claims(goto_functions_inductive_step))
+          return 7;
+
+        context_inductive_step = context;
+
+        bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
+            context_inductive_step, ui_message_handler);
+        set_verbosity(bmc_inductive_step);
+
+        break;
+      }
     }
 
     return res;
