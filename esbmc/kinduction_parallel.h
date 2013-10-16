@@ -21,7 +21,7 @@ class base_caset
     base_caset(bmct &bmc,
         goto_functionst &goto_functions);
 
-    void startSolving();
+    bool startSolving();
 
   private:
     unsigned int _k;
@@ -35,7 +35,7 @@ class forward_conditiont
     forward_conditiont(bmct &bmc,
         goto_functionst &goto_functions);
 
-    void startSolving();
+    bool startSolving();
 
   private:
     unsigned int _k;
@@ -49,7 +49,7 @@ class inductive_stept
     inductive_stept(bmct &bmc,
         goto_functionst &goto_functions);
 
-    void startSolving();
+    bool startSolving();
 
   private:
     unsigned int _k;

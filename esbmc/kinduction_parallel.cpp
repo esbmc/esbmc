@@ -18,7 +18,7 @@ base_caset::base_caset(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void base_caset::startSolving()
+bool base_caset::startSolving()
 {
   bool res=0;
 
@@ -26,8 +26,14 @@ void base_caset::startSolving()
   do
   {
     res=_bmc.run(_goto_functions);
+
+    // If it fails, a bug was found
+    if(res) return res;
+
     _bmc.options.set_option("unwind", i2string(++_k));
   } while(_k<=MAX_STEPS);
+
+  return false;
 }
 
 /* Forward condition class implementation */
@@ -41,7 +47,7 @@ forward_conditiont::forward_conditiont(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void forward_conditiont::startSolving()
+bool forward_conditiont::startSolving()
 {
   bool res=0;
 
@@ -49,8 +55,14 @@ void forward_conditiont::startSolving()
   do
   {
     res=_bmc.run(_goto_functions);
+
+    // If this was a success, the property was proved
+    if(!res) return res;
+
     _bmc.options.set_option("unwind", i2string(++_k));
   } while(_k<=MAX_STEPS);
+
+  return true;
 }
 
 /* Inductive step class implementation */
@@ -64,7 +76,7 @@ inductive_stept::inductive_stept(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-void inductive_stept::startSolving()
+bool inductive_stept::startSolving()
 {
   bool res=0;
 
@@ -72,8 +84,14 @@ void inductive_stept::startSolving()
   do
   {
     res=_bmc.run(_goto_functions);
+
+    // If this was a success, the property was proved
+    if(!res) return res;
+
     _bmc.options.set_option("unwind", i2string(++_k));
   } while(_k<=MAX_STEPS);
+
+  return true;
 }
 
 /* class safe_queues */
