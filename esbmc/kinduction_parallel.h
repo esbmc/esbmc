@@ -18,7 +18,7 @@ extern pthread_cond_t main_cond;
 
 const unsigned int MAX_STEPS=50;
 
-class base_case_thread : public Thread
+class base_case_thread
 {
   public:
     base_case_thread(bmct &bmc,
@@ -35,7 +35,7 @@ class base_case_thread : public Thread
     goto_functionst &_goto_functions;
 };
 
-class forward_condition_thread : public Thread
+class forward_condition_thread
 {
   public:
     forward_condition_thread(bmct &bmc,
@@ -52,7 +52,7 @@ class forward_condition_thread : public Thread
     goto_functionst &_goto_functions;
 };
 
-class inductive_step_thread : public Thread
+class inductive_step_thread
 {
   public:
     inductive_step_thread(bmct &bmc,

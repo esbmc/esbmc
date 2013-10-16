@@ -31,8 +31,7 @@ void finalize_multithread()
 
 base_case_thread::base_case_thread(bmct &bmc,
     goto_functionst &goto_functions)
-  : Thread(),
-    _k(1),
+  : _k(1),
     _bmc(bmc),
     _goto_functions(goto_functions)
 {
@@ -77,8 +76,7 @@ void base_case_thread::run()
 
 forward_condition_thread::forward_condition_thread(bmct &bmc,
     goto_functionst &goto_functions)
-  : Thread(),
-    _k(2),
+  : _k(2),
     _bmc(bmc),
     _goto_functions(goto_functions)
 {
@@ -122,8 +120,7 @@ void forward_condition_thread::run()
 
 inductive_step_thread::inductive_step_thread(bmct &bmc,
     goto_functionst &goto_functions)
-  : Thread(),
-    _k(2),
+  : _k(2),
     _bmc(bmc),
     _goto_functions(goto_functions)
 {
