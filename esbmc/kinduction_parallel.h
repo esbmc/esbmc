@@ -18,16 +18,13 @@ extern pthread_cond_t main_cond;
 
 const unsigned int MAX_STEPS=50;
 
-class base_case_thread
+class base_case
 {
   public:
-    base_case_thread(bmct &bmc,
+    base_case(bmct &bmc,
         goto_functionst &goto_functions);
 
-    virtual ~base_case_thread();
-
-  protected:
-    virtual void run();
+    void startSolving();
 
   private:
     unsigned int _k;
@@ -35,16 +32,13 @@ class base_case_thread
     goto_functionst &_goto_functions;
 };
 
-class forward_condition_thread
+class forward_condition
 {
   public:
-    forward_condition_thread(bmct &bmc,
+    forward_condition(bmct &bmc,
         goto_functionst &goto_functions);
 
-    virtual ~forward_condition_thread();
-
-  protected:
-    virtual void run();
+    void startSolving();
 
   private:
     unsigned int _k;
@@ -52,16 +46,13 @@ class forward_condition_thread
     goto_functionst &_goto_functions;
 };
 
-class inductive_step_thread
+class inductive_step
 {
   public:
-    inductive_step_thread(bmct &bmc,
+    inductive_step(bmct &bmc,
         goto_functionst &goto_functions);
 
-    virtual ~inductive_step_thread();
-
-  protected:
-    virtual void run();
+    void startSolving();
 
   private:
     unsigned int _k;
