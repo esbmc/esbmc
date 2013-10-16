@@ -1114,8 +1114,23 @@ typecast2t::do_simplify(bool second) const
     // Use of strings here is inefficient XXX jmorse
     return from;
   } else if (is_pointer_type(type) && is_pointer_type(from)) {
-    // Casting from one pointer to another is meaningless
-    return from;
+    // Casting from one pointer to another is meaningless... except when there's
+    // pointer arithmetic about to be applied to it. So, only nurk typecasts
+    // that don't change the subtype width.
+    const pointer_type2t &ptr_to = to_pointer_type(type);
+    const pointer_type2t &ptr_from = to_pointer_type(from->type);
+
+    if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype))
+      return expr2tc(); // Not worth thinking about
+    unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
+                            : ptr_to.subtype->get_width();
+    unsigned int from_width = (is_empty_type(ptr_from.subtype)) ? 8
+                            : ptr_from.subtype->get_width();
+
+    if (to_width == from_width)
+      return from;
+    else
+      return expr2tc();
   } else if (is_constant_expr(from)) {
     // Casts from constant operands can be done here.
     if (is_constant_bool2t(from) && is_bv_type(type)) {
