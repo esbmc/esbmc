@@ -515,13 +515,22 @@ int cbmc_parseoptionst::doit_k_induction()
     unsigned whoAmI=-1;
 
     // Pipe for communication between processes
-    int commPipe[2];
+    int commPipeIn[2];
+    int commPipeOut[2];
 
-    if (pipe(commPipe))
+    if (pipe(commPipeIn))
     {
       status("\nPipe Creation Failed, giving up.");
       _exit(1);
     }
+
+    if (pipe(commPipeOut))
+    {
+      status("\nPipe Creation Failed, giving up.");
+      _exit(1);
+    }
+
+    pid_t children_pid[3];
 
     // We need to fork 3 times: one for each step
     for(unsigned p=0; p<3; ++p)
@@ -541,6 +550,8 @@ int cbmc_parseoptionst::doit_k_induction()
         whoAmI = p;
         break;
       }
+      else // Parent process
+        children_pid[p]=pid;
     }
 
     switch(whoAmI)
