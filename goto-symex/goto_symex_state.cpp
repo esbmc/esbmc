@@ -291,12 +291,21 @@ void goto_symex_statet::fixup_renamed_ptr_type(expr2tc &expr,
   const pointer_type2t &orig = to_pointer_type(orig_type);
   const pointer_type2t &newtype = to_pointer_type(expr->type);
 
-  // Rename them -- we might be pointing at a symbol type, and attempting to
-  // get the size of it is going to cause trouble.
-  type2tc origsubtype_s = orig.subtype;
-  type2tc newsubtype_s = newtype.subtype;
-  type2tc origsubtype = ns.follow(origsubtype_s);
-  type2tc newsubtype = ns.follow(newsubtype_s);
+  type2tc origsubtype = orig.subtype;
+  type2tc newsubtype = newtype.subtype;
+
+  // Handle symbol subtypes -- we can't rename these, because there are (some)
+  // pointers to incomplete types, that here we end up trying to get a concrete
+  // type for. Which is incorrect.
+  // So instead, if one of the subtypes is a symbol type, and it isn't identical
+  // to the other type, insert a typecast. This might lead to some needless
+  // casts, but what the hell.
+  if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype)) {
+    if (origsubtype != newsubtype) {
+      expr = typecast2tc(orig_type, expr);
+    }
+    return;
+  }
 
   // Cease caring about anything that points at code types: pointer arithmetic
   // applied to this is already broken.
