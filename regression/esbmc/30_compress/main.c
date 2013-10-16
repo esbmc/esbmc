@@ -95,7 +95,7 @@ int Compress(argc, argv)
       cp++;
     } 
   else
-  { cp = argv[0]; } // XXX jmorse, removing braces causes explosions.
+    cp = argv[0];
   for (argc--, argv++; argc > 0; argc--, argv++)
     {
       if (**argv == '-')
