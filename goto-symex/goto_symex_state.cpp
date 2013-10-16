@@ -226,37 +226,8 @@ void goto_symex_statet::rename(expr2tc &expr)
     type2tc origtype = expr->type;
     top().level1.rename(expr);
     level2.rename(expr);
-
-    if (is_pointer_type(origtype)) {
-      assert(is_pointer_type(expr->type));
-      const pointer_type2t &orig = to_pointer_type(origtype);
-      const pointer_type2t &newtype = to_pointer_type(expr->type);
-
-      type2tc origsubtype_s = orig.subtype;
-      type2tc newsubtype_s = newtype.subtype;
-      type2tc origsubtype = ns.follow(origsubtype_s);
-      type2tc newsubtype = ns.follow(newsubtype_s);
-
-      if (is_code_type(origsubtype) || is_code_type(newsubtype))
-        return;
-
-      unsigned int origsize, newsize;
-
-      if (is_empty_type(origsubtype))
-        origsize = 8;
-      else
-        origsize = origsubtype->get_width();
-
-      if (is_empty_type(newsubtype))
-        newsize = 8;
-      else
-        newsize = newsubtype->get_width();
-
-      if (origsize != newsize) {
-        // This would break all kinds of pointer arith; insert a cast.
-        expr = typecast2tc(origtype, expr);
-      }
-    }
+    if (is_pointer_type(origtype))
+      fixup_renamed_ptr_type(expr, origtype);
   }
   else if (is_address_of2t(expr))
   {
@@ -292,37 +263,8 @@ void goto_symex_statet::rename_address(expr2tc &expr)
     // only do L1
     type2tc origtype = expr->type;
     top().level1.rename(expr);
-
-    if (is_pointer_type(origtype)) {
-      assert(is_pointer_type(expr->type));
-      const pointer_type2t &orig = to_pointer_type(origtype);
-      const pointer_type2t &newtype = to_pointer_type(expr->type);
-
-      type2tc origsubtype_s = orig.subtype;
-      type2tc newsubtype_s = newtype.subtype;
-      type2tc origsubtype = ns.follow(origsubtype_s);
-      type2tc newsubtype = ns.follow(newsubtype_s);
-
-      if (is_code_type(origsubtype) || is_code_type(newsubtype))
-        return;
-
-      unsigned int origsize, newsize;
-
-      if (is_empty_type(origsubtype))
-        origsize = 8;
-      else
-        origsize = origsubtype->get_width();
-
-      if (is_empty_type(newsubtype))
-        newsize = 8;
-      else
-        newsize = newsubtype->get_width();
-
-      if (origsize != newsize) {
-        // This will break all kinds of pointer arith; insert a cast.
-        expr = typecast2tc(origtype, expr);
-      }
-    }
+    if (is_pointer_type(origtype))
+      fixup_renamed_ptr_type(expr, origtype);
   }
   else if (is_index2t(expr))
   {
@@ -336,6 +278,48 @@ void goto_symex_statet::rename_address(expr2tc &expr)
     Forall_operands2(it, idx, expr) {
       rename_address(*it);
     }
+  }
+}
+
+void goto_symex_statet::fixup_renamed_ptr_type(expr2tc &expr,
+                                               const type2tc &orig_type)
+{
+  assert(is_pointer_type(orig_type));
+  assert(is_pointer_type(expr));
+
+  // Grab pointer types
+  const pointer_type2t &orig = to_pointer_type(orig_type);
+  const pointer_type2t &newtype = to_pointer_type(expr->type);
+
+  // Rename them -- we might be pointing at a symbol type, and attempting to
+  // get the size of it is going to cause trouble.
+  type2tc origsubtype_s = orig.subtype;
+  type2tc newsubtype_s = newtype.subtype;
+  type2tc origsubtype = ns.follow(origsubtype_s);
+  type2tc newsubtype = ns.follow(newsubtype_s);
+
+  // Cease caring about anything that points at code types: pointer arithmetic
+  // applied to this is already broken.
+  if (is_code_type(origsubtype) || is_code_type(newsubtype))
+    return;
+
+  // Fetch the (bit) size of the pointer subtype.
+  unsigned int origsize, newsize;
+
+  if (is_empty_type(origsubtype))
+    origsize = 8;
+  else
+    origsize = origsubtype->get_width();
+
+  if (is_empty_type(newsubtype))
+    newsize = 8;
+  else
+    newsize = newsubtype->get_width();
+
+  // If the renaming process has changed the size of the pointer subtype, this
+  // will break all kinds of pointer arith; insert a cast.
+  if (origsize != newsize) {
+    expr = typecast2tc(orig_type, expr);
   }
 }
 
