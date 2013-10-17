@@ -674,6 +674,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
+
+          if(r.result) return r.result;
         }
 
         break;
@@ -734,6 +736,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
         }
 
         break;
@@ -792,6 +796,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
         }
 
         break;
