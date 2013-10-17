@@ -583,7 +583,7 @@ int cbmc_parseoptionst::doit_k_induction()
             switch(results[i].step)
             {
               case BASE_CASE:
-                if(results[i].result)
+                if(results[i].finished)
                   bc_finished=true;
 
                 bc_res[results[i].k] = results[i].result;
@@ -594,7 +594,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 break;
 
               case FORWARD_CONDITION:
-                if(results[i].result)
+                if(results[i].finished)
                   fc_finished=true;
 
                 fc_res[results[i].k] = results[i].result;
@@ -605,7 +605,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 break;
 
               case INDUCTIVE_STEP:
-                if(results[i].result)
+                if(results[i].finished)
                   is_finished=true;
 
                 is_res[results[i].k] = results[i].result;
@@ -627,22 +627,33 @@ int cbmc_parseoptionst::doit_k_induction()
         for(short i=0; i<3; ++i)
           kill(children_pid[i], SIGKILL);
 
+        // No solution was found :/
+        if(!solution_found)
+        {
+          std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+          break;
+        }
+
         if(bc_res[solution_found])
         {
           std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
           break;
         }
-        else
+
+        // Successful!
+        if(!bc_res[solution_found] && !fc_res[solution_found])
         {
-          // Successful!
-          if(!fc_res[solution_found] || !is_res[solution_found])
-          {
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
-            break;
-          }
+          std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          break;
         }
 
-        std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+        if(!bc_res[solution_found] && !is_res[solution_found])
+        {
+          std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          break;
+        }
+
+
         break;
       }
 
@@ -693,9 +704,6 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           r = bc.startSolving();
 
-          std::cout << "BC writing: " << r.result << " for k: " << r.k << std::endl;
-          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
-
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
@@ -704,8 +712,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
-
-        std::cout << "BC finished " << std::endl;
 
         break;
       }
@@ -761,9 +767,6 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           r = fc.startSolving();
 
-          std::cout << "FC writing: " << r.result << " for k: " << r.k << std::endl;
-          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
-
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
@@ -772,8 +775,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
-
-        std::cout << "FC finished " << std::endl;
 
         break;
       }
@@ -827,9 +828,6 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           r = is.startSolving();
 
-          std::cout << "IS writing: " << r.result << " for k: " << r.k << std::endl;
-          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
-
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
@@ -838,8 +836,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
-
-        std::cout << "IS finished " << std::endl;
 
         break;
       }
