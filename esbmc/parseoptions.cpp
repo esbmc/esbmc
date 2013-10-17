@@ -515,16 +515,9 @@ int cbmc_parseoptionst::doit_k_induction()
     unsigned whoAmI=-1;
 
     // Pipe for communication between processes
-    int commPipeIn[2];
-    int commPipeOut[2];
+    int commPipe[2];
 
-    if (pipe(commPipeIn))
-    {
-      status("\nPipe Creation Failed, giving up.");
-      _exit(1);
-    }
-
-    if (pipe(commPipeOut))
+    if (pipe(commPipe))
     {
       status("\nPipe Creation Failed, giving up.");
       _exit(1);
@@ -557,8 +550,78 @@ int cbmc_parseoptionst::doit_k_induction()
     switch(whoAmI)
     {
       case -1:
-        std::cout << "I am your father!" << std::endl;
+      {
+        close (commPipe[1]);
+
+        // Wait for the processes to finish
+        int dummy;
+        pid_t wpid;
+
+        struct resultt results[3];
+
+        // -1 means we have no answer yet
+        for(short i=0; i<3; ++i)
+        {
+          results[i].step=4;
+          results[i].result=-1;
+        }
+
+        bool bc_res=false, fc_res=true, is_res=true;
+
+        // Every time wait returns, a process have finished
+        while ((wpid = wait(&dummy)) > 0)
+        {
+          read(commPipe[0], results, sizeof(results));
+
+          for(short i=0; i<3; ++i)
+          {
+            switch(results[i].step)
+            {
+              case BASE_CASE:
+                bc_res = results[i].result;
+                break;
+
+              case FORWARD_CONDITION:
+                fc_res = results[i].result;
+                break;
+
+              case INDUCTIVE_STEP:
+                is_res = results[i].result;
+                break;
+            }
+          }
+
+          // Failed
+          if(bc_res)
+            break;
+
+          if((bc_res && fc_res) || (bc_res && is_res))
+            break;
+        }
+
+        for(short i=0; i<3; ++i)
+          kill(children_pid[i], SIGKILL);
+
+        // Base case failed?
+        if(bc_res)
+        {
+          std::cout << "VERIFICATION FAILED" << std::endl;
+          break;
+        }
+        else
+        {
+          // Successful!
+          if(fc_res || bc_res)
+          {
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+            break;
+          }
+        }
+
+        std::cout << "VERIFICATION UNKNOWN" << std::endl;
+
         break;
+      }
 
       case 0:
       {
@@ -594,9 +657,21 @@ int cbmc_parseoptionst::doit_k_induction()
 
         context.clear(); // We need to clear the previous context
 
+        // Struct to keep the result
+        struct resultt r;
+        r.step = BASE_CASE;
+
         // Create and start base case checking
         base_caset bc(bmc_base_case, goto_functions_base_case);
-        bc.startSolving();
+        r.result = bc.startSolving();
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        std::cout << "BC writing: " << r.result << std::endl;
+
+        // Write result
+        write(commPipe[1], &r, sizeof(r));
 
         break;
       }
@@ -639,8 +714,20 @@ int cbmc_parseoptionst::doit_k_induction()
 
         context.clear(); // We need to clear the previous context
 
+        // Struct to keep the result
+        struct resultt r;
+        r.step = FORWARD_CONDITION;
+
         forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
-        fc.startSolving();
+        r.result = fc.startSolving();
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        std::cout << "FC writing: " << r.result << std::endl;
+
+        // Write result
+        write(commPipe[1], &r, sizeof(r));
 
         break;
       }
@@ -681,8 +768,20 @@ int cbmc_parseoptionst::doit_k_induction()
             context_inductive_step, ui_message_handler);
         set_verbosity(bmc_inductive_step);
 
+        // Struct to keep the result
+        struct resultt r;
+        r.step = INDUCTIVE_STEP;
+
         inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
-        is.startSolving();
+        r.result = is.startSolving();
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        std::cout << "IS writing: " << r.result << std::endl;
+
+        // Write result
+        write(commPipe[1], &r, sizeof(r));
 
         break;
       }
