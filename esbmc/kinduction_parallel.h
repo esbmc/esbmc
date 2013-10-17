@@ -17,13 +17,14 @@
 
 const unsigned int MAX_STEPS=50;
 
-enum STEP { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP };
+enum STEP { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, NONE };
 
 struct resultt
 {
   STEP step;
   short result;
   unsigned int k;
+  bool finished;
 };
 
 class base_caset

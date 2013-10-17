@@ -525,6 +525,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
     pid_t children_pid[3];
 
+    int k_step = atol(cmdline.get_values("k-step").front().c_str());
+
     // We need to fork 3 times: one for each step
     for(unsigned p=0; p<3; ++p)
     {
@@ -553,73 +555,94 @@ int cbmc_parseoptionst::doit_k_induction()
       {
         close (commPipe[1]);
 
-        // Wait for the processes to finish
-        int dummy;
-        pid_t wpid;
+        struct resultt results[MAX_STEPS*3];
 
-        struct resultt results[3];
-
-        // -1 means we have no answer yet
-        for(short i=0; i<3; ++i)
+        // Invalid values
+        for(short int i=0; i<3; ++i)
         {
-          results[i].step=4;
+          results[i].step=NONE;
           results[i].result=-1;
+          results[i].k=51;
+          results[i].finished=false;
         }
 
-        bool bc_res=false, fc_res=true, is_res=true;
+        short int bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+        short int solution_found=0;
 
-        // Every time wait returns, a process have finished
-        while ((wpid = wait(&dummy)) > 0)
+        bool bc_finished=false, fc_finished=false, is_finished=false;
+
+        // Keep reading untill we find an answer
+        while( !(bc_finished && fc_finished && is_finished)
+              && !solution_found)
         {
           read(commPipe[0], results, sizeof(results));
 
-          for(short i=0; i<3; ++i)
+          unsigned i=0;
+          while((results[i].result != -1) && (i < MAX_STEPS*3))
           {
             switch(results[i].step)
             {
               case BASE_CASE:
-                bc_res = results[i].result;
+                if(results[i].result)
+                  bc_finished=true;
+
+                bc_res[results[i].k] = results[i].result;
+
+                if(results[i].result)
+                  solution_found = results[i].k;
+
                 break;
 
               case FORWARD_CONDITION:
-                fc_res = results[i].result;
+                if(results[i].result)
+                  fc_finished=true;
+
+                fc_res[results[i].k] = results[i].result;
+
+                if(!results[i].result)
+                  solution_found = results[i].k;
+
                 break;
 
               case INDUCTIVE_STEP:
-                is_res = results[i].result;
+                if(results[i].result)
+                  is_finished=true;
+
+                is_res[results[i].k] = results[i].result;
+
+                if(!results[i].result)
+                  solution_found = results[i].k;
+
+                break;
+
+              case NONE:
+                assert(0);
                 break;
             }
+
+            ++i;
           }
-
-          // Failed
-          if(bc_res)
-            break;
-
-          if((bc_res && fc_res) || (bc_res && is_res))
-            break;
         }
 
         for(short i=0; i<3; ++i)
           kill(children_pid[i], SIGKILL);
 
-        // Base case failed?
-        if(bc_res)
+        if(bc_res[solution_found])
         {
-          std::cout << "VERIFICATION FAILED" << std::endl;
+          std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
           break;
         }
         else
         {
           // Successful!
-          if(fc_res || bc_res)
+          if(!fc_res[solution_found] || !is_res[solution_found])
           {
-            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
             break;
           }
         }
 
-        std::cout << "VERIFICATION UNKNOWN" << std::endl;
-
+        std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
         break;
       }
 
@@ -666,17 +689,23 @@ int cbmc_parseoptionst::doit_k_induction()
         // Create and start base case checking
         base_caset bc(bmc_base_case, goto_functions_base_case);
 
-        for(unsigned int i=0; i<MAX_STEPS; +i)
+        for(unsigned int i=0; i<=k_step; ++i)
         {
           r = bc.startSolving();
 
-          std::cout << "BC writing: " << r.result << "for k: " << r.k << std::endl;
+          std::cout << "BC writing: " << r.result << " for k: " << r.k << std::endl;
+          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
           if(r.result) return r.result;
         }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "BC finished " << std::endl;
 
         break;
       }
@@ -728,17 +757,23 @@ int cbmc_parseoptionst::doit_k_induction()
         // Create and start base case checking
         forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
 
-        for(unsigned int i=0; i<MAX_STEPS; +i)
+        for(unsigned int i=0; i<=k_step; ++i)
         {
           r = fc.startSolving();
 
-          std::cout << "FC writing: " << r.result << "for k: " << r.k << std::endl;
+          std::cout << "FC writing: " << r.result << " for k: " << r.k << std::endl;
+          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
           if(!r.result) return r.result;
         }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "FC finished " << std::endl;
 
         break;
       }
@@ -788,17 +823,23 @@ int cbmc_parseoptionst::doit_k_induction()
         // Create and start base case checking
         inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
 
-        for(unsigned int i=0; i<MAX_STEPS; +i)
+        for(unsigned int i=0; i<=k_step; ++i)
         {
           r = is.startSolving();
 
-          std::cout << "IS writing: " << r.result << "for k: " << r.k << std::endl;
+          std::cout << "IS writing: " << r.result << " for k: " << r.k << std::endl;
+          std::cout << "i: " << i << " k_step: " << k_step << std::endl;
 
           // Write result
           write(commPipe[1], &r, sizeof(r));
 
           if(!r.result) return r.result;
         }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "IS finished " << std::endl;
 
         break;
       }
