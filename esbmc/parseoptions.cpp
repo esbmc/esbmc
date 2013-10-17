@@ -511,7 +511,8 @@ int cbmc_parseoptionst::doit_k_induction()
   // do actual BMC
   bool res=0;
 
-  if(cmdline.isset("parallel-k-induction"))
+  // TODO: Use the correct value
+  if(cmdline.isset("k-induction"))
   {
     unsigned whoAmI=-1;
 
