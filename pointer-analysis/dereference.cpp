@@ -1202,20 +1202,14 @@ void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
   // size.
   constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
   add2tc upper_byte(get_uint32_type(), offset, access_size_e);
-  expr2tc lower_byte = offset;
 
   greaterthan2tc gt(upper_byte, arrsize);
-  lessthan2tc lt(lower_byte, zero_int);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
   tmp_guard1.move(gt);
-  dereference_failure("array bounds", "array upper bound", tmp_guard1);
-
-  guardt tmp_guard2(guard);
-  tmp_guard2.move(lt);
-  dereference_failure("array bounds", "array lower bound", tmp_guard2);
+  dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 
 bool dereferencet::memory_model(
