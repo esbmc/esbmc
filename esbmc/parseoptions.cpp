@@ -271,7 +271,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
-  if(cmdline.isset("k-induction"))
+  if(cmdline.isset("k-induction") ||
+     cmdline.isset("parallel-k-induction"))
   {
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
@@ -566,13 +567,20 @@ int cbmc_parseoptionst::doit_k_induction()
           results[i].finished=false;
         }
 
-        short int bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+        bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+
+        for(short int i=0; i<MAX_STEPS; ++i)
+        {
+          bc_res[i]=false;
+          fc_res[i]=is_res[i]=true;
+        }
+
         short int solution_found=0;
 
         bool bc_finished=false, fc_finished=false, is_finished=false;
 
         // Keep reading untill we find an answer
-        while( !(bc_finished && fc_finished && is_finished)
+        while(!(bc_finished && fc_finished && is_finished)
               && !solution_found)
         {
           read(commPipe[0], results, sizeof(results));
@@ -584,7 +592,10 @@ int cbmc_parseoptionst::doit_k_induction()
             {
               case BASE_CASE:
                 if(results[i].finished)
+                {
                   bc_finished=true;
+                  break;
+                }
 
                 bc_res[results[i].k] = results[i].result;
 
@@ -595,7 +606,10 @@ int cbmc_parseoptionst::doit_k_induction()
 
               case FORWARD_CONDITION:
                 if(results[i].finished)
+                {
                   fc_finished=true;
+                  break;
+                }
 
                 fc_res[results[i].k] = results[i].result;
 
@@ -606,7 +620,10 @@ int cbmc_parseoptionst::doit_k_induction()
 
               case INDUCTIVE_STEP:
                 if(results[i].finished)
+                {
                   is_finished=true;
+                  break;
+                }
 
                 is_res[results[i].k] = results[i].result;
 
@@ -641,7 +658,8 @@ int cbmc_parseoptionst::doit_k_induction()
         }
 
         // Successful!
-        if(!bc_res[solution_found] && !fc_res[solution_found])
+        if(!bc_res[solution_found]
+           && !fc_res[solution_found])
         {
           std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
           break;
@@ -696,11 +714,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        r.step=BASE_CASE;
+        r.k=0;
+        r.finished=false;
+        r.step=NONE;
 
         // Create and start base case checking
         base_caset bc(bmc_base_case, goto_functions_base_case);
 
-        for(unsigned int i=0; i<=k_step; ++i)
+        for(unsigned int i=1; i<=k_step; ++i)
         {
           r = bc.startSolving();
 
@@ -759,11 +781,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        r.step=FORWARD_CONDITION;
+        r.k=0;
+        r.finished=false;
+        r.step=NONE;
 
         // Create and start base case checking
         forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
 
-        for(unsigned int i=0; i<=k_step; ++i)
+        for(unsigned int i=2; i<=k_step; ++i)
         {
           r = fc.startSolving();
 
@@ -820,11 +846,15 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        r.step=INDUCTIVE_STEP;
+        r.k=0;
+        r.finished=false;
+        r.step=NONE;
 
         // Create and start base case checking
         inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
 
-        for(unsigned int i=0; i<=k_step; ++i)
+        for(unsigned int i=2; i<=k_step; ++i)
         {
           r = is.startSolving();
 

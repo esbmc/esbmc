@@ -45,7 +45,6 @@ forward_conditiont::forward_conditiont(bmct &bmc,
 
 resultt forward_conditiont::startSolving()
 {
-
   resultt r;
   r.step=FORWARD_CONDITION;
   r.k=_k;
