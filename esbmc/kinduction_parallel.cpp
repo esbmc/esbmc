@@ -18,22 +18,17 @@ base_caset::base_caset(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-bool base_caset::startSolving()
+resultt base_caset::startSolving()
 {
-  bool res=0;
+  resultt r;
+  r.step=BASE_CASE;
+  r.k=_k;
+  r.result=0;
 
-  // We will do BMC for each k, until MAX_STEPS
-  do
-  {
-    res=_bmc.run(_goto_functions);
+  r.result=_bmc.run(_goto_functions);
+  _bmc.options.set_option("unwind", i2string(++_k));
 
-    // If it fails, a bug was found
-    if(res) return res;
-
-    _bmc.options.set_option("unwind", i2string(++_k));
-  } while(_k<=MAX_STEPS);
-
-  return false;
+  return r;
 }
 
 /* Forward condition class implementation */
@@ -47,22 +42,18 @@ forward_conditiont::forward_conditiont(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-bool forward_conditiont::startSolving()
+resultt forward_conditiont::startSolving()
 {
-  bool res=0;
 
-  // We will do BMC for each k, until MAX_STEPS
-  do
-  {
-    res=_bmc.run(_goto_functions);
+  resultt r;
+  r.step=FORWARD_CONDITION;
+  r.k=_k;
+  r.result=1;
 
-    // If this was a success, the property was proved
-    if(!res) return res;
+  r.result=_bmc.run(_goto_functions);
+  _bmc.options.set_option("unwind", i2string(++_k));
 
-    _bmc.options.set_option("unwind", i2string(++_k));
-  } while(_k<=MAX_STEPS);
-
-  return true;
+  return r;
 }
 
 /* Inductive step class implementation */
@@ -76,20 +67,16 @@ inductive_stept::inductive_stept(bmct &bmc,
   _bmc.options.set_option("unwind", i2string(_k));
 }
 
-bool inductive_stept::startSolving()
+resultt inductive_stept::startSolving()
 {
-  bool res=0;
 
-  // We will do BMC for each k, until MAX_STEPS
-  do
-  {
-    res=_bmc.run(_goto_functions);
+  resultt r;
+  r.step=INDUCTIVE_STEP;
+  r.k=_k;
+  r.result=1;
 
-    // If this was a success, the property was proved
-    if(!res) return res;
+  r.result=_bmc.run(_goto_functions);
+  _bmc.options.set_option("unwind", i2string(++_k));
 
-    _bmc.options.set_option("unwind", i2string(++_k));
-  } while(_k<=MAX_STEPS);
-
-  return true;
+  return r;
 }

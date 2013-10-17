@@ -23,6 +23,7 @@ struct resultt
 {
   STEP step;
   short result;
+  unsigned int k;
 };
 
 class base_caset
@@ -31,7 +32,7 @@ class base_caset
     base_caset(bmct &bmc,
         goto_functionst &goto_functions);
 
-    bool startSolving();
+    resultt startSolving();
 
   private:
     unsigned int _k;
@@ -45,7 +46,7 @@ class forward_conditiont
     forward_conditiont(bmct &bmc,
         goto_functionst &goto_functions);
 
-    bool startSolving();
+    resultt startSolving();
 
   private:
     unsigned int _k;
@@ -59,7 +60,7 @@ class inductive_stept
     inductive_stept(bmct &bmc,
         goto_functionst &goto_functions);
 
-    bool startSolving();
+    resultt startSolving();
 
   private:
     unsigned int _k;
