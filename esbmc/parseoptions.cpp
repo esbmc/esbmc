@@ -657,21 +657,24 @@ int cbmc_parseoptionst::doit_k_induction()
 
         context.clear(); // We need to clear the previous context
 
-        // Struct to keep the result
-        struct resultt r;
-        r.step = BASE_CASE;
-
-        // Create and start base case checking
-        base_caset bc(bmc_base_case, goto_functions_base_case);
-        r.result = bc.startSolving();
-
         // Start communication to the parent process
         close(commPipe[0]);
 
-        std::cout << "BC writing: " << r.result << std::endl;
+        // Struct to keep the result
+        struct resultt r;
 
-        // Write result
-        write(commPipe[1], &r, sizeof(r));
+        // Create and start base case checking
+        base_caset bc(bmc_base_case, goto_functions_base_case);
+
+        for(unsigned int i=0; i<MAX_STEPS; +i)
+        {
+          r = bc.startSolving();
+
+          std::cout << "BC writing: " << r.result << "for k: " << r.k << std::endl;
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+        }
 
         break;
       }
@@ -714,20 +717,24 @@ int cbmc_parseoptionst::doit_k_induction()
 
         context.clear(); // We need to clear the previous context
 
-        // Struct to keep the result
-        struct resultt r;
-        r.step = FORWARD_CONDITION;
-
-        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
-        r.result = fc.startSolving();
-
         // Start communication to the parent process
         close(commPipe[0]);
 
-        std::cout << "FC writing: " << r.result << std::endl;
+        // Struct to keep the result
+        struct resultt r;
 
-        // Write result
-        write(commPipe[1], &r, sizeof(r));
+        // Create and start base case checking
+        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
+
+        for(unsigned int i=0; i<MAX_STEPS; +i)
+        {
+          r = fc.startSolving();
+
+          std::cout << "FC writing: " << r.result << "for k: " << r.k << std::endl;
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+        }
 
         break;
       }
@@ -768,20 +775,24 @@ int cbmc_parseoptionst::doit_k_induction()
             context_inductive_step, ui_message_handler);
         set_verbosity(bmc_inductive_step);
 
-        // Struct to keep the result
-        struct resultt r;
-        r.step = INDUCTIVE_STEP;
-
-        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
-        r.result = is.startSolving();
-
         // Start communication to the parent process
         close(commPipe[0]);
 
-        std::cout << "IS writing: " << r.result << std::endl;
+        // Struct to keep the result
+        struct resultt r;
 
-        // Write result
-        write(commPipe[1], &r, sizeof(r));
+        // Create and start base case checking
+        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
+
+        for(unsigned int i=0; i<MAX_STEPS; +i)
+        {
+          r = is.startSolving();
+
+          std::cout << "IS writing: " << r.result << "for k: " << r.k << std::endl;
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+        }
 
         break;
       }
