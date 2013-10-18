@@ -591,7 +591,7 @@ void dereferencet::build_reference_to(
           wrap_in_scalar_step_list(value, scalar_step_list, guard);
       } else {
         const constant_int2t &theint = to_constant_int2t(final_offset);
-        if (theint.constant_value.to_ulong() == 0)
+        if (theint.constant_value.to_ulong() == 0 && !is_scalar_type(value->type))
           construct_from_zero_offset(value, type, tmp_guard, scalar_step_list,
                                      mode);
         else
@@ -793,9 +793,26 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     construct_from_const_struct_offset(value, offset, type, guard, mode);
   } else {
     assert(is_scalar_type(base_object));
-    value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
-    if (type->get_width() != 8)
-      value = typecast2tc(type, value);
+    // We're accessing some kind of scalar type; might be a valid, correct
+    // access, or we might need to be byte extracting it.
+
+    // XXX -- alignment and bounds assertions please.
+
+    if (theint.constant_value == 0 &&
+        base_object->type->get_width() == type->get_width()) {
+      // Offset is zero, and we select the entire contents of the field. We may
+      // need to perform a cast though.
+      value = base_object;
+      if (!base_type_eq(base_object->type, type, ns)) {
+        base_object = typecast2tc(type, base_object);
+      }
+    } else {
+      // Either nonzero offset, or a smaller / bigger read.
+      // XXX -- refactor to become concat based.
+      value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+      if (type->get_width() != 8)
+        value = typecast2tc(type, value);
+    }
   }
 
   if (!checks)
