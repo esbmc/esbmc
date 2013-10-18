@@ -150,8 +150,7 @@ private:
   void construct_struct_ref_from_const_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
-                                        const guardt &guard,
-                                        std::list<expr2tc> *scalar_step_list);
+                                        const guardt &guard);
 
   void construct_struct_ref_from_dyn_offset(expr2tc &value,
                                         const expr2tc &offs,

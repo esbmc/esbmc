@@ -593,7 +593,7 @@ void dereferencet::build_reference_to(
       // Dereferences to structs require minimal effort and maximum assertion
       // failures
       construct_struct_ref_from_const_offset(value, final_offset, type,
-                                             tmp_guard, scalar_step_list);
+                                             tmp_guard);
       if (scalar_step_list->size() != 0)
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
@@ -1460,8 +1460,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
 
 void
 dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
-             const expr2tc &offs, const type2tc &type, const guardt &guard,
-             std::list<expr2tc> *scalar_step_list)
+             const expr2tc &offs, const type2tc &type, const guardt &guard)
 {
   // Minimal effort: the moment that we can throw this object out due to an
   // incompatible type, we do.
@@ -1489,8 +1488,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
     value = index2tc(arr_type.subtype, value, idx_expr);
 
-    construct_struct_ref_from_const_offset(value, mod_expr, type, guard,
-                                           scalar_step_list);
+    construct_struct_ref_from_const_offset(value, mod_expr, type, guard);
   } else if (is_struct_type(value->type)) {
     // Right. In this situation, there are several possibilities. First, if the
     // offset is zero, and the struct type is compatible, we've succeeded.
@@ -1528,8 +1526,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
           mp_integer new_offs = intref.constant_value - offs;
           expr2tc offs_expr = gen_uint(new_offs.to_ulong());
           value = member2tc(*it, value, struct_type.member_names[i]);
-          construct_struct_ref_from_const_offset(value, offs_expr, type, guard,
-                                                 scalar_step_list);
+          construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
           return;
         }
         i++;
