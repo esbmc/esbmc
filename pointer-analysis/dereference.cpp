@@ -590,10 +590,32 @@ void dereferencet::build_reference_to(
   // Now try to construct a reference.
   if (is_constant_expr(final_offset)) {
     if (scalar_step_list->size() != 0) {
-      // Base must be struct or array.
-      construct_struct_ref_from_const_offset(value, final_offset, (*scalar_step_list->front()->get_sub_expr(0))->type,
-                                             tmp_guard);
-      wrap_in_scalar_step_list(value, scalar_step_list, guard);
+      // Base must be struct or array. However we're going to burst into flames
+      // if we access a byte array as a struct; except that's legitimate when
+      // we've just malloc'd it. So, special case that too.
+      const type2tc &base_type_of_steps =
+        (*scalar_step_list->front()->get_sub_expr(0))->type;
+
+      if (is_array_type(value->type) &&
+          to_array_type(value->type).subtype->get_width() == 8 &&
+          (!is_array_type(base_type_of_steps) ||
+           !to_array_type(base_type_of_steps).subtype->get_width() != 8)) {
+        // Right, we're going to be accessing a byte array as not-a-byte-array.
+        // Switch this access together.
+        expr2tc offset_the_third =
+          compute_pointer_offset(scalar_step_list->back());
+
+        add2tc add2(final_offset->type, final_offset, offset_the_third);
+        final_offset = add2->simplify();
+        if (is_nil_expr(final_offset))
+          final_offset = add2;
+
+        stitch_together_from_byte_array(value, type, final_offset);
+      } else {
+        construct_struct_ref_from_const_offset(value, final_offset,
+                                               base_type_of_steps, tmp_guard);
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+      }
     } else {
       // Attempt to pull a scalar out of this object.
       construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
