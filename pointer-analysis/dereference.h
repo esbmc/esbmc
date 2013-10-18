@@ -42,6 +42,11 @@ public:
   virtual bool has_failed_symbol(
     const expr2tc &expr,
     const symbolt *&symbol)=0;
+
+  virtual void rename(expr2tc &expr __attribute__((unused)))
+  {
+    return;
+  }
 };
 
 class dereferencet

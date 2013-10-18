@@ -576,7 +576,11 @@ dereferencet::build_reference_to(
   // expressions. XXX does this make any difference, surely the offset is in
   // the offset field.
   expr2tc additional_offset = compute_pointer_offset(value);
-  add2tc add(o.offset->type, o.offset, additional_offset);
+  expr2tc add = add2tc(o.offset->type, o.offset, additional_offset);
+#if 0
+  // FIXME: benchmark this, on tacas.
+  dereference_callback.rename(add);
+#endif
   expr2tc final_offset = add->simplify();
   if (is_nil_expr(final_offset))
     final_offset = add;
@@ -602,6 +606,9 @@ dereferencet::build_reference_to(
         // Switch this access together.
         expr2tc offset_the_third =
           compute_pointer_offset(scalar_step_list->back());
+#if 0
+        dereference_callback.rename(offset_the_third);
+#endif
 
         add2tc add2(final_offset->type, final_offset, offset_the_third);
         final_offset = add2->simplify();

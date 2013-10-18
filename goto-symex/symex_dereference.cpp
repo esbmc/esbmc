@@ -49,6 +49,8 @@ protected:
   virtual bool has_failed_symbol(
     const expr2tc &expr,
     const symbolt *&symbol);
+
+  virtual void rename(expr2tc &expr);
 };
 
 void symex_dereference_statet::dereference_failure(
@@ -92,6 +94,12 @@ void symex_dereference_statet::get_value_set(
 {
 
   state.value_set.get_value_set(expr, value_set);
+}
+
+void symex_dereference_statet::rename(expr2tc &expr)
+{
+  goto_symex.cur_state->rename(expr);
+  return;
 }
 
 void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
