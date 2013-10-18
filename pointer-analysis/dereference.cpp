@@ -1058,20 +1058,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   }
   else
   {
-    //nec: ex29
-    if ((is_pointer_type(type) && is_empty_type(to_pointer_type(type).subtype))
-        || (is_pointer_type(value) &&
-            is_empty_type(to_pointer_type(value->type).subtype)))
-      return;
-
-    std::string msg="memory model not applicable (got `";
-    msg+=from_type(ns, "", value->type);
-    msg+="', expected `";
-    msg+=from_type(ns, "", type);
-    msg+="')";
-
-    dereference_failure("pointer dereference", msg, guard);
-
     value = expr2tc();
     return; // give up, no way that this is ok
   }
