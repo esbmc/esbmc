@@ -616,6 +616,10 @@ void dereferencet::build_reference_to(
                                                base_type_of_steps, tmp_guard);
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
       }
+
+    } else if (is_struct_type(type)) {
+      construct_struct_ref_from_const_offset(value, final_offset, type,
+                                             tmp_guard);
     } else {
       // Attempt to pull a scalar out of this object.
       construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
