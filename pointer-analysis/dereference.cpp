@@ -560,54 +560,51 @@ void dereferencet::build_reference_to(
     // solver will only get confused.
     return;
   }
-  else
-  {
-    value = object;
 
-    type2tc ptr_type = type2tc(new pointer_type2t(object->type));
-    address_of2tc obj_ptr(ptr_type, object);
+  value = object;
 
-    pointer_guard = same_object2tc(deref_expr, obj_ptr);
+  type2tc ptr_type = type2tc(new pointer_type2t(object->type));
+  address_of2tc obj_ptr(ptr_type, object);
 
-    guardt tmp_guard(guard);
-    tmp_guard.add(pointer_guard);
+  pointer_guard = same_object2tc(deref_expr, obj_ptr);
 
-    valid_check(object, tmp_guard, mode);
+  guardt tmp_guard(guard);
+  tmp_guard.add(pointer_guard);
 
-    expr2tc orig_value = value;
-    value = get_base_object(value);
-    expr2tc additional_offset = compute_pointer_offset(orig_value);
-    add2tc add(o.offset->type, o.offset, additional_offset);
-    expr2tc final_offset = add->simplify();
-    if (is_nil_expr(final_offset))
-      final_offset = add;
+  valid_check(object, tmp_guard, mode);
 
-    if (is_constant_expr(final_offset)) {
-      // Hurrrrrr
-      if (is_struct_type(type)) {
-        construct_struct_ref_from_const_offset(value, final_offset, type,
-                                               tmp_guard, scalar_step_list);
-        if (scalar_step_list->size() != 0)
-          wrap_in_scalar_step_list(value, scalar_step_list, guard);
-      } else {
-        const constant_int2t &theint = to_constant_int2t(final_offset);
-        if (theint.constant_value.to_ulong() == 0 && !is_scalar_type(value->type))
-          construct_from_zero_offset(value, type, tmp_guard, scalar_step_list,
-                                     mode);
-        else
-          construct_from_const_offset(value, final_offset, type, tmp_guard,
-                                      mode);
-      }
-    } else {
-      expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
-      if (is_struct_type(type)) {
-        construct_struct_ref_from_dyn_offset(value, offset, type,
+  expr2tc orig_value = value;
+  value = get_base_object(value);
+  expr2tc additional_offset = compute_pointer_offset(orig_value);
+  add2tc add(o.offset->type, o.offset, additional_offset);
+  expr2tc final_offset = add->simplify();
+  if (is_nil_expr(final_offset))
+    final_offset = add;
+
+  if (is_constant_expr(final_offset)) {
+    // Hurrrrrr
+    if (is_struct_type(type)) {
+      construct_struct_ref_from_const_offset(value, final_offset, type,
                                              tmp_guard, scalar_step_list);
-        if (scalar_step_list->size() != 0)
-          wrap_in_scalar_step_list(value, scalar_step_list, guard);
-      } else {
-        construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment, mode);
-      }
+      if (scalar_step_list->size() != 0)
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+    } else {
+      const constant_int2t &theint = to_constant_int2t(final_offset);
+      if (theint.constant_value.to_ulong() == 0 && !is_scalar_type(value->type))
+        construct_from_zero_offset(value, type, tmp_guard, scalar_step_list,
+                                   mode);
+      else
+        construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
+    }
+  } else {
+    expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
+    if (is_struct_type(type)) {
+      construct_struct_ref_from_dyn_offset(value, offset, type,
+                                           tmp_guard, scalar_step_list);
+      if (scalar_step_list->size() != 0)
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+    } else {
+      construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment, mode);
     }
   }
 }
