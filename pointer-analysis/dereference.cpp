@@ -1221,41 +1221,6 @@ bool dereferencet::memory_model_bytes(
     // XXX jmorse - temporary, while byte extract is still covered in bees.
     value = typecast2tc(to_type, value);
 
-
-    if (!is_constant_int2t(new_offset) ||
-        !to_constant_int2t(new_offset).constant_value.is_zero())
-    {
-      if(!options.get_bool_option("no-pointer-check"))
-      {
-        // Get total size of the data object we're working on.
-        expr2tc total_size;
-        try {
-          total_size = constant_int2tc(uint_type2(),
-                                       base_object->type->get_width() / 8);
-        } catch (array_type2t::dyn_sized_array_excp *e) {
-          expr2tc eight = gen_uint(8);
-          total_size = div2tc(uint_type2(), e->size, eight);
-        }
-
-        unsigned long width = to_type->get_width() / 8;
-        expr2tc const_val = gen_uint(width);
-        add2tc upper_bound(uint_type2(), new_offset, const_val);
-        greaterthan2tc upper_bound_eq(upper_bound, total_size);
-
-        guardt tmp_guard(guard);
-        tmp_guard.move(upper_bound_eq);
-        dereference_failure("byte model object boundries",
-                            "byte access upper bound", tmp_guard);
-
-        lessthan2tc offs_lower_bound(new_offset, zero_int);
-
-        guardt tmp_guard2(guard);
-        tmp_guard2.move(offs_lower_bound);
-        dereference_failure("byte model object boundries",
-                            "word offset lower bound", tmp_guard);
-      }
-    }
-
     return true;
   }
 
