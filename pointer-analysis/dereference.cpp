@@ -417,8 +417,8 @@ dereferencet::dereference(
   {
     expr2tc new_value, pointer_guard;
 
-    build_reference_to(*it, mode, dest, type, new_value, pointer_guard, guard,
-                       scalar_step_list);
+    new_value = build_reference_to(*it, mode, dest, type, guard,
+                                   scalar_step_list, pointer_guard);
 
     if (!is_nil_expr(new_value))
     {
@@ -505,17 +505,17 @@ bool dereferencet::dereference_type_compare(
   return false;
 }
 
-void dereferencet::build_reference_to(
+expr2tc
+dereferencet::build_reference_to(
   const expr2tc &what,
   const modet mode,
   const expr2tc &deref_expr,
   const type2tc &type,
-  expr2tc &value,
-  expr2tc &pointer_guard,
   const guardt &guard,
-  std::list<expr2tc> *scalar_step_list)
+  std::list<expr2tc> *scalar_step_list,
+  expr2tc &pointer_guard)
 {
-  value = expr2tc();
+  expr2tc value;
   pointer_guard = false_expr;
 
   if (is_unknown2t(what) || is_invalid2t(what))
@@ -529,7 +529,7 @@ void dereferencet::build_reference_to(
     guardt tmp_guard(guard);
     tmp_guard.move(invalid_pointer_expr);
     dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
-    return;
+    return value;
   }
 
   if (!is_object_descriptor2t(what)) {
@@ -556,7 +556,7 @@ void dereferencet::build_reference_to(
 
     // Don't build a reference to this. You can't actually access NULL, and the
     // solver will only get confused.
-    return;
+    return value;
   }
 
   value = object;
@@ -634,6 +634,8 @@ void dereferencet::build_reference_to(
       construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment, mode);
     }
   }
+
+  return value;
 }
 
 void

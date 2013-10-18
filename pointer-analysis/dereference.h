@@ -103,15 +103,14 @@ private:
 
   expr2tc make_failed_symbol(const type2tc &out_type);
 
-  void build_reference_to(
+  expr2tc build_reference_to(
     const expr2tc &what,
     const modet mode,
     const expr2tc &deref_expr,
     const type2tc &type,
-    expr2tc &value,
-    expr2tc &pointer_guard,
     const guardt &guard,
-    std::list<expr2tc> *scalar_step_list);
+    std::list<expr2tc> *scalar_step_list,
+    expr2tc &pointer_guard);
 
   static const expr2tc &get_symbol(const expr2tc &object);
 
