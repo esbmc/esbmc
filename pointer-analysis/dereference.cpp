@@ -224,8 +224,6 @@ dereferencet::dereference_expr(
     }
 
     if ((is_scalar_type(expr) || is_code_type(expr) || checks_only)) {
-    //assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
-    //   && "Can't dereference to a nonscalar type");
       expr2tc tmp_obj = deref.value;
       expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
                                    &scalar_step_list);
