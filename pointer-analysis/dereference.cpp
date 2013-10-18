@@ -270,8 +270,6 @@ dereferencet::dereference_expr(
     if (!contains_deref)
       return;
 
-//    assert(is_scalar_type(expr));
-
     std::list<expr2tc> scalar_step_list;
     expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
                                              scalar_step_list, checks_only);
