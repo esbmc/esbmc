@@ -172,6 +172,8 @@ private:
 
   unsigned int fabricate_scalar_access(const type2tc &src_type,
                                        std::list<expr2tc> &scalar_step_list);
+  void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
+                                       const expr2tc &offset);
   void wrap_in_scalar_step_list(expr2tc &value,
                                 std::list<expr2tc> *scalar_step_list,
                                 const guardt &guard);

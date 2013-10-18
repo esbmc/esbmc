@@ -1604,3 +1604,45 @@ dereferencet::dereference_failure(const std::string &error_class,
     dereference_callback.dereference_failure( error_class, error_name, guard);
   }
 }
+
+void
+dereferencet::stitch_together_from_byte_array(expr2tc &value,
+                                              const type2tc &type,
+                                              const expr2tc &offset)
+{
+  const array_type2t &arr_type = to_array_type(value->type);
+  // Unstructured array access. First, check alignment.
+  unsigned int subtype_sz = arr_type.subtype->get_width() / 8;
+
+  // XXX -- deleted aligned access assertions that /were/ in
+  // construct_from_dyn_offset.
+
+  unsigned int target_bytes = type->get_width() / 8;
+  expr2tc accuml;
+  expr2tc accuml_offs = offset;
+  type2tc subtype = arr_type.subtype;
+
+  for (unsigned int i = 0; i < target_bytes; i++) {
+    expr2tc elem = index2tc(subtype, value, accuml_offs);
+
+    if (is_nil_expr(accuml)) {
+      accuml = elem;
+    } else {
+      // XXX -- byte order.
+      type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
+      accuml = concat2tc(res_type, accuml, elem);
+    }
+
+    accuml_offs = add2tc(offset->type, accuml_offs, one_uint);
+  }
+
+  // That's going to come out as a bitvector;
+  if (type != accuml->type) {
+    // XXX -- we might be selecting a char out of an int array, or something
+    // XXX -- byte order.
+    //assert(type->get_width() == accuml->type->get_width());
+    accuml = typecast2tc(type, accuml);
+  }
+
+  value = accuml;
+}
