@@ -1049,10 +1049,13 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                         tmp_guard2);
 
     return;
+  } else if (is_struct_type(value)) {
+    construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
+    return;
   }
-
   // Else, in the case of a scalar access at the bottom,
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
+  assert(is_scalar_type(value));
 
   // Ensure we're dealing with a BV.
   if (!is_number_type(value->type)) {
