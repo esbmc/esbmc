@@ -589,13 +589,11 @@ void dereferencet::build_reference_to(
 
   // Now try to construct a reference.
   if (is_constant_expr(final_offset)) {
-    if (is_struct_type(type)) {
-      // Dereferences to structs require minimal effort and maximum assertion
-      // failures
-      construct_struct_ref_from_const_offset(value, final_offset, type,
+    if (scalar_step_list->size() != 0) {
+      // Base must be struct or array.
+      construct_struct_ref_from_const_offset(value, final_offset, (*scalar_step_list->front()->get_sub_expr(0))->type,
                                              tmp_guard);
-      if (scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+      wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
       // Attempt to pull a scalar out of this object.
       const constant_int2t &theint = to_constant_int2t(final_offset);
