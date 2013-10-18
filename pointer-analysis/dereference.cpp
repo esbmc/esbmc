@@ -45,6 +45,8 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
 {
 
   // XXX -- do we need to consider if2t's? And how?
+  // XXX -- This doesn't consider indexes of pointers to be dereferences, yet
+  // that's how they're handled.
   if (is_member2t(e)) {
     return get_base_dereference(to_member2t(e).source_value);
   } else if (is_index2t(e)) {
