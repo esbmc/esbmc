@@ -125,8 +125,7 @@ private:
                                   const modet mode);
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
-                                  std::list<expr2tc> *scalar_step_list,
-                                  const modet mode, bool checks = true);
+                                   const modet mode, bool checks = true);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
                                  unsigned long alignment, const modet mode,
@@ -145,7 +144,6 @@ private:
   void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
-                                        std::list<expr2tc> *scalar_step_list,
                                         unsigned long alignment,
                                         const modet mode);
 

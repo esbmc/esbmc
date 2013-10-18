@@ -596,7 +596,7 @@ void dereferencet::build_reference_to(
                                      mode);
         else
           construct_from_const_offset(value, final_offset, type, tmp_guard,
-                                      scalar_step_list, mode);
+                                      mode);
       }
     } else {
       expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
@@ -640,7 +640,6 @@ dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
 
     if (is_array_type(arr_subtype)) {
       construct_from_multidir_array(value, zero_uint, type, guard,
-                                    scalar_step_list,
                                     config.ansi_c.word_size, mode);
     } else if (is_structure_type(arr_subtype)) {
       value = index2tc(arr_subtype, orig_value, zero_uint);
@@ -693,7 +692,6 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,
-                                          std::list<expr2tc> *scalar_step_list __attribute__((unused)),
                                           const modet mode, bool checks)
 {
 
@@ -712,7 +710,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 
     if (is_array_type(arr_subtype)) {
       construct_from_multidir_array(value, offset, type, guard,
-                                    scalar_step_list,
                                     config.ansi_c.word_size, mode);
     } else if (is_structure_type(arr_subtype)) {
       constant_int2tc subtype_sz_expr(index_type2(), BigInt(subtype_size));
@@ -881,7 +878,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       if (!is_scalar_type(*it)) {
         // We have to do even more extraction...
-        construct_from_const_offset(res, zero_uint, type, guard, NULL, mode, false);
+        construct_from_const_offset(res, zero_uint, type, guard, mode, false);
       }
 
       value = res;
@@ -895,7 +892,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       constant_int2tc new_offs(index_type2(), int_offset - m_offs);
 
       // Extract.
-      construct_from_const_offset(memb, new_offs, type, guard, NULL, mode, false);
+      construct_from_const_offset(memb, new_offs, type, guard, mode, false);
       value = memb;
       return;
     } else if (int_offset < (m_offs + m_size)) {
@@ -1021,7 +1018,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
 
     if (is_array_type(arr_type.subtype)) {
-      construct_from_multidir_array(value, offset, type, guard, NULL, alignment, mode);
+      construct_from_multidir_array(value, offset, type, guard, alignment, mode);
     } else if (is_structure_type(arr_type.subtype)) {
       mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
       constant_int2tc subtype_sz_expr(index_type2(), subtype_sz);
@@ -1427,7 +1424,6 @@ void
 dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
                               const type2tc &type, const guardt &guard,
-                              std::list<expr2tc> *scalar_step_list,
                               unsigned long alignment,
                               const modet mode)
 {
@@ -1458,7 +1454,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
     idx = mod;
 
   if (is_constant_expr(idx)) {
-    construct_from_const_offset(value, idx, type, guard, scalar_step_list, mode, false);
+    construct_from_const_offset(value, idx, type, guard, mode, false);
   } else {
     construct_from_dyn_offset(value, idx, type, guard, alignment, mode, false);
   }
