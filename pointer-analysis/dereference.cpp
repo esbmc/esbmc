@@ -1172,20 +1172,6 @@ bool dereferencet::memory_model(
   const guardt &guard,
   expr2tc &new_offset)
 {
-  // we will allow more or less arbitrary pointer type cast
-
-  const type2tc &from_type = value->type;
-
-  // first, check if it's really just a conversion
-
-  if (is_bv_type(from_type) && is_bv_type(to_type) &&
-      from_type->get_width() == to_type->get_width() &&
-      is_constant_int2t(new_offset) &&
-      to_constant_int2t(new_offset).constant_value.is_zero()) {
-    value = typecast2tc(to_type, value);
-    return true;
-  }
-
   // otherwise, we will stich it together from bytes
 
   bool ret = memory_model_bytes(value, to_type, guard, new_offset);
