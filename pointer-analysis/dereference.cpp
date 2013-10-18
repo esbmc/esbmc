@@ -563,32 +563,41 @@ void dereferencet::build_reference_to(
 
   value = object;
 
+  // Produce a guard that the dererferenced pointer points at this object.
   type2tc ptr_type = type2tc(new pointer_type2t(object->type));
   address_of2tc obj_ptr(ptr_type, object);
-
   pointer_guard = same_object2tc(deref_expr, obj_ptr);
-
   guardt tmp_guard(guard);
   tmp_guard.add(pointer_guard);
 
+  // Check that the object we're accessing is actually alive and valid for this
+  // mode.
   valid_check(object, tmp_guard, mode);
 
-  expr2tc orig_value = value;
-  value = get_base_object(value);
-  expr2tc additional_offset = compute_pointer_offset(orig_value);
+  // Try to pull additional offset out of the reference, i.e., member and index
+  // expressions. XXX does this make any difference, surely the offset is in
+  // the offset field.
+  expr2tc additional_offset = compute_pointer_offset(value);
   add2tc add(o.offset->type, o.offset, additional_offset);
   expr2tc final_offset = add->simplify();
   if (is_nil_expr(final_offset))
     final_offset = add;
 
+  // Finally, construct a reference against the base object. value set tracking
+  // emits objects with some cruft built on top of them.
+  value = get_base_object(value);
+
+  // Now try to construct a reference.
   if (is_constant_expr(final_offset)) {
-    // Hurrrrrr
     if (is_struct_type(type)) {
+      // Dereferences to structs require minimal effort and maximum assertion
+      // failures
       construct_struct_ref_from_const_offset(value, final_offset, type,
                                              tmp_guard, scalar_step_list);
       if (scalar_step_list->size() != 0)
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
+      // Attempt to pull a scalar out of this object.
       const constant_int2t &theint = to_constant_int2t(final_offset);
       if (theint.constant_value.to_ulong() == 0 && !is_scalar_type(value->type))
         construct_from_zero_offset(value, type, tmp_guard, scalar_step_list,
@@ -597,6 +606,7 @@ void dereferencet::build_reference_to(
         construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
     }
   } else {
+    // No fixed offset, attempt to construct a dynamicly selected reference.
     expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
     if (is_struct_type(type)) {
       construct_struct_ref_from_dyn_offset(value, offset, type,
