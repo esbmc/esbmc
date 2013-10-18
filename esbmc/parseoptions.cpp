@@ -45,7 +45,6 @@ extern "C" {
 
 #include <pointer-analysis/value_set_analysis.h>
 #include <pointer-analysis/goto_program_dereference.h>
-#include <pointer-analysis/add_failed_symbols.h>
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
@@ -1262,9 +1261,6 @@ bool cbmc_parseoptionst::process_goto_program(
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
 #endif
-
-    // add failed symbols
-    add_failed_symbols(context, ns);
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
