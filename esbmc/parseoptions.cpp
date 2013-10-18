@@ -587,15 +587,17 @@ int cbmc_parseoptionst::doit_k_induction()
           read(commPipe[0], results, sizeof(results));
 
           // Eventually checks on inductive step
-          int status;
-          pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-          if (result == 0) {
-            // Child still alive
-          } else if (result == -1) {
-            // Error
-          } else {
-            solution_found=0;
-            break;
+          if(!is_finished)
+          {
+            int status;
+            pid_t result = waitpid(children_pid[2], &status, WNOHANG);
+            if (result == 0) {
+              // Child still alive
+            } else if (result == -1) {
+              // Error
+            } else {
+              is_finished=true;
+            }
           }
 
           unsigned i=0;
@@ -684,7 +686,6 @@ int cbmc_parseoptionst::doit_k_induction()
           break;
         }
 
-
         break;
       }
 
@@ -730,7 +731,6 @@ int cbmc_parseoptionst::doit_k_induction()
         r.step=BASE_CASE;
         r.k=0;
         r.finished=false;
-        r.result=-1;
 
         // Create and start base case checking
         base_caset bc(bmc_base_case, goto_functions_base_case);
@@ -797,7 +797,6 @@ int cbmc_parseoptionst::doit_k_induction()
         r.step=FORWARD_CONDITION;
         r.k=0;
         r.finished=false;
-        r.result=-1;
 
         // Create and start base case checking
         forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
@@ -862,7 +861,6 @@ int cbmc_parseoptionst::doit_k_induction()
         r.step=INDUCTIVE_STEP;
         r.k=0;
         r.finished=false;
-        r.result=-1;
 
         // Create and start base case checking
         inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
