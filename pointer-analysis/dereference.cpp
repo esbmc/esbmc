@@ -1065,6 +1065,21 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
   // XXX jmorse - temporary, while byte extract is still covered in bees.
   value = typecast2tc(type, value);
+
+  // Finally, maintain some checks.
+  if (checks) {
+    // Only erronous thing we check for right now is that the offset is in
+    // bounds, misaligned access will need to happen elsewhere.
+    expr2tc access_sz = gen_uint(type->get_width() / 8);
+    expr2tc datasize = gen_uint(orig_value->type->get_width() / 8);
+    add2tc add(offset->type, offset, access_sz);
+    greaterthan2tc gt(add, datasize);
+
+    guardt tmp_guard = guard;
+    tmp_guard.add(gt);
+    dereference_failure("pointer dereference",
+                        "Access to object out of bounds", tmp_guard);
+  }
 }
 
 void dereferencet::valid_check(
