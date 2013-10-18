@@ -1051,16 +1051,19 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     return;
   }
 
-  expr2tc new_offset = offset;
-  if (memory_model(value, type, guard, new_offset))
-  {
-    // ok
+  // Else, in the case of a scalar access at the bottom,
+  assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
+
+  // Ensure we're dealing with a BV.
+  if (!is_number_type(value->type)) {
+    value = typecast2tc(get_uint_type(value->type->get_width()), value);
   }
-  else
-  {
-    value = expr2tc();
-    return; // give up, no way that this is ok
-  }
+
+  const type2tc &bytetype = get_uint8_type();
+  value = byte_extract2tc(bytetype, value, offset, is_big_endian);
+
+  // XXX jmorse - temporary, while byte extract is still covered in bees.
+  value = typecast2tc(type, value);
 }
 
 void dereferencet::valid_check(
@@ -1164,57 +1167,6 @@ void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
   guardt tmp_guard1(guard);
   tmp_guard1.move(gt);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
-}
-
-bool dereferencet::memory_model(
-  expr2tc &value,
-  const type2tc &to_type,
-  const guardt &guard,
-  expr2tc &new_offset)
-{
-  // otherwise, we will stich it together from bytes
-
-  bool ret = memory_model_bytes(value, to_type, guard, new_offset);
-  return ret;
-}
-
-bool dereferencet::memory_model_bytes(
-  expr2tc &value,
-  const type2tc &to_type,
-  const guardt &guard,
-  expr2tc &new_offset)
-{
-  const expr2tc orig_value = value;
-  const type2tc from_type = value->type;
-
-  assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
-
-  // We allow reading more or less anything as bit-vector.
-  if (is_bv_type(to_type) || is_pointer_type(to_type) ||
-        is_fixedbv_type(to_type))
-  {
-    // Take existing pointer offset, add to the pointer offset produced by
-    // this dereference. It'll get simplified at some point in the future.
-    new_offset = add2tc(new_offset->type, new_offset,
-                        compute_pointer_offset(value));
-    expr2tc tmp = new_offset->simplify();
-    if (!is_nil_expr(tmp))
-      new_offset = tmp;
-
-    // XXX This isn't taking account of the additional offset being torn through
-    expr2tc base_object = get_base_object(value);
-
-
-    const type2tc &bytetype = get_uint8_type();
-    value = byte_extract2tc(bytetype, base_object, new_offset, is_big_endian);
-
-    // XXX jmorse - temporary, while byte extract is still covered in bees.
-    value = typecast2tc(to_type, value);
-
-    return true;
-  }
-
-  return false;
 }
 
 void

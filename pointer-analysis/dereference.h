@@ -158,18 +158,6 @@ private:
                               const expr2tc &accuml_guard,
                               std::list<std::pair<expr2tc, expr2tc> > &output);
 
-  bool memory_model(
-    expr2tc &value,
-    const type2tc &type,
-    const guardt &guard,
-    expr2tc &new_offset);
-
-  bool memory_model_bytes(
-    expr2tc &value,
-    const type2tc &type,
-    const guardt &guard,
-    expr2tc &new_offset);
-
   void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
                                        const expr2tc &offset);
   void wrap_in_scalar_step_list(expr2tc &value,
