@@ -1187,16 +1187,6 @@ bool dereferencet::memory_model_bytes(
   const expr2tc orig_value = value;
   const type2tc from_type = value->type;
 
-  // Accessing code is incorrect; The C spec says that the code and data address
-  // spaces should be considered seperate (i.e., Harvard arch) and so accessing
-  // code via a pointer is never valid. Even though you /can/ do it on X86.
-  if (is_code_type(from_type) || is_code_type(to_type)) {
-    guardt tmp_guard(guard);
-    dereference_failure("Code seperation",
-                        "Dereference accesses code / program text", tmp_guard);
-    return true;
-  }
-
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
 
   // We allow reading more or less anything as bit-vector.
