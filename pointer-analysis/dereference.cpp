@@ -818,6 +818,10 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   if (!checks)
     return;
 
+  // XXX -- we should short circuit code ptr dereferences somewhere.
+  if (is_code_type(type))
+    return;
+
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
   if (is_array_type(base_object) || is_string_type(base_object)) {
     bounds_check(base_object->type, offset, access_sz, guard);
