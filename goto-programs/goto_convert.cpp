@@ -3509,11 +3509,11 @@ DEBUGLOC;
 				  result_op1 != nondet_vars.end())
 			  return ;
     }
-#if 0
+
     loop_varst::const_iterator cache_result = loop_vars.find(expr.op0());
     if (cache_result == loop_vars.end())
 	  return ;
-#endif
+
     assert(expr.op0().type() == expr.op1().type());
 
     exprt new_expr1, new_expr2;
@@ -3616,7 +3616,7 @@ void goto_convertt::convert_ifthenelse(
 	    tmp_guard=code.op0();
 
 	  remove_sideeffects(tmp_guard, dest);
-	  if (inductive_step /*& (is_for_block() ||is_while_block())*/)
+	  if (inductive_step & (is_for_block() ||is_while_block()))
 	    replace_ifthenelse(tmp_guard);
 
 	  //remove_sideeffects(tmp_guard, dest);
