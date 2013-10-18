@@ -596,12 +596,7 @@ void dereferencet::build_reference_to(
       wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
       // Attempt to pull a scalar out of this object.
-      const constant_int2t &theint = to_constant_int2t(final_offset);
-      if (theint.constant_value.to_ulong() == 0 && !is_scalar_type(value->type))
-        construct_from_zero_offset(value, type, tmp_guard, scalar_step_list,
-                                   mode);
-      else
-        construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
+      construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
     }
   } else {
     // No fixed offset, attempt to construct a dynamicly selected reference.
@@ -613,73 +608,6 @@ void dereferencet::build_reference_to(
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
       construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment, mode);
-    }
-  }
-}
-
-void
-dereferencet::construct_from_zero_offset(expr2tc &value, const type2tc &type,
-                                          const guardt &guard,
-                                          std::list<expr2tc> *scalar_step_list,
-                                          const modet mode)
-{
-
-  expr2tc orig_value = value;
-
-  if (is_array_type(orig_value) || is_string_type(orig_value)) {
-    // We have zero offset. Just select things out.
-    type2tc arr_subtype = (is_array_type(orig_value))
-     ? to_array_type(orig_value->type).subtype
-     : to_array_type(to_constant_string2t(orig_value).to_array()->type).subtype;
-    unsigned int access_size_int = type->get_width() / 8;
-    unsigned long subtype_size_int = type_byte_size(*arr_subtype).to_ulong();
-
-    if (is_array_type(arr_subtype)) {
-      construct_from_multidir_array(value, zero_uint, type, guard,
-                                    config.ansi_c.word_size, mode);
-    } else if (is_structure_type(arr_subtype)) {
-      value = index2tc(arr_subtype, orig_value, zero_uint);
-      construct_from_const_struct_offset(value, zero_uint, type, guard, mode);
-    } else {
-      assert(is_scalar_type(arr_subtype));
-
-      // Now, if the subtype size is >= the read size, we can just either cast
-      // or extract out. If not, we have to extract by conjoining elements.
-      if (!is_big_endian && subtype_size_int >= access_size_int) {
-        // Voila, one can just select and cast. This works because little endian
-        // just allows for this to happen.
-        index2tc idx(arr_subtype, orig_value, zero_uint);
-        typecast2tc cast(type, idx);
-        value = cast;
-      } else {
-        // Nope, one must byte extract this.
-        const type2tc &bytetype = get_uint8_type();
-        value = byte_extract2tc(bytetype, orig_value, zero_uint, is_big_endian);
-        if (type != bytetype)
-          value = typecast2tc(type, value);
-      }
-    }
-
-    bounds_check(orig_value->type, zero_int, access_size_int, guard);
-
-    //XXX uuhh, in desperate need of refactor.
-    if (scalar_step_list->size() != 0 && !is_scalar_type(type))
-      wrap_in_scalar_step_list(value, scalar_step_list, guard);
-  } else {
-    assert(is_structure_type(orig_value));
-    assert(scalar_step_list != NULL);
-    if (scalar_step_list->size() != 0) {
-      // We have zero offset; If the base types here are compatible, then we can
-      // just apply the set of scalar steps to this expr.
-
-      // Fetch what's either the source of the index, or member, in the first
-      // step.
-      wrap_in_scalar_step_list(value, scalar_step_list, guard);
-    } else {
-      // No set of scalar steps: what this means is that we're accessing the
-      // first element of this struct as it's natural type. Build the access
-      // ourself.
-      construct_from_const_struct_offset(value, zero_uint, type, guard, mode);
     }
   }
 }
