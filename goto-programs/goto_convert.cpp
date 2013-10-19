@@ -2597,7 +2597,10 @@ void goto_convertt::convert_while(
 
   //do the c label
   if (inductive_step)
+  {
     init_k_indice(dest);
+    init_k_induction_loop(dest);
+  }
 
   dest.destructive_append(tmp_branch);
 
@@ -2636,6 +2639,18 @@ void goto_convertt::convert_while(
   set_while_block(false);
   set_break(false);
   set_goto(false);
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+
+    //kindice=kindice+1
+    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
+    copy(new_assign_plus, ASSIGN, dest);
+  }
 }
 
 /*******************************************************************\
@@ -2717,7 +2732,10 @@ void goto_convertt::convert_dowhile(
 
   //do the c label
   if (inductive_step)
+  {
     init_k_indice(dest);
+    init_k_induction_loop(dest);
+  }
 
   // set the targets
   targets.set_break(z);
@@ -2770,6 +2788,18 @@ void goto_convertt::convert_dowhile(
 
   // restore break/continue targets
   targets.restore(old_targets);
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+
+    //kindice=kindice+1
+    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
+    copy(new_assign_plus, ASSIGN, dest);
+  }
 }
 
 /*******************************************************************\
