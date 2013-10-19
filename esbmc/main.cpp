@@ -38,11 +38,14 @@ Function: main
 
 \*******************************************************************/
 
+void dereference_handlers_init(void);
+
 int main(int argc, const char **argv)
 {
   // To avoid the static initialization order fiasco:
   type_pool = type_poolt(true);
   init_expr_constants();
+  dereference_handlers_init();
 
   cbmc_parseoptionst parseoptions(argc, argv);
   return parseoptions.main();

@@ -84,18 +84,83 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
   return expr;
 }
 
+enum expr_deref_handler {
+  deref_recurse = 0,
+  deref_munge_guard,
+  deref_addrof,
+  deref_deref,
+  deref_nonscalar
+};
+
+static char deref_expr_handler_actions[expr2t::end_expr_id];
+
+void
+dereference_handlers_init(void)
+{
+  deref_expr_handler_actions[expr2t::and_id] = deref_munge_guard;
+  deref_expr_handler_actions[expr2t::or_id] = deref_munge_guard;
+  deref_expr_handler_actions[expr2t::if_id] = deref_munge_guard;
+  deref_expr_handler_actions[expr2t::address_of_id] = deref_addrof;
+  deref_expr_handler_actions[expr2t::dereference_id] = deref_deref;
+  deref_expr_handler_actions[expr2t::index_id] = deref_nonscalar;
+  deref_expr_handler_actions[expr2t::member_id] = deref_nonscalar;
+}
+
 void
 dereferencet::dereference_expr(
   expr2tc &expr,
   guardt &guard,
-  const modet mode,
-  bool checks_only)
+  const modet mode)
 {
 
   if (!has_dereference(expr))
     return;
 
-  // Preliminary, guard munging tests. 
+  switch (deref_expr_handler_actions[expr->expr_id]) {
+  case deref_recurse:
+  {
+    Forall_operands2(it, idx, expr) {
+      if (is_nil_expr(*it))
+        continue;
+
+      dereference_expr(*it, guard, mode);
+    }
+    break;
+  }
+  case deref_munge_guard:
+    dereference_guard_expr(expr, guard, mode);
+    break;
+  case deref_addrof:
+    dereference_addrof_expr(expr, guard, mode);
+    break;
+  case deref_deref:
+    dereference_deref(expr, guard, mode);
+    break;
+  case deref_nonscalar:
+  {
+    // The result of this expression should be scalar: we're transitioning
+    // from a scalar result to a nonscalar result.
+
+    std::list<expr2tc> scalar_step_list;
+    expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
+                                             scalar_step_list);
+    assert(scalar_step_list.size() == 0); // Should finish empty.
+
+    // If a dereference successfully occurred, replace expr at this level.
+    // XXX -- explain this better.
+    if (!is_nil_expr(res))
+      expr = res;
+    break;
+  }
+  }
+
+  return;
+}
+
+void
+dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard,
+                                     const modet mode)
+{
   if (is_and2t(expr) || is_or2t(expr))
   {
     // If this is an and or or expression, then if the first operand short
@@ -129,8 +194,9 @@ dereferencet::dereference_expr(
     guard.resize(old_guards);
     return;
   }
-  else if (is_if2t(expr))
+  else
   {
+    assert(is_if2t(expr));
     // Only one side of this if gets evaluated according to the condition, which
     // means that pointer dereference assertion failures should have the
     // relevant guard applied. This makes sure they don't fire even when their
@@ -144,7 +210,7 @@ dereferencet::dereference_expr(
     if (o1) {
       unsigned old_guard=guard.size();
       guard.add(ifref.cond);
-      dereference_expr(ifref.true_value, guard, mode, checks_only);
+      dereference_expr(ifref.true_value, guard, mode);
       guard.resize(old_guard);
     }
 
@@ -152,56 +218,63 @@ dereferencet::dereference_expr(
       unsigned old_guard=guard.size();
       not2tc tmp(ifref.cond);
       guard.move(tmp);
-      dereference_expr(ifref.false_value, guard, mode, checks_only);
+      dereference_expr(ifref.false_value, guard, mode);
       guard.resize(old_guard);
     }
 
     return;
   }
+}
 
+void
+dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard,
+                                      const modet mode)
+{
   // Crazy combinations of & and * that don't actually lead to a deref:
-  if (is_address_of2t(expr))
-  {
-    // turn &*p to p
-    // this has *no* side effect!
-    // XXX jmorse -- how does this take account of an intervening member
-    // operation? i.e. &foo->bar;
-    address_of2t &addrof = to_address_of2t(expr);
 
-    if (is_dereference2t(addrof.ptr_obj)) {
-      dereference2t &deref = to_dereference2t(addrof.ptr_obj);
-      expr2tc result = deref.value;
+  // turn &*p to p
+  // this has *no* side effect!
+  // XXX jmorse -- how does this take account of an intervening member
+  // operation? i.e. &foo->bar;
+  address_of2t &addrof = to_address_of2t(expr);
 
-      if (result->type != expr->type)
-        result = typecast2tc(expr->type, result);
+  if (is_dereference2t(addrof.ptr_obj)) {
+    dereference2t &deref = to_dereference2t(addrof.ptr_obj);
+    expr2tc result = deref.value;
 
-      expr = result;
+    if (result->type != expr->type)
+      result = typecast2tc(expr->type, result);
+
+    expr = result;
+    return;
+  } else {
+    // This might, alternately, be a chain of member and indexes applied to
+    // a dereference. In which case what we're actually doing is computing
+    // some pointer arith, manually.
+    expr2tc base = get_base_dereference(addrof.ptr_obj);
+    if (!is_nil_expr(base)) {
+      //  We have a base. There may be additional dereferences in it.
+      dereference_expr(base, guard, mode);
+      // Now compute the pointer offset involved.
+      expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
+      assert(!is_nil_expr(offs) && "Pointer offset of index/member "
+             "combination should be valid int");
+
+      // Cast to a byte pointer; add; cast back. Can't think of a better way
+      // to produce safe pointer arithmetic right now.
+      expr2tc output =
+        typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
+      output = add2tc(output->type, output, offs);
+      output = typecast2tc(base->type, output);
+      expr = output;
       return;
-    } else {
-      // This might, alternately, be a chain of member and indexes applied to
-      // a dereference. In which case what we're actually doing is computing
-      // some pointer arith, manually.
-      expr2tc base = get_base_dereference(addrof.ptr_obj);
-      if (!is_nil_expr(base)) {
-        //  We have a base. There may be additional dereferences in it.
-        dereference_expr(base, guard, mode, checks_only);
-        // Now compute the pointer offset involved.
-        expr2tc offs = compute_pointer_offset(addrof.ptr_obj);
-        assert(!is_nil_expr(offs) && "Pointer offset of index/member "
-               "combination should be valid int");
-
-        // Cast to a byte pointer; add; cast back. Can't think of a better way
-        // to produce safe pointer arithmetic right now.
-        expr2tc output =
-          typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
-        output = add2tc(output->type, output, offs);
-        output = typecast2tc(base->type, output);
-        expr = output;
-        return;
-      }
     }
   }
+}
 
+void
+dereferencet::dereference_deref(expr2tc &expr, guardt &guard, const modet mode)
+{
   if (is_dereference2t(expr)) {
     std::list<expr2tc> scalar_step_list;
 
@@ -223,7 +296,7 @@ dereferencet::dereference_expr(
       return;
     }
 
-    if ((is_scalar_type(expr) || is_code_type(expr) || checks_only)) {
+    if ((is_scalar_type(expr) || is_code_type(expr))) {
       expr2tc tmp_obj = deref.value;
       expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
                                    &scalar_step_list);
@@ -246,10 +319,12 @@ dereferencet::dereference_expr(
       }
       expr = result;
     }
-  } else if (is_index2t(expr) &&
-             is_pointer_type(to_index2t(expr).source_value)) {
+  }
+  else
+  {
+    assert(is_index2t(expr) && is_pointer_type(to_index2t(expr).source_value));
     std::list<expr2tc> scalar_step_list;
-    assert((is_scalar_type(expr) || is_code_type(expr) || checks_only)
+    assert((is_scalar_type(expr) || is_code_type(expr))
            && "Can't dereference to a nonscalar type");
     index2t &idx = to_index2t(expr);
 
@@ -260,32 +335,6 @@ dereferencet::dereference_expr(
     add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
     // Result discarded.
     expr = dereference(tmp, tmp->type, guard, mode, &scalar_step_list);
-  } else if (is_non_scalar_expr(expr)) {
-    // The result of this expression should be scalar: we're transitioning
-    // from a scalar result to a nonscalar result.
-    // Unless we're doing something crazy with multidimensional arrays and
-    // address_of, for example, where no dereference is involved. In that case,
-    // bail.
-    bool contains_deref = has_dereference(expr);
-    if (!contains_deref)
-      return;
-
-    std::list<expr2tc> scalar_step_list;
-    expr2tc res = dereference_expr_nonscalar(expr, guard, mode,
-                                             scalar_step_list, checks_only);
-    assert(scalar_step_list.size() == 0); // Should finish empty.
-
-    // If a dereference successfully occurred, replace expr at this level.
-    // XXX -- explain this better.
-    if (!is_nil_expr(res))
-      expr = res;
-  } else {
-    Forall_operands2(it, idx, expr) {
-      if (is_nil_expr(*it))
-        continue;
-
-      dereference_expr(*it, guard, mode, checks_only);
-    }
   }
 }
 
@@ -294,8 +343,7 @@ dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guardt &guard,
   const modet mode,
-  std::list<expr2tc> &scalar_step_list,
-  bool checks_only)
+  std::list<expr2tc> &scalar_step_list)
 {
 
   if (is_dereference2t(expr))
@@ -326,13 +374,13 @@ dereferencet::dereference_expr_nonscalar(
     if (is_member2t(expr)) {
       scalar_step_list.push_front(expr);
       res =  dereference_expr_nonscalar(to_member2t(expr).source_value, guard,
-                                        mode, scalar_step_list, checks_only);
+                                        mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
       dereference_expr(to_index2t(expr).index, guard, mode);
       scalar_step_list.push_front(expr);
       res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
-                                       mode, scalar_step_list, checks_only);
+                                       mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_if2t(expr)) {
       // XXX - make this work similarly to dereference_expr.
@@ -343,12 +391,12 @@ dereferencet::dereference_expr_nonscalar(
 
       scalar_step_list.push_front(theif.true_value);
       expr2tc res1 = dereference_expr_nonscalar(theif.true_value, g1, mode,
-                                                scalar_step_list, checks_only);
+                                                scalar_step_list);
       scalar_step_list.pop_front();
 
       scalar_step_list.push_front(theif.false_value);
       expr2tc res2 = dereference_expr_nonscalar(theif.false_value, g2, mode,
-                                                scalar_step_list, checks_only);
+                                                scalar_step_list);
       scalar_step_list.pop_front();
 
       if2tc fin(res1->type, theif.cond, res1, res2);
@@ -366,7 +414,7 @@ dereferencet::dereference_expr_nonscalar(
   {
     // Just blast straight through
     return dereference_expr_nonscalar(to_typecast2t(expr).from, guard, mode,
-                                      scalar_step_list, checks_only);
+                                      scalar_step_list);
   }
   else
   {
