@@ -70,25 +70,23 @@ public:
   
   typedef enum { READ, WRITE, FREE } modet;
 
-  virtual void dereference_expr(expr2tc &expr, guardt &guard, const modet mode);
-  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard,
-                                      const modet mode);
+  virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
   virtual void dereference_addrof_expr(expr2tc &expr, guardt &guard,
-                                       const modet mode);
-  virtual void dereference_deref(expr2tc &expr, guardt &guard,
-                                 const modet mode);
+                                       modet mode);
+  virtual void dereference_deref(expr2tc &expr, guardt &guard, modet mode);
 
   virtual expr2tc dereference_expr_nonscalar(
     expr2tc &dest,
     guardt &guard,
-    const modet mode,
+    modet mode,
     std::list<expr2tc> &scalar_step_list);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
     const type2tc &type,
     const guardt &guard,
-    const modet mode,
+    modet mode,
     std::list<expr2tc> *scalar_step_list);
 
   bool has_dereference(const expr2tc &expr) const;
@@ -111,7 +109,7 @@ private:
 
   expr2tc build_reference_to(
     const expr2tc &what,
-    const modet mode,
+    modet mode,
     const expr2tc &deref_expr,
     const type2tc &type,
     const guardt &guard,
@@ -122,20 +120,20 @@ private:
 
   void bounds_check(const type2tc &type, const expr2tc &offset,
                     unsigned int access_size, const guardt &guard);
-  void valid_check(const expr2tc &expr, const guardt &guard, const modet mode);
+  void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
 
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
-                                   const modet mode, bool checks = true);
+                                   modet mode, bool checks = true);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
-                                 unsigned long alignment, const modet mode,
+                                 unsigned long alignment, modet mode,
                                  bool checks = true);
   void construct_from_const_struct_offset(expr2tc &value,
                                              const expr2tc &offset,
                                              const type2tc &type,
                                              const guardt &guard,
-                                             const modet mode);
+                                             modet mode);
   void construct_from_dyn_struct_offset(expr2tc &value,
                                            const expr2tc &offset,
                                            const type2tc &type,
@@ -146,7 +144,7 @@ private:
                                         const type2tc &type,
                                         const guardt &guard,
                                         unsigned long alignment,
-                                        const modet mode);
+                                        modet mode);
 
   void construct_struct_ref_from_const_offset(expr2tc &value,
                                         const expr2tc &offs,

@@ -110,7 +110,7 @@ void
 dereferencet::dereference_expr(
   expr2tc &expr,
   guardt &guard,
-  const modet mode)
+  modet mode)
 {
 
   if (!has_dereference(expr))
@@ -158,8 +158,7 @@ dereferencet::dereference_expr(
 }
 
 void
-dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard,
-                                     const modet mode)
+dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode)
 {
   if (is_and2t(expr) || is_or2t(expr))
   {
@@ -227,8 +226,7 @@ dereferencet::dereference_guard_expr(expr2tc &expr, guardt &guard,
 }
 
 void
-dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard,
-                                      const modet mode)
+dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
 {
   // Crazy combinations of & and * that don't actually lead to a deref:
 
@@ -273,7 +271,7 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard,
 }
 
 void
-dereferencet::dereference_deref(expr2tc &expr, guardt &guard, const modet mode)
+dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
 {
   if (is_dereference2t(expr)) {
     std::list<expr2tc> scalar_step_list;
@@ -342,7 +340,7 @@ expr2tc
 dereferencet::dereference_expr_nonscalar(
   expr2tc &expr,
   guardt &guard,
-  const modet mode,
+  modet mode,
   std::list<expr2tc> &scalar_step_list)
 {
 
@@ -433,7 +431,7 @@ dereferencet::dereference(
   const expr2tc &src,
   const type2tc &to_type,
   const guardt &guard,
-  const modet mode,
+  modet mode,
   std::list<expr2tc> *scalar_step_list)
 {
   expr2tc dest = src;
@@ -556,7 +554,7 @@ bool dereferencet::dereference_type_compare(
 expr2tc
 dereferencet::build_reference_to(
   const expr2tc &what,
-  const modet mode,
+  modet mode,
   const expr2tc &deref_expr,
   const type2tc &type,
   const guardt &guard,
@@ -697,7 +695,7 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,
-                                          const modet mode, bool checks)
+                                          modet mode, bool checks)
 {
 
   expr2tc base_object = value;
@@ -839,7 +837,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 void
 dereferencet::construct_from_const_struct_offset(expr2tc &value,
                         const expr2tc &offset, const type2tc &type,
-                        const guardt &guard, const modet mode)
+                        const guardt &guard, modet mode)
 {
   assert(is_struct_type(value->type));
   const struct_type2t &struct_type = to_struct_type(value->type);
@@ -1007,7 +1005,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
                                         unsigned long alignment,
-                                        const modet mode,
+                                        modet mode,
                                         bool checks)
 {
   assert(alignment != 0);
@@ -1142,7 +1140,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 void dereferencet::valid_check(
   const expr2tc &object,
   const guardt &guard,
-  const modet mode)
+  modet mode)
 {
 
   const expr2tc &symbol = get_symbol(object);
@@ -1277,7 +1275,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
                               const type2tc &type, const guardt &guard,
                               unsigned long alignment,
-                              const modet mode)
+                              modet mode)
 {
   assert(is_array_type(value) || is_string_type(value));
   const array_type2t &arr_type = (is_array_type(value))
