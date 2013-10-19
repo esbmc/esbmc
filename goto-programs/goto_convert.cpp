@@ -3618,79 +3618,79 @@ void goto_convertt::convert_ifthenelse(
   const codet &code,
   goto_programt &dest)
 {
-      set_ifthenelse_block(true);
+  set_ifthenelse_block(true);
 
-	  if(code.operands().size()!=2 &&
-	     code.operands().size()!=3)
-	  {
-	    err_location(code);
-	    throw "ifthenelse takes two or three operands";
-	  }
+  if(code.operands().size()!=2 &&
+    code.operands().size()!=3)
+  {
+    err_location(code);
+    throw "ifthenelse takes two or three operands";
+  }
 
-	  bool has_else=
-	    code.operands().size()==3 &&
-	    !code.op2().is_nil();
+  bool has_else=
+    code.operands().size()==3 &&
+    !code.op2().is_nil();
 
-	  const locationt &location=code.location();
+  const locationt &location=code.location();
 
-	  // convert 'then'-branch
-	  goto_programt tmp_op1;
-	  convert(to_code(code.op1()), tmp_op1);
+  // convert 'then'-branch
+  goto_programt tmp_op1;
+  convert(to_code(code.op1()), tmp_op1);
 
-	  goto_programt tmp_op2;
+  goto_programt tmp_op2;
 
-	  if(has_else)
-	    convert(to_code(code.op2()), tmp_op2);
+  if(has_else)
+    convert(to_code(code.op2()), tmp_op2);
 
-	  exprt tmp_guard;
-	  if (options.get_bool_option("control-flow-test")
-		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
-		  && code.op0().id() != "typecast" && code.op0().id() != "="
-		  && !is_thread
-		  && !options.get_bool_option("deadlock-check"))
-	  {
-	    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
-		irept irep;
-		new_symbol.to_irep(irep);
+  exprt tmp_guard;
+  if (options.get_bool_option("control-flow-test")
+    && code.op0().id() != "notequal" && code.op0().id() != "symbol"
+    && code.op0().id() != "typecast" && code.op0().id() != "="
+    && !is_thread
+    && !options.get_bool_option("deadlock-check"))
+  {
+    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
+    irept irep;
+    new_symbol.to_irep(irep);
 
-	    codet assignment("assign");
-		assignment.reserve_operands(2);
-		assignment.copy_to_operands(symbol_expr(new_symbol));
-		assignment.copy_to_operands(code.op0());
-		assignment.location() = code.op0().find_location();
-		copy(assignment, ASSIGN, dest);
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(symbol_expr(new_symbol));
+    assignment.copy_to_operands(code.op0());
+    assignment.location() = code.op0().find_location();
+    copy(assignment, ASSIGN, dest);
 
-		tmp_guard=symbol_expr(new_symbol);
-	  }
-	  else if (code.op0().statement() == "decl-block")
-	  {
-	    exprt lhs(code.op0().op0().op0());
-	    lhs.location()=code.op0().op0().location();
-	    exprt rhs(code.op0().op0().op1());
+    tmp_guard=symbol_expr(new_symbol);
+  }
+  else if (code.op0().statement() == "decl-block")
+  {
+    exprt lhs(code.op0().op0().op0());
+    lhs.location()=code.op0().op0().location();
+    exprt rhs(code.op0().op0().op1());
 
-	    rhs.type()=code.op0().op0().op1().type();
+    rhs.type()=code.op0().op0().op1().type();
 
-	    codet assignment("assign");
-	    assignment.copy_to_operands(lhs);
-	    assignment.move_to_operands(rhs);
-	    assignment.location()=lhs.location();
-	    convert(assignment, dest);
+    codet assignment("assign");
+    assignment.copy_to_operands(lhs);
+    assignment.move_to_operands(rhs);
+    assignment.location()=lhs.location();
+    convert(assignment, dest);
 
-	    tmp_guard=assignment.op0();
-	    if (!tmp_guard.type().is_bool())
-	      tmp_guard.make_typecast(bool_typet());
-	  }
-	  else
-	    tmp_guard=code.op0();
+    tmp_guard=assignment.op0();
+    if (!tmp_guard.type().is_bool())
+      tmp_guard.make_typecast(bool_typet());
+  }
+  else
+    tmp_guard=code.op0();
 
-	  remove_sideeffects(tmp_guard, dest);
-	  if (inductive_step & (is_for_block() ||is_while_block()))
-	    replace_ifthenelse(tmp_guard);
+  remove_sideeffects(tmp_guard, dest);
+  if (inductive_step && (is_for_block() || is_while_block()))
+    replace_ifthenelse(tmp_guard);
 
-	  //remove_sideeffects(tmp_guard, dest);
-	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
+  //remove_sideeffects(tmp_guard, dest);
+  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 
-	  set_ifthenelse_block(false);
+  set_ifthenelse_block(false);
 }
 
 /*******************************************************************\
