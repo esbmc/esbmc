@@ -883,7 +883,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   if (exp.is_symbol() && exp.type().id()!="code")
   {
     if (is_for_block() || is_while_block())
-	  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+      loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
@@ -3545,7 +3545,7 @@ Function: goto_convertt::replace_ifthenelse
 void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
-DEBUGLOC;
+  DEBUGLOC;
 
   bool found=false;
 
@@ -3570,17 +3570,17 @@ DEBUGLOC;
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
     if (result_op0 != nondet_vars.end() &&
-				result_op1 != nondet_vars.end())
-			return ;
+        result_op1 != nondet_vars.end())
+      return;
     else if (expr.op0().is_constant() || expr.op1().is_constant()) {
       if (result_op0 != nondet_vars.end() ||
-				  result_op1 != nondet_vars.end())
-			  return ;
+          result_op1 != nondet_vars.end())
+        return;
     }
 
     loop_varst::const_iterator cache_result = loop_vars.find(expr.op0());
     if (cache_result == loop_vars.end())
-	  return ;
+      return;
 
     assert(expr.op0().type() == expr.op1().type());
 
@@ -3594,9 +3594,10 @@ DEBUGLOC;
       assert(new_expr1.type().id() == expr.op0().op0().type().id());
     else if (expr.op1().is_index())
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
-    else if (new_expr1.type().id() != new_expr2.type().id() ||
-    		new_expr1.type().width()!=new_expr2.type().width())
-      new_expr2.make_typecast(new_expr1.type());
+    else
+      if (new_expr1.type().id() != new_expr2.type().id() ||
+          new_expr1.type().width()!=new_expr2.type().width())
+        new_expr2.make_typecast(new_expr1.type());
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
