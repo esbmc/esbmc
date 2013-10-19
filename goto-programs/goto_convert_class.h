@@ -200,6 +200,7 @@ protected:
   //
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
+  void init_k_induction_loop(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
