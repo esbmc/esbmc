@@ -3688,8 +3688,67 @@ void goto_convertt::convert_ifthenelse(
   if (inductive_step && (is_for_block() || is_while_block()))
     replace_ifthenelse(tmp_guard);
 
-  //remove_sideeffects(tmp_guard, dest);
-  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
+  if (inductive_step)
+  {
+    exprt tmp_guard_kinduction=tmp_guard;
+
+    // generate without k-induction modification
+    goto_programt non_kinduction_dest;
+    generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, non_kinduction_dest);
+
+    set_for_block(true);
+
+    // get components
+    get_struct_components(code.op0(), state);
+    get_struct_components(code.op1(), state);
+    get_struct_components(tmp_guard_kinduction, state);
+
+    if(has_else)
+      get_struct_components(code.op2(), state);
+
+    // convert 'then'-branch
+    goto_programt tmp_op1_kinduction;
+    convert(to_code(code.op1()), tmp_op1_kinduction);
+
+    // convert else branch
+    goto_programt tmp_op2_kinduction;
+    if(has_else)
+      convert(to_code(code.op2()), tmp_op2_kinduction);
+
+    // convert guard
+    replace_ifthenelse(tmp_guard_kinduction);
+
+    // generate with k-induction modification
+    goto_programt kinduction_dest;
+    generate_ifthenelse(tmp_guard_kinduction, tmp_op1_kinduction,
+      tmp_op2_kinduction, location, kinduction_dest);
+
+    set_for_block(false);
+
+    // Generate condition
+    exprt kinduction_guard("=", bool_typet());
+
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+    exprt one_expr = gen_one(bool_typet());
+
+    kinduction_guard.copy_to_operands(lhs_index, one_expr);
+
+//    std::cout << "### non kinduction " << std::endl;
+//    non_kinduction_dest.output(std::cout);
+//
+//    std::cout << "### kinduction " << std::endl;
+//    kinduction_dest.output(std::cout);
+
+    // Generate big if then else condition
+    generate_ifthenelse(kinduction_guard, kinduction_dest,
+      non_kinduction_dest, location, dest);
+  }
+  else
+  {
+    generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
+  }
 
   set_ifthenelse_block(false);
 }
