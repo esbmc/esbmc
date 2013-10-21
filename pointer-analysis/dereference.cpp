@@ -294,29 +294,10 @@ dereferencet::dereference_deref(expr2tc &expr, guardt &guard, modet mode)
       return;
     }
 
-    if ((is_scalar_type(expr) || is_code_type(expr))) {
-      expr2tc tmp_obj = deref.value;
-      expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                   &scalar_step_list);
-      expr = result;
-    } else {
-      // Nonscalar dereference; pretend we know what we're doing for a moment
-      expr2tc tmp_obj = deref.value;
-      expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
-                                   &scalar_step_list);
-      // And now, remove any intermediate indexes or members.
-      while (!dereference_type_compare(result, expr->type)) {
-        if (is_index2t(result)) {
-          result = to_index2t(result).source_value;
-        } else if (is_member2t(result)) {
-          result = to_member2t(result).source_value;
-        } else {
-          std::cerr << "Erronous struct dereference" << std::endl;
-          abort();
-        }
-      }
-      expr = result;
-    }
+    expr2tc tmp_obj = deref.value;
+    expr2tc result = dereference(tmp_obj, deref.type, guard, mode,
+                                 &scalar_step_list);
+    expr = result;
   }
   else
   {
