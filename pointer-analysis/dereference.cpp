@@ -84,6 +84,8 @@ const expr2tc& dereferencet::get_symbol(const expr2tc &expr)
   return expr;
 }
 
+/************************* Expression decomposing code ************************/
+
 enum expr_deref_handler {
   deref_recurse = 0,
   deref_munge_guard,
@@ -406,6 +408,8 @@ dereferencet::dereference_expr_nonscalar(
   }
 }
 
+/********************** Intermediate reference munging code *******************/
+
 expr2tc
 dereferencet::dereference(
   const expr2tc &src,
@@ -670,6 +674,8 @@ dereferencet::build_reference_to(
 
   return value;
 }
+
+/************************** Rereference building code *************************/
 
 void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
