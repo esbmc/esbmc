@@ -362,7 +362,6 @@ dereferencet::dereference_expr_nonscalar(
                                        mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_if2t(expr)) {
-      // XXX - make this work similarly to dereference_expr.
       guardt g1 = guard, g2 = guard;
       if2t &theif = to_if2t(expr);
       g1.add(theif.cond);
