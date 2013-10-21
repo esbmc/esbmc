@@ -1123,139 +1123,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   }
 }
 
-void dereferencet::valid_check(
-  const expr2tc &object,
-  const guardt &guard,
-  modet mode)
-{
-
-  const expr2tc &symbol = get_symbol(object);
-
-  if (is_constant_string2t(symbol))
-  {
-    // always valid, but can't write
-
-    if(mode==WRITE)
-    {
-      dereference_failure("pointer dereference",
-                          "write access to string constant", guard);
-    }
-  }
-  else if (is_nil_expr(symbol))
-  {
-    // always "valid", shut up
-    return;
-  }
-  else if (is_symbol2t(symbol))
-  {
-    // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
-    // making dereferencet persistent.
-    if (has_prefix(to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
-      return;
-
-    const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
-    if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
-      // Assert thtat it hasn't (nondeterministically) been invalidated.
-      address_of2tc addrof(symbol->type, symbol);
-      valid_object2tc valid_expr(addrof);
-      not2tc not_valid_expr(valid_expr);
-
-      guardt tmp_guard(guard);
-      tmp_guard.move(not_valid_expr);
-      dereference_failure("pointer dereference", "invalidated dynamic object",
-                          tmp_guard);
-    } else {
-      // Not dynamic; if we're in free mode, that's an error.
-      if(mode==FREE)
-      {
-        dereference_failure("pointer dereference",
-                            "free() of non-dynamic memory", guard);
-        return;
-      }
-    }
-  }
-}
-
-void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
-                                unsigned int access_size, const guardt &guard)
-{
-  if(options.get_bool_option("no-bounds-check"))
-    return;
-
-  assert(is_array_type(type) || is_string_type(type));
-
-  // Dance around getting the array type normalised.
-  type2tc new_string_type;
-  const array_type2t *arr_type_p = NULL;
-  if (is_array_type(type)) {
-    arr_type_p = &to_array_type(type);
-  } else {
-    const string_type2t &str_type = to_string_type(type);
-    expr2tc str_size = gen_uint(str_type.width);
-    new_string_type =
-      type2tc(new array_type2t(get_uint8_type(), str_size, false));
-    arr_type_p = &to_array_type(new_string_type);
-  }
-
-  const array_type2t &arr_type = *arr_type_p;
-
-  // XXX --  arrays were assigned names, but we're skipping that for the moment
-  // std::string name = array_name(ns, expr.source_value);
-
-  // Firstly, bail if this is an infinite sized array. There are no bounds
-  // checks to be performed.
-  if (arr_type.size_is_infinite)
-    return;
-
-  // Secondly, try to calc the size of the array.
-  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
-  constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
-  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
-
-  // Then, expressions as to whether the access is over or under the array
-  // size.
-  constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
-  add2tc upper_byte(get_uint32_type(), offset, access_size_e);
-
-  greaterthan2tc gt(upper_byte, arrsize);
-
-  // Report these as assertions; they'll be simplified away if they're constant
-
-  guardt tmp_guard1(guard);
-  tmp_guard1.move(gt);
-  dereference_failure("array bounds", "array bounds violated", tmp_guard1);
-}
-
-void
-dereferencet::wrap_in_scalar_step_list(expr2tc &value,
-                                       std::list<expr2tc> *scalar_step_list,
-                                       const guardt &guard)
-{
-  // Check that either the base type that these steps are applied to matches
-  // the type of the object we're wrapping in these steps. It's a type error
-  // if there isn't a match.
-  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-  if (dereference_type_compare(value, base_of_steps->type)) {
-    // We can just reconstruct this.
-    expr2tc accuml = value;
-    for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
-         it != scalar_step_list->end(); it++) {
-      expr2tc tmp = *it;
-      *tmp.get()->get_sub_expr_nc(0) = accuml;
-      accuml = tmp;
-    }
-    value = accuml;
-  } else {
-    // We can't reconstruct this. Go crazy instead.
-    // XXX -- there's a line in the C spec, appendix G or whatever, saying that
-    // accessing an object with an (incompatible) type other than its base type
-    // is undefined behaviour. Should totally put that in the error message.
-    dereference_failure("Memory model",
-                        "Object accessed with incompatible base type", guard);
-    value = expr2tc();
-  }
-}
-
 void
 dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
@@ -1516,6 +1383,8 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
   }
 }
 
+/**************************** Dereference utilities ***************************/
+
 void
 dereferencet::dereference_failure(const std::string &error_class,
                                   const std::string &error_name,
@@ -1567,4 +1436,137 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
   }
 
   value = accuml;
+}
+
+void dereferencet::valid_check(
+  const expr2tc &object,
+  const guardt &guard,
+  modet mode)
+{
+
+  const expr2tc &symbol = get_symbol(object);
+
+  if (is_constant_string2t(symbol))
+  {
+    // always valid, but can't write
+
+    if(mode==WRITE)
+    {
+      dereference_failure("pointer dereference",
+                          "write access to string constant", guard);
+    }
+  }
+  else if (is_nil_expr(symbol))
+  {
+    // always "valid", shut up
+    return;
+  }
+  else if (is_symbol2t(symbol))
+  {
+    // Hacks, but as dereferencet object isn't persistent, necessary. Fix by
+    // making dereferencet persistent.
+    if (has_prefix(to_symbol2t(symbol).thename.as_string(), "symex::invalid_object"))
+      return;
+
+    const symbolt &sym = ns.lookup(to_symbol2t(symbol).thename);
+    if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+      // Assert thtat it hasn't (nondeterministically) been invalidated.
+      address_of2tc addrof(symbol->type, symbol);
+      valid_object2tc valid_expr(addrof);
+      not2tc not_valid_expr(valid_expr);
+
+      guardt tmp_guard(guard);
+      tmp_guard.move(not_valid_expr);
+      dereference_failure("pointer dereference", "invalidated dynamic object",
+                          tmp_guard);
+    } else {
+      // Not dynamic; if we're in free mode, that's an error.
+      if(mode==FREE)
+      {
+        dereference_failure("pointer dereference",
+                            "free() of non-dynamic memory", guard);
+        return;
+      }
+    }
+  }
+}
+
+void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
+                                unsigned int access_size, const guardt &guard)
+{
+  if(options.get_bool_option("no-bounds-check"))
+    return;
+
+  assert(is_array_type(type) || is_string_type(type));
+
+  // Dance around getting the array type normalised.
+  type2tc new_string_type;
+  const array_type2t *arr_type_p = NULL;
+  if (is_array_type(type)) {
+    arr_type_p = &to_array_type(type);
+  } else {
+    const string_type2t &str_type = to_string_type(type);
+    expr2tc str_size = gen_uint(str_type.width);
+    new_string_type =
+      type2tc(new array_type2t(get_uint8_type(), str_size, false));
+    arr_type_p = &to_array_type(new_string_type);
+  }
+
+  const array_type2t &arr_type = *arr_type_p;
+
+  // XXX --  arrays were assigned names, but we're skipping that for the moment
+  // std::string name = array_name(ns, expr.source_value);
+
+  // Firstly, bail if this is an infinite sized array. There are no bounds
+  // checks to be performed.
+  if (arr_type.size_is_infinite)
+    return;
+
+  // Secondly, try to calc the size of the array.
+  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
+  constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
+  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
+
+  // Then, expressions as to whether the access is over or under the array
+  // size.
+  constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
+  add2tc upper_byte(get_uint32_type(), offset, access_size_e);
+
+  greaterthan2tc gt(upper_byte, arrsize);
+
+  // Report these as assertions; they'll be simplified away if they're constant
+
+  guardt tmp_guard1(guard);
+  tmp_guard1.move(gt);
+  dereference_failure("array bounds", "array bounds violated", tmp_guard1);
+}
+
+void
+dereferencet::wrap_in_scalar_step_list(expr2tc &value,
+                                       std::list<expr2tc> *scalar_step_list,
+                                       const guardt &guard)
+{
+  // Check that either the base type that these steps are applied to matches
+  // the type of the object we're wrapping in these steps. It's a type error
+  // if there isn't a match.
+  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
+  if (dereference_type_compare(value, base_of_steps->type)) {
+    // We can just reconstruct this.
+    expr2tc accuml = value;
+    for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
+         it != scalar_step_list->end(); it++) {
+      expr2tc tmp = *it;
+      *tmp.get()->get_sub_expr_nc(0) = accuml;
+      accuml = tmp;
+    }
+    value = accuml;
+  } else {
+    // We can't reconstruct this. Go crazy instead.
+    // XXX -- there's a line in the C spec, appendix G or whatever, saying that
+    // accessing an object with an (incompatible) type other than its base type
+    // is undefined behaviour. Should totally put that in the error message.
+    dereference_failure("Memory model",
+                        "Object accessed with incompatible base type", guard);
+    value = expr2tc();
+  }
 }
