@@ -642,6 +642,8 @@ dereferencet::build_reference_to(
   // Encode some access bounds checks.
   if (is_array_type(value)) {
     bounds_check(value, final_offset, type, guard);
+  } else if (is_code_type(value) || is_code_type(type)) {
+    check_code_access(value, final_offset, type, guard, mode);
   } else {
     check_data_obj_access(value, final_offset, type, guard);
   }
@@ -663,9 +665,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
 {
   bool is_const_offs = is_constant_int2t(offset);
 
-  // All accesses to code, or as code need special checking.
+  // All accesses to code need no further construction
   if (is_code_type(value) || is_code_type(type)) {
-    check_code_access(value, offset, type, guard, mode);
     return;
   }
 
