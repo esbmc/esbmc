@@ -118,7 +118,7 @@ private:
 
   static const expr2tc &get_symbol(const expr2tc &object);
 
-  void bounds_check(const type2tc &type, const expr2tc &offset,
+  void bounds_check(const expr2tc &expr, const expr2tc &offset,
                     unsigned int access_size, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
 

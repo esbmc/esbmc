@@ -835,7 +835,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
 
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
   if (is_array_type(base_object) || is_string_type(base_object)) {
-    bounds_check(base_object->type, offset, access_sz, guard);
+    bounds_check(base_object, offset, access_sz, guard);
   } else {
     unsigned long sz = type_byte_size(*base_object->type).to_ulong();
     if (sz < theint.constant_value.to_ulong() + access_sz) {
@@ -1069,7 +1069,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
     }
 
     if (checks)
-      bounds_check(orig_value->type, offset, access_sz, guard);
+      bounds_check(orig_value, offset, access_sz, guard);
     return;
   } else if (is_struct_type(value)) {
     construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
@@ -1472,28 +1472,17 @@ void dereferencet::valid_check(
   }
 }
 
-void dereferencet::bounds_check(const type2tc &type, const expr2tc &offset,
+void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
                                 unsigned int access_size, const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
 
-  assert(is_array_type(type) || is_string_type(type));
+  assert(is_array_type(expr) || is_string_type(expr));
 
   // Dance around getting the array type normalised.
   type2tc new_string_type;
-  const array_type2t *arr_type_p = NULL;
-  if (is_array_type(type)) {
-    arr_type_p = &to_array_type(type);
-  } else {
-    const string_type2t &str_type = to_string_type(type);
-    expr2tc str_size = gen_uint(str_type.width);
-    new_string_type =
-      type2tc(new array_type2t(get_uint8_type(), str_size, false));
-    arr_type_p = &to_array_type(new_string_type);
-  }
-
-  const array_type2t &arr_type = *arr_type_p;
+  const array_type2t &arr_type = get_arr_type(expr);
 
   // XXX --  arrays were assigned names, but we're skipping that for the moment
   // std::string name = array_name(ns, expr.source_value);
