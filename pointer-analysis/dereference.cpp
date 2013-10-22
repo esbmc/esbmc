@@ -1565,14 +1565,14 @@ dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
 
   // Only erronous thing we check for right now is that the offset is out of
   // bounds, misaligned access happense elsewhere. The highest byte read is at
-  // offset+access_sz-1, so check fail if the (offset+access_sz) >= data_sz.
+  // offset+access_sz-1, so check fail if the (offset+access_sz) > data_sz.
   // Lower bound not checked, instead we just treat everything as unsigned,
   // which has the same effect.
   add2tc add(access_sz_e->type, offset, access_sz_e);
-  greaterthanequal2tc gte(add, data_sz_e);
+  greaterthan2tc gt(add, data_sz_e);
 
   guardt tmp_guard = guard;
-  tmp_guard.add(gte);
+  tmp_guard.add(gt);
   dereference_failure("pointer dereference",
                       "Access to object out of bounds", tmp_guard);
 }
