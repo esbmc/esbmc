@@ -1072,35 +1072,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                             "Unaligned access to array", tmp_guard);
       }
 
-      // From here on, assume aligned access.
-      unsigned int target_bytes = type->get_width() / 8;
-      expr2tc accuml;
-      expr2tc accuml_offs = offset;
-      type2tc subtype = arr_type.subtype;
-
-      for (unsigned int i = 0; i < target_bytes; i++) {
-        expr2tc elem = index2tc(subtype, value, accuml_offs);
-
-        if (is_nil_expr(accuml)) {
-          accuml = elem;
-        } else {
-          // XXX -- byte order.
-          type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
-          accuml = concat2tc(res_type, accuml, elem);
-        }
-
-        accuml_offs = add2tc(offset->type, accuml_offs, one_uint);
-      }
-
-      // That's going to come out as a bitvector;
-      if (type != accuml->type) {
-        // XXX -- we might be selecting a char out of an int array, or something
-        // XXX -- byte order.
-        //assert(type->get_width() == accuml->type->get_width());
-        accuml = typecast2tc(type, accuml);
-      }
-
-      value = accuml;
+      stitch_together_from_byte_array(value, type, offset);
     }
 
     if (checks)
