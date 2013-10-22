@@ -641,6 +641,20 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                     std::list<expr2tc> *scalar_step_list,
                     bool checks __attribute__((unused)))
 {
+  bool is_const_offs = is_constant_int2t(offset);
+
+  // All struct references to be built should be filtered out immediately
+  if (is_struct_type(type)) {
+    if (is_const_offs) {
+      construct_struct_ref_from_const_offset(value, offset, type, guard);
+    } else {
+      construct_struct_ref_from_dyn_offset(value, offset, type, guard,
+                                           scalar_step_list);
+      if (scalar_step_list->size() != 0)
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+    }
+    return;
+  }
 
   // Now try to construct a reference.
   if (is_constant_expr(offset)) {
@@ -675,23 +689,12 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
       }
 
-    } else if (is_struct_type(type)) {
-      construct_struct_ref_from_const_offset(value, offset, type,
-                                             guard);
     } else {
       // Attempt to pull a scalar out of this object.
       construct_from_const_offset(value, offset, type, guard, mode);
     }
   } else {
-    // No fixed offset, attempt to construct a dynamicly selected reference.
-    if (is_struct_type(type)) {
-      construct_struct_ref_from_dyn_offset(value, offset, type,
-                                           guard, scalar_step_list);
-      if (scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
-    } else {
-      construct_from_dyn_offset(value, offset, type, guard, alignment, mode);
-    }
+    construct_from_dyn_offset(value, offset, type, guard, alignment, mode);
   }
 }
 
