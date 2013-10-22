@@ -738,6 +738,101 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
 }
 
 void
+dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
+                                   const type2tc &type, const guardt &guard,
+                                   modet mode, unsigned long alignment)
+{
+  assert(is_array_type(value) || is_string_type(value));
+  bool is_const_offset = is_constant_int2t(offset);
+
+  const array_type2t arr_type = get_arr_type(value);
+  type2tc arr_subtype = arr_type.subtype;
+
+  unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
+  unsigned long deref_size = type->get_width() / 8;
+
+  if (is_array_type(arr_type.subtype)) {
+    construct_from_multidir_array(value, offset, type, guard, alignment, mode);
+    return;
+  }
+
+  constant_int2tc subtype_sz_expr(index_type2(), BigInt(subtype_size));
+  div2tc div(index_type2(), offset, subtype_sz_expr);
+  modulus2tc mod(index_type2(), offset, subtype_sz_expr);
+  expr2tc div2 = div->simplify();
+  expr2tc mod2 = mod->simplify();
+  if (is_nil_expr(div2))
+    div2 = div;
+  if (is_nil_expr(mod2))
+    mod2 = mod;
+
+  if (is_structure_type(arr_subtype)) {
+    value = index2tc(arr_subtype, value, div2);
+    build_reference_rec(value, mod2, type, guard, mode, alignment);
+    return;
+  }
+
+  // Two different ways we can access elements
+  //  1) Just treat them as an element and select them out, possibly with some
+  //     byte extracts applied to it
+  //  2) Stitch everything together with extracts and concats.
+
+  // Can we just select this out?
+  if ((is_const_offset && deref_size <= subtype_size) ||
+      (!is_const_offset && alignment >= subtype_size)) {
+    // We're fine for just indexing and applying appropriate casts/extracts.
+    // And here it is:
+    value = index2tc(arr_subtype, value, div2);
+
+    // Now assert that the appropriate alignment was used. There must be some
+    // much more efficient way of doing this.
+    // XXX short circuit byte accesses. Also, alignment might already guarentee
+    // this.
+    expr2tc mask_expr = gen_uint(deref_size - 1);
+    bitand2tc anded(mask_expr->type, mask_expr, mod2);
+    notequal2tc neq(anded, zero_uint);
+
+    guardt tmp_guard = guard;
+    tmp_guard.add(neq);
+    dereference_failure("Access alignment", "Incorrect alignment when accessing"
+                        " array element", tmp_guard);
+
+    // Finally, coerce the element to the final type. We may need to typecast
+    // it; we might also need to byte extract it.
+    if (deref_size == subtype_size) {
+      // Just need to cast -- XXX this might break with endianness concerns.
+      // If the condition here holds, it doesn't matter whether or not we're
+      // const or dynamic offset.
+      if (type != arr_subtype)
+        value = typecast2tc(type, value);
+    } else {
+      // Badness has occurred; byte extract is needed.
+      // XXX -- this should actually extract and stitch.
+      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
+                              is_big_endian);
+    }
+  } else {
+    // This either isn't aligned or is the wrong size. That might be fine if
+    // further alignment rules are observed, so perform relevant assertions
+    // and then stitch together from byte extracts.
+
+    expr2tc mask_expr = gen_uint(deref_size - 1);
+    bitand2tc anded(mask_expr->type, mask_expr, mod2);
+    notequal2tc neq(anded, zero_uint);
+
+    guardt tmp_guard = guard;
+    tmp_guard.add(neq);
+    dereference_failure("Access alignment", "Incorrect alignment when accessing"
+                        " array element", tmp_guard);
+
+    // This will construct from whatever the subtype is...
+    stitch_together_from_byte_array(value, type, mod2);
+  }
+
+  return;
+}
+
+void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,

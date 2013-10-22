@@ -179,6 +179,10 @@ private:
                          const type2tc &type, const guardt &guard, modet mode);
   void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
                              const type2tc &type, const guardt &guard);
+
+  void construct_from_array(expr2tc &value, const expr2tc &offset,
+                            const type2tc &type, const guardt &guard,
+                            modet mode, unsigned long alignment = 0);
 };
 
 #endif
