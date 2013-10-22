@@ -715,6 +715,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                                                base_type_of_steps, guard);
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
       }
+
+      return;
     }
   }
 
