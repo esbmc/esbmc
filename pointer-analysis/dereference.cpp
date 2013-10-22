@@ -38,7 +38,7 @@ static inline bool is_non_scalar_expr(const expr2tc &e)
   return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
 }
 
-static inline const array_type2t &
+static inline const array_type2t
 get_arr_type(const expr2tc &expr)
 {
   return (is_array_type(expr)) ? to_array_type(expr->type)
@@ -1026,7 +1026,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   // If the base thing is an array, and we have an appropriately aligned
   // reference, then just extract from it.
   if (is_array_type(value) || is_string_type(value)) {
-    const array_type2t &arr_type = get_arr_type(value);
+    const array_type2t arr_type = get_arr_type(value);
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
 
     if (is_array_type(arr_type.subtype)) {
@@ -1114,7 +1114,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
                               modet mode)
 {
   assert(is_array_type(value) || is_string_type(value));
-  const array_type2t &arr_type = get_arr_type(value);
+  const array_type2t arr_type = get_arr_type(value);
 
   // Right: any access across the boundry of the outer dimension of this array
   // is an alignment violation, I think. (It isn't for byte arrays, worry about
@@ -1482,7 +1482,7 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
 
   // Dance around getting the array type normalised.
   type2tc new_string_type;
-  const array_type2t &arr_type = get_arr_type(expr);
+  const array_type2t arr_type = get_arr_type(expr);
 
   // XXX --  arrays were assigned names, but we're skipping that for the moment
   // std::string name = array_name(ns, expr.source_value);
