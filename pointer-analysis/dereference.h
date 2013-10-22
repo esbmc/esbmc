@@ -125,8 +125,7 @@ private:
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
                            const type2tc &type, const guardt &guard, modet mode,
                            unsigned long alignment = 0,
-                           std::list<expr2tc> *scalar_step_list = NULL,
-                           bool checks = true);
+                           std::list<expr2tc> *scalar_step_list = NULL);
 
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,

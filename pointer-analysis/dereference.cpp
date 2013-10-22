@@ -660,8 +660,7 @@ void
 dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                     const type2tc &type, const guardt &guard,
                     modet mode, unsigned long alignment,
-                    std::list<expr2tc> *scalar_step_list,
-                    bool checks __attribute__((unused)))
+                    std::list<expr2tc> *scalar_step_list)
 {
   bool is_const_offs = is_constant_int2t(offset);
 
