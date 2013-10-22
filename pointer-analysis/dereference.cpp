@@ -720,6 +720,16 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     }
   }
 
+  if (is_struct_type(value)) {
+    assert(!is_struct_type(type));
+    if (is_const_offs) {
+      construct_from_const_struct_offset(value, offset, type, guard, mode);
+    } else {
+      construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
+    }
+    return;
+  }
+
   if (is_const_offs) {
     construct_from_const_offset(value, offset, type, guard, mode);
   } else {
@@ -808,14 +818,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
       if (type->get_width() != 8)
         value = typecast2tc(type, value);
     }
-  } else if (is_struct_type(base_object)) {
-    // Just to be sure:
-    assert(is_scalar_type(type));
-
-    // Right. Hand off control to a specialsed function that goes through
-    // structs recursively, determining what object we're operating on at
-    // each point.
-    construct_from_const_struct_offset(value, offset, type, guard, mode);
   } else {
     assert(is_scalar_type(base_object));
     // We're accessing some kind of scalar type; might be a valid, correct
@@ -1063,9 +1065,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       stitch_together_from_byte_array(value, type, offset);
     }
 
-    return;
-  } else if (is_struct_type(value)) {
-    construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
     return;
   }
   // Else, in the case of a scalar access at the bottom,
