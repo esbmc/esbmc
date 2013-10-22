@@ -38,6 +38,19 @@ static inline bool is_non_scalar_expr(const expr2tc &e)
   return is_member2t(e) || is_index2t(e) || (is_if2t(e) && !is_scalar_type(e));
 }
 
+static inline const array_type2t &
+get_arr_type(const expr2tc &expr)
+{
+  return (is_array_type(expr)) ? to_array_type(expr->type)
+    : to_array_type(to_constant_string2t(expr).to_array()->type);
+}
+
+static inline const type2tc
+get_arr_subtype(const expr2tc &expr)
+{
+  return get_arr_type(expr).subtype;
+}
+
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -711,9 +724,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   const type2tc &bytetype = get_uint8_type();
 
   if (is_array_type(base_object) || is_string_type(base_object)) {
-    type2tc arr_subtype = (is_array_type(base_object))
-    ? to_array_type(base_object->type).subtype
-    : to_array_type(to_constant_string2t(base_object).to_array()->type).subtype;
+    type2tc arr_subtype = get_arr_subtype(base_object);
 
     unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
     unsigned long deref_size = type->get_width() / 8;
@@ -1022,9 +1033,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
   // If the base thing is an array, and we have an appropriately aligned
   // reference, then just extract from it.
   if (is_array_type(value) || is_string_type(value)) {
-    const array_type2t &arr_type = (is_array_type(value))
-      ? to_array_type(value->type)
-      : to_array_type(to_constant_string2t(value).to_array()->type);
+    const array_type2t &arr_type = get_arr_type(value);
     unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
 
     if (is_array_type(arr_type.subtype)) {
@@ -1152,9 +1161,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
                               modet mode)
 {
   assert(is_array_type(value) || is_string_type(value));
-  const array_type2t &arr_type = (is_array_type(value))
-    ? to_array_type(value->type)
-    : to_array_type(to_constant_string2t(value).to_array()->type);
+  const array_type2t &arr_type = get_arr_type(value);
 
   // Right: any access across the boundry of the outer dimension of this array
   // is an alignment violation, I think. (It isn't for byte arrays, worry about
