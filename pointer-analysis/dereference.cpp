@@ -619,8 +619,31 @@ dereferencet::build_reference_to(
   // emits objects with some cruft built on top of them.
   value = get_base_object(value);
 
+  // If offset is unknown, or whatever, instead compute the pointer offset
+  // manually.
+  if (!is_constant_int2t(final_offset)) {
+    final_offset = pointer_offset2tc(index_type2(), deref_expr);
+    assert(o.alignment != 0);
+  }
+
+  build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment,
+                      scalar_step_list);
+
+  return value;
+}
+
+/************************** Rereference building code *************************/
+
+void
+dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
+                    const type2tc &type, const guardt &guard,
+                    modet mode, unsigned long alignment,
+                    std::list<expr2tc> *scalar_step_list,
+                    bool checks __attribute__((unused)))
+{
+
   // Now try to construct a reference.
-  if (is_constant_expr(final_offset)) {
+  if (is_constant_expr(offset)) {
     if (scalar_step_list->size() != 0) {
       // Base must be struct or array. However we're going to burst into flames
       // if we access a byte array as a struct; except that's legitimate when
@@ -640,42 +663,37 @@ dereferencet::build_reference_to(
         dereference_callback.rename(offset_the_third);
 #endif
 
-        add2tc add2(final_offset->type, final_offset, offset_the_third);
-        final_offset = add2->simplify();
-        if (is_nil_expr(final_offset))
-          final_offset = add2;
+        add2tc add2(offset->type, offset, offset_the_third);
+        expr2tc new_offset = add2->simplify();
+        if (is_nil_expr(new_offset))
+          new_offset = add2;
 
-        stitch_together_from_byte_array(value, type, final_offset);
+        stitch_together_from_byte_array(value, type, new_offset);
       } else {
-        construct_struct_ref_from_const_offset(value, final_offset,
-                                               base_type_of_steps, tmp_guard);
+        construct_struct_ref_from_const_offset(value, offset,
+                                               base_type_of_steps, guard);
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
       }
 
     } else if (is_struct_type(type)) {
-      construct_struct_ref_from_const_offset(value, final_offset, type,
-                                             tmp_guard);
+      construct_struct_ref_from_const_offset(value, offset, type,
+                                             guard);
     } else {
       // Attempt to pull a scalar out of this object.
-      construct_from_const_offset(value, final_offset, type, tmp_guard, mode);
+      construct_from_const_offset(value, offset, type, guard, mode);
     }
   } else {
     // No fixed offset, attempt to construct a dynamicly selected reference.
-    expr2tc offset = pointer_offset2tc(index_type2(), deref_expr);
     if (is_struct_type(type)) {
       construct_struct_ref_from_dyn_offset(value, offset, type,
-                                           tmp_guard, scalar_step_list);
+                                           guard, scalar_step_list);
       if (scalar_step_list->size() != 0)
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
     } else {
-      construct_from_dyn_offset(value, offset, type, tmp_guard, o.alignment, mode);
+      construct_from_dyn_offset(value, offset, type, guard, alignment, mode);
     }
   }
-
-  return value;
 }
-
-/************************** Rereference building code *************************/
 
 void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
