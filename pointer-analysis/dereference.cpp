@@ -639,6 +639,13 @@ dereferencet::build_reference_to(
     assert(o.alignment != 0);
   }
 
+  // Encode some access bounds checks.
+  if (is_array_type(value)) {
+    bounds_check(value, final_offset, type, guard);
+  } else {
+    check_data_obj_access(value, final_offset, type, guard);
+  }
+
   build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment,
                       scalar_step_list);
 
@@ -721,7 +728,7 @@ void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                           const type2tc &type,
                                           const guardt &guard,
-                                          modet mode, bool checks)
+                                          modet mode)
 {
 
   expr2tc base_object = value;
@@ -829,20 +836,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
         value = typecast2tc(type, value);
     }
   }
-
-  if (!checks)
-    return;
-
-  unsigned long access_sz =  type_byte_size(*type).to_ulong();
-  if (is_array_type(base_object) || is_string_type(base_object)) {
-    bounds_check(base_object, offset, access_sz, guard);
-  } else {
-    unsigned long sz = type_byte_size(*base_object->type).to_ulong();
-    if (sz < theint.constant_value.to_ulong() + access_sz) {
-      // This is statically known to be out of bounds.
-      dereference_failure("pointer dereference", "Offset out of bounds", guard);
-    }
-  }
 }
 
 void
@@ -892,7 +885,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       if (!is_scalar_type(*it)) {
         // We have to do even more extraction...
-        construct_from_const_offset(res, zero_uint, type, guard, mode, false);
+        construct_from_const_offset(res, zero_uint, type, guard, mode);
       }
 
       value = res;
@@ -906,7 +899,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       constant_int2tc new_offs(index_type2(), int_offset - m_offs);
 
       // Extract.
-      construct_from_const_offset(memb, new_offs, type, guard, mode, false);
+      construct_from_const_offset(memb, new_offs, type, guard, mode);
       value = memb;
       return;
     } else if (int_offset < (m_offs + m_size)) {
@@ -1016,8 +1009,7 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
                                         const guardt &guard,
                                         unsigned long alignment,
-                                        modet mode,
-                                        bool checks)
+                                        modet mode)
 {
   assert(alignment != 0);
   unsigned long access_sz = type->get_width() / 8;
@@ -1068,8 +1060,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
       stitch_together_from_byte_array(value, type, offset);
     }
 
-    if (checks)
-      bounds_check(orig_value, offset, access_sz, guard);
     return;
   } else if (is_struct_type(value)) {
     construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
@@ -1089,21 +1079,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
   // XXX jmorse - temporary, while byte extract is still covered in bees.
   value = typecast2tc(type, value);
-
-  // Finally, maintain some checks.
-  if (checks) {
-    // Only erronous thing we check for right now is that the offset is in
-    // bounds, misaligned access will need to happen elsewhere.
-    expr2tc access_sz = gen_uint(type->get_width() / 8);
-    expr2tc datasize = gen_uint(orig_value->type->get_width() / 8);
-    add2tc add(offset->type, offset, access_sz);
-    greaterthan2tc gt(add, datasize);
-
-    guardt tmp_guard = guard;
-    tmp_guard.add(gt);
-    dereference_failure("pointer dereference",
-                        "Access to object out of bounds", tmp_guard);
-  }
 }
 
 void
@@ -1138,9 +1113,9 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
     idx = mod;
 
   if (is_constant_expr(idx)) {
-    construct_from_const_offset(value, idx, type, guard, mode, false);
+    construct_from_const_offset(value, idx, type, guard, mode);
   } else {
-    construct_from_dyn_offset(value, idx, type, guard, alignment, mode, false);
+    construct_from_dyn_offset(value, idx, type, guard, alignment, mode);
   }
 }
 
@@ -1473,10 +1448,12 @@ void dereferencet::valid_check(
 }
 
 void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
-                                unsigned int access_size, const guardt &guard)
+                                const type2tc &type, const guardt &guard)
 {
   if(options.get_bool_option("no-bounds-check"))
     return;
+
+  unsigned long access_size = type_byte_size(*type).to_ulong();
 
   assert(is_array_type(expr) || is_string_type(expr));
 
@@ -1573,4 +1550,29 @@ dereferencet::check_code_access(expr2tc &value, const expr2tc &offset,
   // object. There's nothing we can actually change it to to mean anything, so
   // don't fiddle with it.
   return;
+}
+
+void
+dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
+                                    const type2tc &type, const guardt &guard)
+{
+  assert(!is_array_type(value));
+
+  unsigned long data_sz = type_byte_size(*value->type).to_ulong();
+  unsigned long access_sz = type_byte_size(*type).to_ulong();
+  expr2tc data_sz_e = gen_uint(data_sz);
+  expr2tc access_sz_e = gen_uint(access_sz);
+
+  // Only erronous thing we check for right now is that the offset is out of
+  // bounds, misaligned access happense elsewhere. The highest byte read is at
+  // offset+access_sz-1, so check fail if the (offset+access_sz) >= data_sz.
+  // Lower bound not checked, instead we just treat everything as unsigned,
+  // which has the same effect.
+  add2tc add(offset->type, offset, access_sz_e);
+  greaterthanequal2tc gte(add, data_sz_e);
+
+  guardt tmp_guard = guard;
+  tmp_guard.add(gte);
+  dereference_failure("pointer dereference",
+                      "Access to object out of bounds", tmp_guard);
 }

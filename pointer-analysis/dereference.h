@@ -119,7 +119,7 @@ private:
   static const expr2tc &get_symbol(const expr2tc &object);
 
   void bounds_check(const expr2tc &expr, const expr2tc &offset,
-                    unsigned int access_size, const guardt &guard);
+                    const type2tc &type, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
 
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
@@ -130,11 +130,10 @@ private:
 
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type, const guardt &guard,
-                                   modet mode, bool checks = true);
+                                   modet mode);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                  const type2tc &type, const guardt &guard,
-                                 unsigned long alignment, modet mode,
-                                 bool checks = true);
+                                 unsigned long alignment, modet mode);
   void construct_from_const_struct_offset(expr2tc &value,
                                              const expr2tc &offset,
                                              const type2tc &type,
@@ -179,6 +178,8 @@ private:
 
   void check_code_access(expr2tc &value, const expr2tc &offset,
                          const type2tc &type, const guardt &guard, modet mode);
+  void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
+                             const type2tc &type, const guardt &guard);
 };
 
 #endif
