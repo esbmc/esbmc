@@ -676,15 +676,16 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     } else {
       construct_struct_ref_from_dyn_offset(value, offset, type, guard,
                                            scalar_step_list);
-      if (scalar_step_list->size() != 0)
+      if (scalar_step_list && scalar_step_list->size() != 0)
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
     }
     return;
   }
 
-  // Now try to construct a reference.
+  // Specialised cases: struct refs to which we apply scalar steps, and
+  // attempting to treat a byte array as a struct.
   if (is_constant_expr(offset)) {
-    if (scalar_step_list->size() != 0) {
+    if (scalar_step_list && scalar_step_list->size() != 0) {
       // Base must be struct or array. However we're going to burst into flames
       // if we access a byte array as a struct; except that's legitimate when
       // we've just malloc'd it. So, special case that too.
@@ -714,11 +715,11 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
                                                base_type_of_steps, guard);
         wrap_in_scalar_step_list(value, scalar_step_list, guard);
       }
-
-    } else {
-      // Attempt to pull a scalar out of this object.
-      construct_from_const_offset(value, offset, type, guard, mode);
     }
+  }
+
+  if (is_const_offs) {
+    construct_from_const_offset(value, offset, type, guard, mode);
   } else {
     construct_from_dyn_offset(value, offset, type, guard, alignment, mode);
   }
