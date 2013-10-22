@@ -656,6 +656,12 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
 {
   bool is_const_offs = is_constant_int2t(offset);
 
+  // All accesses to code, or as code need special checking.
+  if (is_code_type(value) || is_code_type(type)) {
+    check_code_access(value, offset, type, guard, mode);
+    return;
+  }
+
   // All struct references to be built should be filtered out immediately
   if (is_struct_type(type)) {
     if (is_const_offs) {
@@ -792,15 +798,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
       if (type->get_width() != 8)
         value = typecast2tc(type, value);
     }
-  } else if (is_code_type(base_object)) {
-    // Accessing anything but the start of a function is not permitted.
-    notequal2tc neq(offset, zero_uint);
-    guardt tmp_guard2(guard);
-    tmp_guard2.add(false_expr);
-
-    dereference_failure("Code separation",
-                        "Dereferencing code pointer with nonzero offset",
-                        tmp_guard2);
   } else if (is_struct_type(base_object)) {
     // Just to be sure:
     assert(is_scalar_type(type));
@@ -834,10 +831,6 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   }
 
   if (!checks)
-    return;
-
-  // XXX -- we should short circuit code ptr dereferences somewhere.
-  if (is_code_type(type))
     return;
 
   unsigned long access_sz =  type_byte_size(*type).to_ulong();
@@ -1077,18 +1070,6 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
 
     if (checks)
       bounds_check(orig_value->type, offset, access_sz, guard);
-    return;
-  } else if (is_code_type(value)) {
-    // No data is read out, we can only check for correctness here. And that
-    // correctness demands that the offset is always zero.
-    notequal2tc neq(offset, zero_uint);
-    guardt tmp_guard2(guard);
-    tmp_guard2.add(false_expr);
-
-    dereference_failure("Code separation",
-                        "Dereferencing code pointer with nonzero offset",
-                        tmp_guard2);
-
     return;
   } else if (is_struct_type(value)) {
     construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
@@ -1569,4 +1550,38 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
                         "Object accessed with incompatible base type", guard);
     value = expr2tc();
   }
+}
+
+void
+dereferencet::check_code_access(expr2tc &value, const expr2tc &offset,
+                                const type2tc &type, const guardt &guard,
+                                modet mode)
+{
+  if (is_code_type(value) && !is_code_type(type)) {
+    dereference_failure("Code separation", "Program code accessed with non-code"
+                        " type", guard);
+  } else if (!is_code_type(value) && is_code_type(type)) {
+    dereference_failure("Code separation", "Data object accessed with code "
+                        "type", guard);
+  } else {
+    assert(is_code_type(value) && is_code_type(type));
+
+    if (mode != READ) {
+      dereference_failure("Code separation", "Program code accessed in write or"
+                          " free mode", guard);
+    }
+
+    // Only other constraint is that the offset has to be zero; there are no
+    // other rules about what code objects look like.
+    notequal2tc neq(offset, zero_uint);
+    guardt tmp_guard = guard;
+    tmp_guard.add(neq);
+    dereference_failure("Code separation", "Program code accessed with non-zero"
+                        " offset", tmp_guard);
+  }
+
+  // As for setting the 'value', it's currently already set to the base code
+  // object. There's nothing we can actually change it to to mean anything, so
+  // don't fiddle with it.
+  return;
 }

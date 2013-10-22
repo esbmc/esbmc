@@ -176,6 +176,9 @@ private:
   void dereference_failure(const std::string &error_class,
                            const std::string &error_name,
                            const guardt &guard);
+
+  void check_code_access(expr2tc &value, const expr2tc &offset,
+                         const type2tc &type, const guardt &guard, modet mode);
 };
 
 #endif
