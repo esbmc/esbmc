@@ -1085,7 +1085,7 @@ void
 dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
                               const type2tc &type, const guardt &guard,
-                              unsigned long alignment __attribute__((unused)),
+                              unsigned long alignment,
                               modet mode)
 {
   assert(is_array_type(value) || is_string_type(value));
@@ -1112,7 +1112,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
   if (is_nil_expr(idx))
     idx = mod;
 
-  build_reference_rec(value, idx, type, guard, mode);
+  build_reference_rec(value, idx, type, guard, mode, alignment);
 }
 
 void
