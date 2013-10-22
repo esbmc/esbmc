@@ -1568,7 +1568,7 @@ dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
   // offset+access_sz-1, so check fail if the (offset+access_sz) >= data_sz.
   // Lower bound not checked, instead we just treat everything as unsigned,
   // which has the same effect.
-  add2tc add(offset->type, offset, access_sz_e);
+  add2tc add(access_sz_e->type, offset, access_sz_e);
   greaterthanequal2tc gte(add, data_sz_e);
 
   guardt tmp_guard = guard;
