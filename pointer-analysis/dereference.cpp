@@ -755,7 +755,7 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
              "simplify to a constant");
 
       value = index2tc(arr_subtype, value, div);
-      construct_from_const_struct_offset(value, mod2, type, guard, mode);
+      build_reference_rec(value, mod2, type, guard, mode);
     } else if (subtype_size == deref_size) {
       // We can just extract this, assuming it's aligned. If it's not aligned,
       // that's an error?
@@ -885,7 +885,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
 
       if (!is_scalar_type(*it)) {
         // We have to do even more extraction...
-        construct_from_const_offset(res, zero_uint, type, guard, mode);
+        build_reference_rec(res, zero_uint, type, guard, mode);
       }
 
       value = res;
@@ -899,7 +899,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       constant_int2tc new_offs(index_type2(), int_offset - m_offs);
 
       // Extract.
-      construct_from_const_offset(memb, new_offs, type, guard, mode);
+      build_reference_rec(memb, new_offs, type, guard, mode);
       value = memb;
       return;
     } else if (int_offset < (m_offs + m_size)) {
@@ -1085,7 +1085,7 @@ void
 dereferencet::construct_from_multidir_array(expr2tc &value,
                               const expr2tc &offset,
                               const type2tc &type, const guardt &guard,
-                              unsigned long alignment,
+                              unsigned long alignment __attribute__((unused)),
                               modet mode)
 {
   assert(is_array_type(value) || is_string_type(value));
@@ -1112,11 +1112,7 @@ dereferencet::construct_from_multidir_array(expr2tc &value,
   if (is_nil_expr(idx))
     idx = mod;
 
-  if (is_constant_expr(idx)) {
-    construct_from_const_offset(value, idx, type, guard, mode);
-  } else {
-    construct_from_dyn_offset(value, idx, type, guard, alignment, mode);
-  }
+  build_reference_rec(value, idx, type, guard, mode);
 }
 
 void
