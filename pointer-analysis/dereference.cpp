@@ -641,11 +641,11 @@ dereferencet::build_reference_to(
 
   // Encode some access bounds checks.
   if (is_array_type(value)) {
-    bounds_check(value, final_offset, type, guard);
+    bounds_check(value, final_offset, type, tmp_guard);
   } else if (is_code_type(value) || is_code_type(type)) {
-    check_code_access(value, final_offset, type, guard, mode);
+    check_code_access(value, final_offset, type, tmp_guard, mode);
   } else {
-    check_data_obj_access(value, final_offset, type, guard);
+    check_data_obj_access(value, final_offset, type, tmp_guard);
   }
 
   build_reference_rec(value, final_offset, type, tmp_guard, mode, o.alignment,
