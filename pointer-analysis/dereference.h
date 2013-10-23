@@ -117,16 +117,28 @@ private:
     expr2tc &pointer_guard);
 
   static const expr2tc &get_symbol(const expr2tc &object);
-
   void bounds_check(const expr2tc &expr, const expr2tc &offset,
                     const type2tc &type, const guardt &guard);
   void valid_check(const expr2tc &expr, const guardt &guard, modet mode);
+  void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
+                                       const expr2tc &offset);
+  void wrap_in_scalar_step_list(expr2tc &value,
+                                std::list<expr2tc> *scalar_step_list,
+                                const guardt &guard);
+  void dereference_failure(const std::string &error_class,
+                           const std::string &error_name,
+                           const guardt &guard);
+  void alignment_failure(const std::string &error_name, const guardt &guard);
+
+  void check_code_access(expr2tc &value, const expr2tc &offset,
+                         const type2tc &type, const guardt &guard, modet mode);
+  void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
+                             const type2tc &type, const guardt &guard);
 
   void build_reference_rec(expr2tc &value, const expr2tc &offset,
                            const type2tc &type, const guardt &guard, modet mode,
                            unsigned long alignment = 0,
                            std::list<expr2tc> *scalar_step_list = NULL);
-
   void construct_from_const_offset(expr2tc &value, const expr2tc &offset,
                                    const type2tc &type);
   void construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
@@ -147,12 +159,10 @@ private:
                                         const guardt &guard,
                                         unsigned long alignment,
                                         modet mode);
-
   void construct_struct_ref_from_const_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
                                         const guardt &guard);
-
   void construct_struct_ref_from_dyn_offset(expr2tc &value,
                                         const expr2tc &offs,
                                         const type2tc &type,
@@ -162,23 +172,6 @@ private:
                               const expr2tc &offs, const type2tc &type,
                               const expr2tc &accuml_guard,
                               std::list<std::pair<expr2tc, expr2tc> > &output);
-
-  void stitch_together_from_byte_array(expr2tc &value, const type2tc &type,
-                                       const expr2tc &offset);
-  void wrap_in_scalar_step_list(expr2tc &value,
-                                std::list<expr2tc> *scalar_step_list,
-                                const guardt &guard);
-
-  void dereference_failure(const std::string &error_class,
-                           const std::string &error_name,
-                           const guardt &guard);
-  void alignment_failure(const std::string &error_name, const guardt &guard);
-
-  void check_code_access(expr2tc &value, const expr2tc &offset,
-                         const type2tc &type, const guardt &guard, modet mode);
-  void check_data_obj_access(const expr2tc &value, const expr2tc &offset,
-                             const type2tc &type, const guardt &guard);
-
   void construct_from_array(expr2tc &value, const expr2tc &offset,
                             const type2tc &type, const guardt &guard,
                             modet mode, unsigned long alignment = 0);
