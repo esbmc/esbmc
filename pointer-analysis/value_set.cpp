@@ -640,7 +640,6 @@ void value_sett::get_reference_set_rec(
   {
     // This index may be dereferencing a pointer. So, get the reference set of
     // the source value, and store a reference to all those things.
-    // XXX - does this /actually/ dereference anything?
     const index2t &index = to_index2t(expr);
     
     assert(is_array_type(index.source_value) ||
