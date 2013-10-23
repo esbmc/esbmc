@@ -799,8 +799,8 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
     guardt tmp_guard = guard;
     tmp_guard.add(neq);
-    dereference_failure("Access alignment", "Incorrect alignment when accessing"
-                        " array element", tmp_guard);
+    alignment_failure("Incorrect alignment when accessing array element",
+                      tmp_guard);
 
     // Finally, coerce the element to the final type. We may need to typecast
     // it; we might also need to byte extract it.
@@ -827,8 +827,8 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
     guardt tmp_guard = guard;
     tmp_guard.add(neq);
-    dereference_failure("Access alignment", "Incorrect alignment when accessing"
-                        " array element", tmp_guard);
+    alignment_failure("Incorrect alignment when accessing array element",
+                      tmp_guard);
 
     // This will construct from whatever the subtype is...
     stitch_together_from_byte_array(value, type, mod2);
@@ -936,8 +936,7 @@ dereferencet::construct_from_const_struct_offset(expr2tc &value,
       // This access starts in this field, but by process of elimination,
       // doesn't end in it. Which means reading padding data (or an alignment
       // error), which are both bad.
-      dereference_failure("pointer dereference",
-                          "Misaligned access to struct field", guard);
+      alignment_failure("Misaligned access to struct field", guard);
       value = expr2tc();
       return;
     }
@@ -1324,6 +1323,16 @@ dereferencet::dereference_failure(const std::string &error_class,
 }
 
 void
+dereferencet::alignment_failure(const std::string &error_name,
+                                const guardt &guard)
+{
+  // This just wraps dereference failure in a no-pointer-check check.
+  if(!options.get_bool_option("no-align-check")) {
+    dereference_failure("Pointer alignment", error_name, guard);
+  }
+}
+
+void
 dereferencet::stitch_together_from_byte_array(expr2tc &value,
                                               const type2tc &type,
                                               const expr2tc &offset)
@@ -1555,7 +1564,7 @@ dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
 
     guardt tmp_guard2 = guard;
     tmp_guard2.add(neq);
-    dereference_failure("Access alignment", "Incorrect alignment when accessing"
-                        " data object", tmp_guard2);
+    alignment_failure("Incorrect alignment when accessing data object",
+                      tmp_guard2);
   }
 }
