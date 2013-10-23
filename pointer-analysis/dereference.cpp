@@ -513,6 +513,10 @@ bool dereferencet::dereference_type_compare(
 {
   const type2tc object_type = object->type;
 
+  // Test for simple equality
+  if (object->type == dereference_type)
+    return true;
+
   // Check for C++ subclasses; we can cast derived up to base safely.
   if (is_struct_type(object) && is_struct_type(dereference_type)) {
     if (is_subclass_of(object->type, dereference_type, ns)) {
@@ -539,6 +543,8 @@ bool dereferencet::dereference_type_compare(
       return true; // ok, dt is a prefix of ot
     }
   }
+
+  // XXX - are there such things as compatible unions?
 
   // really different
 
@@ -667,7 +673,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
   }
 
   // All struct references to be built should be filtered out immediately
-  if (is_struct_type(type)) {
+  if (is_structure_type(type)) {
     if (is_const_offs) {
       construct_struct_ref_from_const_offset(value, offset, type, guard);
     } else {
@@ -1156,7 +1162,8 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
                                         struct_type.member_names[i]);
         mp_integer size = type_byte_size(*(*it).get());
 
-        if (intref.constant_value >= offs &&
+        if (!is_scalar_type(*it) &&
+              intref.constant_value >= offs &&
               intref.constant_value <= (offs + size)) {
           // It's this field. Don't make a decision about whether it's correct
           // or not, recurse to make that happen.
@@ -1174,6 +1181,26 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       dereference_failure("Memory model", "Object accessed with illegal offset",
                           guard);
     }
+  } else if (is_union_type(value)) {
+    // XXX -- this only deals with a very shallow level of unioning.
+
+    if (base_type_eq(value->type, type, ns))
+      return;
+
+    const union_type2t &uni = to_union_type(value->type);
+    unsigned int i = 0;
+    forall_types(it, uni.members) {
+      if (base_type_eq(*it, type, ns)) {
+        // We have a subtype that matches the type we want to be getting.
+        member2tc memb(*it, value, uni.member_names[i]);
+        value = memb;
+        return;
+      }
+      i++;
+    }
+    dereference_failure("Memory model",
+                        "Object accessed with incompatible base type",
+                        guard);
   } else {
     dereference_failure("Memory model",
                         "Object accessed with incompatible base type", guard);
