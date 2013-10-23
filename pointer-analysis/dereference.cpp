@@ -442,9 +442,6 @@ dereferencet::dereference(
   type2tc type = (!is_nil_type(to_type))
     ? to_type : scalar_step_list->back()->type;
 
-  // save the dest for later, dest might be destroyed
-  const expr2tc deref_expr(dest);
-
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
