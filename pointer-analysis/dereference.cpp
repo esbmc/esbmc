@@ -774,6 +774,8 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     return;
   }
 
+  assert(is_scalar_type(arr_subtype));
+
   // Two different ways we can access elements
   //  1) Just treat them as an element and select them out, possibly with some
   //     byte extracts applied to it
