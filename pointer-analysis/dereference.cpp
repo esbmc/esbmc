@@ -618,6 +618,10 @@ dereferencet::build_reference_to(
   // mode.
   valid_check(object, tmp_guard, mode);
 
+  // Don't do anything further if we're freeing things
+  if (mode == FREE)
+    return expr2tc();
+
   // Try to pull additional offset out of the reference, i.e., member and index
   // expressions. XXX does this make any difference, surely the offset is in
   // the offset field.
