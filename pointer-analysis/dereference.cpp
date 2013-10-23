@@ -1337,9 +1337,6 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
   // Unstructured array access. First, check alignment.
   unsigned int subtype_sz = arr_type.subtype->get_width() / 8;
 
-  // XXX -- deleted aligned access assertions that /were/ in
-  // construct_from_dyn_offset.
-
   unsigned int target_bytes = type->get_width() / 8;
   expr2tc accuml;
   expr2tc accuml_offs = offset;
