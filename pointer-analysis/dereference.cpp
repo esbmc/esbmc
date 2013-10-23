@@ -1546,4 +1546,16 @@ dereferencet::check_data_obj_access(const expr2tc &value, const expr2tc &offset,
   tmp_guard.add(gt);
   dereference_failure("pointer dereference",
                       "Access to object out of bounds", tmp_guard);
+
+  // Also, if if it's a scalar, check that the access being made is aligned.
+  if (is_scalar_type(type)) {
+    expr2tc mask_expr = gen_uint(access_sz - 1);
+    bitand2tc anded(mask_expr->type, mask_expr, offset);
+    notequal2tc neq(anded, zero_uint);
+
+    guardt tmp_guard2 = guard;
+    tmp_guard2.add(neq);
+    dereference_failure("Access alignment", "Incorrect alignment when accessing"
+                        " data object", tmp_guard2);
+  }
 }
