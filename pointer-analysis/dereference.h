@@ -19,6 +19,80 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "value_sets.h"
 
+/** @file dereference.h
+ *  The dereferencing code's purpose is to take a symbol with pointer type that
+ *  is being dereferenced, and translate it to an expression representing the
+ *  values it read or wrote to/from. Note that dereferences can be
+ *  'dereference2t' expressions, or indexes that have a base with pointer type.
+ *
+ *  The inputs to this process are an expression that contains a dereference
+ *  that is to be translated, and a value_sett object that contains the set of
+ *  references that pointers may point at.
+ *
+ *  The output is an expression referring that nondeterministically evaluates
+ *  to the piece of data that the dereference points at. This (usually) takes
+ *  the shape of a large chain of 'if' expressions, with appropriate guards to
+ *  switch between which data object the pointer points at, according to the
+ *  model that the SAT solver is building. If the pointer points at something
+ *  unknown (or dereferencing fails), then it evalates to a 'failed symbol', a
+ *  free variable that isn't used anywhere else.
+ *
+ *  The dereferencing process also outputs a series of dereference assertions,
+ *  the failure of which indicate that the dereference performed is invalid in
+ *  some way, and that the data used  (almost certainly) ends up being a free
+ *  variablea free variable. These are recorded by calling methods in the
+ *  dereference_callbackt object. Assertions can be disabled with the
+ *  --no-pointer-check and --no-align-check options, but code modelled then
+ *  relies on undefined behaviour.
+ *
+ *  There are four steps to the dereferencing process:
+ *   1) Interpretation of the expression surrounding the dereference. The
+ *      presence of tertiary operators, short-circuit logic and so forth can
+ *      affect whether a dereference is performed, and thus whether assertions
+ *      fire. Identifying index/member operations applied also helps to simplify
+ *      the resulting dereference.
+ *   2) Collect data objects that the dereferenced pointer points at, the offset
+ *      an alignment they're accessed with, and have references to each built
+ *      (part 3). Each built reference comes with a guard that is true when the
+ *      pointer variable points at that data object, which are used to combine
+ *      all referred to objects into one object (as a gigantic 'if' chain).
+ *   3) Reference building -- this is where all the dirty work is. Given a data
+ *      object, and a (possibly nondeterminstic) offset, this code must create
+ *      an expression that evaluates to the value in the data object, at the
+ *      given offset, with the desired type of this dereference.
+ *   4) Assertions: We encode assertion that the offset being accessed lies
+ *      withing the data object being referred to, but also that the access has
+ *      the correct alignment, and doesn't access padding bytes.
+ *
+ *  A particular point of interest is the byte layout of the data objects we're
+ *  dealing with. The underlying SMT objects mean nothing during byte
+ *  addressing, only the code in 'type_byte_size' is relevant. To aid
+ *  dereferencing, that code ensures that all data objects are word aligned in
+ *  all struct fields (and that trailing padding exists). This is so that we
+ *  can avoid all scenarios where dereferences cross field boundries, as that
+ *  will ultimately be an alignment violation.
+ *  
+ *  The value set tracking code also maintains a 'minimum alignment' piece of
+ *  data when the offset is nondeterministic, guarenteeing that the offset used
+ *  will be aligned to at least that many bytes. This allows for reducing the
+ *  number of behaviours we have to support when dereferencing, particularly
+ *  useful when accessing array elements.
+ *
+ *  The majority of code is in the reference building stuff. It would be aimless
+ *  to document all it's ecentricities, but here are a few guidelines:
+ *   * There are two different flavours of offsets, the offset of the pointer
+ *     being dereferenced, and the offset caused by the expression that's
+ *     dereferencing it.
+ *   * 'Scalar step lists' are a list of expressions applied to a struct or
+ *     array to access a scalar within the base object. For example, the expr
+ *     "foo->bar[baz]" dereferences foo and applies a member then index expr.
+ *     The idea behind this is that we can directly pull the scalar value out
+ *     of the underlying type if possible, instead of having to compute a
+ *     reference to a struct or array in dereference code.
+ *   * In that vein, building a reference to a struct only happens as a last
+ *     resort, and is vigorously asserted against.
+ */
+
 class dereference_callbackt
 {
 public:
