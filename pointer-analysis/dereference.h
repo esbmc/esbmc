@@ -159,6 +159,14 @@ public:
 class dereferencet
 {
 public:
+  /** Primary constructor.
+   *  @param _ns Namespace to make type lookups against
+   *  @param _new_context Context to store new (failed) symbols in.
+   *  @param _options Options to behave under (i.e., disable ptr checks etc).
+   *  @param _dereference_callback Callback object to invoke when we need
+   *         external information or otherwise need to interacte with the
+   *         context.
+   */
   dereferencet(
     const namespacet &_ns,
     contextt &_new_context,
@@ -175,8 +183,26 @@ public:
 
   virtual ~dereferencet() { }
   
-  typedef enum { READ, WRITE, FREE } modet;
+  /** The different ways in which a pointer may be accessed. */
+  typedef enum {
+    READ,  /// The result of the expression is only read.
+    WRITE, /// The result of the expression will be written to.
+    FREE   /// The referred to object will be freed.
+  } modet;
 
+  /** Take an expression and dereference it.
+   *  This will descend through the whole of the expression given, and
+   *  dereference any dereferences contained within it. The given expr will
+   *  be modified in place. It also doesn't necessarily have to contain a
+   *  dereference at all (in which case nothing will happen), or start at a
+   *  relevant part of the expression, as this method will recurse through the
+   *  whole thing.
+   *  @param expr The expression to be dereferenced.
+   *  @param guard Guard to be added to any dereference failure assertions
+   *         generated.
+   *  @param The way in which this dereference is being accessed. Only affects
+   *         the assertions that are generated.
+   */
   virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
 
   virtual expr2tc dereference(
@@ -186,16 +212,28 @@ public:
     modet mode,
     std::list<expr2tc> *scalar_step_list);
 
+  /** Does the given expression have a dereference in it somewhere?
+   *  @param expr The expression to check for existance of a dereference.
+   *  @return True when the given expression does have a dereference.
+   */
   bool has_dereference(const expr2tc &expr) const;
 
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
 
 private:
+  /** Namespace to perform type lookups against. */
   const namespacet &ns;
+  /** Context in which to store new (failed) symbols that are generated. */
   contextt &new_context;
+  /** Options from the command line. */
   const optionst &options;
+  /** The callback object to funnel all interactions with the context through.*/
   dereference_callbackt &dereference_callback;
+  /** The number of failed symbols that we've generated (they're numbered
+   *  individually. */
   static unsigned invalid_counter;
+  /** Whether or not we're operating in a big endian environment. Value for this
+   *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;
 
   virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
