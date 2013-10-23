@@ -93,6 +93,12 @@ Author: Daniel Kroening, kroening@kroening.com
  *     resort, and is vigorously asserted against.
  */
 
+/** Class providing interface to value set tracking code.
+ *  This class allows dereference code to get more data out of the environment
+ *  in which it is dereferencing, fetching the set of values that a pointer
+ *  points at, and also encoding any asertions that occur regarding the validity
+ *  of the dereference.
+ */
 class dereference_callbackt
 {
 public:
@@ -100,7 +106,18 @@ public:
   {
   }
 
+  /** Triggers a 'valid object' check when accessing a dynamically allocated
+   *  object. This is legacy, and will be deleted at some point. */
   virtual bool is_valid_object(const irep_idt &identifier)=0;
+
+  /** Encode a dereference failure assertion. If a dereference does, or can
+   *  trigger undefined or illegal behaviour, then this method is called to
+   *  record it so that it can be asserted against.
+   *  @param property Classification of the assertion being violated.
+   *  @param msg Description of the reason for this assertion.
+   *  @param guard Guard for this assertion -- evaluates to true whe this
+   *         assertion has been violated.
+   */
 
   virtual void dereference_failure(
     const std::string &property,
@@ -109,14 +126,24 @@ public:
 
   typedef hash_set_cont<exprt, irep_hash> expr_sett;
 
+  /** Fetch the set of values that the given pointer variable can point at.
+   *  @param expr Pointer symbol to get the value set of.
+   *  @param value_set A value set to store the output of this call into.
+   */
   virtual void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &value_set)=0;
   
+  /** Check whether a failed symbol already exists for the given symbol.
+   *  This is legacy, and will be removed at some point soon. */
   virtual bool has_failed_symbol(
     const expr2tc &expr,
     const symbolt *&symbol)=0;
 
+  /** Optionally rename the given expression. This exists to provide potential
+   *  optimisation expansion in the future, it isn't currently used by anything.
+   *  @param expr An expression to be renamed
+   */
   virtual void rename(expr2tc &expr __attribute__((unused)))
   {
     return;
