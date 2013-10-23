@@ -192,6 +192,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
   } else if (type.id() == "ellipsis") {
     // Eh? Ellipsis isn't a type. It's a special case.
     new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "destructor") {
+    // This is a destructor return type. Which is nil.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "constructor") {
+    // New operator returns something; constructor is a void method on an
+    // existing object.
+    new_type_ref = type_pool.get_empty();
   } else {
     type.dump();
     assert(0);
