@@ -732,7 +732,8 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     if (is_const_offs) {
       construct_from_const_struct_offset(value, offset, type, guard, mode);
     } else {
-      construct_from_dyn_struct_offset(value, offset, type, guard, alignment);
+      construct_from_dyn_struct_offset(value, offset, type, guard, alignment,
+                                       mode);
     }
     return;
   }
@@ -960,6 +961,7 @@ void
 dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
                                   const expr2tc &offset, const type2tc &type,
                                   const guardt &guard, unsigned long alignment,
+                                  modet mode,
                                   const expr2tc *failed_symbol)
 {
   // For each element of the struct, look at the alignment, and produce an
@@ -998,8 +1000,12 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
-                                       alignment, &failed_container);
+                                       alignment, mode, &failed_container);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+    } else if (is_array_type(*it)) {
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      build_reference_rec(field, new_offset, type, guard, mode, alignment);
     } else if (access_sz > ((*it)->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);

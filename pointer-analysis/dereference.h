@@ -378,6 +378,7 @@ private:
                                            const type2tc &type,
                                            const guardt &guard,
                                            unsigned long alignment,
+                                           modet mode,
                                            const expr2tc *failed_symbol = NULL);
   void construct_from_multidir_array(expr2tc &value, const expr2tc &offset,
                                         const type2tc &type,
