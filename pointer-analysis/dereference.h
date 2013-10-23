@@ -150,6 +150,12 @@ public:
   }
 };
 
+/** Class containing expression dereference logic.
+ *  This class doesn't actually store any state, in that all the side-effects
+ *  of what it does are either returned to the caller, or passed through the
+ *  dereference_callbackt object's virtual methods. Members of this class only
+ *  exist to provide context to the dereference being performed.
+ */
 class dereferencet
 {
 public:
