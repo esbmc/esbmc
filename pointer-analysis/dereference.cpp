@@ -779,7 +779,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
   // Can we just select this out?
   if ((is_const_offset && deref_size <= subtype_size) ||
-      (!is_const_offset && alignment >= subtype_size)) {
+      (!is_const_offset && alignment >= subtype_size && deref_size <= subtype_size)) {
     // We're fine for just indexing and applying appropriate casts/extracts.
     // And here it is:
     value = index2tc(arr_subtype, value, div2);
@@ -845,74 +845,8 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   const type2tc &bytetype = get_uint8_type();
 
   if (is_array_type(base_object) || is_string_type(base_object)) {
-    type2tc arr_subtype = get_arr_subtype(base_object);
-
-    unsigned long subtype_size = type_byte_size(*arr_subtype).to_ulong();
-    unsigned long deref_size = type->get_width() / 8;
-
-    if (is_array_type(arr_subtype)) {
-      construct_from_multidir_array(value, offset, type, guard,
-                                    config.ansi_c.word_size, mode);
-    } else if (is_structure_type(arr_subtype)) {
-      constant_int2tc subtype_sz_expr(index_type2(), BigInt(subtype_size));
-      div2tc div(index_type2(), offset, subtype_sz_expr);
-      modulus2tc mod(index_type2(), offset, subtype_sz_expr);
-
-      expr2tc mod2 = mod->simplify();
-      assert(is_constant_int2t(mod2) && "Modulus of constant offset should "
-             "simplify to a constant");
-
-      value = index2tc(arr_subtype, value, div);
-      build_reference_rec(value, mod2, type, guard, mode);
-    } else if (subtype_size == deref_size) {
-      // We can just extract this, assuming it's aligned. If it's not aligned,
-      // that's an error?
-      expr2tc idx = offset;
-
-      // Divide offset to an index if we're not an array of chars or something.
-      if (subtype_size != 1) {
-        constant_int2tc subtype_size_expr(offset->type, BigInt(subtype_size));
-        div2tc index(offset->type, offset, subtype_size_expr);
-        idx = index;
-      }
-
-      index2tc res(arr_subtype, base_object, idx);
-      value = res;
-
-      if (!base_type_eq(type, res->type, ns)) {
-        // Wrong type but matching size; typecast.
-        typecast2tc cast(type, value);
-        value = cast;
-      }
-    } else if (subtype_size > deref_size) {
-      // Firstly, is this an aligned access?
-      if (subtype_size != 1) {
-        unsigned long submask = subtype_size - 1;
-        unsigned long res = theint.constant_value.to_ulong() & submask;
-        if (res != 0) {
-          dereference_failure("pointer dereference",
-                              "Unaligned access to non-byte array", guard);
-          value = expr2tc();
-          return;
-        }
-      }
-
-      // Now, assuming it's aligned, just select an element then byte extract
-      // from that.
-      expr2tc idx_expr =
-        gen_uint(theint.constant_value.to_ulong() / subtype_size);
-      expr2tc mod_expr =
-        gen_uint(theint.constant_value.to_ulong() % subtype_size);
-      value = index2tc(arr_subtype, value, idx_expr);
-      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod_expr,
-                              is_big_endian);
-      if (type != value->type)
-        value = typecast2tc(type, value);
-    } else {
-      value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
-      if (type->get_width() != 8)
-        value = typecast2tc(type, value);
-    }
+    construct_from_array(value, offset, type, guard, mode);
+    return;
   } else {
     assert(is_scalar_type(base_object));
     // We're accessing some kind of scalar type; might be a valid, correct
@@ -1112,54 +1046,12 @@ dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
                                         modet mode)
 {
   assert(alignment != 0);
-  unsigned long access_sz = type->get_width() / 8;
   expr2tc orig_value = value;
 
   // If the base thing is an array, and we have an appropriately aligned
   // reference, then just extract from it.
   if (is_array_type(value) || is_string_type(value)) {
-    const array_type2t arr_type = get_arr_type(value);
-    unsigned long subtype_sz = type_byte_size(*arr_type.subtype).to_ulong();
-
-    if (is_array_type(arr_type.subtype)) {
-      construct_from_multidir_array(value, offset, type, guard, alignment, mode);
-    } else if (is_structure_type(arr_type.subtype)) {
-      mp_integer subtype_sz = type_byte_size(*arr_type.subtype);
-      constant_int2tc subtype_sz_expr(index_type2(), subtype_sz);
-      div2tc div(index_type2(), offset, subtype_sz_expr);
-      modulus2tc mod(index_type2(), offset, subtype_sz_expr);
-
-      value = index2tc(arr_type.subtype, value, div);
-      construct_from_dyn_struct_offset(value, mod, type, guard, alignment);
-    } else if (alignment >= subtype_sz && access_sz <= subtype_sz) {
-      // Aligned access; just issue an index.
-      expr2tc new_offset = offset;
-
-      // If not an array of bytes or something, scale offset to index.
-      if (subtype_sz != 1) {
-        constant_int2tc subtype_sz_expr(offset->type, BigInt(subtype_sz));
-        new_offset = div2tc(offset->type, offset, subtype_sz_expr);
-      }
-
-      index2tc idx(arr_type.subtype, value, new_offset);
-      value = idx;
-    } else {
-      // Unstructured array access. First, check alignment.
-      unsigned int subtype_sz = arr_type.subtype->get_width() / 8;
-      if (subtype_sz != 1) {
-        expr2tc align_expr = gen_uint(subtype_sz - 1);
-        expr2tc masked_offs = bitand2tc(align_expr->type, align_expr, offset);
-        expr2tc is_aligned = equality2tc(masked_offs, zero_uint);
-
-        guardt tmp_guard = guard;
-        tmp_guard.add(not2tc(is_aligned));
-        dereference_failure("Pointer alignment",
-                            "Unaligned access to array", tmp_guard);
-      }
-
-      stitch_together_from_byte_array(value, type, offset);
-    }
-
+    construct_from_array(value, offset, type, guard, mode, alignment);
     return;
   }
   // Else, in the case of a scalar access at the bottom,
