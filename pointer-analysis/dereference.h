@@ -240,23 +240,98 @@ private:
    *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;
 
+  /** Interpret an expression that modifies the guard. i.e., an 'if' or a
+   *  piece of logic that can be short-circuited.
+   *  @param expr The expression that we're looking for dereferences in.
+   *  @param guard The guard for evaluating this expression.
+   *  @param mode The manner in which the result of this deref is accessed.
+   */
   virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
+
+  /** Interpret an address-of expression. There's the potential that it's just
+   *  taking the address of a dereference, which just evaluates to some pointer
+   *  arithemtic, and thus can be handled without actually dereferencing.
+   *  @param expr Address-of expression we're attempting to handle.
+   *  @param guard Guard of this expression being evaluated.
+   *  @param mode The manner iin which the result of this deref is accessed.
+   */
   virtual void dereference_addrof_expr(expr2tc &expr, guardt &guard,
                                        modet mode);
+
+  /** Interpret an actual dereference (or pointer-index) expression. First
+   *  dereferences the pointer expression, then dereferences the pointer itself,
+   *  and stores the result in the 'expr' reference.
+   *  @param expr The expression we're going to be dereferencing.
+   *  @param guard Guard of this expression being evaluated.
+   *  @param mode The manner iin which the result of this deref is accessed.
+   */
   virtual void dereference_deref(expr2tc &expr, guardt &guard, modet mode);
 
+  /** Interpret an expression that accesses a nonscalar type. This means that
+   *  it's an index or member (or some other glue expr) on top of a dereference
+   *  that evaluates to an array or struct. This code collects all of these
+   *  expressions into a list, and supplies it to other dereference code, so
+   *  that we can directly build a reference to the field this expr wants. This
+   *  means that we don't have to build any intermediate struct or array
+   *  references, which is beneficial.
+   *  @param dest The expression that we're dereferencing.
+   *  @param guard Guard of this expression being evaluated.
+   *  @param mode The manner iin which the result of this deref is accessed.
+   *  @param scalar_step_list A list in which we're accumulating the exprs used
+   *         to build a scalar access to an aggregate type.
+   */
   virtual expr2tc dereference_expr_nonscalar(
     expr2tc &dest,
     guardt &guard,
     modet mode,
     std::list<expr2tc> &scalar_step_list);
 
+  /** Check whether an (aggregate) type is compatible with the desired
+   *  dereference type. This looks at various things, such as whether the given
+   *  struct is a subclass of the desired type, and inserts typecasts as
+   *  appropriate.
+   *  @param object An object with an aggregate type, that we're checking to
+   *         see whether it's compatible with the desired type.
+   *  @param dereference_type The desired type.
+   *  @return True if the types are compatible, possibly after typecast applied.
+   */
   bool dereference_type_compare(
     expr2tc &object,
     const type2tc &dereference_type) const;
 
+  /** Create a new, free, symbol of the given type. This happens when we've
+   *  failed to dereference for some reason, but we still need to build a valid
+   *  SMT formula so that the relevant assertion failure can be reached.
+   *  @param out_type The type of the failed symbol to create.
+   *  @return The new, free variable.
+   */
   expr2tc make_failed_symbol(const type2tc &out_type);
 
+  /** Try to build a reference to a data object. When we have a data object that
+   *  a pointer (might) point at and need an expression to access it, this
+   *  performs the require juggling. Some very strange approaches may come out
+   *  of this (such as stitching together the result from bytes). It may also
+   *  just completely fail and return a nil expression.
+   *  Almost all of the time, the base data object and the offset into it from
+   *  the dereferenced variable are stored in the 'what' parameter, as an
+   *  object_descriptor2t.
+   *  @param what The data object we're accessing. Possibly an unknown2t or
+   *         invalid2t, but more frequently an object_descriptor2t. As this
+   *         comes directly from the value set code, the base object might have
+   *         some gratuitous index and member expressions on top of it.
+   *  @param mode The manner in which the reference is going to be accessed.
+   *  @param deref_expr The expression that is being dereferenced (i.e., the
+   *         pointer variable or similar).
+   *  @param type The desired outcome type from this dereference.
+   *  @param guard The guard of this dereference occuring.
+   *  @param scalar_step_list Optional list of scalar steps that extract a
+   *         scalar expression out of the base object being dereferenced.
+   *  @param pointer_guard Output expression: this is set to be the guard
+   *         against the pointer variable being the same object as the referred
+   *         to type.
+   *  @return If successful, an expression that refers to the object in 'what'.
+   *          Otherwise, a nil expression.
+   */
   expr2tc build_reference_to(
     const expr2tc &what,
     modet mode,
