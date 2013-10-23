@@ -433,8 +433,7 @@ dereferencet::dereference(
   modet mode,
   std::list<expr2tc> *scalar_step_list)
 {
-  expr2tc dest = src;
-  assert(is_pointer_type(dest));
+  assert(is_pointer_type(src));
 
   // Target type is either a scalar type passed down to us, or we have a chain
   // of scalar steps available that end up at a scalar type. The result of this
@@ -445,7 +444,7 @@ dereferencet::dereference(
   // collect objects dest may point to
   value_setst::valuest points_to_set;
 
-  dereference_callback.get_value_set(dest, points_to_set);
+  dereference_callback.get_value_set(src, points_to_set);
 
   // now build big case split
   // only "good" objects
@@ -459,7 +458,7 @@ dereferencet::dereference(
   {
     expr2tc new_value, pointer_guard;
 
-    new_value = build_reference_to(*it, mode, dest, type, guard,
+    new_value = build_reference_to(*it, mode, src, type, guard,
                                    scalar_step_list, pointer_guard);
 
     if (!is_nil_expr(new_value))
@@ -481,8 +480,7 @@ dereferencet::dereference(
     value = make_failed_symbol(type);
   }
 
-  dest = value;
-  return dest;
+  return value;
 }
 
 expr2tc
