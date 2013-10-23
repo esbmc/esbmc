@@ -730,10 +730,15 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     return;
   }
 
+  if (is_array_type(value) || is_string_type(value)) {
+    construct_from_array(value, offset, type, guard, mode, alignment);
+    return;
+  }
+
   if (is_const_offs) {
-    construct_from_const_offset(value, offset, type, guard, mode);
+    construct_from_const_offset(value, offset, type);
   } else {
-    construct_from_dyn_offset(value, offset, type, guard, alignment, mode);
+    construct_from_dyn_offset(value, offset, type);
   }
 }
 
@@ -834,9 +839,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
 
 void
 dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
-                                          const type2tc &type,
-                                          const guardt &guard,
-                                          modet mode)
+                                          const type2tc &type)
 {
 
   expr2tc base_object = value;
@@ -844,31 +847,24 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
   const constant_int2t &theint = to_constant_int2t(offset);
   const type2tc &bytetype = get_uint8_type();
 
-  if (is_array_type(base_object) || is_string_type(base_object)) {
-    construct_from_array(value, offset, type, guard, mode);
-    return;
-  } else {
-    assert(is_scalar_type(base_object));
-    // We're accessing some kind of scalar type; might be a valid, correct
-    // access, or we might need to be byte extracting it.
+  assert(is_scalar_type(base_object));
+  // We're accessing some kind of scalar type; might be a valid, correct
+  // access, or we might need to be byte extracting it.
 
-    // XXX -- alignment and bounds assertions please.
-
-    if (theint.constant_value == 0 &&
-        base_object->type->get_width() == type->get_width()) {
-      // Offset is zero, and we select the entire contents of the field. We may
-      // need to perform a cast though.
-      value = base_object;
-      if (!base_type_eq(base_object->type, type, ns)) {
-        base_object = typecast2tc(type, base_object);
-      }
-    } else {
-      // Either nonzero offset, or a smaller / bigger read.
-      // XXX -- refactor to become concat based.
-      value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
-      if (type->get_width() != 8)
-        value = typecast2tc(type, value);
+  if (theint.constant_value == 0 &&
+      base_object->type->get_width() == type->get_width()) {
+    // Offset is zero, and we select the entire contents of the field. We may
+    // need to perform a cast though.
+    value = base_object;
+    if (!base_type_eq(base_object->type, type, ns)) {
+      base_object = typecast2tc(type, base_object);
     }
+  } else {
+    // Either nonzero offset, or a smaller / bigger read.
+    // XXX -- refactor to become concat based.
+    value = byte_extract2tc(bytetype, base_object, offset, is_big_endian);
+    if (type->get_width() != 8)
+      value = typecast2tc(type, value);
   }
 }
 
@@ -1040,20 +1036,10 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
 
 void
 dereferencet::construct_from_dyn_offset(expr2tc &value, const expr2tc &offset,
-                                        const type2tc &type,
-                                        const guardt &guard,
-                                        unsigned long alignment,
-                                        modet mode)
+                                const type2tc &type)
 {
-  assert(alignment != 0);
   expr2tc orig_value = value;
 
-  // If the base thing is an array, and we have an appropriately aligned
-  // reference, then just extract from it.
-  if (is_array_type(value) || is_string_type(value)) {
-    construct_from_array(value, offset, type, guard, mode, alignment);
-    return;
-  }
   // Else, in the case of a scalar access at the bottom,
   assert(config.ansi_c.endianess != configt::ansi_ct::NO_ENDIANESS);
   assert(is_scalar_type(value));
