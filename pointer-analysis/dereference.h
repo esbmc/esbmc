@@ -178,16 +178,6 @@ public:
   typedef enum { READ, WRITE, FREE } modet;
 
   virtual void dereference_expr(expr2tc &expr, guardt &guard, modet mode);
-  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
-  virtual void dereference_addrof_expr(expr2tc &expr, guardt &guard,
-                                       modet mode);
-  virtual void dereference_deref(expr2tc &expr, guardt &guard, modet mode);
-
-  virtual expr2tc dereference_expr_nonscalar(
-    expr2tc &dest,
-    guardt &guard,
-    modet mode,
-    std::list<expr2tc> &scalar_step_list);
 
   virtual expr2tc dereference(
     const expr2tc &dest,
@@ -207,6 +197,17 @@ private:
   dereference_callbackt &dereference_callback;
   static unsigned invalid_counter;
   bool is_big_endian;
+
+  virtual void dereference_guard_expr(expr2tc &expr, guardt &guard, modet mode);
+  virtual void dereference_addrof_expr(expr2tc &expr, guardt &guard,
+                                       modet mode);
+  virtual void dereference_deref(expr2tc &expr, guardt &guard, modet mode);
+
+  virtual expr2tc dereference_expr_nonscalar(
+    expr2tc &dest,
+    guardt &guard,
+    modet mode,
+    std::list<expr2tc> &scalar_step_list);
 
   bool dereference_type_compare(
     expr2tc &object,
