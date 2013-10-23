@@ -675,7 +675,8 @@ void value_sett::get_reference_set_rec(
             to_constant_int2t(index.index).constant_value.is_zero()) {
           ;
         } else if (is_constant_int2t(index.index) && o.offset_is_zero()) {
-          o.offset = to_constant_int2t(index.index).constant_value;
+          o.offset = to_constant_int2t(index.index).constant_value *
+                     type_byte_size(*index.type);
         } else {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
