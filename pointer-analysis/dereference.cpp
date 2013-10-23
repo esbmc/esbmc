@@ -62,6 +62,8 @@ static inline expr2tc get_base_dereference(const expr2tc &e)
   // that's how they're handled.
   if (is_member2t(e)) {
     return get_base_dereference(to_member2t(e).source_value);
+  } else if (is_index2t(e) && is_pointer_type(to_index2t(e).source_value)) {
+    return e;
   } else if (is_index2t(e)) {
     return get_base_dereference(to_index2t(e).source_value);
   } else if (is_dereference2t(e)) {
