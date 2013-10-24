@@ -226,8 +226,7 @@ void goto_symex_statet::rename(expr2tc &expr)
     type2tc origtype = expr->type;
     top().level1.rename(expr);
     level2.rename(expr);
-    if (is_pointer_type(origtype))
-      fixup_renamed_ptr_type(expr, origtype);
+    fixup_renamed_type(expr, origtype);
   }
   else if (is_address_of2t(expr))
   {
@@ -263,8 +262,7 @@ void goto_symex_statet::rename_address(expr2tc &expr)
     // only do L1
     type2tc origtype = expr->type;
     top().level1.rename(expr);
-    if (is_pointer_type(origtype))
-      fixup_renamed_ptr_type(expr, origtype);
+    fixup_renamed_type(expr, origtype);
   }
   else if (is_index2t(expr))
   {
@@ -281,54 +279,55 @@ void goto_symex_statet::rename_address(expr2tc &expr)
   }
 }
 
-void goto_symex_statet::fixup_renamed_ptr_type(expr2tc &expr,
-                                               const type2tc &orig_type)
+void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
+                                           const type2tc &orig_type)
 {
-  assert(is_pointer_type(orig_type));
-  assert(is_pointer_type(expr));
+  if (is_pointer_type(orig_type)) {
+    assert(is_pointer_type(expr));
 
-  // Grab pointer types
-  const pointer_type2t &orig = to_pointer_type(orig_type);
-  const pointer_type2t &newtype = to_pointer_type(expr->type);
+    // Grab pointer types
+    const pointer_type2t &orig = to_pointer_type(orig_type);
+    const pointer_type2t &newtype = to_pointer_type(expr->type);
 
-  type2tc origsubtype = orig.subtype;
-  type2tc newsubtype = newtype.subtype;
+    type2tc origsubtype = orig.subtype;
+    type2tc newsubtype = newtype.subtype;
 
-  // Handle symbol subtypes -- we can't rename these, because there are (some)
-  // pointers to incomplete types, that here we end up trying to get a concrete
-  // type for. Which is incorrect.
-  // So instead, if one of the subtypes is a symbol type, and it isn't identical
-  // to the other type, insert a typecast. This might lead to some needless
-  // casts, but what the hell.
-  if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype)) {
-    if (origsubtype != newsubtype) {
+    // Handle symbol subtypes -- we can't rename these, because there are (some)
+    // pointers to incomplete types, that here we end up trying to get a
+    // concrete type for. Which is incorrect.
+    // So instead, if one of the subtypes is a symbol type, and it isn't
+    // identical to the other type, insert a typecast. This might lead to some
+    // needless casts, but what the hell.
+    if (is_symbol_type(origsubtype) || is_symbol_type(newsubtype)) {
+      if (origsubtype != newsubtype) {
+        expr = typecast2tc(orig_type, expr);
+      }
+      return;
+    }
+
+    // Cease caring about anything that points at code types: pointer arithmetic
+    // applied to this is already broken.
+    if (is_code_type(origsubtype) || is_code_type(newsubtype))
+      return;
+
+    // Fetch the (bit) size of the pointer subtype.
+    unsigned int origsize, newsize;
+
+    if (is_empty_type(origsubtype))
+      origsize = 8;
+    else
+      origsize = origsubtype->get_width();
+
+    if (is_empty_type(newsubtype))
+      newsize = 8;
+    else
+      newsize = newsubtype->get_width();
+
+    // If the renaming process has changed the size of the pointer subtype, this
+    // will break all kinds of pointer arith; insert a cast.
+    if (origsize != newsize) {
       expr = typecast2tc(orig_type, expr);
     }
-    return;
-  }
-
-  // Cease caring about anything that points at code types: pointer arithmetic
-  // applied to this is already broken.
-  if (is_code_type(origsubtype) || is_code_type(newsubtype))
-    return;
-
-  // Fetch the (bit) size of the pointer subtype.
-  unsigned int origsize, newsize;
-
-  if (is_empty_type(origsubtype))
-    origsize = 8;
-  else
-    origsize = origsubtype->get_width();
-
-  if (is_empty_type(newsubtype))
-    newsize = 8;
-  else
-    newsize = newsubtype->get_width();
-
-  // If the renaming process has changed the size of the pointer subtype, this
-  // will break all kinds of pointer arith; insert a cast.
-  if (origsize != newsize) {
-    expr = typecast2tc(orig_type, expr);
   }
 }
 
