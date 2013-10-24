@@ -1016,7 +1016,10 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       // resolve to a failed deref symbol.
     } else if (alignment >= (config.ansi_c.word_size / 8)) {
       // This is fully aligned, just pull it out and possibly cast,
+      // XXX endian?
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+      if (!base_type_eq(field->type, type, ns))
+        field = typecast2tc(type, field);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else {
       // Not fully aligned; devolve to byte extract. There may be ways to
