@@ -1006,6 +1006,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       build_reference_rec(field, new_offset, type, guard, mode, alignment);
+      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else if (access_sz > ((*it)->get_width() / 8)) {
       guardt newguard(guard);
       newguard.add(field_guard);
