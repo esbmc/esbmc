@@ -987,7 +987,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
     // Compute some kind of guard
     unsigned int field_size = (*it)->get_width() / 8;
     // Round up to word size
-    unsigned int word_mask = config.ansi_c.word_size - 1;
+    unsigned int word_mask = (config.ansi_c.word_size / 8) - 1;
     field_size = (field_size + word_mask) & (~word_mask);
     expr2tc field_offs = gen_uint(offs.to_ulong());
     expr2tc field_top = gen_uint(offs.to_ulong() + field_size);
@@ -1014,7 +1014,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
                           "Oversized field offset", guard);
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
-    } else if (alignment >= config.ansi_c.word_size) {
+    } else if (alignment >= (config.ansi_c.word_size / 8)) {
       // This is fully aligned, just pull it out and possibly cast,
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
