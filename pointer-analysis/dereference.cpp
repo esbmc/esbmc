@@ -676,19 +676,6 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     return;
   }
 
-  // All struct references to be built should be filtered out immediately
-  if (is_structure_type(type)) {
-    if (is_const_offs) {
-      construct_struct_ref_from_const_offset(value, offset, type, guard);
-    } else {
-      construct_struct_ref_from_dyn_offset(value, offset, type, guard,
-                                           scalar_step_list);
-      if (scalar_step_list && scalar_step_list->size() != 0)
-        wrap_in_scalar_step_list(value, scalar_step_list, guard);
-    }
-    return;
-  }
-
   // Specialised cases: struct refs to which we apply scalar steps, and
   // attempting to treat a byte array as a struct.
   if (is_constant_expr(offset)) {
@@ -725,6 +712,19 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
 
       return;
     }
+  }
+
+  // All struct references to be built should be filtered out immediately
+  if (is_structure_type(type)) {
+    if (is_const_offs) {
+      construct_struct_ref_from_const_offset(value, offset, type, guard);
+    } else {
+      construct_struct_ref_from_dyn_offset(value, offset, type, guard,
+                                           scalar_step_list);
+      if (scalar_step_list && scalar_step_list->size() != 0)
+        wrap_in_scalar_step_list(value, scalar_step_list, guard);
+    }
+    return;
   }
 
   if (is_struct_type(value)) {
