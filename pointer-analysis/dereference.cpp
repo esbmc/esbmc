@@ -261,7 +261,6 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       result = typecast2tc(expr->type, result);
 
     expr = result;
-    return;
   } else {
     // This might, alternately, be a chain of member and indexes applied to
     // a dereference. In which case what we're actually doing is computing
@@ -282,9 +281,15 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       output = add2tc(output->type, output, offs);
       output = typecast2tc(expr->type, output);
       expr = output;
-      return;
+    } else {
+      return; // Doesn't contain a deref?
     }
   }
+
+  // We modified this expression, but, we might have injected some pointer
+  // arithmetic that contains another dereference. So we need to re-deref this
+  // new expression.
+  dereference_expr(expr, guard, mode);
 }
 
 void
