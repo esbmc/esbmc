@@ -72,8 +72,8 @@ type_byte_size(const type2t &type)
     type.dump();
     abort();
   case type2t::code_id:
-    std::cerr << "Code type id in type_byte_size" <<std::endl;
-    type.dump();
+    // In C++, methods are struct fields.
+    return 0;
     abort();
   case type2t::cpp_name_id:
     std::cerr << "C++ symbolic type id in type_byte_size" <<std::endl;
