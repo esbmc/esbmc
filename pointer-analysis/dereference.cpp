@@ -1388,7 +1388,7 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
   expr2tc accuml_offs = offset;
   type2tc subtype = arr_type.subtype;
 
-  for (unsigned int i = 0; i < target_bytes; i++) {
+  for (unsigned int i = 0; i < target_bytes; i += subtype_sz) {
     expr2tc elem = index2tc(subtype, value, accuml_offs);
 
     if (is_nil_expr(accuml)) {
