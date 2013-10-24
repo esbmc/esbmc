@@ -207,17 +207,16 @@ public:
     const type2tc &t = e->type;
 
     // Null objects are allowed to have symbol types. What alignment to give?
-    // I guess we may as well go for word alignment, seeing how null is
-    // generally zero.
+    // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
     if (is_null_object2t(e))
-      return config.ansi_c.word_size / 8;
+      return 8;
 
     assert(!is_symbol_type(t));
     if (is_array_type(t)) {
       const array_type2t &arr = to_array_type(t);
       return type_byte_size(*arr.subtype).to_ulong();
     } else {
-      return config.ansi_c.word_size / 8;
+      return 8;
     }
   }
 
@@ -230,7 +229,7 @@ public:
       return nat_align;
     } else {
       // What's the least alignment available?
-      unsigned int max_align = config.ansi_c.word_size / 8;
+      unsigned int max_align = 8;
       do {
         // Repeatedly decrease the word size by powers of two, and test to see
         // whether the offset meets that alignment. This will always succeed

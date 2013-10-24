@@ -469,10 +469,10 @@ void value_sett::get_value_set_rec(
           if ((object.offset % nat_align) != 0) {
             // XXX -- what to do when we have something, say a struct, how
             // do I reduce this offset to an alignment within it.
-            // Answer for the moment it to clamp it to work alignment; that
+            // Answer for the moment it to clamp it to maximum alignment; that
             // might work sometimes.
             offset_align =
-              object.offset.to_ulong() % (config.ansi_c.word_size / 8);
+              object.offset.to_ulong() % (8);
           } else {
             offset_align = nat_align;
           }
