@@ -328,6 +328,15 @@ void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
     if (origsize != newsize) {
       expr = typecast2tc(orig_type, expr);
     }
+  } else {
+    // If we're a BV and have changed size, then we're quite likely to cause
+    // an SMT problem later on. Immediately cast. Also if we've gratuitously
+    // changed sign.
+    if (orig_type->get_width() != expr->type->get_width() ||
+                    (is_bv_type(orig_type) && is_bv_type(expr->type) &&
+                    orig_type->type_id != expr->type->type_id)) {
+      expr = typecast2tc(orig_type, expr);
+    }
   }
 }
 
