@@ -280,7 +280,7 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       expr2tc output =
         typecast2tc(type2tc(new pointer_type2t(get_uint8_type())), base);
       output = add2tc(output->type, output, offs);
-      output = typecast2tc(base->type, output);
+      output = typecast2tc(expr->type, output);
       expr = output;
       return;
     }
