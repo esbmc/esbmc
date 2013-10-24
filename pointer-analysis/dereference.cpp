@@ -1405,6 +1405,8 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
   // That's going to come out as a bitvector;
   if (type != accuml->type) {
     // XXX -- we might be selecting a char out of an int array, or something
+    //        This really needs to consider the initial offset into these array
+    //        elements. Use alignment and apply a byte extract?
     // XXX -- byte order.
     //assert(type->get_width() == accuml->type->get_width());
     accuml = typecast2tc(type, accuml);
