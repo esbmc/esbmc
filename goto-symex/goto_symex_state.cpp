@@ -282,7 +282,9 @@ void goto_symex_statet::rename_address(expr2tc &expr)
 void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
                                            const type2tc &orig_type)
 {
-  if (is_pointer_type(orig_type)) {
+  if (is_code_type(orig_type)) {
+    return;
+  } else if (is_pointer_type(orig_type)) {
     assert(is_pointer_type(expr));
 
     // Grab pointer types
