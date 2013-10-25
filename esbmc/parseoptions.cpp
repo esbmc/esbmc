@@ -59,10 +59,34 @@ extern "C" {
 
 // jmorse - could be somewhere better
 
+// Hack to fix timeout during k-induction
+
+// Pipe for communication between processes
+int commPipe[2];
+
+bool _k_induction=false;
+bool _base_case=false;
+bool _forward_condition=false;
+
 #ifndef _WIN32
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
+  if(_k_induction)
+  {
+    struct resultt r;
+    r.k=0;
+    r.finished=true;
+
+    if(_base_case)
+      r.step=BASE_CASE;
+    else if(_forward_condition)
+      r.step=FORWARD_CONDITION;
+    else
+      r.step=INDUCTIVE_STEP;
+
+    write(commPipe[1], &r, sizeof(r));
+  }
 
   std::cout << "Timed out" << std::endl;
 
@@ -476,6 +500,8 @@ Function: cbmc_parseoptionst::doit_k_induction
 
 int cbmc_parseoptionst::doit_k_induction()
 {
+  _k_induction=true;
+
   if(cmdline.isset("version"))
   {
     std::cout << ESBMC_VERSION << std::endl;
@@ -512,9 +538,6 @@ int cbmc_parseoptionst::doit_k_induction()
 
   unsigned whoAmI=-1;
 
-  // Pipe for communication between processes
-  int commPipe[2];
-
   if (pipe(commPipe))
   {
     status("\nPipe Creation Failed, giving up.");
@@ -523,7 +546,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   pid_t children_pid[3];
 
-  int k_step = atol(cmdline.get_values("k-step").front().c_str());
+  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
 
   short num_p=0;
 
@@ -691,6 +714,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
     case 0:
     {
+      _base_case=true;
+
       status("Generated Base Case process");
 
       status("\n*** Generating Base Case ***");
@@ -728,7 +753,7 @@ int cbmc_parseoptionst::doit_k_induction()
       // Create and start base case checking
       base_caset bc(bmc_base_case, goto_functions_base_case);
 
-      for(unsigned int i=1; i<=k_step; ++i)
+      for(k_step=1; k_step<=max_k_step; ++k_step)
       {
         r = bc.startSolving();
 
@@ -748,6 +773,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
     case 1:
     {
+      _forward_condition=true;
+
       status("Generated Forward Condition process");
 
       //
@@ -789,7 +816,7 @@ int cbmc_parseoptionst::doit_k_induction()
       // Create and start base case checking
       forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
 
-      for(unsigned int i=2; i<=k_step; ++i)
+      for(k_step=2; k_step<=max_k_step; ++k_step)
       {
         r = fc.startSolving();
 
@@ -848,7 +875,7 @@ int cbmc_parseoptionst::doit_k_induction()
       // Create and start base case checking
       inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
 
-      for(unsigned int i=2; i<=k_step; ++i)
+      for(k_step=2; k_step<=max_k_step; ++k_step)
       {
         r = is.startSolving();
 
@@ -1026,7 +1053,7 @@ int cbmc_parseoptionst::doit_k_induction()
     bmc_forward_condition.options.set_option("unwind", i2string(k_step));
     bmc_inductive_step.options.set_option("unwind", i2string(k_step));
 
-  } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
+  } while (k_step <= max_k_step);
 
   status("Unable to prove or falsify the property, giving up.");
   status("VERIFICATION UNKNOWN");
