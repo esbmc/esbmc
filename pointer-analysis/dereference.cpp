@@ -1164,42 +1164,39 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
       if (dereference_type_compare(value, type)) {
         // Good, just return this expression. Uh. Yeah, that is all.
         return;
-      } else {
-        // Correctly aligned access to incompatible base type.
-        dereference_failure("Memory model",
-                            "Object accessed with incompatible base type",
-                            guard);
+      }
+    }
+
+    // If it's not compatible, recurse into the next relevant field to see if
+    // we can construct a ref in there. This would match structs within structs
+    // (but compatible check already gets that;), arrays of structs; and other
+    // crazy inside structs.
+
+    const struct_type2t &struct_type = to_struct_type(value->type);
+    unsigned int i = 0;
+    forall_types(it, struct_type.members) {
+      mp_integer offs = member_offset(struct_type,
+                                      struct_type.member_names[i]);
+      mp_integer size = type_byte_size(*(*it).get());
+
+      if (!is_scalar_type(*it) &&
+            intref.constant_value >= offs &&
+            intref.constant_value <= (offs + size)) {
+        // It's this field. Don't make a decision about whether it's correct
+        // or not, recurse to make that happen.
+        mp_integer new_offs = intref.constant_value - offs;
+        expr2tc offs_expr = gen_uint(new_offs.to_ulong());
+        value = member2tc(*it, value, struct_type.member_names[i]);
+        construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
         return;
       }
-    } else {
-      // If the offset isn't zero; enumerate through all the fields in this
-      // struct, and work out whether or not it points into a sub-struct.
-      const struct_type2t &struct_type = to_struct_type(value->type);
-      unsigned int i = 0;
-      forall_types(it, struct_type.members) {
-        mp_integer offs = member_offset(struct_type,
-                                        struct_type.member_names[i]);
-        mp_integer size = type_byte_size(*(*it).get());
-
-        if (!is_scalar_type(*it) &&
-              intref.constant_value >= offs &&
-              intref.constant_value <= (offs + size)) {
-          // It's this field. Don't make a decision about whether it's correct
-          // or not, recurse to make that happen.
-          mp_integer new_offs = intref.constant_value - offs;
-          expr2tc offs_expr = gen_uint(new_offs.to_ulong());
-          value = member2tc(*it, value, struct_type.member_names[i]);
-          construct_struct_ref_from_const_offset(value, offs_expr, type, guard);
-          return;
-        }
-        i++;
-      }
-
-      // Fell out of that loop. Either this offset is out of range, or lies in
-      // padding.
-      dereference_failure("Memory model", "Object accessed with illegal offset",
-                          guard);
+      i++;
     }
+
+    // Fell out of that loop. Either this offset is out of range, or lies in
+    // padding.
+    dereference_failure("Memory model", "Object accessed with illegal offset",
+                        guard);
   } else if (is_union_type(value)) {
     // XXX -- this only deals with a very shallow level of unioning.
 
