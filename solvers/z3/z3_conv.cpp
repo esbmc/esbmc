@@ -3106,24 +3106,25 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
     expr2tc endisequal;
+    expr2tc the_offs;
     try {
       uint64_t type_size = expr->type->get_width() / 8;
-      constant_int2tc const_offs(ptr_loc_type, BigInt(type_size));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      the_offs = constant_int2tc(ptr_loc_type, BigInt(type_size));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (array_type2t::dyn_sized_array_excp *e) {
       // Dynamically (nondet) sized array; take that size and use it for the
       // offset-to-end expression.
-      const expr2tc size_expr = e->size;
-      add2tc start_plus_offs(ptr_loc_type, start_sym, size_expr);
+      the_offs = e->size;
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (type2t::symbolic_type_excp *e) {
       // Type is empty or code -- something that we can never have a real size
       // for. In that case, create an object of size 1: this means we have a
       // valid entry in the address map, but that any modification of the
       // pointer leads to invalidness, because there's no size to think about.
-      constant_int2tc const_offs(ptr_loc_type, BigInt(1));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      the_offs = constant_int2tc(ptr_loc_type, BigInt(1));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     }
 
@@ -3144,10 +3145,13 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
     // of the address space (ie, wrap around). So, also assert that end > start
+    // Except when the size is zero, which might not be statically dicoverable
     greaterthan2tc wraparound(end_sym, start_sym);
-    z3::expr wraparound_eq;
-    convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    notequal2tc neq(zero_uint, the_offs);
+    or2tc either(wraparound, neq);
+    z3::expr either_expr;
+    convert_bv(either, either_expr);
+    assert_formula(either_expr);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
