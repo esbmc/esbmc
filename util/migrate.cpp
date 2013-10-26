@@ -6,6 +6,9 @@
 #include <namespace.h>
 #include <config.h>
 #include <simplify_expr.h>
+#include <type_byte_size.h>
+
+#include <ansi-c/c_types.h>
 
 // File for old irep -> new irep conversions.
 
@@ -33,6 +36,23 @@ binary2bigint(irep_idt binary, bool is_signed)
 
   std::pair<std::map<irep_idt, BigInt>::const_iterator, bool> res = ref.insert(std::pair<irep_idt,BigInt>(binary, val));
   return res.first->second;
+}
+
+static expr2tc
+fixup_containerof_in_sizeof(const expr2tc &_expr)
+{
+  expr2tc expr = _expr;
+
+  // Blast through all typedefs
+  while (is_typecast2t(expr))
+    expr = to_typecast2t(expr).from;
+
+  // Base must be null; must start with an addressof.
+  if (!is_address_of2t(expr))
+    return expr;
+
+  const address_of2t &addrof = to_address_of2t(expr);
+  return compute_pointer_offset(addrof.ptr_obj);
 }
 
 void
@@ -70,6 +90,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
       exprt sz = (exprt&)type.find(typet::a_size);
       simplify(sz);
       migrate_expr(sz, size);
+      size = fixup_containerof_in_sizeof(size);
     }
 
     array_type2t *a = new array_type2t(subtype, size, is_infinite);
