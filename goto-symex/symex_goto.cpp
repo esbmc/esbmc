@@ -194,6 +194,22 @@ goto_symext::merge_gotos(void)
     // adjust guard
     cur_state->guard |= goto_state.guard;
 
+    expr2tc guard_expr = guard_identifier();
+    expr2tc guard_rhs = cur_state->guard.as_expr();
+    cur_state->assignment(guard_expr, guard_rhs, false);
+
+    guardt guard;
+    target->assignment(
+      guard.as_expr(),
+      guard_expr, guard_expr,
+      guard_rhs,
+      cur_state->source,
+      cur_state->gen_stack_trace(),
+      symex_targett::HIDDEN);
+
+    cur_state->guard = guardt();
+    cur_state->guard.add(guard_expr);
+
     // adjust depth
     cur_state->depth = std::min(cur_state->depth, goto_state.depth);
   }

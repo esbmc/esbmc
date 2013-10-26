@@ -113,6 +113,8 @@ Function: cbmc_parseoptionst::get_command_line_options
 
 \*******************************************************************/
 
+extern "C" uint8_t *version_string;
+
 void cbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
@@ -121,6 +123,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   options.cmdline(cmdline);
+
+  if (cmdline.isset("git-hash")) {
+    std::cout << version_string << std::endl;
+    exit(0);
+  }
 
   if(cmdline.isset("arrays-uf-always"))
     options.set_option("arrays-uf", "always");
