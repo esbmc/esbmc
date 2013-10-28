@@ -295,7 +295,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
-  if(cmdline.isset("k-induction"))
+  if(cmdline.isset("k-induction")
+     || cmdline.isset("k-induction-parallel"))
   {
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
@@ -536,362 +537,367 @@ int cbmc_parseoptionst::doit_k_induction()
   // do actual BMC
   bool res=0;
 
-  unsigned whoAmI=-1;
-
-  if (pipe(commPipe))
+  if(cmdline.isset("k-induction-parallel"))
   {
-    status("\nPipe Creation Failed, giving up.");
-    _exit(1);
-  }
+    unsigned whoAmI=-1;
 
-  pid_t children_pid[3];
-
-  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
-
-  short num_p=0;
-
-  // We need to fork 3 times: one for each step
-  for(unsigned p=0; p<3; ++p)
-  {
-    pid_t pid = fork();
-
-    if(pid == -1)
+    if (pipe(commPipe))
     {
-      status("\nFork Failed, giving up.");
+      status("\nPipe Creation Failed, giving up.");
       _exit(1);
     }
 
-    // Child process
-    if(!pid)
-    {
-      whoAmI = p;
-      break;
-    }
-    else // Parent process
-    {
-      children_pid[p]=pid;
-      ++num_p;
-    }
-  }
+    pid_t children_pid[3];
 
-  // All processeses were created successfully
-  switch(whoAmI)
-  {
-    case -1:
+    int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+
+    short num_p=0;
+
+    // We need to fork 3 times: one for each step
+    for(unsigned p=0; p<3; ++p)
     {
-      if(num_p == 3)
+      pid_t pid = fork();
+
+      if(pid == -1)
       {
-        close (commPipe[1]);
+        status("\nFork Failed, giving up.");
+        _exit(1);
+      }
 
-        struct resultt results[MAX_STEPS*3];
+      // Child process
+      if(!pid)
+      {
+        whoAmI = p;
+        break;
+      }
+      else // Parent process
+      {
+        children_pid[p]=pid;
+        ++num_p;
+      }
+    }
 
-        // Invalid values
-        for(short int i=0; i<3; ++i)
+    // All processeses were created successfully
+    switch(whoAmI)
+    {
+      case -1:
+      {
+        if(num_p == 3)
         {
-          results[i].step=NONE;
-          results[i].result=-1;
-          results[i].k=51;
-          results[i].finished=false;
-        }
+          close (commPipe[1]);
 
-        bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+          struct resultt results[MAX_STEPS*3];
 
-        for(short int i=0; i<MAX_STEPS; ++i)
-        {
-          bc_res[i]=false;
-          fc_res[i]=is_res[i]=true;
-        }
-
-        short int solution_found=0;
-
-        bool bc_finished=false, fc_finished=false, is_finished=false;
-
-        // Keep reading untill we find an answer
-        while(!(bc_finished && fc_finished && is_finished)
-          && !solution_found)
-        {
-          read(commPipe[0], results, sizeof(results));
-
-          // Eventually checks on inductive step
-          if(!is_finished)
+          // Invalid values
+          for(short int i=0; i<3; ++i)
           {
-            int status;
-            pid_t result = waitpid(children_pid[2], &status, WNOHANG);
-            if (result == 0) {
-              // Child still alive
-            } else if (result == -1) {
-              // Error
-            } else {
-              is_finished=true;
-            }
+            results[i].step=NONE;
+            results[i].result=-1;
+            results[i].k=51;
+            results[i].finished=false;
           }
 
-          unsigned i=0;
-          while((results[i].result != -1) && (i < MAX_STEPS*3))
+          bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+
+          for(short int i=0; i<MAX_STEPS; ++i)
           {
-            switch(results[i].step)
+            bc_res[i]=false;
+            fc_res[i]=is_res[i]=true;
+          }
+
+          short int solution_found=0;
+
+          bool bc_finished=false, fc_finished=false, is_finished=false;
+
+          // Keep reading untill we find an answer
+          while(!(bc_finished && fc_finished && is_finished)
+            && !solution_found)
+          {
+            read(commPipe[0], results, sizeof(results));
+
+            // Eventually checks on inductive step
+            if(!is_finished)
             {
-              case BASE_CASE:
-                if(results[i].finished)
-                {
-                  bc_finished=true;
-                  break;
-                }
-
-                bc_res[results[i].k] = results[i].result;
-
-                if(results[i].result)
-                  solution_found = results[i].k;
-
-                break;
-
-              case FORWARD_CONDITION:
-                if(results[i].finished)
-                {
-                  fc_finished=true;
-                  break;
-                }
-
-                fc_res[results[i].k] = results[i].result;
-
-                if(!results[i].result)
-                  solution_found = results[i].k;
-
-                break;
-
-              case INDUCTIVE_STEP:
-                if(results[i].finished)
-                {
-                  is_finished=true;
-                  break;
-                }
-
-                is_res[results[i].k] = results[i].result;
-
-                if(!results[i].result)
-                  solution_found = results[i].k;
-
-                break;
-
-              default:
-                break;
+              int status;
+              pid_t result = waitpid(children_pid[2], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                is_finished=true;
+              }
             }
 
-            ++i;
+            unsigned i=0;
+            while((results[i].result != -1) && (i < MAX_STEPS*3))
+            {
+              switch(results[i].step)
+              {
+                case BASE_CASE:
+                  if(results[i].finished)
+                  {
+                    bc_finished=true;
+                    break;
+                  }
+
+                  bc_res[results[i].k] = results[i].result;
+
+                  if(results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                case FORWARD_CONDITION:
+                  if(results[i].finished)
+                  {
+                    fc_finished=true;
+                    break;
+                  }
+
+                  fc_res[results[i].k] = results[i].result;
+
+                  if(!results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                case INDUCTIVE_STEP:
+                  if(results[i].finished)
+                  {
+                    is_finished=true;
+                    break;
+                  }
+
+                  is_res[results[i].k] = results[i].result;
+
+                  if(!results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                default:
+                  break;
+              }
+
+              ++i;
+            }
           }
+
+          for(short i=0; i<3; ++i)
+            kill(children_pid[i], SIGKILL);
+
+          // No solution was found :/
+          if(!solution_found)
+            std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+
+          if(bc_res[solution_found])
+            std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+
+          // Successful!
+          if(!bc_res[solution_found]
+                     && !fc_res[solution_found])
+            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+
+          if(!bc_res[solution_found] && !is_res[solution_found])
+            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+
+          return res;
+        }
+        else
+        {
+          // Something failed and the processes were not created
+          // Let's start the sequential approach
+          for(short i=0; i<3; ++i)
+            kill(children_pid[i], SIGKILL);
         }
 
-        for(short i=0; i<3; ++i)
-          kill(children_pid[i], SIGKILL);
+        break;
+      }
 
-        // No solution was found :/
-        if(!solution_found)
-          std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+      case 0:
+      {
+        _base_case=true;
 
-        if(bc_res[solution_found])
-          std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+        status("Generated Base Case process");
 
-        // Successful!
-        if(!bc_res[solution_found]
-           && !fc_res[solution_found])
-          std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+        status("\n*** Generating Base Case ***");
+        goto_functionst goto_functions_base_case;
 
-        if(!bc_res[solution_found] && !is_res[solution_found])
-          std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+        optionst opts1;
+        opts1.set_option("base-case", true);
+        opts1.set_option("forward-condition", false);
+        opts1.set_option("inductive-step", false);
+        get_command_line_options(opts1);
+
+        if(get_goto_program(opts1, goto_functions_base_case))
+          return 6;
+
+        if(set_claims(goto_functions_base_case))
+          return 7;
+
+        context_base_case = context;
+
+        bmct bmc_base_case(goto_functions_base_case, opts1,
+          context_base_case, ui_message_handler);
+        set_verbosity(bmc_base_case);
+
+        context.clear(); // We need to clear the previous context
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=BASE_CASE;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        base_caset bc(bmc_base_case, goto_functions_base_case);
+
+        for(k_step=1; k_step<=max_k_step; ++k_step)
+        {
+          r = bc.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(r.result) return r.result;
+        }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
 
         return res;
-      }
-      else
-      {
-        // Something failed and the processes were not created
-        // Let's start the sequential approach
-        for(short i=0; i<3; ++i)
-          kill(children_pid[i], SIGKILL);
+
+        break;
       }
 
-      break;
-    }
-
-    case 0:
-    {
-      _base_case=true;
-
-      status("Generated Base Case process");
-
-      status("\n*** Generating Base Case ***");
-      goto_functionst goto_functions_base_case;
-
-      optionst opts1;
-      opts1.set_option("base-case", true);
-      opts1.set_option("forward-condition", false);
-      opts1.set_option("inductive-step", false);
-      get_command_line_options(opts1);
-
-      if(get_goto_program(opts1, goto_functions_base_case))
-        return 6;
-
-      if(set_claims(goto_functions_base_case))
-        return 7;
-
-      context_base_case = context;
-
-      bmct bmc_base_case(goto_functions_base_case, opts1,
-        context_base_case, ui_message_handler);
-      set_verbosity(bmc_base_case);
-
-      context.clear(); // We need to clear the previous context
-
-      // Start communication to the parent process
-      close(commPipe[0]);
-
-      // Struct to keep the result
-      struct resultt r;
-      r.step=BASE_CASE;
-      r.k=0;
-      r.finished=false;
-
-      // Create and start base case checking
-      base_caset bc(bmc_base_case, goto_functions_base_case);
-
-      for(k_step=1; k_step<=max_k_step; ++k_step)
+      case 1:
       {
-        r = bc.startSolving();
+        _forward_condition=true;
 
-        // Write result
+        status("Generated Forward Condition process");
+
+        //
+        // do the forward condition
+        //
+
+        status("\n*** Generating Forward Condition ***");
+        goto_functionst goto_functions_forward_condition;
+
+        optionst opts2;
+        opts2.set_option("base-case", false);
+        opts2.set_option("forward-condition", true);
+        opts2.set_option("inductive-step", false);
+        get_command_line_options(opts2);
+
+        if(get_goto_program(opts2, goto_functions_forward_condition))
+          return 6;
+
+        if(set_claims(goto_functions_forward_condition))
+          return 7;
+
+        context_forward_condition = context;
+
+        bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
+          context_forward_condition, ui_message_handler);
+        set_verbosity(bmc_forward_condition);
+
+        context.clear(); // We need to clear the previous context
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=FORWARD_CONDITION;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
+
+        for(k_step=2; k_step<=max_k_step; ++k_step)
+        {
+          r = fc.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
+        }
+
+        r.finished=true;
         write(commPipe[1], &r, sizeof(r));
 
-        if(r.result) return r.result;
+        return res;
+
+        break;
       }
 
-      r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
-
-      return res;
-
-      break;
-    }
-
-    case 1:
-    {
-      _forward_condition=true;
-
-      status("Generated Forward Condition process");
-
-      //
-      // do the forward condition
-      //
-
-      status("\n*** Generating Forward Condition ***");
-      goto_functionst goto_functions_forward_condition;
-
-      optionst opts2;
-      opts2.set_option("base-case", false);
-      opts2.set_option("forward-condition", true);
-      opts2.set_option("inductive-step", false);
-      get_command_line_options(opts2);
-
-      if(get_goto_program(opts2, goto_functions_forward_condition))
-        return 6;
-
-      if(set_claims(goto_functions_forward_condition))
-        return 7;
-
-      context_forward_condition = context;
-
-      bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
-        context_forward_condition, ui_message_handler);
-      set_verbosity(bmc_forward_condition);
-
-      context.clear(); // We need to clear the previous context
-
-      // Start communication to the parent process
-      close(commPipe[0]);
-
-      // Struct to keep the result
-      struct resultt r;
-      r.step=FORWARD_CONDITION;
-      r.k=0;
-      r.finished=false;
-
-      // Create and start base case checking
-      forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
-
-      for(k_step=2; k_step<=max_k_step; ++k_step)
+      case 2:
       {
-        r = fc.startSolving();
+        status("Generated Inductive Step process");
 
-        // Write result
+        //
+        // do the inductive step
+        //
+
+        status("\n*** Generating Inductive Step ***");
+        goto_functionst goto_functions_inductive_step;
+
+        optionst opts3;
+        opts3.set_option("base-case", false);
+        opts3.set_option("forward-condition", false);
+        opts3.set_option("inductive-step", true);
+        get_command_line_options(opts3);
+
+        if(get_goto_program(opts3, goto_functions_inductive_step))
+          return 6;
+
+        if(set_claims(goto_functions_inductive_step))
+          return 7;
+
+        context_inductive_step = context;
+
+        bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
+          context_inductive_step, ui_message_handler);
+        set_verbosity(bmc_inductive_step);
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=INDUCTIVE_STEP;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
+
+        for(k_step=2; k_step<=max_k_step; ++k_step)
+        {
+          r = is.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
+        }
+
+        r.finished=true;
         write(commPipe[1], &r, sizeof(r));
 
-        if(!r.result) return r.result;
+        return res;
+
+        break;
       }
-
-      r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
-
-      return res;
-
-      break;
     }
 
-    case 2:
-    {
-      status("Generated Inductive Step process");
-
-      //
-      // do the inductive step
-      //
-
-      status("\n*** Generating Inductive Step ***");
-      goto_functionst goto_functions_inductive_step;
-
-      optionst opts3;
-      opts3.set_option("base-case", false);
-      opts3.set_option("forward-condition", false);
-      opts3.set_option("inductive-step", true);
-      get_command_line_options(opts3);
-
-      if(get_goto_program(opts3, goto_functions_inductive_step))
-        return 6;
-
-      if(set_claims(goto_functions_inductive_step))
-        return 7;
-
-      context_inductive_step = context;
-
-      bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
-        context_inductive_step, ui_message_handler);
-      set_verbosity(bmc_inductive_step);
-
-      // Start communication to the parent process
-      close(commPipe[0]);
-
-      // Struct to keep the result
-      struct resultt r;
-      r.step=INDUCTIVE_STEP;
-      r.k=0;
-      r.finished=false;
-
-      // Create and start base case checking
-      inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
-
-      for(k_step=2; k_step<=max_k_step; ++k_step)
-      {
-        r = is.startSolving();
-
-        // Write result
-        write(commPipe[1], &r, sizeof(r));
-
-        if(!r.result) return r.result;
-      }
-
-      r.finished=true;
-      write(commPipe[1], &r, sizeof(r));
-
-      return res;
-
-      break;
-    }
+    return res;
   }
 
   //
