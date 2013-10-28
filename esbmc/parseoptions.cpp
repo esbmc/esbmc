@@ -1820,7 +1820,7 @@ void cbmc_parseoptionst::help()
     " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
-    " --k-induction-parallel       prove by k-induction, running ech step on a separate process"
+    " --k-induction-parallel       prove by k-induction, running ech step on a separate process\n"
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"
