@@ -537,6 +537,8 @@ int cbmc_parseoptionst::doit_k_induction()
   // do actual BMC
   bool res=0;
 
+  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+
   if(cmdline.isset("k-induction-parallel"))
   {
     unsigned whoAmI=-1;
@@ -548,8 +550,6 @@ int cbmc_parseoptionst::doit_k_induction()
     }
 
     pid_t children_pid[3];
-
-    int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
 
     short num_p=0;
 
