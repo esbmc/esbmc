@@ -1462,10 +1462,13 @@ do_type_crc(const BigInt &theint, hacky_hash &hash)
 
   if (theint.dump(buffer, sizeof(buffer))) {
     // Zero has no data in bigints.
-    if (theint.is_zero())
+    if (theint.is_zero()) {
       hash.ingest((uint8_t)0);
-    else
-      hash.ingest(buffer, theint.get_len());
+    } else {
+      unsigned int thelen = theint.get_len();
+      thelen *= 4; // words -> bytes
+      hash.ingest(&buffer[256-thelen], thelen);
+    }
   } else {
     // bigint is too large to fit in that static buffer. This is insane; but
     // rather than wasting time heap allocing we'll just skip recording data,
