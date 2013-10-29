@@ -116,7 +116,7 @@ from_fixedbv(const fixedbvt &bv, const type2tc &type)
     // If we're converting to a signedbv, the top bit being set means negative.
     if (is_signedbv_type(type)) {
       assert(type->get_width() <= 64);
-      int64_t top_bit = 1ULL << (type->get_width()-1);
+      uint64_t top_bit = 1ULL << (type->get_width()-1);
       int64_t cur_val = tmp_bv.to_integer().to_int64();
       if (cur_val >= top_bit) {
         // Construct some bit mask gumpf as a sign extension
