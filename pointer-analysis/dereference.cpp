@@ -1007,6 +1007,25 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       construct_from_dyn_struct_offset(field, new_offset, type, guard,
                                        alignment, mode, &failed_container);
       extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
+    } else if (is_union_type(*it)) {
+      // Take the union, take the first field, and consider a dynamiclly offset
+      // assignment into the first element. This is a massive approximation;
+      // what we really need is a well-reasoned representation of unions. Like
+      // the byte model, say
+      expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
+      expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
+
+      const union_type2t &uni_type = to_union_type(field->type);
+      assert(uni_type.members.size() != 0);
+      field = member2tc(uni_type.members[0], field, uni_type.member_names[0]);
+      if (is_struct_type(field)) {
+        construct_from_dyn_struct_offset(field, new_offset, type, guard,
+                                         alignment, mode, &failed_container);
+      } else {
+        build_reference_rec(field, new_offset, type, guard, mode, alignment);
+      }
+
+      extract_list.push_back(std::pair<expr2tc,expr2tc>(field_guard, field));
     } else if (is_array_type(*it)) {
       expr2tc new_offset = sub2tc(offset->type, offset, field_offs);
       expr2tc field = member2tc(*it, value, struct_type.member_names[i]);
