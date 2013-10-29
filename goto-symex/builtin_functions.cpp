@@ -321,6 +321,9 @@ goto_symext::intrinsic_set_thread_data(const code_function_call2t &call,
   state.rename(threadid);
   state.rename(startdata);
 
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
+
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
     std::cerr << std::endl;
@@ -339,6 +342,9 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   expr2tc threadid = call.operands[0];
 
   state.level2.rename(threadid);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -426,6 +432,9 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
 
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
+
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
     std::cerr << std::endl;
@@ -494,6 +503,9 @@ goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reacha
   statet &state = art.get_cur_state().get_active_state();
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_register_monitor received nonconstant thread id";
