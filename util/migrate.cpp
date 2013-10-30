@@ -196,6 +196,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
 
     array_type2t *a = new array_type2t(subtype, size, true);
     new_type_ref = type2tc(a);
+  } else if (type.id() == "incomplete_struct") {
+    // Only time that this occurs and the type checking code doesn't complain,
+    // is when we take the /address/ of an incomplete struct. That's fine,
+    // because we still can't access it as an incomplete struct. So just return
+    // an infinitely sized array of characters, the most permissive approach to
+    // something that shouldn't happen.
+    new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   } else {
     type.dump();
     assert(0);
@@ -247,6 +254,8 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == "ellipsis") {
     real_migrate_type(type, new_type_ref);
   } else if (type.id() == "incomplete_array") {
+    real_migrate_type(type, new_type_ref);
+  } else if (type.id() == "incomplete_struct") {
     real_migrate_type(type, new_type_ref);
   } else {
     type.dump();
