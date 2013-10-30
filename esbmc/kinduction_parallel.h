@@ -8,22 +8,32 @@
 #ifndef K_INDUCTION_PARALLEL_H_
 #define K_INDUCTION_PARALLEL_H_
 
-#include "thread.h"
+#include <signal.h>
+#include <sys/wait.h>
 
 #include <goto-programs/goto_functions.h>
+
 #include "bmc.h"
 
-extern pthread_mutex_t main_mutex;
-extern pthread_cond_t main_cond;
+const unsigned int MAX_STEPS=50;
 
-class base_case_thread : public Thread
+enum STEP { BASE_CASE, FORWARD_CONDITION, INDUCTIVE_STEP, NONE };
+
+struct resultt
+{
+  STEP step;
+  short result;
+  unsigned int k;
+  bool finished;
+};
+
+class base_caset
 {
   public:
-    base_case_thread(bmct &bmc,
+    base_caset(bmct &bmc,
         goto_functionst &goto_functions);
 
-  protected:
-    virtual void run();
+    resultt startSolving();
 
   private:
     unsigned int _k;
@@ -31,14 +41,13 @@ class base_case_thread : public Thread
     goto_functionst &_goto_functions;
 };
 
-class forward_condition_thread : public Thread
+class forward_conditiont
 {
   public:
-    forward_condition_thread(bmct &bmc,
+    forward_conditiont(bmct &bmc,
         goto_functionst &goto_functions);
 
-  protected:
-    virtual void run();
+    resultt startSolving();
 
   private:
     unsigned int _k;
@@ -46,14 +55,13 @@ class forward_condition_thread : public Thread
     goto_functionst &_goto_functions;
 };
 
-class inductive_step_thread : public Thread
+class inductive_stept
 {
   public:
-    inductive_step_thread(bmct &bmc,
+    inductive_stept(bmct &bmc,
         goto_functionst &goto_functions);
 
-  protected:
-    virtual void run();
+    resultt startSolving();
 
   private:
     unsigned int _k;
@@ -61,30 +69,4 @@ class inductive_step_thread : public Thread
     goto_functionst &_goto_functions;
 };
 
-class safe_queues
-{
-  public:
-    static safe_queues *get_instance();
-
-    void update_bc_queue(unsigned int k, int res);
-    void update_fc_queue(unsigned int k, int res);
-    void update_is_queue(unsigned int k, int res);
-
-  private:
-    safe_queues();
-    ~safe_queues();
-
-    short bc_queue[50];
-    short fc_queue[50];
-    short is_queue[50];
-
-    pthread_mutex_t _bcMutex;
-    pthread_mutex_t _fcMutex;
-    pthread_mutex_t _isMutex;
-
-    static safe_queues* instance;
-
-    safe_queues(safe_queues const &);
-    void operator=(safe_queues const &);
-};
 #endif /* K_INDUCTION_PARALLEL_H_ */

@@ -2,7 +2,7 @@
 # Usage: esbmcwrapper path_to_source_file
 
 SOURCES=$1/*/
-TIMEOUT=900 #15m=900s
+TIMEOUT=3600 #15m=900s
 
 POS_CONT=0
 FAL_CONT=0

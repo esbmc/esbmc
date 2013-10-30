@@ -883,7 +883,7 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   if (exp.is_symbol() && exp.type().id()!="code")
   {
     if (is_for_block() || is_while_block())
-	  loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+      loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
@@ -1783,7 +1783,10 @@ void goto_convertt::convert_for(
 
   // do the c label
   if (inductive_step)
+  {
     init_k_indice(dest);
+    init_k_induction_loop(dest);
+  }
 
   // do the v label
   goto_programt tmp_v;
@@ -1869,6 +1872,18 @@ void goto_convertt::convert_for(
   targets.restore(old_targets);
   set_for_block(false);
   state_counter++;
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+
+    //kindice=kindice+1
+    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
+    copy(new_assign_plus, ASSIGN, dest);
+  }
 }
 
 /*******************************************************************\
@@ -1998,6 +2013,29 @@ void goto_convertt::init_k_indice(
   identifier = "kindice$"+i2string(state_counter);
   exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
+  code_assignt new_assign(lhs_index,zero_expr);
+  copy(new_assign, ASSIGN, dest);
+}
+
+/*******************************************************************\
+
+Function: goto_convertt::init_k_indice
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::init_k_induction_loop(
+  goto_programt &dest)
+{
+  std::string identifier;
+  identifier = "kinductionloop$"+i2string(1);
+  exprt lhs_index = symbol_exprt(identifier, bool_typet());
+  exprt zero_expr = gen_one(bool_typet());
   code_assignt new_assign(lhs_index,zero_expr);
   copy(new_assign, ASSIGN, dest);
 }
@@ -2559,7 +2597,10 @@ void goto_convertt::convert_while(
 
   //do the c label
   if (inductive_step)
+  {
     init_k_indice(dest);
+    init_k_induction_loop(dest);
+  }
 
   dest.destructive_append(tmp_branch);
 
@@ -2598,6 +2639,18 @@ void goto_convertt::convert_while(
   set_while_block(false);
   set_break(false);
   set_goto(false);
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+
+    //kindice=kindice+1
+    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
+    copy(new_assign_plus, ASSIGN, dest);
+  }
 }
 
 /*******************************************************************\
@@ -2679,7 +2732,10 @@ void goto_convertt::convert_dowhile(
 
   //do the c label
   if (inductive_step)
+  {
     init_k_indice(dest);
+    init_k_induction_loop(dest);
+  }
 
   // set the targets
   targets.set_break(z);
@@ -2732,6 +2788,18 @@ void goto_convertt::convert_dowhile(
 
   // restore break/continue targets
   targets.restore(old_targets);
+
+  if(inductive_step)
+  {
+    std::string identifier;
+    identifier = "kinductionloop$"+i2string(1);
+
+    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+
+    //kindice=kindice+1
+    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
+    copy(new_assign_plus, ASSIGN, dest);
+  }
 }
 
 /*******************************************************************\
@@ -3477,7 +3545,7 @@ Function: goto_convertt::replace_ifthenelse
 void goto_convertt::replace_ifthenelse(
 		exprt &expr)
 {
-DEBUGLOC;
+  DEBUGLOC;
 
   bool found=false;
 
@@ -3502,17 +3570,17 @@ DEBUGLOC;
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
     if (result_op0 != nondet_vars.end() &&
-				result_op1 != nondet_vars.end())
-			return ;
+        result_op1 != nondet_vars.end())
+      return;
     else if (expr.op0().is_constant() || expr.op1().is_constant()) {
       if (result_op0 != nondet_vars.end() ||
-				  result_op1 != nondet_vars.end())
-			  return ;
+          result_op1 != nondet_vars.end())
+        return;
     }
 
     loop_varst::const_iterator cache_result = loop_vars.find(expr.op0());
     if (cache_result == loop_vars.end())
-	  return ;
+      return;
 
     assert(expr.op0().type() == expr.op1().type());
 
@@ -3526,9 +3594,10 @@ DEBUGLOC;
       assert(new_expr1.type().id() == expr.op0().op0().type().id());
     else if (expr.op1().is_index())
       assert(new_expr2.type().id() == expr.op1().op0().type().id());
-    else if (new_expr1.type().id() != new_expr2.type().id() ||
-    		new_expr1.type().width()!=new_expr2.type().width())
-      new_expr2.make_typecast(new_expr1.type());
+    else
+      if (new_expr1.type().id() != new_expr2.type().id() ||
+          new_expr1.type().width()!=new_expr2.type().width())
+        new_expr2.make_typecast(new_expr1.type());
 
     expr = gen_binary(expr.id().as_string(), bool_typet(), new_expr1, new_expr2);
   }
@@ -3550,79 +3619,79 @@ void goto_convertt::convert_ifthenelse(
   const codet &code,
   goto_programt &dest)
 {
-      set_ifthenelse_block(true);
+  set_ifthenelse_block(true);
 
-	  if(code.operands().size()!=2 &&
-	     code.operands().size()!=3)
-	  {
-	    err_location(code);
-	    throw "ifthenelse takes two or three operands";
-	  }
+  if(code.operands().size()!=2 &&
+    code.operands().size()!=3)
+  {
+    err_location(code);
+    throw "ifthenelse takes two or three operands";
+  }
 
-	  bool has_else=
-	    code.operands().size()==3 &&
-	    !code.op2().is_nil();
+  bool has_else=
+    code.operands().size()==3 &&
+    !code.op2().is_nil();
 
-	  const locationt &location=code.location();
+  const locationt &location=code.location();
 
-	  // convert 'then'-branch
-	  goto_programt tmp_op1;
-	  convert(to_code(code.op1()), tmp_op1);
+  // convert 'then'-branch
+  goto_programt tmp_op1;
+  convert(to_code(code.op1()), tmp_op1);
 
-	  goto_programt tmp_op2;
+  goto_programt tmp_op2;
 
-	  if(has_else)
-	    convert(to_code(code.op2()), tmp_op2);
+  if(has_else)
+    convert(to_code(code.op2()), tmp_op2);
 
-	  exprt tmp_guard;
-	  if (options.get_bool_option("control-flow-test")
-		  && code.op0().id() != "notequal" && code.op0().id() != "symbol"
-		  && code.op0().id() != "typecast" && code.op0().id() != "="
-		  && !is_thread
-		  && !options.get_bool_option("deadlock-check"))
-	  {
-	    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
-		irept irep;
-		new_symbol.to_irep(irep);
+  exprt tmp_guard;
+  if (options.get_bool_option("control-flow-test")
+    && code.op0().id() != "notequal" && code.op0().id() != "symbol"
+    && code.op0().id() != "typecast" && code.op0().id() != "="
+    && !is_thread
+    && !options.get_bool_option("deadlock-check"))
+  {
+    symbolt &new_symbol=new_cftest_symbol(code.op0().type());
+    irept irep;
+    new_symbol.to_irep(irep);
 
-	    codet assignment("assign");
-		assignment.reserve_operands(2);
-		assignment.copy_to_operands(symbol_expr(new_symbol));
-		assignment.copy_to_operands(code.op0());
-		assignment.location() = code.op0().find_location();
-		copy(assignment, ASSIGN, dest);
+    codet assignment("assign");
+    assignment.reserve_operands(2);
+    assignment.copy_to_operands(symbol_expr(new_symbol));
+    assignment.copy_to_operands(code.op0());
+    assignment.location() = code.op0().find_location();
+    copy(assignment, ASSIGN, dest);
 
-		tmp_guard=symbol_expr(new_symbol);
-	  }
-	  else if (code.op0().statement() == "decl-block")
-	  {
-	    exprt lhs(code.op0().op0().op0());
-	    lhs.location()=code.op0().op0().location();
-	    exprt rhs(code.op0().op0().op1());
+    tmp_guard=symbol_expr(new_symbol);
+  }
+  else if (code.op0().statement() == "decl-block")
+  {
+    exprt lhs(code.op0().op0().op0());
+    lhs.location()=code.op0().op0().location();
+    exprt rhs(code.op0().op0().op1());
 
-	    rhs.type()=code.op0().op0().op1().type();
+    rhs.type()=code.op0().op0().op1().type();
 
-	    codet assignment("assign");
-	    assignment.copy_to_operands(lhs);
-	    assignment.move_to_operands(rhs);
-	    assignment.location()=lhs.location();
-	    convert(assignment, dest);
+    codet assignment("assign");
+    assignment.copy_to_operands(lhs);
+    assignment.move_to_operands(rhs);
+    assignment.location()=lhs.location();
+    convert(assignment, dest);
 
-	    tmp_guard=assignment.op0();
-	    if (!tmp_guard.type().is_bool())
-	      tmp_guard.make_typecast(bool_typet());
-	  }
-	  else
-	    tmp_guard=code.op0();
+    tmp_guard=assignment.op0();
+    if (!tmp_guard.type().is_bool())
+      tmp_guard.make_typecast(bool_typet());
+  }
+  else
+    tmp_guard=code.op0();
 
-	  remove_sideeffects(tmp_guard, dest);
-	  if (inductive_step & (is_for_block() ||is_while_block()))
-	    replace_ifthenelse(tmp_guard);
+  remove_sideeffects(tmp_guard, dest);
+  if (inductive_step && (is_for_block() || is_while_block()))
+    replace_ifthenelse(tmp_guard);
 
-	  //remove_sideeffects(tmp_guard, dest);
-	  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
+  //remove_sideeffects(tmp_guard, dest);
+  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
 
-	  set_ifthenelse_block(false);
+  set_ifthenelse_block(false);
 }
 
 /*******************************************************************\
