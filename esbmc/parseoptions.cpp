@@ -586,6 +586,8 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           close (commPipe[1]);
 
+          fcntl(commPipe[0], F_SETFL, O_NONBLOCK);
+
           struct resultt results[MAX_STEPS*3];
 
           // Invalid values
@@ -615,7 +617,33 @@ int cbmc_parseoptionst::doit_k_induction()
           {
             read(commPipe[0], results, sizeof(results));
 
-            // Eventually checks on inductive step
+            // Eventually checks on each step
+            if(!bc_finished)
+            {
+              int status;
+              pid_t result = waitpid(children_pid[0], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                bc_finished=true;
+              }
+            }
+
+            if(!fc_finished)
+            {
+              int status;
+              pid_t result = waitpid(children_pid[1], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                fc_finished=true;
+              }
+            }
+
             if(!is_finished)
             {
               int status;
