@@ -41,6 +41,9 @@ binary2bigint(irep_idt binary, bool is_signed)
 static expr2tc
 fixup_containerof_in_sizeof(const expr2tc &_expr)
 {
+  if (is_nil_expr(_expr))
+    return _expr;
+
   expr2tc expr = _expr;
 
   // Blast through all typedefs
