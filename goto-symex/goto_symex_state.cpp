@@ -312,6 +312,9 @@ void goto_symex_statet::fixup_renamed_type(expr2tc &expr,
     if (is_code_type(origsubtype) || is_code_type(newsubtype))
       return;
 
+    if (origsubtype == newsubtype)
+      return;
+
     // Fetch the (bit) size of the pointer subtype.
     unsigned int origsize, newsize;
 
