@@ -733,12 +733,23 @@ pointer_offset2t::do_simplify(bool second) const
     type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
     mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
                           : type_byte_size(*ptr_subtype.get());
+#if 0
     constant_int2tc type_size(ptr_int_type, thesize);
+#endif
+    constant_int2tc type_size(type, thesize);
 
+#if 0
     if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
       non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
+#endif
+    // Herp derp tacas
+    if (non_ptr_op->type->get_width() != type->get_width())
+      non_ptr_op = typecast2tc(type, non_ptr_op);
 
+#if 0
     mul2tc new_non_ptr_op(ptr_int_type, non_ptr_op, type_size);
+#endif
+    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
 
     expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, new_non_ptr_op));
 
