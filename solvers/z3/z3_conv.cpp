@@ -1981,6 +1981,24 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
                         Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
     else
       throw new conv_error("1unsupported irep for convert_byte_update");
+  } else if (is_unsignedbv_type(data.source_value->type)) {
+    if (int_encoding) {
+      output = z3::to_expr(ctx, value);
+      return;
+    }
+
+    width_op0 = data.source_value->type->get_width();
+
+    if (width_op0 == 0)
+      // XXXjmorse - can this ever happen now?
+      throw new conv_error("failed to get width of byte_update operand");
+
+    if (width_op0 > width_op2)
+      output = z3::to_expr(ctx,
+                        Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op2), value));
+    else
+      throw new conv_error("15unsupported irep for convert_byte_update");
+
 
   } else if (is_array_type(data.source_value)) {
     const array_type2t &arr_type = to_array_type(data.source_value->type);
