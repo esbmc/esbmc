@@ -101,6 +101,13 @@ void goto_symext::symex_malloc(
   }
 
   expr2tc rhs = rhs_addrof;
+
+  symbol2tc null_sym(rhs->type, "NULL");
+  sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+
+  rhs = if2tc(rhs->type, choice, rhs, null_sym);
+  replace_nondet(rhs);
+
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
 
