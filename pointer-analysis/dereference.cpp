@@ -743,6 +743,17 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
     return;
   }
 
+  if (is_union_type(value)) {
+    // Huuurrrr. Just perform an access to the first element thing.
+    const union_type2t &uni_type = to_union_type(value->type);
+    assert(uni_type.members.size() != 0);
+    value = member2tc(uni_type.members[0], value, uni_type.member_names[0]);
+
+    build_reference_rec(value, offset, type, guard, mode, alignment,
+                        scalar_step_list);
+    return;
+  }
+
   if (is_array_type(value) || is_string_type(value)) {
     construct_from_array(value, offset, type, guard, mode, alignment);
     return;
