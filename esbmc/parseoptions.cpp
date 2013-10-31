@@ -613,6 +613,10 @@ int cbmc_parseoptionst::doit_k_induction()
       context_inductive_step, ui_message_handler);
   set_verbosity_msg(bmc_inductive_step);
 
+  namespacet ns_base_case(context_base_case);
+  namespacet ns_forward_condition(context_forward_condition);
+  namespacet ns_inductive_step(context_inductive_step);
+
   // do actual BMC
   bool res;
 
@@ -629,6 +633,9 @@ int cbmc_parseoptionst::doit_k_induction()
       // We need to set the right context
       context.clear();
       context = context_base_case;
+
+      // Sins of the fathers, etc
+      migrate_namespace_lookup = &ns_base_case;
 
       res = do_bmc(bmc_base_case);
 
@@ -648,6 +655,7 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_forward_condition;
 
+      migrate_namespace_lookup = &ns_forward_condition;
       res = do_bmc(bmc_forward_condition);
 
       if (!res)
@@ -663,6 +671,7 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_inductive_step;
 
+      migrate_namespace_lookup = &ns_inductive_step;
       res = do_bmc(bmc_inductive_step);
 
       if (!res)
