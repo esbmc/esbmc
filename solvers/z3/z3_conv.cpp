@@ -2954,7 +2954,8 @@ z3_convt::convert_member(const exprt &expr, Z3_ast &bv)
   bv = z3_api.mk_tuple_select(struct_var, j);
 
 
-  if (config.options.get_bool_option("k-induction"))
+  if (config.options.get_bool_option("k-induction")
+      || config.options.get_bool_option("k-induction-parallel"))
   {
     if (expr.type().is_bool() &&
         expr.op0().type().is_struct())

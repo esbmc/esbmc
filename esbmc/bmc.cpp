@@ -421,11 +421,12 @@ bool bmct::run(const goto_functionst &goto_functions)
 
     do
     {
-      if(!options.get_bool_option("k-induction"))
+      if(!options.get_bool_option("k-induction")
+        && !options.get_bool_option("k-induction-parallel"))
         if (++interleaving_number>1) {
-    	  print(8, "*** Thread interleavings "+
-    	           i2string((unsigned long)interleaving_number)+
-    	           " ***");
+          print(8, "*** Thread interleavings "+
+            i2string((unsigned long)interleaving_number)+
+            " ***");
         }
 
       fine_timet bmc_start = current_time();
