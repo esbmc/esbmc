@@ -1187,7 +1187,16 @@ z3_convt::convert_smt_expr(const xor2t &xorval, void *_bv)
 void
 z3_convt::convert_smt_expr(const implies2t &implies, void *_bv)
 {
-  convert_logic_2ops(implies.side_1, implies.side_2, &z3::mk_implies, _bv);
+  expr2tc side1 = implies.side_1;
+  if (!is_bool_type(side1))
+    side1 = typecast2tc(get_bool_type(), side1);
+
+  expr2tc side2 = implies.side_2;
+  if (!is_bool_type(side2))
+    side2 = typecast2tc(get_bool_type(), side2);
+
+
+  convert_logic_2ops(side1, side2, &z3::mk_implies, _bv);
 }
 
 void
