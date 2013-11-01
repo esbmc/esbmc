@@ -78,7 +78,29 @@ z3_convt::~z3_convt()
     temp_out << smt_lib_str << std::endl;
   }
 
-  Z3_del_context(z3_ctx);
+  if (!z3_prop.uw)
+    Z3_pop(z3_ctx, 1);
+
+  // Experimental: if we're handled say, 10,000 ileaves, refresh the z3 ctx.
+  num_ctx_ileaves++;
+
+  if (num_ctx_ileaves == 10000) {
+    num_ctx_ileaves = 0;
+    Z3_del_context(z3_ctx);
+#ifndef _WIN32
+    // This call is an undocumented internal api of Z3's: it causes Z3 to free its
+    // internal symbol table, which it otherwise doesn't, leading to vast
+    // quantities of leaked memory. This will stop work/linking when Microsoft
+    // eventually work out they should be stripping the linux binaries they
+    // release.
+    // Unfortnately it doesn't work like that on Windows, so only try this if
+    // we're on another platform. And hope that perhaps Windows' Z3_reset_memory
+    // works as advertised.
+    finalize_symbols();
+#endif
+    Z3_reset_memory();
+    z3_ctx = z3_api.mk_proof_context(s_is_uw);
+  }
 }
 
 void
@@ -3612,4 +3634,7 @@ z3_convt::get_type_width(const typet &t, unsigned &width) const
   return;
 }
 
+Z3_context z3_convt::z3_ctx = NULL;
+
+unsigned int z3_convt::num_ctx_ileaves = 0;
 bool z3_convt::s_is_uw = false;

@@ -37,7 +37,9 @@ public:
                                :prop_convt(z3_prop),
                                 z3_prop(uw, *this)
   {
-    z3_ctx = z3_api.mk_proof_context(uw);
+    if (z3_ctx == NULL) {
+      z3_ctx = z3_api.mk_proof_context(uw);
+    }
 
     this->int_encoding = int_encoding;
     this->z3_prop.smtlib = smt;
@@ -46,6 +48,7 @@ public:
     total_mem_space = 0;
     model = NULL;
 
+    Z3_push(z3_ctx);
     z3_prop.z3_ctx = z3_ctx;
     ignoring_expr=true;
     max_core_size=Z3_UNSAT_CORE_LIMIT;
@@ -251,8 +254,9 @@ public:
   };
 
 public:
-  Z3_context z3_ctx;
+  static Z3_context z3_ctx;
   static bool s_is_uw;
+  static unsigned int num_ctx_ileaves; // Number of ileaves z3_ctx has handled
 };
 
 #endif
