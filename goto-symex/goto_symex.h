@@ -584,8 +584,6 @@ protected:
   unsigned remaining_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
-  /** Names of functions that we've complained about missing bodies of. */
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, long> unwind_set;
   /** Global maximum number of unwinds. */
@@ -671,6 +669,8 @@ protected:
   /** Flag as to whether we're doing a k-induction forward condition.
    *  Corresponds to the option --forward-condition */
   bool forward_condition;
+  /** Names of functions that we've complained about missing bodies of. */
+  static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
 };
 
 #endif

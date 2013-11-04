@@ -25,7 +25,6 @@
 #include "symex_target.h"
 #include "goto_symex_state.h"
 #include "goto_symex.h"
-#include "read_write_set.h"
 #include "renaming.h"
 
 class reachability_treet;
@@ -367,14 +366,6 @@ class execution_statet : public goto_symext
   bool check_if_ileaves_blocked(void);
 
   /**
-   *  Apply a partial order reduction.
-   *  @param expr Assignment or read to consider in this analysis.
-   *  @param i Thread id of the currently executing thread.
-   *  @return False if we should skip this interleaving.
-   */
-  bool apply_static_por(const expr2tc &expr, unsigned int i) const;
-
-  /**
    *  Create a new thread.
    *  Creates and initializes a new thread, running at the start of the GOTO
    *  program prog.
@@ -394,19 +385,83 @@ class execution_statet : public goto_symext
   void end_thread(void);
 
   /**
-   *  Get number of globals written by expr.
+   *  Perform any necessary steps after a context switch point. Whether or not
+   *  it was taken. Resets DFS record, POR records, executes thread guard.
+   */
+  void update_after_switch_point(void);
+
+  /**
+   *  Analyze the contents of an assignment for threading.
+   *  If the assignment touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param assign Container of code_assign2t object.
+   */
+  void analyze_assign(const expr2tc &assign);
+
+  /**
+   *  Analyze the contents of a read for threading.
+   *  If the read touches any kind of shared state, we track the accessed
+   *  variables for POR decisions made in the future, and also ask the RT obj
+   *  whether or not it wants to generate an interleaving.
+   *  @param expr Container of expression possibly touching global state.
+   */
+  void analyze_read(const expr2tc &expr);
+
+  /**
+   *  Get list of globals accessed by expr.
    *  Exactly how this works, I do not know.
    *  @param ns Namespace to work under.
    *  @expr Expression to count global writes in.
    *  @return Number of global refs in this expression.
    */
-  unsigned int get_expr_write_globals(const namespacet &ns,
-                                      const expr2tc &expr);
+  void get_expr_globals(const namespacet &ns, const expr2tc &expr,
+                        std::set<expr2tc> &global_list);
 
   /**
-   *  See get_expr_write_globals.
+   *  Check for scheduling dependancies. Whether it exists between the variables
+   *  accessed by the last transition of thread j and the last transition of
+   *  thread l.
+   *  @param j Most recently executed thread id
+   *  @param l Other thread id to check dependancy with
+   *  @return True if scheduling dependancy exists between threads j and l
    */
-  unsigned int get_expr_read_globals(const namespacet &ns, const expr2tc &expr);
+  bool check_mpor_dependancy(unsigned int j, unsigned int l) const;
+
+  /**
+   *  Calculate MPOR schedulable threads. I.E. what threads we can schedule
+   *  right now without violating the "quasi-monotonic" property.
+   */
+  void calculate_mpor_constraints(void);
+
+  /** Accessor method for mpor_schedulable. Ensures its access is within bounds
+   *  and is read-only. */
+  bool is_transition_blocked_by_mpor(void) const
+  {
+    return mpor_says_no;
+  }
+
+  /** Accessor method for cswitch_forced. Sets it to true. */
+  void force_cswitch(void)
+  {
+    cswitch_forced = true;
+  }
+
+  /**
+   *  Has a context switch point occured.
+   *  Four things can justify this:
+   *   1. cswitch forced by atomic end or yield.
+   *   2. Global data read/written.
+   *  @return True if context switch is now triggered
+   */
+  bool has_cswitch_point_occured(void) const;
+
+  /**
+   *  Can execution continue in this thread?
+   *  Answer is no if the thread has ended or there's nothing on the call stack
+   *  @return False if there are no further instructions to execute.
+   */
+  bool can_execution_continue(void) const;
 
   /**
    *  Generate hash of entire execution state.
@@ -470,15 +525,11 @@ class execution_statet : public goto_symext
    *  Every time a context switch is taken, the bool in this vector is set to
    *  true at the corresponding thread IDs index. */
   std::vector<bool> DFS_traversed;
-  /** Unknown, something POR related. */
-  std::vector<read_write_set> exprs_read_write;
   /** Storage for threading libraries thread start data. See version history
    *  of when this was introduced to fully understand why; essentially this
    *  is a workaround to prevent too much nondeterminism entering into the
    *  thread starting process. */
   std::vector<expr2tc> thread_start_data;
-  /** Unknown, Something POR related. */
-  read_write_set last_global_read_write;
   /** Last active thread's ID. */
   unsigned int last_active_thread;
   /** Global L2 state of this execution_statet. It's also copied as a reference
@@ -536,6 +587,24 @@ class execution_statet : public goto_symext
   protected:
   /** Number of context switches performed by this ex_state */
   int CS_number;
+  /** For each thread, a set of symbols that were read by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_reads;
+  /** For each thread, a set of symbols that were written by the thread in the
+   *  last transition (run). Renamed to level1, as that identifies each piece of
+   *  data that could have storage in C. */
+  std::vector<std::set<expr2tc> > thread_last_writes;
+  /** Dependancy chain for POR calculations. In mpor paper, DCij elements map
+   *  to dependancy_chain[i][j] here. */
+  std::vector<std::vector<int> > dependancy_chain;
+  /** MPOR scheduling outcome. If we've just taken a transition that MPOR
+   *  rejects, this becomes true. For various reasons, we can't tell whether or
+   *  not MPOR rejects a transition in advance. */
+  bool mpor_says_no;
+  /** Indicates a manatory context switch should occur. Can happen when an
+   *  atomic_end instruction has occured, or when a __ESBMC_yield(); runs */
+  bool cswitch_forced;
 
   /** Are we tracing / printing symex instructions? */
   bool symex_trace;
