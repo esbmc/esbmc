@@ -108,6 +108,8 @@ void goto_symext::symex_malloc(
   rhs = if2tc(rhs->type, choice, rhs, null_sym);
   replace_nondet(rhs);
 
+  expr2tc ptr_rhs = rhs;
+
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
 
@@ -122,7 +124,7 @@ void goto_symext::symex_malloc(
                                               expr2tc(), true));
   symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
 
-  pointer_object2tc ptr_obj(int_type2(), lhs);
+  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
