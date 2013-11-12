@@ -11,6 +11,7 @@ int main(int argc, char *argv[]) {
   struct S *p, *q;
 
   p=malloc(sizeof(struct S));
+  __ESBMC_assume(p);
   p->x = 5;
   p->n = NULL;
   
@@ -18,6 +19,7 @@ int main(int argc, char *argv[]) {
 
   if (argc > 1) {
     q = malloc(sizeof(struct S));
+    __ESBMC_assume(q);
     q->x = 5;
     q->n = p;
   } else {
