@@ -76,6 +76,6 @@ void main()
   e.stoppingEvent = FALSE;
   stopped = FALSE;
 
-  pthread_create(id, NULL, BCSP_PnpStop, &e);
+  pthread_create(&id, NULL, BCSP_PnpStop, &e);
   BCSP_PnpAdd(&e);
 }

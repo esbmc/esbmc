@@ -41,7 +41,7 @@ public:
     goto_stmt=false;
     break_stmt=false;
     is_thread=false;
-    is_ifthenelse=false;
+    ifthenelse_block=false;
     for_block=false;
     while_block=false;
     state_counter=1;
@@ -199,6 +199,7 @@ protected:
   //
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
+  void init_k_induction_loop(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
@@ -212,6 +213,8 @@ protected:
   void set_for_block(bool opt) {for_block=opt;}
   bool is_for_block() const {return for_block;}
   void set_while_block(bool opt) {while_block=opt;}
+  void set_ifthenelse_block(bool opt) {ifthenelse_block=opt;}
+  bool is_ifthenelse_block() {return ifthenelse_block;}
   bool is_while_block() const {return while_block;}
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr, const struct_typet &str);
@@ -386,7 +389,7 @@ protected:
 
   private:
     bool is_thread, for_block, break_stmt,
-         goto_stmt, while_block, is_ifthenelse;
+         goto_stmt, while_block, ifthenelse_block;
     unsigned int state_counter;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;

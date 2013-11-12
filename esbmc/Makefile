@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
-      document_subgoals.cpp  show_vcc.cpp options.cpp
+      document_subgoals.cpp show_vcc.cpp options.cpp kinduction_parallel.cpp
 
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \

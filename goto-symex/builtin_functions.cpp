@@ -376,7 +376,8 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
 
-  if (k_induction) {
+  if (k_induction
+      || options.get_bool_option("k-induction-parallel")) {
     std::cerr << "Sorry, can't perform k-induction on multithreaded code";
     std::cerr  << std::endl;
     abort();
