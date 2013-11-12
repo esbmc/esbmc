@@ -27,6 +27,7 @@ int main(void) {
 
   for(i=1;i<=2;i++) {
     curr = (item *)malloc(sizeof(item));
+    __ESBMC_assume(curr);
     curr->val = i;
     curr->next  = head;
     head = curr;
