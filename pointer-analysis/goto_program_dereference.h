@@ -71,8 +71,6 @@ protected:
     bool checks_only=false);
 
 protected:
-  void dereference_rec(expr2tc &expr, guardt &guard,
-                       const dereferencet::modet mode);
   void dereference_expr(expr2tc &expr, const bool checks_only,
                         const dereferencet::modet mode);
   

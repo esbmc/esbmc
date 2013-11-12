@@ -357,11 +357,13 @@ configure_and_run_cpp(const char *out_file_buf, std::string path,
 
   if (config.options.get_bool_option("deadlock-check")) {
     record_define("pthread_mutex_lock=pthread_mutex_lock_check");
+    record_define("pthread_mutex_unlock=pthread_mutex_unlock_check");
     record_define("pthread_cond_wait=pthread_cond_wait_check");
     record_define("pthread_join=pthread_join_switch");
   } else {
     record_define("pthread_join=pthread_join_noswitch");
     record_define("pthread_mutex_lock=pthread_mutex_lock_nocheck");
+    record_define("pthread_mutex_unlock=pthread_mutex_unlock_nocheck");
     record_define("pthread_cond_wait=pthread_cond_wait_nocheck");
   }
 

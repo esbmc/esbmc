@@ -83,9 +83,17 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
     DFS_traversed[state.source.thread_nr] = false;
   }
 
-  exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(expr2tc());
 
+  // Initial mpor tracking.
+  thread_last_reads.push_back(std::set<expr2tc>());
+  thread_last_writes.push_back(std::set<expr2tc>());
+  // One thread with one dependancy relation.
+  dependancy_chain.push_back(std::vector<int>());
+  dependancy_chain.back().push_back(0);
+  mpor_says_no = false;
+
+  cswitch_forced = false;
   active_thread = 0;
   last_active_thread = 0;
   node_count = 0;
@@ -130,9 +138,7 @@ execution_statet::operator=(const execution_statet &ex)
   threads_state = ex.threads_state;
   atomic_numbers = ex.atomic_numbers;
   DFS_traversed = ex.DFS_traversed;
-  exprs_read_write = ex.exprs_read_write;
   thread_start_data = ex.thread_start_data;
-  last_global_read_write = ex.last_global_read_write;
   last_active_thread = ex.last_active_thread;
   active_thread = ex.active_thread;
   guard_execution = ex.guard_execution;
@@ -157,6 +163,12 @@ execution_statet::operator=(const execution_statet &ex)
 
   CS_number = ex.CS_number;
   TS_number = ex.TS_number;
+
+  thread_last_reads = ex.thread_last_reads;
+  thread_last_writes = ex.thread_last_writes;
+  dependancy_chain = ex.dependancy_chain;
+  mpor_says_no = ex.mpor_says_no;
+  cswitch_forced = ex.cswitch_forced;
 
   // Vastly irritatingly, we have to iterate through existing level2t objects
   // updating their ex_state references. There isn't an elegant way of updating
@@ -221,7 +233,7 @@ execution_statet::symex_step(reachability_treet &art)
     case END_FUNCTION:
       if (instruction.function == "main") {
         end_thread();
-        art.force_cswitch_point();
+        force_cswitch();
       } else {
         // Fall through to base class
         goto_symext::symex_step(art);
@@ -240,7 +252,7 @@ execution_statet::symex_step(reachability_treet &art)
       // don't do this for the active_atomic_number though, because it's cheap,
       // and should be balanced under all circumstances anyway).
       if (!state.guard.is_false())
-        art.force_cswitch_point();
+        force_cswitch();
 
       break;
     case RETURN:
@@ -253,7 +265,7 @@ execution_statet::symex_step(reachability_treet &art)
         symex_return();
 
         if (!is_nil_expr(assign))
-          owning_rt->analyse_for_cswitch_after_assign(assign);
+          analyze_assign(assign);
       }
       state.source.pc++;
       break;
@@ -272,7 +284,7 @@ execution_statet::symex_assign(const expr2tc &code)
   goto_symext::symex_assign(code);
 
   if (threads_state.size() >= thread_cswitch_threshold)
-    owning_rt->analyse_for_cswitch_after_assign(code);
+    analyze_assign(code);
 
   return;
 }
@@ -284,8 +296,8 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 
   goto_symext::claim(expr, msg);
 
-  if (threads_state.size() > thread_cswitch_threshold)
-    owning_rt->analyse_for_cswitch_after_read(expr);
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(expr);
 
   return;
 }
@@ -293,19 +305,13 @@ execution_statet::claim(const expr2tc &expr, const std::string &msg)
 void
 execution_statet::symex_goto(const expr2tc &old_guard)
 {
-  pre_goto_guard = expr2tc();
-  expr2tc pre_goto_state_guard = threads_state[active_thread].guard.as_expr();
+  pre_goto_guard = threads_state[active_thread].guard.as_expr();
 
   goto_symext::symex_goto(old_guard);
 
   if (!is_nil_expr(old_guard)) {
-    if (threads_state.size() > thread_cswitch_threshold) {
-      if (owning_rt->analyse_for_cswitch_after_read(old_guard)) {
-        // We're taking a context switch, store the state guard of this GOTO
-        // instruction. i.e., a state guard that doesn't depend on the _result_
-        // of the GOTO.
-        pre_goto_guard = pre_goto_state_guard;
-      }
+    if (threads_state.size() >= thread_cswitch_threshold) {
+      analyze_read(old_guard);
     }
   }
 
@@ -319,8 +325,8 @@ execution_statet::assume(const expr2tc &assumption)
 
   goto_symext::assume(assumption);
 
-  if (threads_state.size() > thread_cswitch_threshold)
-    owning_rt->analyse_for_cswitch_after_read(assumption);
+  if (threads_state.size() >= thread_cswitch_threshold)
+    analyze_read(assumption);
 
   return;
 }
@@ -416,12 +422,6 @@ execution_statet::check_if_ileaves_blocked(void)
   if (get_active_atomic_number() > 0)
     return true;
 
-  const goto_programt::instructiont &insn = *get_active_state().source.pc;
-  std::list<irep_idt>::const_iterator it = insn.labels.begin();
-  for (; it != insn.labels.end(); it++)
-    if (*it == "__ESBMC_ATOMIC")
-      return true;
-
   if (owning_rt->directed_interleavings)
     // Don't generate interleavings automatically - instead, the user will
     // inserts intrinsics identifying where they want interleavings to occur,
@@ -434,42 +434,6 @@ execution_statet::check_if_ileaves_blocked(void)
   return false;
 }
 
-bool
-execution_statet::apply_static_por(const expr2tc &expr, unsigned int i) const
-{
-  bool consider = true;
-
-  if (!is_nil_expr(expr))
-  {
-    if(i < active_thread)
-    {
-      if(last_global_read_write.write_set.empty() &&
-         exprs_read_write.at(i+1).write_set.empty() &&
-         exprs_read_write.at(active_thread).write_set.empty())
-      {
-        return false;
-      }
-
-      consider = false;
-
-      if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).write_set))
-      {
-        consider = true;
-      }
-      else if(last_global_read_write.has_write_intersect(exprs_read_write.at(i+1).read_set))
-      {
-        consider = true;
-      }
-      else if(last_global_read_write.has_read_intersect(exprs_read_write.at(i+1).write_set))
-      {
-        consider = true;
-      }
-    }
-  }
-
-  return consider;
-}
-
 void
 execution_statet::end_thread(void)
 {
@@ -479,6 +443,21 @@ execution_statet::end_thread(void)
   // live thread (because it's trying to be atomic). So, disable atomic blocks
   // when the thread ends.
   atomic_numbers[active_thread] = 0;
+}
+
+void
+execution_statet::update_after_switch_point(void)
+{
+
+  execute_guard();
+  resetDFS_traversed();
+
+  // MPOR records the variables accessed in last transition taken; we're
+  // starting a new transition, so for the current thread, clear records.
+  thread_last_reads[active_thread].clear();
+  thread_last_writes[active_thread].clear();
+
+  cswitch_forced = false;
 }
 
 bool
@@ -582,57 +561,78 @@ execution_statet::add_thread(const goto_programt *prog)
     DFS_traversed[new_state.source.thread_nr] = false;
   }
 
-  exprs_read_write.push_back(read_write_set());
   thread_start_data.push_back(expr2tc());
 
   // We invalidated all threads_state refs, so reset cur_state ptr.
   cur_state = &threads_state[active_thread];
 
+  // Update MPOR tracking data with newly initialized thread
+  thread_last_reads.push_back(std::set<expr2tc>());
+  thread_last_writes.push_back(std::set<expr2tc>());
+  // Unfortunately as each thread has a depenancy relation with every other
+  // thread we have to do a lot of work to initialize a new one. And initially
+  // all relations are '0', no transitions yet.
+  for (std::vector<std::vector<int> >::iterator it = dependancy_chain.begin();
+       it != dependancy_chain.end(); it++) {
+    it->push_back(0);
+  }
+  // And the new threads dependancies,
+  dependancy_chain.push_back(std::vector<int>());
+  for (unsigned int i = 0; i < dependancy_chain.size(); i++)
+    dependancy_chain.back().push_back(0);
+
   return threads_state.size() - 1; // thread ID, zero based
 }
 
-unsigned int
-execution_statet::get_expr_write_globals(const namespacet &ns,
-                                         const expr2tc &expr)
+void
+execution_statet::analyze_assign(const expr2tc &code)
 {
 
-  if (is_address_of2t(expr) || is_valid_object2t(expr) ||
-      is_dynamic_size2t(expr) || is_valid_object2t(expr) ||
-      is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
-    return 0;
-  } else if (is_symbol2t(expr)) {
-    expr2tc newexpr = expr;
-    get_active_state().get_original_name(newexpr);
-    const std::string &name = to_symbol2t(newexpr).thename.as_string();
-    const symbolt &symbol = ns.lookup(name);
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol.static_lifetime || symbol.type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).write_set.insert(name);
-      return 1;
-    } else
-      return 0;
+  std::set<expr2tc> global_reads, global_writes;
+  const code_assign2t &assign = to_code_assign2t(code);
+  get_expr_globals(ns, assign.target, global_writes);
+  get_expr_globals(ns, assign.source, global_reads);
+
+  if (global_reads.size() > 0 || global_writes.size() > 0) {
+    // Record read/written data
+    thread_last_reads[active_thread].insert(global_reads.begin(),
+                                            global_reads.end());
+    thread_last_writes[active_thread].insert(global_writes.begin(),
+                                             global_writes.end());
   }
 
-  unsigned int globals = 0;
-
-  forall_operands2(it, idx, expr) {
-    if (!is_nil_expr(*it))
-      globals += get_expr_write_globals(ns, *it);
-  }
-
-  return globals;
+  return;
 }
 
-unsigned int
-execution_statet::get_expr_read_globals(const namespacet &ns,
-  const expr2tc &expr)
+void
+execution_statet::analyze_read(const expr2tc &code)
 {
+
+  std::set<expr2tc> global_reads, global_writes;
+  get_expr_globals(ns, code, global_reads);
+
+  if (global_reads.size() > 0) {
+    // Record read/written data
+    thread_last_reads[active_thread].insert(global_reads.begin(),
+                                            global_reads.end());
+  }
+
+  return;
+}
+
+void
+execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
+                                   std::set<expr2tc> &globals_list)
+{
+
+  if (is_nil_expr(expr))
+    return;
 
   if (is_address_of2t(expr) || is_pointer_type(expr) ||
       is_valid_object2t(expr) || is_dynamic_size2t(expr) ||
+      is_dynamic_size2t(expr) || is_zero_string2t(expr) ||
       is_zero_string2t(expr) || is_zero_length_string2t(expr)) {
-    return 0;
+    return;
   } else if (is_symbol2t(expr)) {
     expr2tc newexpr = expr;
     get_active_state().get_original_name(newexpr);
@@ -640,28 +640,186 @@ execution_statet::get_expr_read_globals(const namespacet &ns,
 
     if (name == "goto_symex::\\guard!" +
         i2string(get_active_state().top().level1.thread_id))
-      return 0;
+      return;
 
     const symbolt *symbol;
     if (ns.lookup(name, symbol))
-      return 0;
+      return;
 
-    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size")
-      return 0;
-    else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
-      exprs_read_write.at(active_thread).read_set.insert(name);
-      return 1;
-    } else
-      return 0;
-  }
-  unsigned int globals = 0;
-
-  forall_operands2(it, idx, expr) {
-    if (!is_nil_expr(*it))
-      globals += get_expr_read_globals(ns, *it);
+    if (name == "c::__ESBMC_alloc" || name == "c::__ESBMC_alloc_size" ||
+        name == "c::__ESBMC_is_dynamic") {
+      return;
+    } else if ((symbol->static_lifetime || symbol->type.is_dynamic_set())) {
+      globals_list.insert(expr);
+    } else {
+      return;
+    }
   }
 
-  return globals;
+  forall_operands2(it, op_list, expr) {
+    get_expr_globals(ns, *it, globals_list);
+  }
+}
+
+bool
+execution_statet::check_mpor_dependancy(unsigned int j, unsigned int l) const
+{
+
+  assert(j < threads_state.size());
+  assert(l < threads_state.size());
+
+  // Rules given on page 13 of MPOR paper, although they don't appear to
+  // distinguish which thread is which correctly. Essentially, check that
+  // the write(s) of the previous transition (l) don't intersect with this
+  // transitions (j) reads or writes; and that the previous transitions reads
+  // don't intersect with this transitions write(s).
+
+  // Double write intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
+       it != thread_last_writes[j].end(); it++)
+    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+      return true;
+
+  // This read what that wrote intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_reads[j].begin();
+       it != thread_last_reads[j].end(); it++)
+    if (thread_last_writes[l].find(*it) != thread_last_writes[l].end())
+      return true;
+
+  // We wrote what that reads intersection
+  for (std::set<expr2tc>::const_iterator it = thread_last_writes[j].begin();
+       it != thread_last_writes[j].end(); it++)
+    if (thread_last_reads[l].find(*it) != thread_last_reads[l].end())
+      return true;
+
+  // No check for read-read intersection, it doesn't affect anything
+  return false;
+}
+
+void
+execution_statet::calculate_mpor_constraints(void)
+{
+  // Primary bit of MPOR logic - to be executed at the end of a transition to
+  // update dependancy tracking and suchlike.
+
+  // MPOR paper, page 12, create new dependancy chain record for this time step.
+
+  // 2D Vector of relations, T x T, i.e. threads on each axis:
+  //    -1 signifies that no relation exists.
+  //    0 that the thread hasn't run yet.
+  //    1 that there is a dependency between these threads.
+  //
+  //  dependancy_chain contains the state from the previous transition taken;
+  //  here we update it to reflect the latest transition, and make a decision
+  //  about progress later.
+  std::vector<std::vector<int> > new_dep_chain = dependancy_chain;
+
+  // Start new dependancy chain for this thread. Default to there being no
+  // relation.
+  for (unsigned int i = 0; i < new_dep_chain.size(); i++)
+    new_dep_chain[active_thread][i] = -1;
+
+  // This thread depends on this thread.
+  new_dep_chain[active_thread][active_thread] = 1;
+
+  // Mark un-run threads as continuing to be un-run. Otherwise, look for a
+  // dependancy chain from each thread to the run thread.
+  for (unsigned int j = 0; j < new_dep_chain.size(); j++) {
+    if (j == active_thread)
+      continue;
+
+    if (dependancy_chain[j][active_thread] == 0) {
+      // This thread hasn't been run; continue not having been run.
+      new_dep_chain[j][active_thread] = 0;
+    } else {
+      // This is where the beef is. If there is any other thread (including
+      // the active thread) that we depend on, that depends on the active
+      // thread, then record a dependancy.
+      // A direct dependancy occurs when l = j, as DCjj always = 1, and DEPji
+      // is true.
+      int res = 0;
+
+      for (unsigned int l = 0; l < new_dep_chain.size(); l++) {
+        if (dependancy_chain[j][l] != 1)
+          continue; // No dependancy relation here
+
+        // Now check for variable dependancy.
+        if (!check_mpor_dependancy(active_thread, l))
+          continue;
+
+        res = 1;
+        break;
+      }
+
+      // Don't overwrite if no match
+      if (res != 0)
+        new_dep_chain[j][active_thread] = res;
+    }
+  }
+
+  // For /all other relations/, just propagate the dependancy it already has.
+  // Achieved by initial duplication of dependancy_chain.
+
+  // Voila, new dependancy chain.
+
+  // Calculate whether or not the transition we just took, in active_thread,
+  // was in fact schedulable. We can't tell whether or not a transition is
+  // allowed in advance because we don't know what it is. So instead, check
+  // whether or not a transition /would/ have been allowed, once we've taken
+  // it.
+  bool can_run = true;
+  for (unsigned int j = active_thread + 1; j < threads_state.size(); j++) {
+    if (new_dep_chain[j][active_thread] != -1)
+      // Either no higher threads have been run, or a dependancy relation in
+      // a higher thread justifies our out-of-order execution.
+      continue;
+
+    // Search for a dependancy chain in a lower thread that links us back to
+    // a higher thread, justifying this order.
+    bool dep_exists = false;
+    for (unsigned int l = 0; l < active_thread; l++) {
+      if (dependancy_chain[j][l] == 1)
+        dep_exists = true;
+    }
+
+    if (!dep_exists) {
+      can_run = false;
+      break;
+    }
+  }
+
+  mpor_says_no = !can_run;
+
+  dependancy_chain = new_dep_chain;
+}
+
+bool
+execution_statet::has_cswitch_point_occured(void) const
+{
+
+  // Context switches can occur due to being forced, or by global state access
+
+  if (cswitch_forced)
+    return true;
+
+  if (thread_last_reads[active_thread].size() != 0 ||
+      thread_last_writes[active_thread].size() != 0)
+    return true;
+
+  return false;
+}
+
+bool
+execution_statet::can_execution_continue(void) const
+{
+
+  if (threads_state[active_thread].thread_ended)
+    return false;
+
+  if (threads_state[active_thread].call_stack.empty())
+    return false;
+
+  return true;
 }
 
 crypto_hash

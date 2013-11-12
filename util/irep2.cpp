@@ -218,7 +218,8 @@ type2t::hash(crypto_hash &hash) const
 unsigned int
 bool_type2t::get_width(void) const
 {
-  return 1;
+  // For the purpose of the byte representating memory model
+  return 8;
 }
 
 unsigned int
@@ -648,6 +649,7 @@ static const char *expr_names[] = {
   "cpp_throw_decl_end",
   "isinf",
   "isnormal",
+  "concat",
 };
 // If this fires, you've added/removed an expr id, and need to update the list
 // above (which is ordered according to the enum list)
@@ -2676,7 +2678,7 @@ std::string code_free2t::field_names [esbmct::num_type_fields]  =
 std::string code_goto2t::field_names [esbmct::num_type_fields]  =
 { "target", "", "", "", ""};
 std::string object_descriptor2t::field_names [esbmct::num_type_fields]  =
-{ "object", "offset", "", "", ""};
+{ "object", "offset", "alignment", "", ""};
 std::string code_function_call2t::field_names [esbmct::num_type_fields]  =
 { "return", "function", "operands", "", ""};
 std::string code_comma2t::field_names [esbmct::num_type_fields]  =
@@ -2703,6 +2705,8 @@ std::string isinf2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
 std::string isnormal2t::field_names [esbmct::num_type_fields]  =
 { "value", "", "", "", ""};
+std::string concat2t::field_names [esbmct::num_type_fields]  =
+{ "forward", "aft", "", "", ""};
 
 // Explicit template instanciations
 
@@ -2941,7 +2945,8 @@ template class esbmct::expr_methods<code_goto2t, code_goto_data,
     irep_idt, code_goto_data, &code_goto_data::target>;
 template class esbmct::expr_methods<object_descriptor2t, object_desc_data,
     expr2tc, object_desc_data, &object_desc_data::object,
-    expr2tc, object_desc_data, &object_desc_data::offset>;
+    expr2tc, object_desc_data, &object_desc_data::offset,
+    unsigned int, object_desc_data, &object_desc_data::alignment>;
 template class esbmct::expr_methods<code_function_call2t, code_funccall_data,
     expr2tc, code_funccall_data, &code_funccall_data::ret,
     expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2977,3 +2982,6 @@ template class esbmct::expr_methods<isinf2t,
     arith_1op, expr2tc, arith_1op, &arith_1op::value>;
 template class esbmct::expr_methods<isnormal2t,
     arith_1op, expr2tc, arith_1op, &arith_1op::value>;
+template class esbmct::expr_methods<concat2t, bit_2ops,
+    expr2tc, bit_2ops, &bit_2ops::side_1,
+    expr2tc, bit_2ops, &bit_2ops::side_2>;

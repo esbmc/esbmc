@@ -25,6 +25,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <prefix.h>
 #include <std_code.h>
 #include <arith_tools.h>
+#include <type_byte_size.h>
 
 #include <langapi/language_util.h>
 #include <ansi-c/c_types.h>
@@ -137,7 +138,8 @@ value_sett::to_expr(object_map_dt::const_iterator it) const
   else
     offs = unknown2tc(index_type2());
 
-  expr2tc obj = object_descriptor2tc(object->type, object, offs);
+  expr2tc obj = object_descriptor2tc(object->type, object, offs,
+                                     it->second.offset_alignment);
   return obj;
 }
 
@@ -237,7 +239,7 @@ void value_sett::get_value_set_rec(
   {
     // Unknown / invalid exprs mean we just point at something unknown (and
     // potentially invalid).
-    insert(dest, unknown2tc(original_type));
+    insert(dest, unknown2tc(original_type), mp_integer(0));
     return;
   }
   else if (is_index2t(expr))
@@ -288,7 +290,7 @@ void value_sett::get_value_set_rec(
         subtype = ns.follow(subtype);
 
       expr2tc tmp = null_object2tc(ptr_ref.subtype);
-      insert(dest, tmp, 0);
+      insert(dest, tmp, mp_integer(0));
       return;
     }
 
@@ -387,7 +389,7 @@ void value_sett::get_value_set_rec(
                            : to_sub2t(expr).side_2;
 
       assert(!(is_pointer_type(op0) && is_pointer_type(op1)) &&
-              "Cannot have pointer arithmatic with two pointers as operands");
+              "Cannot have pointer arithmetic with two pointers as operands");
 
       const expr2tc &ptr_op= (is_pointer_type(op0)) ? op0 : op1;
       const expr2tc &non_ptr_op= (is_pointer_type(op0)) ? op1 : op0;
@@ -397,8 +399,51 @@ void value_sett::get_value_set_rec(
       object_mapt pointer_expr_set;
       get_value_set_rec(ptr_op, pointer_expr_set, "", ptr_op->type);
 
+      // Calculate the offset caused by this addition, in _bytes_. Involves
+      // pointer arithmetic. We also use the _perceived_ type of what we're
+      // adding or subtracting from/to, it might be being typecasted.
+      const type2tc &subtype = to_pointer_type(ptr_op->type).subtype;
+      mp_integer total_offs(0);
+      bool is_const = false;
+      try {
+        if (is_constant_int2t(non_ptr_op)) {
+          if (to_constant_int2t(non_ptr_op).constant_value.is_zero()) {
+            total_offs = 0;
+          } else {
+            if (is_empty_type(subtype))
+              throw new type2t::symbolic_type_excp();
+
+            // Potentially rename,
+            const type2tc renamed = ns.follow(subtype);
+            mp_integer elem_size = type_byte_size(*renamed);
+            const mp_integer &val =to_constant_int2t(non_ptr_op).constant_value;
+            total_offs = val * elem_size;
+            if (is_sub2t(expr))
+              total_offs.negate();
+          }
+          is_const = true;
+        } else {
+          is_const = false;
+        }
+      } catch (array_type2t::dyn_sized_array_excp *e) { // Nondet'ly sized.
+      } catch (array_type2t::inf_sized_array_excp *e) {
+      } catch (type2t::symbolic_type_excp *e) {
+        // This vastly annoying piece of code is making operations on void
+        // pointers, or worse. If a void pointer, treat the multiplier of the
+        // addition as being one. If not void pointer, throw cookies.
+        if (is_empty_type(subtype)) {
+          total_offs = to_constant_int2t(non_ptr_op).constant_value;
+          is_const = true;
+        } else {
+          std::cerr << "Pointer arithmetic on type where we can't determine ";
+          std::cerr << "size:" << std::endl;
+          std::cerr << subtype->pretty(0) << std::endl;
+          abort();
+        }
+      }
+
       // For each object, update its offset data according to the integer
-      // operand to this expr. Potential outcomes are keeping it nondet, making
+      // offset to this expr. Potential outcomes are keeping it nondet, making
       // it nondet, or calculating a new static offset.
       for(object_map_dt::const_iterator
           it=pointer_expr_set.read().begin();
@@ -407,14 +452,37 @@ void value_sett::get_value_set_rec(
       {
         objectt object=it->second;
 
-        if (object.offset_is_zero()) {
-          if (is_constant_int2t(non_ptr_op)) {
-            object.offset = to_constant_int2t(non_ptr_op).constant_value;
+        unsigned int nat_align =
+            get_natural_alignment(object_numbering[it->first]);
+        if (is_const && object.offset_is_set) {
+          // Both are const; we can accumulate offsets;
+          object.offset += total_offs;
+        } else if (is_const && !object.offset_is_set) {
+          // Offset is const, but existing pointer isn't. The alignment is now
+          // at least as small as the operand alignment.
+          object.offset_alignment =
+            std::min(nat_align, object.offset_alignment);
+        } else if (!is_const && object.offset_is_set) {
+          // Nondet but aligned offset from arithmetic; but offset set in
+          // current object. Take the minimum alignment again.
+          unsigned int offset_align = 0;
+          if ((object.offset % nat_align) != 0) {
+            // XXX -- what to do when we have something, say a struct, how
+            // do I reduce this offset to an alignment within it.
+            // Answer for the moment it to clamp it to maximum alignment; that
+            // might work sometimes.
+            offset_align =
+              object.offset.to_ulong() % (8);
           } else {
-            object.offset_is_set = false;
+            offset_align = nat_align;
           }
-        } else {
+
           object.offset_is_set=false;
+          object.offset_alignment = std::min(nat_align, offset_align);
+        } else {
+          // Final case: nondet offset from operation, and nondet offset in
+          // the current object. So, just take the minimum available.
+          object.offset_alignment = std::min(nat_align,object.offset_alignment);
         }
 
         // Once updated, store object reference into destination map.
@@ -443,7 +511,7 @@ void value_sett::get_value_set_rec(
       expr2tc locnum = gen_uint(location_number);
       dynamic_object2tc dynobj(dynamic_type, locnum, false, false);
 
-      insert(dest, dynobj, 0);
+      insert(dest, dynobj, mp_integer(0));
       }
       return;          
  
@@ -459,7 +527,7 @@ void value_sett::get_value_set_rec(
 
       dynamic_object2tc dynobj(ptr.subtype, locnum, false, false);
 
-      insert(dest, dynobj, 0);
+      insert(dest, dynobj, mp_integer(0));
       }
       return;
     case sideeffect2t::nondet:
@@ -475,7 +543,7 @@ void value_sett::get_value_set_rec(
   {
     // The use of an explicit constant struct value evaluates to it's address.
     address_of2tc tmp(expr->type, expr);
-    insert(dest, tmp, 0);
+    insert(dest, tmp, mp_integer(0));
     return;
   }
   else if (is_with2t(expr))
@@ -527,7 +595,7 @@ void value_sett::get_value_set_rec(
   // If none of those expressions matched, then we don't really know what this
   // expression evaluates to. So just record it as being unknown.
   unknown2tc tmp(original_type);
-  insert(dest, tmp);
+  insert(dest, tmp, mp_integer(0));
 }
 
 void value_sett::get_reference_set(
@@ -555,12 +623,9 @@ void value_sett::get_reference_set_rec(
       is_constant_string2t(expr))
   {
     // Any symbol we refer to, store into the destination object map.
-    if (is_array_type(expr) &&
-        is_array_type(to_array_type(expr->type).subtype))
-      insert(dest, expr);
-    else    
-      insert(dest, expr, 0);
-
+    // Given that this is a simple symbol, we can be sure that the offset to
+    // it is zero.
+    insert(dest, expr, objectt(true, 0));
     return;
   }
   else if (is_dereference2t(expr))
@@ -575,7 +640,6 @@ void value_sett::get_reference_set_rec(
   {
     // This index may be dereferencing a pointer. So, get the reference set of
     // the source value, and store a reference to all those things.
-    // XXX - does this /actually/ dereference anything?
     const index2t &index = to_index2t(expr);
     
     assert(is_array_type(index.source_value) ||
@@ -595,7 +659,7 @@ void value_sett::get_reference_set_rec(
 
       if (is_unknown2t(object)) {
         unknown2tc unknown(expr->type);
-        insert(dest, unknown);
+        insert(dest, unknown, mp_integer(0));
       } else if (is_array_type(object) || is_string_type(object)) {
         index2tc new_index(index.type, object, zero_uint);
         
@@ -608,12 +672,30 @@ void value_sett::get_reference_set_rec(
         objectt o = a_it->second;
 
         if (is_constant_int2t(index.index) &&
-            to_constant_int2t(index.index).constant_value.is_zero())
+            to_constant_int2t(index.index).constant_value.is_zero()) {
           ;
-        else if (is_constant_int2t(index.index) && o.offset_is_zero())
-          o.offset = to_constant_int2t(index.index).constant_value;
-        else
+        } else if (is_constant_int2t(index.index) && o.offset_is_zero()) {
+          o.offset = to_constant_int2t(index.index).constant_value *
+                     type_byte_size(*index.type);
+        } else {
+          // Non constant offset -- work out what the lowest alignment is.
+          // Fetch the type size of the array index element.
+          const array_type2t &a = to_array_type(index.source_value->type);
+          mp_integer m = type_byte_size(a);
+
+          // This index operation, whatever the offset, will always multiply
+          // by the size of the element type.
+          unsigned int index_align = m.to_ulong();
+
+          // Extract an offset from the old offset if set, otherwise the
+          // alignment field.
+          unsigned int old_align = (o.offset_is_set)
+            ? offset2align(object, o.offset)
+            : o.offset_alignment;
+
+          o.offset_alignment = std::min(index_align, old_align);
           o.offset_is_set = false;
+        }
           
         insert(dest, new_index, o);
       } else {
@@ -651,7 +733,7 @@ void value_sett::get_reference_set_rec(
           (is_typecast2t(object) &&
            is_null_object2t(to_typecast2t(object).from))) {
         unknown2tc unknown(memb.type);
-        insert(dest, unknown);
+        insert(dest, unknown, mp_integer(0));
       } else {
         objectt o=it->second;
 
@@ -662,7 +744,10 @@ void value_sett::get_reference_set_rec(
           object = typecast2tc(memb.source_value->type, object);
           new_memb = member2tc(memb.type, object, memb.member);
         }
-        
+
+        // XXX -- in terms of alignment, I believe this doesn't require
+        // anything, as we're constructing an expression that takes account
+        // of this. Also the same for references to indexes?
         insert(dest, new_memb, o);
       }
     }
@@ -685,11 +770,26 @@ void value_sett::get_reference_set_rec(
     get_reference_set_rec(cast.from, dest);
     return;
   }
+  else if (is_byte_extract2t(expr))
+  {
+    // Address of byte extracts can refer to the object that is being extracted
+    // from.
+    const byte_extract2t &extract = to_byte_extract2t(expr);
+
+    // This may or may not have a constant offset
+    objectt o = (is_constant_int2t(extract.source_offset))
+      ? objectt(true, to_constant_int2t(extract.source_offset).constant_value)
+      // Don't know what to do about alignments right now; default to nothing.
+      : objectt(false, 1);
+
+    insert(dest, extract.source_value, o);
+    return;
+  }
 
   // If we didn't recognize the expression, then we have no idea what this
   // refers to, so store an unknown expr.
   unknown2tc unknown(expr->type);
-  insert(dest, unknown);
+  insert(dest, unknown, mp_integer(0));
 }
 
 void value_sett::assign(

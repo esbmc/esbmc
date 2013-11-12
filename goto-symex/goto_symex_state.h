@@ -395,6 +395,20 @@ public:
    */
   std::vector<dstring> gen_stack_trace(void) const;
 
+  /**
+   *  Fixup types after renaming: we might rename a symbol that we
+   *  believe to be a uint32_t ptr, to be what it statically is, the address
+   *  of a byte array. Or something. Either way, the renaming process changes
+   *  the ptr type of the expression, making all subsequent pointer arithmetic
+   *  croak.
+   *  This used to be just for pointers, but is now for everything in general,
+   *  because a variety of code (01_cbmc_Pointer7 for example) is renaming
+   *  symbols to differently sized constants, which leads to Problems.
+   *  @param expr The expression that's just been renamed
+   *  @param orig_type The original type of the expression, before renaming.
+   */
+  void fixup_renamed_type(expr2tc &expr, const type2tc &orig_type);
+
   // Members
 
   /** Number of instructions executed in this thread. */

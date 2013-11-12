@@ -45,7 +45,6 @@ extern "C" {
 
 #include <pointer-analysis/value_set_analysis.h>
 #include <pointer-analysis/goto_program_dereference.h>
-#include <pointer-analysis/add_failed_symbols.h>
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
@@ -614,6 +613,10 @@ int cbmc_parseoptionst::doit_k_induction()
       context_inductive_step, ui_message_handler);
   set_verbosity_msg(bmc_inductive_step);
 
+  namespacet ns_base_case(context_base_case);
+  namespacet ns_forward_condition(context_forward_condition);
+  namespacet ns_inductive_step(context_inductive_step);
+
   // do actual BMC
   bool res;
 
@@ -630,6 +633,9 @@ int cbmc_parseoptionst::doit_k_induction()
       // We need to set the right context
       context.clear();
       context = context_base_case;
+
+      // Sins of the fathers, etc
+      migrate_namespace_lookup = &ns_base_case;
 
       res = do_bmc(bmc_base_case);
 
@@ -649,6 +655,7 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_forward_condition;
 
+      migrate_namespace_lookup = &ns_forward_condition;
       res = do_bmc(bmc_forward_condition);
 
       if (!res)
@@ -664,6 +671,7 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_inductive_step;
 
+      migrate_namespace_lookup = &ns_inductive_step;
       res = do_bmc(bmc_inductive_step);
 
       if (!res)
@@ -1248,6 +1256,10 @@ bool cbmc_parseoptionst::process_goto_program(
         *get_message_handler(), goto_functions);
     }
 
+#if 0
+    // This disabled code used to run the pointer static analysis and produce
+    // pointer assertions appropriately. Disable now that we can run it at
+    // symex time.
     status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
     value_set_analysis(goto_functions);
@@ -1264,9 +1276,7 @@ bool cbmc_parseoptionst::process_goto_program(
     // add pointer checks
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
-
-    // add failed symbols
-    add_failed_symbols(context, ns);
+#endif
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -1280,6 +1290,9 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("data-races-check"))
     {
       status("Adding Data Race Checks");
+
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
 
       add_race_assertions(
         value_set_analysis,

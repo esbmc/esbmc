@@ -18,7 +18,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <i2string.h>
 #include <expr_util.h>
 #include <string2array.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>
@@ -1187,7 +1187,16 @@ z3_convt::convert_smt_expr(const xor2t &xorval, void *_bv)
 void
 z3_convt::convert_smt_expr(const implies2t &implies, void *_bv)
 {
-  convert_logic_2ops(implies.side_1, implies.side_2, &z3::mk_implies, _bv);
+  expr2tc side1 = implies.side_1;
+  if (!is_bool_type(side1))
+    side1 = typecast2tc(get_bool_type(), side1);
+
+  expr2tc side2 = implies.side_2;
+  if (!is_bool_type(side2))
+    side2 = typecast2tc(get_bool_type(), side2);
+
+
+  convert_logic_2ops(side1, side2, &z3::mk_implies, _bv);
 }
 
 void
@@ -1647,13 +1656,89 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
 {
   z3::expr &output = cast_to_z3(_bv);
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte extract");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source)) {
+      source = typecast2tc(get_uint_type(src_width), source);
+    }
+
+    // The approach: the argument is now a bitvector. Just shift it the
+    // appropriate amount, according to the source offset, and select out the
+    // bottom byte.
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      // Z3 requires these two arguments to be the same width
+      offs = typecast2tc(source->type, data.source_offset);
+
+    z3::expr src, o;
+    convert_bv(source, src);
+    convert_bv(offs, o);
+    output = z3::to_expr(ctx, Z3_mk_bvlshr(ctx, src, o));
+    output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, 7, 0, output));
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
+  z3::expr source;
+
+  convert_bv(data.source_value, source);
+
   unsigned width;
-  width = data.source_value->type->get_width();
+  try {
+    width = data.source_value->type->get_width();
+  } catch (array_type2t::dyn_sized_array_excp *p) {
+    // Dynamically sized array. How to handle -- for now, assume that it's a
+    // byte array, and select the relevant portions out.
+    const array_type2t &arr_type = to_array_type(data.source_value->type);
+    assert(is_scalar_type(arr_type.subtype) && "Can't cope with dynamic "
+           "nonscalar arrays right now, sorry");
+    //unsigned long result_sz = data.type->get_width() / 8;
+    //unsigned long subtype_sz = arr_type.subtype->get_width() / 8;
+
+    // XXX -- unaligned? Probably would mean illegal access anyway.
+    // Actually no, we can extract a single byte from any sized array.
+
+    expr2tc src_offs = data.source_offset;
+    expr2tc expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+
+    // XXX -- actually, byte extract only supports extracting bytes at the
+    // moment.
+
+    if (!is_number_type(arr_type.subtype))
+      expr = typecast2tc(get_uint8_type(), expr);
+
+    convert_bv(expr, output);
+
+#if 0
+    unsigned long sofar = subtype_sz;
+    while (sofar < result_sz) {
+      src_offs = add2tc(src_offs->type, src_offs, one_uint);
+      expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+      if (!is_number_type(arr_type.subtype))
+        expr = typecast2tc(elem_bv_type, expr);
+
+      z3::expr tmp;
+      convert_bv(expr, tmp);
+
+      if (data.big_endian) {
+        output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, output, tmp));
+      } else {
+        output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, tmp, output));
+      }
+
+      sofar += subtype_sz;
+    }
+#endif
+
+    return;
+  }
+
   // XXXjmorse - looks like this only ever reads a single byte, not the desired
   // number of bytes to fill the type.
 
@@ -1666,10 +1751,6 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     upper = max - (intref.constant_value.to_long() * 8); //max-(i*w);
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
-
-  z3::expr source;
-
-  convert_bv(data.source_value, source);
 
   if (int_encoding) {
     if (is_fixedbv_type(data.source_value->type)) {
@@ -1759,34 +1840,50 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
             z3_ctx, struct_elem_inv[num_elems], struct_elem_inv[k]));
       }
 
-      source = struct_elem_inv[num_elems];
-    } else if (is_array_type(data.source_value)) {
-      z3::expr idx;
-      convert_bv(data.source_offset, idx);
-      output = select(source, idx);
+      output = struct_elem_inv[num_elems];
+    } else if (is_array_type(data.source_value) ||
+               is_string_type(data.source_value)) {
+      // lololol special case: two dimensional arrays. deliberately not n.
+      if (is_array_type(data.source_value) &&
+          is_array_type(to_array_type(data.source_value->type).subtype)) {
+        // Double select.
+        unsigned int byte_size = data.source_value->type->get_width() / 8;
+        z3::expr index;
+        convert_bv(data.source_offset, index);
+        z3::expr byte_size_e = ctx.esbmc_int_val(byte_size);
+        z3::expr divindex = mk_div(index, byte_size_e, true);
+        output = select(source, divindex);
+        z3::expr subindex = index - (divindex * byte_size_e); // wat
+        output = select(output, subindex);
+      } else {
+        z3::expr idx;
+        convert_bv(data.source_offset, idx);
+        output = select(source, idx);
+      }
     } else if (is_bv_type(data.source_value)) {
-      if (width >= upper)
-        source = z3::to_expr(ctx, Z3_mk_extract(ctx, upper, lower, source));
-      else
-        source = z3::to_expr(ctx, Z3_mk_extract(ctx, upper - lower, 0, source));
+      output = source;
     } else if (is_fixedbv_type(data.source_value)) {
       if (width > data.type->get_width()) {
-        source = z3::to_expr(ctx,
+        output = z3::to_expr(ctx,
                   Z3_mk_extract(ctx, data.type->get_width()-1, 0, source));
       } else {
-        source = z3::to_expr(ctx,
+        output = z3::to_expr(ctx,
                   Z3_mk_extract(ctx, upper, lower, source));
       }
+    } else {
+      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
+      data.dump();
+      abort();
     }
 
-    unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, source));
-    if (sort_sz < upper) {
+    unsigned int sort_sz =Z3_get_bv_sort_size(ctx, Z3_get_sort(ctx, output));
+    if (sort_sz <= upper) {
       // Extends past the end of this data item. Should be fixed in some other
       // dedicated feature branch, in the meantime stop Z3 from crashing
       z3::sort s = ctx.bv_sort(8);
       output = ctx.fresh_const(NULL, s);
     } else {
-      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, source));
+      output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, upper, lower, output));
     }
   }
 }
@@ -1800,8 +1897,53 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
   // op1 is the byte number
   // op2 is the value to update with
 
-  if (!is_constant_int2t(data.source_offset))
-    throw new conv_error("byte_extract expects constant 2nd arg");
+  if (!is_constant_int2t(data.source_offset)) {
+    if (is_pointer_type(data.type)) {
+      // Just return a free pointer. Seriously, this is going to be faster,
+      // easier, and probably accurate than anything else.
+      z3::sort s;
+      convert_type(data.type, s);
+      output = ctx.fresh_const(NULL, s);
+      return;
+    }
+
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte update");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source))
+      source = typecast2tc(get_uint_type(src_width), source);
+
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      offs = typecast2tc(get_uint_type(src_width), offs);
+
+    expr2tc update = data.update_value;
+    if (update->type->get_width() != src_width)
+      update = typecast2tc(get_uint_type(src_width), update);
+
+    // The approach: mask, shift and or. XXX, byte order?
+    // Massively inefficient.
+    z3::expr src, o, u;
+    convert_bv(source, src);
+    convert_bv(offs, o);
+    convert_bv(update, u);
+
+    o = o * ctx.bv_val(8, src_width);
+
+    z3::expr effs = ctx.bv_val(0xFF, src_width);
+    effs = z3::expr(ctx, Z3_mk_bvshl(ctx, effs, o));
+    z3::expr noteffs = ~effs;
+    src = src & effs;
+
+    u = z3::expr(ctx, Z3_mk_bvshl(ctx, u, o));
+    src = src | u;
+
+    output = src;
+    return;
+  }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
@@ -1848,11 +1990,59 @@ z3_convt::convert_smt_expr(const byte_update2t &data, void *_bv)
                         Z3_mk_sign_ext(z3_ctx, (width_op0 - width_op2), value));
     else
       throw new conv_error("1unsupported irep for convert_byte_update");
+  } else if (is_unsignedbv_type(data.source_value->type)) {
+    if (int_encoding) {
+      output = z3::to_expr(ctx, value);
+      return;
+    }
+
+    width_op0 = data.source_value->type->get_width();
+
+    if (width_op0 == 0)
+      // XXXjmorse - can this ever happen now?
+      throw new conv_error("failed to get width of byte_update operand");
+
+    if (width_op0 > width_op2)
+      output = z3::to_expr(ctx,
+                        Z3_mk_zero_ext(z3_ctx, (width_op0 - width_op2), value));
+    else
+      throw new conv_error("15unsupported irep for convert_byte_update");
+
 
   } else if (is_array_type(data.source_value)) {
+    const array_type2t &arr_type = to_array_type(data.source_value->type);
     z3::expr index;
     convert_bv(data.source_offset, index);
-    output = store(tuple, index, value); // XXX where's index coming from?
+    assert(is_bv_type(arr_type.subtype) && "Byte updating an array of "
+           "non-bitvector types: you're going to have a bad time");
+    if (arr_type.subtype->get_width() == 8) {
+      // This is just a byte array.
+      output = store(tuple, index, value);
+    } else {
+      // Update in some part of an element. Produce mask and or.
+      // First, select out the relevant element.
+      unsigned int byte_size = data.source_value->type->get_width() / 8;
+      z3::expr byte_size_e = ctx.esbmc_int_val(byte_size);
+      z3::expr divindex = mk_div(index, byte_size_e, true);
+      output = select(tuple, divindex);
+      z3::expr where = index - (divindex * byte_size_e); // wat
+
+      z3::expr mask = ctx.esbmc_int_val(0xFF);
+      z3::expr eight = ctx.esbmc_int_val(8);
+      z3::expr shiftsz = where * eight;
+      mask = z3::to_expr(ctx, Z3_mk_bvshl(ctx, mask, shiftsz));
+      output = mk_bvand(output, mask);
+
+      // Or in the given byte value.
+      typecast2tc cast(get_uint_type(config.ansi_c.int_width),
+                       data.update_value);
+      z3::expr value;
+      convert_bv(cast, value);
+      value = z3::to_expr(ctx, Z3_mk_bvshl(ctx, value, shiftsz));
+      output = mk_bvor(output, value);
+
+      output = store(tuple, divindex, output);
+    }
   } else if (is_fixedbv_type(data.source_value)) {
     width_op0 = data.source_value->type->get_width();
     if (width_op0 > width_op2) {
@@ -2700,6 +2890,17 @@ z3_convt::convert_smt_expr(const overflow_neg2t &neg, void *_bv)
   output = z3::to_expr(ctx, Z3_mk_not(z3_ctx, no_over));
 }
 
+
+void
+z3_convt::convert_smt_expr(const concat2t &cat, void *_bv)
+{
+  z3::expr &output = cast_to_z3(_bv);
+  z3::expr op1, op2;
+  convert_bv(cat.side_1, op1);
+  convert_bv(cat.side_2, op2);
+  output = z3::to_expr(ctx, Z3_mk_concat(z3_ctx, op1, op2));
+}
+
 void
 z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
                                 const expr2tc &side2,
@@ -2785,7 +2986,11 @@ z3_convt::convert_pointer_arith(expr2t::expr_ids id, const expr2tc &side1,
       typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
       type2tc followed_type;
       migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+      mp_integer type_size;
+      if (is_empty_type(followed_type))
+        type_size = 1;
+      else
+        type_size = type_byte_size(*followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype(new unsignedbv_type2t(config.ansi_c.int_width));
@@ -2928,30 +3133,36 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
     expr2tc endisequal;
+    expr2tc the_offs;
     try {
       uint64_t type_size = expr->type->get_width() / 8;
-      constant_int2tc const_offs(ptr_loc_type, BigInt(type_size));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      the_offs = constant_int2tc(ptr_loc_type, BigInt(type_size));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (array_type2t::dyn_sized_array_excp *e) {
       // Dynamically (nondet) sized array; take that size and use it for the
       // offset-to-end expression.
-      const expr2tc size_expr = e->size;
-      add2tc start_plus_offs(ptr_loc_type, start_sym, size_expr);
+      the_offs = e->size;
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     } catch (type2t::symbolic_type_excp *e) {
       // Type is empty or code -- something that we can never have a real size
       // for. In that case, create an object of size 1: this means we have a
       // valid entry in the address map, but that any modification of the
       // pointer leads to invalidness, because there's no size to think about.
-      constant_int2tc const_offs(ptr_loc_type, BigInt(1));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, const_offs);
+      the_offs = constant_int2tc(ptr_loc_type, BigInt(1));
+      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
       endisequal = equality2tc(start_plus_offs, end_sym);
     }
 
     // Also record the amount of memory space we're working with for later usage
-    total_mem_space.back() +=
-      pointer_offset_size(*expr->type.get()).to_long() + 1;
+    unsigned int mem_size = 1;
+    try {
+      if (!is_code_type(expr))
+        mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
+    } catch (array_type2t::dyn_sized_array_excp *foo) {
+    }
+    total_mem_space.back() += mem_size;
 
     // Assert that start + offs == end
     z3::expr offs_eq;
@@ -2961,16 +3172,18 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Even better, if we're operating in bitvector mode, it's possible that
     // Z3 will try to be clever and arrange the pointer range to cross the end
     // of the address space (ie, wrap around). So, also assert that end > start
+    // Except when the size is zero, which might not be statically dicoverable
     greaterthan2tc wraparound(end_sym, start_sym);
-    z3::expr wraparound_eq;
-    convert_bv(wraparound, wraparound_eq);
-    assert_formula(wraparound_eq);
+    notequal2tc neq(zero_uint, the_offs);
+    or2tc either(wraparound, neq);
+    z3::expr either_expr;
+    convert_bv(either, either_expr);
+    assert_formula(either_expr);
 
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] =
-          pointer_offset_size(*expr->type.get()).to_long() + 1;
+    addr_space_data.back()[obj_num] = mem_size;
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
@@ -3352,7 +3565,8 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
   ty = t.get_sort();
 
   if (!ty.is_datatype()) {
-    throw new z3_convt::conv_error("argument must be a tuple");
+    std::cerr << "argument must be a tuple" << std::endl;
+    abort();
   }
 
   num_fields = Z3_get_tuple_sort_num_fields(ctx, ty);

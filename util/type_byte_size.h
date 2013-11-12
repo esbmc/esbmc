@@ -15,19 +15,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_types.h>
 #include <irep2.h>
 
-mp_integer member_offset(
-  const struct_typet &type,
-  const irep_idt &member);
+mp_integer member_offset(const struct_type2t &type, const irep_idt &member);
 
-mp_integer member_offset(
-  const struct_type2t &type,
-  const irep_idt &member);
+mp_integer type_byte_size(const type2t &type);
 
-mp_integer pointer_offset_size(const typet &type);
-mp_integer pointer_offset_size(const type2t &type);
+expr2tc compute_pointer_offset(const expr2tc &expr);
 
-mp_integer compute_pointer_offset(
-  const namespacet &ns,
-  const exprt &expr);
+const expr2tc & get_base_object(const expr2tc &expr);
 
 #endif

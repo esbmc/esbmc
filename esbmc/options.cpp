@@ -125,6 +125,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"symex-ssa-trace",	switc,		""	},
 { 0,	"double-assign-check",	switc,		""	},
 { 0,	"git-hash",		switc,		""	},
+{ 0,	"no-align-check",	switc,		""	},
+{ 0,	"quiet",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},

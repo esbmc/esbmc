@@ -16,7 +16,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       string2array.cpp time_stopping.cpp symbol.cpp \
       type_eq.cpp guard.cpp array_name.cpp message_stream.cpp \
       union_find.cpp pretty_names.cpp \
-      xml.cpp xml_irep.cpp std_types.cpp std_code.cpp pointer_offset_size.cpp \
+      xml.cpp xml_irep.cpp std_types.cpp std_code.cpp type_byte_size.cpp \
       format_constant.cpp std_expr.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
       pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \

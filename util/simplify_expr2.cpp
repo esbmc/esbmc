@@ -6,6 +6,7 @@
 
 #include <ansi-c/c_types.h>
 #include <base_type.h>
+#include <type_byte_size.h>
 
 expr2tc
 expr2t::do_simplify(bool second __attribute__((unused))) const
@@ -679,6 +680,9 @@ expr2tc
 pointer_offset2t::do_simplify(bool second) const
 {
 
+  // XXX - this could be better. But the current implementation catches most
+  // cases that ESBMC produces internally.
+
   if (second && is_address_of2t(ptr_obj)) {
     const address_of2t &addrof = to_address_of2t(ptr_obj);
     return pointer_offs_simplify_2(addrof.ptr_obj, type);
@@ -712,19 +716,42 @@ pointer_offset2t::do_simplify(bool second) const
     assert(!(is_pointer_type(add.side_1) &&
              is_pointer_type(add.side_2)));
 
-    const expr2tc ptr_op = (is_pointer_type(add.side_1))
-                           ? add.side_1 : add.side_2;
-    const expr2tc non_ptr_op = (is_pointer_type(add.side_1))
-                               ? add.side_2 : add.side_1;
+    expr2tc ptr_op = (is_pointer_type(add.side_1)) ? add.side_1 : add.side_2;
+    expr2tc non_ptr_op =
+      (is_pointer_type(add.side_1)) ? add.side_2 : add.side_1;
+
+    // Can't do any kind of simplification if the ptr op has a symbolic type.
+    // Let the SMT layer handle this. In the future, can we pass around a
+    // namespace?
+    if (is_symbol_type(to_pointer_type(ptr_op->type).subtype))
+      return expr2tc();
 
     // Turn the pointer one into pointer_offset.
     expr2tc new_ptr_op = expr2tc(new pointer_offset2t(type, ptr_op));
-    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, non_ptr_op));
+    // And multiply the non pointer one by the type size.
+    type2tc ptr_int_type = get_int_type(config.ansi_c.pointer_width);
+    type2tc ptr_subtype = to_pointer_type(ptr_op->type).subtype;
+    mp_integer thesize = (is_empty_type(ptr_subtype)) ? 1
+                          : type_byte_size(*ptr_subtype.get());
+#if 0
+    constant_int2tc type_size(ptr_int_type, thesize);
+#endif
+    constant_int2tc type_size(type, thesize);
 
-    // XXX XXX XXX
-    // XXX XXX XXX  This may be the source of pointer arith fail. Or lack of
-    // XXX XXX XXX  consideration of pointer arithmetic.
-    // XXX XXX XXX
+#if 0
+    if (non_ptr_op->type->get_width() != config.ansi_c.pointer_width)
+      non_ptr_op = typecast2tc(ptr_int_type, non_ptr_op);
+#endif
+    // Herp derp tacas
+    if (non_ptr_op->type->get_width() != type->get_width())
+      non_ptr_op = typecast2tc(type, non_ptr_op);
+
+#if 0
+    mul2tc new_non_ptr_op(ptr_int_type, non_ptr_op, type_size);
+#endif
+    mul2tc new_non_ptr_op(type, non_ptr_op, type_size);
+
+    expr2tc new_add = expr2tc(new add2t(type, new_ptr_op, new_non_ptr_op));
 
     // So, this add is a valid simplification. We may be able to simplify
     // further though.
@@ -1100,8 +1127,24 @@ typecast2t::do_simplify(bool second) const
     // Use of strings here is inefficient XXX jmorse
     return from;
   } else if (is_pointer_type(type) && is_pointer_type(from)) {
-    // Casting from one pointer to another is meaningless
-    return from;
+    // Casting from one pointer to another is meaningless... except when there's
+    // pointer arithmetic about to be applied to it. So, only nurk typecasts
+    // that don't change the subtype width.
+    const pointer_type2t &ptr_to = to_pointer_type(type);
+    const pointer_type2t &ptr_from = to_pointer_type(from->type);
+
+    if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
+        is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
+      return expr2tc(); // Not worth thinking about
+    unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
+                            : ptr_to.subtype->get_width();
+    unsigned int from_width = (is_empty_type(ptr_from.subtype)) ? 8
+                            : ptr_from.subtype->get_width();
+
+    if (to_width == from_width)
+      return from;
+    else
+      return expr2tc();
   } else if (is_constant_expr(from)) {
     // Casts from constant operands can be done here.
     if (is_constant_bool2t(from) && is_bv_type(type)) {
@@ -1195,6 +1238,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
   // we can't simplify away the symbol.
   if (is_index2t(ptr_obj)) {
     const index2t &idx = to_index2t(ptr_obj);
+    const pointer_type2t &ptr_type = to_pointer_type(type);
 
     // Don't simplify &a[0]
     if (is_constant_int2t(idx.index) &&
@@ -1207,7 +1251,7 @@ address_of2t::do_simplify(bool second __attribute__((unused))) const
 
     expr2tc zero = expr2tc(new constant_int2t(index_type2(), BigInt(0)));
     expr2tc new_idx = expr2tc(new index2t(idx.type, idx.source_value, zero));
-    expr2tc sub_addr_of = expr2tc(new address_of2t(type, new_idx));
+    expr2tc sub_addr_of = expr2tc(new address_of2t(ptr_type.subtype, new_idx));
 
     return expr2tc(new add2t(type, sub_addr_of, new_index));
   } else {
@@ -1449,6 +1493,12 @@ obj_equals_addr_of(const expr2tc &a, const expr2tc &b)
   } else if (is_member2t(a) && is_member2t(b)) {
     return obj_equals_addr_of(to_member2t(a).source_value,
                               to_member2t(b).source_value);
+  } else if (is_constant_string2t(a) && is_constant_string2t(b)) {
+    bool val = (to_constant_string2t(a).value == to_constant_string2t(b).value);
+    if (val)
+      return true_expr;
+    else
+      return false_expr;
   }
 
   return expr2tc();

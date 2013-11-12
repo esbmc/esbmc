@@ -16,6 +16,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <namespace.h>
 #include <mp_arith.h>
 #include <reference_counting.h>
+#include <type_byte_size.h>
 
 #include "object_numbering.h"
 #include "value_sets.h"
@@ -95,14 +96,23 @@ public:
   class objectt
   {
   public:
-    objectt():offset_is_set(false)
+    objectt(bool offset_set, unsigned int operand)
     {
+      if (offset_set) {
+        offset_is_set = true;
+        offset = mp_integer(operand);
+      } else {
+        offset_is_set = false;
+        offset_alignment = operand;
+        assert(offset_alignment != 0);
+      }
     }
 
-    explicit objectt(const mp_integer &_offset):
+    explicit objectt(bool offset_set, const mp_integer &_offset):
       offset(_offset),
       offset_is_set(true)
     {
+      assert(offset_set);
     }
 
     /** Record of the explicit offset into the object. Only valid when
@@ -113,6 +123,12 @@ public:
      *  of which is in the offset field. If not, then the offset isn't
      *  statically known, and must be handled at solver time. */
     bool offset_is_set;
+    /** Least alignment of the offset. When offset_is_set is false, we state
+     *  what we think the alignment of this pointer is. This becomes massively
+     *  useful if we point at an array, but can know that the pointer is aligned
+     *  to the array element edges.
+     *  Units are bytes. Zero means N/A. */
+    unsigned int offset_alignment;
     bool offset_is_zero() const
     { return offset_is_set && offset.is_zero(); }
   };
@@ -176,6 +192,55 @@ public:
 
 //********************************** Methods ***********************************
 
+  /** Get the natural alignment unit of a reference to e. I don't know a more
+   *  appropriate term, but if we were to have an offset into e, then what is
+   *  the greatest alignment guarentee that would make sense? i.e., an offset
+   *  of 404 into an array of integers gives an alignment guarentee of 4 bytes,
+   *  not 404.
+   *
+   *  For arrays, this is the element size.
+   *  For structs, I imagine it's the machine word size (?). Depends on padding.
+   *  For integers / other things, it's the machine / word size (?).
+   */
+  inline unsigned int get_natural_alignment(const expr2tc &e) const
+  {
+    const type2tc &t = e->type;
+
+    // Null objects are allowed to have symbol types. What alignment to give?
+    // Pick 8 bytes, as that's a) word aligned, b) double/uint64_t aligned.
+    if (is_null_object2t(e))
+      return 8;
+
+    assert(!is_symbol_type(t));
+    if (is_array_type(t)) {
+      const array_type2t &arr = to_array_type(t);
+      return type_byte_size(*arr.subtype).to_ulong();
+    } else {
+      return 8;
+    }
+  }
+
+  inline unsigned int offset2align(const expr2tc &e, const mp_integer &m) const
+  {
+    unsigned int nat_align = get_natural_alignment(e);
+    if (m == 0) {
+      return nat_align;
+    } else if ((m % nat_align) == 0) {
+      return nat_align;
+    } else {
+      // What's the least alignment available?
+      unsigned int max_align = 8;
+      do {
+        // Repeatedly decrease the word size by powers of two, and test to see
+        // whether the offset meets that alignment. This will always succeed
+        // and exist the loop when the alignment reaches 1.
+        if ((m % max_align) == 0)
+          return max_align;
+        max_align /= 2;
+      } while (true);
+    }
+  }
+
   /** Convert an object map element to an expression. Formulates either an
    *  object_descriptor irep, or unknown / invalid expr's as appropriate. */
   expr2tc to_expr(object_map_dt::const_iterator it) const;
@@ -185,7 +250,13 @@ public:
    *  @param it Iterator of existing object record to insert into dest. */
   void set(object_mapt &dest, object_map_dt::const_iterator it) const
   {
-    dest.write()[it->first]=it->second;
+    // Fetch/insert iterator
+    std::pair<object_map_dt::iterator,bool> res =
+      dest.write().insert(object_map_dt::value_type(it->first, it->second));
+
+    // If element already existed, overwrite.
+    if (res.second)
+      res.first->second = it->second;
   }
 
   bool insert(object_mapt &dest, object_map_dt::const_iterator it) const
@@ -193,14 +264,9 @@ public:
     return insert(dest, it->first, it->second);
   }
 
-  bool insert(object_mapt &dest, const expr2tc &src) const
-  {
-    return insert(dest, object_numbering.number(src), objectt());
-  }
-
   bool insert(object_mapt &dest, const expr2tc &src, const mp_integer &offset) const
   {
-    return insert(dest, object_numbering.number(src), objectt(offset));
+    return insert(dest, object_numbering.number(src), objectt(true, offset));
   }
 
   /** Insert an object record into the given object map. This method has
@@ -222,15 +288,18 @@ public:
    */
   bool insert(object_mapt &dest, unsigned n, const objectt &object) const
   {
-    if(dest.read().find(n)==dest.read().end())
+    object_map_dt::const_iterator it = dest.read().find(n);
+    if (it == dest.read().end())
     {
       // new
-      dest.write()[n]=object;
+      dest.write().insert(object_map_dt::value_type(n, object));
       return true;
     }
     else
     {
-      objectt &old=dest.write()[n];
+      object_map_dt::iterator it2 = dest.write().find(n);
+      objectt &old = it2->second;
+      const expr2tc &expr_obj = object_numbering[n];
 
       if(old.offset_is_set && object.offset_is_set)
       {
@@ -238,14 +307,35 @@ public:
           return false;
         else
         {
-          old.offset_is_set=false;
+          // Merge the tracking for two offsets; take the minimum alignment
+          // guarenteed by them.
+          unsigned long old_align = offset2align(expr_obj, old.offset);
+          unsigned long new_align = offset2align(expr_obj, object.offset);
+          old.offset_is_set = false;
+          old.offset_alignment = std::min(old_align, new_align);
           return true;
         }
+      } else if(!old.offset_is_set) {
+        unsigned int oldalign = old.offset_alignment;
+        if (!object.offset_is_set) {
+          // Both object offsets not set; update alignment to minimum of the two
+          old.offset_alignment =
+            std::min(old.offset_alignment, object.offset_alignment);
+          return !(old.offset_alignment == oldalign);
+        } else {
+          // Old offset unset; new offset set. Compute the alignment of the
+          // new object's offset, and take the minimum of that and the old
+          // alignment.
+          unsigned int new_alignment = offset2align(expr_obj, object.offset);
+          old.offset_alignment = std::min(old.offset_alignment, new_alignment);
+          return !(old.offset_alignment == oldalign);
+        }
       }
-      else if(!old.offset_is_set)
-        return false;
       else
       {
+        // Old offset alignment is set; new isn't.
+        unsigned int old_align = offset2align(expr_obj, old.offset);
+        old.offset_alignment = std::min(old_align, object.offset_alignment);
         old.offset_is_set=false;
         return true;
       }

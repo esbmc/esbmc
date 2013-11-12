@@ -36,12 +36,12 @@ protected:
   {
     return true;
   }
-#if 1
+
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard);
-#endif
+
   virtual void get_value_set(
     const expr2tc &expr,
     value_setst::valuest &value_set);
@@ -49,15 +49,18 @@ protected:
   virtual bool has_failed_symbol(
     const expr2tc &expr,
     const symbolt *&symbol);
+
+  virtual void rename(expr2tc &expr);
 };
 
 void symex_dereference_statet::dereference_failure(
   const std::string &property __attribute__((unused)),
-  const std::string &msg __attribute__((unused)),
-  const guardt &guard __attribute__((unused)))
+  const std::string &msg,
+  const guardt &guard)
 {
-  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
-  // we fix the memory model.
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
 bool symex_dereference_statet::has_failed_symbol(
@@ -93,50 +96,15 @@ void symex_dereference_statet::get_value_set(
   state.value_set.get_value_set(expr, value_set);
 }
 
-void goto_symext::dereference_rec(
-  expr2tc &expr,
-  guardt &guard,
-  dereferencet &dereference,
-  const bool write)
+void symex_dereference_statet::rename(expr2tc &expr)
 {
-
-  if (is_dereference2t(expr))
-  {
-    dereference2t &deref = to_dereference2t(expr);
-
-    // first make sure there are no dereferences in there
-    dereference_rec(deref.value, guard, dereference, false);
-
-    dereference.dereference(deref.value, guard,
-                            write ? dereferencet::WRITE : dereferencet::READ);
-    expr = deref.value;
-  }
-  else if (is_index2t(expr) &&
-           is_pointer_type(to_index2t(expr).source_value))
-  {
-    index2t &index = to_index2t(expr);
-    add2tc tmp(index.source_value->type, index.source_value, index.index);
-
-    // first make sure there are no dereferences in there
-    dereference_rec(tmp, guard, dereference, false);
-
-    dereference.dereference(tmp, guard,
-                            write ? dereferencet::WRITE : dereferencet::READ);
-    expr = tmp;
-  }
-  else
-  {
-    Forall_operands2(it, idx, expr) {
-      if (is_nil_expr(*it))
-        continue;
-
-      dereference_rec(*it, guard, dereference, write);
-    }
-  }
+  goto_symex.cur_state->rename(expr);
+  return;
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write)
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
 {
+
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
 
   dereferencet dereference(
@@ -150,5 +118,17 @@ void goto_symext::dereference(expr2tc &expr, const bool write)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  dereference_rec(expr, guard, dereference, write);
+  if (free) {
+    expr2tc tmp = expr;
+    while (is_typecast2t(tmp))
+      tmp = to_typecast2t(tmp).from;
+
+    assert(is_pointer_type(tmp));
+    std::list<expr2tc> dummy;
+    // Dereference to byte type, because it's guarenteed to succeed.
+    dereference.dereference_expr(expr, guard, dereferencet::FREE);
+  } else {
+    dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
+                                                      : dereferencet::READ);
+  }
 }

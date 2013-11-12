@@ -6,6 +6,9 @@
 #include <namespace.h>
 #include <config.h>
 #include <simplify_expr.h>
+#include <type_byte_size.h>
+
+#include <ansi-c/c_types.h>
 
 // File for old irep -> new irep conversions.
 
@@ -35,8 +38,29 @@ binary2bigint(irep_idt binary, bool is_signed)
   return res.first->second;
 }
 
+static expr2tc
+fixup_containerof_in_sizeof(const expr2tc &_expr)
+{
+  if (is_nil_expr(_expr))
+    return _expr;
+
+  expr2tc expr = _expr;
+
+  // Blast through all typedefs
+  while (is_typecast2t(expr))
+    expr = to_typecast2t(expr).from;
+
+  // Base must be null; must start with an addressof.
+  if (!is_address_of2t(expr))
+    return expr;
+
+  const address_of2t &addrof = to_address_of2t(expr);
+  return compute_pointer_offset(addrof.ptr_obj);
+}
+
 void
-real_migrate_type(const typet &type, type2tc &new_type_ref)
+real_migrate_type(const typet &type, type2tc &new_type_ref,
+                  const namespacet *ns, bool cache)
 {
 
   if (type.id() == typet::t_bool) {
@@ -61,7 +85,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     expr2tc size((expr2t *)NULL);
     bool is_infinite = false;
 
-    migrate_type(type.subtype(), subtype);
+    migrate_type(type.subtype(), subtype, ns, cache);
 
     if (type.find(typet::a_size).id() == "infinity") {
       is_infinite = true;
@@ -69,6 +93,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
       exprt sz = (exprt&)type.find(typet::a_size);
       simplify(sz);
       migrate_expr(sz, size);
+      size = fixup_containerof_in_sizeof(size);
     }
 
     array_type2t *a = new array_type2t(subtype, size, is_infinite);
@@ -76,7 +101,8 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == typet::t_pointer) {
     type2tc subtype;
 
-    migrate_type(type.subtype(), subtype);
+    // Don't recursively look up anything through pointers.
+    migrate_type(type.subtype(), subtype, NULL, true);
 
     pointer_type2t *p = new pointer_type2t(subtype);
     new_type_ref = type2tc(p);
@@ -84,8 +110,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     empty_type2t *e = new empty_type2t();
     new_type_ref = type2tc(e);
   } else if (type.id() == typet::t_symbol) {
-    symbol_type2t *s = new symbol_type2t(type.identifier());
-    new_type_ref = type2tc(s);
+    if (ns) {
+      typet followed = ns->follow(type);
+      real_migrate_type(followed, new_type_ref, ns, cache);
+    } else {
+      symbol_type2t *s = new symbol_type2t(type.identifier());
+      new_type_ref = type2tc(s);
+    }
   } else if (type.id() == typet::t_struct) {
     std::vector<type2tc> members;
     std::vector<irep_idt> names;
@@ -95,7 +126,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref);
+      migrate_type((const typet&)it->type(), ref, ns, cache);
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
@@ -116,7 +147,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
-      migrate_type((const typet&)it->type(), ref);
+      migrate_type((const typet&)it->type(), ref, ns, cache);
 
       members.push_back(ref);
       names.push_back(it->get(typet::a_name));
@@ -152,12 +183,18 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     for (code_typet::argumentst::const_iterator it = old_args.begin();
          it != old_args.end(); it++) {
       type2tc tmp;
-      migrate_type(it->type(), tmp);
+      migrate_type(it->type(), tmp, ns, cache);
       args.push_back(tmp);
       arg_names.push_back(it->get_identifier());
     }
 
-    migrate_type(static_cast<const typet &>(type.return_type()), ret_type);
+    // Don't migrate return type if it's a symbol. There are a variety of C++
+    // things where a method returns itself, or similar.
+    if (type.return_type().id() == "symbol") {
+      ret_type = type2tc(new symbol_type2t(type.return_type().identifier()));
+    } else {
+      migrate_type(static_cast<const typet &>(type.return_type()), ret_type, ns, cache);
+    }
 
     code_type2t *c = new code_type2t(args, ret_type, arg_names, ellipsis);
     new_type_ref = type2tc(c);
@@ -174,7 +211,7 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
       forall_irep(it, cpy.get_sub()) {
         assert((*it).id() == "type");
         type2tc tmptype;
-        migrate_type((*it).type(), tmptype);
+        migrate_type((*it).type(), tmptype, ns, cache);
         template_args.push_back(tmptype);
       }
     }
@@ -184,6 +221,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
     new_type_ref = type2tc(type_pool.get_empty());
   } else if (type.id() == "ellipsis") {
     // Eh? Ellipsis isn't a type. It's a special case.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "destructor") {
+    // This is a destructor return type. Which is nil.
+    new_type_ref = type_pool.get_empty();
+  } else if (type.id() == "constructor") {
+    // New operator returns something; constructor is a void method on an
+    // existing object.
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == "incomplete_array") {
     // Hurrr. Mark as being infinite in size.
@@ -196,6 +240,13 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
 
     array_type2t *a = new array_type2t(subtype, size, true);
     new_type_ref = type2tc(a);
+  } else if (type.id() == "incomplete_struct") {
+    // Only time that this occurs and the type checking code doesn't complain,
+    // is when we take the /address/ of an incomplete struct. That's fine,
+    // because we still can't access it as an incomplete struct. So just return
+    // an infinitely sized array of characters, the most permissive approach to
+    // something that shouldn't happen.
+    new_type_ref = type2tc(new array_type2t(get_uint8_type(), expr2tc(), true));
   } else {
     type.dump();
     assert(0);
@@ -203,8 +254,12 @@ real_migrate_type(const typet &type, type2tc &new_type_ref)
 }
 
 void
-migrate_type(const typet &type, type2tc &new_type_ref)
+migrate_type(const typet &type, type2tc &new_type_ref, const namespacet *ns,
+             bool cache)
 {
+
+  if (!cache)
+    return real_migrate_type(type, new_type_ref, ns, cache);
 
   if (type.id() == typet::t_bool) {
     new_type_ref = type_pool.get_bool();
@@ -222,7 +277,12 @@ migrate_type(const typet &type, type2tc &new_type_ref)
   } else if (type.id() == typet::t_empty) {
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == typet::t_symbol) {
-    new_type_ref = type_pool.get_symbol(type);
+    if (ns) {
+      typet followed = ns->follow(type);
+      return migrate_type(followed, new_type_ref, ns, cache);
+    } else {
+      new_type_ref = type_pool.get_symbol(type);
+    }
   } else if (type.id() == typet::t_struct) {
     new_type_ref = type_pool.get_struct(type);
   } else if (type.id() == typet::t_union) {
@@ -242,12 +302,14 @@ migrate_type(const typet &type, type2tc &new_type_ref)
     // something.
     new_type_ref = type_pool.get_empty();
   } else if (type.id() == "cpp-name") {
-    real_migrate_type(type, new_type_ref);
+    real_migrate_type(type, new_type_ref, ns, cache);
     // No caching; no reason, just not doing it right now.
   } else if (type.id() == "ellipsis") {
-    real_migrate_type(type, new_type_ref);
+    real_migrate_type(type, new_type_ref, ns, cache);
   } else if (type.id() == "incomplete_array") {
-    real_migrate_type(type, new_type_ref);
+    real_migrate_type(type, new_type_ref, ns, cache);
+  } else if (type.id() == "incomplete_struct") {
+    real_migrate_type(type, new_type_ref, ns, cache);
   } else {
     type.dump();
     assert(0);
@@ -375,7 +437,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
 {
   const symbolt *sym;
   symbol2t::renaming_level target_level;
-  unsigned int level1_num, thread_num, node_num, level2_num;
+  unsigned int level1_num = 0, thread_num = 0, node_num = 0, level2_num = 0;
 
   const std::string &thestr = init.as_string();
   // If this is an existing symbol name, then we're not renamed at all. Can't
@@ -405,6 +467,7 @@ sym_name_to_symbol(irep_idt init, type2tc type)
   // Renamed to at least level 1,
   size_t at_pos = thestr.rfind("@");
   size_t exm_pos = thestr.rfind("!");
+  size_t end_of_name_pos = at_pos;
 
   size_t and_pos, hash_pos;
   if (thestr.find("#") == std::string::npos) {
@@ -413,22 +476,31 @@ sym_name_to_symbol(irep_idt init, type2tc type)
     and_pos = thestr.size();
     hash_pos = thestr.size();
   } else {
+    // Level 2
     target_level = symbol2t::level2;
     and_pos = thestr.find("&");
     hash_pos = thestr.find("#");
+
+    if (at_pos == std::string::npos) {
+      // However, it's L2 global.
+      target_level = symbol2t::level2_global;
+      end_of_name_pos = and_pos;
+    }
   }
 
   // Whatever level we're at, set the base name to be nonrenamed.
-  irep_idt thename = irep_idt(thestr.substr(0, at_pos));
+  irep_idt thename = irep_idt(thestr.substr(0, end_of_name_pos));
 
-  std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
-  std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
+  if (target_level != symbol2t::level2_global) {
+    std::string atstr = thestr.substr(at_pos+1, exm_pos - at_pos - 1);
+    std::string exmstr = thestr.substr(exm_pos+1, and_pos - exm_pos - 1);
 
-  char *endatptr, *endexmptr;
-  level1_num = strtol(atstr.c_str(), &endatptr, 10);
-  assert(endatptr != atstr.c_str());
-  thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
-  assert(endexmptr != exmstr.c_str());
+    char *endatptr, *endexmptr;
+    level1_num = strtol(atstr.c_str(), &endatptr, 10);
+    assert(endatptr != atstr.c_str());
+    thread_num = strtol(exmstr.c_str(), &endexmptr, 10);
+    assert(endexmptr != exmstr.c_str());
+  }
 
   if (target_level == symbol2t::level1) {
     return expr2tc(new symbol2t(type, thename, target_level, level1_num,
@@ -1172,7 +1244,7 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     migrate_type(expr.op0().type(), type);
     expr2tc op0, op1;
     convert_operand_pair(expr, op0, op1);
-    new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1));
+    new_expr_ref = expr2tc(new object_descriptor2t(type, op0, op1, 0));
   } else if (expr.id() == irept::id_code &&
              expr.statement() == "function_call") {
     expr2tc op0, op1;

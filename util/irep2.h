@@ -346,6 +346,10 @@ public:
    *  itself. May throw various exceptions depending on whether this operation
    *  is viable - for example, for symbol types, infinite sized or dynamically
    *  sized arrays.
+   *
+   *  Note that the bit width is _not_ the same as the ansi-c byte model
+   *  representation of this type.
+   *
    *  @throws symbolic_type_excp
    *  @throws array_type2t::inf_sized_array_excp
    *  @throws array_type2t::dyn_sized_array_excp
@@ -572,6 +576,7 @@ public:
     code_cpp_throw_decl_end_id,
     isinf_id,
     isnormal_id,
+    concat_id,
     end_expr_id
   };
 
@@ -1846,6 +1851,26 @@ inline bool is_number_type(const type2tc &t) \
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
+inline bool is_scalar_type(const type2tc &t)
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t) || is_code_type(t); }
+
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants
@@ -2005,6 +2030,7 @@ class code_cpp_throw_decl2t;
 class code_cpp_throw_decl_end2t;
 class isinf2t;
 class isnormal2t;
+class concat2t;
 
 // Data definitions.
 
@@ -2569,13 +2595,15 @@ class object_desc_data : public expr2t
 {
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                     const expr2tc &offs)
-      : expr2t(t, id), object(o), offset(offs) { }
+                     const expr2tc &offs, unsigned int align)
+      : expr2t(t, id), object(o), offset(offs), alignment(align) { }
     object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset) { }
+      : expr2t(ref), object(ref.object), offset(ref.offset),
+        alignment(ref.alignment) { }
 
     expr2tc object;
     expr2tc offset;
+    unsigned int alignment;
 };
 
 class code_funccall_data : public code_base
@@ -2894,7 +2922,8 @@ irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
-              expr2tc, object_desc_data, &object_desc_data::offset);
+              expr2tc, object_desc_data, &object_desc_data::offset,
+              unsigned int, object_desc_data, &object_desc_data::alignment);
 irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2930,6 +2959,9 @@ irep_typedefs(isinf, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
 irep_typedefs(isnormal, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
+irep_typedefs(concat, bit_2ops, esbmct::takestype,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4232,8 +4264,10 @@ public:
 class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
-  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs,
+                      unsigned int alignment)
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
+                                     alignment) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
@@ -4390,6 +4424,17 @@ public:
     : isnormal_expr_methods(type_pool.get_bool(), isnormal_id, val) { }
   isnormal2t(const isnormal2t &ref)
     : isnormal_expr_methods(ref) { }
+
+  static std::string field_names[esbmct::num_type_fields];
+};
+
+class concat2t : public concat_expr_methods
+{
+public:
+  concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
+    : concat_expr_methods(type, concat_id, forward, aft) { }
+  concat2t(const concat2t &ref)
+    : concat_expr_methods(ref) { }
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4551,6 +4596,7 @@ expr_macros(code_cpp_throw_decl);
 expr_macros(code_cpp_throw_decl_end);
 expr_macros(isinf);
 expr_macros(isnormal);
+expr_macros(concat);
 #undef expr_macros
 #ifdef dynamic_cast
 #undef dynamic_cast

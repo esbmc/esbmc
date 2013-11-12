@@ -365,15 +365,16 @@ goto_symext::get_unwind(
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 
-  #if 1
+  if (!options.get_bool_option("quiet"))
   {
     std::string msg =
       "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
-  #endif
 
   return this_loop_max_unwind != 0 &&
          unwind >= this_loop_max_unwind;
 }
+
+hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

@@ -93,105 +93,6 @@ void goto_program_dereferencet::dereference_failure(
   }
 }
 
-void goto_program_dereferencet::dereference_rec(
-  expr2tc &expr,
-  guardt &guard,
-  const dereferencet::modet mode)
-{
-
-  if (!dereference.has_dereference(expr))
-    return;
-
-  if (is_and2t(expr) || is_or2t(expr))
-  {
-    unsigned old_guards=guard.size();
-
-    assert(is_bool_type(expr));
-
-    Forall_operands2(it, idx, expr) {
-      expr2tc &op = *it;
-
-      assert(is_bool_type(op));
-
-      if (dereference.has_dereference(op))
-        dereference_rec(op, guard, dereferencet::READ);
-
-      if (is_or2t(expr)) {
-        not2tc tmp(op);
-        guard.move(tmp);
-      } else {
-        guard.add(op);
-      }
-    }
-
-    guard.resize(old_guards);
-
-    return;
-  }
-  else if (is_if2t(expr))
-  {
-    if2t &ifref = to_if2t(expr);
-    assert(is_bool_type(ifref.cond));
-    dereference_rec(ifref.cond, guard, dereferencet::READ);
-
-    bool o1 = dereference.has_dereference(ifref.true_value);
-    bool o2 = dereference.has_dereference(ifref.false_value);
-
-    if (o1) {
-      unsigned old_guard=guard.size();
-      guard.add(ifref.cond);
-      dereference_rec(ifref.true_value, guard, mode);
-      guard.resize(old_guard);
-    }
-
-    if (o2) {
-      unsigned old_guard=guard.size();
-      not2tc tmp(ifref.cond);
-      guard.move(tmp);
-      dereference_rec(ifref.false_value, guard, mode);
-      guard.resize(old_guard);
-    }
-
-    return;
-  }
-
-  if (is_address_of2t(expr))
-  {
-    // turn &*p to p
-    // this has *no* side effect!
-
-    address_of2t &addrof = to_address_of2t(expr);
-
-    if (is_dereference2t(addrof.ptr_obj)) {
-      dereference2t &deref = to_dereference2t(addrof.ptr_obj);
-      expr2tc result = deref.value;
-
-      if (result->type != expr->type)
-        result = typecast2tc(expr->type, result);
-
-      expr = result;
-    }
-  }
-
-  Forall_operands2(it, idx, expr)
-    dereference_rec(*it, guard, mode);
-
-  if (is_dereference2t(expr)) {
-    dereference2t &deref = to_dereference2t(expr);
-
-    expr2tc tmp_obj = deref.value;
-    dereference.dereference(tmp_obj, guard, mode);
-    expr = tmp_obj;
-  } else if (is_index2t(expr)) {
-    index2t &idx = to_index2t(expr);
-
-    if (is_pointer_type(idx.source_value)) {
-      add2tc tmp(idx.source_value->type, idx.source_value, idx.index);
-      dereference.dereference(tmp, guard, mode);
-    }
-  }
-}
-
 void goto_program_dereferencet::get_value_set(
   const expr2tc &expr,
   value_setst::valuest &dest)
@@ -208,9 +109,9 @@ void goto_program_dereferencet::dereference_expr(
 
   if(checks_only) {
     expr2tc tmp = expr;
-    dereference_rec(tmp, guard, mode);
+    dereference.dereference_expr(tmp, guard, mode);
   } else {
-    dereference_rec(expr, guard, mode);
+    dereference.dereference_expr(expr, guard, mode);
   }
 }
 
@@ -326,7 +227,10 @@ void goto_program_dereferencet::dereference_instruction(
       expr2tc operand = free.operand;
 
       guardt guard;
-      dereference.dereference(operand, guard, dereferencet::FREE);
+      // Result discarded
+      std::list<expr2tc> scalar_step_list;
+      dereference.dereference(operand, operand->type, guard, dereferencet::FREE,
+                              &scalar_step_list);
     }
   }
 }
