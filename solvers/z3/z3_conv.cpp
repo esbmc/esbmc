@@ -3174,8 +3174,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // of the address space (ie, wrap around). So, also assert that end > start
     // Except when the size is zero, which might not be statically dicoverable
     greaterthan2tc wraparound(end_sym, start_sym);
-    notequal2tc neq(zero_uint, the_offs);
-    or2tc either(wraparound, neq);
+    equality2tc zeroeq(zero_uint, the_offs);
+    or2tc either(wraparound, zeroeq);
     z3::expr either_expr;
     convert_bv(either, either_expr);
     assert_formula(either_expr);
