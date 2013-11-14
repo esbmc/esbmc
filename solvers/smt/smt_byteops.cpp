@@ -6,16 +6,50 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
   const byte_extract2t &data = to_byte_extract2t(expr);
 
   if (!is_constant_int2t(data.source_offset)) {
-    std::cerr << "byte_extract expects constant 2nd arg";
-    abort();
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte extract");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source)) {
+      source = typecast2tc(get_uint_type(src_width), source);
+    }
+
+    // The approach: the argument is now a bitvector. Just shift it the
+    // appropriate amount, according to the source offset, and select out the
+    // bottom byte.
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      // Z3 requires these two arguments to be the same width
+      offs = typecast2tc(source->type, data.source_offset);
+
+    lshr2tc shr(source->type, source, offs);
+    const smt_ast *ext = convert_ast(shr);
+    const smt_ast *res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
+    return res;
   }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
   unsigned width;
-  width = data.source_value->type->get_width();
-  // XXXjmorse - looks like this only ever reads a single byte, not the desired
-  // number of bytes to fill the type.
+  try {
+    width = data.source_value->type->get_width();
+  } catch (array_type2t::dyn_sized_array_excp *p) {
+    // Dynamically sized array. How to handle -- for now, assume that it's a
+    // byte array, and select the relevant portions out.
+    const array_type2t &arr_type = to_array_type(data.source_value->type);
+    assert(is_scalar_type(arr_type.subtype) && "Can't cope with dynamic "
+           "nonscalar arrays right now, sorry");
+
+    expr2tc src_offs = data.source_offset;
+    expr2tc expr = index2tc(arr_type.subtype, data.source_value, src_offs);
+
+    if (!is_number_type(arr_type.subtype))
+      expr = typecast2tc(get_uint8_type(), expr);
+
+    return convert_ast(expr);
+  }
 
   uint64_t upper, lower;
   if (!data.big_endian) {
@@ -67,21 +101,24 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       }
 
       source = struct_elem_inv[num_elems];
+    } else if (is_bv_type(data.source_value)) {
+      ;
+    } else if (is_fixedbv_type(data.source_value)) {
+      ;
+    } else {
+      std::cerr << "Unrecognized type in operand to byte extract." << std::endl;
+      data.dump();
+      abort();
     }
 
     unsigned int sort_sz = data.source_value->type->get_width();
-    if (sort_sz < upper) {
-      // Extends past the end of this data item. Should be fixed in some other
-      // dedicated feature branch, in the meantime stop Z3 from crashing
+    if (sort_sz <= upper) {
       const smt_sort *s = mk_sort(SMT_SORT_BV, 8, false);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
       return mk_extract(source, upper, lower, convert_sort(expr->type));
     }
   }
-
-  std::cerr << "Unsupported byte extract operand" << std::endl;
-  abort();
 }
 
 const smt_ast *
@@ -94,8 +131,43 @@ smt_convt::convert_byte_update(const expr2tc &expr)
   // op2 is the value to update with
 
   if (!is_constant_int2t(data.source_offset)) {
-    std::cerr << "byte_extract expects constant 2nd arg";
-    abort();
+    if (is_pointer_type(data.type)) {
+      // Just return a free pointer. Seriously, this is going to be faster,
+      // easier, and probably accurate than anything else.
+      const smt_sort *s = convert_sort(data.type);
+      return mk_fresh(s, "updated_ptr");
+    }
+
+    assert(!is_structure_type(data.source_value) &&
+           !is_array_type(data.source_value) && "Composite typed argument to "
+           "byte update");
+
+    expr2tc source = data.source_value;
+    unsigned int src_width = source->type->get_width();
+    if (!is_bv_type(source))
+      source = typecast2tc(get_uint_type(src_width), source);
+
+    expr2tc offs = data.source_offset;
+    if (offs->type->get_width() != src_width)
+      offs = typecast2tc(get_uint_type(src_width), offs);
+
+    expr2tc update = data.update_value;
+    if (update->type->get_width() != src_width)
+      update = typecast2tc(get_uint_type(src_width), update);
+
+    // The approach: mask, shift and or. XXX, byte order?
+    // Massively inefficient.
+
+    expr2tc eight = constant_int2tc(get_uint_type(src_width), BigInt(8));
+    expr2tc effs = constant_int2tc(eight->type, BigInt(255));
+    offs = mul2tc(eight->type, offs, eight);
+
+    expr2tc shl = shl2tc(offs->type, effs, offs);
+    expr2tc noteffs = bitnot2tc(effs->type, shl);
+    source = bitand2tc(source->type, source, noteffs);
+
+    expr2tc shl2 = shl2tc(offs->type, update, offs);
+    return convert_ast(bitor2tc(offs->type, shl2, source));
   }
 
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
@@ -149,9 +221,19 @@ smt_convt::convert_byte_update(const expr2tc &expr)
       std::cerr << "unsupported irep for conver_byte_update" << std::endl;
       abort();
     }
+  } else if (is_unsignedbv_type(data.source_value->type)) {
+    width_op0 = data.source_value->type->get_width();
+    assert(width_op0 != 0);
+
+    if (width_op0 > width_op2) {
+      return convert_zero_ext(value, convert_sort(expr->type),
+                              width_op0 - width_op2);
+    } else {
+      std::cerr << "unsupported irep for conver_byte_update" << std::endl;
+      abort();
+    }
   }
 
   std::cerr << "unsupported irep for convert_byte_update" << std::endl;;
   abort();
 }
-
