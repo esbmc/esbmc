@@ -131,23 +131,18 @@ class tuple_smt_sort : public smt_sort
 {
 public:
   const type2tc thetype;
-  unsigned long domain_width;
 
   tuple_smt_sort(const type2tc &type)
-    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(0)
+    : smt_sort(SMT_SORT_STRUCT, 0, 0), thetype(type)
   {
   }
 
   tuple_smt_sort(const type2tc &type, unsigned long dom_width)
-    : smt_sort(SMT_SORT_STRUCT), thetype(type), domain_width(dom_width)
+    : smt_sort(SMT_SORT_STRUCT, 0, dom_width), thetype(type)
   {
   }
 
   virtual ~tuple_smt_sort() { }
-
-  virtual unsigned long get_domain_width(void) const {
-    return domain_width;
-  }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
