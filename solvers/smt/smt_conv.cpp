@@ -388,6 +388,11 @@ expr_handle_table:
     a = tuple_create(expr);
     break;
   }
+  case expr2t::constant_union_id:
+  {
+    a = union_create(expr);
+    break;
+  }
   case expr2t::constant_array_id:
   case expr2t::constant_array_of_id:
   {
@@ -548,7 +553,7 @@ expr_handle_table:
   {
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
-    if (is_struct_type(expr) || is_pointer_type(expr)) {
+    if (is_structure_type(expr) || is_pointer_type(expr)) {
       a = tuple_ite(if_ref.cond, if_ref.true_value, if_ref.false_value,
                     if_ref.type);
     } else {
@@ -866,11 +871,6 @@ smt_convt::convert_sort(const type2tc &type)
   {
     const array_type2t &arr = to_array_type(type);
 
-    if (!tuple_support &&
-        (is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))) {
-      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
-    }
-
     // Index arrays by the smallest integer required to represent its size.
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
@@ -881,6 +881,10 @@ smt_convt::convert_sort(const type2tc &type)
     type2tc range = arr.subtype;
     while (is_array_type(range))
       range = to_array_type(range).subtype;
+
+    if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
+      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
+    }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sort *r;
@@ -985,12 +989,22 @@ smt_convt::convert_terminal(const expr2tc &expr)
         (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
       // Perform smt-tuple hacks.
       return mk_tuple_symbol(expr);
-    } else if (!tuple_support && is_array_type(expr) &&
-                (is_struct_type(to_array_type(expr->type).subtype) ||
-                 is_union_type(to_array_type(expr->type).subtype) ||
-                 is_pointer_type(to_array_type(expr->type).subtype))) {
-      return mk_tuple_array_symbol(expr);
+    } else if (!tuple_support && is_array_type(expr)) {
+      // Determine the range if we have arrays of arrays.
+      const array_type2t &arr = to_array_type(expr->type);
+      type2tc range = arr.subtype;
+      while (is_array_type(range))
+        range = to_array_type(range).subtype;
+
+      // If this is an array of structs, we have a tuple array sym.
+      if (is_structure_type(range) || is_pointer_type(range)) {
+        return mk_tuple_array_symbol(expr);
+      } else {
+        ; // continue onwards;
+      }
     }
+
+    // Just a normal symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     const smt_sort *sort = convert_sort(sym.type);
@@ -1520,8 +1534,6 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     typecast2tc cast(get_uint_type(1), update_val);
     return mk_store(with.source_value, newidx, cast, ressort);
   } else if (is_tuple_array_ast_type(with.type)) {
-    assert(is_structure_type(arrtype.subtype) ||
-           is_pointer_type(arrtype.subtype));
     const smt_sort *sort = convert_sort(with.update_value->type);
     const smt_ast *src, *update;
     src = convert_ast(with.source_value);
@@ -1817,8 +1829,11 @@ smt_convt::get(const expr2tc &expr)
 expr2tc
 smt_convt::get_array(const smt_ast *array, const type2tc &t)
 {
+  // XXX -- printing multidimensional arrays?
 
-  const array_type2t &ar = to_array_type(t);
+  type2tc newtype = flatten_array_type(t);
+
+  const array_type2t &ar = to_array_type(newtype);
   if (is_tuple_ast_type(ar.subtype)) {
     std::cerr << "Tuple array getting not implemented yet, sorry" << std::endl;
     return expr2tc();

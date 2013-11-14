@@ -2,6 +2,8 @@
 
 #include <ansi-c/c_types.h>
 
+#include <base_type.h>
+
 #include "smt_conv.h"
 
 // So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
@@ -88,12 +90,43 @@ smt_convt::tuple_create(const expr2tc &structdef)
 }
 
 smt_ast *
+smt_convt::union_create(const expr2tc &unidef)
+{
+  // Unions are known to be brok^W fragile. Create a free new structure, and
+  // assign in any members where the type matches the single member of the
+  // initializer members. No need to worry about subtypes; this is a union.
+  std::string name = mk_fresh_name("union_create::");
+  // Add a . suffix because this is of tuple type.
+  name += ".";
+  symbol2tc result(unidef->type, irep_idt(name));
+
+  const constant_union2t &uni = to_constant_union2t(unidef);
+  const struct_union_data &def = get_type_def(uni.type);
+  assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
+         "initializer");
+  const expr2tc &init = uni.datatype_members[0];
+
+  unsigned int i = 0;
+  forall_types(it, def.members) {
+    if (base_type_eq(*it, init->type, ns)) {
+      // Assign in.
+      expr2tc target_memb = tuple_project_sym(result, i);
+      equality2tc eq(target_memb, init);
+      assert_ast(convert_ast(eq));
+    }
+    i++;
+  }
+
+  return new tuple_smt_ast(convert_sort(unidef->type), name);
+}
+
+smt_ast *
 smt_convt::tuple_fresh(const smt_sort *s)
 {
   std::string name = mk_fresh_name("tuple_fresh::") + ".";
 
   smt_ast *a = mk_smt_symbol(name, s);
-  a = a;
+  (void)a;
   return new tuple_smt_ast(s, name);
 }
 
@@ -196,6 +229,24 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
   // a new tuple_smt_ast containing its name.
   const tuple_smt_ast *ta = to_tuple_ast(a);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
+
+  if (is_array_type(ts->thetype)) {
+    // Project, then wrap in an array.
+    const array_type2t &arr = to_array_type(ts->thetype);
+    const smt_sort *oldsort = a->sort;
+    const smt_sort *subtype = convert_sort(arr.subtype);
+    smt_ast *a2 = const_cast<smt_ast*>(a);
+    a2->sort = subtype;
+    smt_ast *result = tuple_project(a2, s, i);
+    a2->sort = oldsort;
+
+    // Perform array wrapping
+    const smt_sort *s2 = mk_sort(SMT_SORT_ARRAY, make_array_domain_sort(arr),
+                                result->sort);
+    result->sort = s2;
+    return result;
+  }
+
   const struct_union_data &data =
     dynamic_cast<const struct_union_data &>(*ts->thetype.get());
 
@@ -536,7 +587,8 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   std::string name = mk_fresh_name("tuple_array_select::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
-  const array_type2t &array_type = to_array_type(ts->thetype);
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
   tuple_array_select_rec(ta, array_type.subtype, result, field,
                          array_type.array_size);
   return result;
@@ -604,9 +656,9 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
   std::string name = mk_fresh_name("tuple_array_update[]::") + ".";
   const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
 
-  const array_type2t &arrtype = to_array_type(ts->thetype);
-  const array_type2t &array_type = to_array_type(ts->thetype);
-  tuple_array_update_rec(ta, tv, index, result, arrtype.array_size,
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
+  tuple_array_update_rec(ta, tv, index, result, array_type.array_size,
                          array_type.subtype);
   return result;
 }
@@ -674,7 +726,9 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
   const tuple_smt_ast *tb = to_tuple_ast(b);
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
-  const array_type2t &array_type = to_array_type(ts->thetype);
+  // Descend through multidimensional arrays.
+  type2tc newtype = flatten_array_type(ts->thetype);
+  const array_type2t &array_type = to_array_type(newtype);
   return tuple_array_equality_rec(ta, tb, array_type.array_size,
                                   array_type.subtype);
 }
@@ -935,21 +989,21 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 
   constant_int2tc arrsize(index_type2(), BigInt(array_size));
   type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
-  const smt_sort *sort = convert_sort(arrtype);
   std::string name = mk_fresh_name("tuple_array_of::") + ".";
+  symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
+
+  const smt_sort *sort = convert_sort(arrtype);
   const smt_ast *newsym = new tuple_smt_ast(sort, name);
-  const smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++) {
     const expr2tc &val = data.datatype_members[i];
-    const smt_ast *sub_arr_of = convert_array_of(val, array_size);
-    const smt_ast *args[2];
+    type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
+    constant_array_of2tc sub_array_of(subarr_type, val);
 
-    const smt_sort *this_sort = convert_sort(subtype.members[i]);
-    args[0] = tuple_project(newsym, this_sort, i);
-    args[1] = sub_arr_of;
-    assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
+    expr2tc target_array = tuple_project_sym(tuple_arr_of_sym, i);
+
+    assert_ast(convert_array_equality(target_array, sub_array_of));
   }
 
   return newsym;
@@ -1010,5 +1064,13 @@ smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
   args[0] = convert_ast(a);
   args[1] = convert_ast(b);
 
-  return mk_func_app(s, SMT_FUNC_EQ, args, 2);
+  // Did we generate a tuple ast?
+  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(args[0]);
+
+  // If we did, we need to do a tuple array equality.
+  if (ta != NULL) {
+    return tuple_array_equality(args[0], args[1]);
+  } else {
+    return mk_func_app(s, SMT_FUNC_EQ, args, 2);
+  }
 }

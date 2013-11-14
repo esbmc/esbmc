@@ -16,8 +16,8 @@ y.tab.hpp: smtlib.y
 clean:
 	-rm -f $(MAINOBJ) $(OBJS) $(OBJDIR)/.deps lex.yy.cpp y.tab.cpp y.tab.hpp y.output
 
-
-STRICTCOMPILE=1
+# Disabled as clang 3.3 doesn't like the output of flex.
+#STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common
 
