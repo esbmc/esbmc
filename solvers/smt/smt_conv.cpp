@@ -787,7 +787,6 @@ expr_handle_table:
     const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_side, false);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
-    a = args[0];
     break;
   }
   default:
