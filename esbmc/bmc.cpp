@@ -586,7 +586,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
   std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
   exit(1);
 #else
-  solver_base *solver;
+  smt_convt *solver;
   bool ret;
   unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,

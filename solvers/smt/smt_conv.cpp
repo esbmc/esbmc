@@ -774,16 +774,13 @@ expr_handle_table:
     assert(!int_encoding && "Concatonate encountered in integer mode; "
            "unimplemented (and funky)");
     const concat2t &cat = to_concat2t(expr);
-    std::vector<expr2tc>::const_iterator it = cat.data_items.begin();
-    args[0] = convert_ast(*it);
-    unsigned long accuml_size = (*it)->type->get_width();
-    it++;
-    for (; it != cat.data_items.end() ;it++) {
-      accuml_size += (*it)->type->get_width();
-      const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_size, false);
-      args[1] = convert_ast(*it);
-      args[0] = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
-    }
+    args[0] = convert_ast(cat.side_1);
+    args[1] = convert_ast(cat.side_2);
+
+    unsigned long accuml_side =
+      cat.side_1->type->get_width() + cat.side_2->type->get_width();
+    const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_side, false);
+    a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
     a = args[0];
     break;
@@ -1418,22 +1415,20 @@ smt_convt::decompose_select_chain(const expr2tc &expr, expr2tc &base)
   // index at the top, then descending.
 
   unsigned long accuml_size = 0;
-  std::vector<expr2tc> output;
   index2tc idx = expr;
-  output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
-  accuml_size += output.back()->type->get_width();
+  expr2tc output = twiddle_index_width(idx->index, idx->source_value->type);
+  accuml_size += output->type->get_width();
   while (is_index2t(idx->source_value)) {
     idx = idx->source_value;
-    output.push_back(twiddle_index_width(idx->index, idx->source_value->type));
-    accuml_size += output.back()->type->get_width();
+    expr2tc tmp = twiddle_index_width(idx->index, idx->source_value->type);
+    accuml_size += tmp->type->get_width();
+    output = concat2tc(get_uint_type(accuml_size), output, tmp);
   }
-
-  concat2tc concat(get_uint_type(accuml_size), output);
 
   // Give the caller the base array object / thing. So that it can actually
   // select out of the right piece of data.
   base = idx->source_value;
-  return concat;
+  return output;
 }
 
 expr2tc
@@ -1446,24 +1441,21 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
   // caller the base object that this is being applied to.
 
   unsigned long accuml_size = 0;
-  std::vector<expr2tc> output;
   with2tc with = expr;
-  output.push_back(twiddle_index_width(with->update_field, with->type));
-  accuml_size += output.back()->type->get_width();
+  expr2tc output = twiddle_index_width(with->update_field, with->type);
+  accuml_size += output->type->get_width();
   while (is_with2t(with->update_value)) {
     with = with->update_value;
-    output.push_back(twiddle_index_width(with->update_field, with->type));
-    accuml_size += output.back()->type->get_width();
+    expr2tc tmp = twiddle_index_width(with->update_field, with->type);
+    accuml_size += tmp->type->get_width();
+
+    // NB: order is reversed from indexes.
+    output = concat2tc(get_uint_type(accuml_size), tmp, output);
   }
-
-  // With's are in reverse order to indexes; so swap around.
-  std::reverse(output.begin(), output.end());
-
-  concat2tc concat(get_uint_type(accuml_size), output);
 
   // Give the caller the actual value we're updating with.
   base = with->update_value;
-  return concat;
+  return output;
 }
 
 const smt_ast *

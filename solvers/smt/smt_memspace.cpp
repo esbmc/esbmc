@@ -126,7 +126,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       typet followed_type_old = ns.follow(migrate_type_back(ptr_type.subtype));
       type2tc followed_type;
       migrate_type(followed_type_old, followed_type);
-      mp_integer type_size = pointer_offset_size(*followed_type);
+      mp_integer type_size = type_byte_size(*followed_type);
 
       // Generate nonptr * constant.
       type2tc inttype = machine_ptr;
@@ -253,7 +253,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     finalize_pointer_chain(obj_num);
 
     addr_space_data.back()[obj_num] =
-          pointer_offset_size(*expr->type.get()).to_long() + 1;
+          type_byte_size(*expr->type.get()).to_long() + 1;
 
     membs.clear();
     membs.push_back(start_sym);

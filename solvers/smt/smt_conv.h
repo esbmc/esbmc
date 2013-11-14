@@ -8,7 +8,7 @@
 #include <namespace.h>
 #include <threeval.h>
 
-#include <util/pointer_offset_size.h>
+#include <util/type_byte_size.h>
 
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/prop/literal.h>
