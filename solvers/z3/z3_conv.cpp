@@ -1393,8 +1393,11 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
   unsigned long bv_size = array->sort->get_domain_width();
-  z3_smt_ast *idx =
-    static_cast<z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
+  z3_smt_ast *idx;
+  if (int_encoding)
+    idx = static_cast<z3_smt_ast*>(mk_smt_int(BigInt(index), false));
+  else
+    idx = static_cast<z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
 
   z3::expr e = select(za->e, idx->e);
   delete idx;
@@ -1406,7 +1409,7 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
   }
 
   z3_smt_ast *value = new z3_smt_ast(e, elem_sort);
-  type2tc res_type = get_uint_type(bv_size);
+  type2tc res_type = (int_encoding) ? get_int_type(64) : get_uint_type(bv_size);
   expr2tc result = get_bv(res_type, value);
   delete value;
 
