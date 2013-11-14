@@ -13,7 +13,9 @@ for module in $MODULES; do
   sh llbmc.sh $module > logs/llbmc.$module.log
   echo "Done!"
   END=$(date +"%s")
+
   echo "Time elapsed: " $(( $END - $START )) "s"
+  echo "Time elapsed: " $(( $END - $START )) "s" >> logs/llbmc.$module.log
 done
 echo "============================== "
 

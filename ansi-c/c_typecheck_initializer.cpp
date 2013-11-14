@@ -204,7 +204,7 @@ exprt c_typecheck_baset::do_initializer_rec(
         << to_string(full_type) << "' is still incomplete -- cannot initialize";
     throw 0;
   }
-  
+
   if(value.id()=="designated_list")
   {
     // Can't designated-initialize anything but a struct; however an array
@@ -269,8 +269,12 @@ exprt c_typecheck_baset::do_initializer_rec(
       throw 0;
     }
   }
-  else // other types
+  else
   {
+    if(value.type().id()=="incomplete_array")
+      if(value.operands().size()==1)
+        return do_initializer_rec(value.op0(), type, force_constant); // other types
+
     exprt tmp(value);
     implicit_typecast(tmp, type);
     return tmp;

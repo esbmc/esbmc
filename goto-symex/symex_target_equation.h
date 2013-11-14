@@ -163,6 +163,8 @@ public:
     SSA_steps.clear();
   }
   
+  unsigned int clear_assertions();
+
   virtual symex_targett *clone(void) const
   {
     // No pointers or anything that requires ownership modification, can just

@@ -2,7 +2,7 @@ ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
 SRCS = main.cpp parseoptions.cpp bmc.cpp  \
-      document_subgoals.cpp  show_vcc.cpp options.cpp
+      document_subgoals.cpp show_vcc.cpp options.cpp kinduction_parallel.cpp
 
 # additional objects for esbmc binary
 OBJS+=../ansi-c/$(OBJDIR)/ansi-c.o \
@@ -29,6 +29,7 @@ export LD LDFLAGS
 ifndef STATICLINK
 esbmc: $(OBJS)
 	$(ESBMCDIR)/scripts/buildidobj.sh $(OBJDIR)
+	$(ESBMCDIR)/ansi-c/headers/flail.sh buildidstring $(OBJDIR)/buildidobj.txt | $(CC) $(CFLAGS) -x c - -c -o $(OBJDIR)/buildidobj.o
 	$(FINLINKBIN) $(FINLINKOUT)esbmc $(OBJS) $(SOLVER_LIBS) $(OBJDIR)/buildidobj.o $(FINLINKTAIL)
 
 else

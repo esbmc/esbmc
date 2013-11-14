@@ -50,7 +50,7 @@ protected:
 
   bool set_claims(goto_functionst &goto_functions);
 
-  void set_verbosity(messaget &message);
+  void set_verbosity_msg(messaget &message);
 
   // get any additional stuff before finalizing
   virtual bool get_modules()

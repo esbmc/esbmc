@@ -48,7 +48,7 @@ void value_set_analysist::add_vars(
       i_it!=goto_program.instructions.end();
       i_it++)
   {
-    value_sett &v=(*this)[i_it].value_set;
+    value_sett &v=*(*this)[i_it].value_set;
 
     v.add_vars(globals);
     
@@ -131,7 +131,7 @@ void value_set_analysist::add_vars(
       f_it++)
     forall_goto_program_instructions(i_it, f_it->second.body)
     {
-      value_sett &v=(*this)[i_it].value_set;
+      value_sett &v=*(*this)[i_it].value_set;
     
       v.add_vars(globals);
       
@@ -204,7 +204,7 @@ void value_set_analysist::convert(
       continue;
 
     // find value set
-    const value_sett &value_set=(*this)[i_it].value_set;
+    const value_sett &value_set=*(*this)[i_it].value_set;
 
     xmlt &i=dest.new_element("instruction");
     xmlt &xml_location=i.new_element("location");

@@ -76,11 +76,8 @@ void goto_convertt::do_function_call(
   Forall_expr(it, new_arguments)
   {
     remove_sideeffects(*it, dest);
-
-//    unsigned int globals = get_expr_number_globals(*it);
-//    if(globals > 0)
-//    	break_globals2assignments(*it, dest);
   }
+
   // split on the function
   if(new_function.id()=="dereference" ||
      new_function.id()=="implicit_dereference")

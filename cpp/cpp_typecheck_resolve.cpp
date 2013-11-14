@@ -945,6 +945,12 @@ exprt cpp_typecheck_resolvet::do_builtin(
                       << original_scope->prefix;
     cpp_typecheck.warning();
   }
+  else if(base_name=="context")
+  {
+    dest=exprt("constant", typet("empty"));
+    cpp_typecheck.context.show(cpp_typecheck.str);
+    cpp_typecheck.warning();
+  }
   else
   {
     cpp_typecheck.err_location(location);
@@ -1010,25 +1016,12 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
       {
         cpp_typecheck.cpp_scopes.get_ids(final_base_name,cpp_idt::TEMPLATE, id_set, !recursive);
 
-        symbolt template_symbol=
-          cpp_typecheck.context.symbols.find((*id_set.begin())->identifier)->second;
-
-        cpp_template_args_tct template_args_tc;
-        template_args_tc=
-          cpp_typecheck.typecheck_template_args(
-            location,
-            template_symbol,
-            template_args);
-
         const symbolt& symb_tmpl=
-          cpp_typecheck.instantiate_template(
-            cpp_name.location(),
-            template_symbol,
-            template_args_tc,
-            template_args_tc);
+          disambiguate_template_classes(base_name, id_set, template_args);
 
         cpp_typecheck.cpp_scopes.go_to(
           cpp_typecheck.cpp_scopes.get_scope(symb_tmpl.name));
+
         template_args.make_nil();
       }
       else
@@ -1966,9 +1959,11 @@ void cpp_typecheck_resolvet::guess_template_args(
       }
       else
       {
-        const symbolt &s=cpp_typecheck.lookup(desired_type.identifier());
-        const exprt &template_arguments=
-          static_cast<const exprt&>(s.type.find("#template_arguments"));
+        symbolt &s =
+          const_cast<symbolt&>(cpp_typecheck.lookup(desired_type.identifier()));
+        exprt &template_arguments=
+          const_cast<exprt&>(
+          static_cast<const exprt&>(s.type.find("#template_arguments")));
 
         if(template_arguments.is_not_nil())
         {
@@ -1983,14 +1978,14 @@ void cpp_typecheck_resolvet::guess_template_args(
           while(parent_size)
           {
             cpp_scopet &parent=scope.get_parent();
-            s=cpp_typecheck.lookup(parent.identifier);
+            const symbolt &s2 = cpp_typecheck.lookup(parent.identifier);
 
-            template_arguments=
-              static_cast<const exprt&>(s.type.find("#template_arguments"));
+            const exprt &template_arguments2=
+              static_cast<const exprt&>(s2.type.find("#template_arguments"));
 
-            if(template_arguments.is_not_nil())
+            if(template_arguments2.is_not_nil())
             {
-              instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+              instantiated_args=to_cpp_template_args_non_tc(template_arguments2);
               break;
             }
             else
@@ -2014,7 +2009,13 @@ void cpp_typecheck_resolvet::guess_template_args(
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
       for(unsigned i=0; i<args.size();++i)
       {
-        resolve_scope(to_cpp_name(args[i].type()),base_name,template_args);
+        cpp_namet cpp_name;
+        if(args[i].id()=="unary-")
+          cpp_name=to_cpp_name(args[i].op0());
+        else
+          cpp_name=to_cpp_name(args[i].type());
+
+        resolve_scope(cpp_name,base_name,template_args);
 
         cpp_scopest::id_sett id_set;
         cpp_typecheck.cpp_scopes.get_ids(base_name, id_set, false);

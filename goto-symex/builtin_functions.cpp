@@ -101,6 +101,15 @@ void goto_symext::symex_malloc(
   }
 
   expr2tc rhs = rhs_addrof;
+
+  symbol2tc null_sym(rhs->type, "NULL");
+  sideeffect2tc choice(get_bool_type(), expr2tc(), expr2tc(), std::vector<expr2tc>(), type2tc(), sideeffect2t::nondet);
+
+  rhs = if2tc(rhs->type, choice, rhs, null_sym);
+  replace_nondet(rhs);
+
+  expr2tc ptr_rhs = rhs;
+
   if (rhs->type != lhs->type)
     rhs = typecast2tc(lhs->type, rhs);
 
@@ -115,7 +124,7 @@ void goto_symext::symex_malloc(
                                               expr2tc(), true));
   symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
 
-  pointer_object2tc ptr_obj(int_type2(), lhs);
+  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
@@ -123,10 +132,16 @@ void goto_symext::symex_malloc(
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
 }
 
-void goto_symext::symex_free(const code_free2t &code)
+void goto_symext::symex_free(const expr2tc &expr)
 {
+  const code_free2t &code = to_code_free2t(expr);
 
-  pointer_offset2tc ptr_obj(pointer_type2(), code.operand);
+  // Trigger 'free'-mode dereference of this pointer. Should generate various
+  // dereference failure callbacks.
+  expr2tc tmp = code.operand;
+  dereference(tmp, false, true);
+
+  pointer_offset2tc ptr_obj(uint_type2(), tmp);
   equality2tc eq(ptr_obj, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
 }
@@ -153,8 +168,11 @@ void goto_symext::symex_printf(
           to_constant_string2t(idx.source_value).value.as_string();
 
         std::list<expr2tc> args; 
-        forall_operands2(it, idx, new_rhs)
-          args.push_back(*it);
+        forall_operands2(it, idx, new_rhs) {
+          expr2tc tmp = *it;
+          do_simplify(tmp);
+          args.push_back(tmp);
+        }
 
         target->output(cur_state->guard.as_expr(), cur_state->source, fmt,args);
       }
@@ -245,7 +263,7 @@ void
 goto_symext::intrinsic_yield(reachability_treet &art)
 {
 
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -279,7 +297,7 @@ goto_symext::intrinsic_switch_from(reachability_treet &art)
   art.get_cur_state().DFS_traversed[art.get_cur_state().get_active_state_number()] = true;
 
   // And force a context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
   return;
 }
 
@@ -294,7 +312,7 @@ goto_symext::intrinsic_get_thread_id(const code_function_call2t &call,
   thread_id = art.get_cur_state().get_active_state_number();
   constant_int2tc tid(uint_type2(), BigInt(thread_id));
 
-  state.value_set.assign(call.ret, tid, ns);
+  state.value_set.assign(call.ret, tid);
 
   code_assign2tc assign(call.ret, tid);
   assert(call.ret->type == tid->type);
@@ -312,6 +330,9 @@ goto_symext::intrinsic_set_thread_data(const code_function_call2t &call,
 
   state.rename(threadid);
   state.rename(startdata);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
@@ -332,6 +353,9 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
 
   state.level2.rename(threadid);
 
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
+
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_set_start_data received nonconstant thread id";
     std::cerr << std::endl;
@@ -344,7 +368,7 @@ goto_symext::intrinsic_get_thread_data(const code_function_call2t &call,
   code_assign2tc assign(call.ret, startdata);
   assert(base_type_eq(call.ret->type, startdata->type, ns));
 
-  state.value_set.assign(call.ret, startdata, ns);
+  state.value_set.assign(call.ret, startdata);
   symex_assign(assign);
   return;
 }
@@ -354,7 +378,8 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
                                     reachability_treet &art)
 {
 
-  if (options.get_bool_option("k-induction")) {
+  if (k_induction
+      || options.get_bool_option("k-induction-parallel")) {
     std::cerr << "Sorry, can't perform k-induction on multithreaded code";
     std::cerr  << std::endl;
     abort();
@@ -389,14 +414,14 @@ goto_symext::intrinsic_spawn_thread(const code_function_call2t &call,
   constant_int2tc thread_id_exp(int_type2(), BigInt(thread_id));
 
   code_assign2tc assign(call.ret, thread_id_exp);
-  state.value_set.assign(call.ret, thread_id_exp, ns);
+  state.value_set.assign(call.ret, thread_id_exp);
 
   symex_assign(assign);
 
   // Force a context switch point. If the caller is in an atomic block, it'll be
   // blocked, but a context switch will be forced when we exit the atomic block.
   // Otherwise, this will cause the required context switch.
-  art.force_cswitch_point();
+  art.get_cur_state().force_cswitch();
 
   return;
 }
@@ -417,6 +442,9 @@ goto_symext::intrinsic_get_thread_state(const code_function_call2t &call, reacha
   statet &state = art.get_cur_state().get_active_state();
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_get_thread_state received nonconstant thread id";
@@ -486,6 +514,9 @@ goto_symext::intrinsic_register_monitor(const code_function_call2t &call, reacha
   statet &state = art.get_cur_state().get_active_state();
   expr2tc threadid = call.operands[0];
   state.level2.rename(threadid);
+
+  while (is_typecast2t(threadid))
+    threadid = to_typecast2t(threadid).from;
 
   if (!is_constant_int2t(threadid)) {
     std::cerr << "__ESBMC_register_monitor received nonconstant thread id";

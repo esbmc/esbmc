@@ -7,8 +7,6 @@
 
 #include <assert.h>
 #include <ctype.h>
-#include <malloc.h>
-#include <stdarg.h>
 #include <fstream>
 #include <sstream>
 #include <std_expr.h>
@@ -20,7 +18,7 @@
 #include <i2string.h>
 #include <expr_util.h>
 #include <string2array.h>
-#include <pointer_offset_size.h>
+#include <type_byte_size.h>
 #include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>

@@ -380,11 +380,12 @@ bool bmct::run(void)
 
     do
     {
-      if(!options.get_bool_option("k-induction"))
+      if(!options.get_bool_option("k-induction")
+        && !options.get_bool_option("k-induction-parallel"))
         if (++interleaving_number>1) {
-    	  print(8, "*** Thread interleavings "+
-    	           i2string((unsigned long)interleaving_number)+
-    	           " ***");
+          print(8, "*** Thread interleavings "+
+            i2string((unsigned long)interleaving_number)+
+            " ***");
         }
 
       fine_timet bmc_start = current_time();
@@ -579,15 +580,15 @@ bool bmct::run_thread()
 }
 
 int
-bmct::ltl_run_thread(symex_target_equationt *equation)
+bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 {
-  smt_convt *solver;
-  bool ret;
-  unsigned int num_asserts = 0;
 #ifndef Z3
   std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
   exit(1);
 #else
+  solver_base *solver;
+  bool ret;
+  unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,
   // and then check for all others.
 

@@ -386,7 +386,7 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(uint_type());
 
     remove_sideeffects(alloc_size, dest);
-    rhs.size_irep() = alloc_size;
+    const_cast<irept&>(rhs.size_irep()) = alloc_size;
   }
   else
     alloc_size=from_integer(1, uint_type());
@@ -810,7 +810,7 @@ void goto_convertt::do_function_call_symbol(
       get_string_constant(arguments[1]);
 
     if(options.get_bool_option("no-assertions") &&
-   	   !(description.find("deadlock detected") != std::string::npos))
+   	   !(description.find("Deadlocked state") != std::string::npos))
       return;
 
     goto_programt::targett t=dest.add_instruction(ASSERT);

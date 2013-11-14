@@ -12,6 +12,7 @@ void really ( void )
 {
    int i;
    char* p = malloc(10);
+   __ESBMC_assume(p);
    for (i = 0; i < 1; i++)
       p[i] = 'z';
    free(p);

@@ -12,6 +12,7 @@ int main() {
   
   for(i=0; i<10; i++) {
     new_node=malloc(sizeof(*new_node));
+    __ESBMC_assume(new_node);
     new_node->n=list;
     list=new_node;
   }

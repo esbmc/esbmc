@@ -72,7 +72,7 @@ renaming::level2t::get_ident_name(expr2tc &sym) const
   return;
 }
 
-void renaming::level1t::rename(expr2tc &expr) const
+void renaming::level1t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 
@@ -111,7 +111,7 @@ void renaming::level1t::rename(expr2tc &expr) const
   }
 }
 
-void renaming::level2t::rename(expr2tc &expr) const
+void renaming::level2t::rename(expr2tc &expr)
 {
   // rename all the symbols with their last known value
 

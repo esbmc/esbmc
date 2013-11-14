@@ -233,6 +233,22 @@ goto_symext::merge_gotos(void)
     // adjust guard
     cur_state->guard |= goto_state.guard;
 
+    expr2tc guard_expr = guard_identifier();
+    expr2tc guard_rhs = cur_state->guard.as_expr();
+    cur_state->assignment(guard_expr, guard_rhs, false);
+
+    guardt guard;
+    target->assignment(
+      guard.as_expr(),
+      guard_expr, guard_expr,
+      guard_rhs,
+      cur_state->source,
+      cur_state->gen_stack_trace(),
+      symex_targett::HIDDEN);
+
+    cur_state->guard = guardt();
+    cur_state->guard.add(guard_expr);
+
     // adjust depth
     cur_state->depth = std::min(cur_state->depth, goto_state.depth);
   }
@@ -340,18 +356,6 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
     negated_cond = not2tc(guard);
   }
 
-  bool unwinding_assertions =
-    !options.get_bool_option("no-unwinding-assertions");
-
-  bool partial_loops =
-    options.get_bool_option("partial-loops");
-
-  bool base_case=
-    options.get_bool_option("base-case");
-
-  bool forward_condition=
-    options.get_bool_option("forward-condition");
-
   if (base_case)
   {
     // generate unwinding assumption
@@ -373,7 +377,7 @@ goto_symext::loop_bound_exceeded(const expr2tc &guard)
   }
   else if(!partial_loops)
   {
-    if(unwinding_assertions)
+    if(!no_unwinding_assertions)
     {
       // generate unwinding assertion
       claim(negated_cond, "unwinding assertion loop " + id2string(loop_id));
@@ -400,15 +404,16 @@ goto_symext::get_unwind(
   if (unwind_set.count(id) != 0)
     this_loop_max_unwind = unwind_set[id];
 
-  #if 1
+  if (!options.get_bool_option("quiet"))
   {
     std::string msg =
       "Unwinding loop " + i2string(id) + " iteration " + i2string(unwind) +
       " " + source.pc->location.as_string();
     std::cout << msg << std::endl;
   }
-  #endif
 
   return this_loop_max_unwind != 0 &&
          unwind >= this_loop_max_unwind;
 }
+
+hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;

@@ -2,7 +2,9 @@ void *malloc(unsigned);
 
 void *my_malloc(unsigned size)
 {
-  return malloc(size);
+  void *p = malloc(size);
+  __ESBMC_assume(p);
+  return p;
 }
 
 struct S1

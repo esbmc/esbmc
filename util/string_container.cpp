@@ -119,3 +119,7 @@ unsigned string_containert::get(const std::string &s)
 
   return r;
 }
+
+#include "irep.cpp"
+#include "expr.cpp"
+#include "type.cpp"

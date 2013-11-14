@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <stdbool.h>
 #include <pthread.h>
 
@@ -28,25 +29,27 @@ static void *pthread_end_values[__ESBMC_constant_infinity_uint];
 
 static unsigned int num_total_threads = 0;
 static unsigned int num_threads_running = 0;
-static unsigned int count_wait = 0;
-static unsigned int count_lock = 0;
-static unsigned int join_wait = 0;
+static int blocked_threads_count = 0;
 
 /************************** Thread creation and exit **************************/
 
 void
 pthread_start_main_hook(void)
 {
-__ESBMC_ATOMIC:
+  __ESBMC_atomic_begin();
   num_total_threads++;
-__ESBMC_ATOMIC:
   num_threads_running++;
+  __ESBMC_atomic_end();
 }
 
 void
 pthread_end_main_hook(void)
 {
-__ESBMC_ATOMIC:
+  // So, we want to be able to access this internal accounting data atomically,
+  // but that'll never be permitted by POR, which will see the access and try
+  // to generate context switches as a result. So, end the main thread in an
+  // atomic state, which will prevent everything but the final from-main switch.
+  __ESBMC_atomic_begin();
   num_threads_running--;
 }
 
@@ -61,9 +64,6 @@ __ESBMC_hide:
   threadid = __ESBMC_get_thread_id();
   startdata = __ESBMC_get_thread_internal_data(threadid);
 
-  // Don't cause a context switch when dereferencing this pointer, which hits
-  // global pointers (i.e., the function pointer). This is an optimisation.
-__ESBMC_ATOMIC:
   exit_val = startdata.func(startdata.start_arg);
 
   __ESBMC_atomic_begin();
@@ -133,18 +133,23 @@ __ESBMC_hide:
   // waiting for its completion. That fact can be used for deadlock detection
   // elsewhere.
   bool ended = pthread_thread_ended[thread];
-  if (!ended)
-    join_wait++;
+  if (!ended) {
+    blocked_threads_count++;
+    // If there are now no more threads unblocked, croak.
+    __ESBMC_assert(blocked_threads_count != num_threads_running,
+                   "Deadlocked state in pthread_join");
+  }
 
   // Fetch exit code
   if (retval != NULL)
     *retval = pthread_end_values[thread];
 
+  // In all circumstances, allow a switch away from this thread to permit
+  // deadlock checking,
   __ESBMC_atomic_end();
 
-  // Discard any interleavings where the other thread wasn't halted.
-  if (!ended)
-    __ESBMC_assume(false);
+  // But if this thread is blocked, don't allow for any further execution.
+  __ESBMC_assume(ended);
 
   return 0;
 }
@@ -155,12 +160,11 @@ pthread_join_noswitch(pthread_t thread, void **retval)
 __ESBMC_hide:
   __ESBMC_atomic_begin();
 
-  // Detect whether the target thread has ended or not. If it isn't, mark us as
-  // waiting for its completion. That fact can be used for deadlock detection
-  // elsewhere.
+  // If the other thread hasn't ended, assume false, because further progress
+  // isn't going to be made. Wait for an interleaving where this is true
+  // instead. This function isn't designed for deadlock detection.
   bool ended = pthread_thread_ended[thread];
-  if (!ended)
-    join_wait++;
+  __ESBMC_assume(ended);
 
   // Fetch exit code
   if (retval != NULL)
@@ -168,14 +172,8 @@ __ESBMC_hide:
 
   __ESBMC_really_atomic_end();
 
-  // Discard any interleavings where the other thread wasn't halted.
-  if (!ended)
-    __ESBMC_assume(false);
-
   return 0;
 }
-
-
 
 /************************* Mutex manipulation routines ************************/
 
@@ -202,39 +200,7 @@ __ESBMC_HIDE:
 }
 
 int
-pthread_mutex_lock_check(pthread_mutex_t *mutex)
-{
-__ESBMC_HIDE:
-  _Bool unlocked = 1;
-  _Bool deadlock_mutex = true;
-
-  __ESBMC_atomic_begin();
-  unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
-
-  if (unlocked)
-    __ESBMC_mutex_lock_field(*mutex) = 1;
-  else
-    count_lock++;
-
-  if (!unlocked) {
-    deadlock_mutex = (count_lock + count_wait + join_wait == num_threads_running);
-    __ESBMC_assert(!deadlock_mutex, "deadlock detected with mutex lock");
-  }
-  __ESBMC_atomic_end();
-
-  __ESBMC_assume(deadlock_mutex);
-
-  return 0;
-}
-
-int
-pthread_mutex_trylock(pthread_mutex_t *mutex)
-{
-  return 0; // we never fail
-}
-
-int
-pthread_mutex_unlock(pthread_mutex_t *mutex)
+pthread_mutex_unlock_nocheck(pthread_mutex_t *mutex)
 {
 __ESBMC_HIDE:
   __ESBMC_atomic_begin();
@@ -242,6 +208,56 @@ __ESBMC_HIDE:
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_atomic_end();
   return 0;
+}
+
+int
+pthread_mutex_lock_check(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:
+  _Bool unlocked = 1;
+
+  __ESBMC_atomic_begin();
+  unlocked = (__ESBMC_mutex_lock_field(*mutex) == 0);
+
+  if (unlocked) {
+    __ESBMC_mutex_lock_field(*mutex) = 1;
+  } else {
+    // Deadlock foo
+    blocked_threads_count++;
+    // No more threads to run -> croak.
+    __ESBMC_assert(blocked_threads_count != num_threads_running,
+                   "Deadlocked state in pthread_mutex_lock");
+  }
+
+  // Switch away for deadlock detection and so forth...
+  __ESBMC_atomic_end();
+
+  // ... but don't allow execution further if it was locked.
+  __ESBMC_assume(unlocked);
+
+  return 0;
+}
+
+int
+pthread_mutex_unlock_check(pthread_mutex_t *mutex)
+{
+__ESBMC_HIDE:
+  __ESBMC_atomic_begin();
+  __ESBMC_assert(__ESBMC_mutex_lock_field(*mutex), "must hold lock upon unlock");
+  __ESBMC_mutex_lock_field(*mutex) = 0;
+  __ESBMC_atomic_end();
+  return 0;
+}
+
+int
+pthread_mutex_trylock(pthread_mutex_t *mutex)
+{
+  if (__ESBMC_mutex_lock_field(*mutex) != 0) {
+    return EBUSY;
+  } else {
+    pthread_mutex_lock(mutex);
+    return 0;
+  }
 }
 
 int
@@ -305,20 +321,8 @@ pthread_rwlock_wrlock(pthread_rwlock_t *lock)
 
 /************************ condvar mainpulation routines ***********************/
 
-#if 0
-int
-pthread_cond_broadcast(pthread_cond_t *cond)
-{
-  //__ESBMC_HIDE:
-  //printf("broadcast_counter: %d", __ESBMC_cond_broadcast_seq_field(*cond));
-  //__ESBMC_cond_broadcast_seq_field(*cond)=1;
-  //printf("broadcast_counter: %d", __ESBMC_cond_broadcast_seq_field(*cond));
-  __ESBMC_cond_broadcast_seq_field(*cond) = 1;
-  __ESBMC_assert(__ESBMC_cond_broadcast_seq_field(
-                   *cond), "__ESBMC_cond_broadcast_seq_field(*cond)");
-  return 0; // we never fail
-}
-#endif
+// this is currently unimplemented.
+int pthread_cond_broadcast(pthread_cond_t *cond);
 
 int
 pthread_cond_init(
@@ -352,8 +356,6 @@ static void
 do_pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex, _Bool assrt)
 {
 __ESBMC_HIDE:
-  _Bool deadlock_wait = 0;
-
   __ESBMC_atomic_begin();
 
   if (assrt)
@@ -363,28 +365,32 @@ __ESBMC_HIDE:
   // Unlock mutex; register us as waiting on condvar; context switch
   __ESBMC_mutex_lock_field(*mutex) = 0;
   __ESBMC_cond_lock_field(*cond) = 1;
-  ++count_wait;
 
-  // If something failed to join in the meantime, stop exploration,
-  __ESBMC_assume(join_wait == 0);
+  // Technically in the gap below, we are blocked. So mark ourselves thus. If
+  // all other threads are (or become) blocked, then deadlock occurred, which
+  // this helps detect.
+  blocked_threads_count++;
+  // No more threads to run -> croak.
+  __ESBMC_assert(blocked_threads_count != num_threads_running,
+                 "Deadlocked state in pthread_mutex_lock");
 
   __ESBMC_atomic_end();
+
   // Other thread activity to happen in this gap
+
   __ESBMC_atomic_begin();
 
-  if (assrt && __ESBMC_cond_lock_field(*cond) == 1) {
-    // If we're _not_ unlocked, check for deadlock.
-    deadlock_wait = (count_lock + count_wait + join_wait == num_threads_running);
-    __ESBMC_assert(!deadlock_wait, "deadlock detected with pthread_cond_wait");
-  }
+  // Have we been signalled?
+  bool signalled = __ESBMC_cond_lock_field(*cond) == 0;
 
-  // Assume that we've been signaled. If we weren't, guard becomes false, and
-  // deadlock assertions possibly trigger.
-  __ESBMC_assume(__ESBMC_cond_lock_field(*cond) == 0);
-  --count_wait;
-
-  // If something failed to join in the meantime, stop exploration,
-  __ESBMC_assume(join_wait == 0);
+  // Don't consider any other interleavings aside from the ones where we've
+  // been signalled. As with mutexes, we should discard this trace and look
+  // for one where we /have/ been signalled instead. There's no use in
+  // switching away from this thread and looking for deadlock; if that's
+  // reachable, it'll be found by the context switch earlier in this function.
+  __ESBMC_assume(signalled);
+  // We're no longer blocked.
+  blocked_threads_count--;
 
   __ESBMC_atomic_end();
 

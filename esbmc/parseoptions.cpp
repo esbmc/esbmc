@@ -18,7 +18,9 @@ extern "C" {
 #include <unistd.h>
 
 #include <sys/resource.h>
+#ifndef ONAMAC
 #include <sys/sendfile.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 }
@@ -43,7 +45,6 @@ extern "C" {
 
 #include <pointer-analysis/value_set_analysis.h>
 #include <pointer-analysis/goto_program_dereference.h>
-#include <pointer-analysis/add_failed_symbols.h>
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
@@ -55,12 +56,38 @@ extern "C" {
 #include "bmc.h"
 #include "version.h"
 
+#include "kinduction_parallel.h"
+
 // jmorse - could be somewhere better
+
+// Hack to fix timeout during k-induction
+
+// Pipe for communication between processes
+int commPipe[2];
+
+bool _k_induction=false;
+bool _base_case=false;
+bool _forward_condition=false;
 
 #ifndef _WIN32
 void
 timeout_handler(int dummy __attribute__((unused)))
 {
+  if(_k_induction)
+  {
+    struct resultt r;
+    r.k=0;
+    r.finished=true;
+
+    if(_base_case)
+      r.step=BASE_CASE;
+    else if(_forward_condition)
+      r.step=FORWARD_CONDITION;
+    else
+      r.step=INDUCTIVE_STEP;
+
+    write(commPipe[1], &r, sizeof(r));
+  }
 
   std::cout << "Timed out" << std::endl;
 
@@ -74,7 +101,7 @@ timeout_handler(int dummy __attribute__((unused)))
 
 /*******************************************************************\
 
-Function: cbmc_parseoptionst::set_verbosity
+Function: cbmc_parseoptionst::set_verbosity_msg
 
   Inputs:
 
@@ -84,7 +111,7 @@ Function: cbmc_parseoptionst::set_verbosity
 
 \*******************************************************************/
 
-void cbmc_parseoptionst::set_verbosity(messaget &message)
+void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
 
@@ -112,6 +139,8 @@ Function: cbmc_parseoptionst::get_command_line_options
 
 \*******************************************************************/
 
+extern "C" uint8_t *version_string;
+
 void cbmc_parseoptionst::get_command_line_options(optionst &options)
 {
   if(config.set(cmdline))
@@ -120,6 +149,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   }
 
   options.cmdline(cmdline);
+
+  if (cmdline.isset("git-hash")) {
+    std::cout << version_string << std::endl;
+    exit(0);
+  }
 
   if(cmdline.isset("arrays-uf-always"))
     options.set_option("arrays-uf", "always");
@@ -250,7 +284,8 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
     options.set_option("partial-loops", true);
   }
 
-  if(cmdline.isset("k-induction"))
+  if(cmdline.isset("k-induction")
+     || cmdline.isset("k-induction-parallel"))
   {
     options.set_option("no-bounds-check", true);
     options.set_option("no-div-by-zero-check", true);
@@ -407,7 +442,7 @@ int cbmc_parseoptionst::doit()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   goto_functionst goto_functions;
 
@@ -437,7 +472,7 @@ int cbmc_parseoptionst::doit()
 
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity(bmc);
+  set_verbosity_msg(bmc);
   return do_bmc(bmc);
 }
 
@@ -455,6 +490,8 @@ Function: cbmc_parseoptionst::doit_k_induction
 
 int cbmc_parseoptionst::doit_k_induction()
 {
+  _k_induction=true;
+
   if(cmdline.isset("version"))
   {
     std::cout << ESBMC_VERSION << std::endl;
@@ -478,12 +515,406 @@ int cbmc_parseoptionst::doit_k_induction()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   if(cmdline.isset("preprocess"))
   {
     preprocessing();
     return 0;
+  }
+
+  // do actual BMC
+  bool res=0;
+
+  int max_k_step = atol(cmdline.get_values("k-step").front().c_str());
+
+  if(cmdline.isset("k-induction-parallel"))
+  {
+    unsigned whoAmI=-1;
+
+    if (pipe(commPipe))
+    {
+      status("\nPipe Creation Failed, giving up.");
+      _exit(1);
+    }
+
+    pid_t children_pid[3];
+
+    short num_p=0;
+
+    // We need to fork 3 times: one for each step
+    for(unsigned p=0; p<3; ++p)
+    {
+      pid_t pid = fork();
+
+      if(pid == -1)
+      {
+        status("\nFork Failed, giving up.");
+        _exit(1);
+      }
+
+      // Child process
+      if(!pid)
+      {
+        whoAmI = p;
+        break;
+      }
+      else // Parent process
+      {
+        children_pid[p]=pid;
+        ++num_p;
+      }
+    }
+
+    // All processeses were created successfully
+    switch(whoAmI)
+    {
+      case -1:
+      {
+        if(num_p == 3)
+        {
+          close (commPipe[1]);
+
+          fcntl(commPipe[0], F_SETFL, O_NONBLOCK);
+
+          struct resultt results[MAX_STEPS*3];
+
+          // Invalid values
+          for(short int i=0; i<3; ++i)
+          {
+            results[i].step=NONE;
+            results[i].result=-1;
+            results[i].k=51;
+            results[i].finished=false;
+          }
+
+          bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
+
+          for(unsigned int i=0; i<MAX_STEPS; ++i)
+          {
+            bc_res[i]=false;
+            fc_res[i]=is_res[i]=true;
+          }
+
+          short int solution_found=0;
+
+          bool bc_finished=false, fc_finished=false, is_finished=false;
+
+          // Keep reading untill we find an answer
+          while(!(bc_finished && fc_finished && is_finished)
+            && !solution_found)
+          {
+            read(commPipe[0], results, sizeof(results));
+
+            // Eventually checks on each step
+            if(!bc_finished)
+            {
+              int status;
+              pid_t result = waitpid(children_pid[0], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                bc_finished=true;
+              }
+            }
+
+            if(!fc_finished)
+            {
+              int status;
+              pid_t result = waitpid(children_pid[1], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                fc_finished=true;
+              }
+            }
+
+            if(!is_finished)
+            {
+              int status;
+              pid_t result = waitpid(children_pid[2], &status, WNOHANG);
+              if (result == 0) {
+                // Child still alive
+              } else if (result == -1) {
+                // Error
+              } else {
+                is_finished=true;
+              }
+            }
+
+            unsigned i=0;
+            while((results[i].result != -1) && (i < MAX_STEPS*3))
+            {
+              switch(results[i].step)
+              {
+                case BASE_CASE:
+                  if(results[i].finished)
+                  {
+                    bc_finished=true;
+                    break;
+                  }
+
+                  bc_res[results[i].k] = results[i].result;
+
+                  if(results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                case FORWARD_CONDITION:
+                  if(results[i].finished)
+                  {
+                    fc_finished=true;
+                    break;
+                  }
+
+                  fc_res[results[i].k] = results[i].result;
+
+                  if(!results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                case INDUCTIVE_STEP:
+                  if(results[i].finished)
+                  {
+                    is_finished=true;
+                    break;
+                  }
+
+                  is_res[results[i].k] = results[i].result;
+
+                  if(!results[i].result)
+                    solution_found = results[i].k;
+
+                  break;
+
+                default:
+                  break;
+              }
+
+              ++i;
+            }
+          }
+
+          for(short i=0; i<3; ++i)
+            kill(children_pid[i], SIGKILL);
+
+          // No solution was found :/
+          if(!solution_found)
+            std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
+
+          if(bc_res[solution_found])
+            std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+
+          // Successful!
+          if(!bc_res[solution_found]
+                     && !fc_res[solution_found])
+            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+
+          if(!bc_res[solution_found] && !is_res[solution_found])
+            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+
+          return res;
+        }
+        else
+        {
+          // Something failed and the processes were not created
+          // Let's start the sequential approach
+          for(short i=0; i<3; ++i)
+            kill(children_pid[i], SIGKILL);
+        }
+
+        break;
+      }
+
+      case 0:
+      {
+        _base_case=true;
+
+        status("Generated Base Case process");
+
+        status("\n*** Generating Base Case ***");
+        goto_functionst goto_functions_base_case;
+
+        optionst opts1;
+        opts1.set_option("base-case", true);
+        opts1.set_option("forward-condition", false);
+        opts1.set_option("inductive-step", false);
+        get_command_line_options(opts1);
+
+        if(get_goto_program(opts1, goto_functions_base_case))
+          return 6;
+
+        if(set_claims(goto_functions_base_case))
+          return 7;
+
+        context_base_case = context;
+
+        bmct bmc_base_case(goto_functions_base_case, opts1,
+          context_base_case, ui_message_handler);
+        set_verbosity_msg(bmc_base_case);
+
+        context.clear(); // We need to clear the previous context
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=BASE_CASE;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        base_caset bc(bmc_base_case, goto_functions_base_case);
+
+        for(k_step=1; k_step<=max_k_step; ++k_step)
+        {
+          r = bc.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(r.result) return r.result;
+        }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        return res;
+
+        break;
+      }
+
+      case 1:
+      {
+        _forward_condition=true;
+
+        status("Generated Forward Condition process");
+
+        //
+        // do the forward condition
+        //
+
+        status("\n*** Generating Forward Condition ***");
+        goto_functionst goto_functions_forward_condition;
+
+        optionst opts2;
+        opts2.set_option("base-case", false);
+        opts2.set_option("forward-condition", true);
+        opts2.set_option("inductive-step", false);
+        get_command_line_options(opts2);
+
+        if(get_goto_program(opts2, goto_functions_forward_condition))
+          return 6;
+
+        if(set_claims(goto_functions_forward_condition))
+          return 7;
+
+        context_forward_condition = context;
+
+        bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
+          context_forward_condition, ui_message_handler);
+        set_verbosity_msg(bmc_forward_condition);
+
+        context.clear(); // We need to clear the previous context
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=FORWARD_CONDITION;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
+
+        for(k_step=2; k_step<=max_k_step; ++k_step)
+        {
+          r = fc.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
+        }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        return res;
+
+        break;
+      }
+
+      case 2:
+      {
+        status("Generated Inductive Step process");
+
+        //
+        // do the inductive step
+        //
+
+        status("\n*** Generating Inductive Step ***");
+        goto_functionst goto_functions_inductive_step;
+
+        optionst opts3;
+        opts3.set_option("base-case", false);
+        opts3.set_option("forward-condition", false);
+        opts3.set_option("inductive-step", true);
+        get_command_line_options(opts3);
+
+        if(get_goto_program(opts3, goto_functions_inductive_step))
+          return 6;
+
+        if(set_claims(goto_functions_inductive_step))
+          return 7;
+
+        context_inductive_step = context;
+
+        bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
+          context_inductive_step, ui_message_handler);
+        set_verbosity_msg(bmc_inductive_step);
+
+        // Start communication to the parent process
+        close(commPipe[0]);
+
+        // Struct to keep the result
+        struct resultt r;
+        r.step=INDUCTIVE_STEP;
+        r.k=0;
+        r.finished=false;
+
+        // Create and start base case checking
+        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
+
+        for(k_step=2; k_step<=max_k_step; ++k_step)
+        {
+          r = is.startSolving();
+
+          // Write result
+          write(commPipe[1], &r, sizeof(r));
+
+          if(!r.result) return r.result;
+        }
+
+        r.finished=true;
+        write(commPipe[1], &r, sizeof(r));
+
+        return res;
+
+        break;
+      }
+    }
+
+    return res;
   }
 
   //
@@ -516,7 +947,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_base_case(goto_functions_base_case, opts1,
       context_base_case, ui_message_handler);
-  set_verbosity(bmc_base_case);
+  set_verbosity_msg(bmc_base_case);
 
   context.clear(); // We need to clear the previous context
 
@@ -550,7 +981,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
       context_forward_condition, ui_message_handler);
-  set_verbosity(bmc_forward_condition);
+  set_verbosity_msg(bmc_forward_condition);
 
   context.clear(); // We need to clear the previous context
 
@@ -584,10 +1015,11 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
       context_inductive_step, ui_message_handler);
-  set_verbosity(bmc_inductive_step);
+  set_verbosity_msg(bmc_inductive_step);
 
-  // do actual BMC
-  bool res;
+  namespacet ns_base_case(context_base_case);
+  namespacet ns_forward_condition(context_forward_condition);
+  namespacet ns_inductive_step(context_inductive_step);
 
   do {
     std::cout << std::endl << "*** K-Induction Loop Iteration ";
@@ -603,10 +1035,13 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_base_case;
 
+      // Sins of the fathers, etc
+      migrate_namespace_lookup = &ns_base_case;
+
       res = do_bmc(bmc_base_case);
 
-      if(k_step >= 1 && res)
-        return 0;
+      if(res)
+        return res;
 
       ++k_step;
 
@@ -621,10 +1056,11 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_forward_condition;
 
+      migrate_namespace_lookup = &ns_forward_condition;
       res = do_bmc(bmc_forward_condition);
 
       if (!res)
-        return 0;
+        return res;
 
       forward_condition = false; //disable forward condition
     }
@@ -636,10 +1072,11 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_inductive_step;
 
+      migrate_namespace_lookup = &ns_inductive_step;
       res = do_bmc(bmc_inductive_step);
 
       if (!res)
-        return 0;
+        return res;
 
       base_case = true; //enable base case
     }
@@ -648,7 +1085,7 @@ int cbmc_parseoptionst::doit_k_induction()
     bmc_forward_condition.options.set_option("unwind", i2string(k_step));
     bmc_inductive_step.options.set_option("unwind", i2string(k_step));
 
-  } while (k_step <= atol(cmdline.get_values("k-step").front().c_str()));
+  } while (k_step <= max_k_step);
 
   status("Unable to prove or falsify the property, giving up.");
   status("VERIFICATION UNKNOWN");
@@ -1167,6 +1604,7 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
+#if 0
 static void
 relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 {
@@ -1186,6 +1624,7 @@ relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 
   return;
 }
+#endif
 
 bool cbmc_parseoptionst::process_goto_program(
   optionst &options,
@@ -1218,6 +1657,10 @@ bool cbmc_parseoptionst::process_goto_program(
         *get_message_handler(), goto_functions);
     }
 
+#if 0
+    // This disabled code used to run the pointer static analysis and produce
+    // pointer assertions appropriately. Disable now that we can run it at
+    // symex time.
     status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
     value_set_analysis(goto_functions);
@@ -1234,9 +1677,7 @@ bool cbmc_parseoptionst::process_goto_program(
     // add pointer checks
     pointer_checks(
       goto_functions, ns, context, options, value_set_analysis);
-
-    // add failed symbols
-    add_failed_symbols(context, ns);
+#endif
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -1250,6 +1691,9 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("data-races-check"))
     {
       status("Adding Data Race Checks");
+
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
 
       add_race_assertions(
         value_set_analysis,
@@ -1330,7 +1774,7 @@ int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 
   bool res = bmc1.run();
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(ONAMAC)
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
@@ -1379,8 +1823,8 @@ void cbmc_parseoptionst::help()
     " --show-features              only show features\n"
     " --document-subgoals          generate subgoals documentation\n"
     " --no-library                 disable built-in abstract C library\n"
-    " --binary                     read goto program instead of source code\n"
-    " --llvm-metadata Filename     read the metadata file generated by LLVM\n"
+//    " --binary                     read goto program instead of source code\n"
+//    " --llvm-metadata Filename     read the metadata file generated by LLVM\n"
     " --little-endian              allow little-endian word-byte conversions\n"
     " --big-endian                 allow big-endian word-byte conversions\n"
     " --16, --32, --64             set width of machine word\n"
@@ -1419,6 +1863,7 @@ void cbmc_parseoptionst::help()
     " --forward-condition          check the forward condition\n"
     " --inductive-step             check the inductive step\n"
     " --k-induction                prove by k-induction \n"
+    " --k-induction-parallel       prove by k-induction, running ech step on a separate process\n"
     " --k-step nr                  set the k time step (default is 50) \n\n"
     " --- scheduling approaches -----------------------------------------------------\n\n"
     " --schedule                   use schedule recording approach \n"

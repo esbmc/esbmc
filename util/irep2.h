@@ -21,6 +21,8 @@
 #include <big-int/bigint.hh>
 #include <dstring.h>
 
+#include <crypto_hash.h>
+
 // XXXjmorse - abstract, access modifies, need consideration
 
 /** Iterate over all expr2tc's in a vector.
@@ -196,7 +198,10 @@ public:
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref), boost::detail::polymorphic_cast_tag()) {}
+    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+  {
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+  }
 
   irep_container &operator=(irep_container const &ref)
   {
@@ -215,7 +220,8 @@ public:
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    *this = boost::shared_polymorphic_cast<T, Y>
+    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    *this = boost::static_pointer_cast<T, Y>
             (static_cast<const boost::shared_ptr<Y> &>(ref));
     return *this;
   }
@@ -319,11 +325,17 @@ protected:
   type2t(const type2t &ref);
 
 public:
+  virtual ~type2t() { };
+
   /** Fetch bit width of this type.
    *  For a particular type, calculate its size in a bit representation of
    *  itself. May throw various exceptions depending on whether this operation
    *  is viable - for example, for symbol types, infinite sized or dynamically
    *  sized arrays.
+   *
+   *  Note that the bit width is _not_ the same as the ansi-c byte model
+   *  representation of this type.
+   *
    *  @throws symbolic_type_excp
    *  @throws array_type2t::inf_sized_array_excp
    *  @throws array_type2t::dyn_sized_array_excp
@@ -414,12 +426,22 @@ public:
    */
   virtual void do_crc(hacky_hash &hash) const;
 
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
+
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
 
   mutable uint32_t crc_val;
 };
-
 
 /** Fetch identifying name for a type.
  *  I.E., this is the class of the type, what you'd get if you called type.id()
@@ -559,6 +581,8 @@ protected:
   expr2t(const expr2t &ref);
 
 public:
+  virtual ~expr2t() { };
+
   /** Clone method. Self explanatory. */
   virtual expr2tc clone(void) const = 0;
 
@@ -654,6 +678,17 @@ public:
    *  @param hash Hash object to accumulate expression data into.
    */
   virtual void do_crc(hacky_hash &hash) const;
+
+  /** Perform hash operation accumulating into parameter.
+   *  Feeds data as appropriate to the type of the expression into the
+   *  parameter, to be hashed. Like crc and do_crc, but for some other kind
+   *  of hash scenario.
+   *  @see cmp
+   *  @see crc
+   *  @see do_crc
+   *  @param hash Object to accumulate hash data into.
+   */
+  virtual void hash(crypto_hash &hash) const;
 
   /** Generate a list of expr operands.
    *  Use forall_operands2 instead; this method is overridden by subclasses and
@@ -820,7 +855,7 @@ namespace esbmct {
    *  via overloading), and then inspecting the output of that.
    *
    *  In fact, we can make type generic implementations of all the following
-   *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands.
+   *  methods in expr2t: clone, tostring, cmp, lt, do_crc, list_operands, hash.
    *
    *  So, that's what this template provides; an expr2t class can be made by
    *  inheriting from this template, telling it what class it'll end up with,
@@ -961,6 +996,7 @@ namespace esbmct {
     virtual bool cmp(const expr2t &ref) const;
     virtual int lt(const expr2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
     virtual void list_operands(std::list<const expr2tc*> &inp) const;
     virtual const expr2tc *get_sub_expr(unsigned int i) const;
     virtual expr2tc *get_sub_expr_nc(unsigned int i);
@@ -1055,6 +1091,7 @@ namespace esbmct {
     virtual bool cmp(const type2t &ref) const;
     virtual int lt(const type2t &ref) const;
     virtual void do_crc(hacky_hash &hash) const;
+    virtual void hash(crypto_hash &hash) const;
   };
 
   // Meta goo
@@ -1783,6 +1820,26 @@ inline bool is_number_type(const type2tc &t) \
 inline bool is_number_type(const expr2tc &e)
 { return is_number_type(e->type); }
 
+inline bool is_scalar_type(const type2tc &t)
+{ return is_number_type(t) || is_pointer_type(t) || is_bool_type(t) ||
+         is_empty_type(t) || is_code_type(t); }
+
+inline bool is_scalar_type(const expr2tc &e)
+{ return is_scalar_type(e->type); }
+
+inline bool is_multi_dimensional_array(const type2tc &t) {
+  if (is_array_type(t)) {
+    const array_type2t &arr_type = to_array_type(t);
+    return is_array_type(arr_type.subtype);
+  } else {
+    return false;
+  }
+}
+
+inline bool is_multi_dimensional_array(const expr2tc &e) {
+  return is_multi_dimensional_array(e->type);
+}
+
 /** Pool for caching converted types.
  *  Various common types (bool, empty for example) needn't be reallocated
  *  every time we need a new one; it's better to have some global constants
@@ -1794,6 +1851,7 @@ inline bool is_number_type(const expr2tc &e)
 class type_poolt {
 public:
   type_poolt(void);
+  type_poolt(bool yolo);
 
   type2tc bool_type;
   type2tc empty_type;
@@ -2506,13 +2564,15 @@ class object_desc_data : public expr2t
 {
   public:
     object_desc_data(const type2tc &t, expr2t::expr_ids id, const expr2tc &o,
-                     const expr2tc &offs)
-      : expr2t(t, id), object(o), offset(offs) { }
+                     const expr2tc &offs, unsigned int align)
+      : expr2t(t, id), object(o), offset(offs), alignment(align) { }
     object_desc_data(const object_desc_data &ref)
-      : expr2t(ref), object(ref.object), offset(ref.offset) { }
+      : expr2t(ref), object(ref.object), offset(ref.offset),
+        alignment(ref.alignment) { }
 
     expr2tc object;
     expr2tc offset;
+    unsigned int alignment;
 };
 
 class code_funccall_data : public code_base
@@ -2844,7 +2904,8 @@ irep_typedefs(code_goto, code_goto_data, esbmct::notype,
               irep_idt, code_goto_data, &code_goto_data::target);
 irep_typedefs(object_descriptor, object_desc_data, esbmct::takestype,
               expr2tc, object_desc_data, &object_desc_data::object,
-              expr2tc, object_desc_data, &object_desc_data::offset);
+              expr2tc, object_desc_data, &object_desc_data::offset,
+              unsigned int, object_desc_data, &object_desc_data::alignment);
 irep_typedefs(code_function_call, code_funccall_data, esbmct::notype,
               expr2tc, code_funccall_data, &code_funccall_data::ret,
               expr2tc, code_funccall_data, &code_funccall_data::function,
@@ -2880,8 +2941,9 @@ irep_typedefs(isinf, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
 irep_typedefs(isnormal, arith_1op, esbmct::notype,
               expr2tc, arith_1op, &arith_1op::value);
-irep_typedefs(concat, concat_data, esbmct::takestype,
-              std::vector<expr2tc>, concat_data, &concat_data::data_items);
+irep_typedefs(concat, bit_2ops, esbmct::takestype,
+              expr2tc, bit_2ops, &bit_2ops::side_1,
+              expr2tc, bit_2ops, &bit_2ops::side_2);
 
 /** Constant integer class.
  *  Records a constant integer of an arbitary precision, signed or unsigned.
@@ -4184,8 +4246,10 @@ public:
 class object_descriptor2t : public object_descriptor_expr_methods
 {
 public:
-  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs)
-    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs) {}
+  object_descriptor2t(const type2tc &t, const expr2tc &root,const expr2tc &offs,
+                      unsigned int alignment)
+    : object_descriptor_expr_methods(t, object_descriptor_id, root, offs,
+                                     alignment) {}
   object_descriptor2t(const object_descriptor2t &ref)
     : object_descriptor_expr_methods(ref) {}
 
@@ -4349,11 +4413,10 @@ public:
 class concat2t : public concat_expr_methods
 {
 public:
-  concat2t(const type2tc &type, const std::vector<expr2tc> &vals)
-    : concat_expr_methods(type, concat_id, vals) { }
+  concat2t(const type2tc &type, const expr2tc &forward, const expr2tc &aft)
+    : concat_expr_methods(type, concat_id, forward, aft) { }
   concat2t(const concat2t &ref)
     : concat_expr_methods(ref) { }
-  virtual expr2tc do_simplify(bool second) const;
 
   static std::string field_names[esbmct::num_type_fields];
 };
@@ -4586,6 +4649,9 @@ is_false(const expr2tc &expr)
   else
     return false;
 }
+
+// To initialize the below at a defined time...
+void init_expr_constants(void);
 
 extern const expr2tc true_expr;
 extern const expr2tc false_expr;
