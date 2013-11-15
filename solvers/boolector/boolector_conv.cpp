@@ -395,9 +395,44 @@ boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
 }
 
 const smt_ast *
-boolector_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
+boolector_convt::overflow_arith(const expr2tc &expr)
 {
-  abort();
+  const overflow2t &overflow = to_overflow2t(expr);
+  const arith_2ops &opers = static_cast<const arith_2ops &>(*overflow.operand);
+
+  const btor_smt_ast *side1 = btor_ast_downcast(convert_ast(opers.side_1));
+  const btor_smt_ast *side2 = btor_ast_downcast(convert_ast(opers.side_2));
+
+  // Guess whether we're performing a signed or unsigned comparison.
+  bool is_signed = (is_signedbv_type(opers.side_1) ||
+                    is_signedbv_type(opers.side_2));
+
+  BtorNode *res;
+  if (is_add2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_saddo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_uaddo(btor, side1->e, side2->e);
+    }
+  } else if (is_sub2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_ssubo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_usubo(btor, side1->e, side2->e);
+    }
+  } else if (is_mul2t(overflow.operand)) {
+    if (is_signed) {
+      res = boolector_smulo(btor, side1->e, side2->e);
+    } else {
+      res = boolector_umulo(btor, side1->e, side2->e);
+    }
+  } else {
+    std::cerr << "Unexpected operand to overflow_arith2t irep" << std::endl;
+    abort();
+  }
+
+  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
+  return new btor_smt_ast(s, res);
 }
 
 smt_ast *
