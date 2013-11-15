@@ -57,9 +57,41 @@ boolector_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func
 }
 
 smt_sort *
-boolector_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
+boolector_convt::mk_sort(const smt_sort_kind k, ...)
 {
-  abort();
+  // Boolector doesn't have any special handling for sorts, they're all always
+  // explicit arguments to functions. So, just use the base smt_sort class.
+  va_list ap;
+  smt_sort *s = NULL, *dom, *range;
+  unsigned long uint;
+  bool thebool;
+
+  va_start(ap, k);
+  switch (k) {
+  case SMT_SORT_INT:
+  case SMT_SORT_REAL:
+    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+    abort();
+  case SMT_SORT_BV:
+    uint = va_arg(ap, unsigned long);
+    thebool = va_arg(ap, int);
+    thebool = thebool;
+    s = new smt_sort(k, uint);
+    break;
+  case SMT_SORT_ARRAY:
+    dom = va_arg(ap, smt_sort *); // Consider constness?
+    range = va_arg(ap, smt_sort *);
+    s = new smt_sort(k, range->data_width, dom->data_width);
+    break;
+  case SMT_SORT_BOOL:
+    s = new smt_sort(k);
+    break;
+  default:
+    std::cerr << "Unhandled SMT sort in boolector conv" << std::endl;
+    abort();
+  }
+
+  return s;
 }
 
 smt_ast *
