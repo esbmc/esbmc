@@ -75,6 +75,34 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new btor_smt_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUDIV:
     return new btor_smt_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSHL:
+    return new btor_smt_ast(s, boolector_sll(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVLSHR:
+    return new btor_smt_ast(s, boolector_srl(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVASHR:
+    return new btor_smt_ast(s, boolector_sra(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVNEG:
+    return new btor_smt_ast(s, boolector_neg(btor, asts[0]->e));
+  case SMT_FUNC_BVNOT:
+  case SMT_FUNC_NOT:
+    return new btor_smt_ast(s, boolector_not(btor, asts[0]->e));
+  case SMT_FUNC_BVNXOR:
+    return new btor_smt_ast(s, boolector_xnor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVNOR:
+    return new btor_smt_ast(s, boolector_nor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVNAND:
+    return new btor_smt_ast(s, boolector_nand(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVXOR:
+  case SMT_FUNC_XOR:
+    return new btor_smt_ast(s, boolector_xor(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVOR:
+  case SMT_FUNC_OR:
+    return new btor_smt_ast(s, boolector_or(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVAND:
+  case SMT_FUNC_AND:
+    return new btor_smt_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_IMPLIES:
+    return new btor_smt_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
