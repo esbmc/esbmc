@@ -49,11 +49,25 @@ boolector_convt::assert_ast(const smt_ast *a __attribute__((unused)))
 }
 
 smt_ast *
-boolector_convt::mk_func_app(const smt_sort *s __attribute__((unused)), smt_func_kind k __attribute__((unused)),
-                               const smt_ast * const *args __attribute__((unused)),
-                               unsigned int numargs __attribute__((unused)))
+boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
+                               const smt_ast * const *args,
+                               unsigned int numargs)
 {
-  abort();
+  const btor_smt_ast *asts[4];
+  unsigned int i;
+
+  assert(numargs <= 4);
+  for (i = 0; i < numargs; i++)
+    asts[i] = btor_ast_downcast(args[i]);
+
+  switch (k) {
+  case SMT_FUNC_BVADD:
+    return new btor_smt_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
+  default:
+    std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
+              << "\" in boolector conv" << std::endl;
+    abort();
+  }
 }
 
 smt_sort *
