@@ -265,9 +265,12 @@ boolector_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
 }
 
 smt_ast *
-boolector_convt::mk_extract(const smt_ast *a __attribute__((unused)), unsigned int high __attribute__((unused)), unsigned int low __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
+                            unsigned int low, const smt_sort *s)
 {
-  abort();
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  BtorNode *b = boolector_slice(btor, ast->e, high, low);
+  return new btor_smt_ast(s, b);
 }
 
 expr2tc
