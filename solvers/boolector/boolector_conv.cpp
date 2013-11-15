@@ -40,7 +40,7 @@ boolector_convt::dec_solve()
 tvt
 boolector_convt::l_get(const smt_ast *l)
 {
-  assert(l->sort->data_width == 1);
+  assert(l->sort->id == SMT_SORT_BOOL);
   const btor_smt_ast *ast = btor_ast_downcast(l);
   char *result = boolector_bv_assignment(btor, ast->e);
 
