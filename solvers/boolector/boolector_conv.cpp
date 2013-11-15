@@ -11,7 +11,8 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns)
   : smt_convt(true, int_encoding, ns, is_cpp, false, false, true)
 {
-  abort();
+  btor = boolector_new();
+  boolector_enable_model_gen(btor);
 }
 
 boolector_convt::~boolector_convt(void)
@@ -33,7 +34,7 @@ boolector_convt::l_get(const smt_ast *l __attribute__((unused)))
 const std::string
 boolector_convt::solver_text()
 {
-  abort();
+  return "Boolector";
 }
 
 void
