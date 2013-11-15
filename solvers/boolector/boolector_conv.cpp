@@ -311,10 +311,8 @@ boolector_convt::get_bool(const smt_ast *a __attribute__((unused)))
   abort();
 }
 
-static int64_t read_btor_string(Btor *btor, BtorNode *e, unsigned int len)
+static int64_t read_btor_string(const char *result, unsigned int len)
 {
-  char *result = boolector_bv_assignment(btor, e);
-
   assert(result != NULL && "Boolector returned null bv assignment string");
 
   // Assume first bit is the most significant for the moment.
@@ -341,7 +339,6 @@ static int64_t read_btor_string(Btor *btor, BtorNode *e, unsigned int len)
       res = -1;
   }
 
-  boolector_free_bv_assignment(btor, result);
   return res;
 }
 
@@ -351,14 +348,42 @@ boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
   assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
   const btor_smt_ast *ast = btor_ast_downcast(a);
 
-  int64_t val = read_btor_string(btor, ast->e,a->sort->data_width);
-  constant_int2tc exp(t, BigInt(val));
+  char *result = boolector_bv_assignment(btor, ast->e);
+  int64_t val = read_btor_string(result, a->sort->data_width);
+  boolector_free_bv_assignment(btor, result);
 
+  constant_int2tc exp(t, BigInt(val));
   return exp;
 }
 
 expr2tc
-boolector_convt::get_array_elem(const smt_ast *array __attribute__((unused)), uint64_t index __attribute__((unused)), const smt_sort *sort __attribute__((unused)))
+boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
+                                const smt_sort *sort __attribute__((unused)))
 {
-  abort();
+  // Super inefficient, but never mind.
+  assert(array->sort->id == SMT_SORT_ARRAY);
+  const btor_smt_ast *ast = btor_ast_downcast(array);
+
+  int size;
+  char **indicies, **values;
+  boolector_array_assignment(btor, ast->e, &indicies, &values, &size);
+
+  if (size == 0)
+    // Presumably no allocation occurred either.
+    return expr2tc();
+
+  expr2tc final_result;
+
+  for (int i = 0; i < size; i++) {
+    int64_t idx = read_btor_string(indicies[i], array->sort->domain_width);
+    if (idx == (int64_t)index) {
+      int64_t value = read_btor_string(values[i], array->sort->data_width);
+      final_result =
+        constant_int2tc(get_int_type(array->sort->data_width), BigInt(value));
+      break;
+    }
+  }
+
+  boolector_free_array_assignment(btor, indicies, values, size);
+  return final_result;
 }
