@@ -11,6 +11,11 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns)
   : smt_convt(true, int_encoding, ns, is_cpp, false, false, true)
 {
+  if (int_encoding) {
+    std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
+    abort();
+  }
+
   btor = boolector_new();
   boolector_enable_model_gen(btor);
 }
@@ -60,12 +65,14 @@ boolector_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
 smt_ast *
 boolector_convt::mk_smt_int(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)))
 {
+  std::cerr << "Boolector can't create integer sorts" << std::endl;
   abort();
 }
 
 smt_ast *
 boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 {
+  std::cerr << "Boolector can't create Real sorts" << std::endl;
   abort();
 }
 
