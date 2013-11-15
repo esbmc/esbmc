@@ -103,6 +103,23 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new btor_smt_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_IMPLIES:
     return new btor_smt_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVULT:
+    return new btor_smt_ast(s, boolector_ult(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSLT:
+    return new btor_smt_ast(s, boolector_slt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVULTE:
+    return new btor_smt_ast(s, boolector_ulte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSLTE:
+    return new btor_smt_ast(s, boolector_slte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUGT:
+    return new btor_smt_ast(s, boolector_ugt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSGT:
+    return new btor_smt_ast(s, boolector_sgt(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUGTE:
+    return new btor_smt_ast(s, boolector_ugte(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSGTE:
+    return new btor_smt_ast(s, boolector_sgte(btor, asts[0]->e, asts[1]->e));
+
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
