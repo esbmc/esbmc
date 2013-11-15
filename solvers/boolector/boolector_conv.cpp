@@ -115,9 +115,11 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint __attribute__((unused)), 
 }
 
 smt_ast *
-boolector_convt::mk_smt_bool(bool val __attribute__((unused)))
+boolector_convt::mk_smt_bool(bool val)
 {
-  abort();
+  BtorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
+  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+  return new btor_smt_ast(sort, node);
 }
 
 smt_ast *
