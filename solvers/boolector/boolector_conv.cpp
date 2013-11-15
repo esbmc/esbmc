@@ -27,7 +27,14 @@ boolector_convt::~boolector_convt(void)
 smt_convt::resultt
 boolector_convt::dec_solve()
 {
-  abort();
+  int result = boolector_sat(btor);
+
+  if (result == BOOLECTOR_SAT)
+    return P_SATISFIABLE;
+  else if (result == BOOLECTOR_UNSAT)
+    return P_UNSATISFIABLE;
+  else
+    return P_ERROR;
 }
 
 tvt
