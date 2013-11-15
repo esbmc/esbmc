@@ -55,8 +55,6 @@ public:
                          const smt_sort *sort);
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
-  virtual smt_ast *overflow_cast(const expr2tc &expr);
-  virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
   // Members
 

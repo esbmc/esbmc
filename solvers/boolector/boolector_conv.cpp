@@ -434,15 +434,3 @@ boolector_convt::overflow_arith(const expr2tc &expr)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new btor_smt_ast(s, res);
 }
-
-smt_ast *
-boolector_convt::overflow_cast(const expr2tc &expr __attribute__((unused)))
-{
-  abort();
-}
-
-const smt_ast *
-boolector_convt::overflow_neg(const expr2tc &expr __attribute__((unused)))
-{
-  abort();
-}
