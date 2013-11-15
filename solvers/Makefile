@@ -33,6 +33,12 @@ OBJS+= cvc/$(OBJDIR)/cvc.o
 DIRS+= cvc
 endif
 
+ifdef BOOLECTOR
+OBJS+= boolector/$(OBJDIR)/boolector.o
+DIRS+= boolector
+endif
+
+#
 ###############################################################################
 
 # Make dirs then solvers.o _seperately_ so that changes to file mod
