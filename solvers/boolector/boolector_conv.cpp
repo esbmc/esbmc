@@ -126,6 +126,13 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_ITE:
     return new btor_smt_ast(s, boolector_cond(btor, asts[0]->e, asts[1]->e,
                                               asts[2]->e));
+  case SMT_FUNC_STORE:
+    return new btor_smt_ast(s, boolector_write(btor, asts[0]->e, asts[1]->e,
+                                               asts[2]->e));
+  case SMT_FUNC_SELECT:
+    return new btor_smt_ast(s, boolector_read(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_CONCAT:
+    return new btor_smt_ast(s, boolector_concat(btor, asts[0]->e, asts[1]->e));
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
