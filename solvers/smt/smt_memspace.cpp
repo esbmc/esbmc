@@ -255,8 +255,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] =
-          type_byte_size(*expr->type.get()).to_long() + 1;
+    addr_space_data.back()[obj_num] = 0; // XXX -- nothing uses this data?
 
     membs.clear();
     membs.push_back(start_sym);
