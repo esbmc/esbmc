@@ -393,3 +393,21 @@ boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
   boolector_free_array_assignment(btor, indicies, values, size);
   return final_result;
 }
+
+const smt_ast *
+boolector_convt::overflow_arith(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
+
+smt_ast *
+boolector_convt::overflow_cast(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
+
+const smt_ast *
+boolector_convt::overflow_neg(const expr2tc &expr __attribute__((unused)))
+{
+  abort();
+}
