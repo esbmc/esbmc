@@ -132,6 +132,9 @@ minisat_convt::l_get(const literalt &l)
 void
 minisat_convt::assert_lit(const literalt &l)
 {
+  if (l.is_true())
+    return; // XXX how about false?
+
   Minisat::vec<Lit> c;
   c.push(Minisat::mkLit(l.var_no(), l.sign()));
   solver.addClause_(c);
