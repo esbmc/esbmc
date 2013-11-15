@@ -311,19 +311,16 @@ boolector_convt::get_bool(const smt_ast *a __attribute__((unused)))
   abort();
 }
 
-expr2tc
-boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
+static int64_t read_btor_string(Btor *btor, BtorNode *e, unsigned int len)
 {
-  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
-  const btor_smt_ast *ast = btor_ast_downcast(a);
-  char *result = boolector_bv_assignment(btor, ast->e);
+  char *result = boolector_bv_assignment(btor, e);
 
   assert(result != NULL && "Boolector returned null bv assignment string");
 
   // Assume first bit is the most significant for the moment.
   int64_t res = 0;
 
-  for (unsigned int i = 0; i < a->sort->data_width; i++) {
+  for (unsigned int i = 0; i < len; i++) {
     res <<= 1;
 
     assert(result[i] != '\0' && "Premature end of boolector bv assignment str");
@@ -344,9 +341,19 @@ boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
       res = -1;
   }
 
-  constant_int2tc exp(t, BigInt(res));
-
   boolector_free_bv_assignment(btor, result);
+  return res;
+}
+
+expr2tc
+boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
+{
+  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+
+  int64_t val = read_btor_string(btor, ast->e,a->sort->data_width);
+  constant_int2tc exp(t, BigInt(val));
+
   return exp;
 }
 
