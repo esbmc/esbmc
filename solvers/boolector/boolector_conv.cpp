@@ -306,9 +306,15 @@ boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
 }
 
 expr2tc
-boolector_convt::get_bool(const smt_ast *a __attribute__((unused)))
+boolector_convt::get_bool(const smt_ast *a)
 {
-  abort();
+  tvt t = l_get(a);
+  if (t.is_true())
+    return true_expr;
+  else if (t.is_false())
+    return false_expr;
+  else
+    return expr2tc();
 }
 
 static int64_t read_btor_string(const char *result, unsigned int len)
