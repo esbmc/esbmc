@@ -43,9 +43,10 @@ boolector_convt::solver_text()
 }
 
 void
-boolector_convt::assert_ast(const smt_ast *a __attribute__((unused)))
+boolector_convt::assert_ast(const smt_ast *a)
 {
-  abort();
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  boolector_assert(btor, ast->e);
 }
 
 smt_ast *
