@@ -63,6 +63,18 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   switch (k) {
   case SMT_FUNC_BVADD:
     return new btor_smt_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSUB:
+    return new btor_smt_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVMUL:
+    return new btor_smt_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSMOD:
+    return new btor_smt_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUMOD:
+    return new btor_smt_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVSDIV:
+    return new btor_smt_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
+  case SMT_FUNC_BVUDIV:
+    return new btor_smt_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
