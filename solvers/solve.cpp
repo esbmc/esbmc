@@ -169,7 +169,7 @@ create_boolector_solver(bool is_cpp __attribute__((unused)),
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_boolector_solver(int_encoding, is_cpp, ns);
+    return create_new_boolector_solver(is_cpp, int_encoding, ns);
 #endif
 }
 
