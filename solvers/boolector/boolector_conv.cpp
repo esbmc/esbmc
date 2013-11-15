@@ -30,6 +30,9 @@ boolector_convt::~boolector_convt(void)
 {
   boolector_delete(btor);
   btor = NULL;
+  if (debugfile)
+    fclose(debugfile);
+  debugfile = NULL;
 }
 
 smt_convt::resultt
@@ -87,6 +90,8 @@ boolector_convt::assert_ast(const smt_ast *a)
 {
   const btor_smt_ast *ast = btor_ast_downcast(a);
   boolector_assert(btor, ast->e);
+  if (debugfile)
+    boolector_dump_smt(btor, debugfile, ast->e);
 }
 
 smt_ast *
