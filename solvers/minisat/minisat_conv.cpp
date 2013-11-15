@@ -68,7 +68,7 @@ minisat_convt::lcnf(const bvt &bv)
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
 : cnf_convt(true, int_encoding, _ns, is_cpp, false, true, true),
-  solver(), options(_opts)
+  solver(), options(_opts), false_asserted(false)
 {
   smt_post_init();
 }
@@ -80,6 +80,10 @@ minisat_convt::~minisat_convt(void)
 smt_convt::resultt
 minisat_convt::dec_solve()
 {
+  if (false_asserted)
+    // Then the formula can never be satisfied.
+    return smt_convt::P_UNSATISFIABLE;
+
   add_array_constraints();
   bool res = solver.solve();
   if (res)
@@ -134,6 +138,11 @@ minisat_convt::assert_lit(const literalt &l)
 {
   if (l.is_true())
     return; // XXX how about false?
+
+  if (l.is_false()) {
+    false_asserted = true;
+    return;
+  }
 
   Minisat::vec<Lit> c;
   c.push(Minisat::mkLit(l.var_no(), l.sign()));

@@ -51,6 +51,7 @@ public:
 
   Minisat::Solver solver;
   const optionst &options;
+  bool false_asserted;
 };
 
 #endif /* _ESBMC_SOLVERS_SMTLIB_CONV_H_ */
