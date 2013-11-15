@@ -312,9 +312,42 @@ boolector_convt::get_bool(const smt_ast *a __attribute__((unused)))
 }
 
 expr2tc
-boolector_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a __attribute__((unused)))
+boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
 {
-  abort();
+  assert(a->sort->id == SMT_SORT_BV && a->sort->data_width != 0);
+  const btor_smt_ast *ast = btor_ast_downcast(a);
+  char *result = boolector_bv_assignment(btor, ast->e);
+
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  // Assume first bit is the most significant for the moment.
+  int64_t res = 0;
+
+  for (unsigned int i = 0; i < a->sort->data_width; i++) {
+    res <<= 1;
+
+    assert(result[i] != '\0' && "Premature end of boolector bv assignment str");
+    switch (result[i]) {
+    case '1':
+      res |= 1;
+      break;
+    case '0':
+    case 'x':
+      break;
+    default:
+      std::cerr << "Boolector bv model string \"" << result << "\" not of the "
+                << "expected format" << std::endl;
+      abort();
+    }
+
+    if (i == 0 && res == 1)
+      res = -1;
+  }
+
+  constant_int2tc exp(t, BigInt(res));
+
+  boolector_free_bv_assignment(btor, result);
+  return exp;
 }
 
 expr2tc
