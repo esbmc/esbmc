@@ -2,13 +2,13 @@
 
 smt_convt *
 create_new_boolector_solver(bool is_cpp, bool int_encoding,
-                            const namespacet &ns)
+                            const namespacet &ns, const optionst &options)
 {
-  return new boolector_convt(is_cpp, int_encoding, ns);
+  return new boolector_convt(is_cpp, int_encoding, ns, options);
 }
 
 boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
-                                 const namespacet &ns)
+                                 const namespacet &ns, const optionst &options)
   : smt_convt(true, int_encoding, ns, is_cpp, false, true, false)
 {
   if (int_encoding) {
@@ -18,6 +18,12 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
 
   btor = boolector_new();
   boolector_enable_model_gen(btor);
+
+  if (options.get_option("output") != "") {
+    debugfile = fopen(options.get_option("output").c_str(), "w");
+  } else {
+    debugfile = NULL;
+  }
 }
 
 boolector_convt::~boolector_convt(void)
