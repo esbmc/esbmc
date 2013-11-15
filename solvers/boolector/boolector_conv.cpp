@@ -193,9 +193,25 @@ boolector_convt::mk_smt_real(const std::string &str __attribute__((unused)))
 }
 
 smt_ast *
-boolector_convt::mk_smt_bvint(const mp_integer &theint __attribute__((unused)), bool sign __attribute__((unused)), unsigned int w __attribute__((unused)))
+boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
+                              unsigned int w)
 {
-  abort();
+  if (w > 32) {
+    std::cerr << "Boolector only uses 'int's for passing integers around; "
+              << "unless you're on an ILP64 machine, this " << w << " bit "
+              << "model can't bee constructed" << std::endl;
+    abort();
+  }
+
+  BtorNode *node;
+  if (sign) {
+    node = boolector_int(btor, theint.to_long(), w);
+  } else {
+    node = boolector_unsigned_int(btor, theint.to_ulong(), w);
+  }
+
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+  return new btor_smt_ast(s, node);
 }
 
 smt_ast *
