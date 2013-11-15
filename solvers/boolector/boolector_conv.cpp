@@ -68,7 +68,7 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   case SMT_FUNC_BVMUL:
     return new btor_smt_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSMOD:
-    return new btor_smt_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
+    return new btor_smt_ast(s, boolector_smod(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUMOD:
     return new btor_smt_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSDIV:
