@@ -123,9 +123,32 @@ boolector_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
-boolector_convt::mk_smt_symbol(const std::string &name __attribute__((unused)), const smt_sort *s __attribute__((unused)))
+boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  abort();
+  symtable_type::iterator it = symtable.find(name);
+  if (it != symtable.end())
+    return it->second;
+
+  BtorNode *node;
+
+  switch(s->id) {
+  case SMT_SORT_BV:
+    node = boolector_var(btor, s->data_width, name.c_str());
+    break;
+  case SMT_SORT_BOOL:
+    node = boolector_var(btor, 1, name.c_str());
+    break;
+  case SMT_SORT_ARRAY:
+    node = boolector_array(btor, s->data_width, s->domain_width, name.c_str());
+    break;
+  default:
+    return NULL; // Hax.
+  }
+
+  btor_smt_ast *ast = new btor_smt_ast(s, node);
+
+  symtable.insert(symtable_type::value_type(name, ast));
+  return ast;
 }
 
 smt_sort *

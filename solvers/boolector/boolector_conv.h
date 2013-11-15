@@ -22,6 +22,9 @@ public:
 class boolector_convt : public smt_convt
 {
 public:
+  typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
+    symtable_type;
+
   boolector_convt(bool is_cpp, bool int_encoding, const namespacet &ns);
   virtual ~boolector_convt();
 
@@ -54,4 +57,5 @@ public:
   // Members
 
   Btor *btor;
+  symtable_type symtable;
 };
