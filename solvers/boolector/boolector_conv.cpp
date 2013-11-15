@@ -38,9 +38,34 @@ boolector_convt::dec_solve()
 }
 
 tvt
-boolector_convt::l_get(const smt_ast *l __attribute__((unused)))
+boolector_convt::l_get(const smt_ast *l)
 {
-  abort();
+  assert(l->sort->data_width == 1);
+  const btor_smt_ast *ast = btor_ast_downcast(l);
+  char *result = boolector_bv_assignment(btor, ast->e);
+
+  assert(result != NULL && "Boolector returned null bv assignment string");
+
+  tvt t;
+
+  switch (*result) {
+  case '1':
+    t = tvt(tvt::TV_TRUE);
+    break;
+  case '0':
+    t = tvt(tvt::TV_FALSE);
+    break;
+  case 'x':
+    t = tvt(tvt::TV_UNKNOWN);
+    break;
+  default:
+    std::cerr << "Boolector bv model string \"" << result << "\" not of the "
+              << "expected format" << std::endl;
+    abort();
+  }
+
+  boolector_free_bv_assignment(btor, result);
+  return t;
 }
 
 const std::string
