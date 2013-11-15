@@ -9,7 +9,7 @@ create_new_boolector_solver(bool is_cpp, bool int_encoding,
 
 boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns)
-  : smt_convt(true, int_encoding, ns, is_cpp, false, true, true)
+  : smt_convt(true, int_encoding, ns, is_cpp, false, true, false)
 {
   if (int_encoding) {
     std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
