@@ -153,6 +153,10 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       // Voila, we have our pointer arithmatic
       const smt_ast *the_ptr = convert_ast(ptr_op);
 
+      expr2tc tmp = newexpr->simplify();
+      if (!is_nil_expr(tmp))
+        newexpr = tmp;
+
       // That calculated the offset; update field in pointer.
       return tuple_update(the_ptr, 1, newexpr);
     }
