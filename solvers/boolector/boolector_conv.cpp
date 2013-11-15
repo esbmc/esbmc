@@ -22,6 +22,8 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
 
 boolector_convt::~boolector_convt(void)
 {
+  boolector_delete(btor);
+  btor = NULL;
 }
 
 smt_convt::resultt
