@@ -78,36 +78,8 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
 z3_convt::~z3_convt()
 {
-
-  // jmorse - remove when smtlib printer exists and works.
-#if 0
-  if (smtlib) {
-    std::ofstream temp_out;
-    Z3_string smt_lib_str, logic;
-    Z3_ast assumpt_array_ast[assumpt.size() + 1];
-    z3::expr formula;
-    formula = ctx.bool_val(true);
-
-    std::list<z3::expr>::const_iterator it;
-    unsigned int i;
-    for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumpt_array_ast[i] = *it;
-    }
-
-    if (int_encoding)
-      logic = "QF_AUFLIRA";
-    else
-      logic = "QF_AUFBV";
-
-    smt_lib_str = Z3_benchmark_to_smtlib_string(z3_ctx, "ESBMC", logic,
-                                    "unknown", "", assumpt.size(),
-                                    assumpt_array_ast, formula);
-
-    temp_out.open(filename.c_str(), std::ios_base::out | std::ios_base::trunc);
-
-    temp_out << smt_lib_str << std::endl;
-  }
-#endif
+  // All deconstruction handled by reference counters (save the lifetime-of
+  // smt-ast issue)
 }
 
 void
