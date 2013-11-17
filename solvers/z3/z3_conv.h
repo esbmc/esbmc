@@ -94,10 +94,11 @@ private:
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
   virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                      const smt_ast *val);
+                                      const expr2tc &val);
   virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val);
-  virtual const smt_ast *tuple_ite(const smt_ast *cond, const smt_ast *trueval,
-                             const smt_ast *false_val, const smt_sort *sort);
+  virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
+                             const expr2tc &false_val, const type2tc &sort);
+  virtual expr2tc tuple_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,

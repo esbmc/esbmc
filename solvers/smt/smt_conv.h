@@ -337,7 +337,7 @@ public:
                            const expr2tc &cond, const type2tc &type,
                            const type2tc &dom_sort,
                            const expr2tc &res);
-  expr2tc tuple_get(const expr2tc &expr);
+  virtual expr2tc tuple_get(const expr2tc &expr);
   expr2tc tuple_array_get(const expr2tc &expr);
   expr2tc tuple_project_sym(const smt_ast *a, unsigned int f, bool dot = false);
   expr2tc tuple_project_sym(const expr2tc &a, unsigned int f, bool dot = false);

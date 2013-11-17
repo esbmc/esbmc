@@ -777,10 +777,10 @@ z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field)
 }
 
 const smt_ast *
-z3_convt::tuple_update(const smt_ast *a, unsigned int field, const smt_ast *val)
+z3_convt::tuple_update(const smt_ast *a, unsigned int field, const expr2tc &val)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
-  const z3_smt_ast *zu = z3_smt_downcast(val);
+  const z3_smt_ast *zu = z3_smt_downcast(convert_ast(val));
   return new z3_smt_ast(mk_tuple_update(za->e, field, zu->e), za->sort);
 }
 
@@ -794,13 +794,14 @@ z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 }
 
 const smt_ast *
-z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
-                    const smt_ast *false_val, const smt_sort *sort)
+z3_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
+                    const expr2tc &false_val, const type2tc &sort)
 {
 
-  return new z3_smt_ast(z3::ite(z3_smt_downcast(cond)->e,
-                                z3_smt_downcast(true_val)->e,
-                                z3_smt_downcast(false_val)->e), sort);
+  return new z3_smt_ast(z3::ite(z3_smt_downcast(convert_ast(cond))->e,
+                                z3_smt_downcast(convert_ast(true_val))->e,
+                                z3_smt_downcast(convert_ast(false_val))->e),
+                                convert_sort(sort));
 }
 
 const smt_ast *
@@ -911,6 +912,38 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                             z3_smt_downcast(false_val)->e);
   return new z3_smt_ast(output, sort);
 }
+
+
+expr2tc
+z3_convt::tuple_get(const expr2tc &expr)
+{
+  assert(is_symbol2t(expr) && "Non-symbol in z3 tuple_get()");
+
+  const struct_union_data &strct = get_type_def(expr->type);
+
+  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+
+  // Run through all fields and despatch to 'get' again.
+  unsigned int i = 0;
+  forall_types(it, strct.members) {
+    member2tc memb(*it, expr, strct.member_names[i]);
+    outstruct.get()->datatype_members.push_back(get(memb));
+    i++;
+  }
+
+  // If it's a pointer, rewrite.
+  if (is_pointer_type(expr->type)) {
+    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
+                                    .constant_value.to_uint64();
+    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
+                                     .constant_value.to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
+  }
+
+  return outstruct;
+}
+
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
