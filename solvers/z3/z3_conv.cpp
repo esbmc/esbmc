@@ -352,10 +352,10 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   }
   case type2t::array_id:
   {
-    const array_type2t &arr = to_array_type(type);
-    z3::sort subtype;
-    convert_type(arr.subtype, subtype);
-    sort = ctx.array_sort(ctx.esbmc_int_sort(), subtype);
+    // Because of crazy domain sort rewriting, pass this via all the other smt
+    // processing code.
+    const z3_smt_sort *array_type = z3_sort_downcast(convert_sort(type));
+    sort = array_type->s;
     break;
   }
   case type2t::unsignedbv_id:
