@@ -435,13 +435,7 @@ z3_convt::assert_formula(const z3::expr &ast)
   z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, newvar, ast));
   solver.add(formula);
 
-  // jmorse - delete when smtlib printer exists and works
-#if 0
-  if (smtlib)
-    assumpt.push_back(ast);
-  else
-#endif
-    assumpt.push_back(newvar);
+  assumpt.push_back(newvar);
 
   return;
 }
