@@ -266,7 +266,10 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
   const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
 
   if (w > 32) {
-    // Hurrrrr, we have to pass things around via means of strings.
+    // We have to pass things around via means of strings, becausae boolector
+    // uses native int types as arguments to its functions, rather than fixed
+    // width integers. Seeing how amd64 is LP64, there's no way to pump 64 bit
+    // ints to boolector natively.
     if (w > 64) {
       std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
                 << std::endl;
