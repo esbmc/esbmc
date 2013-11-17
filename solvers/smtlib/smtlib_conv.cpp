@@ -186,9 +186,18 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     return 0;
   case SMT_FUNC_BVINT:
     // Construct a bitvector
-    ss << "(_ bv" << integer2string(ast->intval) << " " << sort->width << ")";
+  {
+    // Irritatingly, the number may be higher than the actual bitwidth permits.
+    assert(sort->width <= 64 && "smtlib printer assumes no numbers more than "
+          "64 bits wide, sorry");
+    int64_t theval = ast->intval.to_int64();
+    uint64_t mask = 1ULL << sort->width;
+    mask -= 1;
+    theval &= mask;
+    ss << "(_ bv" << theval << " " << sort->width << ")";
     output = ss.str();
     return 0;
+  }
   case SMT_FUNC_REAL:
     // Give up
     ss << ast->realval;
