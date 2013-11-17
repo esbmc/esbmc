@@ -281,7 +281,7 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
 
     // Note that boolector has the most significant bit first in bit strings.
     int64_t num = theint.to_int64();
-    int64_t bit = 1ULL << (w - 1);
+    uint64_t bit = 1ULL << (w - 1);
     for (unsigned int i = 0; i < w; i++) {
       if (num & bit)
         buffer[i] = '1';
