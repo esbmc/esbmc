@@ -30,7 +30,9 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
 
 boolector_convt::~boolector_convt(void)
 {
-  boolector_delete(btor);
+  // Don't delete boolector: it aborts because we didn't release all its
+  // references.
+  // boolector_delete(btor);
   btor = NULL;
   if (debugfile)
     fclose(debugfile);
