@@ -473,6 +473,7 @@ public:
   bool tuple_support;
   bool no_bools_in_arrays;
   bool can_init_unbounded_arrs;
+  bool ptr_foo_inited;
   std::string dyn_info_arr_name;
 
   std::map<std::string, unsigned int> fresh_map;

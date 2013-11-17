@@ -175,6 +175,12 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   unsigned int obj_num;
   bool got_obj_num = false;
 
+  if (!ptr_foo_inited) {
+    std::cerr << "SMT solver must call smt_post_init immediately after "
+              << "construction" << std::endl;
+    abort();
+  }
+
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
     if (sym.thename == "NULL" || sym.thename == "0") {

@@ -115,6 +115,8 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
   } else {
     dyn_info_arr_name = "c::__ESBMC_is_dynamic&0#1";
   }
+
+  ptr_foo_inited = false;
 }
 
 smt_convt::~smt_convt(void)
@@ -133,6 +135,8 @@ smt_convt::smt_post_init(void)
   }
 
   init_addr_space_array();
+
+  ptr_foo_inited = true;
 }
 
 void
