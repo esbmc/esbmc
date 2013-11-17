@@ -876,10 +876,11 @@ out:
 
 const smt_ast *
 z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
-                             const smt_ast *idx)
+                             const expr2tc &idx)
 {
 
-  z3::expr output = select(z3_smt_downcast(a)->e, z3_smt_downcast(idx)->e);
+  z3::expr output = select(z3_smt_downcast(a)->e,
+                           z3_smt_downcast(convert_ast(idx))->e);
   return new z3_smt_ast(output, s);
 }
 
