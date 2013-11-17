@@ -358,7 +358,7 @@ public:
   const smt_ast *round_fixedbv_to_int(const smt_ast *a, unsigned int width,
                                       unsigned int towidth);
 
-  const struct_union_data &get_type_def(const type2tc &type);
+  const struct_union_data &get_type_def(const type2tc &type) const;
   expr2tc force_expr_to_tuple_sym(const expr2tc &expr);
 
   const smt_ast *make_bool_bit(const smt_ast *a);
@@ -381,6 +381,9 @@ public:
                                   unsigned long array_width);
 
   std::string get_fixed_point(const unsigned width, std::string value) const;
+
+  unsigned int get_member_name_field(const type2tc &t, const irep_idt &name) const;
+  unsigned int get_member_name_field(const type2tc &t, const expr2tc &name) const;
 
   // The wreckage of prop_convt:
   typedef enum { P_SATISFIABLE, P_UNSATISFIABLE, P_ERROR, P_SMTLIB } resultt;
