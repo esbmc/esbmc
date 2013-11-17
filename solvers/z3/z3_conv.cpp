@@ -45,7 +45,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(true, int_encoding, _ns, is_cpp, false, false, false), ctx(false)
+: smt_convt(true, int_encoding, _ns, is_cpp, true, false, false), ctx(false)
 {
   this->int_encoding = int_encoding;
 
@@ -748,7 +748,6 @@ z3_convt::mk_union_sort(const type2tc &type)
   return new z3_smt_sort(SMT_SORT_UNION, s);
 }
 
-#if 0
 smt_ast *
 z3_convt::tuple_create(const expr2tc &structdef)
 {
@@ -912,7 +911,6 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                             z3_smt_downcast(false_val)->e);
   return new z3_smt_ast(output, sort);
 }
-#endif
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
@@ -921,7 +919,6 @@ z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
   return new z3_smt_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
 }
 
-#if 0
 const smt_ast *
 z3_convt::overflow_arith(const expr2tc &expr)
 {
@@ -1100,7 +1097,6 @@ z3_convt::overflow_neg(const expr2tc &expr)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new z3_smt_ast(output, s);
 }
-#endif
 
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {

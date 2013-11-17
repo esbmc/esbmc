@@ -89,7 +89,6 @@ private:
   virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
 
-#if 0
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_fresh(const smt_sort *s);
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
@@ -116,7 +115,6 @@ private:
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
-#endif
 
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
 
