@@ -495,7 +495,7 @@ expr_handle_table:
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr->type) || is_union_type(expr)) {
+    if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(convert_ast(with.source_value), idx, with.update_value);
     } else {
