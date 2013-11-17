@@ -106,7 +106,7 @@ private:
                                             const smt_sort *domain);
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const smt_ast *field);
-  virtual smt_ast *tuple_array_update(const smt_ast *a, const smt_ast *field,
+  virtual smt_ast *tuple_array_update(const smt_ast *a, const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
   virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
   virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
