@@ -24,6 +24,8 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
   } else {
     debugfile = NULL;
   }
+
+  smt_post_init();
 }
 
 boolector_convt::~boolector_convt(void)
