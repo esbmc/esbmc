@@ -1,3 +1,5 @@
+#include <string.h>
+
 #include "boolector_conv.h"
 
 smt_convt *
@@ -261,11 +263,33 @@ smt_ast *
 boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
                               unsigned int w)
 {
+  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
+
   if (w > 32) {
-    std::cerr << "Boolector only uses 'int's for passing integers around; "
-              << "unless you're on an ILP64 machine, this " << w << " bit "
-              << "model can't bee constructed" << std::endl;
-    abort();
+    // Hurrrrr, we have to pass things around via means of strings.
+    if (w > 64) {
+      std::cerr <<  "Boolector backend assumes maximum bitwidth is 64, sorry"
+                << std::endl;
+      abort();
+    }
+
+    char buffer[65];
+    memset(buffer, 0, sizeof(buffer));
+
+    // Note that boolector has the most significant bit first in bit strings.
+    int64_t num = theint.to_int64();
+    int64_t bit = 1ULL << (w - 1);
+    for (unsigned int i = 0; i < w; i++) {
+      if (num & bit)
+        buffer[i] = '1';
+      else
+        buffer[i] = '0';
+
+      bit >>= 1;
+    }
+
+    BtorNode *node = boolector_const(btor, buffer);
+    return new btor_smt_ast(s, node);
   }
 
   BtorNode *node;
@@ -275,7 +299,6 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
     node = boolector_unsigned_int(btor, theint.to_ulong(), w);
   }
 
-  const smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
   return new btor_smt_ast(s, node);
 }
 
