@@ -919,8 +919,6 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
 expr2tc
 z3_convt::tuple_get(const expr2tc &expr)
 {
-  assert(is_symbol2t(expr) && "Non-symbol in z3 tuple_get()");
-
   const struct_union_data &strct = get_type_def(expr->type);
 
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
