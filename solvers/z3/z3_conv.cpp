@@ -45,7 +45,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(true, int_encoding, _ns, is_cpp, false, false, false), ctx(false)
+: smt_convt(true, int_encoding, _ns, is_cpp, true, false, false), ctx(false)
 {
   this->int_encoding = int_encoding;
 
@@ -78,36 +78,8 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
 z3_convt::~z3_convt()
 {
-
-  // jmorse - remove when smtlib printer exists and works.
-#if 0
-  if (smtlib) {
-    std::ofstream temp_out;
-    Z3_string smt_lib_str, logic;
-    Z3_ast assumpt_array_ast[assumpt.size() + 1];
-    z3::expr formula;
-    formula = ctx.bool_val(true);
-
-    std::list<z3::expr>::const_iterator it;
-    unsigned int i;
-    for (it = assumpt.begin(), i = 0; it != assumpt.end(); it++, i++) {
-      assumpt_array_ast[i] = *it;
-    }
-
-    if (int_encoding)
-      logic = "QF_AUFLIRA";
-    else
-      logic = "QF_AUFBV";
-
-    smt_lib_str = Z3_benchmark_to_smtlib_string(z3_ctx, "ESBMC", logic,
-                                    "unknown", "", assumpt.size(),
-                                    assumpt_array_ast, formula);
-
-    temp_out.open(filename.c_str(), std::ios_base::out | std::ios_base::trunc);
-
-    temp_out << smt_lib_str << std::endl;
-  }
-#endif
+  // All deconstruction handled by reference counters (save the lifetime-of
+  // smt-ast issue)
 }
 
 void
@@ -380,10 +352,10 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   }
   case type2t::array_id:
   {
-    const array_type2t &arr = to_array_type(type);
-    z3::sort subtype;
-    convert_type(arr.subtype, subtype);
-    sort = ctx.array_sort(ctx.esbmc_int_sort(), subtype);
+    // Because of crazy domain sort rewriting, pass this via all the other smt
+    // processing code.
+    const z3_smt_sort *array_type = z3_sort_downcast(convert_sort(type));
+    sort = array_type->s;
     break;
   }
   case type2t::unsignedbv_id:
@@ -463,13 +435,7 @@ z3_convt::assert_formula(const z3::expr &ast)
   z3::expr formula = z3::to_expr(ctx, Z3_mk_iff(z3_ctx, newvar, ast));
   solver.add(formula);
 
-  // jmorse - delete when smtlib printer exists and works
-#if 0
-  if (smtlib)
-    assumpt.push_back(ast);
-  else
-#endif
-    assumpt.push_back(newvar);
+  assumpt.push_back(newvar);
 
   return;
 }
@@ -782,7 +748,6 @@ z3_convt::mk_union_sort(const type2tc &type)
   return new z3_smt_sort(SMT_SORT_UNION, s);
 }
 
-#if 0
 smt_ast *
 z3_convt::tuple_create(const expr2tc &structdef)
 {
@@ -812,10 +777,10 @@ z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field)
 }
 
 const smt_ast *
-z3_convt::tuple_update(const smt_ast *a, unsigned int field, const smt_ast *val)
+z3_convt::tuple_update(const smt_ast *a, unsigned int field, const expr2tc &val)
 {
   const z3_smt_ast *za = z3_smt_downcast(a);
-  const z3_smt_ast *zu = z3_smt_downcast(val);
+  const z3_smt_ast *zu = z3_smt_downcast(convert_ast(val));
   return new z3_smt_ast(mk_tuple_update(za->e, field, zu->e), za->sort);
 }
 
@@ -829,13 +794,14 @@ z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 }
 
 const smt_ast *
-z3_convt::tuple_ite(const smt_ast *cond, const smt_ast *true_val,
-                    const smt_ast *false_val, const smt_sort *sort)
+z3_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
+                    const expr2tc &false_val, const type2tc &sort)
 {
 
-  return new z3_smt_ast(z3::ite(z3_smt_downcast(cond)->e,
-                                z3_smt_downcast(true_val)->e,
-                                z3_smt_downcast(false_val)->e), sort);
+  return new z3_smt_ast(z3::ite(z3_smt_downcast(convert_ast(cond))->e,
+                                z3_smt_downcast(convert_ast(true_val))->e,
+                                z3_smt_downcast(convert_ast(false_val))->e),
+                                convert_sort(sort));
 }
 
 const smt_ast *
@@ -910,20 +876,22 @@ out:
 
 const smt_ast *
 z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
-                             const smt_ast *idx)
+                             const expr2tc &idx)
 {
 
-  z3::expr output = select(z3_smt_downcast(a)->e, z3_smt_downcast(idx)->e);
+  z3::expr output = select(z3_smt_downcast(a)->e,
+                           z3_smt_downcast(convert_ast(idx))->e);
   return new z3_smt_ast(output, s);
 }
 
 smt_ast *
-z3_convt::tuple_array_update(const smt_ast *a, const smt_ast *field,
+z3_convt::tuple_array_update(const smt_ast *a, const expr2tc &field,
                              const smt_ast *val,
                              const smt_sort *s __attribute__((unused)))
 {
   Z3_ast ast = Z3_mk_store(z3_ctx, z3_smt_downcast(a)->e,
-                          z3_smt_downcast(field)->e, z3_smt_downcast(val)->e);
+                          z3_smt_downcast(convert_ast(field))->e,
+                          z3_smt_downcast(val)->e);
   z3::expr output = z3::to_expr(ctx, ast);
   return new z3_smt_ast(output, a->sort);
 }
@@ -946,7 +914,36 @@ z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
                             z3_smt_downcast(false_val)->e);
   return new z3_smt_ast(output, sort);
 }
-#endif
+
+
+expr2tc
+z3_convt::tuple_get(const expr2tc &expr)
+{
+  const struct_union_data &strct = get_type_def(expr->type);
+
+  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+
+  // Run through all fields and despatch to 'get' again.
+  unsigned int i = 0;
+  forall_types(it, strct.members) {
+    member2tc memb(*it, expr, strct.member_names[i]);
+    outstruct.get()->datatype_members.push_back(get(memb));
+    i++;
+  }
+
+  // If it's a pointer, rewrite.
+  if (is_pointer_type(expr->type)) {
+    uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
+                                    .constant_value.to_uint64();
+    uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
+                                     .constant_value.to_uint64();
+    pointer_logict::pointert p(num, BigInt(offs));
+    return pointer_logic.back().pointer_expr(p, expr->type);
+  }
+
+  return outstruct;
+}
+
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
@@ -955,7 +952,6 @@ z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
   return new z3_smt_ast(ctx.fresh_const(tag.c_str(), zs->s), sort);
 }
 
-#if 0
 const smt_ast *
 z3_convt::overflow_arith(const expr2tc &expr)
 {
@@ -1134,7 +1130,6 @@ z3_convt::overflow_neg(const expr2tc &expr)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new z3_smt_ast(output, s);
 }
-#endif
 
 // Gigantic hack, implement a method in z3::ast, so that we can call from gdb
 namespace z3 {

@@ -28,6 +28,9 @@ smt_convt *
 create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
 smt_convt *
 create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
+smt_convt *
+create_new_boolector_solver(bool int_encoding, bool is_cpp,
+                            const namespacet &ns, const optionst &options);
 
 static smt_convt *
 create_z3_solver(bool is_cpp __attribute__((unused)),
@@ -156,6 +159,21 @@ create_cvc_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
+static smt_convt *
+create_boolector_solver(bool is_cpp __attribute__((unused)),
+                                bool int_encoding __attribute__((unused)),
+                                const namespacet &ns __attribute__((unused)),
+                                const optionst &options __attribute__((unused)))
+{
+#if !defined(BOOLECTOR)
+    std::cerr << "Sorry, Boolector support was not built into this "
+              << "version of ESBMC" << std::endl;
+    abort();
+#else
+    return create_new_boolector_solver(is_cpp, int_encoding, ns, options);
+#endif
+}
+
 static const unsigned int num_of_solvers = 9;
 static const std::string list_of_solvers[] =
 { "z3", "smtlib", "minisat", "metasmt", "boolector", "sword", "stp", "mathsat", "cvc"};
@@ -204,6 +222,8 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
     }
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options);
+  } else if (options.get_bool_option("boolector")) {
+    return create_boolector_solver(is_cpp, int_encoding, ns, options);
   } else {
     return create_z3_solver(is_cpp, int_encoding, ns);
   }
@@ -236,6 +256,8 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
     }
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options);
+  } else if (options.get_bool_option("boolector")) {
+    return create_boolector_solver(is_cpp, int_encoding, ns, options);
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
               << std::endl;

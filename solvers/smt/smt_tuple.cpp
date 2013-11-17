@@ -131,7 +131,7 @@ smt_convt::tuple_fresh(const smt_sort *s)
 }
 
 const struct_union_data &
-smt_convt::get_type_def(const type2tc &type)
+smt_convt::get_type_def(const type2tc &type) const
 {
 
   return (is_pointer_type(type))

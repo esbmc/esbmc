@@ -49,7 +49,7 @@ execution_statet::execution_statet(const goto_functionst &goto_functions,
   monitor_tid = 0;
   mon_from_tid = false;
   monitor_from_tid = 0;
-  guard_execution = "execution_statet::\\guard_exec";
+  guard_execution = "execution_statet::guard_exec";
   interleaving_unviable = false;
   symex_trace = options.get_bool_option("symex-trace");
   smt_during_symex = options.get_bool_option("smt-during-symex");
@@ -638,7 +638,7 @@ execution_statet::get_expr_globals(const namespacet &ns, const expr2tc &expr,
     get_active_state().get_original_name(newexpr);
     const std::string &name = to_symbol2t(newexpr).thename.as_string();
 
-    if (name == "goto_symex::\\guard!" +
+    if (name == "goto_symex::guard!" +
         i2string(get_active_state().top().level1.thread_id))
       return;
 

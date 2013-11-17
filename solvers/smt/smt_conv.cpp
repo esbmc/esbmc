@@ -39,12 +39,11 @@ itos(int64_t i)
   return ss.str();
 }
 
-static unsigned int
-get_member_name_field(const type2tc &t, const irep_idt &name)
+unsigned int
+smt_convt::get_member_name_field(const type2tc &t, const irep_idt &name) const
 {
   unsigned int idx = 0;
-  const struct_union_data &data_ref =
-          dynamic_cast<const struct_union_data &>(*t);
+  const struct_union_data &data_ref = get_type_def(t);
 
   forall_names(it, data_ref.member_names) {
     if (*it == name)
@@ -57,8 +56,8 @@ get_member_name_field(const type2tc &t, const irep_idt &name)
   return idx;
 }
 
-static unsigned int
-get_member_name_field(const type2tc &t, const expr2tc &name)
+unsigned int
+smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 {
   const constant_string2t &str = to_constant_string2t(name);
   return get_member_name_field(t, str.value);
@@ -496,7 +495,7 @@ expr_handle_table:
     const with2t &with = to_with2t(expr);
 
     // We reach here if we're with'ing a struct, not an array. Or a bool.
-    if (is_struct_type(expr->type) || is_union_type(expr)) {
+    if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
       a = tuple_update(convert_ast(with.source_value), idx, with.update_value);
     } else {
