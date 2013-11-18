@@ -113,6 +113,9 @@ private:
                                    const smt_ast *false_val,
                                    const smt_sort *sort);
 
+  virtual const smt_ast *convert_array_of(const expr2tc &init_val,
+                                          unsigned long domain_width);
+
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
   virtual smt_ast *overflow_cast(const expr2tc &expr);
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
