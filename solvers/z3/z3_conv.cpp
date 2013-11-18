@@ -854,15 +854,15 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
     u_int i = 0;
     z3::sort z3_array_type;
     z3::expr int_cte, val_cte;
-    z3::sort elem_type;
+    z3::sort domain_sort;
 
-    elem_type = z3_sort_downcast(convert_sort(arrtype.subtype))->s;
-    z3_array_type = ctx.array_sort(ctx.esbmc_int_sort(), elem_type);
+    z3_array_type = z3_sort_downcast(convert_sort(arr_type))->s;
+    domain_sort = z3_array_type.array_domain();
 
     output = ctx.fresh_const(NULL, z3_array_type);
 
     for (i = 0; i < size; i++) {
-      int_cte = ctx.esbmc_int_val(i);
+      int_cte = ctx.num_val(i, domain_sort);
       const z3_smt_ast *tmpast = z3_smt_downcast(input_args[i]);
       output = z3::store(output, int_cte, tmpast->e);
     }
