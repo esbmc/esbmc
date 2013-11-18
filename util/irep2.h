@@ -1373,7 +1373,8 @@ class bv_data : public type2t
 public:
   bv_data(type2t::type_ids id, unsigned int w) : type2t(id), width(w)
   {
-    assert(w != 0 && "Must have nonzero width for integer type");
+    // assert(w != 0 && "Must have nonzero width for integer type");
+    // XXX -- zero sized bitfields are permissible. Wat.
   }
   bv_data(const bv_data &ref) : type2t(ref), width(ref.width) { }
 
