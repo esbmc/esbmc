@@ -141,7 +141,8 @@ void goto_symext::symex_free(const expr2tc &expr)
   expr2tc tmp = code.operand;
   dereference(tmp, false, true);
 
-  pointer_offset2tc ptr_obj(uint_type2(), tmp);
+  address_of2tc addrof(code.operand->type, tmp);
+  pointer_offset2tc ptr_obj(uint_type2(), addrof);
   equality2tc eq(ptr_obj, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
 }
