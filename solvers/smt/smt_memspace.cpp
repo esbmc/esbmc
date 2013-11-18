@@ -405,7 +405,9 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     return convert_ast(tmp);
   }
 
-  assert(0 && "Unrecognized address_of operand");
+  std::cerr << "Unrecognized address_of operand:" << std::endl;
+  expr->dump();
+  abort();
 }
 
 
