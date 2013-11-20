@@ -496,9 +496,9 @@ smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
     if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
       // Recurse.
 
-      expr2tc res_item = tuple_project_sym(result, i);
-      expr2tc true_item = tuple_project_sym(true_val_exp, i);
-      expr2tc false_item = tuple_project_sym(false_val_exp, i);
+      expr2tc res_item = tuple_project_sym(result, i, true);
+      expr2tc true_item = tuple_project_sym(true_val_exp, i, true);
+      expr2tc false_item = tuple_project_sym(false_val_exp, i, true);
       if (is_tuple_ast_type(*it)) {
         tuple_ite_rec(res_item, cond_exp, true_item, false_item);
       } else {
