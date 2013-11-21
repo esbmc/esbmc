@@ -349,7 +349,10 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   // Rebuild a gigantic if-then-else chain from the result list.
   expr2tc result;
   if (result_list.size() == 0) {
-    abort(); // XXX?
+    // Nothing happened; there was nothing, or only null, to point at.
+    // In this case, just return right now and leave the pointer free. The
+    // symex_free that occurred above should trigger a dereference failure.
+    return;
   } else {
     result = expr2tc();
     for (auto it = result_list.begin(); it != result_list.end(); it++) {
