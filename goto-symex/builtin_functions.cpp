@@ -122,7 +122,7 @@ void goto_symext::symex_malloc(
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
+  symbol2tc sym(sym_type, dyn_info_arr_name);
 
   pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
@@ -130,6 +130,32 @@ void goto_symext::symex_malloc(
   symex_assign_rec(idx, truth, guard);
 
   dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+
+  // Also update all the accounting data.
+  // valid object:
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  truth = true_expr;
+  symex_assign_rec(valid_index_expr, truth, guard);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc falseity = false_expr;
+  symex_assign_rec(dealloc_index_expr, falseity, guard);
+
+  type2tc sz_sym_type = type2tc(new array_type2t(uint_type2(), expr2tc(),true));
+  symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
+  index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
+
+  expr2tc object_size_exp;
+  try {
+    mp_integer object_size = type_byte_size(*new_type);
+    object_size_exp = gen_uint(object_size.to_ulong());
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    object_size_exp = e->size;
+  }
+
+  symex_assign_rec(sz_index_expr, object_size_exp, guard);
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
