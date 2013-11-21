@@ -325,7 +325,8 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   expr2tc realloc_size = call.operands[1];
 
   internal_deref_items.clear();
-  dereference(src_ptr, false, false, true);
+  dereference2tc deref(get_empty_type(), src_ptr);
+  dereference(deref, false, false, true);
   // src_ptr is now invalidated.
 
   // We now have a list of things to work on. Recurse into them, build a result,
