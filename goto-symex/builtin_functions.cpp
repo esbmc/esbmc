@@ -286,7 +286,7 @@ void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 }
 
 void
-goto_symext::intrinsic_realloc(const code_function_call2t &call __attribute__((unused)),
+goto_symext::intrinsic_realloc(const code_function_call2t &call,
                                reachability_treet &arg __attribute__((unused)))
 {
   // For a given piece of data, the realloc process is fairly simple: re-malloc
@@ -297,6 +297,57 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call __attribute__((u
   // However it's not that simple, as the pointer we're dereferencing may point
   // at a whole host of things, therefore we have to perform multiple reallocs
   // depending on what's being pointed at. Ew.
+
+  assert(call.operands.size() == 2);
+  expr2tc src_ptr = call.operands[0];
+  expr2tc realloc_size = call.operands[1];
+
+  internal_deref_items.clear();
+  dereference(src_ptr, false, false, true);
+  // src_ptr is now invalidated.
+
+  // We now have a list of things to work on. Recurse into them, build a result,
+  // and then switch between those results afterwards.
+  // Result list is the address of the reallocated piece of data, and the guard.
+  std::list<std::pair<expr2tc,expr2tc> > result_list;
+  for (auto &item : internal_deref_items) {
+    expr2tc realloced = intrinsic_realloc_rec(item.object);
+    std::pair<expr2tc,expr2tc> tmp(realloced, item.guard);
+    result_list.push_back(tmp);
+
+    // Also, assert that the offset is zero. We can't realloc if it isn't.
+    equality2tc eq(item.offset, zero_uint);
+    and2tc theand(item.guard, eq);
+    not2tc n(theand);
+
+    guardt guard;
+    guard.add(n);
+    claim(guard.as_expr(), "Realloc of pointer with non-zero offset");
+  }
+
+  // Rebuild a gigantic if-then-else chain from the result list.
+  expr2tc result;
+  if (result_list.size() == 0) {
+    abort(); // XXX?
+  } else {
+    result = expr2tc();
+    for (auto it = result_list.begin(); it != result_list.end(); it++) {
+      if (is_nil_expr(result))
+        result = it->first;
+      else
+        result = if2tc(result->type, it->second, it->first, result);
+    }
+  }
+
+  // Assign the result to the left hand side.
+  equality2tc eq(call.ret, result);
+  symex_assign(eq);
+  return;
+}
+
+expr2tc
+goto_symext::intrinsic_realloc_rec(const expr2tc &obj __attribute__((unused)))
+{
   abort();
 }
 
