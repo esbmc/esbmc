@@ -439,6 +439,7 @@ dereferencet::dereference(
   std::list<expr2tc> *scalar_step_list)
 {
   assert(is_pointer_type(src));
+  internal_items.clear();
 
   // Target type is either a scalar type passed down to us, or we have a chain
   // of scalar steps available that end up at a scalar type. The result of this
@@ -477,12 +478,16 @@ dereferencet::dereference(
     }
   }
 
-  if (is_nil_expr(value))
+  if (is_nil_expr(value) && mode != INTERNAL)
   {
     // Dereference failed entirely; various assertions will explode later down
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
+  } else if (mode == INTERNAL) {
+    // Deposit internal values with the caller, then clear.
+    dereference_callback.dump_internal_state(internal_items);
+    internal_items.clear();
   }
 
   return value;
@@ -649,6 +654,18 @@ dereferencet::build_reference_to(
   if (!is_constant_int2t(final_offset)) {
     final_offset = pointer_offset2tc(index_type2(), deref_expr);
     assert(o.alignment != 0);
+  }
+
+  // If we're in internal mode, collect all of our data into one struct, insert
+  // it into the list of internal data, and then bail. The caller does not want
+  // to have a reference built at all.
+  if (mode == INTERNAL) {
+    dereference_callbackt::internal_item internal;
+    internal.object = value;
+    internal.offset = final_offset;
+    internal.guard = pointer_guard;
+    internal_items.push_back(internal);
+    return expr2tc();
   }
 
   // Encode some access bounds checks.
