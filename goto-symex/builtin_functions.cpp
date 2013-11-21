@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sstream>
+
 #include <irep2.h>
 #include <migrate.h>
 
@@ -24,13 +26,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-void goto_symext::symex_malloc(
+expr2tc
+goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
 
   if (is_nil_expr(lhs))
-    return; // ignore
+    return expr2tc(); // ignore
 
   // size
   type2tc type = code.alloctype;
@@ -156,6 +159,8 @@ void goto_symext::symex_malloc(
   }
 
   symex_assign_rec(sz_index_expr, object_size_exp, guard);
+
+  return rhs_addrof->ptr_obj;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -346,10 +351,49 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
 }
 
 expr2tc
-goto_symext::intrinsic_realloc_rec(const expr2tc &obj __attribute__((unused)),
-                                   const expr2tc &size __attribute__((unused)))
+goto_symext::intrinsic_realloc_rec(const expr2tc &obj, const expr2tc &size)
 {
-  abort();
+  static unsigned realloc_count = 0;
+
+  // Ok. So the main approach depends entirely on _what_ is being reallocated.
+  // For the moment, turn everything into 
+  if (is_array_type(obj)) {
+    const array_type2t &arrtype = to_array_type(obj->type);
+
+    // Build a new type. Deliberately faffing the size field here.
+    type2tc new_type = type2tc(new array_type2t(arrtype.subtype, size, false));
+    type2tc ptr_type = type2tc(new pointer_type2t(new_type));
+
+    // Build a side effect to represent the actual allocation.
+    sideeffect2tc se(new_type, expr2tc(), size, std::vector<expr2tc>(), new_type, sideeffect2t::malloc);
+
+    // Create a symbol to assign it to. With a unique name, because there might
+    // be multiple reallocs here.
+    std::stringstream ss;
+    ss  << "goto_symext::realloc_" << realloc_count++;
+    symbol2tc lhs(ptr_type, ss.str());
+
+    // Perform a new allocation.
+    expr2tc newobj = symex_malloc(lhs, *se);
+
+    // newobj now contains an index (zero) of the new array. Pull the base
+    // symbol out of it.
+    assert(is_index2t(newobj));
+    const index2t &idx = to_index2t(newobj);
+    assert(is_symbol2t(idx.source_value));
+
+    // Assign initial value to that array, of the source reallocated thing.
+    equality2tc eq(idx.source_value, obj);
+    symex_assign(eq);
+
+    return lhs;
+  } else {
+    // Turn _everything_ else into an array of it. This is the closest fastest
+    // approximation.
+    std::cerr << "Realloc of non-array-objects currently unimplemented"
+              << std::endl;
+    abort();
+  }
 }
 
 void

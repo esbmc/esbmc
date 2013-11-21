@@ -547,7 +547,7 @@ protected:
   void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
