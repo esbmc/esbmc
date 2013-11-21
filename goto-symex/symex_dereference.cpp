@@ -51,6 +51,8 @@ protected:
     const symbolt *&symbol);
 
   virtual void rename(expr2tc &expr);
+
+  virtual void dump_internal_state(const std::list<struct internal_item> &data);
 };
 
 void symex_dereference_statet::dereference_failure(
@@ -99,6 +101,16 @@ void symex_dereference_statet::get_value_set(
 void symex_dereference_statet::rename(expr2tc &expr)
 {
   goto_symex.cur_state->rename(expr);
+  return;
+}
+
+void
+symex_dereference_statet::dump_internal_state(
+                      const std::list<struct internal_item> &data)
+{
+  goto_symex.internal_deref_items.insert(
+                          goto_symex.internal_deref_items.begin(),
+                          data.begin(), data.end());
   return;
 }
 
