@@ -586,15 +586,6 @@ dereferencet::build_reference_to(
     tmp_guard.move(invalid_pointer_expr);
     dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
 
-    if (mode == INTERNAL) {
-      dereference_callbackt::internal_item internal;
-      internal.object = what;
-      internal.offset = expr2tc();
-      internal.guard = tmp_guard.as_expr();
-      internal_items.push_back(internal);
-      return expr2tc();
-    }
-
     return value;
   }
 
