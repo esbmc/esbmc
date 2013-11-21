@@ -11,6 +11,8 @@ Date: August 2012
 #ifndef __STL_VECTOR
 #define __STL_VECTOR
 
+#include <stdlib.h>
+
 #include "stdexcept"
 
 #define VECTOR_CAPACITY 500
@@ -303,13 +305,19 @@ namespace std{
       // construct:
       explicit vector(): _size(0), _capacity(1)
       {
-        buf[0] = T();
+        buf = new T[1];
         _size = 0;
         _capacity = 1;
       }
 
       explicit vector(iterator t1, iterator t2): _size(0)
       {
+        int count = 0;
+        iterator tmp = t1;
+        for (; tmp != t2; tmp++)
+          count++;
+
+        buf = new T[count];
         int n = 0;
         for(; t1 != t2 ; t1++){
           buf[n++] = *t1;
@@ -320,6 +328,7 @@ namespace std{
 
       explicit vector(size_type n): _size(0),  _capacity(1)
       {
+        buf = new T[n];
         _size = 0;
         for(int i = 0;i < n;i++){
           push_back(T());
@@ -329,6 +338,11 @@ namespace std{
 
       explicit vector(void t[], void* addr): _size(0),  _capacity(1)
       {
+        int count = 0;
+        for (void *tmp = t; t != addr; t++)
+          count++;
+
+        buf = new T[count];
         _size = 0;
         int i=0;
         T* t1 = (T*) t;
@@ -340,6 +354,7 @@ namespace std{
 
       explicit vector ( size_type n, const T& x)
       {
+        buf = new T[n];
         _size = 0;
         for(int i = 0; i < n; i++)
           push_back(x);
@@ -349,6 +364,7 @@ namespace std{
 
       vector(const vector<T>& x): _size(0),  _capacity(1)
       {
+        buf = new T[x._size];
         _size = 0;
         for(int i = 0 ; i < x.size() ; i++)
           push_back(x[i]);
@@ -357,6 +373,7 @@ namespace std{
       }
 
       vector<T>& operator=(const vector<T>& x){
+        buf = new T[x._size];
         _size = 0;
         for(int i = 0 ; i < x.size() ; i++)
           push_back(x[i]);
@@ -374,6 +391,12 @@ namespace std{
       }
 
       void assign(iterator t1, iterator t2){
+        int count = 0;
+        iterator tmp = t1;
+        for(; tmp != t2 ; tmp++)
+          count++;
+
+        buf = new T[count];
         int n = 0;
         for(; t1 != t2 ; t1++){
           buf[n++] = *t1;
@@ -490,7 +513,10 @@ namespace std{
       }
 
       void reserve(size_type n){
-        _capacity = n;
+        if (n > _capacity) {
+          buf = static_cast<T*>(realloc(buf, sizeof(T)*n));
+          _capacity = n;
+        }
       }
 
       // element access:
@@ -544,13 +570,13 @@ namespace std{
       {
         assert(0 <= _size);
         assert(_size < VECTOR_CAPACITY);
-        buf[_size] = x;
         _size++;
         verify_capacity();
+        buf[_size-1] = x;
       }
 
       void verify_capacity(){
-        while(_size >= _capacity) _capacity *= 2;
+        reserve(_size);
       }
 
       void pop_back()
@@ -669,7 +695,7 @@ namespace std{
           }
 
     private:
-      T buf[VECTOR_CAPACITY];
+      T *buf;
       int _size;
       int _capacity;
 
