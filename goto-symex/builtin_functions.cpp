@@ -337,15 +337,13 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
     std::pair<expr2tc,expr2tc> tmp(realloced, item.guard);
     result_list.push_back(tmp);
 
-    // Also, assert that the offset is zero. We can't realloc if it isn't.
-    equality2tc eq(item.offset, zero_uint);
-    and2tc theand(item.guard, eq);
-    not2tc n(theand);
-
-    guardt guard;
-    guard.add(n);
-    claim(guard.as_expr(), "Realloc of pointer with non-zero offset");
   }
+
+  // Free the given pointer. This works at the level of the pointer that's the
+  // argument to realloc, and it performs pointer validity checking, and that
+  // the pointer itself has a zero offset.
+  code_free2tc fr(call.operands[0]);
+  symex_free(fr);
 
   // Rebuild a gigantic if-then-else chain from the result list.
   expr2tc result;
