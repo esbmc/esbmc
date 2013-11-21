@@ -364,7 +364,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   }
 
   // Assign the result to the left hand side.
-  equality2tc eq(call.ret, result);
+  code_assign2tc eq(call.ret, result);
   symex_assign(eq);
   return;
 }
@@ -402,8 +402,8 @@ goto_symext::intrinsic_realloc_rec(const expr2tc &obj, const expr2tc &size)
     assert(is_symbol2t(idx.source_value));
 
     // Assign initial value to that array, of the source reallocated thing.
-    equality2tc eq(idx.source_value, obj);
-    symex_assign(eq);
+    code_assign2tc assign(idx.source_value, obj);
+    symex_assign(assign);
 
     return lhs;
   } else {
