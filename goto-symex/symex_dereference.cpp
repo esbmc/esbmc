@@ -114,7 +114,8 @@ symex_dereference_statet::dump_internal_state(
   return;
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
+                              bool internal)
 {
 
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
@@ -130,7 +131,9 @@ void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  if (free) {
+  if (internal) {
+    dereference.dereference_expr(expr, guard, dereferencet::INTERNAL);
+  } else if (free) {
     expr2tc tmp = expr;
     while (is_typecast2t(tmp))
       tmp = to_typecast2t(tmp).from;

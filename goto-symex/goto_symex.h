@@ -160,7 +160,8 @@ protected:
    *  @param write Whether or not we're writing into this object.
    *  @param free Whether we're freeing this pointer.
    */
-  void dereference(expr2tc &expr, const bool write, bool free = false);
+  void dereference(expr2tc &expr, const bool write, bool free = false,
+                   bool internal = false);
 
   // symex
 
