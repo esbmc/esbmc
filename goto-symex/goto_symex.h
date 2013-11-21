@@ -363,7 +363,7 @@ protected:
   /** Implementation of realloc. */
   void intrinsic_realloc(const code_function_call2t &call,
                          reachability_treet &arg);
-  expr2tc intrinsic_realloc_rec(const expr2tc &obj);
+  expr2tc intrinsic_realloc_rec(const expr2tc &obj, const expr2tc &size);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
