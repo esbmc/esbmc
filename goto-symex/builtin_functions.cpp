@@ -379,12 +379,11 @@ goto_symext::intrinsic_realloc_rec(const expr2tc &obj, const expr2tc &size)
   if (is_array_type(obj)) {
     const array_type2t &arrtype = to_array_type(obj->type);
 
-    // Build a new type. Deliberately faffing the size field here.
-    type2tc new_type = type2tc(new array_type2t(arrtype.subtype, size, false));
-    type2tc ptr_type = type2tc(new pointer_type2t(new_type));
+    type2tc ptr_type = type2tc(new pointer_type2t(get_empty_type()));
 
     // Build a side effect to represent the actual allocation.
-    sideeffect2tc se(new_type, expr2tc(), size, std::vector<expr2tc>(), new_type, sideeffect2t::malloc);
+    // XXX, what if the size is one?
+    sideeffect2tc se(get_empty_type(), expr2tc(), size, std::vector<expr2tc>(), arrtype.subtype, sideeffect2t::malloc);
 
     // Create a symbol to assign it to. With a unique name, because there might
     // be multiple reallocs here.
