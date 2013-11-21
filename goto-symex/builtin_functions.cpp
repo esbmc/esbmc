@@ -286,6 +286,21 @@ void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 }
 
 void
+goto_symext::intrinsic_realloc(const code_function_call2t &call __attribute__((unused)),
+                               reachability_treet &arg __attribute__((unused)))
+{
+  // For a given piece of data, the realloc process is fairly simple: re-malloc
+  // the data with a new size, possibly munging the type along the way, and then
+  // assign in the old piece of data to the new. This avoids having to perform
+  // a language level copy of, say, array fields, from one array to another.
+  //
+  // However it's not that simple, as the pointer we're dereferencing may point
+  // at a whole host of things, therefore we have to perform multiple reallocs
+  // depending on what's being pointed at. Ew.
+  abort();
+}
+
+void
 goto_symext::intrinsic_yield(reachability_treet &art)
 {
 

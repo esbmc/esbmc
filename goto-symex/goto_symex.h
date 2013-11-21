@@ -357,6 +357,10 @@ protected:
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
 
+  /** Implementation of realloc. */
+  void intrinsic_realloc(const code_function_call2t &call,
+                         reachability_treet &arg);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
