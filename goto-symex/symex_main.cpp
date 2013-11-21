@@ -236,11 +236,20 @@ goto_symext::symex_step(reachability_treet & art)
     // unfortunate circumstance where a thread starts with false guard due to
     // decision taken in another thread in this trace. In that case the
     // terminate intrinsic _has_ to run, or we explode.
-    if (is_symbol2t(call.function) &&
-      has_prefix(to_symbol2t(call.function).thename.as_string(), "c::__ESBMC")){
-      cur_state->source.pc++;
-      run_intrinsic(call, art, to_symbol2t(call.function).thename.as_string());
-      return;
+    if (is_symbol2t(call.function)) {
+      const irep_idt &id = to_symbol2t(call.function).thename;
+      if (has_prefix(id.as_string(), "c::__ESBMC")) {
+        cur_state->source.pc++;
+        std::string name = id.as_string().substr(3);
+        run_intrinsic(call, art, name);
+        return;
+      } else if (has_prefix(id.as_string(), "cpp::__ESBMC")) {
+        cur_state->source.pc++;
+        std::string name = id.as_string().substr(5);
+        name = name.substr(0, name.find("("));
+        run_intrinsic(call, art, name);
+        return;
+      }
     }
 
     // Don't run a function call if the guard is false.
@@ -303,37 +312,37 @@ goto_symext::run_intrinsic(const code_function_call2t &func_call,
                            reachability_treet &art, const std::string symname)
 {
 
-  if (symname == "c::__ESBMC_yield") {
+  if (symname == "__ESBMC_yield") {
     intrinsic_yield(art);
-  } else if (symname == "c::__ESBMC_switch_to") {
+  } else if (symname == "__ESBMC_switch_to") {
     intrinsic_switch_to(func_call, art);
-  } else if (symname == "c::__ESBMC_switch_away_from") {
+  } else if (symname == "__ESBMC_switch_away_from") {
     intrinsic_switch_from(art);
-  } else if (symname == "c::__ESBMC_get_thread_id") {
+  } else if (symname == "__ESBMC_get_thread_id") {
     intrinsic_get_thread_id(func_call, art);
-  } else if (symname == "c::__ESBMC_set_thread_internal_data") {
+  } else if (symname == "__ESBMC_set_thread_internal_data") {
     intrinsic_set_thread_data(func_call, art);
-  } else if (symname == "c::__ESBMC_get_thread_internal_data") {
+  } else if (symname == "__ESBMC_get_thread_internal_data") {
     intrinsic_get_thread_data(func_call, art);
-  } else if (symname == "c::__ESBMC_spawn_thread") {
+  } else if (symname == "__ESBMC_spawn_thread") {
     intrinsic_spawn_thread(func_call, art);
-  } else if (symname == "c::__ESBMC_terminate_thread") {
+  } else if (symname == "__ESBMC_terminate_thread") {
     intrinsic_terminate_thread(art);
-  } else if (symname == "c::__ESBMC_get_thread_state") {
+  } else if (symname == "__ESBMC_get_thread_state") {
     intrinsic_get_thread_state(func_call, art);
-  } else if (symname == "c::__ESBMC_really_atomic_begin") {
+  } else if (symname == "__ESBMC_really_atomic_begin") {
     intrinsic_really_atomic_begin(art);
-  } else if (symname == "c::__ESBMC_really_atomic_end") {
+  } else if (symname == "__ESBMC_really_atomic_end") {
     intrinsic_really_atomic_end(art);
-  } else if (symname == "c::__ESBMC_switch_to_monitor") {
+  } else if (symname == "__ESBMC_switch_to_monitor") {
     intrinsic_switch_to_monitor(art);
-  } else if (symname == "c::__ESBMC_switch_from_monitor") {
+  } else if (symname == "__ESBMC_switch_from_monitor") {
     intrinsic_switch_from_monitor(art);
-  } else if (symname == "c::__ESBMC_register_monitor") {
+  } else if (symname == "__ESBMC_register_monitor") {
     intrinsic_register_monitor(func_call, art);
-  } else if (symname == "c::__ESBMC_kill_monitor") {
+  } else if (symname == "__ESBMC_kill_monitor") {
     intrinsic_kill_monitor(art);
-  } else if (symname == "c::__ESBMC_realloc") {
+  } else if (symname == "__ESBMC_realloc") {
     intrinsic_realloc(func_call, art);
   } else {
     std::cerr << "Function call to non-intrinsic prefixed with __ESBMC (fatal)";
