@@ -361,8 +361,8 @@ dereferencet::dereference_expr_nonscalar(
     index2t &index = to_index2t(expr);
 
     // first make sure there are no dereferences in there
-    dereference_expr(index.source_value, guard, mode);
-    dereference_expr(index.index, guard, mode);
+    dereference_expr(index.source_value, guard, dereferencet::READ);
+    dereference_expr(index.index, guard, dereferencet::READ);
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
     expr2tc result = dereference(tmp, type2tc(), guard, mode,
@@ -378,7 +378,7 @@ dereferencet::dereference_expr_nonscalar(
                                         mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
-      dereference_expr(to_index2t(expr).index, guard, mode);
+      dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
       scalar_step_list.push_front(expr);
       res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
                                        mode, scalar_step_list);
