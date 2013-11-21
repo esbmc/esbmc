@@ -334,7 +334,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   // Result list is the address of the reallocated piece of data, and the guard.
   std::list<std::pair<expr2tc,expr2tc> > result_list;
   for (auto &item : internal_deref_items) {
-    expr2tc realloced = intrinsic_realloc_rec(item.object, realloc_size);
+    expr2tc realloced = intrinsic_realloc_hunk(item.object, realloc_size);
     std::pair<expr2tc,expr2tc> tmp(realloced, item.guard);
     result_list.push_back(tmp);
 
@@ -370,7 +370,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
 }
 
 expr2tc
-goto_symext::intrinsic_realloc_rec(const expr2tc &obj, const expr2tc &size)
+goto_symext::intrinsic_realloc_hunk(const expr2tc &obj, const expr2tc &size)
 {
   static unsigned realloc_count = 0;
 
