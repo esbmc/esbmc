@@ -593,32 +593,6 @@ void goto_convertt::do_free(
   goto_programt::targett t_f=dest.add_instruction(OTHER);
   migrate_expr(free_statement, t_f->code);
   t_f->location=function.location();
-
-  exprt valid_expr("valid_object", bool_typet());
-  valid_expr.copy_to_operands(arguments[0]);
-
-  //tse paper
-#if TSE_PAPER
-  exprt deallocated_expr("deallocated_object", bool_typet());
-  deallocated_expr.copy_to_operands(arguments[0]);
-#endif
-
-  // clear alloc bit
-
-  goto_programt::targett t_c=dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(valid_expr, false_exprt());
-  migrate_expr(assign, t_c->code);
-  t_c->location=function.location();
-
-  //tse paper
-#if TSE_PAPER
-  //indicate that memory has been deallocated
-
-  goto_programt::targett t_d=dest.add_instruction(ASSIGN);
-  assign = code_assignt(deallocated_expr, true_exprt());
-  migrate_expr(assign, t_d->code);
-  t_d->location=function.location();
-#endif
 }
 
 /*******************************************************************\

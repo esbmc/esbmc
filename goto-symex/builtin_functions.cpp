@@ -172,9 +172,26 @@ void goto_symext::symex_free(const expr2tc &expr)
   expr2tc tmp = code.operand;
   dereference(tmp, false, true);
 
-  pointer_offset2tc ptr_obj(uint_type2(), tmp);
-  equality2tc eq(ptr_obj, zero_uint);
+  address_of2tc addrof(code.operand->type, tmp);
+  pointer_offset2tc ptr_offs(uint_type2(), addrof);
+  equality2tc eq(ptr_offs, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
+
+  // Clear the alloc bit, and set the deallocated bit.
+  guardt guard;
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
+                                              expr2tc(), true));
+  pointer_object2tc ptr_obj(uint_type2(), code.operand);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc truth = true_expr;
+  symex_assign_rec(dealloc_index_expr, truth, guard);
+
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  expr2tc falsity = false_expr;
+  symex_assign_rec(valid_index_expr, falsity, guard);
 }
 
 void goto_symext::symex_printf(
