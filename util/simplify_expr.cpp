@@ -2651,27 +2651,7 @@ bool simplify_exprt::simplify_index(index_exprt &expr, modet mode)
 {
   if(expr.operands().size()!=2) return true;
 
-  if(expr.op0().id()=="lambda")
-  {
-    // simplify (lambda i: e)(x) to e[i/x]
-
-    exprt &lambda_expr=expr.op0();
-
-    if(lambda_expr.operands().size()!=2) return true;
-
-    if(expr.op1().type()==lambda_expr.op0().type())
-    {
-      exprt tmp;
-
-      tmp.swap(lambda_expr.op1());
-
-      replace_expr(lambda_expr.op0(), expr.op1(), tmp);
-
-      expr.swap(tmp);
-      return false;
-    }
-  }
-  else if(expr.op0().id()=="with")
+  if(expr.op0().id()=="with")
   {
     exprt &with_expr=expr.op0();
 
