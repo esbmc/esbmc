@@ -311,15 +311,6 @@ void
 goto_symext::intrinsic_realloc(const code_function_call2t &call,
                                reachability_treet &arg __attribute__((unused)))
 {
-  // For a given piece of data, the realloc process is fairly simple: re-malloc
-  // the data with a new size, possibly munging the type along the way, and then
-  // assign in the old piece of data to the new. This avoids having to perform
-  // a language level copy of, say, array fields, from one array to another.
-  //
-  // However it's not that simple, as the pointer we're dereferencing may point
-  // at a whole host of things, therefore we have to perform multiple reallocs
-  // depending on what's being pointed at. Ew.
-
   assert(call.operands.size() == 2);
   expr2tc src_ptr = call.operands[0];
   expr2tc realloc_size = call.operands[1];
@@ -334,11 +325,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   // Result list is the address of the reallocated piece of data, and the guard.
   std::list<std::pair<expr2tc,expr2tc> > result_list;
   while (internal_deref_items.size() != 0) {
-    expr2tc realloced, guard;
-    intrinsic_realloc_type(internal_deref_items.begin()->object, realloc_size,
-                           realloced, guard);
-    std::pair<expr2tc,expr2tc> tmp(realloced, guard);
-    result_list.push_back(tmp);
+    abort();
   }
 
   // Free the given pointer. This works at the level of the pointer that's the
@@ -368,90 +355,6 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   code_assign2tc eq(call.ret, result);
   symex_assign(eq);
   return;
-}
-
-void
-goto_symext::intrinsic_realloc_type(const expr2tc &obj, const expr2tc &size,
-                                    expr2tc &out_realloced, expr2tc &out_guard)
-{
-
-  if (is_array_type(obj)) {
-    const array_type2t &arrtype = to_array_type(obj->type);
-    expr2tc result;
-    expr2tc guard;
-
-    // Look for everything with this array subtype.
-    for (auto it = internal_deref_items.begin();
-         it != internal_deref_items.end(); it++)
-    {
-      if (is_array_type(it->object) &&
-          to_array_type(it->object->type).subtype == arrtype.subtype) {
-        // Match
-        if (is_nil_expr(result)) {
-          result = it->object;
-          guard = it->guard;
-        } else {
-          result = if2tc(result->type, it->guard, it->object, result);
-          guard = or2tc(it->guard, guard);
-        }
-
-        it = internal_deref_items.erase(it);
-      }
-    }
-
-    // Actually perform the re-alloc, and assign in the value of these objects.
-    out_realloced = intrinsic_realloc_hunk(result, size);
-    out_guard = guard;
-  } else {
-    std::cerr << "Realloc of non-array-objects currently unimplemented"
-              << std::endl;
-    abort();
-  }
-}
-
-expr2tc
-goto_symext::intrinsic_realloc_hunk(const expr2tc &obj, const expr2tc &size)
-{
-  static unsigned realloc_count = 0;
-
-  // Ok. So the main approach depends entirely on _what_ is being reallocated.
-  // For the moment, turn everything into 
-  if (is_array_type(obj)) {
-    const array_type2t &arrtype = to_array_type(obj->type);
-
-    type2tc ptr_type = type2tc(new pointer_type2t(get_empty_type()));
-
-    // Build a side effect to represent the actual allocation.
-    // XXX, what if the size is one?
-    sideeffect2tc se(get_empty_type(), expr2tc(), size, std::vector<expr2tc>(), arrtype.subtype, sideeffect2t::malloc);
-
-    // Create a symbol to assign it to. With a unique name, because there might
-    // be multiple reallocs here.
-    std::stringstream ss;
-    ss  << "goto_symext::realloc_" << realloc_count++;
-    symbol2tc lhs(ptr_type, ss.str());
-
-    // Perform a new allocation.
-    expr2tc newobj = symex_malloc(lhs, *se);
-
-    // newobj now contains an index (zero) of the new array. Pull the base
-    // symbol out of it.
-    assert(is_index2t(newobj));
-    const index2t &idx = to_index2t(newobj);
-    assert(is_symbol2t(idx.source_value));
-
-    // Assign initial value to that array, of the source reallocated thing.
-    code_assign2tc assign(idx.source_value, obj);
-    symex_assign(assign);
-
-    return lhs;
-  } else {
-    // Turn _everything_ else into an array of it. This is the closest fastest
-    // approximation.
-    std::cerr << "Realloc of non-array-objects currently unimplemented"
-              << std::endl;
-    abort();
-  }
 }
 
 void
