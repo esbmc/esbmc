@@ -3127,6 +3127,31 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
 
+    // Fetch a size.
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    expr2tc size;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      size = constant_int2tc(ptr_loc_type, BigInt(type_size));
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      size = e->size;
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      size = constant_int2tc(ptr_loc_type, BigInt(1));
+    }
+
+    init_pointer_obj(obj_num, size, output);
+  }
+}
+
+void
+z3_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &sz,
+                           z3::expr &output)
+{
+
     z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
                                        ctx.esbmc_int_val(0));
 
@@ -3143,37 +3168,9 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
-    expr2tc endisequal;
-    expr2tc the_offs;
-    try {
-      uint64_t type_size = expr->type->get_width() / 8;
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(type_size));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (array_type2t::dyn_sized_array_excp *e) {
-      // Dynamically (nondet) sized array; take that size and use it for the
-      // offset-to-end expression.
-      the_offs = e->size;
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (type2t::symbolic_type_excp *e) {
-      // Type is empty or code -- something that we can never have a real size
-      // for. In that case, create an object of size 1: this means we have a
-      // valid entry in the address map, but that any modification of the
-      // pointer leads to invalidness, because there's no size to think about.
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(1));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    }
-
-    // Also record the amount of memory space we're working with for later usage
-    unsigned int mem_size = 1;
-    try {
-      if (!is_code_type(expr))
-        mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
-    } catch (array_type2t::dyn_sized_array_excp *foo) {
-    }
-    total_mem_space.back() += mem_size;
+    expr2tc the_offs = sz;
+    add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
+    expr2tc endisequal = equality2tc(start_plus_offs, end_sym);
 
     // Assert that start + offs == end
     z3::expr offs_eq;
@@ -3194,7 +3191,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] = mem_size;
+    addr_space_data.back()[obj_num] = 1; // XXX - nothing uses this data.
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
@@ -3226,9 +3223,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr select = z3::select(allocarray, idxnum);
     z3::expr isfalse = ctx.bool_val(false) == select;
     assert_formula(isfalse);
-  }
-
-  DEBUGLOC;
 }
 
 void

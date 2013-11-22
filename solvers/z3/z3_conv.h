@@ -79,6 +79,8 @@ private:
 
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
+  void init_pointer_obj(unsigned int obj_num, const expr2tc &size,
+                        z3::expr &output);
 
   typedef z3::expr (*ast_convert_calltype_new)(const z3::expr &op1,
                                            const z3::expr &op2,
