@@ -3118,7 +3118,13 @@ z3_convt::renumber_symbol_address(const expr2tc &guard,
     it->second = ite(z3_guard, output, it->second);
   } else {
     // Newly bumped pointer.
-    abort();
+    unsigned int obj_num = pointer_logic.back().add_object(addr_symbol);
+    z3::expr output;
+    init_pointer_obj(obj_num, new_size, output);
+
+    // Store in renumbered store.
+    renumber_mapt::value_type v(str, output);
+    renumber_map.insert(v);
   }
 }
 
