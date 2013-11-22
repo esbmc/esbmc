@@ -476,27 +476,37 @@ namespace std{
       size_type max_size() const;
 
       void resize(size_type sz){
-        if(sz < _size){
+        if(sz <= _size){
           _size = sz;
           return;
         }
-        while(_size < sz){
-          push_back(T());
-        }
+
+        // Rather than repeatedly pushing back, bump up the size of the vector
+        // once, and then fill it with default data.
+        unsigned int difference = sz - _size;
+        _size = sz;
         verify_capacity();
+        for (unsigned int n = 0; n < difference; n++)
+          buf[n] = T();
+
         return;
       }
+
       void resize(size_type sz, T t){
-        if(sz < _size){
+        if(sz <= _size){
           _size = sz;
           return;
         }
-        while(_size < sz){
-          push_back(t);
-        }
+
+        unsigned int difference = sz - _size;
+        _size = sz;
         verify_capacity();
+        for (unsigned int n = 0; n < difference; n++)
+          buf[n] = t;
+
         return;
       }
+
       void resize(iterator i){
         _size = i.pos;
         verify_capacity();
