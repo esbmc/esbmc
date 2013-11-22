@@ -101,7 +101,7 @@ void symex_slicet::slice_renumber(
 {
   assert(is_symbol2t(SSA_step.cond));
 
-  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.cond)))
+  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
               == depends.end())
   {
     // we don't really need it

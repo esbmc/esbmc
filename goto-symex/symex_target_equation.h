@@ -80,6 +80,7 @@ public:
   virtual void renumber(
     const expr2tc &guard,
     const expr2tc &symbol,
+    const expr2tc &size,
     const sourcet &source);
 
   virtual void convert(prop_convt &prop_conv);

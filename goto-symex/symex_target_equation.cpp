@@ -108,14 +108,16 @@ void symex_target_equationt::assertion(
 
 void
 symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
-                                 const sourcet &source)
+                                 const expr2tc &size, const sourcet &source)
 {
   assert(is_symbol2t(symbol));
+  assert(is_bv_type(size));
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 
   SSA_step.guard = guard;
-  SSA_step.cond = symbol;
+  SSA_step.lhs = symbol;
+  SSA_step.rhs = size;
   SSA_step.type=goto_trace_stept::RENUMBER;
   SSA_step.source=source;
 
@@ -178,7 +180,7 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
       }
     }
   } else if (step.is_renumber()) {
-    prop_conv.renumber_symbol_address(step.cond);
+    prop_conv.renumber_symbol_address(step.lhs, step.rhs);
   } else {
     assert(0 && "Unexpected SSA step type in conversion");
   }

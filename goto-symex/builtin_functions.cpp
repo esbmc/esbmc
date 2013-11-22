@@ -334,7 +334,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
     expr2tc guard = item.guard;
     cur_state->rename_address(item.object);
     cur_state->guard.guard_expr(guard);
-    target->renumber(guard, item.object, cur_state->source);
+    target->renumber(guard, item.object, realloc_size, cur_state->source);
     type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
     address_of2tc addrof(new_ptr, item.object);
     result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));

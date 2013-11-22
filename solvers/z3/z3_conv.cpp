@@ -3093,7 +3093,7 @@ z3_convt::convert_expr(const expr2tc &expr)
 }
 
 void
-z3_convt::renumber_symbol_address(const expr2tc &addr_symbol __attribute__((unused)))
+z3_convt::renumber_symbol_address(const expr2tc &addr_symbol __attribute__((unused)), const expr2tc &new_size __attribute__((unused)))
 {
   abort();
 }
