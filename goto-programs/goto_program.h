@@ -6,8 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
-#ifndef CPROVER_GOTO_PROGRAM_TEMPLATE_H
-#define CPROVER_GOTO_PROGRAM_TEMPLATE_H
+#ifndef CPROVER_GOTO_PROGRAM_H
+#define CPROVER_GOTO_PROGRAM_H
 
 #include <irep2.h>
 #include <assert.h>
