@@ -26,6 +26,7 @@ protected:
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
 };
 
 void symex_slicet::get_symbols(const expr2tc &expr)
@@ -71,6 +72,10 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
   case goto_trace_stept::OUTPUT:
     break;
 
+  case goto_trace_stept::RENUMBER:
+    slice_renumber(SSA_step);
+    break;
+
   default:
     assert(false);  
   }
@@ -89,6 +94,21 @@ void symex_slicet::slice_assignment(
   }
   else
     get_symbols(SSA_step.rhs);
+}
+
+void symex_slicet::slice_renumber(
+  symex_target_equationt::SSA_stept &SSA_step)
+{
+  assert(is_symbol2t(SSA_step.cond));
+
+  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.cond)))
+              == depends.end())
+  {
+    // we don't really need it
+    SSA_step.ignore=true;
+  }
+
+  // Don't collect the symbol; this insn has no effect on dependencies.
 }
 
 void slice(symex_target_equationt &equation)
