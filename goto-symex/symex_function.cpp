@@ -19,6 +19,8 @@
 
 #include <ansi-c/c_types.h>
 
+#include <langapi/language_util.h>
+
 #include "goto_symex.h"
 #include "execution_state.h"
 

@@ -15,6 +15,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_expr.h>
 #include <expr_util.h>
 
+#include <langapi/language_util.h>
+
 #include "remove_skip.h"
 #include "goto_inline.h"
 
