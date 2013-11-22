@@ -19,7 +19,7 @@ SRCS= arith_tools.cpp base_type.cpp cmdline.cpp config.cpp context.cpp \
       xml.cpp xml_irep.cpp std_types.cpp std_code.cpp type_byte_size.cpp \
       format_constant.cpp std_expr.cpp \
       irep_serialization.cpp symbol_serialization.cpp fixedbv.cpp \
-      pointer_arithmetic.cpp ieee_float.cpp signal_catcher.cpp \
+      pointer_arithmetic.cpp signal_catcher.cpp \
       irep2.cpp migrate.cpp crypto_hash.cpp thread.cpp
 
 ifdef MODULE_FLOATBV
@@ -27,11 +27,8 @@ ifdef MODULE_FLOATBV
 endif
 
 clean:
-	-rm -f $(OBJS) ieee_float_test $(MAINOBJ) irep2.h.gch
+	-rm -f $(OBJS) $(MAINOBJ) irep2.h.gch
 	-rm -f $(OBJDIR)/.deps
-#
-#ieee_float_test: ieee_float_test.o ieee_float.o util.o
-#	$(CXX) $(CXXFLAGS) -o ieee_float_test util.o ieee_float_test.o ../big-int/bigint.o
 
 include $(ESBMCDIR)/common
 
