@@ -141,7 +141,7 @@ Function: goto_convert_functionst::add_return
 \*******************************************************************/
 
 void goto_convert_functionst::add_return(
-  goto_functionst::goto_functiont &f,
+  goto_functiont &f,
   const locationt &location)
 {
   if(!f.body.instructions.empty() &&
@@ -184,7 +184,7 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  goto_functionst::goto_functiont &f=functions.function_map[identifier];
+  goto_functiont &f=functions.function_map[identifier];
   const symbolt &symbol=ns.lookup(identifier);
 
   // make tmp variables local to function

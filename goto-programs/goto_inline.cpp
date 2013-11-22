@@ -287,7 +287,7 @@ void goto_inlinet::expand_function_call(
     throw 0;
   }
   
-  goto_functionst::goto_functiont &f=m_it->second;
+  goto_functiont &f=m_it->second;
 
   // see if we need to inline this  
   if(!full)

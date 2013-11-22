@@ -15,11 +15,10 @@ Date: June 2003
 
 #include <std_types.h>
 
-template <class bodyT>
-class goto_function_templatet
+class goto_functiont
 {
 public:
-  bodyT body;
+  goto_programt body;
   code_typet type;
   bool body_available;
 
@@ -32,7 +31,7 @@ public:
     return type.inlined();
   }
 
-  goto_function_templatet():body_available(false)
+  goto_functiont():body_available(false)
   {
   }
 
@@ -43,20 +42,11 @@ public:
     body_available=false;
     inlined_funcs.clear();
   }
-
-  void swap(goto_function_templatet &other)
-  {
-    body.swap(other.body);
-    type.swap(other.type);
-    std::swap(body_available, other.body_available);
-    inlined_funcs.swap(other.inline_funcs);
-  }
 };
 
 class goto_functionst
 {
 public:
-  typedef goto_function_templatet<goto_programt> goto_functiont;
   typedef std::map<irep_idt, goto_functiont> function_mapt;
   function_mapt function_map;
 

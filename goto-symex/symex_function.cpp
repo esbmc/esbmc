@@ -164,7 +164,7 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
     abort();
   }
 
-  const goto_functionst::goto_functiont &goto_function = it->second;
+  const goto_functiont &goto_function = it->second;
 
   unsigned &unwinding_counter = cur_state->function_unwind[identifier];
 
@@ -459,7 +459,7 @@ goto_symext::symex_end_of_function()
 }
 
 void
-goto_symext::locality(const goto_functionst::goto_functiont &goto_function)
+goto_symext::locality(const goto_functiont &goto_function)
 {
   goto_programt::local_variablest local_identifiers;
 

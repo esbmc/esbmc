@@ -335,7 +335,7 @@ protected:
    *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.

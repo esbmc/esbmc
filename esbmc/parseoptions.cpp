@@ -1343,7 +1343,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
     return;
 
   Forall_goto_functions(f_it, goto_functions) {
-    goto_functionst::goto_functiont &func = f_it->second;
+    goto_functiont &func = f_it->second;
     goto_programt &prog = func.body;
     Forall_goto_program_instructions(p_it, prog) {
       add_monitor_exprs(p_it, prog.instructions, monitors);

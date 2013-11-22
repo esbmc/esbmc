@@ -432,7 +432,7 @@ void static_analysis_baset::do_function_call(
   const std::vector<expr2tc> &arguments,
   statet &new_state)
 {
-  const goto_functionst::goto_functiont &goto_function=f_it->second;
+  const goto_functiont &goto_function=f_it->second;
 
   if(!goto_function.body_available)
     return; // do nothing
