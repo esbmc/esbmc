@@ -92,7 +92,8 @@ public:
   // satisfying assignment
   virtual tvt l_get(literalt a)=0;
 
-  virtual void renumber_symbol_address(const expr2tc &addr_symbol,
+  virtual void renumber_symbol_address(const expr2tc &guard,
+                                       const expr2tc &addr_symbol,
                                        const expr2tc &new_size) = 0;
 
 protected:

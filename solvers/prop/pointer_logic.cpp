@@ -52,7 +52,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   ret.first->second = objects.size() - 1;
   lookup.push_back(expr);
   assert(lookup.size() == objects.size());
-  return objects.size() - 1;
+  return objects.size() - 1 + obj_num_offset;
 }
 
 /*******************************************************************\
@@ -220,6 +220,8 @@ pointer_logict::pointer_logict()
   // add INVALID
   symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
+
+  obj_num_offset = 0;
 }
 
 /*******************************************************************\

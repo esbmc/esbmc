@@ -63,7 +63,8 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
-  virtual void renumber_symbol_address(const expr2tc &addr_symbol,
+  virtual void renumber_symbol_address(const expr2tc &guard,
+                                       const expr2tc &addr_symbol,
                                        const expr2tc &new_size);
 
   void setup_pointer_sort(void);
@@ -316,6 +317,10 @@ public:
   uint64_t no_variables;
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
+
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, z3::expr> renumber_mapt;
+  renumber_mapt renumber_map;
 
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;

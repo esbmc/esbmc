@@ -3093,9 +3093,33 @@ z3_convt::convert_expr(const expr2tc &expr)
 }
 
 void
-z3_convt::renumber_symbol_address(const expr2tc &addr_symbol __attribute__((unused)), const expr2tc &new_size __attribute__((unused)))
+z3_convt::renumber_symbol_address(const expr2tc &guard,
+                                  const expr2tc &addr_symbol,
+                                  const expr2tc &new_size)
 {
-  abort();
+  const symbol2t &sym = to_symbol2t(addr_symbol);
+  std::string str = sym.get_symbol_name();
+
+  // Two different approaches if we do or don't have an address-of pointer
+  // variable already.
+
+  renumber_mapt::iterator it = renumber_map.find(str);
+  if (it != renumber_map.end()) {
+    // There's already an address-of variable for this pointer. Set up a new
+    // object number, and nondeterministically pick the new value.
+
+    unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
+    z3::expr output;
+    init_pointer_obj(new_obj_num, new_size, output);
+
+    // Now merge with the old value for all future address-of's
+    z3::expr z3_guard;
+    convert_bv(guard, z3_guard);
+    it->second = ite(z3_guard, output, it->second);
+  } else {
+    // Newly bumped pointer.
+    abort();
+  }
 }
 
 void
