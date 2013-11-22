@@ -84,7 +84,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
   addr_space_data.push_back(std::map<unsigned, unsigned>());
-  total_mem_space.push_back(0);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -192,7 +191,6 @@ z3_convt::intr_push_ctx(void)
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   addr_space_data.push_back(addr_space_data.back());
-  total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
   std::list<z3::expr>::iterator it = assumpt.end();
@@ -219,7 +217,6 @@ z3_convt::intr_pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
-  total_mem_space.pop_back();
 
   level_ctx--;
 }
