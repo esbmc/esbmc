@@ -107,10 +107,19 @@ void symex_target_equationt::assertion(
 }
 
 void
-symex_target_equationt::renumber(const expr2tc &guard __attribute__((unused)), const expr2tc &symbol __attribute__((unused)),
-                                 const sourcet &source __attribute__((unused)))
+symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
+                                 const sourcet &source)
 {
-  abort();
+  SSA_steps.push_back(SSA_stept());
+  SSA_stept &SSA_step=SSA_steps.back();
+
+  SSA_step.guard = guard;
+  SSA_step.cond = symbol;
+  SSA_step.type=goto_trace_stept::RENUMBER;
+  SSA_step.source=source;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
 }
 
 void symex_target_equationt::convert(prop_convt &prop_conv)
