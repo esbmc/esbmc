@@ -447,6 +447,11 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
+
+  /** Map of what pointer values have been realloc'd, and what their new
+   *  realloc number is. No need for special consideration when merging states
+   *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
+  std::map<expr2tc, unsigned> realloc_map;
 };
 
 #endif

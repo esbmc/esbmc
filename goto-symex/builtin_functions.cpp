@@ -338,6 +338,19 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
     type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
     address_of2tc addrof(new_ptr, item.object);
     result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+
+    // Bump the realloc-numbering of the object. This ensures that, after
+    // renaming, the address_of we just generated compares differently to
+    // previous address_of's before the realloc.
+    unsigned int cur_num = 0;
+    if (cur_state->realloc_map.find(item.object) !=
+        cur_state->realloc_map.end()) {
+      cur_num = cur_state->realloc_map[item.object];
+    }
+
+    cur_num++;
+    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
+    cur_state->realloc_map.insert(v);
   }
 
   // Rebuild a gigantic if-then-else chain from the result list.
