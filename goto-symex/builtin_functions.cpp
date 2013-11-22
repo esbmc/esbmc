@@ -333,11 +333,12 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   // and then switch between those results afterwards.
   // Result list is the address of the reallocated piece of data, and the guard.
   std::list<std::pair<expr2tc,expr2tc> > result_list;
-  for (auto &item : internal_deref_items) {
-    expr2tc realloced = intrinsic_realloc_hunk(item.object, realloc_size);
-    std::pair<expr2tc,expr2tc> tmp(realloced, item.guard);
+  while (internal_deref_items.size() != 0) {
+    expr2tc realloced, guard;
+    intrinsic_realloc_type(internal_deref_items.begin()->object, realloc_size,
+                           realloced, guard);
+    std::pair<expr2tc,expr2tc> tmp(realloced, guard);
     result_list.push_back(tmp);
-
   }
 
   // Free the given pointer. This works at the level of the pointer that's the
@@ -367,6 +368,45 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   code_assign2tc eq(call.ret, result);
   symex_assign(eq);
   return;
+}
+
+void
+goto_symext::intrinsic_realloc_type(const expr2tc &obj, const expr2tc &size,
+                                    expr2tc &out_realloced, expr2tc &out_guard)
+{
+
+  if (is_array_type(obj)) {
+    const array_type2t &arrtype = to_array_type(obj->type);
+    expr2tc result;
+    expr2tc guard;
+
+    // Look for everything with this array subtype.
+    for (auto it = internal_deref_items.begin();
+         it != internal_deref_items.end(); it++)
+    {
+      if (is_array_type(it->object) &&
+          to_array_type(it->object->type).subtype == arrtype.subtype) {
+        // Match
+        if (is_nil_expr(result)) {
+          result = it->object;
+          guard = it->guard;
+        } else {
+          result = if2tc(result->type, it->guard, it->object, result);
+          guard = or2tc(it->guard, guard);
+        }
+
+        it = internal_deref_items.erase(it);
+      }
+    }
+
+    // Actually perform the re-alloc, and assign in the value of these objects.
+    out_realloced = intrinsic_realloc_hunk(result, size);
+    out_guard = guard;
+  } else {
+    std::cerr << "Realloc of non-array-objects currently unimplemented"
+              << std::endl;
+    abort();
+  }
 }
 
 expr2tc
