@@ -76,6 +76,12 @@ public:
     std::vector<dstring> stack_trace,
     const sourcet &source)=0;
 
+  // Renumber the pointer object of a given symbol
+  virtual void renumber(
+    const expr2tc &guard,
+    const expr2tc &symbol,
+    const sourcet &source)=0;
+
   // Abstract method, with the purpose of duplicating a symex_targett from the
   // subclass.
   virtual symex_targett *clone(void) const = 0;

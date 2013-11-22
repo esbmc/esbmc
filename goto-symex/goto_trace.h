@@ -38,8 +38,9 @@ public:
   bool is_assert() const     { return type==ASSERT; }
   bool is_output() const     { return type==OUTPUT; }
   bool is_skip() const       { return type==SKIP; }
+  bool is_renumber() const   { return type==RENUMBER; }
 
-  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP } typet;
+  typedef enum { ASSIGNMENT, ASSUME, ASSERT, OUTPUT, SKIP, RENUMBER } typet;
   typet type;
     
   goto_programt::const_targett pc;

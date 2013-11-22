@@ -106,6 +106,12 @@ void symex_target_equationt::assertion(
     SSA_step.short_output(ns, std::cout);
 }
 
+void
+symex_target_equationt::renumber(const expr2tc &guard __attribute__((unused)), const expr2tc &symbol __attribute__((unused)),
+                                 const sourcet &source __attribute__((unused)))
+{
+  abort();
+}
 
 void symex_target_equationt::convert(prop_convt &prop_conv)
 {
