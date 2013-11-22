@@ -99,7 +99,7 @@ void symex_slicet::slice_assignment(
 void symex_slicet::slice_renumber(
   symex_target_equationt::SSA_stept &SSA_step)
 {
-  assert(is_symbol2t(SSA_step.cond));
+  assert(is_symbol2t(SSA_step.lhs));
 
   if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
               == depends.end())
