@@ -16,7 +16,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "simplify_expr.h"
 #include "mp_arith.h"
 #include "arith_tools.h"
-#include "replace_expr.h"
 #include "std_types.h"
 #include "bitvector.h"
 #include "simplify_utils.h"

@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <queue>
 #include <namespace.h>
-#include <replace_expr.h>
 #include <guard.h>
 #include <std_code.h>
 #include <options.h>
