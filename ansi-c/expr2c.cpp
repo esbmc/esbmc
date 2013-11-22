@@ -3011,9 +3011,6 @@ std::string expr2ct::convert(
   else if(src.id()=="exists")
     return convert_quantifier(src, "EXISTS", precedence=2);
 
-  else if(src.id()=="lambda")
-    return convert_quantifier(src, "LAMBDA", precedence=2);
-
   else if(src.id()=="with")
     return convert_with(src, precedence=2);
 

@@ -2531,25 +2531,6 @@ bool simplify_exprt::simplify_ieee_float_relation(exprt &expr)
 
 /*******************************************************************\
 
-Function: simplify_exprt::simplify_lambda
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool simplify_exprt::simplify_lambda(exprt &expr)
-{
-  bool result=true;
-
-  return result;
-}
-
-/*******************************************************************\
-
 Function: simplify_exprt::simplify_with
 
   Inputs:
@@ -3364,8 +3345,6 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_relation(expr, mode) && result;
   else if(expr.id()=="if")
     result=simplify_if(expr) && result;
-  else if(expr.id()=="lambda")
-    result=simplify_lambda(expr) && result;
   else if(expr.id()=="with")
     result=simplify_with(expr) && result;
   else if(expr.id()=="index")
