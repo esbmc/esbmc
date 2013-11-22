@@ -131,7 +131,8 @@ goto_symext::symex_malloc(
 }
 
 void
-goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type)
+goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                               expr2tc size)
 {
   guardt guard;
 
@@ -161,11 +162,15 @@ goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type)
   index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
 
   expr2tc object_size_exp;
-  try {
-    mp_integer object_size = type_byte_size(*new_type);
-    object_size_exp = gen_uint(object_size.to_ulong());
-  } catch (array_type2t::dyn_sized_array_excp *e) {
-    object_size_exp = e->size;
+  if (is_nil_expr(size)) {
+    try {
+      mp_integer object_size = type_byte_size(*new_type);
+      object_size_exp = gen_uint(object_size.to_ulong());
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      object_size_exp = e->size;
+    }
+  } else {
+    object_size_exp = size;
   }
 
   symex_assign_rec(sz_index_expr, object_size_exp, guard);
@@ -378,6 +383,10 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
         result = if2tc(result->type, it->second, it->first, result);
     }
   }
+
+  // Install pointer modelling data into the relevant arrays.
+  pointer_object2tc ptr_obj(int_type2(), result);
+  track_new_pointer(ptr_obj, type2tc(), realloc_size);
 
   // Assign the result to the left hand side.
   code_assign2tc eq(call.ret, result);
