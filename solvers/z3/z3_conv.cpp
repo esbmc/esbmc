@@ -1629,7 +1629,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
-    convert_identifier_pointer(obj.ptr_obj, identifier, output);
+
+    // Create a symbol for this address -- there's no need to worry about the
+    // fact that this is essentially a global and not renamed, because in any
+    // real binary strings will be collated into some static location in the
+    // .data segment.
+    symbol2tc sym(obj.ptr_obj->type, identifier);
+    convert_identifier_pointer(sym, identifier, output);
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
@@ -3103,12 +3109,11 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   unsigned int obj_num;
   bool got_obj_num = false;
 
-  if (is_symbol2t(expr)) {
-    const symbol2t &sym = to_symbol2t(expr);
-    if (sym.thename == "NULL" || sym.thename == "0") {
-      obj_num = pointer_logic.back().get_null_object();
-      got_obj_num = true;
-    }
+  assert(is_symbol2t(expr));
+  const symbol2t &sym = to_symbol2t(expr);
+  if (sym.thename == "NULL" || sym.thename == "0") {
+    obj_num = pointer_logic.back().get_null_object();
+    got_obj_num = true;
   }
 
   if (!got_obj_num)
