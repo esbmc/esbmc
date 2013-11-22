@@ -210,6 +210,7 @@ Function: pointer_logict::pointer_logict
 
 pointer_logict::pointer_logict()
 {
+  obj_num_offset = 0;
 
   type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
   symbol2tc sym(type, "NULL");
@@ -221,7 +222,6 @@ pointer_logict::pointer_logict()
   symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
 
-  obj_num_offset = 0;
 }
 
 /*******************************************************************\
