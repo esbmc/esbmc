@@ -19,6 +19,15 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <namespace.h>
 #include <location.h>
+#include <std_code.h>
+
+#define forall_goto_program_instructions(it, program) \
+  for(goto_programt::instructionst::const_iterator it=(program).instructions.begin(); \
+      it!=(program).instructions.end(); it++)
+
+#define Forall_goto_program_instructions(it, program) \
+  for(goto_programt::instructionst::iterator it=(program).instructions.begin(); \
+      it!=(program).instructions.end(); it++)
 
 typedef enum { NO_INSTRUCTION_TYPE=0,
                GOTO=1,          // branch, possibly guarded
