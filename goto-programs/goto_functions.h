@@ -18,8 +18,6 @@ Date: June 2003
 #include "goto_program.h"
 #include "goto_functions_template.h"
 
-typedef goto_functions_templatet<goto_programt> goto_functionst;
-
 #define Forall_goto_functions(it, functions) \
   for(goto_functionst::function_mapt::iterator it=(functions).function_map.begin(); \
       it!=(functions).function_map.end(); it++)

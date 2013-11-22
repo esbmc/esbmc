@@ -221,7 +221,7 @@ execution_statet::symex_step(reachability_treet &art)
 
   if (symex_trace) {
     const goto_programt p_dummy;
-    goto_functions_templatet<goto_programt>::function_mapt::const_iterator it =
+    goto_functionst::function_mapt::const_iterator it =
       goto_functions.function_map.find(instruction.function);
 
     const goto_programt &p_real = it->second.body;
