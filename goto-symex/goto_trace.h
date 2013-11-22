@@ -21,8 +21,6 @@ Date: July 2005
 #include <map>
 #include "VarMap.h"
 
-#include <pretty_names.h>
-
 #include <goto-programs/goto_program.h>
 
 class goto_trace_stept 

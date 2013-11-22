@@ -10,7 +10,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"program-too",		switc,		""	},
 { 0,	"function",		string,		""	},
 { 0,	"preprocess",		switc,		""	},
-{ 0,	"slice-by-trace",	string,		""	},
 { 0,	"no-simplify",		switc,		""	},
 { 0,	"unwind",		number,		""	},
 { 0,	"unwindset",		string,		""	},

@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <i2string.h>
-#include <replace_expr.h>
 #include <expr_util.h>
 #include <location.h>
 #include <cprover_prefix.h>

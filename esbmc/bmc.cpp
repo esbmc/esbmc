@@ -36,7 +36,6 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <goto-symex/reachability_tree.h>
 
@@ -510,13 +509,6 @@ bool bmct::run_thread()
 
   try
   {
-    if(options.get_option("slice-by-trace")!="")
-    {
-      symex_slice_by_tracet symex_slice_by_trace;
-      symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation);
-    }
-
     if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
