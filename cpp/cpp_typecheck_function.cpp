@@ -7,7 +7,6 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 \*******************************************************************/
 
 #include <i2string.h>
-#include <identifier.h>
 #include <ansi-c/c_qualifiers.h>
 #include <expr_util.h>
 
