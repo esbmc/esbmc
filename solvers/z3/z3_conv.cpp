@@ -3117,8 +3117,8 @@ z3_convt::renumber_symbol_address(const expr2tc &guard,
     convert_bv(guard, z3_guard);
     it->second = ite(z3_guard, output, it->second);
   } else {
-    // Newly bumped pointer.
-    unsigned int obj_num = pointer_logic.back().add_object(addr_symbol);
+    // Newly bumped pointer. Still needs a new number though.
+    unsigned int obj_num = pointer_logic.back().get_free_obj_num();
     z3::expr output = ctx.fresh_const("ptr_renum", pointer_sort);
     init_pointer_obj(obj_num, new_size, output);
 
