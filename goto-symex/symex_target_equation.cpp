@@ -110,6 +110,7 @@ void
 symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
                                  const sourcet &source)
 {
+  assert(is_symbol2t(symbol));
   SSA_steps.push_back(SSA_stept());
   SSA_stept &SSA_step=SSA_steps.back();
 

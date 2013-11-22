@@ -332,7 +332,7 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   std::list<std::pair<expr2tc,expr2tc> > result_list;
   for (auto &item : internal_deref_items) {
     cur_state->rename_address(item.object);
-    target->renumber(item.object, item.guard, cur_state->source);
+    target->renumber(item.guard, item.object, cur_state->source);
     type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
     address_of2tc addrof(new_ptr, item.object);
     result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
