@@ -3137,6 +3137,14 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     got_obj_num = true;
   }
 
+  // Has this already been renumbered?
+  std::string str = sym.get_symbol_name();
+  renumber_mapt::const_iterator it = renumber_map.find(str);
+  if (it != renumber_map.end()) {
+    output = it->second;
+    return;
+  }
+
   if (!got_obj_num)
     // add object won't duplicate objs for identical exprs (it's a map)
     obj_num = pointer_logic.back().add_object(expr);
