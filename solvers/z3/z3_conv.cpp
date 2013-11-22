@@ -3090,6 +3090,12 @@ z3_convt::convert_expr(const expr2tc &expr)
 }
 
 void
+z3_convt::renumber_symbol_address(const expr2tc &addr_symbol __attribute__((unused)))
+{
+  abort();
+}
+
+void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      z3::expr &output)
 {

@@ -176,6 +176,8 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
         step.converted_output_args.push_back(sym);
       }
     }
+  } else if (step.is_renumber()) {
+    prop_conv.renumber_symbol_address(step.cond);
   } else {
     assert(0 && "Unexpected SSA step type in conversion");
   }

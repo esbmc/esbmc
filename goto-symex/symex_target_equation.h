@@ -102,6 +102,7 @@ public:
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
+    bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
     
     expr2tc guard;
 
