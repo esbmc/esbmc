@@ -11,9 +11,19 @@ Date: June 2003
 #ifndef CPROVER_GOTO_FUNCTIONS_TEMPLATE_H
 #define CPROVER_GOTO_FUNCTIONS_TEMPLATE_H
 
+#define Forall_goto_functions(it, functions) \
+  for(goto_functionst::function_mapt::iterator it=(functions).function_map.begin(); \
+      it!=(functions).function_map.end(); it++)
+
+#define forall_goto_functions(it, functions) \
+  for(goto_functionst::function_mapt::const_iterator it=(functions).function_map.begin(); \
+      it!=(functions).function_map.end(); it++)
+
 #include <iostream>
 
 #include <std_types.h>
+
+#include "goto_program.h"
 
 class goto_functiont
 {
