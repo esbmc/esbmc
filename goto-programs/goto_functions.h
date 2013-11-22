@@ -8,8 +8,8 @@ Date: June 2003
 
 \*******************************************************************/
 
-#ifndef CPROVER_GOTO_FUNCTIONS_TEMPLATE_H
-#define CPROVER_GOTO_FUNCTIONS_TEMPLATE_H
+#ifndef CPROVER_GOTO_FUNCTIONS_H
+#define CPROVER_GOTO_FUNCTIONS_H
 
 #define Forall_goto_functions(it, functions) \
   for(goto_functionst::function_mapt::iterator it=(functions).function_map.begin(); \
