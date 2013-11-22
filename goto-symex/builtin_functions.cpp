@@ -320,6 +320,12 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   dereference(deref, false, false, true);
   // src_ptr is now invalidated.
 
+  // Free the given pointer. This just uses the pointer object from the pointer
+  // variable that's the argument to realloc. It also leads to pointer validity
+  // checking, and checks that the offset is zero.
+  code_free2tc fr(call.operands[0]);
+  symex_free(fr);
+
   // We now have a list of things to work on. Recurse into them, build a result,
   // and then switch between those results afterwards.
   // Result list is the address of the reallocated piece of data, and the guard.
@@ -327,12 +333,6 @@ goto_symext::intrinsic_realloc(const code_function_call2t &call,
   while (internal_deref_items.size() != 0) {
     abort();
   }
-
-  // Free the given pointer. This works at the level of the pointer that's the
-  // argument to realloc, and it performs pointer validity checking, and that
-  // the pointer itself has a zero offset.
-  code_free2tc fr(call.operands[0]);
-  symex_free(fr);
 
   // Rebuild a gigantic if-then-else chain from the result list.
   expr2tc result;
