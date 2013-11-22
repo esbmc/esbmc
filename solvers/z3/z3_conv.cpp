@@ -19,7 +19,6 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <expr_util.h>
 #include <string2array.h>
 #include <type_byte_size.h>
-#include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>
 #include <base_type.h>
