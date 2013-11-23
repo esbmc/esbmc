@@ -365,20 +365,18 @@ namespace std{
       vector(const vector<T>& x): _size(0),  _capacity(1)
       {
         buf = new T[x._size];
-        _size = 0;
-        for(int i = 0 ; i < x.size() ; i++)
-          push_back(x[i]);
-        buf[_size] = T();
-        verify_capacity();
+        _size = x._size;
+        for(int i = 0 ; i < _size; i++)
+          buf[i] = x.buf[i];
+        _capacity = _size;
       }
 
       vector<T>& operator=(const vector<T>& x){
         buf = new T[x._size];
-        _size = 0;
-        for(int i = 0 ; i < x.size() ; i++)
-          push_back(x[i]);
-        buf[_size] = T();
-        verify_capacity();
+        _size = x._size;
+        for(int i = 0 ; i < _size; i++)
+          buf[i] = x.buf[i];
+        _capacity = _size;
         return *this;
       }
 
