@@ -336,10 +336,10 @@ namespace std{
         _capacity = n;
       }
 
-      explicit vector(void t[], void* addr): _size(0),  _capacity(1)
+      explicit vector(T t[], void* addr): _size(0),  _capacity(1)
       {
         int count = 0;
-        for (void *tmp = t; t != addr; t++)
+        for (T *tmp = t; tmp != addr; tmp++)
           count++;
 
         buf = new T[count];
