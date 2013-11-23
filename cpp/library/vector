@@ -355,11 +355,10 @@ namespace std{
       explicit vector ( size_type n, const T& x)
       {
         buf = new T[n];
-        _size = 0;
+        _size = n;
         for(int i = 0; i < n; i++)
-          push_back(x);
-        buf[_size] = T();
-        verify_capacity();
+          buf[i] = x;
+        _capacity = n;
       }
 
       vector(const vector<T>& x): _size(0),  _capacity(1)
