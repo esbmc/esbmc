@@ -593,6 +593,9 @@ namespace std{
       }
 
       iterator insert(iterator position, const T& x){
+        // Fist, give us space for one more item.
+        buf = static_cast<T*>(realloc(buf, sizeof(T)*(_size + 1)));
+
         // We need to shift all fields at or above the position iterator up
         // one place. Backwards copy to avoid overwriting existing data.
         for (int i = _size - 1; i >= position.pos; i--) {
@@ -602,7 +605,7 @@ namespace std{
         // And now install the new value.
         buf[position.pos] = x;
         _size++;
-        verify_capacity();
+        _capacity = _size;
         return position;
       }
 
