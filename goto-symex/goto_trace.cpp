@@ -424,6 +424,11 @@ show_goto_trace(
       // Something deliberately ignored
       break;
 
+    case goto_trace_stept::RENUMBER:
+      out << "Renumbered pointer to ";
+      counterexample_value(out, ns, it->lhs, it->value);
+      break;
+
     default:
       assert(false);
     }
