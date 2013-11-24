@@ -428,7 +428,6 @@ namespace std{
         assert(_size >= 0);
         iterator buffer;
         int n = _size;
-        buf[n] = T();
         buffer.pointer = buf + n;
         buffer.pos = n;
         buffer.vec_pos = buf;
