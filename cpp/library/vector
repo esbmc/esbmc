@@ -343,13 +343,13 @@ namespace std{
           count++;
 
         buf = new T[count];
-        _size = 0;
-        int i=0;
         T* t1 = (T*) t;
         T* addr1 = (T*) addr;
-        while((t1+i)<addr1)
-          push_back(t1[i++]);
-        verify_capacity();
+        for (int i = 0; i < count; i++)
+          buf[i] = t1[i];
+
+        _size = count;
+        _capacity = _size;
       }
 
       explicit vector ( size_type n, const T& x)
