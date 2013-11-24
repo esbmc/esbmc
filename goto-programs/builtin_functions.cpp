@@ -18,6 +18,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <std_code.h>
 #include <std_expr.h>
+#include <type_byte_size.h>
 
 #include <ansi-c/c_types.h>
 
@@ -328,6 +329,17 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(uint_type());
 
     remove_sideeffects(alloc_size, dest);
+
+    // jmorse: multiply alloc size by size of subtype.
+    type2tc subtype;
+    expr2tc alloc_units;
+    migrate_expr(alloc_size, alloc_units);
+    migrate_type(rhs.type(), subtype);
+    mp_integer sz = type_byte_size(*subtype);
+    constant_int2tc sz_expr(uint_type2(), sz);
+    mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
+    alloc_size = migrate_expr_back(byte_size);
+
     const_cast<irept&>(rhs.size_irep()) = alloc_size;
   }
   else
