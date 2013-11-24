@@ -610,6 +610,9 @@ namespace std{
       }
 
       void insert(iterator position, size_type n, const T& x){
+        // Allocate some more memory.
+        buf = static_cast<T*>(realloc(buf, sizeof(T)*(_size + n)));
+
         // Like normal insert, but we have to shift each existing field upwards
         // n positions.
         if (_size != 0) {
@@ -624,7 +627,7 @@ namespace std{
         }
 
         _size += n;
-        verify_capacity();
+        _capacity = n;
       }
 
       void insert(iterator position, iterator first, iterator last){
