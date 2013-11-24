@@ -63,6 +63,10 @@ private:
   bool assign_z3_expr(const exprt expr);
   u_int convert_member_name(const exprt &lhs, const exprt &rhs);
 
+  virtual void renumber_symbol_address(const expr2tc &guard,
+                                       const expr2tc &addr_symbol,
+                                       const expr2tc &new_size);
+
   void setup_pointer_sort(void);
   void convert_type(const type2tc &type, z3::sort &outtype);
 
@@ -77,6 +81,8 @@ private:
 
   void convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                   z3::expr &output);
+  void init_pointer_obj(unsigned int obj_num, const expr2tc &size,
+                        z3::expr &output);
 
   typedef z3::expr (*ast_convert_calltype_new)(const z3::expr &op1,
                                            const z3::expr &op2,
@@ -312,13 +318,16 @@ public:
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, z3::expr> renumber_mapt;
+  renumber_mapt renumber_map;
+
   // Array of obj ID -> address range tuples
   std::list<unsigned int> addr_space_sym_num;
   z3::sort addr_space_tuple_sort;
   z3::sort addr_space_arr_sort;
   z3::func_decl addr_space_tuple_decl;
   std::list<std::map<unsigned, unsigned>> addr_space_data; // Obj id, size
-  std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;

@@ -327,6 +327,12 @@ void bmct::show_program(symex_target_equationt &equation)
       std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
       count++;
     }
+    else if (it->is_renumber())
+    {
+      std::cout << "(" << count << ") " << "renumber: " <<
+                   from_expr(ns, "", it->lhs) << std::endl;
+      count++;
+    }
 #
 #endif
   }

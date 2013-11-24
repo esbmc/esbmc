@@ -152,6 +152,18 @@ public:
   {
     return;
   }
+
+  struct internal_item {
+    expr2tc object;
+    expr2tc offset;
+    expr2tc guard;
+  };
+
+  virtual void dump_internal_state(const std::list<struct internal_item> &data
+                                   __attribute__((unused)))
+  {
+    return;
+  }
 };
 
 /** Class containing expression dereference logic.
@@ -191,7 +203,8 @@ public:
   typedef enum {
     READ,  /// The result of the expression is only read.
     WRITE, /// The result of the expression will be written to.
-    FREE   /// The referred to object will be freed.
+    FREE,   /// The referred to object will be freed.
+    INTERNAL, /// Calling code only wants the internal value-set data.
   } modet;
 
   /** Take an expression and dereference it.
@@ -239,6 +252,11 @@ private:
   /** Whether or not we're operating in a big endian environment. Value for this
    *  is taken from config.ansi_c.endianness. */
   bool is_big_endian;
+  /** List of internal state items -- these contain all the data of interest
+   *  to build_reference_to, but in INTERNAL mode we skip the construction
+   *  of a reference, and instead return the data to the caller via the
+   *  callback. */
+  std::list<dereference_callbackt::internal_item> internal_items;
 
   /** Interpret an expression that modifies the guard. i.e., an 'if' or a
    *  piece of logic that can be short-circuited.

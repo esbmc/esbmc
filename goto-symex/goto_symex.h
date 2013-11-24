@@ -20,6 +20,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <goto-programs/goto_functions.h>
 
+#include <pointer-analysis/dereference.h>
+
 #include "goto_symex_state.h"
 #include "symex_target.h"
 
@@ -158,7 +160,8 @@ protected:
    *  @param write Whether or not we're writing into this object.
    *  @param free Whether we're freeing this pointer.
    */
-  void dereference(expr2tc &expr, const bool write, bool free = false);
+  void dereference(expr2tc &expr, const bool write, bool free = false,
+                   bool internal = false);
 
   // symex
 
@@ -357,6 +360,10 @@ protected:
   void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
 
+  /** Implementation of realloc. */
+  void intrinsic_realloc(const code_function_call2t &call,
+                         reachability_treet &arg);
+
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
@@ -539,7 +546,10 @@ protected:
   void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Pointer modelling update function */
+  void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                         expr2tc size = expr2tc());
   /** Symbolic implementation of free */
   void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
@@ -671,6 +681,10 @@ protected:
   bool forward_condition;
   /** Names of functions that we've complained about missing bodies of. */
   static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  /** Set of dereference state records; this field is used as a mailbox between
+   *  the dereference code and the caller, who will inspect the contents after
+   *  a call to dereference (in INTERNAL mode) completes. */
+  std::list<dereference_callbackt::internal_item> internal_deref_items;
 };
 
 #endif

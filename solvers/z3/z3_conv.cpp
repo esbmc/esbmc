@@ -83,7 +83,6 @@ z3_convt::z3_convt(bool uw, bool int_encoding, bool smt, bool is_cpp,
   pointer_logic.push_back(pointer_logict());
   addr_space_sym_num.push_back(0);
   addr_space_data.push_back(std::map<unsigned, unsigned>());
-  total_mem_space.push_back(0);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -191,7 +190,6 @@ z3_convt::intr_push_ctx(void)
   pointer_logic.push_back(pointer_logic.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   addr_space_data.push_back(addr_space_data.back());
-  total_mem_space.push_back(total_mem_space.back());
 
   // Store where we are in the list of assumpts.
   std::list<z3::expr>::iterator it = assumpt.end();
@@ -218,7 +216,6 @@ z3_convt::intr_pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
-  total_mem_space.pop_back();
 
   level_ctx--;
 }
@@ -1628,7 +1625,13 @@ z3_convt::convert_smt_expr(const address_of2t &obj, void *_bv)
     const constant_string2t &str = to_constant_string2t(obj.ptr_obj);
     std::string identifier =
       "address_of_str_const(" + str.value.as_string() + ")";
-    convert_identifier_pointer(obj.ptr_obj, identifier, output);
+
+    // Create a symbol for this address -- there's no need to worry about the
+    // fact that this is essentially a global and not renamed, because in any
+    // real binary strings will be collated into some static location in the
+    // .data segment.
+    symbol2tc sym(obj.ptr_obj->type, identifier);
+    convert_identifier_pointer(sym, identifier, output);
   } else if (is_if2t(obj.ptr_obj)) {
     // We can't nondeterministically take the address of something; So instead
     // rewrite this to be if (cond) ? &a : &b;.
@@ -3089,6 +3092,42 @@ z3_convt::convert_expr(const expr2tc &expr)
 }
 
 void
+z3_convt::renumber_symbol_address(const expr2tc &guard,
+                                  const expr2tc &addr_symbol,
+                                  const expr2tc &new_size)
+{
+  const symbol2t &sym = to_symbol2t(addr_symbol);
+  std::string str = sym.get_symbol_name();
+
+  // Two different approaches if we do or don't have an address-of pointer
+  // variable already.
+
+  renumber_mapt::iterator it = renumber_map.find(str);
+  if (it != renumber_map.end()) {
+    // There's already an address-of variable for this pointer. Set up a new
+    // object number, and nondeterministically pick the new value.
+
+    unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
+    z3::expr output = ctx.fresh_const("ptr_renum", pointer_sort);
+    init_pointer_obj(new_obj_num, new_size, output);
+
+    // Now merge with the old value for all future address-of's
+    z3::expr z3_guard;
+    convert_bv(guard, z3_guard);
+    it->second = ite(z3_guard, output, it->second);
+  } else {
+    // Newly bumped pointer. Still needs a new number though.
+    unsigned int obj_num = pointer_logic.back().get_free_obj_num();
+    z3::expr output = ctx.fresh_const("ptr_renum", pointer_sort);
+    init_pointer_obj(obj_num, new_size, output);
+
+    // Store in renumbered store.
+    renumber_mapt::value_type v(str, output);
+    renumber_map.insert(v);
+  }
+}
+
+void
 z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
                                      z3::expr &output)
 {
@@ -3096,12 +3135,19 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   unsigned int obj_num;
   bool got_obj_num = false;
 
-  if (is_symbol2t(expr)) {
-    const symbol2t &sym = to_symbol2t(expr);
-    if (sym.thename == "NULL" || sym.thename == "0") {
-      obj_num = pointer_logic.back().get_null_object();
-      got_obj_num = true;
-    }
+  assert(is_symbol2t(expr));
+  const symbol2t &sym = to_symbol2t(expr);
+  if (sym.thename == "NULL" || sym.thename == "0") {
+    obj_num = pointer_logic.back().get_null_object();
+    got_obj_num = true;
+  }
+
+  // Has this already been renumbered?
+  std::string str = sym.get_symbol_name();
+  renumber_mapt::const_iterator it = renumber_map.find(str);
+  if (it != renumber_map.end()) {
+    output = it->second;
+    return;
   }
 
   if (!got_obj_num)
@@ -3114,6 +3160,31 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
+
+    // Fetch a size.
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    expr2tc size;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      size = constant_int2tc(ptr_loc_type, BigInt(type_size));
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      size = e->size;
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      size = constant_int2tc(ptr_loc_type, BigInt(1));
+    }
+
+    init_pointer_obj(obj_num, size, output);
+  }
+}
+
+void
+z3_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &sz,
+                           z3::expr &output)
+{
 
     z3::expr ptr_val = pointer_decl(ctx.esbmc_int_val(obj_num),
                                        ctx.esbmc_int_val(0));
@@ -3131,37 +3202,9 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 
     // Another thing to note is that the end var must be /the size of the obj/
     // from start. Express this in irep.
-    expr2tc endisequal;
-    expr2tc the_offs;
-    try {
-      uint64_t type_size = expr->type->get_width() / 8;
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(type_size));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (array_type2t::dyn_sized_array_excp *e) {
-      // Dynamically (nondet) sized array; take that size and use it for the
-      // offset-to-end expression.
-      the_offs = e->size;
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (type2t::symbolic_type_excp *e) {
-      // Type is empty or code -- something that we can never have a real size
-      // for. In that case, create an object of size 1: this means we have a
-      // valid entry in the address map, but that any modification of the
-      // pointer leads to invalidness, because there's no size to think about.
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(1));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    }
-
-    // Also record the amount of memory space we're working with for later usage
-    unsigned int mem_size = 1;
-    try {
-      if (!is_code_type(expr))
-        mem_size = type_byte_size(*expr->type.get()).to_long() + 1;
-    } catch (array_type2t::dyn_sized_array_excp *foo) {
-    }
-    total_mem_space.back() += mem_size;
+    expr2tc the_offs = sz;
+    add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
+    expr2tc endisequal = equality2tc(start_plus_offs, end_sym);
 
     // Assert that start + offs == end
     z3::expr offs_eq;
@@ -3182,7 +3225,7 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     // Generate address space layout constraints.
     finalize_pointer_chain(obj_num);
 
-    addr_space_data.back()[obj_num] = mem_size;
+    addr_space_data.back()[obj_num] = 1; // XXX - nothing uses this data.
 
     z3::expr start_ast, end_ast;
     convert_bv(start_sym, start_ast);
@@ -3214,9 +3257,6 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     z3::expr select = z3::select(allocarray, idxnum);
     z3::expr isfalse = ctx.bool_val(false) == select;
     assert_formula(isfalse);
-  }
-
-  DEBUGLOC;
 }
 
 void

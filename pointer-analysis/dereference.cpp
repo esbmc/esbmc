@@ -361,8 +361,8 @@ dereferencet::dereference_expr_nonscalar(
     index2t &index = to_index2t(expr);
 
     // first make sure there are no dereferences in there
-    dereference_expr(index.source_value, guard, mode);
-    dereference_expr(index.index, guard, mode);
+    dereference_expr(index.source_value, guard, dereferencet::READ);
+    dereference_expr(index.index, guard, dereferencet::READ);
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
     expr2tc result = dereference(tmp, type2tc(), guard, mode,
@@ -378,7 +378,7 @@ dereferencet::dereference_expr_nonscalar(
                                         mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
-      dereference_expr(to_index2t(expr).index, guard, mode);
+      dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
       scalar_step_list.push_front(expr);
       res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
                                        mode, scalar_step_list);
@@ -439,6 +439,7 @@ dereferencet::dereference(
   std::list<expr2tc> *scalar_step_list)
 {
   assert(is_pointer_type(src));
+  internal_items.clear();
 
   // Target type is either a scalar type passed down to us, or we have a chain
   // of scalar steps available that end up at a scalar type. The result of this
@@ -477,12 +478,16 @@ dereferencet::dereference(
     }
   }
 
-  if (is_nil_expr(value))
+  if (is_nil_expr(value) && mode != INTERNAL)
   {
     // Dereference failed entirely; various assertions will explode later down
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
+  } else if (mode == INTERNAL) {
+    // Deposit internal values with the caller, then clear.
+    dereference_callback.dump_internal_state(internal_items);
+    internal_items.clear();
   }
 
   return value;
@@ -580,6 +585,7 @@ dereferencet::build_reference_to(
     guardt tmp_guard(guard);
     tmp_guard.move(invalid_pointer_expr);
     dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
+
     return value;
   }
 
@@ -649,6 +655,18 @@ dereferencet::build_reference_to(
   if (!is_constant_int2t(final_offset)) {
     final_offset = pointer_offset2tc(index_type2(), deref_expr);
     assert(o.alignment != 0);
+  }
+
+  // If we're in internal mode, collect all of our data into one struct, insert
+  // it into the list of internal data, and then bail. The caller does not want
+  // to have a reference built at all.
+  if (mode == INTERNAL) {
+    dereference_callbackt::internal_item internal;
+    internal.object = value;
+    internal.offset = final_offset;
+    internal.guard = pointer_guard;
+    internal_items.push_back(internal);
+    return expr2tc();
   }
 
   // Encode some access bounds checks.
@@ -1505,22 +1523,33 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
 
   assert(is_array_type(expr) || is_string_type(expr));
 
-  // Dance around getting the array type normalised.
-  type2tc new_string_type;
-  const array_type2t arr_type = get_arr_type(expr);
+  expr2tc arrsize;
+  const symbolt &sym = ns.lookup(to_symbol2t(expr).thename);
+  if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+    // Construct a dynamic_size irep.
+    address_of2tc addrof(expr->type, expr);
+    arrsize = dynamic_size2tc(addrof);
+  } else {
+    // Calculate size from type.
 
-  // XXX --  arrays were assigned names, but we're skipping that for the moment
-  // std::string name = array_name(ns, expr.source_value);
+    // Dance around getting the array type normalised.
+    type2tc new_string_type;
+    const array_type2t arr_type = get_arr_type(expr);
 
-  // Firstly, bail if this is an infinite sized array. There are no bounds
-  // checks to be performed.
-  if (arr_type.size_is_infinite)
-    return;
+    // XXX -- arrays were assigned names, but we're skipping that for the moment
+    // std::string name = array_name(ns, expr.source_value);
 
-  // Secondly, try to calc the size of the array.
-  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
-  constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
-  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
+    // Firstly, bail if this is an infinite sized array. There are no bounds
+    // checks to be performed.
+    if (arr_type.size_is_infinite)
+      return;
+
+    // Secondly, try to calc the size of the array.
+    unsigned long subtype_size_int
+      = type_byte_size(*arr_type.subtype).to_ulong();
+    constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
+    arrsize = mul2tc(get_uint32_type(), arr_type.array_size, subtype_size);
+  }
 
   // Then, expressions as to whether the access is over or under the array
   // size.

@@ -52,7 +52,7 @@ unsigned pointer_logict::add_object(const expr2tc &expr)
   ret.first->second = objects.size() - 1;
   lookup.push_back(expr);
   assert(lookup.size() == objects.size());
-  return objects.size() - 1;
+  return objects.size() - 1 + obj_num_offset;
 }
 
 /*******************************************************************\
@@ -210,6 +210,7 @@ Function: pointer_logict::pointer_logict
 
 pointer_logict::pointer_logict()
 {
+  obj_num_offset = 0;
 
   type2tc type(new pointer_type2t(type2tc(new empty_type2t())));
   symbol2tc sym(type, "NULL");
@@ -220,6 +221,7 @@ pointer_logict::pointer_logict()
   // add INVALID
   symbol2tc invalid(type, "INVALID");
   invalid_object = add_object(invalid);
+
 }
 
 /*******************************************************************\

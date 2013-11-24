@@ -1,12 +1,9 @@
 #include <cassert>
 #include <iostream>
 #include <vector>
-using namespace std;
+#include <cstdlib>
 
-short unsigned int rand () {
-	short unsigned int a;
-	return a;
-}
+using namespace std;
 
 int main() {
     vector<int> vectorOne(10);

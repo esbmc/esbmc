@@ -106,6 +106,24 @@ void symex_target_equationt::assertion(
     SSA_step.short_output(ns, std::cout);
 }
 
+void
+symex_target_equationt::renumber(const expr2tc &guard, const expr2tc &symbol,
+                                 const expr2tc &size, const sourcet &source)
+{
+  assert(is_symbol2t(symbol));
+  assert(is_bv_type(size));
+  SSA_steps.push_back(SSA_stept());
+  SSA_stept &SSA_step=SSA_steps.back();
+
+  SSA_step.guard = guard;
+  SSA_step.lhs = symbol;
+  SSA_step.rhs = size;
+  SSA_step.type=goto_trace_stept::RENUMBER;
+  SSA_step.source=source;
+
+  if (debug_print)
+    SSA_step.short_output(ns, std::cout);
+}
 
 void symex_target_equationt::convert(prop_convt &prop_conv)
 {
@@ -161,6 +179,8 @@ void symex_target_equationt::convert_internal_step(prop_convt &prop_conv,
         step.converted_output_args.push_back(sym);
       }
     }
+  } else if (step.is_renumber()) {
+    prop_conv.renumber_symbol_address(step.guard, step.lhs, step.rhs);
   } else {
     assert(0 && "Unexpected SSA step type in conversion");
   }
@@ -238,6 +258,10 @@ void symex_target_equationt::SSA_stept::short_output(
   if (is_assignment() || is_assert() || is_assume())
   {
     out <<  from_expr(ns, "", cond) << std::endl;
+  }
+  else if (is_renumber())
+  {
+    out << "renumber: " << from_expr(ns, "", lhs) << std::endl;
   }
 }
 
