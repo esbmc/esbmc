@@ -259,6 +259,10 @@ void symex_target_equationt::SSA_stept::short_output(
   {
     out <<  from_expr(ns, "", cond) << std::endl;
   }
+  else if (is_renumber())
+  {
+    out << "renumber: " << from_expr(ns, "", lhs) << std::endl;
+  }
 }
 
 void
