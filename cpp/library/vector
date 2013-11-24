@@ -323,7 +323,7 @@ namespace std{
           buf[n++] = *t1;
         }
         _size = n;
-        verify_capacity();
+        _capacity = _size;
       }
 
       explicit vector(size_type n): _size(0),  _capacity(1)
@@ -409,7 +409,7 @@ namespace std{
         T* t21 = (T*) t2;
         while((t11+i)<t21)
           push_back(t11[i++]);
-        verify_capacity();
+        _capacity = _size;
       }
 
       // iterators:
@@ -480,7 +480,7 @@ namespace std{
         // once, and then fill it with default data.
         unsigned int difference = sz - _size;
         _size = sz;
-        verify_capacity();
+        buf = static_cast<T*>(realloc(buf, sizeof(T)*_size));
         for (unsigned int n = 0; n < difference; n++)
           buf[n] = T();
 
@@ -495,7 +495,7 @@ namespace std{
 
         unsigned int difference = sz - _size;
         _size = sz;
-        verify_capacity();
+        reserve(_size);
         for (unsigned int n = 0; n < difference; n++)
           buf[n] = t;
 
@@ -504,7 +504,7 @@ namespace std{
 
       void resize(iterator i){
         _size = i.pos;
-        verify_capacity();
+        reserve(_size);
       }
       size_type capacity() const
       {
@@ -577,12 +577,8 @@ namespace std{
         assert(0 <= _size);
         assert(_size < VECTOR_CAPACITY);
         _size++;
-        verify_capacity();
-        buf[_size-1] = x;
-      }
-
-      void verify_capacity(){
         reserve(_size);
+        buf[_size-1] = x;
       }
 
       void pop_back()
@@ -635,7 +631,6 @@ namespace std{
           insert(position++, *first);
           first++;
         }
-        verify_capacity();
       }
 
       void insert(iterator position, T n[], T* x){
@@ -643,7 +638,6 @@ namespace std{
         while((n+j)<x){
           insert(position++,n[j++]);
         }
-        verify_capacity();
       }
 
       iterator erase(iterator position){
@@ -652,7 +646,6 @@ namespace std{
         }
         _size--;
         buf[_size] = T();
-        verify_capacity();
         return position;
       }
 
