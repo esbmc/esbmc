@@ -399,8 +399,7 @@ namespace std{
           buf[n++] = *t1;
         }
         _size = n;
-        buf[_size] = T();
-        verify_capacity();
+        _capacity = _size;
       }
 
       void assign(void t1[], void *t2){
