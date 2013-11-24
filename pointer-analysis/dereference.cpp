@@ -1523,22 +1523,33 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
 
   assert(is_array_type(expr) || is_string_type(expr));
 
-  // Dance around getting the array type normalised.
-  type2tc new_string_type;
-  const array_type2t arr_type = get_arr_type(expr);
+  expr2tc arrsize;
+  const symbolt &sym = ns.lookup(to_symbol2t(expr).thename);
+  if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+    // Construct a dynamic_size irep.
+    address_of2tc addrof(expr->type, expr);
+    arrsize = dynamic_size2tc(addrof);
+  } else {
+    // Calculate size from type.
 
-  // XXX --  arrays were assigned names, but we're skipping that for the moment
-  // std::string name = array_name(ns, expr.source_value);
+    // Dance around getting the array type normalised.
+    type2tc new_string_type;
+    const array_type2t arr_type = get_arr_type(expr);
 
-  // Firstly, bail if this is an infinite sized array. There are no bounds
-  // checks to be performed.
-  if (arr_type.size_is_infinite)
-    return;
+    // XXX -- arrays were assigned names, but we're skipping that for the moment
+    // std::string name = array_name(ns, expr.source_value);
 
-  // Secondly, try to calc the size of the array.
-  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
-  constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
-  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
+    // Firstly, bail if this is an infinite sized array. There are no bounds
+    // checks to be performed.
+    if (arr_type.size_is_infinite)
+      return;
+
+    // Secondly, try to calc the size of the array.
+    unsigned long subtype_size_int
+      = type_byte_size(*arr_type.subtype).to_ulong();
+    constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
+    arrsize = mul2tc(get_uint32_type(), arr_type.array_size, subtype_size);
+  }
 
   // Then, expressions as to whether the access is over or under the array
   // size.
