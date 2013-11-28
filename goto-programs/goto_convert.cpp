@@ -32,7 +32,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #define DEBUGLOC
 #endif
 
-
 static void
 link_up_type_names(irept &irep, const namespacet &ns)
 {
@@ -497,6 +496,12 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
+  bool last_for=is_for_block();
+  bool last_while=is_while_block();
+
+  if(inductive_step && code.add("inside_loop") != irept(""))
+    set_for_block(true);
+
   std::list<irep_idt> locals;
   //extract all the local variables from the block
 
@@ -564,6 +569,9 @@ void goto_convertt::convert_block(
 
     locals.pop_back();
   }
+
+  set_for_block(last_for);
+  set_while_block(last_while);
 }
 
 /*******************************************************************\
