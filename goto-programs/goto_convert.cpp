@@ -892,6 +892,18 @@ void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
   {
     if (is_for_block() || is_while_block())
       loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+    else
+    {
+      // look if it is a global/static variable
+      symbolst::iterator s_it=context.symbols.find(exp.identifier());
+      if(s_it!=context.symbols.end())
+      {
+        symbolt &symbol=s_it->second;
+        if(symbol.static_lifetime)
+          loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
+      }
+    }
+
     if (!is_expr_in_state(exp, str))
     {
       unsigned int size = str.components().size();
