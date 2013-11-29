@@ -1064,7 +1064,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       guardt newguard(guard);
       newguard.add(field_guard);
       dereference_failure("pointer dereference",
-                          "Oversized field offset", guard);
+                          "Oversized field offset", newguard);
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     } else if (alignment >= (config.ansi_c.word_size / 8)) {
