@@ -930,6 +930,7 @@ const irep_idt irept::s_offsetof_type = dstring("offsetof_type");
 
 const irep_idt irept::id_address_of = dstring("address_of");
 const irep_idt irept::id_and = dstring("and");
+const irep_idt irept::id_or = dstring("or");
 const irep_idt irept::id_array = dstring("array");
 const irep_idt irept::id_bool = dstring("bool");
 const irep_idt irept::id_code = dstring("code");
