@@ -3515,8 +3515,6 @@ void goto_convertt::replace_ifthenelse(
     if (!found) std::cout << "failed" << std::endl;
     assert(found);
 
-    if (!new_expr.type().is_bool())
-      new_expr.make_typecast(bool_typet());
     expr = new_expr;
   }
   else
@@ -3649,11 +3647,12 @@ void goto_convertt::convert_ifthenelse(
 
   remove_sideeffects(tmp_guard, dest);
   if (inductive_step && (is_for_block() || is_while_block()))
+  {
     replace_ifthenelse(tmp_guard);
+    tmp_guard.make_typecast(bool_typet());
+  }
 
-  //remove_sideeffects(tmp_guard, dest);
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
-
   set_ifthenelse_block(false);
 }
 
