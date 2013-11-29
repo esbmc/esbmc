@@ -570,9 +570,14 @@ void goto_convertt::convert_block(
     locals.pop_back();
   }
 
-  set_for_block(last_for);
-  set_while_block(last_while);
+  if(inductive_step)
+  {
+    code.remove("inside_loop");
+    set_for_block(last_for);
+    set_while_block(last_while);
+  }
 }
+
 
 /*******************************************************************\
 
