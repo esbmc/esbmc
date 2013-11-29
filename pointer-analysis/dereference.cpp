@@ -857,8 +857,15 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     } else {
       // Badness has occurred; byte extract is needed.
       // XXX -- this should actually extract and stitch.
-      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
-                              is_big_endian);
+      if (type->get_width() == 8)
+        // You can always read a byte out of anything.
+        value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
+                                is_big_endian);
+      else
+        // XXX XXX XXX -- bail for the moment. We're now producing invalid
+        // formula as a result of the fact that byte extract always gets
+        // converted to one byte, rather than what we request.
+        value = make_failed_symbol(type);
     }
   } else {
     // This either isn't aligned or is the wrong size. That might be fine if
