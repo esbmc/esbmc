@@ -2535,7 +2535,7 @@ void goto_convertt::convert_while(
           !code.op0().op0().op1().is_nil())
       {
         exprt *lhs=&code.op0().op0().op0(),
-            *rhs=&code.op0().op0().op1();
+              *rhs=&code.op0().op0().op1();
         if(rhs->id()=="sideeffect" &&
             (rhs->statement()=="cpp_new" ||
                 rhs->statement()=="cpp_new[]"))
@@ -3521,12 +3521,11 @@ void goto_convertt::replace_ifthenelse(
     assert(expr.operands().size()==2);
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
-    if (result_op0 != nondet_vars.end() &&
-        result_op1 != nondet_vars.end())
+
+    if (result_op0 != nondet_vars.end() && result_op1 != nondet_vars.end())
       return;
     else if (expr.op0().is_constant() || expr.op1().is_constant()) {
-      if (result_op0 != nondet_vars.end() ||
-          result_op1 != nondet_vars.end())
+      if (result_op0 != nondet_vars.end() || result_op1 != nondet_vars.end())
         return;
     }
 
