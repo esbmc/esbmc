@@ -3501,6 +3501,9 @@ void goto_convertt::replace_ifthenelse(
 
   bool found=false;
 
+  if(expr.id()=="constant")
+    return;
+
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
     exprt new_expr;
@@ -3519,6 +3522,15 @@ void goto_convertt::replace_ifthenelse(
   else
   {
     assert(expr.operands().size()==2);
+
+    if(expr.has_operands())
+    {
+      exprt::operandst::iterator it = expr.operands().begin();
+      for( ; it != expr.operands().end(); ++it)
+        replace_ifthenelse(*it);
+      return;
+    }
+
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
 
