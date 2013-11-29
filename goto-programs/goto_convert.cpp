@@ -1783,10 +1783,7 @@ void goto_convertt::convert_for(
 
   // do the c label
   if (inductive_step)
-  {
     init_k_indice(dest);
-    init_k_induction_loop(dest);
-  }
 
   // do the v label
   goto_programt tmp_v;
@@ -1872,18 +1869,6 @@ void goto_convertt::convert_for(
   targets.restore(old_targets);
   set_for_block(false);
   state_counter++;
-
-  if(inductive_step)
-  {
-    std::string identifier;
-    identifier = "kinductionloop$"+i2string(1);
-
-    exprt lhs_index = symbol_exprt(identifier, bool_typet());
-
-    //kindice=kindice+1
-    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
-    copy(new_assign_plus, ASSIGN, dest);
-  }
 }
 
 /*******************************************************************\
@@ -2013,29 +1998,6 @@ void goto_convertt::init_k_indice(
   identifier = "kindice$"+i2string(state_counter);
   exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
-  code_assignt new_assign(lhs_index,zero_expr);
-  copy(new_assign, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::init_k_indice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::init_k_induction_loop(
-  goto_programt &dest)
-{
-  std::string identifier;
-  identifier = "kinductionloop$"+i2string(1);
-  exprt lhs_index = symbol_exprt(identifier, bool_typet());
-  exprt zero_expr = gen_one(bool_typet());
   code_assignt new_assign(lhs_index,zero_expr);
   copy(new_assign, ASSIGN, dest);
 }
