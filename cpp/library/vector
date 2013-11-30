@@ -480,6 +480,8 @@ namespace std{
         // once, and then fill it with default data.
         unsigned int difference = sz - _size;
         buf = static_cast<T*>(realloc(buf, sizeof(T) * sz));
+        // XXX -- really we should be initializing with a nondeterministic value
+        // to model the fact that these new elements are undefined.
         for (unsigned int n = _size; n < sz; n++)
           buf[n] = T();
 
