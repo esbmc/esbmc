@@ -1223,7 +1223,8 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred) {
 	last--;
 	while(first != last)
 	{
-		if(pred(val, *last) || val == *first) return last;
+          // Return the iterator _before_ the predicate becomes true.
+		if(!pred(val, *last)) return ++last;
 		else last--;
 	}
 	return last;
