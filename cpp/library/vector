@@ -479,11 +479,12 @@ namespace std{
         // Rather than repeatedly pushing back, bump up the size of the vector
         // once, and then fill it with default data.
         unsigned int difference = sz - _size;
-        _size = sz;
-        buf = static_cast<T*>(realloc(buf, sizeof(T)*_size));
-        for (unsigned int n = 0; n < difference; n++)
+        buf = static_cast<T*>(realloc(buf, sizeof(T) * sz));
+        for (unsigned int n = _size; n < sz; n++)
           buf[n] = T();
 
+        _size = sz;
+        _capacity = _size;
         return;
       }
 
