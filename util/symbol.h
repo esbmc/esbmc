@@ -97,7 +97,8 @@ public:
     SYM_SWAP2(is_volatile);
   }
 
-  void show(std::ostream &out) const;
+  void show(std::ostream &out = std::cout) const;
+  void dump();
 
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);

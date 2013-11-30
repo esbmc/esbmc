@@ -21,6 +21,23 @@ Function: symbolt::show
 
 \*******************************************************************/
 
+void symbolt::dump()
+{
+  show(std::cout);
+}
+
+/*******************************************************************\
+
+Function: symbolt::show
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
 void symbolt::show(std::ostream &out) const
 {
   out << "  " << name << std::endl;
