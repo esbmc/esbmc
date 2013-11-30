@@ -218,7 +218,7 @@ protected:
   bool is_while_block() const {return while_block;}
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr, const struct_typet &str);
-  void get_struct_components(const exprt &exp, struct_typet &str);
+  void get_struct_components(const exprt &exp);
   void replace_cond(exprt &tmp, goto_programt &dest);
   void increment_var(const exprt &var, goto_programt &dest);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
