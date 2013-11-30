@@ -1926,7 +1926,7 @@ void make_heap(RanIt first, RanIt last){
 	while(t++!=last)
 		n++;
 	int i = n/2;
-	int pai, filho;
+	int parent, child;
 	t = last;
 	for (int j = 0;j < n/2;j++){
 
@@ -1942,20 +1942,20 @@ void make_heap(RanIt first, RanIt last){
 			*t = *(first+n);
 			*(first+n) = *first;
 		}
-		pai = i;
-		filho = i*2+1;
-		while (filho < n){
-			if ((filho + 1 < n)  &&  (*(first+filho + 1) > *(first+filho)))
-				filho++;
-			if (*(first+filho) > *t){
-				*(first+pai) = *(first+filho);
-				pai = filho;
-				filho = pai*2 + 1;
+		parent = i;
+		child = i*2+1;
+		while (child < n){
+			if ((child + 1 < n)  &&  (*(first+child + 1) > *(first+child)))
+				child++;
+			if (*(first+child) > *t){
+				*(first+parent) = *(first+child);
+				parent = child;
+				child = parent*2 + 1;
 			}
 			else
 				break;
 		}
-		*(first+pai) = *t;
+		*(first+parent) = *t;
 	}
 }
 
