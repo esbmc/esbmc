@@ -81,6 +81,52 @@ std::ostream &operator<<(std::ostream &out,
 
 /*******************************************************************\
 
+Function: symbolt::to_expr
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+exprt symbolt::to_expr() const
+{
+  exprt dest;
+
+  dest.clear();
+  dest.type()=type;
+  dest.symvalue(value);
+  dest.name(name);
+  dest.module(module);
+  dest.base_name(base_name);
+  dest.mode(mode);
+  dest.pretty_name(pretty_name);
+  dest.ordering(ordering);
+
+  if (theorem) dest.theorem(true);
+  if (axiom) dest.axiom(true);
+  if (is_type) dest.is_type(true);
+  if (is_macro) dest.is_macro(true);
+  if (is_exported) dest.is_exported(true);
+  if (is_input) dest.is_input(true);
+  if (is_output) dest.is_output(true);
+  if (is_statevar) dest.is_statevar(true);
+  if (is_actual) dest.is_actual(true);
+  if (free_var) dest.free_var(true);
+  if (binding) dest.binding(true);
+  if (lvalue) dest.lvalue(true);
+  if (static_lifetime) dest.static_lifetime(true);
+  if (file_local) dest.file_local(true);
+  if (is_extern) dest.is_extern(true);
+  if (is_volatile) dest.is_volatile(true);
+
+  return dest;
+}
+
+/*******************************************************************\
+
 Function: symbolt::to_irep
 
   Inputs:
