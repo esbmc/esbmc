@@ -429,19 +429,19 @@ void goto_symext::symex_assign_concat(
     typecast2tc cast(get_uint_type(shift_distance), rhs);
     symex_assign_rec(cat.side_2, cast, guard);
   } else {
-    assert(cat.side_2->type->get_width() == 8);
-    // Extract lower byte
-    typecast2tc cast(get_uint8_type(), rhs);
+    assert(is_scalar_type(rhs) && "Can't assign a nonscalar to a concat expr");
+    // Extract lower bytes
+    typecast2tc cast(cat.side_2->type, rhs);
     symex_assign_rec(cat.side_2, cast, guard);
 
-    // Shift one byte off the end, and assign the remainder to the other
+    // Shift those bytes off the end, and assign the remainder to the other
     // operand.
-    unsigned int shift_distance = 8;
+    unsigned int shift_distance = cat.side_2->type->get_width();
     expr2tc shift_dist = gen_uint(shift_distance);
     shift_dist = typecast2tc(rhs->type, shift_dist);
     ashr2tc shr(rhs->type, rhs, shift_dist);
 
-    unsigned int cast_size = cat.type->get_width() - 8;
+    unsigned int cast_size = cat.type->get_width() - shift_distance;
     typecast2tc cast2(get_uint_type(cast_size), rhs);
     symex_assign_rec(cat.side_1, cast2, guard);
   }
