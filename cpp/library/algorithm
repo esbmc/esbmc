@@ -737,8 +737,9 @@ void rotate(FwdIt first, FwdIt middle, FwdIt last) {
 
 template<class FwdIt, class OutIt>
 OutIt rotate_copy(FwdIt first, FwdIt mid, FwdIt last, OutIt dest) {
+        FwdIt orig_mid = mid;
 	while (mid!=last) *dest++ = *mid++;
-	while (first!=mid) *dest++ = *first++;
+	while (first!=orig_mid) *dest++ = *first++;
 	return dest;
 }
 
@@ -746,8 +747,9 @@ template<class FwdIt, class OutIt>
 OutIt rotate_copy(FwdIt *first, FwdIt *mid, FwdIt *last, OutIt dest) {
 	//dest=copy (mid,last,dest);
 	//return dest; //copy (first,mid,dest);
+        FwdIt *orig_mid = mid;
 	while (mid!=last) *dest++ = *mid++;
-	while (first!=mid) *dest++ = *first++;
+	while (first!=orig_mid) *dest++ = *first++;
 	return dest;
 }
 
