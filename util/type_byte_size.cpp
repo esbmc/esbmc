@@ -56,7 +56,11 @@ member_offset(const struct_type2t &type, const irep_idt &member)
   forall_types(it, type.members) {
     // If the current field is 64 bits, and we're on a 32 bit machine, then we
     // _must_ round up to 64 bits now.
-    if ((*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+    if (is_scalar_type(*it) && !is_code_type(*it) &&
+        (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+      round_up_to_int64(result);
+
+    if (is_structure_type(*it))
       round_up_to_int64(result);
 
     if (type.member_names[idx] == member.as_string())
