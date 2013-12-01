@@ -706,8 +706,13 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       // Base must be struct or array. However we're going to burst into flames
       // if we access a byte array as a struct; except that's legitimate when
       // we've just malloc'd it. So, special case that too.
-      const type2tc &base_type_of_steps =
+      type2tc base_type_of_steps =
         (*scalar_step_list->front()->get_sub_expr(0))->type;
+
+      // The base type might be symbolic, btw. This is due to the return type
+      // of some dereferences being symbol types; something to chase and
+      // eliminate at a later date.
+      base_type_of_steps = ns.follow(base_type_of_steps);
 
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
@@ -1580,8 +1585,11 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
   // Check that either the base type that these steps are applied to matches
   // the type of the object we're wrapping in these steps. It's a type error
   // if there isn't a match.
-  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-  if (dereference_type_compare(value, base_of_steps->type)) {
+  type2tc base_of_steps_type =
+    (*scalar_step_list->front()->get_sub_expr(0))->type;
+  base_of_steps_type = ns.follow(base_of_steps_type);
+
+  if (dereference_type_compare(value, base_of_steps_type)) {
     // We can just reconstruct this.
     expr2tc accuml = value;
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();
