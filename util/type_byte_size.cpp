@@ -154,6 +154,11 @@ type_byte_size(const type2t &type)
           (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
         round_up_to_int64(accumulated_size);
 
+      // While we're at it, round any struct/union up to 64 bit alignment too,
+      // as that might require such alignment due to internal doubles.
+      if (is_structure_type(*it))
+        round_up_to_int64(accumulated_size);
+
       mp_integer memb_size = type_byte_size(**it);
 
       round_up_to_word(memb_size);
