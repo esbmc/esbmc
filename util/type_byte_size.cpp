@@ -148,8 +148,10 @@ type_byte_size(const type2t &type)
     mp_integer accumulated_size(0);
     forall_types(it, t2.members) {
       // If the current field is 64 bits, and we're on a 32 bit machine, then we
-      // _must_ round up to 64 bits now.
-      if ((*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+      // _must_ round up to 64 bits now. Also guard against symbolic types
+      // as operands.
+      if (is_scalar_type(*it) && !is_code_type(*it) &&
+          (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
         round_up_to_int64(accumulated_size);
 
       mp_integer memb_size = type_byte_size(**it);
