@@ -903,7 +903,12 @@ string::string(string& s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
 	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
 	int i,j;
-	this->str = new char[s._size - n + 1];
+
+        // Avoid allocating a negative amount.
+        int sz = s._size - n + 1;
+        if (sz < 0)
+          sz = 0;
+	this->str = new char[sz];
 	this->_size = s._size - n;
 	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
 		this->str[j] = s.str[i];
