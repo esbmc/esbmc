@@ -89,7 +89,7 @@ namespace std
         itoa(n, temp, DEC);
         strcat(temp, ".");
         val = val - (float) n;
-        for(int i = 0;i < NUM_SIZE, val != 0;i++){
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
           val = val * DEC;
           n = (int) val;
           itoa(n, temp2, DEC);
@@ -106,7 +106,7 @@ namespace std
         itoa(n, temp, DEC);
         strcat(temp, ".");
         val = val - (double) n;
-        for(int i = 0;i < NUM_SIZE, val != 0;i++){
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
           val = val * DEC;
           n = (int) val;
           itoa(n, temp2, DEC);
