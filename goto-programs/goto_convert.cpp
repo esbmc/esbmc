@@ -3514,10 +3514,13 @@ void goto_convertt::replace_ifthenelse(
   if(expr.id()=="constant")
     return;
 
-  const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
-  if(it!=context.symbols.end())
-    if(!it->second.static_lifetime)
-      return;
+  if(expr.operands().size())
+  {
+    const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+    if(it!=context.symbols.end())
+      if(!it->second.static_lifetime)
+        return;
+  }
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
