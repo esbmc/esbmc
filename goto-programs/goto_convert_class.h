@@ -387,15 +387,15 @@ protected:
     bool k_induction, inductive_step, base_case;
     struct_typet state;
 
+    typedef std::map<exprt, struct_typet> loop_varst;
+    loop_varst loop_vars;
+
   private:
     bool is_thread, for_block, break_stmt,
          goto_stmt, while_block, ifthenelse_block;
     unsigned int state_counter;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
-
-    typedef std::map<exprt, struct_typet> loop_varst;
-    loop_varst loop_vars;
 };
 
 #endif
