@@ -895,19 +895,17 @@ void goto_convertt::get_struct_components(const exprt &exp)
   DEBUGLOC;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
+    std::size_t found = exp.identifier().as_string().find("__ESBMC_");
+    if(found != std::string::npos)
+      return;
+
+    if(exp.identifier().as_string() == "c::__func__"
+       || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
+       || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
+      return;
+
     if (is_for_block() || is_while_block())
       loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
-    else
-    {
-      // look if it is a global/static variable
-      symbolst::iterator s_it=context.symbols.find(exp.identifier());
-      if(s_it!=context.symbols.end())
-      {
-        symbolt &symbol=s_it->second;
-        if(symbol.static_lifetime)
-          loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
-      }
-    }
 
     if (!is_expr_in_state(exp, state))
     {
