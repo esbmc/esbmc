@@ -3659,7 +3659,9 @@ void goto_convertt::convert_ifthenelse(
   if (inductive_step && (is_for_block() || is_while_block()))
   {
     replace_ifthenelse(tmp_guard);
-    tmp_guard.make_typecast(bool_typet());
+
+    if (!tmp_guard.type().is_bool())
+      tmp_guard.make_typecast(bool_typet());
   }
 
   generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
