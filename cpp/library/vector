@@ -597,8 +597,6 @@ namespace std{
       }
 
       void insert(iterator position, iterator first, iterator last){
-        int i = _size;
-        int aux;
         while(first!=last){
           insert(position++, *first);
           first++;
