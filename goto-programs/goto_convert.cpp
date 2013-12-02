@@ -900,8 +900,15 @@ void goto_convertt::get_struct_components(const exprt &exp)
       return;
 
     if(exp.identifier().as_string() == "c::__func__"
+       || exp.identifier().as_string() == "c::__PRETTY_FUNCTION__"
        || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
        || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
+      return;
+
+    if(exp.location().file().as_string() == "<built-in>"
+       || exp.cmt_location().file().as_string() == "<built-in>"
+       || exp.type().location().file().as_string() == "<built-in>"
+       || exp.type().cmt_location().file().as_string() == "<built-in>")
       return;
 
     if (is_for_block() || is_while_block())
