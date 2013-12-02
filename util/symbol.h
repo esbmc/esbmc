@@ -102,8 +102,6 @@ public:
 
   void to_irep(irept &dest) const;
   void from_irep(const irept &src);
-
-  exprt to_expr() const;
 };
 
 std::ostream &operator<<(std::ostream &out,
