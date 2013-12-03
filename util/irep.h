@@ -948,6 +948,7 @@ public:
 
   inline bool is_address_of() const { return id() == id_address_of; }
   inline bool is_and() const { return id() == id_and; }
+  inline bool is_or() const { return id() == id_or; }
   inline bool is_array() const { return id() == id_array; }
   inline bool is_bool() const { return id() == id_bool; }
   inline bool is_code() const { return id() == id_code; }
@@ -1039,7 +1040,7 @@ public:
   static const irep_idt a_object_type, a_cmt_size, a_cmt, a_type_id;
   static const irep_idt a_cmt_type;
 
-  static const irep_idt id_address_of, id_and, id_array, id_bool, id_code;
+  static const irep_idt id_address_of, id_and, id_or, id_array, id_bool, id_code;
   static const irep_idt id_constant, id_dereference, id_empty, id_fixedbv;
   static const irep_idt id_floatbv, id_incomplete_array, id_index, id_member;
   static const irep_idt id_not, id_notequal, id_pointer, id_signedbv;
