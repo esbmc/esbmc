@@ -3133,13 +3133,13 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
 {
   std::string cte, identifier;
   unsigned int obj_num;
-  bool got_obj_num = false;
 
   assert(is_symbol2t(expr));
   const symbol2t &sym = to_symbol2t(expr);
   if (sym.thename == "NULL" || sym.thename == "0") {
     obj_num = pointer_logic.back().get_null_object();
-    got_obj_num = true;
+    output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
+    return;
   }
 
   // Has this already been renumbered?
@@ -3150,9 +3150,8 @@ z3_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol,
     return;
   }
 
-  if (!got_obj_num)
-    // add object won't duplicate objs for identical exprs (it's a map)
-    obj_num = pointer_logic.back().add_object(expr);
+  // add object won't duplicate objs for identical exprs (it's a map)
+  obj_num = pointer_logic.back().add_object(expr);
 
   output = z3::to_expr(ctx, ctx.constant(symbol.c_str(), pointer_sort));
 
