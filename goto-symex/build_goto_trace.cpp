@@ -81,15 +81,6 @@ void build_goto_trace(
       } else {
         goto_trace_step.guard = result.is_true();
       }
-
-      if(!goto_trace_step.guard)
-      {
-    	if (!SSA_step.is_assert())
-    	{
-      	  goto_trace_step.type=goto_trace_stept::ASSERT;
-    	}
-        break;
-      }
     }
   }
 }
