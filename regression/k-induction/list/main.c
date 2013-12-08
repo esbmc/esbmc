@@ -35,6 +35,7 @@ int delete_list(mlist *l){
 int insert_list(mlist *l, int k){
 
 	l = (mlist*)malloc(sizeof(mlist));
+        __ESBMC_assume(l);
 
 	if (head==NULL) {
 		l->key = k;
