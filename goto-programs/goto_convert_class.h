@@ -198,7 +198,6 @@ protected:
   //
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
-  void init_k_induction_loop(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
   void assign_current_state(/*const struct_typet &state,*/ goto_programt &dest);
   void assume_cond(const exprt &cond, const bool &neg, goto_programt &dest);
@@ -217,7 +216,7 @@ protected:
   bool is_while_block() const {return while_block;}
   bool nondet_initializer(exprt &value, const typet &type, exprt &rhs_expr) const;
   bool is_expr_in_state(const exprt &expr, const struct_typet &str);
-  void get_struct_components(const exprt &exp, struct_typet &str);
+  void get_struct_components(const exprt &exp);
   void replace_cond(exprt &tmp, goto_programt &dest);
   void increment_var(const exprt &var, goto_programt &dest);
   void assert_cond(const exprt &cond, const bool &neg, goto_programt &dest);
