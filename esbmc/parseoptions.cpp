@@ -720,15 +720,23 @@ int cbmc_parseoptionst::doit_k_induction()
             std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
 
           if(bc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the base case" << std::endl;
+            std::cout << "VERIFICATION FAILED" << std::endl;
+          }
 
           // Successful!
-          if(!bc_res[solution_found]
-                     && !fc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          if(!bc_res[solution_found] && !fc_res[solution_found])
+          {
+            std::cout << std::endl << "Solution found by the forward condition" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           if(!bc_res[solution_found] && !is_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the inductive step" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           return res;
         }
