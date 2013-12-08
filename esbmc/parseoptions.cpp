@@ -594,18 +594,7 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           close (commPipe[1]);
 
-          fcntl(commPipe[0], F_SETFL, O_NONBLOCK);
-
-          struct resultt results[MAX_STEPS*3];
-
-          // Invalid values
-          for(short int i=0; i<3; ++i)
-          {
-            results[i].step=NONE;
-            results[i].result=-1;
-            results[i].k=51;
-            results[i].finished=false;
-          }
+          struct resultt a_result;
 
           bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
 
@@ -623,7 +612,22 @@ int cbmc_parseoptionst::doit_k_induction()
           while(!(bc_finished && fc_finished && is_finished)
             && !solution_found)
           {
-            read(commPipe[0], results, sizeof(results));
+            // Perform read and interpret the number of bytes read
+            int read_size;
+            if ((read_size = read(commPipe[0], &a_result, sizeof(resultt))) !=
+                sizeof(resultt)) {
+              if (read_size == 0) {
+                // Client hung up; continue on, but don't interpret the result.
+                ;
+              } else {
+                // Invalid size read.
+                std::cerr << "Short read communicating with kinduction children"
+                          << std::endl;
+                std::cerr << "Size " << read_size << ", expected "
+                          << sizeof(resultt) << std::endl;
+                abort();
+              }
+            }
 
             // Eventually checks on each step
             if(!bc_finished)
@@ -665,58 +669,59 @@ int cbmc_parseoptionst::doit_k_induction()
               }
             }
 
-            unsigned i=0;
-            while((results[i].result != -1) && (i < MAX_STEPS*3))
+            if (read_size == 0)
+              continue;
+
             {
-              switch(results[i].step)
+              switch(a_result.step)
               {
                 case BASE_CASE:
-                  if(results[i].finished)
+                  if(a_result.finished)
                   {
                     bc_finished=true;
                     break;
                   }
 
-                  bc_res[results[i].k] = results[i].result;
+                  bc_res[a_result.k] = a_result.result;
 
-                  if(results[i].result)
-                    solution_found = results[i].k;
+                  if(a_result.result)
+                    solution_found = a_result.k;
 
                   break;
 
                 case FORWARD_CONDITION:
-                  if(results[i].finished)
+                  if(a_result.finished)
                   {
                     fc_finished=true;
                     break;
                   }
 
-                  fc_res[results[i].k] = results[i].result;
+                  fc_res[a_result.k] = a_result.result;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                  if(!a_result.result)
+                    solution_found = a_result.k;
 
                   break;
 
                 case INDUCTIVE_STEP:
-                  if(results[i].finished)
+                  if(a_result.finished)
                   {
                     is_finished=true;
                     break;
                   }
 
-                  is_res[results[i].k] = results[i].result;
+                  is_res[a_result.k] = a_result.result;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                  if(!a_result.result)
+                    solution_found = a_result.k;
 
                   break;
 
                 default:
-                  break;
+                  std::cerr << "Message from unrecognized k-induction child "
+                            << "process" << std::endl;
+                  abort();
               }
-
-              ++i;
             }
           }
 
