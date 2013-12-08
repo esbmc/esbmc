@@ -1042,6 +1042,12 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         continue; // done
       }
 
+      if(declaration.is_destructor())
+        found_dtor=true;
+
+      if(declaration.is_constructor())
+        found_ctor=true;
+
       if(declaration.is_template())
       {
         // remember access mode
@@ -1104,14 +1110,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
         // Skip the constructors until all the data members
         // are discovered
-        if(declaration.is_destructor())
-          found_dtor=true;
-
         if(declaration.is_constructor())
-        {
-          found_ctor=true;
           continue;
-        }
 
         typecheck_compound_declarator(
           symbol,
