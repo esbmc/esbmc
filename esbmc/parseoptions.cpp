@@ -773,6 +773,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_base_case = context;
+        namespacet ns_base_case(context_base_case);
+        migrate_namespace_lookup = &ns_base_case;
 
         bmct bmc_base_case(goto_functions_base_case, opts1,
           context_base_case, ui_message_handler);
@@ -836,6 +838,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_forward_condition = context;
+        namespacet ns_forward_condition(context_forward_condition);
+        migrate_namespace_lookup = &ns_forward_condition;
 
         bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
           context_forward_condition, ui_message_handler);
@@ -897,6 +901,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_inductive_step = context;
+        namespacet ns_inductive_step(context_inductive_step);
+        migrate_namespace_lookup = &ns_inductive_step;
 
         bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
           context_inductive_step, ui_message_handler);
