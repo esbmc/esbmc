@@ -787,6 +787,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=BASE_CASE;
         r.k=0;
         r.finished=false;
@@ -852,6 +853,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=FORWARD_CONDITION;
         r.k=0;
         r.finished=false;
@@ -913,6 +915,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=INDUCTIVE_STEP;
         r.k=0;
         r.finished=false;
