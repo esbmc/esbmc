@@ -211,6 +211,14 @@ protected:
     const cpp_template_args_tct &full_template_args,
     const typet &specialization=typet("nil"));
 
+  void put_template_args_in_scope(
+      const template_typet &template_type,
+      const cpp_template_args_tct &template_args);
+
+  void put_template_arg_into_scope(
+      const template_parametert &template_param,
+      const exprt &argument);
+
   unsigned template_counter;
   unsigned anon_counter;
 

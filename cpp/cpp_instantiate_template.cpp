@@ -317,6 +317,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
     new_decl.type().swap(declaration_type);
   }
 
+  put_template_args_in_scope(template_type, specialization_template_args);
+
   if(new_decl.type().id()=="struct")
   {
     convert_non_template_declaration(new_decl);
@@ -432,4 +434,93 @@ const symbolt &cpp_typecheckt::instantiate_template(
     lookup(new_decl.declarators()[0].identifier());
 
   return symb;
+}
+
+void
+cpp_typecheckt::put_template_args_in_scope(
+    const template_typet &template_type,
+    const cpp_template_args_tct &template_args)
+{
+  const template_typet::parameterst &template_parameters=
+    template_type.parameters();
+
+  cpp_template_args_tct::argumentst instance=
+    template_args.arguments();
+
+  template_typet::parameterst::const_iterator t_it=
+    template_parameters.begin();
+
+  if(instance.size()<template_parameters.size())
+  {
+    // check for default parameters
+    for(unsigned i=instance.size();
+        i<template_parameters.size();
+        i++)
+    {
+      const template_parametert &param=template_parameters[i];
+
+      if(param.has_default_parameter())
+        instance.push_back(param.default_parameter());
+      else
+        break;
+    }
+  }
+
+  // these should have been typechecked before
+  assert(instance.size()==template_parameters.size());
+
+  for(cpp_template_args_tct::argumentst::const_iterator
+      i_it=instance.begin();
+      i_it!=instance.end();
+      i_it++, t_it++)
+  {
+    put_template_arg_into_scope(*t_it, *i_it);
+  }
+}
+
+void
+cpp_typecheckt::put_template_arg_into_scope(
+      const template_parametert &template_param,
+      const exprt &argument)
+{
+  symbolt symbol;
+
+  // Fetch useful information for the following symbol construction
+  cpp_scopet *cur_scope = &cpp_scopes.current_scope();
+  std::string cur_scope_prefix = cur_scope->identifier.as_string();
+
+  // Template parameter should be the name of the template type.
+  const typet &templ_param_type = template_param.type();
+  assert(templ_param_type.id() == "symbol");
+
+  // Find declaration of that templated type.
+  const symbolt &orig_symbol = lookup(templ_param_type.identifier());
+
+  // Construct a new, concrete type symbol, with the base name as the templated
+  // type name, and with the current scopes prefix.
+  symbol.name = cur_scope_prefix + "::" + orig_symbol.base_name.as_string();
+  symbol.base_name = orig_symbol.base_name;
+  symbol.value = exprt();
+  symbol.location = argument.location();
+  symbol.mode = mode; // uhu.
+  symbol.module = module; // uuuhu.
+  symbol.type = argument.type(); // BAM
+  symbol.is_type = true;
+  symbol.is_macro = false;
+  symbol.pretty_name = orig_symbol.base_name;
+
+  // Install this concrete type symbol into the context.
+  symbolt *new_symbol;
+  if (context.move(symbol, new_symbol))
+    throw "cpp_typecheckt::put_template_arg_in_scope: context.move() failed";
+
+  // And install it into the templates scope too.
+  cpp_idt &identifier=
+    cpp_scopes.put_into_scope(*new_symbol, *cur_scope, false);
+
+  // Mark it as being a template argument
+  identifier.id_class = cpp_idt::TEMPLATE_ARGUMENT;
+  // And store the concrete template type itself -- so that code outside of the
+  // template instantiation can pick up what types it has.
+  identifier.this_expr.type() = argument.type();
 }
