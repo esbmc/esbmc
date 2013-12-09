@@ -609,6 +609,13 @@ void goto_convertt::convert_sideeffect(
       throw 0;
     }
 
+    if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
+    {
+      const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+      if(it!=context.symbols.end())
+        it->second.value.add("assignment_inside_loop")=irept("1");
+    }
+
     exprt rhs;
 
     if(statement=="postincrement" ||
@@ -3522,18 +3529,15 @@ void goto_convertt::replace_ifthenelse(
     return;
 
   // Don't convert if this is not a global/static variable
-  if(expr.operands().size())
-  {
-    const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
-    if(it!=context.symbols.end())
-      if(!it->second.static_lifetime)
-      {
-        // Before returning we must check if the variable is dirty, if that is true
-        // then we should replace it
-        if(it->second.value.add("assignment_inside_loop") == irept(""))
-          return;
-      }
-  }
+  const symbolst::const_iterator it=context.symbols.find(expr.identifier());
+  if(it!=context.symbols.end())
+    if(!it->second.static_lifetime)
+    {
+      // Before returning we must check if the variable is dirty, if that is true
+      // then we should replace it
+      if(it->second.value.add("assignment_inside_loop") == irept(""))
+        return;
+    }
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
