@@ -265,12 +265,32 @@ Purpose:
 exprt cpp_typecheck_resolvet::convert_template_argument(
   const cpp_idt &identifier)
 {
-  // look up in template map
-  exprt e("type");
-  e.type() = identifier.this_expr.type();
-  e.location()=location;
+  // Is there an assignment to this template argument in the template map?
+  exprt e=cpp_typecheck.template_map.lookup(identifier.identifier);
 
-  return e;
+  if(e.is_nil() ||
+     (e.id()=="type" && e.type().is_nil()))
+  {
+    // No. In that case, see whether we've picked up the template argument from
+    // the instantiation scope, which will mean it has a type attached.
+    exprt e2("type");
+    e2.type() = identifier.this_expr.type();
+    e2.location()=location;
+
+    if (e2.type().is_nil()) {
+      cpp_typecheck.err_location(location);
+      cpp_typecheck.str <<"internal error: template parameter without instance:"
+                        << std::endl
+                        << identifier << std::endl;
+      throw 0;
+    }
+
+    return e2;
+  } else {
+    // Just return what was in the template map.
+    e.location() = location;
+    return e;
+  }
 }
 
 /*******************************************************************\
