@@ -3528,16 +3528,24 @@ void goto_convertt::replace_ifthenelse(
   if(expr.id()=="constant")
     return;
 
-  // Don't convert if this is not a global/static variable
-  const symbolst::const_iterator it=context.symbols.find(expr.identifier());
-  if(it!=context.symbols.end())
-    if(!it->second.static_lifetime)
+  // We only transform the condition if all the variables are not touched during
+  // the loop
+  if(expr.operands().size()==2)
+  {
+    exprt::operandst::iterator it = expr.operands().begin();
+    for( ; it != expr.operands().end(); ++it)
     {
-      // Before returning we must check if the variable is dirty, if that is true
-      // then we should replace it
-      if(it->second.value.add("assignment_inside_loop") == irept(""))
-        return;
+      const symbolst::const_iterator it1=context.symbols.find(it->identifier());
+      if(it1!=context.symbols.end())
+        if(!it1->second.static_lifetime)
+        {
+          // Before returning we must check if the variable is dirty, if that is true
+          // then we should replace it
+          if(it1->second.value.add("assignment_inside_loop") == irept(""))
+            return;
+        }
     }
+  }
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
