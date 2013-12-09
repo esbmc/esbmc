@@ -1042,6 +1042,12 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
         continue; // done
       }
 
+      if(declaration.is_destructor())
+        found_dtor=true;
+
+      if(declaration.is_constructor())
+        found_ctor=true;
+
       if(declaration.is_template())
       {
         // remember access mode
@@ -1104,14 +1110,8 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
 
         // Skip the constructors until all the data members
         // are discovered
-        if(declaration.is_destructor())
-          found_dtor=true;
-
         if(declaration.is_constructor())
-        {
-          found_ctor=true;
           continue;
-        }
 
         typecheck_compound_declarator(
           symbol,
@@ -1150,6 +1150,12 @@ void cpp_typecheckt::typecheck_compound_body(symbolt &symbol)
     {
     }
   }
+
+  // If we've seen a constructor, flag this type as not being a POD. This is
+  // only useful when we might not be able to work that out later, such as a
+  // constructor that gets deleted, or something.
+  if (found_ctor || found_dtor)
+    type.set("is_not_pod", "1");
 
   // Add the default dtor, if needed
   // (we have to do the destructor before building the virtual tables,
