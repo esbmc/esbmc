@@ -336,17 +336,16 @@ namespace std{
         _capacity = n;
       }
 
-      explicit vector(T t[], void* addr): _size(0),  _capacity(1)
+      template <typename InputIt>
+      vector(InputIt t, InputIt addr): _size(0),  _capacity(1)
       {
         int count = 0;
-        for (T *tmp = t; tmp != addr; tmp++)
+        for (InputIt tmp = t; tmp != addr; tmp++)
           count++;
 
         buf = new T[count];
-        T* t1 = (T*) t;
-        T* addr1 = (T*) addr;
         for (int i = 0; i < count; i++)
-          buf[i] = t1[i];
+          buf[i] = *t++;
 
         _size = count;
         _capacity = _size;
