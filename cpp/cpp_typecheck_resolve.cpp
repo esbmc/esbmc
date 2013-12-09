@@ -266,18 +266,8 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
   const cpp_idt &identifier)
 {
   // look up in template map
-  exprt e=cpp_typecheck.template_map.lookup(identifier.identifier);
-
-  if(e.is_nil() ||
-     (e.id()=="type" && e.type().is_nil()))
-  {
-    cpp_typecheck.err_location(location);
-    cpp_typecheck.str << "internal error: template parameter without instance:"
-                      << std::endl
-                      << identifier << std::endl;
-    throw 0;
-  }
-
+  exprt e("type");
+  e.type() = identifier.this_expr.type();
   e.location()=location;
 
   return e;
