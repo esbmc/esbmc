@@ -578,7 +578,6 @@ void goto_convertt::convert_block(
   }
 }
 
-
 /*******************************************************************\
 
 Function: goto_convertt::convert_sideeffect

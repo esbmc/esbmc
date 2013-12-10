@@ -46,10 +46,8 @@ public:
     while_block=false;
     state_counter=1;
     k_induction=false;
-    inductive_step=
-      options.get_bool_option("inductive-step");
-    base_case=
-      options.get_bool_option("base-case");
+    inductive_step=options.get_bool_option("inductive-step");
+    base_case=options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
