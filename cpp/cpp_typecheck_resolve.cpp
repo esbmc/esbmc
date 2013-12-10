@@ -2560,7 +2560,7 @@ void cpp_typecheck_resolvet::filter_for_named_scopes(
     {
       // a template argument may be a scope: it could
       // be instantiated with a class/struct/union/enum
-      exprt e=cpp_typecheck.template_map.lookup(id.identifier);
+      exprt e = convert_template_argument(id);
 
       if(e.id()!="type")
         continue; // expressions are definitively not a scope
