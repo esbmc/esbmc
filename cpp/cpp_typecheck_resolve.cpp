@@ -273,11 +273,20 @@ exprt cpp_typecheck_resolvet::convert_template_argument(
   {
     // No. In that case, see whether we've picked up the template argument from
     // the instantiation scope, which will mean it has a type attached.
-    exprt e2("type");
-    e2.type() = identifier.this_expr.type();
+
+    const symbolt &sym = cpp_typecheck.lookup(identifier.identifier);
+    exprt e2;
+    if (sym.is_type) {
+      exprt tmp("type");
+      tmp.type() = sym.type;
+      e2 = tmp;
+    } else {
+      e2 = sym.value;
+    }
+
     e2.location()=location;
 
-    if (e2.type().is_nil()) {
+    if (e2.is_nil() || e2.type().is_nil()) {
       cpp_typecheck.err_location(location);
       cpp_typecheck.str <<"internal error: template parameter without instance:"
                         << std::endl
