@@ -528,6 +528,9 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
+
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
   // replacing it with the value of the type name. However, if we have a pointer
