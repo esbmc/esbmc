@@ -147,6 +147,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
   }
 
   disambiguate_functions(identifiers, fargs);
+  remove_duplicates(identifiers);
 
   // there should only be one left, or we have failed to disambiguate
   if(identifiers.size()==1)
@@ -2093,6 +2094,16 @@ void cpp_typecheck_resolvet::guess_template_args(
               std::cout << "ASSIGN " << id.identifier << " := "
                         << cpp_typecheck.to_string(desired_type) << std::endl;
               #endif
+
+              // XXX: various implicit conversions are defined by section 14.1
+              // of the spec, most notably that array types become element
+              // pointers. This should be refactored into a separate method
+              // and fully explored, rather than monkey-patched.
+              if (t.id() == "array") {
+                // Morph irep.
+                t.id() = "pointer";
+                t.remove("size");
+              }
             }
           }
         }
