@@ -530,7 +530,12 @@ goto_convert_functionst::thrash_type_symbols(void)
 {
   forall_symbols(it, context.symbols) {
     if(it->second.static_lifetime && !it->second.type.is_pointer())
-      get_struct_components(symbol_expr(it->second));
+    {
+      exprt s = symbol_expr(it->second);
+      if(it->second.value.id()==irep_idt("array_of"))
+        s.type()=it->second.value.type();
+      get_struct_components(s);
+    }
   }
 
   // This function has one purpose: remove as many type symbols as possible.
