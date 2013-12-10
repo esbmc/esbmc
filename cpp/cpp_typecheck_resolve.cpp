@@ -147,6 +147,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
   }
 
   disambiguate_functions(identifiers, fargs);
+  remove_duplicates(identifiers);
 
   // there should only be one left, or we have failed to disambiguate
   if(identifiers.size()==1)
