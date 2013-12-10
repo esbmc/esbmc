@@ -196,6 +196,7 @@ protected:
   //
   // k-induction conversion
   //
+  void add_global_variable_to_state();
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);

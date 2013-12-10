@@ -528,16 +528,6 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
-  forall_symbols(it, context.symbols) {
-    if(it->second.static_lifetime && !it->second.type.is_pointer())
-    {
-      exprt s = symbol_expr(it->second);
-      if(it->second.value.id()==irep_idt("array_of"))
-        s.type()=it->second.value.type();
-      get_struct_components(s);
-    }
-  }
-
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
   // replacing it with the value of the type name. However, if we have a pointer

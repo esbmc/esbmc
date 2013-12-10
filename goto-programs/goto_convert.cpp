@@ -1914,6 +1914,35 @@ void goto_convertt::convert_for(
   state_counter++;
 }
 
+
+/*******************************************************************\
+
+Function: goto_convertt::add_global_variable_to_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::add_global_variable_to_state()
+{
+  if(!inductive_step)
+    return;
+
+  forall_symbols(it, context.symbols) {
+    if(it->second.static_lifetime && !it->second.type.is_pointer())
+    {
+      exprt s = symbol_expr(it->second);
+      if(it->second.value.id()==irep_idt("array_of"))
+        s.type()=it->second.value.type();
+      get_struct_components(s);
+    }
+  }
+}
+
 /*******************************************************************\
 
 Function: goto_convertt::make_nondet_assign
