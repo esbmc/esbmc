@@ -859,6 +859,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
 
     if(exp.identifier().as_string() == "c::__func__"
        || exp.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+       || exp.identifier().as_string() == "c::__LINE__"
        || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
        || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
       return;
@@ -871,6 +872,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
 
     if (is_for_block() || is_while_block())
       loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
+
     if (!is_expr_in_state(exp, state))
     {
       unsigned int size = state.components().size();
