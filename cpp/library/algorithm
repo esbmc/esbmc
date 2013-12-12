@@ -679,7 +679,6 @@ OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
 
 template<class InIt, class OutIt, class Pr>
 OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
-#if 1
         InIt::value_type value = *first;
 	while (++first != last) {
 		if (!pred(value, *first)){
@@ -689,7 +688,6 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
 	}
         *dest++ = value;
 	return dest;
-#endif
 }
 
 template<class BidIt>
