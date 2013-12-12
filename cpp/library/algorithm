@@ -657,7 +657,7 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest) {
 	dest = first;
 	while (++first != last) {
 		if (!(value == *first)){
-			*(++dest) = value;
+			*(++dest) = *value;
 			*value = *first;
 		}
 	}
