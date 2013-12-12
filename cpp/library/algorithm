@@ -679,14 +679,18 @@ OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
 
 template<class InIt, class OutIt, class Pr>
 OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
-        InIt::value_type value = *first;
+
+        if (first == last)
+          return dest;
+
+        InIt value = first;
+        *dest++ = *first;
 	while (++first != last) {
-		if (!pred(value, *first)){
-			*dest++ = value;
-			value = *first;
+		if (!pred(*value, *first)){
+                        *dest++ = *first;
+                        value = first;
 		}
 	}
-        *dest++ = value;
 	return dest;
 }
 
