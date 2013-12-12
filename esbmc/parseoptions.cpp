@@ -639,6 +639,7 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
                 bc_finished=true;
               }
             }
@@ -652,6 +653,7 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
                 fc_finished=true;
               }
             }
@@ -665,6 +667,7 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
                 is_finished=true;
               }
             }
@@ -821,6 +824,8 @@ int cbmc_parseoptionst::doit_k_induction()
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
 
+        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
+
         return res;
 
         break;
@@ -887,6 +892,8 @@ int cbmc_parseoptionst::doit_k_induction()
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
 
+        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
+
         return res;
 
         break;
@@ -948,6 +955,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
         return res;
 
