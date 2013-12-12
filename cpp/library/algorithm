@@ -683,11 +683,6 @@ OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
         InIt::value_type value = *first;
 	while (++first != last) {
 		if (!pred(value, *first)){
-                  int fgasdf = 0;
-                  int levalue = value;
-                  int lenewvalue =  *first;
-                  int lesrcpos = first.pos;
-                  int ledestpos = dest.pos;
 			*dest++ = value;
 			value = *first;
 		}
