@@ -2120,7 +2120,7 @@ int* min_element(int *first, int *last) {
 
 template<class FwdIt, class Pr>
 FwdIt min_element(FwdIt first, FwdIt last, Pr pred) {
-	FwdIt *lowest = first;
+	FwdIt lowest = first;
 	if (first == last)
 		return last;
 	while (++first != last)
