@@ -640,7 +640,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
-                bc_finished=true;
+                bc_finished=fc_finished=is_finished=true;
               }
             }
 
@@ -654,7 +654,7 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
-                fc_finished=true;
+                bc_finished=fc_finished=is_finished=true;
               }
             }
 
@@ -668,63 +668,61 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
-                is_finished=true;
+                bc_finished=fc_finished=is_finished=true;
               }
             }
 
             if (read_size == 0)
               continue;
 
+            switch(a_result.step)
             {
-              switch(a_result.step)
-              {
-                case BASE_CASE:
-                  if(a_result.finished)
-                  {
-                    bc_finished=true;
-                    break;
-                  }
-
-                  bc_res[a_result.k] = a_result.result;
-
-                  if(a_result.result)
-                    solution_found = a_result.k;
-
+              case BASE_CASE:
+                if(a_result.finished)
+                {
+                  bc_finished=true;
                   break;
+                }
 
-                case FORWARD_CONDITION:
-                  if(a_result.finished)
-                  {
-                    fc_finished=true;
-                    break;
-                  }
+                bc_res[a_result.k] = a_result.result;
 
-                  fc_res[a_result.k] = a_result.result;
+                if(a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!a_result.result)
-                    solution_found = a_result.k;
+                break;
 
+              case FORWARD_CONDITION:
+                if(a_result.finished)
+                {
+                  fc_finished=true;
                   break;
+                }
 
-                case INDUCTIVE_STEP:
-                  if(a_result.finished)
-                  {
-                    is_finished=true;
-                    break;
-                  }
+                fc_res[a_result.k] = a_result.result;
 
-                  is_res[a_result.k] = a_result.result;
+                if(!a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!a_result.result)
-                    solution_found = a_result.k;
+                break;
 
+              case INDUCTIVE_STEP:
+                if(a_result.finished)
+                {
+                  is_finished=true;
                   break;
+                }
 
-                default:
-                  std::cerr << "Message from unrecognized k-induction child "
-                            << "process" << std::endl;
-                  abort();
-              }
+                is_res[a_result.k] = a_result.result;
+
+                if(!a_result.result)
+                  solution_found = a_result.k;
+
+                break;
+
+              default:
+                std::cerr << "Message from unrecognized k-induction child "
+                << "process" << std::endl;
+                abort();
             }
           }
 
