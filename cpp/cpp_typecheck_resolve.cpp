@@ -130,6 +130,7 @@ void cpp_typecheck_resolvet::guess_function_template_args(
   const cpp_typecheck_fargst &fargs)
 {
   resolve_identifierst old_identifiers;
+  resolve_identifierst non_template_identifiers;
   old_identifiers.swap(identifiers);
 
   for(resolve_identifierst::const_iterator
@@ -143,6 +144,10 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     {
       assert(e.id()!="type");
       identifiers.push_back(e);
+    }
+    else
+    {
+      non_template_identifiers.push_back(*it);
     }
   }
 
@@ -175,6 +180,10 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     identifiers.push_back(
       symbol_exprt(new_symbol.name, new_symbol.type));
   }
+
+  // Restore the non-template identifiers, which we haven't altered.
+  identifiers.insert(identifiers.begin(), non_template_identifiers.begin(),
+                     non_template_identifiers.end());
 }
 
 /*******************************************************************\
@@ -1741,9 +1750,6 @@ exprt cpp_typecheck_resolvet::resolve(
     if(template_args.is_nil())
     {
       guess_function_template_args(new_identifiers, fargs);
-
-      if(new_identifiers.empty())
-        new_identifiers=identifiers;
     }
   }
 
