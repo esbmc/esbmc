@@ -654,14 +654,14 @@ FwdIt unique(FwdIt first, FwdIt last, Pr pred) {
 template<class InIt, class OutIt>
 OutIt unique_copy(InIt first, InIt last, OutIt dest) {
 	InIt value = first;
-	dest = first;
+	*dest++ = *first;
 	while (++first != last) {
-		if (!(value == *first)){
-			*(++dest) = *value;
-			*value = *first;
+		if (!(*value == *first)){
+			*dest++ = *first;
+			value = first;
 		}
 	}
-	return ++dest;
+	return dest;
 }
 
 template<class InIt, class OutIt, class Pr>
