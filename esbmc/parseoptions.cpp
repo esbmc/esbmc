@@ -640,7 +640,10 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
-                bc_finished=fc_finished=is_finished=true;
+
+                bc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  fc_finished=is_finished=true;
               }
             }
 
@@ -654,7 +657,10 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
-                bc_finished=fc_finished=is_finished=true;
+
+                fc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=is_finished=true;
               }
             }
 
@@ -668,7 +674,10 @@ int cbmc_parseoptionst::doit_k_induction()
                 // Error
               } else {
                 std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
-                bc_finished=fc_finished=is_finished=true;
+
+                is_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=fc_finished=true;
               }
             }
 
