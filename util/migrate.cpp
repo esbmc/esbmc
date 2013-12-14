@@ -126,6 +126,21 @@ real_migrate_type(const typet &type, type2tc &new_type_ref,
     for (struct_union_typet::componentst::const_iterator it = comps.begin();
          it != comps.end(); it++) {
       type2tc ref;
+
+      // Hacks: due to SFINAE, we might have a templated instantiation in
+      // here that's invalid. Try to detect those and avoid converting them.
+      // As that's just going to cause grief.
+      const irep_idt &this_name = it->get("name");
+      if (this_name != "" && ns) {
+        const symbolt *component_sym;
+        bool failed = ns->lookup(this_name, component_sym);
+        if (!failed &&
+            component_sym->value.get("#speculative_template") == "1" &&
+            component_sym->value.get("#template_in_use") != "1")
+          // Skip it.
+          continue;
+      }
+
       migrate_type((const typet&)it->type(), ref, ns, cache);
 
       members.push_back(ref);
