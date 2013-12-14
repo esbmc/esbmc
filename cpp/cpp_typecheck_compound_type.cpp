@@ -181,8 +181,12 @@ void cpp_typecheckt::typecheck_compound_type(
     dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
   }
 
+  // All types are dumped in the 'cpp' namespace. Types declared in a piece of
+  // code with 'c' linkage are no different from C++ types, and otherwise this
+  // leads to type conflicts when calling code with a different linkage. (i.e.,
+  // a cpp::foo pointer isn't compatible with a c::foo pointer).
   const irep_idt symbol_name=
-    cpp_identifier_prefix(current_mode)+"::"+
+    cpp_identifier_prefix("C++")+"::"+
     dest_scope->prefix+
     "tag."+identifier;
 
@@ -225,7 +229,7 @@ void cpp_typecheckt::typecheck_compound_type(
     symbol.base_name=base_name;
     symbol.value.make_nil();
     symbol.location=type.location();
-    symbol.mode=current_mode;
+    symbol.mode="C++"; // All types are cpp types
     symbol.module=module;
     symbol.type.swap(type);
     symbol.is_type=true;
@@ -1585,8 +1589,9 @@ void cpp_typecheckt::convert_compound_ano_union(
   // produce an anonymous member
   irep_idt base_name="#anon_member"+i2string((unsigned long)components.size());
 
+  // All types are in 'cpp' mode.
   irep_idt identifier=
-    cpp_identifier_prefix(current_mode)+"::"+
+    cpp_identifier_prefix("C++")+"::"+
     cpp_scopes.current_scope().prefix+
     base_name.c_str();
 
