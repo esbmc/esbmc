@@ -259,7 +259,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
       const symbolt &symb=lookup(cpp_id.identifier);
 
       // continue if the type is incomplete only
-      if(cpp_id.id_class==cpp_idt::CLASS &&
+      if (cpp_id.id_class != cpp_idt::CLASS)
+        return symb;
+      else if(cpp_id.id_class==cpp_idt::CLASS &&
          symb.type.id()=="struct")
         return symb;
       else if(symb.value.is_not_nil())
