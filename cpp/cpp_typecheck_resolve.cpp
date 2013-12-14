@@ -176,6 +176,16 @@ void cpp_typecheck_resolvet::guess_function_template_args(
         template_args,
         template_args);
 
+    // Mark this template as having been instantiated speculatively. This is
+    // vital to support SFINAE: when the instantiated template is typechecked
+    // later, it may very well have an error in it. We need to know at that
+    // point (or beforehand) whether it was speculatively instantiated, and thus
+    // might not actually be used.
+    // A template that's speculatively instantiated, and used, and contains an
+    // error, should still be registered as an error though.
+    symbolt &mutable_symbol = const_cast<symbolt&>(new_symbol);
+    mutable_symbol.value.set("#speculative_template", "1");
+
     identifiers.clear();
     identifiers.push_back(
       symbol_exprt(new_symbol.name, new_symbol.type));
@@ -1841,6 +1851,18 @@ exprt cpp_typecheck_resolvet::resolve(
 
   default:
 	  break;
+  }
+
+  // Workaround for SFINAE: mark any specuatively instantiated template that
+  // we've resolved to, as in use. This means that any error in it will still
+  // be reported.
+  // XXX - this isn't going to work recursively.
+  if (want == VAR && result.id() == "symbol") {
+    symbolt &sym =
+      cpp_typecheck.context.symbols.find(result.identifier())->second;
+    if (sym.value.get("#speculative_template") == "1") {
+      sym.value.set("#template_in_use", "1");
+    }
   }
 
   return result;
