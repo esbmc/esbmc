@@ -63,6 +63,9 @@ member_offset(const struct_type2t &type, const irep_idt &member)
     if (is_structure_type(*it))
       round_up_to_int64(result);
 
+    if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
+      round_up_to_int64(result);
+
     if (type.member_names[idx] == member.as_string())
       break;
 
@@ -161,6 +164,10 @@ type_byte_size(const type2t &type)
       // While we're at it, round any struct/union up to 64 bit alignment too,
       // as that might require such alignment due to internal doubles.
       if (is_structure_type(*it))
+        round_up_to_int64(accumulated_size);
+
+      // Also arrays of int64's. One onders why I bother.
+      if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
         round_up_to_int64(accumulated_size);
 
       mp_integer memb_size = type_byte_size(**it);
