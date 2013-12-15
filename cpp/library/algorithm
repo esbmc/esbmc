@@ -474,12 +474,6 @@ FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2) {
 	return last2;
 }
 
-template<class FwdIt1, class FwdIt2>
-FwdIt2 swap_ranges(FwdIt1 first1[], FwdIt1 *last1, FwdIt2 *last2) {
-	//while (first1!=last1) swap(*first1++, *last2++);
-	//return *last2;
-}
-
 template<class ForwardIterator1, class ForwardIterator2>
 void iter_swap(ForwardIterator1 a, ForwardIterator2 b) {
 	swap(*a, *b);
