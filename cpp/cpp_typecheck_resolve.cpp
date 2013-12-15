@@ -147,7 +147,12 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     }
     else
     {
-      non_template_identifiers.push_back(*it);
+      if (it->type().get("is_template") == "1")
+        // Failed template arg guessing. Discard.
+        ;
+      else
+        // Not a template; save it for later disambiguation.
+        non_template_identifiers.push_back(*it);
     }
   }
 
