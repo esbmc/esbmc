@@ -491,23 +491,31 @@ cpp_typecheckt::put_template_arg_into_scope(
   cpp_scopet *cur_scope = &cpp_scopes.current_scope();
   std::string cur_scope_prefix = cur_scope->identifier.as_string();
 
-  // Template parameter should be the name of the template type.
-  const typet &templ_param_type = template_param.type();
-  assert(templ_param_type.id() == "symbol");
+  // Template parameter is either a type with a symbol type; or it's an
+  // expression that's a symbol.
+  irep_idt templ_param_id;
+  if (template_param.id() == "symbol") {
+    symbol.is_type = false;
+    templ_param_id = template_param.identifier();
+  } else {
+    symbol.is_type = true;
+    const typet &templ_param_type = template_param.type();
+    assert(templ_param_type.id() == "symbol");
+    templ_param_id = templ_param_type.identifier();
+  }
 
   // Find declaration of that templated type.
-  const symbolt &orig_symbol = lookup(templ_param_type.identifier());
+  const symbolt &orig_symbol = lookup(templ_param_id);
 
   // Construct a new, concrete type symbol, with the base name as the templated
   // type name, and with the current scopes prefix.
   symbol.name = cur_scope_prefix + "::" + orig_symbol.base_name.as_string();
   symbol.base_name = orig_symbol.base_name;
-  symbol.value = exprt();
+  symbol.value = argument;
   symbol.location = argument.location();
   symbol.mode = mode; // uhu.
   symbol.module = module; // uuuhu.
   symbol.type = argument.type(); // BAM
-  symbol.is_type = true;
   symbol.is_macro = false;
   symbol.pretty_name = orig_symbol.base_name;
 
@@ -522,7 +530,8 @@ cpp_typecheckt::put_template_arg_into_scope(
 
   // Mark it as being a template argument
   identifier.id_class = cpp_idt::TEMPLATE_ARGUMENT;
-  // And store the concrete template type itself -- so that code outside of the
-  // template instantiation can pick up what types it has.
-  identifier.this_expr.type() = argument.type();
+
+  // Resolver code will pick up the fact that this argument exists; look up its
+  // fully qualified name and get the above symbolt; and then pick out either
+  // the type or value this resolves to.
 }
