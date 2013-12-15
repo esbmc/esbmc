@@ -2465,7 +2465,12 @@ bool cpp_typecheck_resolvet::disambiguate_functions(
 {
   args_distance=0;
 
-  if(expr.type().id()!="code" || !fargs.in_use)
+  // Not code, not a function, bail.
+  if (expr.type().id()!="code")
+    return false;
+
+  // No arguments -> nothing to disambiguate?
+  if (!fargs.in_use)
     return true;
 
   const code_typet &type=to_code_type(expr.type());
