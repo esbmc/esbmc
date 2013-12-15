@@ -241,6 +241,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
   cpp_scopest::id_mapt::iterator scope_it=
     cpp_scopes.id_map.find(subscope_name);
 
+  bool already_instantiated = false;
+
   if(scope_it!=cpp_scopes.id_map.end())
   {
     cpp_scopet &scope=cpp_scopes.get_scope(subscope_name);
@@ -266,6 +268,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
         return symb;
       else if(symb.value.is_not_nil())
         return symb;
+
+      already_instantiated = true;
     }
 
     cpp_scopes.go_to(scope);
@@ -319,7 +323,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
     new_decl.type().swap(declaration_type);
   }
 
-  put_template_args_in_scope(template_type, specialization_template_args);
+  if (!already_instantiated)
+    put_template_args_in_scope(template_type, specialization_template_args);
 
   if(new_decl.type().id()=="struct")
   {
