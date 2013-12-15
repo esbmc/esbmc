@@ -188,6 +188,11 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   goto_functiont &f=functions.function_map[identifier];
   const symbolt &symbol=ns.lookup(identifier);
 
+  // Apply a SFINAE test: discard unused C++ templates.
+  if (symbol.value.get("#speculative_template") == "1" &&
+      symbol.value.get("#template_in_use") != "1")
+    return;
+
   // make tmp variables local to function
   tmp_symbol_prefix=id2string(symbol.name)+"::$tmp::";
   temporary_counter=0;
