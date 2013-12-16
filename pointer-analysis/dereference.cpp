@@ -1440,7 +1440,8 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
       accuml = elem;
     } else {
       // XXX -- byte order.
-      type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
+      type2tc res_type =
+        get_uint_type(accuml->type->get_width() + (subtype_sz * 8));
       accuml = concat2tc(res_type, accuml, elem);
     }
 
