@@ -192,8 +192,16 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     mutable_symbol.value.set("#speculative_template", "1");
 
     identifiers.clear();
-    identifiers.push_back(
-      symbol_exprt(new_symbol.name, new_symbol.type));
+    if (!fargs.has_object) {
+      identifiers.push_back(
+        symbol_exprt(new_symbol.name, new_symbol.type));
+    } else {
+      // This should be a member expression.
+      exprt memb("member");
+      memb.type() = new_symbol.type;
+      memb.set("component_name", new_symbol.name);
+      identifiers.push_back(memb);
+    }
   }
 
   // Restore the non-template identifiers, which we haven't altered.
