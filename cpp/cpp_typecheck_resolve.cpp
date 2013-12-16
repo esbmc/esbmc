@@ -2534,10 +2534,14 @@ bool cpp_typecheck_resolvet::disambiguate_functions(
   else if(fargs.has_object)
   {
     // if it's not a member then we shall remove the object
-    cpp_typecheck_fargst new_fargs(fargs);
-    new_fargs.remove_object();
+    // jmorse: Actually, member function templates end up here, so we shouldn't.
+    // Plus, normal function templates shouldn't be matched in member
+    // invocations, which I imagine is what this would match as a result.
 
-    return new_fargs.match(type, args_distance, cpp_typecheck);
+    //cpp_typecheck_fargst new_fargs(fargs);
+    //new_fargs.remove_object();
+
+    return fargs.match(type, args_distance, cpp_typecheck);
   }
 
   return fargs.match(type, args_distance, cpp_typecheck);
