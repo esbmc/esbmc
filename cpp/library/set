@@ -436,13 +436,6 @@ public:
 			insert(*first++);
 	}
 
-	template<class Iterator>
-	iterator insert(Iterator *first, Iterator *last){
-		__ESBMC_assert(last > first, "Invalid pointer range: the second argument must be greater than the first one");
-		while(first!=last)
-			insert(*first++);
-	}
-
 	// modifiers:
 	iterator insert(const value_type& x){
 		iterator it = begin();
