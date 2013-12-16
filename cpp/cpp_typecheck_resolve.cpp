@@ -2282,13 +2282,26 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   const irept::subt &arguments=
     function_declarator.type().arguments().get_sub();
 
-  for(unsigned i=0; i<arguments.size(); i++)
+  unsigned int i = 0, j = 0;
+  // Method templates don't have the implicit 'this' pointer attached to them,
+  // because they're not actually members of the class until they're
+  // instantiated. If this template is being called in the context of an object
+  // method invocation, skip the first argument.
+  // XXX -- what about static methods? IIRC they have the implicit arg, but
+  // it's ignored/
+  if (fargs.has_object)
+    i = 1;
+
+  // In this context, j is used to indicate the arguments (the existing template
+  // arguments), and i the operands, which are in the fargs object, and have
+  // concrete types.
+  for(; j<arguments.size(); i++, j++)
   {
     if(i<fargs.operands.size() &&
-       arguments[i].id()=="cpp-declaration")
+       arguments[j].id()=="cpp-declaration")
     {
       const cpp_declarationt &arg_declaration=
-        to_cpp_declaration(arguments[i]);
+        to_cpp_declaration(arguments[j]);
 
       // again, there should be one declarator
       assert(arg_declaration.declarators().size()==1);
