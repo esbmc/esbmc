@@ -13,6 +13,7 @@ Date: June 2003
 #include <base_type.h>
 #include <prefix.h>
 #include <std_code.h>
+#include <std_expr.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -222,7 +223,7 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
       arg.remove("#base_name");
       arg.remove("#location");
 
-      get_struct_components(arg, state);
+      get_struct_components(arg);
     }
 
     const irep_idt &identifier=it->get_identifier();
@@ -523,6 +524,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
 
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and

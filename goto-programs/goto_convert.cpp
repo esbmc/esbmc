@@ -447,6 +447,12 @@ void goto_convertt::convert_block(
   const codet &code,
   goto_programt &dest)
 {
+  bool last_for=is_for_block();
+  bool last_while=is_while_block();
+
+  if(inductive_step && code.add("inside_loop") != irept(""))
+    set_for_block(true);
+
   std::list<irep_idt> locals;
   //extract all the local variables from the block
 
@@ -514,6 +520,13 @@ void goto_convertt::convert_block(
 
     locals.pop_back();
   }
+
+  if(inductive_step)
+  {
+    code.remove("inside_loop");
+    set_for_block(last_for);
+    set_while_block(last_while);
+  }
 }
 
 /*******************************************************************\
@@ -544,6 +557,13 @@ void goto_convertt::convert_sideeffect(
       err_location(expr);
       str << statement << " takes one argument";
       throw 0;
+    }
+
+    if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
+    {
+      const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+      if(it!=context.symbols.end())
+        it->second.value.add("assignment_inside_loop")=irept("1");
     }
 
     exprt rhs;
@@ -828,44 +848,62 @@ Function: goto_convertt::get_struct_components
 
 \*******************************************************************/
 
-void goto_convertt::get_struct_components(const exprt &exp, struct_typet &str)
+void goto_convertt::get_struct_components(const exprt &exp)
 {
   DEBUGLOC;
   if (exp.is_symbol() && exp.type().id()!="code")
   {
+    std::size_t found = exp.identifier().as_string().find("__ESBMC_");
+    if(found != std::string::npos)
+      return;
+
+    if(exp.identifier().as_string() == "c::__func__"
+       || exp.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+       || exp.identifier().as_string() == "c::__LINE__"
+       || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
+       || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
+      return;
+
+    if(exp.location().file().as_string() == "<built-in>"
+       || exp.cmt_location().file().as_string() == "<built-in>"
+       || exp.type().location().file().as_string() == "<built-in>"
+       || exp.type().cmt_location().file().as_string() == "<built-in>")
+      return;
+
     if (is_for_block() || is_while_block())
-      loop_vars.insert(std::pair<exprt,struct_typet>(exp,str));
-    if (!is_expr_in_state(exp, str))
+      loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
+
+    if (!is_expr_in_state(exp, state))
     {
-      unsigned int size = str.components().size();
-      str.components().resize(size+1);
-      str.components()[size] = (struct_typet::componentt &) exp;
-      str.components()[size].set_name(exp.get_string("identifier"));
-      str.components()[size].pretty_name(exp.get_string("identifier"));
+      unsigned int size = state.components().size();
+      state.components().resize(size+1);
+      state.components()[size] = (struct_typet::componentt &) exp;
+      state.components()[size].set_name(exp.get_string("identifier"));
+      state.components()[size].pretty_name(exp.get_string("identifier"));
     }
   }
   else if (exp.operands().size()==1)
   {
     DEBUGLOC;
     if (exp.op0().is_symbol()) {
-      get_struct_components(exp.op0(), str);
+      get_struct_components(exp.op0());
     } else if (exp.op0().operands().size()==1)
-      get_struct_components(exp.op0().op0(), str);
+      get_struct_components(exp.op0().op0());
   }
   else if (exp.operands().size()==2)
   {
     DEBUGLOC;
     if (exp.op0().is_symbol()) {
-      get_struct_components(exp.op0(), str);
+      get_struct_components(exp.op0());
     } else if (exp.op0().operands().size())
-      get_struct_components(exp.op0().op0(), str);
+      get_struct_components(exp.op0().op0());
   }
   else
   {
     forall_operands(it, exp)
     {
       DEBUGLOC;
-      get_struct_components(*it, str);
+      get_struct_components(*it);
     }
   }
   DEBUGLOC;
@@ -903,7 +941,7 @@ void goto_convertt::convert_decl(
   }
 
   if (inductive_step)
-    get_struct_components(op0, state);
+    get_struct_components(op0);
 
   const irep_idt &identifier=op0.identifier();
 
@@ -1018,6 +1056,13 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
+  if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
+  {
+    const symbolst::const_iterator it=context.symbols.find(code.op0().identifier());
+    if(it!=context.symbols.end())
+      it->second.value.add("assignment_inside_loop")=irept("1");
+  }
+
   exprt lhs=code.lhs(),
         rhs=code.rhs();
 
@@ -1092,7 +1137,8 @@ void goto_convertt::convert_assign(
   }
 
   if (inductive_step && lhs.type().id() != "empty") {
-    get_struct_components(lhs, state);
+  if (inductive_step) {
+    get_struct_components(lhs);
     if (rhs.is_constant() && is_ifthenelse_block()) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
     }
@@ -1102,6 +1148,7 @@ void goto_convertt::convert_assign(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(lhs, dest);
     }
+  }
   }
 }
 
@@ -1770,8 +1817,8 @@ void goto_convertt::convert_for(
   if(inductive_step)
   {
     //assert(cond.operands().size()==2);
-    get_struct_components(cond, state);
-    get_struct_components(code.op3(), state);
+    get_struct_components(cond);
+    get_struct_components(code.op3());
     make_nondet_assign(dest);
   }
 
@@ -1792,10 +1839,7 @@ void goto_convertt::convert_for(
 
   // do the c label
   if (inductive_step)
-  {
     init_k_indice(dest);
-    init_k_induction_loop(dest);
-  }
 
   // do the v label
   goto_programt tmp_v;
@@ -1883,17 +1927,34 @@ void goto_convertt::convert_for(
   targets.restore(old_targets);
   set_for_block(false);
   state_counter++;
+}
 
-  if(inductive_step)
-  {
-    std::string identifier;
-    identifier = "kinductionloop$"+i2string(1);
 
-    exprt lhs_index = symbol_exprt(identifier, bool_typet());
+/*******************************************************************\
 
-    //kindice=kindice+1
-    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
-    copy(new_assign_plus, ASSIGN, dest);
+Function: goto_convertt::add_global_variable_to_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::add_global_variable_to_state()
+{
+  if(!inductive_step)
+    return;
+
+  forall_symbols(it, context.symbols) {
+    if(it->second.static_lifetime && !it->second.type.is_pointer())
+    {
+      exprt s = symbol_expr(it->second);
+      if(it->second.value.id()==irep_idt("array_of"))
+        s.type()=it->second.value.type();
+      get_struct_components(s);
+    }
   }
 }
 
@@ -2020,29 +2081,6 @@ void goto_convertt::init_k_indice(
   identifier = "kindice$"+i2string(state_counter);
   exprt lhs_index = symbol_exprt(identifier, int_type());
   exprt zero_expr = gen_zero(int_type());
-  code_assignt new_assign(lhs_index,zero_expr);
-  copy(new_assign, ASSIGN, dest);
-}
-
-/*******************************************************************\
-
-Function: goto_convertt::init_k_indice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_convertt::init_k_induction_loop(
-  goto_programt &dest)
-{
-  std::string identifier;
-  identifier = "kinductionloop$"+i2string(1);
-  exprt lhs_index = symbol_exprt(identifier, bool_typet());
-  exprt zero_expr = gen_one(bool_typet());
   code_assignt new_assign(lhs_index,zero_expr);
   copy(new_assign, ASSIGN, dest);
 }
@@ -2290,13 +2328,13 @@ void goto_convertt::replace_infinite_loop(
   identifier = "c::i$"+i2string(state_counter);
   exprt indice = symbol_exprt(identifier, uint_type());
 
-  get_struct_components(indice, state);
+  get_struct_components(indice);
 
   //declare variables n$ of type uint
   identifier = "c::n$"+i2string(state_counter);
   exprt n_expr = symbol_exprt(identifier, uint_type());
 
-  get_struct_components(n_expr, state);
+  get_struct_components(n_expr);
 
   exprt zero_expr = gen_zero(uint_type());
   exprt nondet_expr=side_effect_expr_nondett(uint_type());
@@ -2351,7 +2389,7 @@ void goto_convertt::set_expr_to_nondet(
       std::string identifier;
       identifier = "c::x$"+i2string(state_counter);
       exprt x_expr = symbol_exprt(identifier, uint_type());
-      get_struct_components(x_expr, state);
+      get_struct_components(x_expr);
       exprt nondet_expr=side_effect_expr_nondett(uint_type());
 
       //initialize x=nondet_uint();
@@ -2547,7 +2585,7 @@ void goto_convertt::convert_while(
   // do the t label
   if(inductive_step)
   {
-    get_struct_components(code.op1(), state);
+    get_struct_components(code.op1());
     make_nondet_assign(dest);
   }
 
@@ -2566,7 +2604,7 @@ void goto_convertt::convert_while(
           !code.op0().op0().op1().is_nil())
       {
         exprt *lhs=&code.op0().op0().op0(),
-            *rhs=&code.op0().op0().op1();
+              *rhs=&code.op0().op0().op1();
         if(rhs->id()=="sideeffect" &&
             (rhs->statement()=="cpp_new" ||
                 rhs->statement()=="cpp_new[]"))
@@ -2610,10 +2648,7 @@ void goto_convertt::convert_while(
 
   //do the c label
   if (inductive_step)
-  {
     init_k_indice(dest);
-    init_k_induction_loop(dest);
-  }
 
   dest.destructive_append(tmp_branch);
 
@@ -2652,18 +2687,6 @@ void goto_convertt::convert_while(
   set_while_block(false);
   set_break(false);
   set_goto(false);
-
-  if(inductive_step)
-  {
-    std::string identifier;
-    identifier = "kinductionloop$"+i2string(1);
-
-    exprt lhs_index = symbol_exprt(identifier, bool_typet());
-
-    //kindice=kindice+1
-    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
-    copy(new_assign_plus, ASSIGN, dest);
-  }
 }
 
 /*******************************************************************\
@@ -2720,7 +2743,7 @@ void goto_convertt::convert_dowhile(
   // do the t label
   if(inductive_step)
   {
-    get_struct_components(code.op1(), state);
+    get_struct_components(code.op1());
     make_nondet_assign(dest);
   }
 
@@ -2745,10 +2768,7 @@ void goto_convertt::convert_dowhile(
 
   //do the c label
   if (inductive_step)
-  {
     init_k_indice(dest);
-    init_k_induction_loop(dest);
-  }
 
   // set the targets
   targets.set_break(z);
@@ -2803,18 +2823,6 @@ void goto_convertt::convert_dowhile(
 
   // restore break/continue targets
   targets.restore(old_targets);
-
-  if(inductive_step)
-  {
-    std::string identifier;
-    identifier = "kinductionloop$"+i2string(1);
-
-    exprt lhs_index = symbol_exprt(identifier, bool_typet());
-
-    //kindice=kindice+1
-    code_assignt new_assign_plus(lhs_index, gen_zero(bool_typet()));
-    copy(new_assign_plus, ASSIGN, dest);
-  }
 }
 
 /*******************************************************************\
@@ -3460,6 +3468,28 @@ void goto_convertt::replace_ifthenelse(
 
   bool found=false;
 
+  if(expr.id()=="constant")
+    return;
+
+  // We only transform the condition if all the variables are not touched during
+  // the loop
+  if(expr.operands().size()==2)
+  {
+    exprt::operandst::iterator it = expr.operands().begin();
+    for( ; it != expr.operands().end(); ++it)
+    {
+      const symbolst::const_iterator it1=context.symbols.find(it->identifier());
+      if(it1!=context.symbols.end())
+        if(!it1->second.static_lifetime)
+        {
+          // Before returning we must check if the variable is dirty, if that is true
+          // then we should replace it
+          if(it1->second.value.add("assignment_inside_loop") == irept(""))
+            return;
+        }
+    }
+  }
+
   if (expr.operands().size()==0 || expr.operands().size() == 1)
   {
     exprt new_expr;
@@ -3471,21 +3501,27 @@ void goto_convertt::replace_ifthenelse(
     if (!found) std::cout << "failed" << std::endl;
     assert(found);
 
-    if (!new_expr.type().is_bool())
-      new_expr.make_typecast(bool_typet());
     expr = new_expr;
   }
   else
   {
     assert(expr.operands().size()==2);
+
+    if(expr.has_operands())
+    {
+      exprt::operandst::iterator it = expr.operands().begin();
+      for( ; it != expr.operands().end(); ++it)
+        replace_ifthenelse(*it);
+      return;
+    }
+
     nondet_varst::const_iterator result_op0 = nondet_vars.find(expr.op0());
     nondet_varst::const_iterator result_op1 = nondet_vars.find(expr.op1());
-    if (result_op0 != nondet_vars.end() &&
-        result_op1 != nondet_vars.end())
+
+    if (result_op0 != nondet_vars.end() && result_op1 != nondet_vars.end())
       return;
     else if (expr.op0().is_constant() || expr.op1().is_constant()) {
-      if (result_op0 != nondet_vars.end() ||
-          result_op1 != nondet_vars.end())
+      if (result_op0 != nondet_vars.end() || result_op1 != nondet_vars.end())
         return;
     }
 
@@ -3597,11 +3633,14 @@ void goto_convertt::convert_ifthenelse(
 
   remove_sideeffects(tmp_guard, dest);
   if (inductive_step && (is_for_block() || is_while_block()))
+  {
     replace_ifthenelse(tmp_guard);
 
-  //remove_sideeffects(tmp_guard, dest);
-  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
+    if (!tmp_guard.type().is_bool())
+      tmp_guard.make_typecast(bool_typet());
+  }
 
+  generate_ifthenelse(tmp_guard, tmp_op1, tmp_op2, location, dest);
   set_ifthenelse_block(false);
 }
 

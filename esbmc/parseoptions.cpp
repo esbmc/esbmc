@@ -594,18 +594,7 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           close (commPipe[1]);
 
-          fcntl(commPipe[0], F_SETFL, O_NONBLOCK);
-
-          struct resultt results[MAX_STEPS*3];
-
-          // Invalid values
-          for(short int i=0; i<3; ++i)
-          {
-            results[i].step=NONE;
-            results[i].result=-1;
-            results[i].k=51;
-            results[i].finished=false;
-          }
+          struct resultt a_result;
 
           bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
 
@@ -623,7 +612,22 @@ int cbmc_parseoptionst::doit_k_induction()
           while(!(bc_finished && fc_finished && is_finished)
             && !solution_found)
           {
-            read(commPipe[0], results, sizeof(results));
+            // Perform read and interpret the number of bytes read
+            int read_size;
+            if ((read_size = read(commPipe[0], &a_result, sizeof(resultt))) !=
+                sizeof(resultt)) {
+              if (read_size == 0) {
+                // Client hung up; continue on, but don't interpret the result.
+                ;
+              } else {
+                // Invalid size read.
+                std::cerr << "Short read communicating with kinduction children"
+                          << std::endl;
+                std::cerr << "Size " << read_size << ", expected "
+                          << sizeof(resultt) << std::endl;
+                abort();
+              }
+            }
 
             // Eventually checks on each step
             if(!bc_finished)
@@ -635,7 +639,11 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
+
                 bc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  fc_finished=is_finished=true;
               }
             }
 
@@ -648,7 +656,11 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
+
                 fc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=is_finished=true;
               }
             }
 
@@ -661,62 +673,65 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
+
                 is_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=fc_finished=true;
               }
             }
 
-            unsigned i=0;
-            while((results[i].result != -1) && (i < MAX_STEPS*3))
+            if (read_size == 0)
+              continue;
+
+            switch(a_result.step)
             {
-              switch(results[i].step)
-              {
-                case BASE_CASE:
-                  if(results[i].finished)
-                  {
-                    bc_finished=true;
-                    break;
-                  }
-
-                  bc_res[results[i].k] = results[i].result;
-
-                  if(results[i].result)
-                    solution_found = results[i].k;
-
+              case BASE_CASE:
+                if(a_result.finished)
+                {
+                  bc_finished=true;
                   break;
+                }
 
-                case FORWARD_CONDITION:
-                  if(results[i].finished)
-                  {
-                    fc_finished=true;
-                    break;
-                  }
+                bc_res[a_result.k] = a_result.result;
 
-                  fc_res[results[i].k] = results[i].result;
+                if(a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                break;
 
+              case FORWARD_CONDITION:
+                if(a_result.finished)
+                {
+                  fc_finished=true;
                   break;
+                }
 
-                case INDUCTIVE_STEP:
-                  if(results[i].finished)
-                  {
-                    is_finished=true;
-                    break;
-                  }
+                fc_res[a_result.k] = a_result.result;
 
-                  is_res[results[i].k] = results[i].result;
+                if(!a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                break;
 
+              case INDUCTIVE_STEP:
+                if(a_result.finished)
+                {
+                  is_finished=true;
                   break;
+                }
 
-                default:
-                  break;
-              }
+                is_res[a_result.k] = a_result.result;
 
-              ++i;
+                if(!a_result.result)
+                  solution_found = a_result.k;
+
+                break;
+
+              default:
+                std::cerr << "Message from unrecognized k-induction child "
+                << "process" << std::endl;
+                abort();
             }
           }
 
@@ -728,15 +743,23 @@ int cbmc_parseoptionst::doit_k_induction()
             std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
 
           if(bc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the base case" << std::endl;
+            std::cout << "VERIFICATION FAILED" << std::endl;
+          }
 
           // Successful!
-          if(!bc_res[solution_found]
-                     && !fc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          if(!bc_res[solution_found] && !fc_res[solution_found])
+          {
+            std::cout << std::endl << "Solution found by the forward condition" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           if(!bc_res[solution_found] && !is_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the inductive step" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           return res;
         }
@@ -773,6 +796,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_base_case = context;
+        namespacet ns_base_case(context_base_case);
+        migrate_namespace_lookup = &ns_base_case;
 
         bmct bmc_base_case(goto_functions_base_case, opts1,
           context_base_case, ui_message_handler);
@@ -785,6 +810,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=BASE_CASE;
         r.k=0;
         r.finished=false;
@@ -804,6 +830,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
         return res;
 
@@ -836,6 +864,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_forward_condition = context;
+        namespacet ns_forward_condition(context_forward_condition);
+        migrate_namespace_lookup = &ns_forward_condition;
 
         bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
           context_forward_condition, ui_message_handler);
@@ -848,6 +878,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=FORWARD_CONDITION;
         r.k=0;
         r.finished=false;
@@ -867,6 +898,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
         return res;
 
@@ -897,6 +930,8 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_inductive_step = context;
+        namespacet ns_inductive_step(context_inductive_step);
+        migrate_namespace_lookup = &ns_inductive_step;
 
         bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
           context_inductive_step, ui_message_handler);
@@ -907,6 +942,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=INDUCTIVE_STEP;
         r.k=0;
         r.finished=false;
@@ -926,6 +962,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
         return res;
 

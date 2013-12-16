@@ -218,7 +218,7 @@ namespace z3 {
         object(object const & s):m_ctx(s.m_ctx) {}
         context & ctx() const { return *m_ctx; }
         void check_error() const { m_ctx->check_error(); }
-        friend void check_context(object const & a, object const & b) { assert(a.m_ctx == b.m_ctx); }
+        friend void check_context(object const & a __attribute__((unused)), object const & b __attribute__((unused))) { assert(a.m_ctx == b.m_ctx); }
     };
 
     class symbol : public object {
@@ -451,7 +451,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -471,7 +471,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -491,7 +491,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -511,7 +511,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -576,7 +576,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -594,7 +594,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -612,7 +612,7 @@ namespace z3 {
       }
       else {
           // operator is not supported by given arguments.
-          assert(false);
+          abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -633,7 +633,7 @@ namespace z3 {
       }
       else {
         // operator is not supported by given arguments.
-        assert(false);
+        abort();
       }
       a.check_error();
       return expr(a.ctx(), r);
@@ -702,7 +702,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -722,7 +722,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -757,7 +757,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -776,7 +776,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -794,7 +794,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -821,7 +821,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -840,7 +840,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -859,7 +859,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
@@ -878,7 +878,7 @@ namespace z3 {
             }
             else {
                 // operator is not supported by given arguments.
-                assert(false);
+                abort();
             }
             a.check_error();
             return expr(a.ctx(), r);
