@@ -113,6 +113,7 @@ public:
       offset_is_set(true)
     {
       assert(offset_set);
+      offset_set = offset_set;
     }
 
     /** Record of the explicit offset into the object. Only valid when

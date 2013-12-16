@@ -3639,7 +3639,7 @@ namespace z3 {
 //
 // So, don't distribute this.
 #ifdef NDEBUG
-#error Don't distribute/release shadily licensed MS workaround code. And don't delete this error without asking jmorse.
+
 #endif
 
 Z3_ast

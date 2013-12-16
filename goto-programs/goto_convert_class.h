@@ -45,10 +45,8 @@ public:
     while_block=false;
     state_counter=1;
     k_induction=false;
-    inductive_step=
-      options.get_bool_option("inductive-step");
-    base_case=
-      options.get_bool_option("base-case");
+    inductive_step=options.get_bool_option("inductive-step");
+    base_case=options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -196,6 +194,7 @@ protected:
   //
   // k-induction conversion
   //
+  void add_global_variable_to_state();
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);

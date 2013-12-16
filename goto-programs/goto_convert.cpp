@@ -529,7 +529,6 @@ void goto_convertt::convert_block(
   }
 }
 
-
 /*******************************************************************\
 
 Function: goto_convertt::convert_sideeffect
@@ -558,6 +557,13 @@ void goto_convertt::convert_sideeffect(
       err_location(expr);
       str << statement << " takes one argument";
       throw 0;
+    }
+
+    if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
+    {
+      const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+      if(it!=context.symbols.end())
+        it->second.value.add("assignment_inside_loop")=irept("1");
     }
 
     exprt rhs;
@@ -853,6 +859,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
 
     if(exp.identifier().as_string() == "c::__func__"
        || exp.identifier().as_string() == "c::__PRETTY_FUNCTION__"
+       || exp.identifier().as_string() == "c::__LINE__"
        || exp.identifier().as_string() == "c::pthread_lib::num_total_threads"
        || exp.identifier().as_string() == "c::pthread_lib::num_threads_running")
       return;
@@ -1049,6 +1056,13 @@ void goto_convertt::convert_assign(
     throw "assignment statement takes two operands";
   }
 
+  if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
+  {
+    const symbolst::const_iterator it=context.symbols.find(code.op0().identifier());
+    if(it!=context.symbols.end())
+      it->second.value.add("assignment_inside_loop")=irept("1");
+  }
+
   exprt lhs=code.lhs(),
         rhs=code.rhs();
 
@@ -1124,7 +1138,6 @@ void goto_convertt::convert_assign(
 
   if (inductive_step && lhs.type().id() != "empty") {
     get_struct_components(lhs);
-
     if (rhs.is_constant() && is_ifthenelse_block()) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
     }
@@ -1912,6 +1925,35 @@ void goto_convertt::convert_for(
   targets.restore(old_targets);
   set_for_block(false);
   state_counter++;
+}
+
+
+/*******************************************************************\
+
+Function: goto_convertt::add_global_variable_to_state
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::add_global_variable_to_state()
+{
+  if(!inductive_step)
+    return;
+
+  forall_symbols(it, context.symbols) {
+    if(it->second.static_lifetime && !it->second.type.is_pointer())
+    {
+      exprt s = symbol_expr(it->second);
+      if(it->second.value.id()==irep_idt("array_of"))
+        s.type()=it->second.value.type();
+      get_struct_components(s);
+    }
+  }
 }
 
 /*******************************************************************\
@@ -3427,12 +3469,23 @@ void goto_convertt::replace_ifthenelse(
   if(expr.id()=="constant")
     return;
 
-  if(expr.operands().size())
+  // We only transform the condition if all the variables are not touched during
+  // the loop
+  if(expr.operands().size()==2)
   {
-    const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
-    if(it!=context.symbols.end())
-      if(!it->second.static_lifetime)
-        return;
+    exprt::operandst::iterator it = expr.operands().begin();
+    for( ; it != expr.operands().end(); ++it)
+    {
+      const symbolst::const_iterator it1=context.symbols.find(it->identifier());
+      if(it1!=context.symbols.end())
+        if(!it1->second.static_lifetime)
+        {
+          // Before returning we must check if the variable is dirty, if that is true
+          // then we should replace it
+          if(it1->second.value.add("assignment_inside_loop") == irept(""))
+            return;
+        }
+    }
   }
 
   if (expr.operands().size()==0 || expr.operands().size() == 1)

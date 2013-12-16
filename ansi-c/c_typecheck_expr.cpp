@@ -305,8 +305,6 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
         symbolt &symbol=s_it->second;
         symbol.value.add("inside_loop") = true_exprt();
       }
-      else
-        std::cerr << "*** WARNING: failed apply k-induction transformations" << std::endl;
     }
 
     typecheck_expr(expr.op1()); // arguments

@@ -246,9 +246,11 @@ void value_sett::get_value_set_rec(
   {
     // This is an index, fetch values from the array being indexed.
     const index2t &idx = to_index2t(expr);
-    const type2tc &source_type = idx.source_value->type;
 
+#ifndef NDEBUG
+    const type2tc &source_type = idx.source_value->type;
     assert(is_array_type(source_type) || is_string_type(source_type));
+#endif
 
     // Attach '[]' to the suffix, identifying the variable tracking all the
     // pointers in this array.
@@ -261,9 +263,11 @@ void value_sett::get_value_set_rec(
     // We're selecting a member variable of a structure: fetch the values it
     // might point at.
     const member2t &memb = to_member2t(expr);
-    const type2tc &source_type = memb.source_value->type;
 
+#ifndef NDEBUG
+    const type2tc &source_type = memb.source_value->type;
     assert(is_struct_type(source_type) || is_union_type(source_type));
+#endif
            
     // Add '.$field' to the suffix, identifying the member from the other
     // members of the struct's variable.

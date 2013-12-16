@@ -529,10 +529,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
-  forall_symbols(it, context.symbols) {
-    if(it->second.static_lifetime && !it->second.type.is_pointer())
-      get_struct_components(symbol_expr(it->second));
-  }
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
 
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
