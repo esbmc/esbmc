@@ -64,7 +64,7 @@ public:
       \param[in] src an empty goto program
       \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt(const goto_programt &src)
+  inline goto_programt(const goto_programt &src __attribute__((unused)))
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     assert(src.instructions.empty());
@@ -74,7 +74,8 @@ public:
       \param[in] src an empty goto program
       \remark Use copy_from to copy non-empty goto-programs
   */
-  inline goto_programt &operator=(const goto_programt &src)
+  inline goto_programt &operator=(const goto_programt &src
+                                  __attribute__((unused)))
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     assert(src.instructions.empty());
