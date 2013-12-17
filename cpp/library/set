@@ -123,6 +123,11 @@ public:
 			base = i.base;
 		}
 
+		const_iterator(const iterator& i){
+			pos = i.pos;
+			base = i.base;
+		}
+
 		const_iterator(key_type *bbase, int ppos){
 			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
@@ -133,11 +138,6 @@ public:
 
 		}
 		const_iterator& operator=(const const_iterator& i){
-			this->pos = i.pos;
-			this->base = i.base;
-		}
-
-		const_iterator& operator=(const iterator& i){
 			this->pos = i.pos;
 			this->base = i.base;
 		}
@@ -175,15 +175,8 @@ public:
 		bool operator == (const const_iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
-		bool operator == (const iterator& it) const{
-			return ((base == it.base)&&(pos == it.pos));
-		}
 
 		bool operator != (const const_iterator& it) const{
-			return !((base == it.base)&&(pos == it.pos));
-		}
-
-		bool operator != (const iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
@@ -700,6 +693,11 @@ public:
 		key_type* base;
 
 		const_iterator(const const_iterator& i){
+			pos = i.pos;
+			base = i.base;
+		}
+
+		const_iterator(const iterator& i){
 			pos = i.pos;
 			base = i.base;
 		}
