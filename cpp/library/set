@@ -545,7 +545,7 @@ public:
 		return counter;
 	}
 
-	iterator lower_bound(const key_type& x) const{
+	iterator lower_bound(const key_type& x) {
 		int first = 0, last = _size;
 		while(first != last)
 		{
@@ -556,19 +556,50 @@ public:
 		return iterator(buf,first);
 	}
 
-	iterator upper_bound(const key_type& x) const{
+	const_iterator lower_bound(const key_type& x) const{
+		int first = 0, last = _size;
+		while(first != last)
+		{
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((x< buf[first])||(x == buf[first]))
+                          return const_iterator(buf,first);
+			else first++;
+		}
+		return const_iterator(buf,first);
+	}
+
+	iterator upper_bound(const key_type& x) {
 		int first = 0, last = _size - 1;
 		while(first != last)
 		{
 			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
-			if((buf[last]< x)||(x == buf[last])) return iterator(buf,last+1);
+			if((buf[last]< x)||(x == buf[last]))
+                          return iterator(buf,last+1);
 			else last--;
 
 		}
 		return iterator(buf,last);
 	}
 
-	pair<iterator,iterator> equal_range(const key_type& x) const{
+	const_iterator upper_bound(const key_type& x) const {
+		int first = 0, last = _size - 1;
+		while(first != last)
+		{
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((buf[last]< x)||(x == buf[last]))
+                          return const_iterator(buf,last+1);
+			else last--;
+
+		}
+		return const_iterator(buf,last);
+	}
+
+	pair<iterator,iterator> equal_range(const key_type& x) {
+		return make_pair(upper_bound(x), lower_bound(x));
+	}
+
+	pair<const_iterator, const_iterator>
+          equal_range(const key_type& x) const{
 		return make_pair(upper_bound(x), lower_bound(x));
 	}
 
@@ -1081,34 +1112,70 @@ public:
 		return counter;
 	}
 
-	iterator lower_bound(const key_type& x) const{
+	iterator lower_bound(const key_type& x) {
 		int first = 0, last = _size;
 		int y;
 		while(first != last)
 		{
 			y = buf[first];
-			if(Compare()(x, y)||(x == y)) return iterator(buf,first);
+			if(Compare()(x, y)||(x == y))
+                          return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
 	}
 
-	iterator upper_bound(const key_type& x) const{
+	const_iterator lower_bound(const key_type& x) const{
+		int first = 0, last = _size;
+		int y;
+		while(first != last)
+		{
+			y = buf[first];
+			if(Compare()(x, y)||(x == y))
+                          return const_iterator(buf,first);
+			else first++;
+		}
+		return const_iterator(buf,first);
+	}
+
+	iterator upper_bound(const key_type& x) {
 		int first = 0, last = _size;
 		last--;
 		int y;
 		while(first != last)
 		{
 			y = buf[first];
-			if(!Compare()(x, y)) return iterator(buf,last);
+			if(!Compare()(x, y))
+                          return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
 	}
 
-	pair<iterator,iterator> equal_range(const key_type& x) const{
+	const_iterator upper_bound(const key_type& x) const {
+		int first = 0, last = _size;
+		last--;
+		int y;
+		while(first != last)
+		{
+			y = buf[first];
+			if(!Compare()(x, y))
+                          return const_iterator(buf,last);
+			else last--;
+		}
+		return const_iterator(buf,last);
+	}
+
+
+	pair<iterator,iterator> equal_range(const key_type& x) {
 		return make_pair(upper_bound(x), lower_bound(x));
 	}
+
+	pair<const_iterator, const_iterator>
+          equal_range(const key_type& x) const {
+		return make_pair(upper_bound(x), lower_bound(x));
+	}
+
 
 };
 
