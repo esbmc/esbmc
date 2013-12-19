@@ -373,6 +373,16 @@ const symbolt &cpp_typecheckt::instantiate_template(
       new_symb.type.set("#template_arguments", new_decl.find("#template_arguments"));
     }
 
+    // Put the template we're instantiating from into the class scope. The class
+    // is entitled to use its own template with different template args, and in
+    // that circumstance it needs to be able to resolve the classname to the
+    // template, not just the instantiated class.
+    cpp_scopet &class_scope =
+      cpp_scopes.get_scope(new_decl.type().identifier());
+    cpp_idt &identifier=
+      cpp_scopes.put_into_scope(template_symbol, class_scope, false);
+    identifier.id_class = cpp_idt::TEMPLATE;
+
     return new_symb;
   }
 
