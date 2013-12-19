@@ -166,11 +166,6 @@ bool cpp_typecheck_fargst::match(
     unsigned rank = 0;
     exprt new_expr;
 
-    #if 0
-    std::cout << "C: " << cpp_typecheck.to_string(operand.type())
-              << " -> " << cpp_typecheck.to_string(argument.type()) << std::endl;
-    #endif
-
     // can we do the standard conversion sequence?
     if(cpp_typecheck.implicit_conversion_sequence(
         operand, argument.type(), new_expr, rank))
@@ -179,15 +174,9 @@ bool cpp_typecheck_fargst::match(
 
       // ok
       distance+=rank;
-      #if 0
-      std::cout << "OK " << rank << std::endl;
-      #endif
     }
     else
     {
-      #if 0
-      std::cout << "NOT OK" << std::endl;
-      #endif
       return false; // no conversion possible
     }
   }
