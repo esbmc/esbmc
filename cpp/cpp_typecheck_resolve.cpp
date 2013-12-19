@@ -283,6 +283,53 @@ void cpp_typecheck_resolvet::remove_duplicates(
   }
 }
 
+void
+cpp_typecheck_resolvet::disambiguate_copy_constructor(
+    resolve_identifierst &identifiers)
+{
+  // C++ has an ambiguity: templates can be defined that will exactly match
+  // the signature of the copy constructor in the right circumstances. Section
+  // 12.8.3 specifies that templates must not be candidates for copy
+  // constructors, and if anything else is an equal match as the copy
+  // constructor, the program is ill formed.
+  // To implement this, if the list of identifiers we have contains a copy
+  // constructor, go through and remove all templates. That implements the
+  // "no-templates" part of the spec.
+  // Leaving all other candidates in, even if there are multiple candidates,
+  // will implement the "ill formed if any methods equivalent to copy
+  // constructor" part. (Because this will be rejected later).
+
+  // First: is there a copy constructor in here?
+  bool has_copy_cons = false;
+  for(resolve_identifierst::const_iterator
+      it=identifiers.begin();
+      it!=identifiers.end();
+      it++)
+  {
+    if (it->type().id() == "code" &&
+        it->type().return_type().get("#default_copy_cons") == "1")
+      has_copy_cons = true;
+  }
+
+  if (!has_copy_cons)
+    return;
+
+  // Erase anything that was a template.
+
+  resolve_identifierst::iterator it = identifiers.begin();
+  while (it != identifiers.end())
+  {
+    // Identify and eliminate templates by seeing if they've been instantiated
+    // in apply/guess template args. This is indicated by the speculative
+    // template flag.
+    const symbolt &sym = cpp_typecheck.lookup(it->identifier());
+    if (sym.value.get("#speculative_template") == "1")
+      it = identifiers.erase(it);
+    else
+      it++;
+  }
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheck_resolvet::convert_template_argument
@@ -1788,6 +1835,8 @@ exprt cpp_typecheck_resolvet::resolve(
   disambiguate_functions(new_identifiers, fargs);
 
   remove_duplicates(new_identifiers);
+
+  disambiguate_copy_constructor(new_identifiers);
 
   if(new_identifiers.size()==1)
   {

@@ -97,6 +97,9 @@ protected:
   void remove_duplicates(
     resolve_identifierst &identifiers);
 
+  void disambiguate_copy_constructor(
+    resolve_identifierst &identifiers);
+
   exprt guess_function_template_args(
     const exprt &expr,
     const cpp_typecheck_fargst &fargs);
