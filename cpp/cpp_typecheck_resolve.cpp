@@ -1165,6 +1165,29 @@ cpp_scopet &cpp_typecheck_resolvet::resolve_scope(
 
         filter_for_named_scopes(id_set);
 
+        if (id_set.size() == 2) {
+          // Special case: if in this scope there's a) a template and b) a
+          // class, then one is an instantiation of the other. And (only) in
+          // this case, if there are no template arguments, resolve to the class
+          // instead of the template.
+          cpp_scopest::id_sett::iterator it = id_set.begin();
+          cpp_scopest::id_sett::iterator it1 = it;
+          const cpp_idt &id1 = **it++;
+          cpp_scopest::id_sett::iterator it2 = it;
+          const cpp_idt &id2 = **it++;
+
+          if ((id1.id_class == cpp_idt::TEMPLATE &&
+               id2.id_class == cpp_idt::CLASS) ||
+              (id1.id_class == cpp_idt::CLASS &&
+               id2.id_class == cpp_idt::TEMPLATE))
+          {
+            if (id1.id_class == cpp_idt::TEMPLATE)
+              id_set.erase(it1);
+            else
+              id_set.erase(it2);
+          }
+        }
+
         if(id_set.empty())
         {
           cpp_typecheck.show_instantiation_stack(cpp_typecheck.str);
