@@ -632,6 +632,31 @@ void cpp_typecheck_resolvet::filter(
   }
 }
 
+void
+cpp_typecheck_resolvet::filter(cpp_scopest::id_sett &id_set, const wantt want)
+{
+  // When searching for templates named 'foo', any constructor templates for
+  // 'foo' will be returned too. This results in the function template code
+  // becoming unhappy for reasons unknown, and encoding template arguments into
+  // the symbol table twice (boom).
+  // Fix this by, when searching for types, eliminating function templates.
+
+  if (want != TYPE)
+    return;
+
+  cpp_scopest::id_sett old_set;
+  old_set.swap(id_set);
+  for(cpp_scopest::id_sett::const_iterator
+    it=old_set.begin();
+    it!=old_set.end();
+    it++) {
+    // OK; what kind of template are we dealing with here...
+    const symbolt &sym = cpp_typecheck.lookup((*it)->identifier);
+    if (sym.type.type().id() == "struct")
+      id_set.insert(*it);
+  }
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheck_resolvet::exact_match_functions
@@ -1803,6 +1828,8 @@ exprt cpp_typecheck_resolvet::resolve(
 
     if(!identifiers.size())
     {
+      filter(id_set, want);
+
       convert_identifiers(
         id_set, want, fargs, identifiers);
 
