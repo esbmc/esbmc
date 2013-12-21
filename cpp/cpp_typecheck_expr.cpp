@@ -1852,7 +1852,15 @@ void cpp_typecheckt::typecheck_side_effect_function_call(
   }
 
   // now do the function -- this has been postponed
-  typecheck_function_expr(expr.function(), cpp_typecheck_fargst(expr));
+  cpp_typecheck_fargst fargs(expr);
+  // If the expression is decorated with what the 'this' object is, add it to
+  // the fargst record. If it isn't available, name resolution will still work,
+  // it just won't take the 'this' argument into account when overloading. (NB:
+  // this is bad).
+  if (expr.find("#this_expr").is_not_nil())
+    fargs.add_object(static_cast<const exprt &>(expr.find("#this_expr")));
+
+  typecheck_function_expr(expr.function(), fargs);
 
   if(expr.function().id()=="type")
   {

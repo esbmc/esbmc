@@ -274,6 +274,19 @@ codet cpp_typecheckt::cpp_constructor(
         it++)
       function_call.op1().copy_to_operands(*it);
 
+    // Decorate function call with the 'this' object. Important so that
+    // constructor overloading works. Would add as an argument, but due to
+    // overriding of the C version of this method, that causes type horror.
+    if (object.id() == "already_typechecked") {
+      function_call.add("#this_expr") = object.op0();
+    } else {
+      // Alas, we need to add a type.
+      assert(object.id() == "symbol");
+      function_call.add("#this_expr") = object;
+      const symbolt &sym = lookup(object.identifier());
+      function_call.add("#this_expr").type() = sym.type;
+    }
+
     typecheck_side_effect_function_call(function_call);
     assert(function_call.statement() == "temporary_object");
 
