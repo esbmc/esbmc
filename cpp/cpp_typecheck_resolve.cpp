@@ -156,14 +156,18 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     }
   }
 
-  disambiguate_functions(identifiers, fargs);
   remove_duplicates(identifiers);
 
-  // there should only be one left, or we have failed to disambiguate
-  if(identifiers.size()==1)
+  // Don't disambiguate functions -- member functions don't have a 'this'
+  // parameter until they're instantiated, and without that detail we might pick
+  // the wrong template, due to not being able to overload on the 'this'
+  // parameter. Instead, instantiate them all, and let a later disambiguation
+  // solve tihs problem. SFINAE should prevent any substitution errors
+  // manifesting.
+  for(resolve_identifierst::iterator it=identifiers.begin();
+      it!=identifiers.end(); it++)
   {
-    // instantiate that one
-    exprt e=*identifiers.begin();
+    exprt e = *it;
     assert(e.id()=="template_function_instance");
 
     const symbolt &template_symbol=
@@ -191,22 +195,20 @@ void cpp_typecheck_resolvet::guess_function_template_args(
     symbolt &mutable_symbol = const_cast<symbolt&>(new_symbol);
     mutable_symbol.value.set("#speculative_template", "1");
 
-    identifiers.clear();
-    if (!fargs.has_object) {
-      identifiers.push_back(
+    if (!fargs.has_object || e.type().get("return_type") == "constructor") {
+      non_template_identifiers.push_back(
         symbol_exprt(new_symbol.name, new_symbol.type));
     } else {
       // This should be a member expression.
       exprt memb("member");
       memb.type() = new_symbol.type;
       memb.set("component_name", new_symbol.name);
-      identifiers.push_back(memb);
+      non_template_identifiers.push_back(memb);
     }
   }
 
   // Restore the non-template identifiers, which we haven't altered.
-  identifiers.insert(identifiers.begin(), non_template_identifiers.begin(),
-                     non_template_identifiers.end());
+  identifiers.swap(non_template_identifiers);
 }
 
 /*******************************************************************\
