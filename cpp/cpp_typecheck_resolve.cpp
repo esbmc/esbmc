@@ -867,28 +867,30 @@ void cpp_typecheck_resolvet::make_constructors(
 
     struct_typet struct_type = to_struct_type(symbol_type);
 
-    const struct_typet::componentst &components =
-      struct_type.components();
-
-    // go over components
-    for(struct_typet::componentst::const_iterator
-        itc=components.begin();
-        itc!=components.end();
-        itc++)
     {
-      const struct_typet::componentt &component = *itc;
-      const typet &type=component.type();
+      cpp_save_scopet cpp_saved_scope(cpp_typecheck.cpp_scopes);
+      cpp_typecheck.cpp_scopes.set_scope(struct_type.name());
+      const symbolt &the_sym = cpp_typecheck.lookup(struct_type.name());
 
-      if(component.get_bool("from_base"))
-        continue;
+      cpp_scopest::id_sett id_set;
+      cpp_typecheck.cpp_scopes.get_ids(the_sym.base_name, id_set, true);
 
-      if(type.return_type().id()=="constructor")
+      for(cpp_scopest::id_sett::const_iterator
+          it=id_set.begin();
+          it!=id_set.end();
+          it++)
       {
-        const symbolt &symb =
-          cpp_typecheck.lookup(component.get_name());
-        exprt e = cpp_symbol_expr(symb);
-        e.type() = type;
-        new_identifiers.push_back(e);
+        const symbolt &sub_sym = cpp_typecheck.lookup((*it)->identifier);
+
+        // Pick out member expressions that are constructors
+        if (sub_sym.type.id() == "code" &&
+            sub_sym.type.return_type().id() == "constructor")
+          new_identifiers.push_back(cpp_symbol_expr(sub_sym));
+
+        // Also template that are constructors.
+        if (sub_sym.type.id() == "cpp-declaration" &&
+            sub_sym.type.type().id() == "constructor")
+          new_identifiers.push_back(cpp_symbol_expr(sub_sym));
       }
     }
   }
