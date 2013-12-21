@@ -319,10 +319,17 @@ cpp_typecheck_resolvet::disambiguate_copy_constructor(
   resolve_identifierst::iterator it = identifiers.begin();
   while (it != identifiers.end())
   {
+    if (it->id() != "symbol" && it->id() != "member") {
+      it++;
+      continue;
+    }
+
     // Identify and eliminate templates by seeing if they've been instantiated
     // in apply/guess template args. This is indicated by the speculative
     // template flag.
-    const symbolt &sym = cpp_typecheck.lookup(it->identifier());
+    const irep_idt &name = (it->id() == "symbol") ? it->identifier()
+                                                  : it->component_name();
+    const symbolt &sym = cpp_typecheck.lookup(name);
     if (sym.value.get("#speculative_template") == "1")
       it = identifiers.erase(it);
     else
