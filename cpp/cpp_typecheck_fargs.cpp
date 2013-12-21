@@ -161,6 +161,17 @@ bool cpp_typecheck_fargst::match(
     {
       argument.type().set("#reference", true);
       argument.type().set("#this", true);
+
+      // Allow an explicit conversion of the operand to a reference; this is
+      // permitted by 5.2.2.4. Matching / conversion of the reference still
+      // needs to be applied though.
+      // XXXjmorse -- AFAIK it should alwas be possible to convert a straight
+      // object to an rvalue reference by implicit conversion, why is this
+      // conversion necessary here?
+      if (operand.type().id() != "pointer") {
+        operand = address_of_exprt(operand);
+        operand.type().set("#reference", "1");
+      }
     }
 
     unsigned rank = 0;
