@@ -1024,6 +1024,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
   exprt &new_expr,
   unsigned &rank)
 {
+  static bool recursion_guard = false;
   assert(!is_reference(expr.type()));
   assert(!is_reference(type));
 
@@ -1079,7 +1080,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
         }
       }
     }
-    else
+    else if (!recursion_guard)
     {
       struct_typet from_struct;
       from_struct.make_nil();
@@ -1089,151 +1090,69 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
       struct_typet to_struct=to_struct_type(to);
 
-      bool found = false;
+      // Look up a constructor that will build us a temporary of the correct
+      // type, and takes an argument of the relevant type. Do this by asking
+      // the resolve code to look it up for us; this avoids duplication, and
+      // nets us template constructors too.
 
-      for(struct_typet::componentst::const_iterator
-          it = to_struct.components().begin();
-          it != to_struct.components().end();
-          it++)
+      // Move to the struct scope
+      cpp_scopet &scope = cpp_scopes.get_scope(to_struct.name());
+      cpp_save_scopet cpp_saved_scope(cpp_scopes);
+      cpp_scopes.go_to(scope);
+
+      // Just look up the plain name from this scope.
+      // XXX this is super dodgy.
+      irept thename = to_struct.add("tag").get_sub()[0];
+      cpp_namet name_record;
+      name_record.get_sub().push_back(thename);
+
+      // Make a fake temporary.
+      symbol_exprt fake_temp("fake_temporary", type);
+      fake_temp.type().remove("#constant");
+      fake_temp.cmt_lvalue(true);
+
+      cpp_typecheck_fargst fargs;
+      fargs.in_use = true;
+      fargs.add_object(fake_temp);
+      fargs.operands.push_back(expr);
+
+      // Disallow more than one level of implicit construction.
+      recursion_guard = true;
+      exprt result = resolve(name_record, cpp_typecheck_resolvet::VAR, fargs,
+                             false);
+      recursion_guard = false;
+
+      // XXX explicit?
+      if (result.type().get_bool("is_explicit"))
+        goto out;
+
+      if (result.type().id() !="code")
+        goto out;
+
+      if(result.type().return_type().id() !="constructor")
+        goto out;
+
+      result.location() = expr.location();
+
       {
-        const irept& component = *it;
-
-        if(component.get_bool("from_base"))
-          continue;
-
-        if(component.get_bool("is_explicit"))
-          continue;
-
-        const typet& comp_type =
-          static_cast<const typet&>(component.type());
-
-        if(comp_type.id() !="code")
-          continue;
-
-        if(comp_type.return_type().id() !="constructor")
-          continue;
-
-        // TODO: ellipsis
-
-        const irept &arguments = comp_type.arguments();
-
-        if(arguments.get_sub().size() != 2)
-          continue;
-
-        exprt curr_arg1 = static_cast<const exprt&> (arguments.get_sub()[1]);
-        typet arg1_type = curr_arg1.type();
-
-        if(is_reference(arg1_type))
-        {
-          typet tmp=arg1_type.subtype();
-          arg1_type.swap(tmp);
-        }
-
-        struct_typet arg1_struct;
-        arg1_struct.make_nil();
-        {
-          typet tmp = follow(arg1_type);
-          if(tmp.id()=="struct")
-            arg1_struct = to_struct_type(tmp);
-        }
-
-        unsigned tmp_rank = 0;
-        if(arg1_struct.is_nil())
-        {
-            exprt tmp_expr;
-            if(standard_conversion_sequence(expr, arg1_type, tmp_expr, tmp_rank))
-            {
-              // check if it's ambiguous
-              if(found)
-                return false;
-              found = true;
-
-              if(expr.cmt_lvalue())
-                tmp_expr.set("#lvalue",true);
-
-              tmp_expr.location() = expr.location();
-
-              exprt func_symb = cpp_symbol_expr(lookup(component.name()));
-              func_symb.type() = comp_type;
-              {
-                exprt tmp("already_typechecked");
-                tmp.copy_to_operands(func_symb);
-                func_symb.swap(func_symb);
-              }
-
-              // create temporary object
-              side_effect_expr_function_callt ctor_expr;
-              ctor_expr.location() = expr.location();
-              ctor_expr.function().swap(func_symb);
-              ctor_expr.arguments().push_back(tmp_expr);
-              typecheck_side_effect_function_call(ctor_expr);
-
-              new_expr.swap(ctor_expr);
-              assert(new_expr.statement()=="temporary_object");
-
-              if(to.cmt_constant())
-                new_expr.type().cmt_constant(true);
-
-              rank += tmp_rank;
-            }
-          }
-          else if(from_struct.is_not_nil() && arg1_struct.is_not_nil())
-          {
-              // try derived-to-base conversion
-              exprt expr_pfrom("address_of", pointer_typet());
-              expr_pfrom.type().subtype() = expr.type();
-              expr_pfrom.copy_to_operands(expr);
-
-              pointer_typet pto;
-              pto.subtype() = arg1_type;
-
-              exprt expr_ptmp;
-              tmp_rank = 0;
-              if(standard_conversion_sequence(expr_pfrom, pto, expr_ptmp, tmp_rank))
-              {
-                // check if it's ambiguous
-                if(found)
-                  return false;
-                found = true;
-
-                rank+=tmp_rank;
-
-                // create temporary object
-                exprt expr_deref = exprt("dereference", expr_ptmp.type().subtype());
-                expr_deref.set("#lvalue", true);
-                expr_deref.copy_to_operands(expr_ptmp);
-                expr_deref.location() = expr.location();
-
-                exprt new_object("new_object", type);
-                new_object.set("#lvalue", true);
-                new_object.type().cmt_constant(false);
-
-                exprt func_symb = cpp_symbol_expr(lookup(component.name()));
-                func_symb.type() = comp_type;
-                {
-                  exprt tmp("already_typechecked");
-                  tmp.copy_to_operands(func_symb);
-                  func_symb.swap(func_symb);
-                }
-
-                side_effect_expr_function_callt ctor_expr;
-                ctor_expr.location() = expr.location();
-                ctor_expr.function().swap(func_symb);
-                ctor_expr.arguments().push_back(expr_deref);
-                typecheck_side_effect_function_call(ctor_expr);
-
-                new_expr.swap(ctor_expr);
-
-                assert(new_expr.statement()=="temporary_object");
-
-                if(to.cmt_constant())
-                  new_expr.type().cmt_constant(true);
-              }
-            }
-          }
-          if(found)
-            return true;
+        exprt tmp("already_typechecked");
+        tmp.copy_to_operands(result);
+        result.swap(result);
       }
+
+      // create temporary object
+      side_effect_expr_function_callt ctor_expr;
+      ctor_expr.location() = expr.location();
+      ctor_expr.function().swap(result);
+      ctor_expr.arguments().push_back(expr);
+      typecheck_side_effect_function_call(ctor_expr);
+
+      new_expr.swap(ctor_expr);
+      assert(new_expr.statement()=="temporary_object");
+
+      if(to.cmt_constant())
+        new_expr.type().cmt_constant(true);
+    }
   }
   else if(to.id() == "bool")
   {
@@ -1253,6 +1172,8 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
       new_expr.swap(tmp_expr);
     }
   }
+
+out:
 
   // conversion operators
   if(from.id()=="struct")
