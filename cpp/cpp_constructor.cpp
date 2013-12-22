@@ -287,6 +287,9 @@ codet cpp_typecheckt::cpp_constructor(
       function_call.add("#this_expr").type() = sym.type;
     }
 
+    // Also, 'this' is an lvalue.
+    function_call.add("#this_expr").cmt_lvalue(true);
+
     typecheck_side_effect_function_call(function_call);
     assert(function_call.statement() == "temporary_object");
 
