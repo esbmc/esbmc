@@ -1995,6 +1995,16 @@ exprt cpp_typecheck_resolvet::resolve(
     if (sym.value.get("#speculative_template") == "1") {
       sym.value.set("#template_in_use", "1");
     }
+  } else if (want == VAR && result.id() == "member") {
+    // Is this a fake-member, i.e. a member with component_name == symbol name?
+    if (cpp_typecheck.context.symbols.find(result.component_name()) !=
+        cpp_typecheck.context.symbols.end()) {
+      symbolt &sym =
+        cpp_typecheck.context.symbols.find(result.component_name())->second;
+      if (sym.value.get("#speculative_template") == "1") {
+        sym.value.set("#template_in_use", "1");
+      }
+    }
   }
 
   return result;
