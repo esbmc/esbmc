@@ -1010,11 +1010,12 @@ public:
 	pair<iterator,bool> insert(const value_type& x){
 		iterator it = begin();
 		int i, aux;
-		while(it != end())
-			if(*it == x) break;
-
-		if(it != end())
-			return make_pair(it, false);
+		while(it != end()) {
+                  if(*it == x) {
+                    return make_pair(it, false);
+                  }
+                  it++;
+                }
 
 		_size++;
 		i = _size;
