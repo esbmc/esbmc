@@ -431,16 +431,21 @@ public:
 	}
 
 	// modifiers:
-	iterator insert(const value_type& x){
+        std::pair<iterator, bool>
+        insert(const value_type& x){
 		iterator it = begin();
 		int i, aux;
-		while(it != end())
-			if(*it == x) break;
+		while(it != end()) {
+                  if(*it == x) {
+                    return make_pair(it, false);
+                  }
+                  it++;
+                }
 
 		_size++;
 		i = _size;
 
-
+                // it is equal to end() already.
 		while( it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
@@ -448,7 +453,7 @@ public:
 		}
 
 		buf[it.pos] = x;
-		return it;
+		return make_pair(it, true);
 	}
 
 	iterator insert(iterator position, const value_type& x){
