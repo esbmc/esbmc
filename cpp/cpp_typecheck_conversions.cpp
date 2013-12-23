@@ -1122,6 +1122,9 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
                              false);
       recursion_guard = false;
 
+      if (result.is_nil())
+        goto out;
+
       // XXX explicit?
       if (result.type().get_bool("is_explicit"))
         goto out;
