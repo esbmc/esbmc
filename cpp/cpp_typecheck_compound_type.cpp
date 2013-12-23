@@ -802,18 +802,29 @@ void cpp_typecheckt::put_compound_into_scope(
 
   if(compound.type().id()=="code")
   {
-    // put the symbol into scope
-    cpp_idt &id=cpp_scopes.current_scope().insert(base_name);
+    // put the symbol into scope. Template methods need to be put into the
+    // class scope, rather than the template, though. Unfortunately, we can't
+    // discover that from our argument. So instead attempt to match the scopes
+    // in this context to a template mthods.
+    cpp_scopet *target_scope = &cpp_scopes.current_scope();
+    if (target_scope->id_class == cpp_idt::UNKNOWN &&
+        target_scope->parents_size() &&
+        target_scope->get_parent(0).id_class == cpp_idt::TEMPLATE_SCOPE &&
+        target_scope->get_parent(0).get_parent(0).id_class == cpp_idt::CLASS)
+      target_scope = &target_scope->get_parent(0).get_parent(0);
+
+    cpp_idt &id=target_scope->insert(base_name);
     id.id_class=compound.is_type()?cpp_idt::TYPEDEF:cpp_idt::SYMBOL;
     id.identifier=name;
-    id.class_identifier=cpp_scopes.current_scope().identifier;
+    id.class_identifier=target_scope->identifier;
     id.is_member = true;
     id.is_constructor =
       compound.type().get("return_type") == "constructor";
     id.is_method = true;
     id.is_static_member=compound.get_bool("is_static");
 
-    // create function block-scope in the scope
+    // create function block-scope in the scope. Put that in the current scope
+    // rather than the class scope.
     cpp_idt &id_block=
       cpp_scopes.current_scope().insert(
         irep_idt(std::string("$block:") + base_name.c_str()));
