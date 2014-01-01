@@ -260,7 +260,7 @@ public:
 	ostream_iterator<T, charT, traits>& operator++() {
 		return *this;
 	}
-	ostream_iterator<T, charT, traits>& operator++(int) {
+	ostream_iterator<T, charT, traits> operator++(int) {
 		return *this;
 	}
 };
@@ -352,7 +352,7 @@ public:
 	ostreambuf_iterator& operator++();/* {
 		return *this;
 	}*/
-	ostreambuf_iterator& operator++(int);/* {
+	ostreambuf_iterator operator++(int);/* {
 		return *this;
 	}*/
 

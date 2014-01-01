@@ -79,7 +79,7 @@ public:
 		iterator& operator ++ (){
 			return iterator(base, ++pos);
 		}
-		iterator& operator ++ (int b){
+		iterator operator ++ (int b){
 			return iterator(base, pos++);
 		}
 
@@ -90,7 +90,7 @@ public:
 		iterator& operator -- (){
 			return iterator(base, --pos);
 		}
-		iterator& operator -- (int b){
+		iterator operator -- (int b){
 			return iterator(base, pos--);
 		}
 
@@ -154,7 +154,7 @@ public:
 		const_iterator& operator ++ (){
 			return const_iterator(base, ++pos);
 		}
-		const_iterator& operator ++ (int b){
+		const_iterator operator ++ (int b){
 			return const_iterator(base, pos++);
 		}
 
@@ -165,7 +165,7 @@ public:
 		const_iterator& operator -- (){
 			return const_iterator(base, --pos);
 		}
-		const_iterator& operator -- (int b){
+		const_iterator operator -- (int b){
 			return const_iterator(base, pos--);
 		}
 
@@ -222,7 +222,7 @@ public:
 		reverse_iterator& operator ++ (){
 			return reverse_iterator(base, --pos);
 		}
-		reverse_iterator& operator ++ (int b){
+		reverse_iterator operator ++ (int b){
 			return reverse_iterator(base, pos--);
 		}
 
@@ -233,7 +233,7 @@ public:
 		reverse_iterator& operator -- (){
 			return reverse_iterator(base, ++pos);
 		}
-		reverse_iterator& operator -- (int b){
+		reverse_iterator operator -- (int b){
 			return reverse_iterator(base, pos++);
 		}
 
@@ -288,7 +288,7 @@ public:
 		const_reverse_iterator& operator ++ (){
 			return const_reverse_iterator(base, --pos);
 		}
-		const_reverse_iterator& operator ++ (int b){
+		const_reverse_iterator operator ++ (int b){
 			return const_reverse_iterator(base, pos--);
 		}
 
@@ -299,7 +299,7 @@ public:
 		const_reverse_iterator& operator -- (){
 			return const_reverse_iterator(base, ++pos);
 		}
-		const_reverse_iterator& operator -- (int b){
+		const_reverse_iterator operator -- (int b){
 			return const_reverse_iterator(base, pos++);
 		}
 
@@ -659,7 +659,7 @@ public:
 		iterator& operator ++ (){
 			return iterator(base, ++pos);
 		}
-		iterator& operator ++ (int b){
+		iterator operator ++ (int b){
 			return iterator(base, pos++);
 		}
 
@@ -670,7 +670,7 @@ public:
 		iterator& operator -- (){
 			return iterator(base, --pos);
 		}
-		iterator& operator -- (int b){
+		iterator operator -- (int b){
 			return iterator(base, pos--);
 		}
 
@@ -733,7 +733,7 @@ public:
 		const_iterator& operator ++ (){
 			return const_iterator(base, ++pos);
 		}
-		const_iterator& operator ++ (int b){
+		const_iterator operator ++ (int b){
 			return const_iterator(base, pos++);
 		}
 
@@ -744,7 +744,7 @@ public:
 		const_iterator& operator -- (){
 			return const_iterator(base, --pos);
 		}
-		const_iterator& operator -- (int b){
+		const_iterator operator -- (int b){
 			return const_iterator(base, pos--);
 		}
 
@@ -800,7 +800,7 @@ public:
 		reverse_iterator& operator ++ (){
 			return reverse_iterator(base, --pos);
 		}
-		reverse_iterator& operator ++ (int b){
+		reverse_iterator operator ++ (int b){
 			return reverse_iterator(base, pos--);
 		}
 
@@ -811,7 +811,7 @@ public:
 		reverse_iterator& operator -- (){
 			return reverse_iterator(base, ++pos);
 		}
-		reverse_iterator& operator -- (int b){
+		reverse_iterator operator -- (int b){
 			return reverse_iterator(base, pos++);
 		}
 
@@ -866,7 +866,7 @@ public:
 		const_reverse_iterator& operator ++ (){
 			return const_reverse_iterator(base, --pos);
 		}
-		const_reverse_iterator& operator ++ (int b){
+		const_reverse_iterator operator ++ (int b){
 			return const_reverse_iterator(base, pos--);
 		}
 
@@ -877,7 +877,7 @@ public:
 		const_reverse_iterator& operator -- (){
 			return const_reverse_iterator(base, ++pos);
 		}
-		const_reverse_iterator& operator -- (int b){
+		const_reverse_iterator operator -- (int b){
 			return const_reverse_iterator(base, pos++);
 		}
 

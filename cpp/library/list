@@ -77,11 +77,11 @@ public:
 			return *this;
 		}
 
-		iterator operator --() {
+		iterator& operator --() {
 			this->it = this->it->prev;
 			return *this;
 		}
-		iterator& operator --(int) {
+		iterator operator --(int) {
 			this->it = this->it->prev;
 			return *this;
 		}
@@ -169,10 +169,10 @@ public:
 			return *this;
 		}
 
-		reverse_iterator operator --() {
+		reverse_iterator& operator --() {
 			return *this;
 		}
-		reverse_iterator& operator --(int) {
+		reverse_iterator operator --(int) {
 			return *this;
 		}
 
@@ -1004,7 +1004,7 @@ public:
 			return *this;
 		}
 
-		iterator operator --() {
+		iterator& operator --() {
 			this->it--;
 			this->pos--;
 			return *this;
@@ -1063,7 +1063,7 @@ public:
 			return *this;
 		}
 
-		reverse_iterator operator --() {
+		reverse_iterator& operator --() {
 			//todo
 			return *this;
 		}

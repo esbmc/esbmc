@@ -174,10 +174,10 @@ namespace std {
 			value_type & operator *();
 
 			iterator& operator ++();
-			iterator& operator ++(int);
+			iterator operator ++(int);
 
 			iterator& operator --();
-			iterator& operator --(int);
+			iterator operator --(int);
 
 			//bool operator == (const iterator& it) const;
 			bool operator !=(const iterator& it) const;
@@ -194,10 +194,10 @@ namespace std {
 		 //const value_type & operator * ();
 
 		 const_iterator& operator ++ ();
-		 const_iterator& operator ++ (int);
+		 const_iterator operator ++ (int);
 
 		 const_iterator& operator -- ();
-		 const_iterator& operator -- (int);
+		 const_iterator operator -- (int);
 
 		 bool operator == ( const const_iterator&)const;
 		 bool operator != ( const const_iterator&)const;
@@ -219,10 +219,10 @@ namespace std {
 			value_type & operator *();
 
 			reverse_iterator& operator ++();
-			reverse_iterator& operator ++(int);
+			reverse_iterator operator ++(int);
 
 			//reverse_iterator& operator -- ();
-			//reverse_iterator& operator -- (int);
+			//reverse_iterator operator -- (int);
 
 			//bool operator == ( const reverse_iterator&)const;
 			bool operator !=(const reverse_iterator&) const;
@@ -243,10 +243,10 @@ namespace std {
 			 //const value_type & operator * ();
 
 			 const_reverse_iterator& operator ++ ();
-			 const_reverse_iterator& operator++ (int);
+			 const_reverse_iterator operator++ (int);
 
 			 const_reverse_iterator& operator -- ();
-			 const_reverse_iterator& operator -- (int);
+			 const_reverse_iterator operator -- (int);
 
 			 bool operator == ( const const_reverse_iterator&)const;
 			 bool operator != ( const const_reverse_iterator&)const;
@@ -538,7 +538,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator ++(int) {
+		iterator operator ++(int) {
 			this->it_pos++;
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
@@ -551,7 +551,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator --(int) {
+		iterator operator --(int) {
 			this->it_pos--;
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
@@ -630,7 +630,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		reverse_iterator& operator ++(int) {
+		reverse_iterator operator ++(int) {
 			if (this->it_pos == 0) {
 				this->it_pos--;
 				this->it_pair.first = Key();
@@ -657,7 +657,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		reverse_iterator& operator --(int) {
+		reverse_iterator operator --(int) {
 			if (this->it_pos == this->it_size) {
 				this->it_pos = 0;
 			} else {
@@ -1302,7 +1302,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator ++(int) {
+		iterator operator ++(int) {
 			this->it_pos++;
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
@@ -1315,7 +1315,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		iterator& operator --(int) {
+		iterator operator --(int) {
 			this->it_pos--;
 			this->it_pair.first = this->it_key[this->it_pos];
 			this->it_pair.second = this->it_value[this->it_pos];
@@ -1394,7 +1394,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		reverse_iterator& operator ++(int) {
+		reverse_iterator operator ++(int) {
 			if (this->it_pos == 0) {
 				this->it_pos--;
 				this->it_pair.first = Key();
@@ -1421,7 +1421,7 @@ public:
 			this->it_pair.second = this->it_value[this->it_pos];
 			return *this;
 		}
-		reverse_iterator& operator --(int) {
+		reverse_iterator operator --(int) {
 			if (this->it_pos == this->it_size) {
 				this->it_pos = 0;
 			} else {

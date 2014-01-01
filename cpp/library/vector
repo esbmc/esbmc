@@ -67,14 +67,14 @@ namespace std{
         iterator& operator ++ (){
           return iterator(++pointer,++pos,vec_pos);
         }
-        iterator& operator ++ (int b){
+        iterator operator ++ (int b){
           return iterator(pointer++,pos++,vec_pos);
         }
 
         iterator& operator -- (){
           return iterator(--pointer,--pos,vec_pos);
         }
-        iterator& operator -- (int b){
+        iterator operator -- (int b){
           return iterator(pointer--,pos--,vec_pos);
         }
 
@@ -161,14 +161,14 @@ namespace std{
           const_iterator& operator ++ (){
             return const_iterator(++pointer,++pos,vec_pos);
           }
-          const_iterator& operator ++ (int b){
+          const_iterator operator ++ (int b){
             return const_iterator(pointer++,pos++,vec_pos);
           }
 
           const_iterator& operator -- (){
             return const_iterator(--pointer,--pos,vec_pos);
           }
-          const_iterator& operator -- (int b){
+          const_iterator operator -- (int b){
             return const_iterator(pointer--,pos--,vec_pos);
           }
 
@@ -232,7 +232,7 @@ namespace std{
           }
 
           reverse_iterator& operator ++ ();
-          reverse_iterator& operator ++ (int n){
+          reverse_iterator operator ++ (int n){
             reverse_iterator buffer;
             buffer.pointer = pointer;
             buffer.pos = pos;
@@ -243,7 +243,7 @@ namespace std{
           }
 
           reverse_iterator& operator -- ();
-          reverse_iterator& operator -- (int);
+          reverse_iterator operator -- (int);
 
           bool operator == ( const reverse_iterator&)const;
           bool operator != ( const reverse_iterator&)const;
@@ -272,10 +272,10 @@ namespace std{
           const T& operator * ();
 
           const_reverse_iterator& operator ++ ();
-          const_reverse_iterator& operator ++ (int);
+          const_reverse_iterator operator ++ (int);
 
           const_reverse_iterator& operator -- ();
-          const_reverse_iterator& operator -- (int);
+          const_reverse_iterator operator -- (int);
 
           bool operator == ( const const_reverse_iterator&)const;
           bool operator != ( const const_reverse_iterator&)const;
