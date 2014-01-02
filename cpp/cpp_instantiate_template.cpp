@@ -153,6 +153,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
   const cpp_template_args_tct &full_template_args,
   const typet &specialization)
 {
+  symbolt *output_new_symbol = NULL;
+
   if(instantiation_stack.size()==50)
   {
     err_location(location);
@@ -237,41 +239,25 @@ const symbolt &cpp_typecheckt::instantiate_template(
   // sub-scope for fixing the prefix
   std::string subscope_name=id2string(template_scope->identifier)+suffix;
 
-  // let's see if we have the instance already
-  cpp_scopest::id_mapt::iterator scope_it=
-    cpp_scopes.id_map.find(subscope_name);
-
   bool already_instantiated = false;
 
-  if(scope_it!=cpp_scopes.id_map.end())
-  {
-    cpp_scopet &scope=cpp_scopes.get_scope(subscope_name);
+  // Check whether the instance already exists. The 'template_instances' irep
+  // contains a list of already instantiated patterns, and the symbol names
+  // where the resulting thing is.
+  const irept &instances = template_symbol.value.find("template_instances");
+  if (!instances.is_nil()) {
+    if (instances.get(subscope_name) != "") {
+      // It has already been instantianted! Look up the symbol.
+      const symbolt &symb=lookup(instances.get(subscope_name));
 
-    cpp_scopet::id_sett id_set;
-    scope.lookup(template_symbol.base_name, id_set);
-
-    if(id_set.size()==1)
-    {
-      // It has already been instantianted!
-      const cpp_idt &cpp_id = **id_set.begin();
-
-      assert(cpp_id.id_class == cpp_idt::CLASS ||
-             cpp_id.id_class == cpp_idt::SYMBOL);
-
-      const symbolt &symb=lookup(cpp_id.identifier);
-
-      // continue if the type is incomplete only
-      if (cpp_id.id_class != cpp_idt::CLASS)
-        return symb;
-      else if(cpp_id.id_class==cpp_idt::CLASS &&
-         symb.type.id()=="struct")
-        return symb;
-      else if(symb.value.is_not_nil())
+      // continue if the type is incomplete only -- it might now be complete(?).
+      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
         return symb;
 
       already_instantiated = true;
     }
 
+    cpp_scopet &scope=cpp_scopes.get_scope(subscope_name);
     cpp_scopes.go_to(scope);
   }
   else
@@ -383,7 +369,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
       cpp_scopes.put_into_scope(template_symbol, class_scope, false);
     identifier.id_class = cpp_idt::TEMPLATE;
 
-    return new_symb;
+    output_new_symbol = &new_symb;
+    goto exit_w_sym;
   }
 
   if(is_template_method)
@@ -437,7 +424,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
       false,
       false);
 
-    return lookup(to_struct_type(symb.type).components().back().name());
+    irep_idt sym_name = to_struct_type(symb.type).components().back().name();
+    output_new_symbol = &context.symbols.find(sym_name)->second;
+    goto exit_w_sym;
   }
 
   // not a class template, not a class template method,
@@ -447,10 +436,16 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   convert_non_template_declaration(new_decl);
 
-  const symbolt &symb=
-    lookup(new_decl.declarators()[0].identifier());
+  output_new_symbol =
+    &context.symbols.find(new_decl.declarators()[0].identifier())->second;
 
-  return symb;
+exit_w_sym:
+  // Set a flag in the template's value indicating that this has been
+  // instantiated, and what the instantiated things symbol is.
+  symbolt &s=context.symbols.find(template_symbol.name)->second;
+  irept &new_instances = s.value.add("template_instances");
+  new_instances.set(subscope_name, output_new_symbol->name);
+  return *output_new_symbol;
 }
 
 void
