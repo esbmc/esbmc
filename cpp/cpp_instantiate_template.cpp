@@ -256,11 +256,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
       already_instantiated = true;
     }
-
-    cpp_scopet &scope=cpp_scopes.get_scope(subscope_name);
-    cpp_scopes.go_to(scope);
   }
-  else
+
+  if (!already_instantiated)
   {
     // set up a scope as subscope of the template scope
     std::string prefix=template_scope->get_parent().prefix+suffix;
