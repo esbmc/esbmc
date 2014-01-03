@@ -1452,7 +1452,8 @@ const symbolt &cpp_typecheck_resolvet::disambiguate_template_classes(
       match.full_args);
 
   if(instance.type.id()!="struct" &&
-     instance.type.id()!="incomplete_struct")
+     instance.type.id()!="incomplete_struct" &&
+     instance.type.id()!="symbol") // Recursive template def.
   {
     cpp_typecheck.err_location(location);
     cpp_typecheck.str << "template `"

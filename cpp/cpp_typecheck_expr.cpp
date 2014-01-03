@@ -1226,8 +1226,13 @@ void cpp_typecheckt::typecheck_expr_member(
     throw 0;
   }
 
+  typet op_type = op0.type();
+  // Follow symbolic types up until the last one.
+  while (lookup(op_type.identifier()).type.id() == "symbol")
+    op_type = lookup(op_type.identifier()).type;
+
   const irep_idt &struct_identifier=
-    to_symbol_type(op0.type()).get_identifier();
+    to_symbol_type(op_type).get_identifier();
 
   const symbolt &struct_symbol=lookup(struct_identifier);
 

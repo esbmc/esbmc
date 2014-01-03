@@ -127,6 +127,47 @@ cpp_scopet &cpp_typecheckt::tag_scope(
   return cpp_scopes.current_scope();
 }
 
+std::string
+cpp_typecheckt::fetch_compound_name(
+  const typet &type) const
+{
+  // get the tag name
+  bool anonymous=type.find("tag").is_nil();
+  std::string identifier, base_name;
+  cpp_scopet *dest_scope=NULL;
+  bool has_body=type.body().is_not_nil();
+  bool tag_only_declaration=type.get_bool("#tag_only_declaration");
+
+  if(anonymous)
+  {
+    // Name is unpredictable until it's actually made, sorry.
+    return "";
+  }
+  else
+  {
+    const cpp_namet &cpp_name=
+      to_cpp_name(type.find("tag"));
+
+    cpp_name.convert(identifier, base_name);
+
+    if(identifier!=base_name)
+    {
+      err_location(cpp_name.location());
+      throw "no namespaces allowed in compound names";
+    }
+
+    dest_scope=&tag_scope(base_name, has_body, tag_only_declaration);
+  }
+
+  // See: typecheck_compound_type for full details.
+  const std::string symbol_name=
+    cpp_identifier_prefix("C++")+"::"+
+    dest_scope->prefix+
+    "tag."+identifier;
+
+  return symbol_name;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::typecheck_compound_type

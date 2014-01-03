@@ -204,6 +204,11 @@ protected:
     instantiation_stackt &instantiation_stack;
   };
 
+  const symbolt *handle_recursive_template_instance(
+    const symbolt &template_symbol,
+    const cpp_template_args_tct &full_template_args,
+    const exprt &new_decl);
+
   const symbolt &instantiate_template(
     const locationt &location,
     const symbolt &template_symbol,
@@ -363,6 +368,7 @@ protected:
   cpp_scopet &typecheck_template_parameters(
     template_typet &type);
 
+  std::string fetch_compound_name(const typet &type) const;
   void typecheck_compound_type(typet &type);
   void check_array_types(typet &type);
   void typecheck_enum_type(typet &type);

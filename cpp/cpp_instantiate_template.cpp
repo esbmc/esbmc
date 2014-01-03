@@ -6,6 +6,7 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <base_type.h>
 #include <arith_tools.h>
 #include <simplify_expr_class.h>
 #include <simplify_expr.h>
@@ -170,6 +171,86 @@ void cpp_typecheckt::mark_template_instantiated(
   irept &new_instances = s.value.add("template_instances");
   new_instances.set(template_pattern_name, instantiated_symbol_name);
   return;
+}
+
+const symbolt *
+cpp_typecheckt::handle_recursive_template_instance(
+    const symbolt &template_symbol,
+    const cpp_template_args_tct &full_template_args,
+    const exprt &new_decl)
+{
+  // Recursive template uses are fine if it doesn't lead to a cyclic
+  // definition, in the same way that C structs can't be recursively defined.
+  // It's OK for this to happen within a method though; those get typechecked
+  // later.
+  // Detect recursive instantiations, then resolve them to a symbolic type.
+  // Anything that attempts to find a concrete value from that type should
+  // mean that the template is defined cyclicly, and so it's a program error.
+
+  // The first item on the instantiation stack is the one we're wondering is
+  // recursive. Skip it.
+  instantiation_stackt::const_reverse_iterator it =
+    instantiation_stack.rbegin();
+  it++;
+
+  // Look for this template being instantiated.
+  for (; it != instantiation_stack.rend(); it++) {
+    if (it->identifier == template_symbol.name) {
+      // OK, we found it. Now, are the types equivalent?
+      typedef cpp_template_args_baset::argumentst argumentst;
+      const argumentst &src_args = it->full_template_args.arguments();
+      const argumentst &cur_args = full_template_args.arguments();
+
+      if (src_args.size() != cur_args.size())
+        continue;
+
+      bool match = true;
+      for (unsigned int i = 0; i != src_args.size(); i++) {
+        if (!base_type_eq(src_args[i].type(), cur_args[i].type(), *this)) {
+          match = false;
+          break;
+        }
+      }
+
+      if (!match)
+        continue;
+
+      // OK: Recursion detected. For the moment, only deal with structs.
+      assert(new_decl.type().id() == "struct");
+      std::string instance = fetch_compound_name(new_decl.type());
+
+      // We have the name this is /going/ to resolve to once it's instantiated.
+      // Now create a temporary symbol that links back to it if it's followed.
+      // (Unless it already exists).
+
+      irep_idt link_symbol = instance + "$recurse";
+      symbolst::const_iterator it = context.symbols.find(link_symbol);
+      if (it != context.symbols.end())
+        return &it->second;
+
+      // Nope; create it.
+      symbolt symbol;
+      symbol.name = link_symbol;
+      symbol.base_name = template_symbol.base_name;
+      symbol.value = exprt();
+      symbol.location = locationt();
+      symbol.mode = mode; // uhu.
+      symbol.module = module; // uuuhu.
+      symbol.type = symbol_typet(instance);
+      symbol.is_macro = false;
+      symbol.is_type = true;
+      symbol.pretty_name = template_symbol.base_name;
+
+      // Insert.
+      symbolt *new_symbol;
+      if (context.move(symbol, new_symbol))
+        throw "cpp_typecheckt::handle_recurse_templ: context.move() failed";
+
+      return new_symbol;
+    }
+  }
+
+  return NULL;
 }
 
 /*******************************************************************\
@@ -342,6 +423,17 @@ const symbolt &cpp_typecheckt::instantiate_template(
     new_decl.type().swap(declaration_type);
   }
 
+  // Before properly typechecking this instance: are we already doing that
+  // right now, recursively? If so, this will explode, so generate a symbolic
+  // type instead. Currently only rated for structs.
+  if(new_decl.type().id()=="struct") {
+    const symbolt *recurse_sym = handle_recursive_template_instance(
+        template_symbol, full_template_args, new_decl);
+    if (recurse_sym)
+      return *recurse_sym;
+  }
+
+  // We're definitely instantiating this; put the template types into scope.
   if (!already_instantiated)
     put_template_args_in_scope(template_type, specialization_template_args);
 
