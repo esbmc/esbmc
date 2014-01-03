@@ -219,6 +219,15 @@ protected:
       const template_parametert &template_param,
       const exprt &argument);
 
+  const symbolt *is_template_instantiated(
+      const irep_idt &template_symbol_name,
+      const irep_idt &template_pattern_name) const;
+
+  void mark_template_instantiated(
+      const irep_idt &template_symbol_name,
+      const irep_idt &template_pattern_name,
+      const irep_idt &instantiated_symbol_name);
+
   unsigned template_counter;
   unsigned anon_counter;
 

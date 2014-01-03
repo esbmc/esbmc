@@ -131,6 +131,47 @@ void cpp_typecheckt::show_instantiation_stack(std::ostream &out)
   }
 }
 
+const symbolt *
+cpp_typecheckt::is_template_instantiated(
+    const irep_idt &template_symbol_name,
+    const irep_idt &template_pattern_name) const
+{
+
+  // Check whether the instance already exists. The 'template_instances' irep
+  // contains a list of already instantiated patterns, and the symbol names
+  // where the resulting thing is.
+  const symbolt &template_symbol = lookup(template_symbol_name);
+  const irept &instances = template_symbol.value.find("template_instances");
+  if (!instances.is_nil()) {
+    if (instances.get(template_pattern_name) != "") {
+
+      // It has already been instantianted! Look up the symbol.
+      const symbolt &symb=lookup(instances.get(template_pattern_name));
+
+      // continue if the type is incomplete only -- it might now be complete(?).
+      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
+        return &symb;
+    }
+  }
+
+  return NULL;
+}
+
+void cpp_typecheckt::mark_template_instantiated(
+    const irep_idt &template_symbol_name,
+    const irep_idt &template_pattern_name,
+    const irep_idt &instantiated_symbol_name)
+{
+  assert(context.symbols.find(template_symbol_name) != context.symbols.end());
+
+  // Set a flag in the template's value indicating that this has been
+  // instantiated, and what the instantiated things symbol is.
+  symbolt &s=context.symbols.find(template_symbol_name)->second;
+  irept &new_instances = s.value.add("template_instances");
+  new_instances.set(template_pattern_name, instantiated_symbol_name);
+  return;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheckt::instantiate_template
@@ -241,21 +282,15 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   bool already_instantiated = false;
 
-  // Check whether the instance already exists. The 'template_instances' irep
-  // contains a list of already instantiated patterns, and the symbol names
-  // where the resulting thing is.
-  const irept &instances = template_symbol.value.find("template_instances");
-  if (!instances.is_nil()) {
-    if (instances.get(subscope_name) != "") {
-      // It has already been instantianted! Look up the symbol.
-      const symbolt &symb=lookup(instances.get(subscope_name));
+  // Does it already exist?
+  const symbolt *existing_template_instance =
+    is_template_instantiated(template_symbol.name, subscope_name);
+  if (existing_template_instance) {
+    // continue if the type is incomplete only -- it might now be complete(?).
+//      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
+      return *existing_template_instance;
 
-      // continue if the type is incomplete only -- it might now be complete(?).
-      if (symb.type.id() != "incomplete_struct" || symb.value.is_not_nil())
-        return symb;
-
-      already_instantiated = true;
-    }
+    already_instantiated = true;
   }
 
   if (!already_instantiated)
@@ -367,8 +402,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
       cpp_scopes.put_into_scope(template_symbol, class_scope, false);
     identifier.id_class = cpp_idt::TEMPLATE;
 
-    output_new_symbol = &new_symb;
-    goto exit_w_sym;
+    mark_template_instantiated(template_symbol.name, subscope_name,
+                               new_symb.name);
+    return new_symb;
   }
 
   if(is_template_method)
@@ -423,8 +459,8 @@ const symbolt &cpp_typecheckt::instantiate_template(
       false);
 
     irep_idt sym_name = to_struct_type(symb.type).components().back().name();
-    output_new_symbol = &context.symbols.find(sym_name)->second;
-    goto exit_w_sym;
+    mark_template_instantiated(template_symbol.name, subscope_name, sym_name);
+    return lookup(sym_name);
   }
 
   // not a class template, not a class template method,
@@ -434,16 +470,9 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
   convert_non_template_declaration(new_decl);
 
-  output_new_symbol =
-    &context.symbols.find(new_decl.declarators()[0].identifier())->second;
-
-exit_w_sym:
-  // Set a flag in the template's value indicating that this has been
-  // instantiated, and what the instantiated things symbol is.
-  symbolt &s=context.symbols.find(template_symbol.name)->second;
-  irept &new_instances = s.value.add("template_instances");
-  new_instances.set(subscope_name, output_new_symbol->name);
-  return *output_new_symbol;
+  const irep_idt &new_sym_name = new_decl.declarators()[0].identifier();
+  mark_template_instantiated(template_symbol.name, subscope_name, new_sym_name);
+  return lookup(new_sym_name);
 }
 
 void
