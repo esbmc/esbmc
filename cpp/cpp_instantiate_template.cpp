@@ -349,6 +349,14 @@ const symbolt &cpp_typecheckt::instantiate_template(
   {
     convert_non_template_declaration(new_decl);
 
+    symbolt &new_symb=
+      const_cast<symbolt&>(lookup(new_decl.type().identifier()));
+
+    // Mark template as instantiated before instantiating template methods,
+    // as they might then go and instantiate recursively.
+    mark_template_instantiated(template_symbol.name, subscope_name,
+                               new_symb.name);
+
     // also instantiate all the template methods
     const exprt &template_methods=
       static_cast<const exprt &>(
@@ -382,9 +390,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
       convert(method_decl);
     }
 
-    symbolt &new_symb=
-      const_cast<symbolt&>(lookup(new_decl.type().identifier()));
-
     // any template instance to remember?
     if(new_decl.find("#template").is_not_nil())
     {
@@ -402,8 +407,6 @@ const symbolt &cpp_typecheckt::instantiate_template(
       cpp_scopes.put_into_scope(template_symbol, class_scope, false);
     identifier.id_class = cpp_idt::TEMPLATE;
 
-    mark_template_instantiated(template_symbol.name, subscope_name,
-                               new_symb.name);
     return new_symb;
   }
 
