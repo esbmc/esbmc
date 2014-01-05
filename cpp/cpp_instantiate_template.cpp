@@ -653,8 +653,15 @@ cpp_typecheckt::put_template_arg_into_scope(
 
   // Install this concrete type symbol into the context.
   symbolt *new_symbol;
-  if (context.move(symbol, new_symbol))
-    throw "cpp_typecheckt::put_template_arg_in_scope: context.move() failed";
+  if (context.move(symbol, new_symbol)) {
+    // Normally this is a good indicator that something to do with recursive
+    // or nested templates has gone wrong. However, it becomes much more complex
+    // when incomplete structs turn up, which can be instantiated multiple times
+    // unsuccessfully. To guard against this, don't make this a fatal error
+    // (for now).
+    //throw "cpp_typecheckt::put_template_arg_in_scope: context.move() failed";
+    return;
+  }
 
   // And install it into the templates scope too.
   cpp_idt &identifier=
