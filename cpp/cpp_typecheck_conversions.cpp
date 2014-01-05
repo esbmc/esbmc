@@ -1170,6 +1170,12 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
     }
     else if(expr.id() == "symbol")
     {
+      // Can't blindly cast aggregate / composite types. NB: Nothing here
+      // actually appears to look up any custom convertors.
+      if (expr.type().id() == "array" || expr.type().id() == "struct" ||
+          expr.type().id() == "union")
+        return false;
+
       exprt tmp_expr = expr;
       tmp_expr.make_typecast(bool_typet());
       new_expr.swap(tmp_expr);
