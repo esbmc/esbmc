@@ -39,7 +39,9 @@ round_up_to_int64(mp_integer &mp)
   const unsigned int word_bytes = 8;
   const unsigned int align_mask = 7;
 
-  if (mp < word_bytes) {
+  if (mp == 0) {
+    return;
+  } else if (mp < word_bytes) {
     mp = mp_integer(word_bytes);
   // Or if it's an array of chars etc. that doesn't end on a boundry,
   } else if (mp.to_ulong() & align_mask) {
