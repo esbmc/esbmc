@@ -75,9 +75,17 @@ namespace std
 
 namespace std
 {
+  template < typename T >
+  istream& operator>> (istream& is, T val )
+  {
+    is._gcount=0;
+    return is;
+  }
 
-
-  istream& operator>> (istream& is, bool val )
+#if 0
+  // XXX - operator overloading template specialization isn't implemented.
+  template <>
+  istream& operator>> <bool> (istream& is, bool val )
   {
     dec(is);
     if (val == 1) {
@@ -87,17 +95,7 @@ namespace std
     is._gcount=0;
     return is;
   }
-
-
-  template < typename T >
-  istream& operator>> (istream& is, T val )
-  {
-    is._gcount=0;
-    return is;
-  }
-
-
-
+#endif
 
   int istream::get()
   {
