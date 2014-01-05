@@ -21,7 +21,9 @@ round_up_to_word(mp_integer &mp)
   const unsigned int word_bytes = config.ansi_c.word_size / 8;
   const unsigned int align_mask = word_bytes - 1;
 
-  if (mp < word_bytes) {
+  if (mp == 0) {
+    return;
+  } else if (mp < word_bytes) {
     mp = mp_integer(word_bytes);
   // Or if it's an array of chars etc. that doesn't end on a boundry,
   } else if (mp.to_ulong() & align_mask) {
