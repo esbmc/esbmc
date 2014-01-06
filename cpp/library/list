@@ -1134,13 +1134,13 @@ public:
 		this->_size = 0;
 	}
 
-	iterator& begin() {
+	iterator begin() {
 		iterator it;
 		it.it = &(this->_list[0]);
 		it.pos = 0;
 		return it;
 	}
-	iterator& end() {
+	iterator end() {
 		iterator it;
 		this->_list[this->_size] = value_type();
 		it.it = &(this->_list[this->_size]);
@@ -1274,7 +1274,7 @@ public:
 		*this = list(n, u);
 	}
 
-	iterator& erase(iterator& position) {
+	iterator erase(iterator& position) {
 		this->_size--;
 		for(int i = position.pos; i <  this->_size; i++){
 			this->_list[i] = this->_list[i+1];
@@ -1284,7 +1284,7 @@ public:
 		return position;
 	}
 
-	iterator& erase(iterator& position, iterator& last) {
+	iterator erase(iterator& position, iterator& last) {
 		while(position.pos != last.pos){
 			this->erase(position);
 		}
