@@ -282,7 +282,9 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       output = typecast2tc(expr->type, output);
       expr = output;
     } else {
-      return; // Doesn't contain a deref?
+      // It's not something that we can simplify from &foo->bar[baz] to not have
+      // a dereference, but might still contain a dereference.
+      dereference_expr(addrof.ptr_obj, guard, mode);
     }
   }
 
