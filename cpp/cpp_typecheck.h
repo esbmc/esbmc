@@ -39,6 +39,34 @@ bool cpp_typecheck(
   message_handlert &message_handler,
   const namespacet &ns);
 
+class cpp_typecast_rank
+{
+public:
+  // Total score of what conversions occurred to make this conversion happen,
+  // summed from:
+  //   0) None?
+  //   1) An exact-match conversion
+  //   2) Promotion
+  //   3) Conversion (including floating point and pointer casting).
+  //   4) User defined conversion.
+  unsigned int rank;
+
+  bool has_ptr_to_bool; // Self explanatory.
+  bool has_ptr_to_base; // Derived ptr casted down to base ptr
+  bool has_ptr_to_voidptr; // Any pointer converted to void ptr type.
+
+  // There are more conditions to detect; These are the most relevant at the
+  // moment.
+
+  cpp_typecast_rank()
+  {
+    rank = 0;
+    has_ptr_to_bool = false;
+    has_ptr_to_base = false;
+    has_ptr_to_voidptr = false;
+  }
+};
+
 class cpp_typecheckt:public c_typecheck_baset
 {
 public:
