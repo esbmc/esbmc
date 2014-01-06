@@ -993,7 +993,7 @@ public:
 			return *this->it;
 		}
 
-		iterator operator ++() {
+		iterator& operator ++() {
 			this->it++;
 			this->pos++;
 			return *this;
