@@ -1345,16 +1345,19 @@ public:
 			}
 	}
 
-	template<class Predicate>
-	void remove_if(Predicate* pred) {
-		__ESBMC_assert(pred != NULL,
-				"The parameter must be different than NULL.");
-		for(iterator _it = this->begin(); _it.pos <= this->_size; _it++)
-			if(pred()(*_it.it)){
-				this->erase(_it);
-			}
-	}
 
+        template<class Predicate>
+        void remove_if(Predicate pred) {
+                __ESBMC_assert(pred != ((void *)0),
+                                "The parameter must be different than NULL.");
+                for(iterator _it = this->begin(); _it.pos < this->_size;) {
+                        if(pred(*_it.it)){
+                          _it = this->erase(_it);
+                        } else {
+                          _it++;
+                        }
+                }
+        }
 
 	void unique() {
 		size_type i;
