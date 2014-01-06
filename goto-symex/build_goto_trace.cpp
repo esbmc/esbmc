@@ -28,7 +28,7 @@ void build_goto_trace(
     tvt result;
     result=prop_conv.l_get(SSA_step.guard_literal);
 
-    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
+    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME) && SSA_step.type != goto_trace_stept::ASSERT)
       continue;
 
     if(it->is_assignment() &&
