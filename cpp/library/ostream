@@ -50,11 +50,34 @@ namespace std
   };
   //ios::streampos ostream::_filepos = 0;
 
-  template < typename T >
-  inline ostream& operator<< ( ostream& o, T i )
-  {
-    return o;
-  }
+  // Ostream shift output operators: these are explicitly enumerated by the
+  // spec, and thus we can't template them, or crazy things happen. Until
+  // someone knows how much of this to model, just discard the data for now.
+
+  inline ostream& operator<< ( ostream& o, bool val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, short val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned short val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, int val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned int val )
+  { return o; }
+#if __WORDSIZE == 64 // Is the same type as 'int' otherwise.
+  inline ostream& operator<< ( ostream& o, long val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, unsigned long val )
+  { return o; }
+#endif
+  inline ostream& operator<< ( ostream& o, float val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, double val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, long double val )
+  { return o; }
+  inline ostream& operator<< ( ostream& o, void *val )
+  { return o; }
 
 }
 
