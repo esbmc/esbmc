@@ -463,8 +463,12 @@ void cpp_typecheckt::typecheck_compound_declarator(
   if(is_cast_operator)
     component.set("is_cast_operator", true);
 
-  if(declaration.member_spec().is_explicit())
+  if(declaration.member_spec().is_explicit()) {
     component.set("is_explicit", true);
+    // Decorate type with it too; it tends to be more accessible than component
+    // records during cpp name resolving.
+    component.type().set("is_explicit", true);
+  }
 
   // either blank, const, volatile, or const volatile
   const typet &method_qualifier=
