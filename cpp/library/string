@@ -342,7 +342,7 @@ public:
 	string(const string& str, size_t pos, size_t n);
 	string(string& s, size_t n);
 	string(char c, size_t n);
-	string(int len);
+	explicit string(int len);
 	string(const_iterator begin, const_iterator end);
 	char* c_str() const;
 	//bool operator==(string& b);
