@@ -1228,13 +1228,16 @@ public:
 	}
 
 	iterator insert(iterator& position, const value_type& x) {
-		for(int i = position.pos; i < this->_size; i++){
-			this->_list[i + 1] = this->_list[i];
+		// Backwards copy all higher elements upwards.
+		for(int i = this->_size; i > position.pos; i--) {
+			this->_list[i] = this->_list[i - 1];
 		}
+
 		this->_list[position.pos] = x;
 		this->_size++;
-		position.pos++;
-		position.it = &(this->_list[position.pos]);
+
+                // Return value points at the newly created element.
+                // So pos index and pointer stays the same.
 		return position;
 	}
 
