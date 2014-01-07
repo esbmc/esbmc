@@ -65,6 +65,36 @@ public:
     has_ptr_to_base = false;
     has_ptr_to_voidptr = false;
   }
+
+  cpp_typecast_rank &
+  operator +=(const cpp_typecast_rank &ref)
+  {
+    rank += ref.rank;
+    has_ptr_to_bool |= ref.has_ptr_to_bool;
+    has_ptr_to_base |= ref.has_ptr_to_base;
+    has_ptr_to_voidptr |= ref.has_ptr_to_voidptr;
+    return *this;
+  }
+
+  bool
+  operator<(const cpp_typecast_rank &ref) const
+  {
+    if (rank < ref.rank)
+      return true;
+    else if (rank > ref.rank)
+      return false;
+
+    // Put funkier rules here. Note that less-than means a better match.
+    if (!has_ptr_to_bool && ref.has_ptr_to_bool)
+      return true;
+
+    // Pointer-to-base-ptr is better than casting it to void.
+    if (has_ptr_to_base && ref.has_ptr_to_voidptr)
+      return true;
+
+    // Insert here: other rules.
+    return false;
+  }
 };
 
 class cpp_typecheckt:public c_typecheck_baset
@@ -581,25 +611,30 @@ protected:
   #endif
 
   bool standard_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool user_defined_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool reference_related(
     const exprt &expr, const typet &type) const;
 
   bool reference_compatible(
-    const exprt &expr, const typet &type, unsigned &rank) const;
+    const exprt &expr, const typet &type,
+    class cpp_typecast_rank &rank) const;
 
   bool reference_binding(
-    exprt expr, const typet &type, exprt &new_expr, unsigned &rank);
+    exprt expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
-    const exprt &expr, const typet &type, exprt &new_expr, unsigned &rank);
+    const exprt &expr, const typet &type, exprt &new_expr,
+    class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
-    const exprt &expr, const typet &type, unsigned &rank);
+    const exprt &expr, const typet &type,class cpp_typecast_rank &rank);
 
   bool implicit_conversion_sequence(
     const exprt &expr, const typet &type, exprt &new_expr);

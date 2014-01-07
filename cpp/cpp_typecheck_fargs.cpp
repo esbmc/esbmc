@@ -95,10 +95,10 @@ Function: cpp_typecheck_fargst::exact_match
 
 bool cpp_typecheck_fargst::match(
   const code_typet &code_type,
-  unsigned &distance,
+  cpp_typecast_rank &distance,
   cpp_typecheckt &cpp_typecheck) const
 {
-  distance=0;
+  distance = cpp_typecast_rank();
 
   exprt::operandst ops = operands;
   const code_typet::argumentst &arguments=code_type.arguments();
@@ -139,7 +139,7 @@ bool cpp_typecheck_fargst::match(
     if(i>=arguments.size())
     {
       // Ellipsis is the 'worst' of the conversion sequences
-      distance+=1000;
+      distance.rank+=1000;
       continue;
     }
 
@@ -163,7 +163,7 @@ bool cpp_typecheck_fargst::match(
       argument.type().set("#this", true);
     }
 
-    unsigned rank = 0;
+    class cpp_typecast_rank rank;
     exprt new_expr;
 
     // can we do the standard conversion sequence?

@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@cs.cmu.edu
 
 \*******************************************************************/
 
+#include <utility>
+
 #include <expr_util.h>
 #include <std_types.h>
 #include <std_expr.h>
@@ -687,9 +689,9 @@ void cpp_typecheck_resolvet::exact_match_functions(
       it!=old_identifiers.end();
       it++)
   {
-    unsigned distance;
+    cpp_typecast_rank distance;
     if(disambiguate_functions(*it, distance, fargs))
-      if(distance<=1)
+      if(distance.rank<=1)
         identifiers.push_back(*it);
   }
 }
@@ -717,14 +719,14 @@ void cpp_typecheck_resolvet::disambiguate_functions(
   old_identifiers.swap(identifiers);
 
   // sort according to distance
-  std::multimap<unsigned, exprt> distance_map;
+  std::multimap<cpp_typecast_rank, exprt> distance_map;
 
   for(resolve_identifierst::const_iterator
       it=old_identifiers.begin();
       it!=old_identifiers.end();
       it++)
   {
-    unsigned args_distance;
+    cpp_typecast_rank args_distance;
 
     if(disambiguate_functions(*it, args_distance, fargs))
     {
@@ -736,11 +738,9 @@ void cpp_typecheck_resolvet::disambiguate_functions(
 
       // we give strong preference to functions that have
       // fewer template arguments
-      unsigned total_distance=
-        1000*template_distance+args_distance;
+      args_distance.rank += 1000*template_distance;
 
-      distance_map.insert(
-        std::pair<unsigned, exprt>(total_distance, *it));
+      distance_map.insert(std::make_pair(args_distance, *it));
     }
   }
 
@@ -749,11 +749,12 @@ void cpp_typecheck_resolvet::disambiguate_functions(
   // put in the top ones
   if(!distance_map.empty())
   {
-    unsigned distance=distance_map.begin()->first;
+    const cpp_typecast_rank &distance = distance_map.begin()->first;
 
-    for(std::multimap<unsigned, exprt>::const_iterator
+    for(std::multimap<cpp_typecast_rank, exprt>::const_iterator
         it=distance_map.begin();
-        it!=distance_map.end() && it->first==distance;
+        // "While rank not worse that then start of the lists rank"
+        it!=distance_map.end() && !(distance < it->first);
         it++)
       identifiers.push_back(it->second);
   }
@@ -2607,10 +2608,10 @@ Purpose:
 
 bool cpp_typecheck_resolvet::disambiguate_functions(
   const exprt &expr,
-  unsigned &args_distance,
+  cpp_typecast_rank &args_distance,
   const cpp_typecheck_fargst &fargs)
 {
-  args_distance=0;
+  args_distance = cpp_typecast_rank();
 
   // Not code, not a function, bail.
   if (expr.type().id()!="code")

@@ -870,7 +870,7 @@ bool cpp_typecheckt::standard_conversion_sequence(
   const exprt &expr,
   const typet &type,
   exprt &new_expr,
-  unsigned &rank)
+  cpp_typecast_rank &rank)
 {
   assert(!is_reference(expr.type()) && !is_reference(type));
 
@@ -915,10 +915,10 @@ bool cpp_typecheckt::standard_conversion_sequence(
           if(!standard_conversion_floating_integral_conversion(curr_expr, type, new_expr))
             return false;
         }
-        rank+=3;
+        rank.rank+=3;
       }
       else
-        rank+=2;
+        rank.rank+=2;
     }
     else if(type.id()=="floatbv" || type.id()=="fixedbv")
     {
@@ -929,10 +929,10 @@ bool cpp_typecheckt::standard_conversion_sequence(
            !standard_conversion_floating_integral_conversion(curr_expr,type, new_expr))
           return false;
 
-        rank += 3;
+        rank.rank += 3;
       }
       else
-        rank += 2;
+        rank.rank += 2;
     }
     else if(type.id()=="pointer")
     {
@@ -941,20 +941,20 @@ bool cpp_typecheckt::standard_conversion_sequence(
         if(!standard_conversion_pointer_to_member(curr_expr, type, new_expr))
           return false;
       }
-      rank += 3;
+      rank.rank += 3;
     }
     else if(type.id()=="bool")
     {
       if(!standard_conversion_boolean(curr_expr,new_expr))
         return false;
-      rank += 3;
+      rank.rank += 3;
     }
     #ifdef CPP_SYSTEMC_EXTENSION
     else if(type.id() == "verilogbv")
     {
       if(!standard_conversion_verilogbv(curr_expr, type, new_expr))
          return false;
-      rank += 3;
+      rank.rank += 3;
     }
     #endif
     else
@@ -985,7 +985,7 @@ bool cpp_typecheckt::standard_conversion_sequence(
 
       if(qual_from!=qual_to)
       {
-        rank+=1;
+        rank.rank+=1;
         break;
       }
 
@@ -1022,7 +1022,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
   const exprt &expr,
   const typet &type,
   exprt &new_expr,
-  unsigned &rank)
+  cpp_typecast_rank &rank)
 {
   static bool recursion_guard = false;
   assert(!is_reference(expr.type()));
@@ -1033,7 +1033,7 @@ bool cpp_typecheckt::user_defined_conversion_sequence(
 
   new_expr.make_nil();
 
-  rank +=4;
+  rank.rank +=4;
 
   if(to.id()=="struct")
   {
@@ -1216,7 +1216,7 @@ out:
       exprt this_expr(expr);
       this_type.set("#this", true);
 
-      unsigned tmp_rank = 0;
+      cpp_typecast_rank tmp_rank;
       exprt tmp_expr;
 
       if(implicit_conversion_sequence(
@@ -1319,7 +1319,7 @@ Function: reference_compatible
 bool cpp_typecheckt::reference_compatible(
   const exprt &expr,
   const typet &type,
-  unsigned &rank) const
+  cpp_typecast_rank &rank) const
 {
   assert(is_reference(type));
   assert(!is_reference(expr.type()));
@@ -1328,7 +1328,7 @@ bool cpp_typecheckt::reference_compatible(
     return false;
 
   if(expr.type()!=type.subtype())
-    rank+=3;
+    rank.rank+=3;
 
   c_qualifierst qual_from;
     qual_from.read(expr.type());
@@ -1337,7 +1337,7 @@ bool cpp_typecheckt::reference_compatible(
     qual_to.read(type.subtype());
 
   if(qual_from!=qual_to)
-    rank+=1;
+    rank.rank+=1;
 
   if(qual_from.is_subset_of(qual_to))
     return true;
@@ -1393,12 +1393,12 @@ bool cpp_typecheckt::reference_binding(
   exprt expr,
   const typet &type,
   exprt &new_expr,
-  unsigned &rank)
+  cpp_typecast_rank &rank)
 {
   assert(is_reference(type));
   assert(!is_reference(expr.type()));
 
-  unsigned backup_rank = rank;
+  cpp_typecast_rank backup_rank = rank;
 
   if(type.get_bool("#this") &&
      !expr.cmt_lvalue())
@@ -1490,7 +1490,7 @@ bool cpp_typecheckt::reference_binding(
 
       this_type.set("#this", true);
 
-      unsigned tmp_rank = 0;
+      cpp_typecast_rank tmp_rank;
 
       exprt tmp_expr;
       if(implicit_conversion_sequence(
@@ -1534,7 +1534,8 @@ bool cpp_typecheckt::reference_binding(
             make_ptr_typecast(new_expr,type);
             qual_from.write(new_expr.type().subtype());
           }
-          rank+=4+tmp_rank;
+          rank += tmp_rank;
+          rank.rank += 4;
           return true;
         }
       }
@@ -1618,9 +1619,9 @@ bool cpp_typecheckt::implicit_conversion_sequence(
   const exprt &expr,
   const typet &type,
   exprt &new_expr,
-  unsigned &rank)
+  cpp_typecast_rank &rank)
 {
-  unsigned backup_rank = rank;
+  cpp_typecast_rank backup_rank = rank;
 
   exprt e=expr;
   add_implicit_dereference(e);
@@ -1666,7 +1667,7 @@ bool cpp_typecheckt::implicit_conversion_sequence(
   const typet &type,
   exprt &new_expr)
 {
-  unsigned rank = 0;
+  cpp_typecast_rank rank;
   return implicit_conversion_sequence(expr, type, new_expr, rank);
 }
 
@@ -1689,7 +1690,7 @@ Function: implicit_conversion_sequence
 bool cpp_typecheckt::implicit_conversion_sequence(
   const exprt &expr,
   const typet &type,
-  unsigned &rank)
+  cpp_typecast_rank &rank)
 {
   exprt new_expr;
   return implicit_conversion_sequence(expr, type, new_expr, rank);
@@ -1784,7 +1785,7 @@ void cpp_typecheckt::reference_initializer(
   assert(is_reference(type));
   add_implicit_dereference(expr);
 
-  unsigned rank=0;
+  cpp_typecast_rank rank;
   exprt new_expr;
   if(reference_binding(expr,type,new_expr,rank))
   {
@@ -2320,7 +2321,7 @@ bool cpp_typecheckt::static_typecast(
 
   if(type.reference())
   {
-    unsigned rank=0;
+    cpp_typecast_rank rank;
     if(reference_binding(e,type,new_expr,rank))
       return true;
 

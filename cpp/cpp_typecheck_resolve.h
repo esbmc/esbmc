@@ -118,7 +118,7 @@ protected:
 
   bool disambiguate_functions(
     const exprt &expr,
-    unsigned &args_distance,
+    cpp_typecast_rank &args_distance,
     const cpp_typecheck_fargst &fargs);
 
   exprt do_builtin(
