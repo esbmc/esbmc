@@ -942,12 +942,21 @@ bool cpp_typecheckt::standard_conversion_sequence(
           return false;
       }
       rank.rank += 3;
+
+      // Did we just cast to a void pointer?
+      if (type.subtype().id() == "empty" && curr_expr.type().id() == "pointer"
+          && curr_expr.type().subtype().id() != "empty")
+        rank.has_ptr_to_voidptr = true;
     }
     else if(type.id()=="bool")
     {
       if(!standard_conversion_boolean(curr_expr,new_expr))
         return false;
       rank.rank += 3;
+
+      // Pointer to bool conversion might lead to special disambiguation later
+      if (curr_expr.type().id() == "pointer")
+        rank.has_ptr_to_bool = true;
     }
     #ifdef CPP_SYSTEMC_EXTENSION
     else if(type.id() == "verilogbv")
