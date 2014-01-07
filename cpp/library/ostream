@@ -81,6 +81,8 @@ namespace std
 #endif
   inline ostream& operator<< ( ostream& o, void *val )
   { return o; }
+  inline ostream& operator<< ( ostream& o, const smanip &val )
+  { return o; }
 
 }
 
