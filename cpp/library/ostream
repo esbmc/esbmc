@@ -74,8 +74,11 @@ namespace std
   { return o; }
   inline ostream& operator<< ( ostream& o, double val )
   { return o; }
+#if 0
+  // Identical to double under ESBMC.
   inline ostream& operator<< ( ostream& o, long double val )
   { return o; }
+#endif
   inline ostream& operator<< ( ostream& o, void *val )
   { return o; }
 
