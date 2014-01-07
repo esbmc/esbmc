@@ -738,7 +738,7 @@ void cpp_typecheck_resolvet::disambiguate_functions(
 
       // we give strong preference to functions that have
       // fewer template arguments
-      args_distance.rank += 1000*template_distance;
+      args_distance.templ_distance += template_distance;
 
       distance_map.insert(std::make_pair(args_distance, *it));
     }

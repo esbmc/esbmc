@@ -51,6 +51,9 @@ public:
   //   4) User defined conversion.
   unsigned int rank;
 
+  // How many template arguments exist in this templated function.
+  unsigned int templ_distance;
+
   bool has_ptr_to_bool; // Self explanatory.
   bool has_ptr_to_base; // Derived ptr casted down to base ptr
   bool has_ptr_to_voidptr; // Any pointer converted to void ptr type.
@@ -61,6 +64,7 @@ public:
   cpp_typecast_rank()
   {
     rank = 0;
+    templ_distance = 0;
     has_ptr_to_bool = false;
     has_ptr_to_base = false;
     has_ptr_to_voidptr = false;
@@ -70,6 +74,7 @@ public:
   operator +=(const cpp_typecast_rank &ref)
   {
     rank += ref.rank;
+    templ_distance += ref.templ_distance;
     has_ptr_to_bool |= ref.has_ptr_to_bool;
     has_ptr_to_base |= ref.has_ptr_to_base;
     has_ptr_to_voidptr |= ref.has_ptr_to_voidptr;
@@ -85,6 +90,13 @@ public:
       return false;
 
     // Put funkier rules here. Note that less-than means a better match.
+
+    // Prefer functions with the fewest template parameters.
+    if (templ_distance < ref.templ_distance)
+      return true;
+    else if (templ_distance > ref.templ_distance)
+      return false;
+
     if (!has_ptr_to_bool && ref.has_ptr_to_bool)
       return true;
 
