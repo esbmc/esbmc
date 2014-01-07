@@ -401,6 +401,11 @@ dereferencet::dereference_expr_nonscalar(
                                                 scalar_step_list);
       scalar_step_list.pop_front();
 
+      if (is_nil_expr(res1))
+        res1 = theif.true_value;
+      if (is_nil_expr(res2))
+        res2 = theif.true_value;
+
       if2tc fin(res1->type, theif.cond, res1, res2);
       res = fin;
     } else {
