@@ -279,12 +279,31 @@ codet cpp_typecheckt::cpp_constructor(
     // overriding of the C version of this method, that causes type horror.
     if (object.id() == "already_typechecked") {
       function_call.add("#this_expr") = object.op0();
-    } else {
+    } else if (object.id() == "symbol") {
       // Alas, we need to add a type.
-      assert(object.id() == "symbol");
       function_call.add("#this_expr") = object;
       const symbolt &sym = lookup(object.identifier());
       function_call.add("#this_expr").type() = sym.type;
+    } else {
+      assert(object.id() == "index");
+      // Also need to extract a type.
+      exprt tmp_object = object;
+      unsigned int num_subtypes = 0;
+      while (tmp_object.id() == "index") {
+        tmp_object = tmp_object.op0();
+        num_subtypes++;
+      }
+
+      // We've found the base type. We need to pull the expr type out of that,
+      // then attach it to the top level object expr.
+      assert(tmp_object.id() == "already_typechecked");
+      function_call.add("#this_expr") = object;
+      function_call.add("#this_expr").type() = tmp_object.op0().type();
+
+      // Now rectify type to not be an array any more.
+      while (num_subtypes-- != 0)
+        function_call.add("#this_expr").type() =
+          function_call.add("#this_expr").type().subtype();
     }
 
     // Also, 'this' is an lvalue.
