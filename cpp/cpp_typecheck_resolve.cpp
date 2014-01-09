@@ -2161,6 +2161,9 @@ void cpp_typecheck_resolvet::guess_template_args(
           while(parent_size)
           {
             cpp_scopet &parent=scope.get_parent();
+            if (parent.id_class == cpp_idt::ROOT_SCOPE)
+              break;
+
             const symbolt &s2 = cpp_typecheck.lookup(parent.identifier);
 
             const exprt &template_arguments2=
