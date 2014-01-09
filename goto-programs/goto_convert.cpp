@@ -2916,7 +2916,8 @@ void goto_convertt::convert_switch(
 
         rhs.type()=code.op0().op0().op1().type();
 
-        code.op0() = code.op0().op0().op0();
+        // XXX - why?
+        const_cast<exprt&>(code.op0()) = code.op0().op0().op0();
         codet assignment("assign");
         assignment.copy_to_operands(lhs);
         assignment.move_to_operands(rhs);
