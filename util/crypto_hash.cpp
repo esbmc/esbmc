@@ -113,29 +113,6 @@ crypto_hash::to_string() const
   return false;
 }
 
-void
-crypto_hash::init(const uint8_t *data __attribute__((unused)),
-                  int sz __attribute__((unused)))
-{
-
-  std::cerr << "This version of ESBMC was not built with OpenSSL support";
-  std::cerr << std::endl;
-  abort();
-}
-
-crypto_hash::crypto_hash(const uint8_t *data __attribute__((unused)),
-                         int sz __attribute__((unused)))
-{
-
-  init(NULL, 0);
-}
-
-crypto_hash::crypto_hash(std::string str __attribute__((unused)))
-{
-
-  init(NULL, 0);
-}
-
 crypto_hash::crypto_hash()
 {
   // Valid; some exist as default constructions within other parts of ESBMC.
