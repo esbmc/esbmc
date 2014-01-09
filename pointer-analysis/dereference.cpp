@@ -45,12 +45,6 @@ get_arr_type(const expr2tc &expr)
     : to_array_type(to_constant_string2t(expr).to_array()->type);
 }
 
-static inline const type2tc
-get_arr_subtype(const expr2tc &expr)
-{
-  return get_arr_type(expr).subtype;
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
