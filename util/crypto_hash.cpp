@@ -48,7 +48,7 @@ crypto_hash::crypto_hash()
 }
 
 void
-crypto_hash::ingest(const void *data, unsigned int size)
+crypto_hash::ingest(void const *data, unsigned int size)
 {
 
   sha_update(&c, data, size);
