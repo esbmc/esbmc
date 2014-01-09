@@ -2563,7 +2563,7 @@ void goto_convertt::convert_while(
     replace_cond(tmp, dest);
 
   array_typet state_vector;
-  const exprt &cond=tmp;
+  const exprt *cond=&tmp;
   const locationt &location=code.location();
 
 
@@ -2622,13 +2622,13 @@ void goto_convertt::convert_while(
             const_cast<exprt&>(code.op0()).make_typecast(bool_typet());
 
           do_cpp_new(lhs, rhs, dest);
-          cond = code.op0();
+          cond = &code.op0();
         }
       }
     }
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v=tmp_branch.instructions.begin();
@@ -2681,7 +2681,7 @@ void goto_convertt::convert_while(
   //do the g label
   if (!is_break() && !is_goto()
 			&& (inductive_step))
-    assume_cond(cond, true, dest); //assume(!c)
+    assume_cond(*cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
 
