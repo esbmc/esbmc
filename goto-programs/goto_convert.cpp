@@ -450,7 +450,7 @@ void goto_convertt::convert_block(
   bool last_for=is_for_block();
   bool last_while=is_while_block();
 
-  if(inductive_step && code.add("inside_loop") != irept(""))
+  if(inductive_step)
     set_for_block(true);
 
   std::list<irep_idt> locals;
@@ -523,7 +523,6 @@ void goto_convertt::convert_block(
 
   if(inductive_step)
   {
-    code.remove("inside_loop");
     set_for_block(last_for);
     set_while_block(last_while);
   }
