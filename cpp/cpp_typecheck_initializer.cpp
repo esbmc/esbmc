@@ -266,8 +266,6 @@ void cpp_typecheckt::zero_initializer(
   }
   else if(final_type.id()=="union")
   {
-    c_sizeoft c_sizeof(*this);
-
     // Select the largest component
     mp_integer comp_size=0;
 
@@ -282,7 +280,7 @@ void cpp_typecheckt::zero_initializer(
       if(component.type().id()=="code")
         continue;
 
-      exprt exs=c_sizeof(component.type());
+      exprt exs=c_sizeof(component.type(), *this);
 
       mp_integer size;
       bool to_int = !to_integer(exs,size);

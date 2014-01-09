@@ -18,7 +18,9 @@ extern "C" {
 #include <unistd.h>
 
 #include <sys/resource.h>
+#ifndef ONAMAC
 #include <sys/sendfile.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 }
@@ -43,7 +45,6 @@ extern "C" {
 
 #include <pointer-analysis/value_set_analysis.h>
 #include <pointer-analysis/goto_program_dereference.h>
-#include <pointer-analysis/add_failed_symbols.h>
 #include <pointer-analysis/show_value_sets.h>
 
 #include <langapi/mode.h>
@@ -100,7 +101,7 @@ timeout_handler(int dummy __attribute__((unused)))
 
 /*******************************************************************\
 
-Function: cbmc_parseoptionst::set_verbosity
+Function: cbmc_parseoptionst::set_verbosity_msg
 
   Inputs:
 
@@ -110,7 +111,7 @@ Function: cbmc_parseoptionst::set_verbosity
 
 \*******************************************************************/
 
-void cbmc_parseoptionst::set_verbosity(messaget &message)
+void cbmc_parseoptionst::set_verbosity_msg(messaget &message)
 {
   int v=8;
 
@@ -161,12 +162,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("arrays-uf", "auto");
 
-  if(cmdline.isset("boolector-bv"))
-  {
-    options.set_option("boolector-bv", true);
-    options.set_option("int-encoding", false);
-  }
-
   if(cmdline.isset("z3-bv"))
   {
     options.set_option("z3", true);
@@ -187,7 +182,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   if(cmdline.isset("btor"))
   {
     options.set_option("btor", true);
-    options.set_option("boolector-bv", true);
   }
 
   if(cmdline.isset("z3-ir"))
@@ -203,11 +197,11 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   options.set_option("string-abstraction", true);
   options.set_option("fixedbv", true);
 
-  if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3"))
+  if (!options.get_bool_option("z3"))
   {
-    // If no solver options given, default to z3 integer encoding
+    // If no solver options given, default to z3 bv encoding
     options.set_option("z3", true);
-    options.set_option("int-encoding", true);
+    options.set_option("int-encoding", false);
   }
 
   if(cmdline.isset("qf_aufbv"))
@@ -235,7 +229,6 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
    {
      options.set_option("uw-model", true);
      options.set_option("schedule", true);
-     options.set_option("minisat", false);
    }
    else
      options.set_option("uw-model", false);
@@ -259,8 +252,23 @@ void cbmc_parseoptionst::get_command_line_options(optionst &options)
   else
     options.set_option("smtlib-ileave-num", "1");
 
-  if(cmdline.isset("inlining"))
-    options.set_option("inlining", true);
+  if(cmdline.isset("no-inlining"))
+    options.set_option("no-inlining", true);
+
+  if (cmdline.isset("smt-during-symex")) {
+    std::cout << "Enabling --no-slice due to presence of --smt-during-symex";
+    std::cout << std::endl;
+    options.set_option("no-slice", true);
+  }
+
+  if (cmdline.isset("smt-thread-guard") || cmdline.isset("smt-symex-guard")) {
+    if (!cmdline.isset("smt-during-symex")) {
+      std::cerr << "Please explicitly specify --smt-during-symex if you want "
+                   "to use features that involve encoding SMT during symex"
+                   << std::endl;
+      abort();
+    }
+  }
 
   if(cmdline.isset("base-case") ||
      options.get_bool_option("base-case"))
@@ -453,7 +461,7 @@ int cbmc_parseoptionst::doit()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   goto_functionst goto_functions;
 
@@ -483,8 +491,8 @@ int cbmc_parseoptionst::doit()
 
   // do actual BMC
   bmct bmc(goto_functions, opts, context, ui_message_handler);
-  set_verbosity(bmc);
-  return do_bmc(bmc, goto_functions);
+  set_verbosity_msg(bmc);
+  return do_bmc(bmc);
 }
 
 /*******************************************************************\
@@ -526,7 +534,7 @@ int cbmc_parseoptionst::doit_k_induction()
   // command line options
   //
 
-  set_verbosity(*this);
+  set_verbosity_msg(*this);
 
   if(cmdline.isset("preprocess"))
   {
@@ -586,22 +594,11 @@ int cbmc_parseoptionst::doit_k_induction()
         {
           close (commPipe[1]);
 
-          fcntl(commPipe[0], F_SETFL, O_NONBLOCK);
-
-          struct resultt results[MAX_STEPS*3];
-
-          // Invalid values
-          for(short int i=0; i<3; ++i)
-          {
-            results[i].step=NONE;
-            results[i].result=-1;
-            results[i].k=51;
-            results[i].finished=false;
-          }
+          struct resultt a_result;
 
           bool bc_res[MAX_STEPS], fc_res[MAX_STEPS], is_res[MAX_STEPS];
 
-          for(short int i=0; i<MAX_STEPS; ++i)
+          for(unsigned int i=0; i<MAX_STEPS; ++i)
           {
             bc_res[i]=false;
             fc_res[i]=is_res[i]=true;
@@ -615,7 +612,22 @@ int cbmc_parseoptionst::doit_k_induction()
           while(!(bc_finished && fc_finished && is_finished)
             && !solution_found)
           {
-            read(commPipe[0], results, sizeof(results));
+            // Perform read and interpret the number of bytes read
+            int read_size;
+            if ((read_size = read(commPipe[0], &a_result, sizeof(resultt))) !=
+                sizeof(resultt)) {
+              if (read_size == 0) {
+                // Client hung up; continue on, but don't interpret the result.
+                ;
+              } else {
+                // Invalid size read.
+                std::cerr << "Short read communicating with kinduction children"
+                          << std::endl;
+                std::cerr << "Size " << read_size << ", expected "
+                          << sizeof(resultt) << std::endl;
+                abort();
+              }
+            }
 
             // Eventually checks on each step
             if(!bc_finished)
@@ -627,7 +639,11 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "BASE CASE PROCESS CRASHED." << std::endl;
+
                 bc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  fc_finished=is_finished=true;
               }
             }
 
@@ -640,7 +656,11 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "FORWARD CONDITION PROCESS CRASHED." << std::endl;
+
                 fc_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=is_finished=true;
               }
             }
 
@@ -653,62 +673,65 @@ int cbmc_parseoptionst::doit_k_induction()
               } else if (result == -1) {
                 // Error
               } else {
+                std::cout << "INDUCTIVE STEP PROCESS CRASHED." << std::endl;
+
                 is_finished=true;
+                if(!cmdline.isset("ignore-child-process"))
+                  bc_finished=fc_finished=true;
               }
             }
 
-            unsigned i=0;
-            while((results[i].result != -1) && (i < MAX_STEPS*3))
+            if (read_size == 0)
+              continue;
+
+            switch(a_result.step)
             {
-              switch(results[i].step)
-              {
-                case BASE_CASE:
-                  if(results[i].finished)
-                  {
-                    bc_finished=true;
-                    break;
-                  }
-
-                  bc_res[results[i].k] = results[i].result;
-
-                  if(results[i].result)
-                    solution_found = results[i].k;
-
+              case BASE_CASE:
+                if(a_result.finished)
+                {
+                  bc_finished=true;
                   break;
+                }
 
-                case FORWARD_CONDITION:
-                  if(results[i].finished)
-                  {
-                    fc_finished=true;
-                    break;
-                  }
+                bc_res[a_result.k] = a_result.result;
 
-                  fc_res[results[i].k] = results[i].result;
+                if(a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                break;
 
+              case FORWARD_CONDITION:
+                if(a_result.finished)
+                {
+                  fc_finished=true;
                   break;
+                }
 
-                case INDUCTIVE_STEP:
-                  if(results[i].finished)
-                  {
-                    is_finished=true;
-                    break;
-                  }
+                fc_res[a_result.k] = a_result.result;
 
-                  is_res[results[i].k] = results[i].result;
+                if(!a_result.result)
+                  solution_found = a_result.k;
 
-                  if(!results[i].result)
-                    solution_found = results[i].k;
+                break;
 
+              case INDUCTIVE_STEP:
+                if(a_result.finished)
+                {
+                  is_finished=true;
                   break;
+                }
 
-                default:
-                  break;
-              }
+                is_res[a_result.k] = a_result.result;
 
-              ++i;
+                if(!a_result.result)
+                  solution_found = a_result.k;
+
+                break;
+
+              default:
+                std::cerr << "Message from unrecognized k-induction child "
+                << "process" << std::endl;
+                abort();
             }
           }
 
@@ -720,15 +743,23 @@ int cbmc_parseoptionst::doit_k_induction()
             std::cout << std::endl << "VERIFICATION UNKNOWN" << std::endl;
 
           if(bc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION FAILED" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the base case" << std::endl;
+            std::cout << "VERIFICATION FAILED" << std::endl;
+          }
 
           // Successful!
-          if(!bc_res[solution_found]
-                     && !fc_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          if(!bc_res[solution_found] && !fc_res[solution_found])
+          {
+            std::cout << std::endl << "Solution found by the forward condition" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           if(!bc_res[solution_found] && !is_res[solution_found])
-            std::cout << std::endl << "VERIFICATION SUCCESSFUL" << std::endl;
+          {
+            std::cout << std::endl << "Solution found by the inductive step" << std::endl;
+            std::cout << "VERIFICATION SUCCESSFUL" << std::endl;
+          }
 
           return res;
         }
@@ -765,10 +796,12 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_base_case = context;
+        namespacet ns_base_case(context_base_case);
+        migrate_namespace_lookup = &ns_base_case;
 
         bmct bmc_base_case(goto_functions_base_case, opts1,
           context_base_case, ui_message_handler);
-        set_verbosity(bmc_base_case);
+        set_verbosity_msg(bmc_base_case);
 
         context.clear(); // We need to clear the previous context
 
@@ -777,6 +810,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=BASE_CASE;
         r.k=0;
         r.finished=false;
@@ -796,6 +830,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "BASE CASE PROCESS FINISHED." << std::endl;
 
         return res;
 
@@ -828,10 +864,12 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_forward_condition = context;
+        namespacet ns_forward_condition(context_forward_condition);
+        migrate_namespace_lookup = &ns_forward_condition;
 
         bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
           context_forward_condition, ui_message_handler);
-        set_verbosity(bmc_forward_condition);
+        set_verbosity_msg(bmc_forward_condition);
 
         context.clear(); // We need to clear the previous context
 
@@ -840,6 +878,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=FORWARD_CONDITION;
         r.k=0;
         r.finished=false;
@@ -859,6 +898,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "FORWARD CONDITION PROCESS FINISHED." << std::endl;
 
         return res;
 
@@ -889,16 +930,19 @@ int cbmc_parseoptionst::doit_k_induction()
           return 7;
 
         context_inductive_step = context;
+        namespacet ns_inductive_step(context_inductive_step);
+        migrate_namespace_lookup = &ns_inductive_step;
 
         bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
           context_inductive_step, ui_message_handler);
-        set_verbosity(bmc_inductive_step);
+        set_verbosity_msg(bmc_inductive_step);
 
         // Start communication to the parent process
         close(commPipe[0]);
 
         // Struct to keep the result
         struct resultt r;
+        memset(&r, 0, sizeof(r));
         r.step=INDUCTIVE_STEP;
         r.k=0;
         r.finished=false;
@@ -918,6 +962,8 @@ int cbmc_parseoptionst::doit_k_induction()
 
         r.finished=true;
         write(commPipe[1], &r, sizeof(r));
+
+        std::cout << "INDUCTIVE STEP PROCESS FINISHED." << std::endl;
 
         return res;
 
@@ -958,7 +1004,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_base_case(goto_functions_base_case, opts1,
       context_base_case, ui_message_handler);
-  set_verbosity(bmc_base_case);
+  set_verbosity_msg(bmc_base_case);
 
   context.clear(); // We need to clear the previous context
 
@@ -992,7 +1038,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_forward_condition(goto_functions_forward_condition, opts2,
       context_forward_condition, ui_message_handler);
-  set_verbosity(bmc_forward_condition);
+  set_verbosity_msg(bmc_forward_condition);
 
   context.clear(); // We need to clear the previous context
 
@@ -1026,7 +1072,11 @@ int cbmc_parseoptionst::doit_k_induction()
 
   bmct bmc_inductive_step(goto_functions_inductive_step, opts3,
       context_inductive_step, ui_message_handler);
-  set_verbosity(bmc_inductive_step);
+  set_verbosity_msg(bmc_inductive_step);
+
+  namespacet ns_base_case(context_base_case);
+  namespacet ns_forward_condition(context_forward_condition);
+  namespacet ns_inductive_step(context_inductive_step);
 
   do {
     std::cout << std::endl << "*** K-Induction Loop Iteration ";
@@ -1042,7 +1092,10 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_base_case;
 
-      res = do_bmc(bmc_base_case, goto_functions_base_case);
+      // Sins of the fathers, etc
+      migrate_namespace_lookup = &ns_base_case;
+
+      res = do_bmc(bmc_base_case);
 
       if(res)
         return res;
@@ -1060,7 +1113,8 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_forward_condition;
 
-      res = do_bmc(bmc_forward_condition, goto_functions_forward_condition);
+      migrate_namespace_lookup = &ns_forward_condition;
+      res = do_bmc(bmc_forward_condition);
 
       if (!res)
         return res;
@@ -1075,7 +1129,8 @@ int cbmc_parseoptionst::doit_k_induction()
       context.clear();
       context = context_inductive_step;
 
-      res = do_bmc(bmc_inductive_step, goto_functions_inductive_step);
+      migrate_namespace_lookup = &ns_inductive_step;
+      res = do_bmc(bmc_inductive_step);
 
       if (!res)
         return res;
@@ -1191,6 +1246,9 @@ bool cbmc_parseoptionst::get_goto_program(
 
       status("Generating GOTO Program");
 
+      // Ahem
+      migrate_namespace_lookup = new namespacet(context);
+
       goto_convert(
         context, options, goto_functions,
         ui_message_handler);
@@ -1285,7 +1343,7 @@ void cbmc_parseoptionst::preprocessing()
   }
 }
 
-void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns)
+void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, namespacet &ns __attribute__((unused)))
 {
   std::map<std::string, std::string> strings;
 
@@ -1306,15 +1364,15 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
     }
   }
 
-  std::map<std::string, std::pair<std::set<std::string>, exprt> > monitors;
+  std::map<std::string, std::pair<std::set<std::string>, expr2tc> > monitors;
   std::map<std::string, std::string>::const_iterator str_it;
   for (str_it = strings.begin(); str_it != strings.end(); str_it++) {
     if (str_it->first.find("$type") == std::string::npos) {
       std::set<std::string> used_syms;
-      exprt main_expr;
+      expr2tc main_expr;
       std::string prop_name = str_it->first.substr(20, std::string::npos);
       main_expr = calculate_a_property_monitor(prop_name, strings, used_syms);
-      monitors[prop_name] = std::pair<std::set<std::string>, exprt>
+      monitors[prop_name] = std::pair<std::set<std::string>, expr2tc>
                                       (used_syms, main_expr);
     }
   }
@@ -1323,7 +1381,7 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
     return;
 
   Forall_goto_functions(f_it, goto_functions) {
-    goto_functions_templatet<goto_programt>::goto_functiont &func = f_it->second;
+    goto_functiont &func = f_it->second;
     goto_programt &prog = func.body;
     Forall_goto_program_instructions(p_it, prog) {
       add_monitor_exprs(p_it, prog.instructions, monitors);
@@ -1337,19 +1395,22 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
   assert(f_it != goto_functions.function_map.end());
   Forall_goto_program_instructions(p_it, f_it->second.body) {
     if (p_it->type == FUNCTION_CALL) {
-      if (p_it->code.op1().identifier().as_string() != "c::main")
+      const code_function_call2t &func_call =
+        to_code_function_call2t(p_it->code);
+      if (is_symbol2t(func_call.function) &&
+          to_symbol2t(func_call.function).thename == "c::main")
         continue;
 
       // Insert initializers for each monitor expr.
-      std::map<std::string, std::pair<std::set<std::string>, exprt> >
+      std::map<std::string, std::pair<std::set<std::string>, expr2tc> >
         ::const_iterator it;
       for (it = monitors.begin(); it != monitors.end(); it++) {
         goto_programt::instructiont new_insn;
         new_insn.type = ASSIGN;
         std::string prop_name = "c::" + it->first + "_status";
-        exprt cast = typecast_exprt(signedbv_typet(32));
-        cast.op0() = it->second.second;
-        new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
+        typecast2tc cast(get_int_type(32), it->second.second);
+        code_assign2tc assign(symbol2tc(get_int_type(32), prop_name), cast);
+        new_insn.code = assign;
         new_insn.function = p_it->function;
 
         // new_insn location field not set - I believe it gets numbered later.
@@ -1363,11 +1424,12 @@ void cbmc_parseoptionst::add_property_monitors(goto_functionst &goto_functions, 
   return;
 }
 
-static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+static void replace_symbol_names(expr2tc &e, std::string prefix, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
 
-  if (e.id() ==  "symbol") {
-    std::string sym = e.identifier().as_string();
+  if (is_symbol2t(e)) {
+    symbol2t &thesym = to_symbol2t(e);
+    std::string sym = thesym.get_symbol_name();
 
 // Originally this piece of code renamed all the symbols in the property
 // expression to ones specified by the user. However, there's no easy way of
@@ -1387,14 +1449,15 @@ static void replace_symbol_names(exprt &e, std::string prefix, std::map<std::str
 
     used_syms.insert(sym);
   } else {
-    Forall_operands(it, e)
-      replace_symbol_names(*it, prefix, strings, used_syms);
+    Forall_operands2(it, idx, e)
+      if (!is_nil_expr(*it))
+        replace_symbol_names(*it, prefix, strings, used_syms);
   }
 
   return;
 }
 
-exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
+expr2tc cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::map<std::string, std::string> &strings, std::set<std::string> &used_syms)
 {
   exprt main_expr;
   std::map<std::string, std::string>::const_iterator it;
@@ -1407,12 +1470,14 @@ exprt cbmc_parseoptionst::calculate_a_property_monitor(std::string name, std::ma
 
   languages.to_expr(expr_str, dummy_str, main_expr, ui_message_handler);
 
-  replace_symbol_names(main_expr, name, strings, used_syms);
+  expr2tc new_main_expr;
+  migrate_expr(main_expr, new_main_expr);
+  replace_symbol_names(new_main_expr, name, strings, used_syms);
 
-  return main_expr;
+  return new_main_expr;
 }
 
-void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, exprt> >monitors)
+void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_programt::instructionst &insn_list, std::map<std::string, std::pair<std::set<std::string>, expr2tc> >monitors)
 {
 
   // So the plan: we've been handed an instruction, look for assignments to a
@@ -1423,21 +1488,24 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   if (!insn->is_assign())
     return;
 
-  exprt sym = insn->code.op0();
-  if (sym.id() != "symbol")
-    return;
+  code_assign2t &assign = to_code_assign2t(insn->code);
+
   // XXX - this means that we can't make propositions about things like
   // the contents of an array and suchlike.
+  if (!is_symbol2t(assign.target))
+    return;
+
+  symbol2t &sym = to_symbol2t(assign.target);
 
   // Is this actually an assignment that we're interested in?
-  std::map<std::string, std::pair<std::set<std::string>, exprt> >::const_iterator it;
-  std::string sym_name = sym.identifier().as_string();
-  std::set<std::pair<std::string, exprt> > triggered;
+  std::map<std::string, std::pair<std::set<std::string>, expr2tc> >::const_iterator it;
+  std::string sym_name = sym.get_symbol_name();
+  std::set<std::pair<std::string, expr2tc> > triggered;
   for (it = monitors.begin(); it != monitors.end(); it++) {
     if (it->second.first.find(sym_name) == it->second.first.end())
       continue;
 
-    triggered.insert(std::pair<std::string, exprt>(it->first, it->second.second));
+    triggered.insert(std::pair<std::string, expr2tc>(it->first, it->second.second));
   }
 
   if (triggered.empty())
@@ -1452,12 +1520,12 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   insn++;
 
   new_insn.type = ASSIGN;
-  std::set<std::pair<std::string, exprt> >::const_iterator trig_it;
+  std::set<std::pair<std::string, expr2tc> >::const_iterator trig_it;
   for (trig_it = triggered.begin(); trig_it != triggered.end(); trig_it++) {
     std::string prop_name = "c::" + trig_it->first + "_status";
-    exprt cast = typecast_exprt(signedbv_typet(32));
-    cast.op0() = trig_it->second;
-    new_insn.code = code_assignt(symbol_exprt(prop_name, signedbv_typet(32)), cast);
+    typecast2tc hack_cast(get_int_type(32), trig_it->second);
+    symbol2tc newsym(get_int_type(32), prop_name);
+    new_insn.code = code_assign2tc(newsym, hack_cast);
     new_insn.function = insn->function;
 
     // new_insn location field not set - I believe it gets numbered later.
@@ -1465,9 +1533,10 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
   }
 
   new_insn.type = FUNCTION_CALL;
-  new_insn.code = code_function_callt();
+  symbol2tc func_sym(get_empty_type(), "c::__ESBMC_switch_to_monitor");
+  std::vector<expr2tc> args;
+  new_insn.code = code_function_call2tc(expr2tc(), func_sym, args);
   new_insn.function = insn->function;
-  new_insn.code.op1() = symbol_exprt("c::__ESBMC_switch_to_monitor");
   insn_list.insert(insn, new_insn);
 
   new_insn.type = ATOMIC_END;
@@ -1479,19 +1548,22 @@ void cbmc_parseoptionst::add_monitor_exprs(goto_programt::targett insn, goto_pro
 
 #include <symbol.h>
 
-static unsigned int calc_globals_used(const namespacet &ns, const exprt &expr)
+static unsigned int calc_globals_used(const namespacet &ns, const expr2tc &expr)
 {
-  std::string identifier = expr.identifier().as_string();
 
-  if (expr.id() != "symbol") {
+  if (is_nil_expr(expr))
+    return 0;
+
+  if (!is_symbol2t(expr)) {
     unsigned int globals = 0;
 
-    forall_operands(it, expr)
+    forall_operands2(it, idx, expr)
       globals += calc_globals_used(ns, *it);
 
     return globals;
   }
 
+  std::string identifier = to_symbol2t(expr).get_symbol_name();
   const symbolt &sym = ns.lookup(identifier);
 
   if (identifier == "c::__ESBMC_alloc" || identifier == "c::__ESBMC_alloc_size")
@@ -1524,8 +1596,12 @@ void cbmc_parseoptionst::print_ileave_points(namespacet &ns,
           break;
         case FUNCTION_CALL:
           {
-            code_function_callt deref_code = to_code_function_call(pit->code);
-            if (deref_code.function().identifier() == "c::__ESBMC_yield")
+            code_function_call2t deref_code =
+              to_code_function_call2t(pit->code);
+
+            if (is_symbol2t(deref_code.function) &&
+                to_symbol2t(deref_code.function).get_symbol_name()
+                            == "c::__ESBMC_yield")
               print_insn = true;
           }
           break;
@@ -1585,31 +1661,27 @@ Function: cbmc_parseoptionst::process_goto_program
 
 \*******************************************************************/
 
+#if 0
 static void
-relink_calls_from_to(irept &irep, irep_idt from_name, irep_idt to_name)
+relink_calls_from_to(expr2tc &irep, irep_idt from_name, irep_idt to_name)
 {
 
-   if (irep.id() == "symbol") {
-    if (irep.identifier() == from_name)
-      irep.identifier(to_name);
+  if (is_nil_expr(irep))
+    return;
+
+   if (is_symbol2t(irep)) {
+    if (to_symbol2t(irep).get_symbol_name() == from_name.as_string())
+      irep = symbol2tc(irep->type, to_name);
 
     return;
   } else {
-    Forall_irep(it, irep.get_sub()) {
+    Forall_operands2(it, idx, irep)
       relink_calls_from_to(*it, from_name, to_name);
-    }
-
-    Forall_named_irep(it, irep.get_named_sub()) {
-      relink_calls_from_to(it->second, from_name, to_name);
-    }
-
-    Forall_named_irep(it, irep.get_comments()) {
-      relink_calls_from_to(it->second, from_name, to_name);
-    }
   }
 
   return;
 }
+#endif
 
 bool cbmc_parseoptionst::process_goto_program(
   optionst &options,
@@ -1626,7 +1698,7 @@ bool cbmc_parseoptionst::process_goto_program(
     namespacet ns(context);
 
     // do partial inlining
-    if(!cmdline.isset("inlining"))
+    if (!cmdline.isset("no-inlining"))
       goto_partial_inline(goto_functions, ns, ui_message_handler);
 
     if(!cmdline.isset("show-features"))
@@ -1642,6 +1714,10 @@ bool cbmc_parseoptionst::process_goto_program(
         *get_message_handler(), goto_functions);
     }
 
+#if 0
+    // This disabled code used to run the pointer static analysis and produce
+    // pointer assertions appropriately. Disable now that we can run it at
+    // symex time.
     status("Pointer Analysis");
     value_set_analysist value_set_analysis(ns);
     value_set_analysis(goto_functions);
@@ -1657,10 +1733,8 @@ bool cbmc_parseoptionst::process_goto_program(
 
     // add pointer checks
     pointer_checks(
-      goto_functions, ns, options, value_set_analysis);
-
-    // add failed symbols
-    add_failed_symbols(context, ns);
+      goto_functions, ns, context, options, value_set_analysis);
+#endif
 
     // add re-evaluations of monitored properties
     add_property_monitors(goto_functions, ns);
@@ -1674,6 +1748,9 @@ bool cbmc_parseoptionst::process_goto_program(
     if(cmdline.isset("data-races-check"))
     {
       status("Adding Data Race Checks");
+
+      value_set_analysist value_set_analysis(ns);
+      value_set_analysis(goto_functions);
 
       add_race_assertions(
         value_set_analysis,
@@ -1744,10 +1821,7 @@ Function: cbmc_parseoptionst::do_bmc
 
 \*******************************************************************/
 
-
-bool cbmc_parseoptionst::do_bmc(
-  bmct &bmc1,
-  const goto_functionst &goto_functions)
+int cbmc_parseoptionst::do_bmc(bmct &bmc1)
 {
   bmc1.set_ui(get_ui());
 
@@ -1755,9 +1829,9 @@ bool cbmc_parseoptionst::do_bmc(
 
   status("Starting Bounded Model Checking");
 
-  bool res = bmc1.run(goto_functions);
+  bool res = bmc1.run();
 
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(ONAMAC)
   if (bmc1.options.get_bool_option("memstats")) {
     int fd = open("/proc/self/status", O_RDONLY);
     sendfile(2, fd, NULL, 100000);
@@ -1797,7 +1871,7 @@ void cbmc_parseoptionst::help()
     " -I path                      set include path\n"
     " -D macro                     define preprocessor macro\n"
     " --preprocess                 stop after preprocessing\n"
-    " --inlining                   inlining function calls\n"
+    " --no-inlining                disable inlining function calls\n"
     " --program-only               only show program expression\n"
     " --all-claims                 keep all claims\n"
     " --show-loops                 show the loops in the program\n"
@@ -1823,8 +1897,6 @@ void cbmc_parseoptionst::help()
     " --no-unwinding-assertions    do not generate unwinding assertions\n"
     " --no-slice                   do not remove unused equations\n\n"
     " --- solver configuration ------------------------------------------------------\n\n"
-    //" --minisat                    use the SAT solver MiniSat\n"
-    " --boolector-bv               use BOOLECTOR with bit-vector arith (experimental)\n"
     " --z3-bv                      use Z3 with bit-vector arithmetic\n"
     " --z3-ir                      use Z3 with integer/real arithmetic\n"
     " --eager                      use eager instantiation with Z3\n"

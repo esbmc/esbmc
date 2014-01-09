@@ -24,6 +24,7 @@ public:
   fixedbv_spect(unsigned _width, unsigned _integer_bits):
     integer_bits(_integer_bits), width(_width)
   {
+    assert(width >= integer_bits);
   }
   
   fixedbv_spect(const class fixedbv_typet &type);

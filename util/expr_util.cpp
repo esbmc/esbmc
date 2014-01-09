@@ -8,7 +8,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "expr_util.h"
 #include "fixedbv.h"
-#include "ieee_float.h"
 #include "bitvector.h"
 
 /*******************************************************************\
@@ -112,10 +111,8 @@ exprt gen_one(const typet &type)
   }
   else if(type_id=="floatbv")
   {
-    ieee_floatt ieee_float;
-    ieee_float.spec=to_floatbv_type(type);
-    ieee_float.from_integer(1);
-    result=ieee_float.to_expr();
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
   }
   else
     result.make_nil();

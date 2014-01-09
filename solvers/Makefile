@@ -1,17 +1,11 @@
 ESBMCDIR= $(shell pwd)/..
 include $(ESBMCDIR)/config.inc
 
-OBJS= sat/$(OBJDIR)/satsolvers.o flattening/$(OBJDIR)/flattening.o \
-      prop/$(OBJDIR)/propobj.o
+OBJS= prop/$(OBJDIR)/propobj.o
 
-DIRS= sat flattening prop
+DIRS= prop
 
 ###############################################################################
-
-ifdef BOOLECTOR
-OBJS+= boolector/$(OBJDIR)/boolector.o
-DIRS+= boolector
-endif
 
 ifdef Z3
 OBJS+= z3/$(OBJDIR)/z3.o
@@ -35,7 +29,7 @@ dirs:
 	done
 
 $(OBJDIR)/solvers.o: $(OBJS)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 clean:
 	-rm $(OBJDIR)/solvers.o
@@ -43,5 +37,7 @@ clean:
 	    make -C $$dir clean; \
 	done
 	-rm $(OBJDIR)/.depends
+
+STRICTCOMPILE=1
 
 include $(ESBMCDIR)/common

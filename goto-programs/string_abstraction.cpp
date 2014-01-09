@@ -43,6 +43,7 @@ public:
     struct_typet s;
 
     s.components().resize(3);
+    s.tag("#!strabs_tag");
 
     s.components()[0].name("is_zero");
     s.components()[0].pretty_name("is_zero");
@@ -56,57 +57,57 @@ public:
     s.components()[2].pretty_name("size");
     s.components()[2].type()=build_type(SIZE);
 
-    string_struct=s;
+    migrate_type(s, string_struct);
   }
   
   void operator()(goto_functionst &dest);
 
-  exprt is_zero_string(
-    const exprt &object,
+  expr2tc is_zero_string(
+    const expr2tc &object,
     bool write,
     const locationt &location);
 
-  exprt zero_string_length(
-    const exprt &object,
+  expr2tc zero_string_length(
+    const expr2tc &object,
     bool write,
     const locationt &location);
 
-  exprt buffer_size(
-    const exprt &object,
+  expr2tc buffer_size(
+    const expr2tc &object,
     const locationt &location);
 
-  static bool has_string_macros(const exprt &expr);
+  static bool has_string_macros(const expr2tc &expr);
 
   void replace_string_macros(
-    exprt &expr,
+    expr2tc &expr,
     bool lhs,
     const locationt &location);
   
-  typet get_string_struct(void) { return string_struct; }
+  type2tc get_string_struct(void) { return string_struct; }
 
 protected:
   contextt &context;
   namespacet ns;
 
-  void move_lhs_arithmetic(exprt &lhs, exprt &rhs);
+  void move_lhs_arithmetic(expr2tc &lhs, expr2tc &rhs);
 
-  bool is_char_type(const typet &type) const
+  bool is_char_type(const type2tc &type) const
   {
-    if(type.id()=="symbol")
-      return is_char_type(ns.follow(type));
-
-    if(type.id()!="signedbv" &&
-       type.id()!="unsignedbv")
+    if (!is_bv_type(type))
       return false;
 
-    return bv_width(type)==config.ansi_c.char_width;
+    return type->get_width()==config.ansi_c.char_width;
   }
 
-  void make_type(exprt &dest, const typet &type)
+  bool is_char_type(const expr2tc &e) const
   {
-    if(dest.is_not_nil() &&
-       ns.follow(dest.type())!=ns.follow(type))
-      dest.make_typecast(type);
+    return is_char_type(e->type);
+  }
+
+  void make_type(expr2tc &dest, const type2tc &type)
+  {
+    if (!is_nil_expr(dest) && dest->type != type)
+      dest = typecast2tc(type, dest);
   }
 
   void abstract(irep_idt name, goto_programt &dest, goto_programt::targett it);
@@ -119,47 +120,55 @@ protected:
 
   typedef enum { IS_ZERO, LENGTH, SIZE } whatt;
 
-  exprt build(
-    const exprt &pointer,
+  expr2tc build(
+    const expr2tc &pointer,
     whatt what,
     bool write,
     const locationt &location);
 
-  exprt build(const exprt &ptr, bool write);
-  exprt build_symbol_ptr(const exprt &object);
-  exprt build_symbol_buffer(const exprt &object);
-  exprt build_symbol_constant(const irep_idt &str);
-  exprt build_unknown(whatt what, bool write);
-  exprt build_unknown(bool write);
+  expr2tc build(const expr2tc &ptr, bool write);
+  expr2tc build_symbol_ptr(const expr2tc &object);
+  expr2tc build_symbol_buffer(const expr2tc &object);
+  expr2tc build_symbol_constant(const irep_idt &str);
+  expr2tc build_unknown(whatt what, bool write);
+  expr2tc build_unknown(bool write);
   static typet build_type(whatt what);
 
-  exprt sub(const exprt &a, const exprt &b)
+  expr2tc sub(const expr2tc &a, const expr2tc &b)
   {
-    if(b.is_nil() || b.is_zero()) return a;
-    exprt result("-", a.type());
-    result.copy_to_operands(a, b);
-    make_type(result.op1(), result.type());
-    return result;
+    if (is_nil_expr(b) ||
+        (is_constant_bool2t(b) && to_constant_bool2t(b).constant_value))
+      return a;
+
+    expr2tc b2 = b;
+    make_type(b2, a->type);
+    sub2tc res(a->type, a, b2);
+    return res;
   }
 
-  exprt member(const exprt &a, whatt what)
+  expr2tc member(const expr2tc &a, whatt what)
   {
-    if(a.is_nil()) return a;
-    exprt result("member", build_type(what));
-    result.copy_to_operands(a);
+    if (is_nil_expr(a))
+      return a;
 
-    switch(what)
-    {
-    case IS_ZERO: result.component_name("is_zero"); break;
-    case SIZE: result.component_name("size"); break;
-    case LENGTH: result.component_name("length"); break;
+    irep_idt name;
+
+    switch(what) {
+    case IS_ZERO: name = "is_zero"; break;
+    case SIZE: name = "size"; break;
+    case LENGTH: name = "length"; break;
     default: assert(false);
     }
 
+    type2tc type;
+    typet tmp_type = build_type(what);
+    migrate_type(tmp_type, type);
+    member2tc result(type, a, name);
+
     return result;
   }
 
-  typet string_struct;
+  type2tc string_struct;
   goto_programt initialization;  
 
   typedef std::map<irep_idt, irep_idt> localst;
@@ -171,7 +180,7 @@ protected:
   // the calling function.
   unsigned int func_return_num;
   
-  void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
+  void abstract(irep_idt name, goto_functiont &dest);
 };
 
 /*******************************************************************\
@@ -242,42 +251,45 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(irep_idt name,
-                                   goto_function_templatet<goto_programt> &dest)
+void string_abstractiont::abstract(irep_idt name, goto_functiont &dest)
 {
   locals.clear();
   func_return_num = 0;
 
-  code_typet &func_type = static_cast<code_typet &>(dest.type);
-  code_typet::argumentst &arg_types=func_type.arguments();
-  code_typet::argumentst new_args;
+  type2tc func_type_c;
+  migrate_type(dest.type, func_type_c);
+  code_type2t &func_type = to_code_type(func_type_c);
+  std::vector<type2tc> &arg_types = func_type.arguments;
+  std::vector<type2tc> new_args;
+  std::vector<irep_idt> new_arg_names;
 
-  for(code_typet::argumentst::const_iterator it=arg_types.begin();
-      it!=arg_types.end(); it++)
+  unsigned int name_idx = 0;
+  for (std::vector<type2tc>::const_iterator it = arg_types.begin();
+      it != arg_types.end(); it++, name_idx++)
   {
-    const code_typet::argumentt &argument=
-                static_cast<const code_typet::argumentt &>(*it);
-    const typet &type = argument.type();
+    const type2tc &type = *it;
 
-    new_args.push_back(argument);
+    new_args.push_back(type);
+    new_arg_names.push_back(func_type.argument_names[name_idx]);
 
-    if(type.id()=="pointer" && is_char_type(type.subtype()))
+    if (is_pointer_type(type) && is_char_type(to_pointer_type(type).subtype))
     {
-      code_typet::argumentt new_arg;
-
-      new_arg.type() = pointer_typet(string_struct);
-      new_arg.set_identifier(it->get_identifier().as_string() + "\\str");
-      new_arg.set_base_name(it->get_base_name().as_string() + "\\str");
-      new_args.push_back(new_arg);
+      new_args.push_back(type2tc(new pointer_type2t(string_struct)));
+      new_arg_names.push_back(func_type.argument_names[name_idx].as_string() +
+                              "\\str");
 
       // We also need to put this new argument into the symbol table.
+
+      // Fabricate a base name.
+      size_t endpos = new_arg_names.back().as_string().rfind("::");
+      std::string basename = new_arg_names.back().as_string().substr(endpos+2);
       symbolt new_sym;
-      new_sym.type = new_arg.type();
+      new_sym.type = migrate_type_back(new_args.back());
       new_sym.value = exprt();
       new_sym.location = locationt();
       new_sym.location.set_file("<added_by_string_abstraction>");
-      new_sym.name = new_arg.get_identifier();
-      new_sym.base_name = new_arg.get_base_name();
+      new_sym.name = new_arg_names.back();
+      new_sym.base_name = basename;
       context.add(new_sym);
     }
   }
@@ -286,22 +298,24 @@ void string_abstractiont::abstract(irep_idt name,
   // able to provide related information about the returned string. To implement
   // this, another pointer to a string struct is tacked onto the end of the
   // function arguments.
-  const typet ret_type = func_type.return_type();
-  if(ret_type.id()=="pointer" && is_char_type(ret_type.subtype())) {
+  const type2tc ret_type = func_type.ret_type;
+  if (is_pointer_type(ret_type) &&
+      is_char_type(to_pointer_type(ret_type).subtype)) {
     code_typet::argumentt new_arg;
 
-    new_arg.type() = pointer_typet(pointer_typet(string_struct));
-    new_arg.set_identifier(name.as_string() + "::__strabs::returned_str\\str");
-    new_arg.set_base_name("returned_str\\str");
-    new_args.push_back(new_arg);
+    type2tc fintype = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
+    new_args.push_back(fintype);
+    new_arg_names.push_back(name.as_string() + "::__strabs::returned_str\\str");
 
     symbolt new_sym;
-    new_sym.type = new_arg.type();
+    new_sym.type = migrate_type_back(fintype);
     new_sym.value = exprt();
     new_sym.location = locationt();
     new_sym.location.set_file("<added_by_string_abstraction>");
-    new_sym.name = new_arg.get_identifier();
-    new_sym.base_name = new_arg.get_base_name();
+    new_sym.name = new_arg_names.back();
+    size_t endpos = new_sym.name.as_string().rfind("::");
+    std::string basename = new_sym.name.as_string().substr(endpos+2);
+    new_sym.base_name = basename;
     context.add(new_sym);
 
     new_sym.name = name.as_string() + "::__strabs::returned_str";
@@ -309,15 +323,20 @@ void string_abstractiont::abstract(irep_idt name,
     new_sym.type = pointer_typet(signedbv_typet(8));
     context.add(new_sym);
 
-    locals[new_sym.name] = new_arg.get_identifier();
+    locals[new_sym.name] = new_arg_names.back();
   }
 
-  func_type.arguments() = new_args;
+  func_type.arguments = new_args;
+  func_type.argument_names = new_arg_names;
 
   // Additionally, update the type of our symbol
   symbolst::iterator it = context.symbols.find(name);
   assert(it != context.symbols.end());
-  it->second.type = func_type;
+  it->second.type = migrate_type_back(func_type_c);
+
+  // Also need to update the type in the goto_function struct, not just the
+  // symbol table.
+  dest.type = to_code_type(it->second.type);
 
   Forall_goto_program_instructions(it, dest.body)
     abstract(name, dest.body, it);
@@ -336,65 +355,72 @@ void string_abstractiont::abstract(irep_idt name,
       }
 
       // do initializations of those locals
-      if(it->is_other() && it->code.statement()=="decl")
+      if (it->is_other() && is_code_decl2t(it->code))
       {
-        assert(it->code.operands().size()==1);
-        if(it->code.op0().id()=="symbol")
+        const code_decl2t &decl = to_code_decl2t(it->code);
+
+        const irep_idt &identifier = decl.value;
+
+        localst::const_iterator l_it=locals.find(identifier);
+        if(l_it!=locals.end())
         {
-          const irep_idt &identifier=
-            to_symbol_expr(it->code.op0()).get_identifier();
+          const symbolt &symbol=ns.lookup(l_it->second);
 
-          localst::const_iterator l_it=locals.find(identifier);
-          if(l_it!=locals.end())
+          if (symbol.value.is_not_nil())
           {
-            const symbolt &symbol=ns.lookup(l_it->second);
+            // initialization
+            goto_programt tmp;
 
-            if(symbol.value.is_not_nil())
-            {
-              // initialization
-              goto_programt tmp;
+            goto_programt::targett decl1=tmp.add_instruction();
+            decl1->make_other();
+            type2tc new_type;
+            migrate_type(symbol.type, new_type);
+            decl1->code = code_decl2tc(new_type, symbol.name);
+            decl1->location=it->location;
+            decl1->local_variables=it->local_variables;
 
-              goto_programt::targett decl1=tmp.add_instruction();
-              decl1->make_other();
-              decl1->code=code_declt();
-              decl1->code.copy_to_operands(symbol_expr(symbol));
-              decl1->location=it->location;
-              decl1->local_variables=it->local_variables;
+            goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+            exprt sym = symbol_expr(symbol);
+            expr2tc new_sym;
+            migrate_expr(sym, new_sym);
+            expr2tc val;
+            migrate_expr(symbol.value, val);
+            assignment1->code = code_assign2tc(new_sym, val);
+            assignment1->location=it->location;
+            assignment1->local_variables=it->local_variables;
 
-              goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
-              assignment1->code=code_assignt(symbol_expr(symbol), symbol.value);
-              assignment1->location=it->location;
-              assignment1->local_variables=it->local_variables;
+            goto_programt::targett it_next=it;
+            it_next++;
 
-              goto_programt::targett it_next=it;
-              it_next++;
+            dest.body.destructive_insert(it_next, tmp);
+          } else if (symbol.type.id() == "pointer" &&
+                     symbol.type.subtype() == migrate_type_back(string_struct)){
+            goto_programt tmp;
 
-              dest.body.destructive_insert(it_next, tmp);
-            } else if (symbol.type.id() == "pointer" &&
-                       symbol.type.subtype() == string_struct) {
-              goto_programt tmp;
+            type2tc sym_type;
+            migrate_type(symbol.type, sym_type);
+            expr2tc null = symbol2tc(sym_type, "NULL");
 
-              constant_exprt null(typet("pointer"));
-              null.type() = symbol.type;
-              null.set_value("NULL");
+            goto_programt::targett decl1=tmp.add_instruction();
+            decl1->make_other();
+            type2tc new_type;
+            migrate_type(symbol.type, new_type);
+            decl1->code = code_decl2tc(new_type, symbol.name);
+            decl1->location=it->location;
+            decl1->local_variables=it->local_variables;
 
-              goto_programt::targett decl1=tmp.add_instruction();
-              decl1->make_other();
-              decl1->code=code_declt();
-              decl1->code.copy_to_operands(symbol_expr(symbol));
-              decl1->location=it->location;
-              decl1->local_variables=it->local_variables;
+            goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
+            exprt sym = symbol_expr(symbol);
+            expr2tc new_sym;
+            migrate_expr(sym, new_sym);
+            assignment1->code = code_assign2tc(new_sym, null);
+            assignment1->location=it->location;
+            assignment1->local_variables=it->local_variables;
 
-              goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
-              assignment1->code=code_assignt(symbol_expr(symbol), null);
-              assignment1->location=it->location;
-              assignment1->local_variables=it->local_variables;
+            goto_programt::targett it_next=it;
+            it_next++;
 
-              goto_programt::targett it_next=it;
-              it_next++;
-
-              dest.body.destructive_insert(it_next, tmp);
-            }
+            dest.body.destructive_insert(it_next, tmp);
           }
         }
       }
@@ -430,7 +456,7 @@ void string_abstractiont::abstract(
   case GOTO:
   case ASSERT:
   case ASSUME:
-    if(has_string_macros(it->guard))
+    if (has_string_macros(it->guard))
       replace_string_macros(it->guard, false, it->location);
     break;
     
@@ -449,19 +475,21 @@ void string_abstractiont::abstract(
 void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
                                           goto_programt::targett it)
 {
-  exprt ret_val;
   irep_idt label;
 
-  if (it->code.operands().size() == 0)
+  code_return2t &ret = to_code_return2t(it->code);
+
+  if (is_nil_expr(ret.operand))
     return; // We're not interested at all.
 
-  replace_string_macros(it->code.op0(), false, it->location);
+  replace_string_macros(ret.operand, false, it->location);
 
-  ret_val = it->code.op0();
-  while(ret_val.id()=="typecast")
-    ret_val = ret_val.op0();
+  expr2tc ret_val = ret.operand;
+  while (is_typecast2t(ret_val))
+    ret_val = to_typecast2t(ret_val).from;
 
-  if (ret_val.type().id() != "pointer" || !is_char_type(ret_val.type().subtype()))
+  if (!is_pointer_type(ret_val) ||
+      !is_char_type(to_pointer_type(ret_val->type).subtype))
     return;
 
   // We have a return type that needs to also write to the callers string
@@ -475,19 +503,20 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   goto_programt tmp;
   goto_programt::targett branch, assignment;
 
-  typet rtype = pointer_typet(pointer_typet(string_struct));
-  typet rtype2 = pointer_typet(rtype);
-  exprt ret_sym = symbol_exprt(name.as_string() + "::__strabs::returned_str\\str", rtype2);
+  type2tc rtype = type2tc(new pointer_type2t(string_struct));
+  type2tc rtype2 = type2tc(new pointer_type2t(rtype));
+  exprt old_ret_sym =
+    symbol_exprt(name.as_string() + "::__strabs::returned_str\\str",
+                 migrate_type_back(rtype2));
+  expr2tc ret_sym;
+  migrate_expr(old_ret_sym, ret_sym);
 
   // For the purposes of comparing the pointer against NULL, we need to typecast
   // it: other goto convert functions rewrite the returned_str\\str pointer to
   // be a particular pointer (value set foo). Upon which it becomes another type
-  typecast_exprt cast(rtype);
-  cast.op0() = ret_sym;
-  constant_exprt null(typet("pointer"));
-  null.type() = rtype;
-  null.set_value("NULL");
-  exprt guard = equality_exprt(cast, null);
+  typecast2tc cast(rtype, ret_sym);
+  symbol2tc null(rtype2, "NULL");
+  equality2tc guard(cast, null);
 
   branch = tmp.add_instruction(GOTO);
   branch->make_goto();
@@ -497,14 +526,14 @@ void string_abstractiont::abstract_return(irep_idt name, goto_programt &dest,
   branch->local_variables = it->local_variables;
   dest.destructive_insert(it, tmp);
 
-  exprt lhs = dereference_exprt(pointer_typet(string_struct));
-  lhs.op0() = ret_sym;
-  exprt rhs = build(ret_val, false);
+  type2tc deref_type = type2tc(new pointer_type2t(string_struct));
+  dereference2tc lhs(deref_type, ret_sym);
+  expr2tc rhs = build(ret_val, false);
   assignment = tmp.add_instruction(ASSIGN);
-  assignment->code = code_assignt(lhs, rhs);
+  assignment->code = code_assign2tc(lhs, rhs);
   assignment->location = it->location;
   assignment->local_variables = it->local_variables;
-  assignment->guard.make_true();
+  assignment->guard = true_expr;
   dest.destructive_insert(it, tmp);
 
   return;
@@ -522,15 +551,14 @@ Function: string_abstractiont::has_string_macros
 
 \*******************************************************************/
 
-bool string_abstractiont::has_string_macros(const exprt &expr)
+bool string_abstractiont::has_string_macros(const expr2tc &expr)
 {
-  if(expr.id()=="is_zero_string" ||
-     expr.id()=="zero_string_length" ||
-     expr.id()=="buffer_size")
+  if (is_zero_string2t(expr) || is_zero_length_string2t(expr) ||
+      is_buffer_size2t(expr))
     return true;
 
-  forall_operands(it, expr)
-    if(has_string_macros(*it))
+  forall_operands2(it, idx, expr)
+    if (!is_nil_expr(*it) && has_string_macros(*it))
       return true;
 
   return false;
@@ -549,31 +577,34 @@ Function: string_abstractiont::replace_string_macros
 \*******************************************************************/
 
 void string_abstractiont::replace_string_macros(
-  exprt &expr,
+  expr2tc &expr,
   bool lhs,
   const locationt &location)
 {
-  if(expr.id()=="is_zero_string")
+  if (is_zero_string2t(expr))
   {
-    assert(expr.operands().size()==1);
-    exprt tmp=is_zero_string(expr.op0(), lhs, location);
-    expr.swap(tmp);
+    const zero_string2t &ref = to_zero_string2t(expr);
+    expr2tc tmp = is_zero_string(ref.string, lhs, location);
+    expr = tmp;
   }
-  else if(expr.id()=="zero_string_length")
+  else if (is_zero_length_string2t(expr))
   {
-    assert(expr.operands().size()==1);
-    exprt tmp=zero_string_length(expr.op0(), lhs, location);
-    expr.swap(tmp);
+    const zero_length_string2t &ref = to_zero_length_string2t(expr);
+    expr2tc tmp = zero_string_length(ref.string, lhs, location);
+    expr = tmp;
   }
-  else if(expr.id()=="buffer_size")
+  else if (is_buffer_size2t(expr))
   {
-    assert(expr.operands().size()==1);
-    exprt tmp=buffer_size(expr.op0(), location);
-    expr.swap(tmp);
+    const buffer_size2t &ref = to_buffer_size2t(expr);
+    expr2tc tmp = buffer_size(ref.value, location);
+    expr = tmp;
   }
   else
-    Forall_operands(it, expr)
-      replace_string_macros(*it, lhs, location);
+  {
+    Forall_operands2(it, idx, expr)
+      if (!is_nil_expr(*it))
+        replace_string_macros(*it, lhs, location);
+  }
 }
 
 /*******************************************************************\
@@ -615,26 +646,31 @@ Function: string_abstractiont::build_unknown
 
 \*******************************************************************/
 
-exprt string_abstractiont::build_unknown(whatt what, bool write)
+expr2tc string_abstractiont::build_unknown(whatt what, bool write)
 {
-  typet type=build_type(what);
+  typet type = build_type(what);
+  type2tc tmp_type;
+  migrate_type(type, tmp_type);
 
-  if(write)
-    return exprt("NULL-object", type);
+  if (write)
+    return null_object2tc(tmp_type);
 
-  exprt result;
+  expr2tc result;
 
   switch(what)
   {
   case IS_ZERO:
-    result=false_exprt();
+    result = false_expr;
     break;
 
   case LENGTH:
   case SIZE:
-    result=exprt("sideeffect", type);
-    result.statement("nondet");
+    {
+    std::vector<expr2tc> args;
+    result = sideeffect2tc(tmp_type, expr2tc(), expr2tc(), args, type2tc(),
+                           sideeffect2t::nondet);
     break;
+    }
 
   default: assert(false);
   }
@@ -654,17 +690,14 @@ Function: string_abstractiont::build_unknown
 
 \*******************************************************************/
 
-exprt string_abstractiont::build_unknown(bool write)
+expr2tc string_abstractiont::build_unknown(bool write)
 {
-  typet type=pointer_typet();
-  type.subtype()=string_struct;
+  type2tc type = type2tc(new pointer_type2t(string_struct));
 
-  if(write)
-    return exprt("NULL-object", type);
+  if (write)
+    return null_object2tc(type);
 
-  exprt result=exprt("constant", type);
-  result.value("NULL");
-
+  symbol2tc result(type, "NULL");
   return result;
 }
 
@@ -680,38 +713,33 @@ Function: string_abstractiont::build
 
 \*******************************************************************/
 
-exprt string_abstractiont::build(
-  const exprt &pointer,
+expr2tc string_abstractiont::build(
+  const expr2tc &pointer,
   whatt what,
   bool write,
   const locationt &location)
 {
   // take care of pointer typecasts now
-  if(pointer.id()=="typecast")
+  if (is_typecast2t(pointer))
   {
     // cast from another pointer type?
-    assert(pointer.operands().size()==1);
-    if(pointer.op0().type().id()!="pointer")
+    if (!is_pointer_type(to_typecast2t(pointer).from))
       return build_unknown(what, write);
 
     // recursive call
-    return build(pointer.op0(), what, write, location);
+    return build(to_typecast2t(pointer).from, what, write, location);
   }
 
-  exprt str_ptr=build(pointer, write);
+  expr2tc str_ptr = build(pointer, write);
 
-  exprt deref=dereference_exprt(string_struct);
-  deref.op0()=str_ptr;
-  deref.location()=location;
+  dereference2tc deref(string_struct, str_ptr);
+  expr2tc result = member(deref, what);
 
-  exprt result=member(deref, what);
-
-  if(what==LENGTH || what==SIZE)
+  if (what==LENGTH || what==SIZE)
   {
     // adjust for offset
-    exprt pointer_offset("pointer_offset", uint_type());
-    pointer_offset.copy_to_operands(pointer);
-    result=sub(result, pointer_offset);
+    pointer_offset2tc ptr_offs(uint_type2(), pointer);
+    result = sub(result, ptr_offs);
   }
 
   return result;
@@ -729,36 +757,33 @@ Function: string_abstractiont::build_symbol_ptr
 
 \*******************************************************************/
 
-exprt string_abstractiont::build_symbol_ptr(const exprt &object)
+expr2tc string_abstractiont::build_symbol_ptr(const expr2tc &object)
 {
   std::string suffix="\\str";
-  const exprt *p=&object;
+  expr2tc obj = object;
 
-  while(p->id()=="member")
+  while (is_member2t(obj))
   {
-    suffix="\\"+p->component_name().as_string()+suffix;
-    assert(p->operands().size()==1);
-    p=&(p->op0());
+    suffix="\\" + to_member2t(obj).member.as_string() + suffix;
+    obj = to_member2t(obj).source_value;
   }
 
-  if(p->id()!="symbol")
-    return static_cast<const exprt &>(get_nil_irep());
+  if (!is_symbol2t(obj) || to_symbol2t(obj).get_symbol_name() == "NULL")
+    return expr2tc();
 
-  const symbol_exprt &expr_symbol=to_symbol_expr(*p);
+  const symbol2t &expr_symbol = to_symbol2t(obj);
 
-  const symbolt &symbol=ns.lookup(expr_symbol.get_identifier());
-  irep_idt identifier=id2string(symbol.name)+suffix;
+  const symbolt &symbol = ns.lookup(expr_symbol.get_symbol_name());
+  irep_idt identifier = symbol.name.as_string() + suffix;
 
-  typet type=pointer_typet();
-  type.subtype()=string_struct;
+  type2tc type = type2tc(new pointer_type2t(string_struct));
 
-  if(context.symbols.find(identifier)==
-     context.symbols.end())
+  if(context.symbols.find(identifier) == context.symbols.end())
   {
     symbolt new_symbol;
     new_symbol.name=identifier;
     new_symbol.mode=symbol.mode;
-    new_symbol.type=type;
+    new_symbol.type = migrate_type_back(type);
     new_symbol.is_statevar=true;
     new_symbol.lvalue=true;
     new_symbol.static_lifetime=symbol.static_lifetime;
@@ -774,7 +799,10 @@ exprt string_abstractiont::build_symbol_ptr(const exprt &object)
   if(!str_symbol.static_lifetime)
     locals[symbol.name]=str_symbol.name;
 
-  return symbol_expr(str_symbol);
+  exprt sym_exp = symbol_expr(str_symbol);
+  expr2tc tmp;
+  migrate_expr(sym_exp, tmp);
+  return tmp;
 }
 
 /*******************************************************************\
@@ -789,34 +817,34 @@ Function: string_abstractiont::build
 
 \*******************************************************************/
 
-exprt string_abstractiont::build(const exprt &pointer, bool write)
+expr2tc string_abstractiont::build(const expr2tc &pointer, bool write)
 {
   // take care of typecasts
-  if(pointer.id()=="typecast")
+  if (is_typecast2t(pointer))
   {
     // cast from another pointer type?
-    assert(pointer.operands().size()==1);
-    if(pointer.op0().type().id()!="pointer")
+    if (!is_pointer_type(to_typecast2t(pointer).from))
       return build_unknown(write);
 
     // recursive call
-    return build(pointer.op0(), write);
+    return build(to_typecast2t(pointer).from, write);
   }
 
   // take care of if
-  if(pointer.id()=="if")
+  if (is_if2t(pointer))
   {
-    exprt result=if_exprt();
+    const if2t &ifval = to_if2t(pointer);
+    expr2tc true_exp = build(ifval.true_value, write);
+    expr2tc false_exp = build(ifval.false_value, write);
 
     // recursive call
-    result.op0()=pointer.op0();
-    result.op1()=build(pointer.op1(), write);
-    result.op2()=build(pointer.op2(), write);
-    result.type()=result.op1().type();
+    if2tc result(true_exp->type, ifval.cond, true_exp, false_exp);
     return result;
   }
 
-  pointer_arithmetict ptr(pointer);
+  // migration erk.
+  exprt old_pointer = migrate_expr_back(pointer);
+  pointer_arithmetict ptr(old_pointer);
 
   if(ptr.pointer.is_address_of())
   {
@@ -833,38 +861,48 @@ exprt string_abstractiont::build(const exprt &pointer, bool write)
 
       if(o.id()=="string-constant")
       {
-        exprt symbol=build_symbol_constant(o.value());
+        exprt symbol = migrate_expr_back(build_symbol_constant(o.value()));
 
         if(symbol.is_nil())
           return build_unknown(write);
 
         exprt address_of("address_of", pointer_typet());
-        address_of.type().subtype()=string_struct;
+        address_of.type().subtype()=migrate_type_back(string_struct);
         address_of.copy_to_operands(symbol);
 
-        return address_of;
+        expr2tc new_addr_of;
+        migrate_expr(address_of, new_addr_of);
+        return new_addr_of;
       }
 
-      exprt symbol=build_symbol_buffer(o);
+      expr2tc obj;
+      migrate_expr(o, obj);
+      exprt symbol=migrate_expr_back(build_symbol_buffer(obj));
 
       if(symbol.is_nil())
         return build_unknown(write);
 
       exprt address_of("address_of", pointer_typet());
-      address_of.type().subtype()=string_struct;
+      address_of.type().subtype()=migrate_type_back(string_struct);
       address_of.copy_to_operands(symbol);
 
-      return address_of;
+      expr2tc new_addr_of;
+      migrate_expr(address_of, new_addr_of);
+      return new_addr_of;
     }
   }
   else
   {
-    exprt result=build_symbol_ptr(ptr.pointer);
+    expr2tc tmp_ptr;
+    migrate_expr(ptr.pointer, tmp_ptr);
+    exprt result=migrate_expr_back(build_symbol_ptr(tmp_ptr));
 
     if(result.is_nil())
       return build_unknown(write);
 
-    return result;
+    expr2tc new_res;
+    migrate_expr(result, new_res);
+    return new_res;
   }
 
   return build_unknown(write);
@@ -882,45 +920,44 @@ Function: string_abstractiont::build_symbol_buffer
 
 \*******************************************************************/
 
-exprt string_abstractiont::build_symbol_buffer(const exprt &object)
+expr2tc string_abstractiont::build_symbol_buffer(const expr2tc &object)
 {
   // first of all, it must be a buffer
-  const typet &obj_t=ns.follow(object.type());
+  const type2tc &obj_t = object->type;
 
-  if(!obj_t.is_array())  
-    return static_cast<const exprt &>(get_nil_irep());
+  if(!is_array_type(obj_t))
+    return expr2tc();
 
-  const array_typet &obj_array_type=to_array_type(obj_t);
+  const array_type2t &obj_array_type = to_array_type(obj_t);
 
   // we do buffers, arrays of buffers, and a buffer in a struct
 
-  if(object.id()=="index")
+  if (is_index2t(object))
   {
-    assert(object.operands().size()==2);
+    const index2t &idx = to_index2t(object);
+    const type2tc &t = idx.source_value->type;
 
-    const typet &t=ns.follow(object.op0().type());
+    if (!is_symbol2t(idx.source_value) || !is_array_type(t))
+      return expr2tc();
 
-    if(object.op0().id()!="symbol" ||
-       !t.is_array())
-      return static_cast<const exprt &>(get_nil_irep());
+    const symbol2t &expr_symbol = to_symbol2t(idx.source_value);
+    const array_type2t &arr_type = to_array_type(expr_symbol.type);
 
-    const symbol_exprt &expr_symbol=to_symbol_expr(object.op0());
-
-    const symbolt &symbol=ns.lookup(expr_symbol.get_identifier());
+    const symbolt &symbol = ns.lookup(expr_symbol.get_symbol_name());
     std::string suffix="\\str_array";
     irep_idt identifier=id2string(symbol.name)+suffix;
 
     if(context.symbols.find(identifier)==
        context.symbols.end())
     {
-      array_typet new_type;
-      new_type.size()=to_array_type(t).size();
-      new_type.subtype()=string_struct;
+      type2tc new_type = type2tc(new array_type2t(string_struct,
+                                                  arr_type.array_size,
+                                                  arr_type.size_is_infinite));
 
       symbolt new_symbol;
       new_symbol.name=identifier;
       new_symbol.mode=symbol.mode;
-      new_symbol.type=new_type;
+      new_symbol.type = migrate_type_back(new_type);
       new_symbol.is_statevar=true;
       new_symbol.lvalue=true;
       new_symbol.static_lifetime=symbol.static_lifetime;
@@ -930,17 +967,19 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
       new_symbol.value.make_nil();
 
       {
-        exprt struct_expr=exprt("struct", string_struct);
-        struct_expr.operands().resize(3);
-        struct_expr.op0()=false_exprt();
-        struct_expr.op1()=obj_array_type.size();
-        make_type(struct_expr.op1(), build_type(SIZE));
-        struct_expr.op2()=struct_expr.op1();
+        std::vector<expr2tc> operands;
+        operands.push_back(false_expr);
+        operands.push_back(obj_array_type.array_size);
+        typet blah = build_type(SIZE);
+        type2tc an_op_type;
+        migrate_type(blah, an_op_type);
+        make_type(operands.back(), an_op_type);
+        operands.push_back(operands.back());
+        constant_struct2tc struct_expr(string_struct, operands);
 
-        exprt value=exprt("array_of", new_type);
-        value.copy_to_operands(struct_expr);
+        constant_array_of2tc value(new_type, struct_expr);
         
-        new_symbol.value=value;
+        new_symbol.value = migrate_expr_back(value);
       }
 
       if(symbol.static_lifetime)
@@ -948,7 +987,11 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
         // initialization
         goto_programt::targett assignment1=
           initialization.add_instruction(ASSIGN);
-        assignment1->code=code_assignt(symbol_expr(new_symbol), new_symbol.value);
+        exprt sym_exp = symbol_expr(new_symbol);
+        expr2tc sym, val;
+        migrate_expr(sym_exp, sym);
+        migrate_expr(new_symbol.value, val);
+        assignment1->code = code_assign2tc(sym, val);
       }
 
       context.move(new_symbol);
@@ -959,33 +1002,30 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     if(!str_array_symbol.static_lifetime)
       locals[symbol.name]=str_array_symbol.name;
 
-    index_exprt result;
-    result.array()=symbol_expr(str_array_symbol);
-    result.index()=object.op1();
-    result.type()=string_struct;
-
-    return result;
+    exprt sym = symbol_expr(str_array_symbol);
+    expr2tc sym_exp;
+    migrate_expr(sym, sym_exp);
+    return index2tc(string_struct, sym_exp, idx.index);
   }
 
   // possibly walk over some members
 
   std::string suffix="\\str";
-  const exprt *p=&object;
+  expr2tc p = object;
 
-  while(p->id()=="member")
+  while (is_member2t(p))
   {
-    suffix="\\"+p->component_name().as_string()+suffix;
-    assert(p->operands().size()==1);
-    p=&(p->op0());
+    suffix="\\" + to_member2t(p).member.as_string() + suffix;
+    p = to_member2t(p).source_value;
   }
 
-  if(p->id()!="symbol")
-    return static_cast<const exprt &>(get_nil_irep());
+  if (!is_symbol2t(p))
+    return expr2tc();
 
-  const symbol_exprt &expr_symbol=to_symbol_expr(*p);
+  const symbol2t thesym = to_symbol2t(p);
 
-  const symbolt &symbol=ns.lookup(expr_symbol.get_identifier());
-  irep_idt identifier=id2string(symbol.name)+suffix;
+  const symbolt &symbol = ns.lookup(thesym.get_symbol_name());
+  irep_idt identifier=id2string(symbol.name) + suffix;
 
   if(context.symbols.find(identifier)==
      context.symbols.end())
@@ -993,7 +1033,7 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     symbolt new_symbol;
     new_symbol.name=identifier;
     new_symbol.mode=symbol.mode;
-    new_symbol.type=string_struct;
+    new_symbol.type = migrate_type_back(string_struct);
     new_symbol.is_statevar=true;
     new_symbol.lvalue=true;
     new_symbol.static_lifetime=symbol.static_lifetime;
@@ -1002,24 +1042,32 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
     new_symbol.base_name=id2string(symbol.base_name)+suffix;
 
     {    
-      exprt value=exprt("struct", string_struct);
-      value.operands().resize(3);
-      value.op0()=false_exprt();
-      value.op1()=obj_array_type.size();
-      make_type(value.op1(), build_type(SIZE));
-      value.op2()=value.op1();
+      std::vector<expr2tc> operands;
+      operands.push_back(false_expr);
+      operands.push_back(obj_array_type.array_size);
+      typet tmptype = build_type(SIZE);
+      type2tc eventmpertype;
+      migrate_type(tmptype, eventmpertype);
+      make_type(operands.back(), eventmpertype);
+      operands.push_back(operands.back());
+      constant_struct2tc value(string_struct, operands);
       
-      new_symbol.value=value;
+      new_symbol.value = migrate_expr_back(value);
     }
+
+    exprt new_sym = symbol_expr(new_symbol);
+    exprt new_sym_val = new_symbol.value;
+    context.move(new_symbol);
 
     if(symbol.static_lifetime)
     {
       // initialization
       goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      assignment1->code=code_assignt(symbol_expr(new_symbol), new_symbol.value);
+      expr2tc new_sym2, new_sym_value;
+      migrate_expr(new_sym, new_sym2);
+      migrate_expr(new_sym_val, new_sym_value);
+      assignment1->code = code_assign2tc(new_sym2, new_sym_value);
     }
-
-    context.move(new_symbol);
   }
 
   const symbolt &str_symbol=ns.lookup(identifier);
@@ -1027,7 +1075,10 @@ exprt string_abstractiont::build_symbol_buffer(const exprt &object)
   if(!str_symbol.static_lifetime)
     locals[symbol.name]=str_symbol.name;
 
-  return symbol_expr(str_symbol);
+  exprt symsymbol = symbol_expr(str_symbol);
+  expr2tc newsymsymbol;
+  migrate_expr(symsymbol, newsymsymbol);
+  return newsymsymbol;
 }
 
 /*******************************************************************\
@@ -1042,7 +1093,7 @@ Function: string_abstractiont::build_symbol_constant
 
 \*******************************************************************/
 
-exprt string_abstractiont::build_symbol_constant(const irep_idt &str)
+expr2tc string_abstractiont::build_symbol_constant(const irep_idt &str)
 {
   unsigned l=strlen(str.c_str());
   irep_idt base="string_constant_str_"+i2string(l);
@@ -1054,34 +1105,38 @@ exprt string_abstractiont::build_symbol_constant(const irep_idt &str)
     symbolt new_symbol;
     new_symbol.name=identifier;
     new_symbol.mode="C";
-    new_symbol.type=string_struct;
+    new_symbol.type = migrate_type_back(string_struct);
     new_symbol.is_statevar=true;
     new_symbol.lvalue=true;
     new_symbol.static_lifetime=true;
     new_symbol.pretty_name=base;
+    size_t endpos = base.as_string().rfind("::");
+    std::string basename = base.as_string().substr(endpos+2);
     new_symbol.base_name=base;
 
-    {
-      exprt value=exprt("struct", string_struct);
-      value.operands().resize(3);
-
-      value.op0()=true_exprt();
-      value.op1()=from_integer(l, build_type(LENGTH));
-      value.op2()=from_integer(l+1, build_type(SIZE));
-
-      // initialization
-      goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
-      assignment1->code=code_assignt(symbol_expr(new_symbol), value);
-    }
-
+    exprt new_sym = symbol_expr(new_symbol);
     context.move(new_symbol);
+
+    type2tc lentype, sizetype;
+    typet olentype = build_type(LENGTH);
+    typet osizetype = build_type(SIZE);
+    migrate_type(olentype, lentype);
+    migrate_type(osizetype, sizetype);
+
+    std::vector<expr2tc> operands;
+    operands.push_back(true_expr);
+    operands.push_back(constant_int2tc(lentype, l));
+    operands.push_back(constant_int2tc(sizetype, l+1));
+    constant_struct2tc value(string_struct, operands);
+
+    // initialization
+    goto_programt::targett assignment1=initialization.add_instruction(ASSIGN);
+    expr2tc new_sym2;
+    migrate_expr(new_sym, new_sym2);
+    assignment1->code = code_assign2tc(new_sym2, value);
   }
 
-  symbol_exprt symbol_expr;
-  symbol_expr.type()=string_struct;
-  symbol_expr.set_identifier(identifier);
-
-  return symbol_expr;
+  return symbol2tc(string_struct, identifier);
 }
 
 /*******************************************************************\
@@ -1096,8 +1151,8 @@ Function: string_abstractiont::is_zero_string
 
 \*******************************************************************/
 
-exprt string_abstractiont::is_zero_string(
-  const exprt &object,
+expr2tc string_abstractiont::is_zero_string(
+  const expr2tc &object,
   bool write,
   const locationt &location)
 {
@@ -1116,8 +1171,8 @@ Function: string_abstractiont::zero_string_length
 
 \*******************************************************************/
 
-exprt string_abstractiont::zero_string_length(
-  const exprt &object,
+expr2tc string_abstractiont::zero_string_length(
+  const expr2tc &object,
   bool write,
   const locationt &location)
 {
@@ -1136,8 +1191,8 @@ Function: string_abstractiont::buffer_size
 
 \*******************************************************************/
 
-exprt string_abstractiont::buffer_size(
-  const exprt &object,
+expr2tc string_abstractiont::buffer_size(
+  const expr2tc &object,
   const locationt &location)
 {
   return build(object, SIZE, false, location);
@@ -1155,17 +1210,16 @@ Function: string_abstractiont::move_lhs_arithmetic
 
 \*******************************************************************/
 
-void string_abstractiont::move_lhs_arithmetic(exprt &lhs, exprt &rhs)
+void string_abstractiont::move_lhs_arithmetic(expr2tc &lhs, expr2tc &rhs)
 {
-  if(lhs.id()=="-")
+  if (is_sub2t(lhs))
   {
     // move op1 to rhs
-    exprt rest=lhs.op0();
-    exprt sum=exprt("+", lhs.type());
-    sum.copy_to_operands(rhs, lhs.op1());
+    expr2tc rest = to_sub2t(lhs).side_1;
+    add2tc sum(lhs->type, rhs, to_sub2t(lhs).side_2);
     // overwrite
-    rhs=sum;
-    lhs=rest;
+    rhs = sum;
+    lhs = rest;
   }
 }
 
@@ -1185,23 +1239,20 @@ void string_abstractiont::abstract_assign(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  code_assignt &assign=to_code_assign(target->code);
+  code_assign2t &assign = to_code_assign2t(target->code);
 
-  exprt &lhs=assign.lhs();
-  exprt &rhs=assign.rhs();
-
-  if(has_string_macros(lhs))
+  if (has_string_macros(assign.target))
   {
-    replace_string_macros(lhs, true, target->location);
-    move_lhs_arithmetic(lhs, rhs);
+    replace_string_macros(assign.target, true, target->location);
+    move_lhs_arithmetic(assign.target, assign.source);
   }
 
-  if(has_string_macros(rhs))
-    replace_string_macros(rhs, false, target->location);
+  if (has_string_macros(assign.source))
+    replace_string_macros(assign.source, false, target->location);
 
-  if(lhs.type().id()=="pointer")
+  if (is_pointer_type(assign.target))
     abstract_pointer_assign(dest, target);
-  else if(is_char_type(lhs.type()))
+  else if (is_char_type(assign.target))
     abstract_char_assign(dest, target);
 }
 
@@ -1221,17 +1272,18 @@ void string_abstractiont::abstract_pointer_assign(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  code_assignt &assign=to_code_assign(target->code);
+  code_assign2t &assign = to_code_assign2t(target->code);
 
-  exprt &lhs=assign.lhs();
-  exprt rhs=assign.rhs();
-  exprt *rhsp=&(assign.rhs());
+  expr2tc &lhs = assign.target;
+  expr2tc rhs = assign.source;
 
-  while(rhsp->id()=="typecast")
-    rhsp=&(rhsp->op0());
+  expr2tc rhsp = assign.source;
+
+  while (is_typecast2t(rhsp))
+    rhsp = to_typecast2t(rhsp).from;
   
   // we only care about char pointers for now
-  if(!is_char_type(rhsp->type().subtype()))
+  if (!is_char_type(to_pointer_type(rhsp->type).subtype))
     return;
 
   // assign length and is_zero as well
@@ -1239,7 +1291,7 @@ void string_abstractiont::abstract_pointer_assign(
   goto_programt tmp;
 
   goto_programt::targett assignment=tmp.add_instruction(ASSIGN);
-  assignment->code=code_assignt(build(lhs, true), build(rhs, false));
+  assignment->code = code_assign2tc(build(lhs, true), build(rhs, false));
   assignment->location=target->location;
   assignment->local_variables=target->local_variables;
 
@@ -1263,63 +1315,52 @@ void string_abstractiont::abstract_char_assign(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  code_assignt &assign=to_code_assign(target->code);
+  code_assign2t &assign = to_code_assign2t(target->code);
 
-  exprt &lhs=assign.lhs();
-  exprt &rhs=assign.rhs();
+  expr2tc &lhs = assign.target;
+  expr2tc &rhs = assign.source;
 
   // we only care if the constant zero is assigned
-  if(!rhs.is_zero())
+  if (!is_constant_int2t(rhs) ||
+      !to_constant_int2t(rhs).constant_value.is_zero())
     return;
 
-  if(lhs.id()=="index")
+  if (is_index2t(lhs))
   {
-    assert(lhs.operands().size()==2);
-
+    index2t &idx = to_index2t(lhs);
     goto_programt tmp;
 
-    const exprt symbol_buffer=build_symbol_buffer(lhs.op0());
+    const expr2tc symbol_buffer = build_symbol_buffer(idx.source_value);
 
-    const exprt i1=member(symbol_buffer, IS_ZERO);
-    if(i1.is_not_nil())
+    const expr2tc i1 = member(symbol_buffer, IS_ZERO);
+    if (!is_nil_expr(i1))
     {
       goto_programt::targett assignment1=tmp.add_instruction(ASSIGN);
-      assignment1->code=code_assignt(i1, true_exprt());
-      assignment1->code.location()=target->location;
+      assignment1->code = code_assign2tc(i1, true_expr);
       assignment1->location=target->location;
       assignment1->local_variables=target->local_variables;
     }
 
-    const exprt i2=member(symbol_buffer, LENGTH);
-    if(i2.is_not_nil())
+    const expr2tc i2 = member(symbol_buffer, LENGTH);
+    if (!is_nil_expr(i2))
     {
-      exprt new_length=lhs.op1();
-      make_type(new_length, i2.type());
+      expr2tc new_length = idx.index;
+      make_type(new_length, i2->type);
 
-      if_exprt min_expr;
-      min_expr.cond()=binary_relation_exprt(new_length, "<", i2);
-      min_expr.true_case()=new_length;
-      min_expr.false_case()=i2;
-      min_expr.type()=i2.type();
+      lessthan2tc cond(new_length, i2);
+      if2tc min_expr(i2->type, cond, new_length, i2);
 
       goto_programt::targett assignment2=tmp.add_instruction(ASSIGN);
-      assignment2->code=code_assignt(i2, min_expr);
-      assignment2->code.location()=target->location;
+      assignment2->code = code_assign2tc(i2, min_expr);
       assignment2->location=target->location;
       assignment2->local_variables=target->local_variables;
 
-      move_lhs_arithmetic(
-       assignment2->code.op0(),
-       assignment2->code.op1());
+      code_assign2t &assign = to_code_assign2t(assignment2->code);
+      move_lhs_arithmetic(assign.target, assign.source);
     }
 
     target++;
     dest.destructive_insert(target, tmp);
-  }
-  else if(lhs.id()=="dereference")
-  {
-    assert(lhs.operands().size()==1);
-
   }
 }
 
@@ -1339,13 +1380,17 @@ void string_abstractiont::abstract_function_call(
   goto_programt &dest,
   goto_programt::targett target)
 {
-  code_function_callt::argumentst new_args;
+  std::vector<expr2tc> new_args;
 
-  code_function_callt &call=to_code_function_call(target->code);
-  const code_function_callt::argumentst &arguments=call.arguments();
+  code_function_call2t &call = to_code_function_call2t(target->code);
+  const std::vector<expr2tc> &arguments = call.operands;
   
+  // Can't cope with non symbols.
+  if (!is_symbol2t(call.function))
+    return;
+
   symbolst::const_iterator f_it = 
-    context.symbols.find(call.function().identifier());
+    context.symbols.find(to_symbol2t(call.function).get_symbol_name());
   if(f_it==context.symbols.end())
     // XXXjmorse - handle function pointer strabs at symex time?
     return;
@@ -1354,29 +1399,37 @@ void string_abstractiont::abstract_function_call(
   if (f_it->second.value.is_nil())
     return;
   
-  const code_typet &fnc_type = 
+  const code_typet &old_fnc_type = 
     static_cast<const code_typet &>(f_it->second.type);
-  const code_typet::argumentst &argument_types=fnc_type.arguments();
+  type2tc func_type_c;
+  migrate_type(old_fnc_type, func_type_c);
+  const code_type2t &func_type = to_code_type(func_type_c);
+  const std::vector<type2tc> &argument_types = func_type.arguments;
 
-  code_typet::argumentst::const_iterator arg = argument_types.begin();
-  for(exprt::operandst::const_iterator it1=arguments.begin();
+  std::vector<type2tc>::const_iterator arg = argument_types.begin();
+  for (std::vector<expr2tc>::const_iterator it1 = arguments.begin();
       it1 != arguments.end(); it1++) {
-    const exprt actual(*it1);
+    const expr2tc actual(*it1);
 
     new_args.push_back(actual);
 
-    const exprt *tcfree = &*arg;
-    while(tcfree->id()=="typecast")
-      tcfree=&tcfree->op0();
+    // XXX jmorse migration; see here in the past, arg was being implicity
+    // casted from type to expr. Hacking around this could have led to a change
+    // in behaviour.
+    type2tc tcfree = *arg;
+#if 0
+    while (is_typecast2t(tcfree))
+      tcfree = to_typecast2t(tcfree).from;
+#endif
     
-    if(tcfree->type().id()=="pointer" &&
-       is_char_type(tcfree->type().subtype()))
+    if (is_pointer_type(tcfree) &&
+        is_char_type(to_pointer_type(tcfree).subtype))
     {
-      if (actual.type().id() == "pointer")
+      if (is_pointer_type(actual))
         new_args.push_back(build(actual, false));
       else
-        new_args.push_back(address_of_exprt(build(actual, false)));
-
+        new_args.push_back(address_of2tc(to_pointer_type(tcfree).subtype,
+                                         (build(actual, false))));
     }
 
     arg++;
@@ -1387,7 +1440,7 @@ void string_abstractiont::abstract_function_call(
     // Uuugh. Arg we're pointing at may (or may not) now be a string struct ptr.
     // Ultimately the fix to this horror is not rewriting program code and
     // signature in the same pass.
-    if (arg->type().id() == "pointer" && arg->type().subtype() == string_struct)
+    if (is_pointer_type(*arg) && to_pointer_type(*arg).subtype == string_struct)
       arg++;
 
     if (arg == argument_types.end())
@@ -1396,15 +1449,17 @@ void string_abstractiont::abstract_function_call(
 
   // If we have a char return type, receive a returned string struct by passing
   // a string struct pointer as the last argument.
-  typet fnc_ret_type = fnc_type.return_type();
-  if (fnc_ret_type.id() == "pointer" && is_char_type(fnc_ret_type.subtype())) {
-    if (call.lhs().is_nil()) {
-      constant_exprt null(typet("pointer"));
-      null.type().subtype() = pointer_typet(string_struct);
-      null.set_value("NULL");
+  type2tc fnc_ret_type = func_type.ret_type;
+  if (is_pointer_type(fnc_ret_type) &&
+      is_char_type(to_pointer_type(fnc_ret_type).subtype)) {
+    if (is_nil_expr(call.ret)) {
+      type2tc null_type = type2tc(new pointer_type2t(type2tc(new pointer_type2t(string_struct))));
+      symbol2tc null(null_type, "NULL");
       new_args.push_back(null);
     } else {
-      new_args.push_back(address_of_exprt(build(call.lhs(), false)));
+      //XXX jmorse migration guessing; void ptr?
+      type2tc ret_type = type2tc(new pointer_type2t(get_empty_type()));
+      new_args.push_back(address_of2tc(ret_type, build(call.ret, false)));
     }
   }
 
@@ -1413,5 +1468,5 @@ void string_abstractiont::abstract_function_call(
   // that number, and we can't guarentee the order these functions are processed
   // in, it's not inpractical.
 
-  call.arguments() = new_args;
+  call.operands = new_args;
 }

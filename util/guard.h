@@ -9,6 +9,9 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GUARD_H
 #define CPROVER_GUARD_H
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <iostream>
 
 #include <expr.h>
@@ -20,10 +23,10 @@ public:
   guardt() : guard_list() { }
   guardt(const guardt &ref) { *this = ref; }
 
-  typedef expr_listt guard_listt;
+  typedef std::list<expr2tc> guard_listt;
 
-  void add(const exprt &expr);
-  void move(exprt &expr);
+  void add(const expr2tc &expr);
+  void move(expr2tc &expr);
 
   void append(const guardt &guard)
   {
@@ -33,25 +36,21 @@ public:
       add(*it);
   }
 
-  exprt as_expr(guard_listt::const_iterator it) const;
+  expr2tc as_expr(guard_listt::const_iterator it) const;
 
-  exprt as_expr() const
+  expr2tc as_expr() const
   {
     return as_expr(guard_list.begin());
   }
   
-  void guard_expr(exprt &dest) const
+  void guard_expr(expr2tc &dest) const
   {
     if(guard_list.empty())
     {
     }
     else
     {
-      exprt tmp("=>", typet("bool"));
-      tmp.operands().resize(2);
-      tmp.op0()=as_expr();
-      tmp.op1().swap(dest);
-      dest.swap(tmp);
+      dest = expr2tc(new implies2t(as_expr(), dest));
     }
   }
 
@@ -67,12 +66,14 @@ public:
   void make_false()
   {
     guard_list.clear();
-    guard_list.push_back(exprt());
-    guard_list.back().make_false();
+    expr2tc tmp = false_expr;
+    guard_list.push_back(tmp);
   }
   
   friend guardt &operator -= (guardt &g1, const guardt &g2);
   friend guardt &operator |= (guardt &g1, const guardt &g2);
+
+  void back_sub(const guardt &g2);
   
   void swap(guardt &g)
   {

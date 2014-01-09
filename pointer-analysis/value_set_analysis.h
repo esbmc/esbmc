@@ -58,7 +58,7 @@ protected:
     std::list<value_sett::entryt> &dest);
 
   void get_entries_rec(
-    const irep_idt &identifier,
+    const std::string &identifier,
     const std::string &suffix,
     const typet &type,
     std::list<value_sett::entryt> &dest);
@@ -67,10 +67,10 @@ public:
   // interface value_sets
   virtual void get_values(
     locationt l,
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &dest)
   {
-    (*this)[l].value_set.get_value_set(expr, dest, ns);
+    (*this)[l].value_set->get_value_set(expr, dest);
   }  
 };
 

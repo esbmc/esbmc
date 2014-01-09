@@ -20,6 +20,7 @@ int main(){
       exit(1);
    } else {
       a = (int *) malloc( n * sizeof(int));
+      __ESBMC_assume(a);
    }
 
    //__ESBMC_assume(a);

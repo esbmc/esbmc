@@ -354,7 +354,7 @@ const symbolt &cpp_typecheckt::instantiate_template(
       convert(method_decl);
     }
 
-    symbolt &new_symb =
+    symbolt &new_symb=
       const_cast<symbolt&>(lookup(new_decl.type().identifier()));
 
     // any template instance to remember?

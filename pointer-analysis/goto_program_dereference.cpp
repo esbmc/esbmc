@@ -6,57 +6,42 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+#include <prefix.h>
 #include <simplify_expr.h>
 #include <base_type.h>
 #include <std_code.h>
 
 #include "goto_program_dereference.h"
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::has_failed_symbol
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 bool goto_program_dereferencet::has_failed_symbol(
-  const exprt &expr,
+  const expr2tc &expr,
   const symbolt *&symbol)
 {
-  if(expr.id()=="symbol")
+  if (is_symbol2t(expr))
   {
-    if(expr.invalid_object())
+    if (has_prefix(to_symbol2t(expr).thename.as_string(), "symex::invalid_object"))
       return false;
 
-    const symbolt &ptr_symbol=ns.lookup(expr);
+    // Null and invalid name lookups will fail.
+    if (to_symbol2t(expr).thename == "NULL" ||
+        to_symbol2t(expr).thename == "INVALID")
+      return false;
 
-    const irep_idt &failed_symbol=
-      ptr_symbol.type.failed_symbol();
+    exprt tmp_sym = migrate_expr_back(expr);
+    const symbolt &ptr_symbol = ns.lookup(tmp_sym);
 
-    if(failed_symbol=="") return false;
+    const irep_idt &failed_symbol = ptr_symbol.type.failed_symbol();
+
+    if (failed_symbol == "")
+      return false;
 
     return !ns.lookup(failed_symbol, symbol);
   }
 
   return false;
 }
-
-/*******************************************************************\
-
-Function: goto_program_dereferencet::is_valid_object
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 bool goto_program_dereferencet::is_valid_object(
   const irep_idt &identifier)
@@ -76,40 +61,31 @@ bool goto_program_dereferencet::is_valid_object(
   return false;
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference_failure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::dereference_failure(
   const std::string &property,
   const std::string &msg,
   const guardt &guard)
 {
-  exprt guard_expr=guard.as_expr();
+  expr2tc guard_expr = guard.as_expr();
 
-  if(assertions.insert(guard_expr).second)
+  if (assertions.insert(guard_expr).second)
   {
-    guard_expr.make_not();
+    guard_expr = not2tc(guard_expr);
 
     // first try simplifier on it
-    if(!options.get_bool_option("no-simplify"))
+    if (!options.get_bool_option("no-simplify"))
     {
       base_type(guard_expr, ns);
-      simplify(guard_expr);
+      expr2tc tmp_expr = guard_expr->simplify();
+      if (!is_nil_expr(tmp_expr))
+        guard_expr = tmp_expr;
     }
 
-    if(!guard_expr.is_true())
+    if (!is_constant_bool2t(guard_expr) ||
+        !to_constant_bool2t(guard_expr).constant_value)
     {
       goto_programt::targett t=new_code.add_instruction(ASSERT);
-      t->guard.swap(guard_expr);
+      t->guard = guard_expr;
       t->location=dereference_location;
       t->location.property(property);
       t->location.comment("dereference failure: "+msg);
@@ -117,212 +93,27 @@ void goto_program_dereferencet::dereference_failure(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference_rec
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void goto_program_dereferencet::dereference_rec(
-  exprt &expr,
-  guardt &guard,
-  const dereferencet::modet mode)
-{
-  if(!dereference.has_dereference(expr))
-    return;
-
-  if(expr.is_and() || expr.id()=="or")
-  {
-    if(!expr.is_boolean())
-      throw expr.id_string()+" must be Boolean, but got "+
-            expr.pretty();
-
-    unsigned old_guards=guard.size();
-
-    for(unsigned i=0; i<expr.operands().size(); i++)
-    {
-      exprt &op=expr.operands()[i];
-
-      if(!op.is_boolean())
-        throw expr.id_string()+" takes Boolean operands only, but got "+
-              op.pretty();
-
-      if(dereference.has_dereference(op))
-        dereference_rec(op, guard, dereferencet::READ);
-
-      if(expr.id()=="or")
-      {
-        exprt tmp(op);
-        tmp.make_not();
-        guard.move(tmp);
-      }
-      else
-        guard.add(op);
-    }
-
-    guard.resize(old_guards);
-
-    return;
-  }
-  else if(expr.id()=="if")
-  {
-    if(expr.operands().size()!=3)
-      throw "if takes three arguments";
-
-    if(!expr.op0().is_boolean())
-    {
-      std::string msg=
-        "first argument of if must be boolean, but got "
-        +expr.op0().to_string();
-      throw msg;
-    }
-
-    dereference_rec(expr.op0(), guard, dereferencet::READ);
-
-    bool o1=dereference.has_dereference(expr.op1());
-    bool o2=dereference.has_dereference(expr.op2());
-
-    if(o1)
-    {
-      unsigned old_guard=guard.size();
-      guard.add(expr.op0());
-      dereference_rec(expr.op1(), guard, mode);
-      guard.resize(old_guard);
-    }
-
-    if(o2)
-    {
-      unsigned old_guard=guard.size();
-      exprt tmp(expr.op0());
-      tmp.make_not();
-      guard.move(tmp);
-      dereference_rec(expr.op2(), guard, mode);
-      guard.resize(old_guard);
-    }
-
-    return;
-  }
-
-  if(expr.is_address_of() ||
-     expr.id()=="reference_to")
-  {
-    // turn &*p to p
-    // this has *no* side effect!
-
-    assert(expr.operands().size()==1);
-
-    if(expr.op0().id()=="dereference" ||
-       expr.op0().id()=="implicit_dereference")
-    {
-      assert(expr.op0().operands().size()==1);
-
-      exprt tmp;
-      tmp.swap(expr.op0().op0());
-
-      if(tmp.type()!=expr.type())
-        tmp.make_typecast(expr.type());
-
-      expr.swap(tmp);
-    }
-  }
-
-  Forall_operands(it, expr)
-    dereference_rec(*it, guard, mode);
-
-  if(expr.id()=="dereference" ||
-     expr.id()=="implicit_dereference")
-  {
-    if(expr.operands().size()!=1)
-      throw "dereference expects one operand";
-
-    dereference_location=expr.find_location();
-
-    exprt tmp;
-    tmp.swap(expr.op0());
-    dereference.dereference(tmp, guard, mode);
-    expr.swap(tmp);
-  }
-  else if(expr.id()=="index")
-  {
-    if(expr.operands().size()!=2)
-      throw "index expects two operands";
-
-    if(expr.op0().type().id()=="pointer")
-    {
-      dereference_location=expr.find_location();
-
-      exprt tmp("+", expr.op0().type());
-      tmp.operands().swap(expr.operands());
-      dereference.dereference(tmp, guard, mode);
-      tmp.swap(expr);
-    }
-  }
-}
-
-/*******************************************************************\
-
-Function: goto_program_dereferencet::get_value_set
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &dest)
 {
   value_sets.get_values(current_target, expr, dest);
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference_expr
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::dereference_expr(
-  exprt &expr,
+  expr2tc &expr,
   const bool checks_only,
   const dereferencet::modet mode)
 {
   guardt guard;
 
-  if(checks_only)
-  {
-    exprt tmp(expr);
-    dereference_rec(tmp, guard, mode);
+  if(checks_only) {
+    expr2tc tmp = expr;
+    dereference.dereference_expr(tmp, guard, mode);
+  } else {
+    dereference.dereference_expr(expr, guard, mode);
   }
-  else
-    dereference_rec(expr, guard, mode);
 }
-
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void goto_program_dereferencet::dereference_program(
   goto_programt &goto_program,
@@ -354,18 +145,6 @@ void goto_program_dereferencet::dereference_program(
   }
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::dereference_program(
   goto_functionst &goto_functions,
   bool checks_only)
@@ -377,18 +156,6 @@ void goto_program_dereferencet::dereference_program(
     dereference_program(it->second.body, checks_only);
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::dereference_instruction(
   goto_programt::targett target,
   bool checks_only)
@@ -396,31 +163,33 @@ void goto_program_dereferencet::dereference_instruction(
   current_target=target;
   valid_local_variables=&target->local_variables;
   goto_programt::instructiont &i=*target;
+  dereference_location = i.location;
 
   dereference_expr(i.guard, checks_only, dereferencet::READ);
 
-  if(i.is_assign())
+  if (i.is_assign())
   {
-    if(i.code.operands().size()!=2)
-      throw "assignment expects two operands";
-
-    dereference_expr(i.code.op0(), checks_only, dereferencet::WRITE);
-    dereference_expr(i.code.op1(), checks_only, dereferencet::READ);
+    code_assign2t &assign = to_code_assign2t(i.code);
+    dereference_expr(assign.target, checks_only, dereferencet::WRITE);
+    dereference_expr(assign.source, checks_only, dereferencet::READ);
   }
-  else if(i.is_function_call())
+  else if (i.is_function_call())
   {
-    code_function_callt &function_call=to_code_function_call(to_code(i.code));
+    code_function_call2t &func_call = to_code_function_call2t(i.code);
 
-    if(function_call.lhs().is_not_nil())
-      dereference_expr(function_call.lhs(), checks_only, dereferencet::WRITE);
+    if (!is_nil_expr(func_call.ret)) {
+      dereference_expr(func_call.ret, checks_only, dereferencet::WRITE);
+    }
 
-    dereference_expr(function_call.op2(), checks_only, dereferencet::READ);
+    for (std::vector<expr2tc>::iterator it = func_call.operands.begin();
+         it != func_call.operands.end(); it++)
+      dereference_expr(*it, checks_only, dereferencet::READ);
 
-    if (function_call.function().id() == "dereference") {
+    if (is_dereference2t(func_call.function)) {
       // Rather than derefing function ptr, which we're moving to not collect
       // via pointer analysis, instead just assert that it's a valid pointer.
-      exprt invalid_ptr("invalid-pointer", typet("bool"));
-      invalid_ptr.copy_to_operands(function_call.function().op0());
+      const dereference2t &deref = to_dereference2t(func_call.function);
+      invalid_pointer2tc invalid_ptr(deref.value);
       guardt guard;
       guard.move(invalid_ptr);
 #if 1
@@ -437,66 +206,38 @@ void goto_program_dereferencet::dereference_instruction(
   }
   else if (i.is_return())
   {
-    assert(i.code.statement() == "return");
-    if (i.code.operands().size() == 0)
+    code_return2t &ret = to_code_return2t(i.code);
+    if (is_nil_expr(ret.operand))
       return;
 
-    assert(i.code.operands().size() == 1);
-
-    exprt &ret = i.code.op0();
-    dereference_expr(ret, checks_only, dereferencet::READ);
+    dereference_expr(ret.operand, checks_only, dereferencet::READ);
   }
   else if(i.is_other())
   {
-    const irep_idt &statement=i.code.statement();
-
-    if(statement=="decl")
-    {
-      if(i.code.operands().size()!=1)
-        throw "decl expects one operand";
-    }
-    else if(statement=="expression")
-    {
-      if(i.code.operands().size()!=1)
-        throw "expression expects one operand";
-
-      dereference_expr(i.code.op0(), checks_only, dereferencet::READ);
-    }
-    else if(statement=="printf")
-    {
-      Forall_operands(it, i.code)
+    if (is_code_decl2t(i.code)) {
+      ;
+    } else if (is_code_expression2t(i.code)) {
+      code_expression2t &theexp = to_code_expression2t(i.code);
+      dereference_expr(theexp.operand, checks_only, dereferencet::READ);
+    } else if (is_code_printf2t(i.code)) {
+      Forall_operands2(it, idx, i.code)
         dereference_expr(*it, checks_only, dereferencet::READ);
-    }
-    else if(statement=="free")
-    {
-      if(i.code.operands().size()!=1)
-        throw "free expects one operand";
-
-      exprt tmp(i.code.op0());
-
-      dereference_location=tmp.find_location();
+    } else if (is_code_free2t(i.code)) {
+      code_free2t &free = to_code_free2t(i.code);
+      expr2tc operand = free.operand;
 
       guardt guard;
-      dereference.dereference(tmp, guard, dereferencet::FREE);
+      // Result discarded
+      std::list<expr2tc> scalar_step_list;
+      dereference.dereference(operand, operand->type, guard, dereferencet::FREE,
+                              &scalar_step_list);
     }
   }
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::dereference_expression(
   goto_programt::const_targett target,
-  exprt &expr)
+  expr2tc &expr)
 {
   current_target=target;
   valid_local_variables=&target->local_variables;
@@ -504,53 +245,17 @@ void goto_program_dereferencet::dereference_expression(
   dereference_expr(expr, false, dereferencet::READ);
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::pointer_checks
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::pointer_checks(
   goto_programt &goto_program)
 {
   dereference_program(goto_program, true);
 }
 
-/*******************************************************************\
-
-Function: goto_program_dereferencet::pointer_checks
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void goto_program_dereferencet::pointer_checks(
   goto_functionst &goto_functions)
 {
   dereference_program(goto_functions, true);
 }
-
-/*******************************************************************\
-
-Function: remove_pointers
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void remove_pointers(
   goto_programt &goto_program,
@@ -565,18 +270,6 @@ void remove_pointers(
 
   goto_program_dereference.dereference_program(goto_program);
 }
-
-/*******************************************************************\
-
-Function: remove_pointers
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void remove_pointers(
   goto_functionst &goto_functions,
@@ -593,18 +286,6 @@ void remove_pointers(
     goto_program_dereference.dereference_program(it->second.body);
 }
 
-/*******************************************************************\
-
-Function: pointer_checks
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void pointer_checks(
   goto_programt &goto_program,
   const namespacet &ns,
@@ -617,45 +298,21 @@ void pointer_checks(
   goto_program_dereference.pointer_checks(goto_program);
 }
 
-/*******************************************************************\
-
-Function: pointer_checks
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void pointer_checks(
   goto_functionst &goto_functions,
   const namespacet &ns,
+  contextt &context,
   const optionst &options,
   value_setst &value_sets)
 {
-  contextt new_context;
   goto_program_dereferencet
-    goto_program_dereference(ns, new_context, options, value_sets);
+    goto_program_dereference(ns, context, options, value_sets);
   goto_program_dereference.pointer_checks(goto_functions);
 }
 
-/*******************************************************************\
-
-Function: dereference
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void dereference(
   goto_programt::const_targett target,
-  exprt &expr,
+  expr2tc &expr,
   const namespacet &ns,
   value_setst &value_sets)
 {
@@ -663,5 +320,6 @@ void dereference(
   contextt new_context;
   goto_program_dereferencet
     goto_program_dereference(ns, new_context, options, value_sets);
+
   goto_program_dereference.dereference_expression(target, expr);
 }

@@ -18,7 +18,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <std_types.h>
 #include <std_code.h>
 #include <i2string.h>
-#include <ieee_float.h>
 #include <fixedbv.h>
 #include <prefix.h>
 
@@ -1349,15 +1348,8 @@ std::string expr2ct::convert_constant(
   }
   else if(type.id()=="floatbv")
   {
-    dest=ieee_floatt(src).to_ansi_c_string();
-
-    if(dest!="" && isdigit(dest[dest.size()-1]))
-    {
-      if(src.type()==float_type())
-        dest+="f";
-      else if(src.type()==double_type())
-        dest+="l";
-    }
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
   }
   else if(type.id()=="fixedbv")
   {
@@ -3018,9 +3010,6 @@ std::string expr2ct::convert(
 
   else if(src.id()=="exists")
     return convert_quantifier(src, "EXISTS", precedence=2);
-
-  else if(src.id()=="lambda")
-    return convert_quantifier(src, "LAMBDA", precedence=2);
 
   else if(src.id()=="with")
     return convert_with(src, precedence=2);

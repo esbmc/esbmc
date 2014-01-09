@@ -10,6 +10,7 @@
 
 #include <iostream>
 #include <math.h>
+#include <migrate.h>
 #include <iomanip>
 #include <sstream>
 #include <string>
@@ -62,34 +63,50 @@ z3_convt::get_fixed_point(const unsigned width, std::string value) const
   return value;
 }
 
-exprt
-z3_convt::get(const exprt &expr) const
+expr2tc
+z3_convt::get(const expr2tc &expr)
 {
 
   try {
 
-  if (expr.id() == exprt::symbol ||
-      expr.id() == "nondet_symbol") {
+  if (is_symbol2t(expr)) {
     std::string identifier, tmp;
-    Z3_sort sort;
-    Z3_ast bv;
-    Z3_func_decl func;
+    z3::sort sort;
+    z3::expr bv;
 
-    identifier = expr.identifier().as_string();
-    create_type(expr.type(), sort);
-    bv = z3_api.mk_var(identifier.c_str(), sort);
-    func = Z3_get_app_decl(z3_ctx, Z3_to_app(z3_ctx, bv));
+    const symbol2t sym = to_symbol2t(expr);
+    identifier = sym.get_symbol_name();
 
-    if(Z3_eval_func_decl(z3_ctx, model, func, &bv) == Z3_L_FALSE) {
-      // This symbol doesn't have an assignment in this model
-      return nil_exprt();
+    sort_cachet::const_iterator cache_res = sort_cache.find(expr->type);
+    if (cache_res != sort_cache.end()) {
+      sort = cache_res->second;
+    } else if (int_encoding && is_bv_type(expr)) {
+      // Special case: in integer mode, all int types become Z3 int's, which
+      // doesn't necessarily get put in the type cache.
+      sort = ctx.int_sort();
+    } else {
+      // This doesn't work; can't be bothered to debug it either.
+      //assert(cache_res != sort_cache.end() && "No cached copy of type when "
+      //       "fetching cex data");
+      convert_type(expr->type, sort);
     }
 
-    return bv_get_rec(bv, expr.type());
-  } else if (expr.id() == exprt::constant) {
+    bv = ctx.constant(identifier.c_str(), sort);
+
+    try {
+      z3::expr res = model.eval(bv, false);
+      expr2tc ret = bv_get_rec(res, expr->type);
+      return ret;
+    }
+
+    catch (z3::exception &e) {
+    }
+    // This symbol doesn't have an assignment in this model
+    return expr2tc();
+  } else if (is_constant_expr(expr)) {
     return expr;
   } else {
-    std::cerr << "Unrecognized irep fetched from Z3: " << expr.id().as_string();
+    std::cerr << "Unrecognized irep fetched from Z3: " << get_expr_id(expr);
     std::cerr << std::endl;
     abort();
   }
@@ -97,32 +114,38 @@ z3_convt::get(const exprt &expr) const
   } catch (conv_error *e) {
     std::cerr << "Conversion error fetching counterexample:" << std::endl;
     std::cerr << e->to_string() << std::endl;
-    return nil_exprt();
+    return expr2tc();
   }
 }
 
-exprt
-z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
+expr2tc
+z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
 {
-  Z3_ast tmp;
   Z3_app app;
   unsigned width;
 
   app = Z3_to_app(z3_ctx, bv); // Just typecasting.
 
-  get_type_width(type, width);
+  try {
+    width = type->get_width();
+  } catch (array_type2t::inf_sized_array_excp *) {
+    // Not a problem, we don't use the array size in extraction
+    width = 0;
+  } catch (array_type2t::dyn_sized_array_excp *e) {
+    // Also fine.
+    width = 0;
+  }
 
-  if (type.is_bool()) {
-    Z3_app app = Z3_to_app(z3_ctx, bv);
+  if (is_bool_type(type)) {
     if (Z3_get_bool_value(z3_ctx, Z3_app_to_ast(z3_ctx, app)) == Z3_L_TRUE)
-      return true_exprt();
+      return true_expr;
     else
-      return false_exprt();
-  } else if (type.is_array()) {
-    typedef std::pair<mp_integer, exprt> array_elem;
+      return false_expr;
+  } else if (is_array_type(type)) {
+    typedef std::pair<mp_integer, expr2tc> array_elem;
+    const array_type2t & type_ref = to_array_type(type);
     std::list<array_elem> elems_in_z3_order;
-    std::map<mp_integer, exprt> mapped_elems;
-    exprt expr;
+    std::map<mp_integer, expr2tc> mapped_elems;
 
     // Array model is a series of store ASTs, with the operands:
     //   0) Array to store into
@@ -141,7 +164,7 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       assert(Z3_get_ast_kind(z3_ctx, idx) == Z3_NUMERAL_AST);
       std::string index = Z3_get_numeral_string(z3_ctx, idx);
       mp_integer i = string2integer(index);
-      exprt val = bv_get_rec(value, type.subtype());
+      expr2tc val = bv_get_rec(value, type_ref.subtype);
       elems_in_z3_order.push_back(array_elem(i, val));
     }
 
@@ -154,78 +177,66 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
 
     // Finally, serialise into operands list
 
-    std::vector<exprt> elem_list;
-    for (std::map<mp_integer, exprt>::const_iterator it = mapped_elems.begin();
+    std::vector<expr2tc> elem_list;
+    for (std::map<mp_integer, expr2tc>::const_iterator it =mapped_elems.begin();
          it != mapped_elems.end(); it++)
       elem_list.push_back(it->second);
 
     // XXXjmorse - this isn't going to be printed right if the array data is
     // sparse. See trac #73
-    exprt dest = exprt("array", type);
-    dest.operands() = elem_list;
-    return dest;
-  } else if (type.id() == "struct") {
-    std::vector<exprt> unknown;
-    const irept &components = type.components();
-    exprt::operandst op;
-    op.reserve(components.get_sub().size());
 
-    exprt expr;
+    return constant_array2tc(type, elem_list);
+  } else if (is_struct_type(type)) {
+    const struct_type2t &type_ref = to_struct_type(type);
+    std::vector<expr2tc> unknown;
+    std::vector<expr2tc> opers;
+    opers.reserve(type_ref.members.size());
+
+    expr2tc expr;
     unsigned i = 0;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
     if (num_fields == 0)
-      return nil_exprt();
+      return expr2tc();
 
-    forall_irep(it, components.get_sub()) {
-      const typet &subtype = it->type();
+    forall_types(it, type_ref.members) {
       tmp = Z3_get_app_arg(z3_ctx, app, i++);
-      op.push_back(bv_get_rec(tmp, subtype));
+      opers.push_back(bv_get_rec(tmp, *it));
     }
 
-    exprt dest = exprt(type.id(), type);
-    dest.operands().swap(op);
-    return dest;
-  } else if (type.id() == "union") {
-    const irept &components = type.components();
-
+    return constant_struct2tc(type, opers);
+  } else if (is_union_type(type)) {
+    const union_type2t &type_ref = to_union_type(type);
     unsigned component_nr = 0;
+    std::vector<expr2tc> operands;
 
-    if (component_nr >= components.get_sub().size())
-      return nil_exprt();
+    if (component_nr >= type_ref.members.size())
+      return expr2tc();
 
-    exprt value("union", type);
-    value.operands().resize(1);
-
-    value.component_name(components.get_sub()[component_nr].name());
-
-    exprt::operandst op;
-    op.reserve(1);
-
-    exprt expr;
-    unsigned int i = 0;
-    int comp_nr;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
+    expr2tc expr;
+    int i = 0;
+    // Z3's own int64 type. It uses a long long rather than C99 int64_t,
+    // because MSVC doesn't support C99, the !@*&%'s
+    __int64 comp_nr;
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
     tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
 
     assert(Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST);
-    Z3_bool tbool = Z3_get_numeral_int(z3_ctx, tmp, &comp_nr);
+    Z3_bool tbool = Z3_get_numeral_int64(z3_ctx, tmp, &comp_nr);
     assert(tbool);
+    tbool = tbool;
 
     if (num_fields == 0)
-      return nil_exprt();
+      return expr2tc();
 
-    forall_irep(it, components.get_sub())
+    forall_types(it, type_ref.members)
     {
-      const typet &subtype = it->type();
       tmp = Z3_get_app_arg(z3_ctx, app, i);
-      expr = bv_get_rec(tmp, subtype);
-      op.push_back(expr);
+      expr = bv_get_rec(tmp, *it);
+      operands.push_back(expr);
       if (comp_nr == i) {
         // XXXjmorse, Dunno what to do with this
         // in fact, shouldn't be reached, not in components list.
@@ -234,71 +245,66 @@ z3_convt::bv_get_rec(const Z3_ast bv, const typet &type) const
       ++i;
     }
 
-    value.operands().swap(op);
-    return value;
-  } else if (type.id() == "pointer") {
-    exprt object, offset;
-    Z3_app app = Z3_to_app(z3_ctx, bv);
+    return constant_union2tc(type, operands);
+  } else if (is_pointer_type(type)) {
+    expr2tc object, offset;
     unsigned num_fields = Z3_get_app_num_args(z3_ctx, app);
     Z3_ast tmp;
 
-    assert(num_fields == 2);
-
-    const typet &subtype = static_cast<const typet &>(type.subtype());
-
-    tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
-    object = bv_get_rec(tmp, unsignedbv_typet(config.ansi_c.int_width));
-    tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
-    offset = bv_get_rec(tmp, unsignedbv_typet(config.ansi_c.int_width));
-
-    pointer_logict::pointert pointer;
-    pointer.object =
-      integer2long(binary2integer(object.value().as_string(), false));
-    pointer.offset = binary2integer(offset.value().as_string(), true);
-    if (pointer.object == 0) {
-      constant_exprt result(type);
-      result.set_value("NULL");
-      return result;
+    if (num_fields != 2) {
+      std::cerr << "pointer symbol retrieval error" << std::endl;
+      return expr2tc();
     }
 
-    return pointer_logic.pointer_expr(pointer, type);
-  } else if (type.id() == "signedbv" || type.id() == "unsignedbv") {
-    unsigned width;
+    assert(num_fields == 2);
+
+    tmp = Z3_get_app_arg(z3_ctx, app, 0); //object
+    object = bv_get_rec(tmp, get_uint_type(config.ansi_c.int_width));
+    tmp = Z3_get_app_arg(z3_ctx, app, 1); //offset
+    offset = bv_get_rec(tmp, get_uint_type(config.ansi_c.int_width));
+
+    assert(is_unsignedbv_type(object));
+// XXXjmorse - some thought should go in here.
+//    assert(is_signedbv_type(offset));
+    const constant_int2t &objref = to_constant_int2t(object);
+    const constant_int2t &offsref = to_constant_int2t(offset);
+
+    pointer_logict::pointert pointer;
+    pointer.object = objref.constant_value.to_ulong();
+    pointer.offset = offsref.constant_value;
+    if (pointer.object == 0) {
+      return symbol2tc(type, "NULL");
+    }
+
+    return pointer_logic.back().pointer_expr(pointer, type);
+  } else if (is_bv_type(type)) {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
-      return nil_exprt();
+      return expr2tc();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    get_type_width(type, width);
-    constant_exprt value_expr(type);
-    value_expr.set_value(integer2binary(string2integer(value), width));
-    return value_expr;
-  } else if (type.id() == "fixedbv" && int_encoding) {
+    return constant_int2tc(type, BigInt(value.c_str()));
+  } else if (is_fixedbv_type(type) && int_encoding) {
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
-      return nil_exprt();
+      return expr2tc();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    get_type_width(type, width);
-    constant_exprt value_expr(type);
+    constant_exprt value_expr(migrate_type_back(type));
     value_expr.set_value(get_fixed_point(width, value));
-    return value_expr;
-  } else if (type.id() == "fixedbv" && !int_encoding) {
+    fixedbvt fbv;
+    fbv.from_expr(value_expr);
+    return constant_fixedbv2tc(type, fbv);
+  } else if (is_fixedbv_type(type) && !int_encoding) {
     // bv integer representation of fixedbv can be stuffed right back into a
     // constant irep, afaik
     if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
-      return nil_exprt();
-    get_type_width(type, width);
+      return expr2tc();
     std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    constant_exprt value_expr(type);
+    constant_exprt value_expr(migrate_type_back(type));
     value_expr.set_value(integer2binary(string2integer(value), width));
-    return value_expr;
-  } else if (type.id() == "c_enum" || type.id() == "incomplete_c_enum") {
-    if (Z3_get_ast_kind(z3_ctx, bv) != Z3_NUMERAL_AST)
-      return nil_exprt();
-    std::string value = Z3_get_numeral_string(z3_ctx, bv);
-    constant_exprt value_expr(type);
-    value_expr.set_value(value);
-    return value_expr;
+    fixedbvt fbv;
+    fbv.from_expr(value_expr);
+    return constant_fixedbv2tc(type, fbv);
   } else {
-    std::cerr << "Unrecognized type \"" << type.id() << "\" generating counterexample" << std::endl;
+    std::cerr << "Unrecognized type  generating counterexample" << std::endl;
+    type->dump();
     abort();
-    return nil_exprt();
   }
 }

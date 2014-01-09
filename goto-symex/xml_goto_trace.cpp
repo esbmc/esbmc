@@ -18,18 +18,6 @@ Author: Daniel Kroening
 
 #include "xml_goto_trace.h"
 
-/*******************************************************************\
-
-Function: convert
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void convert(
   const namespacet &ns,
   const goto_tracet &goto_trace,
@@ -74,10 +62,10 @@ void convert(
       {
         irep_idt identifier;
 
-        if(it->original_lhs.is_not_nil())
-          identifier=it->original_lhs.identifier();
+        if (!is_nil_expr(it->original_lhs))
+          identifier = to_symbol2t(it->original_lhs).get_symbol_name();
         else
-          identifier=it->lhs.identifier();
+          identifier = to_symbol2t(it->lhs).get_symbol_name();
           
         xmlt &xml_assignment=xml.new_element("assignment");
 
@@ -86,11 +74,12 @@ void convert(
 
         std::string value_string, type_string;
         
-        if(it->value.is_not_nil())
-          value_string=from_expr(ns, identifier, it->value);
-
-        if(it->value.type().is_not_nil())
-          type_string=from_type(ns, identifier, it->value.type());
+        if (!is_nil_expr(it->value)) {
+          value_string = from_expr(ns, identifier,
+                                   migrate_expr_back(it->value));
+          type_string=from_type(ns, identifier,
+                                migrate_type_back(it->value->type));
+        }
 
         const symbolt *symbol;
         irep_idt base_name, display_name;
@@ -118,7 +107,15 @@ void convert(
     case goto_trace_stept::OUTPUT:
       {
         printf_formattert printf_formatter;
-        printf_formatter(it->format_string, it->output_args);
+
+        std::list<exprt> vec;
+
+        for (std::list<expr2tc>::const_iterator it2 = it->output_args.begin();
+             it2 != it->output_args.end(); it2++) {
+          vec.push_back(migrate_expr_back(*it2));
+        }
+
+        printf_formatter(it->format_string, vec);
         std::string text=printf_formatter.as_string();
         xmlt &xml_output=xml.new_element("output");
         xml_output.new_element("step_nr").data=i2string(it->step_nr);

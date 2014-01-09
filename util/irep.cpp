@@ -857,7 +857,6 @@ const irep_idt irept::a_cformat = dstring("#cformat");
 const irep_idt irept::a_cmt_width = dstring("#width");
 const irep_idt irept::a_axiom = dstring("axiom");
 const irep_idt irept::a_binding = dstring("binding");
-const irep_idt irept::a_bounds_check = dstring("bounds_check");
 const irep_idt irept::a_cmt_constant = dstring("#constant");
 const irep_idt irept::a_default = dstring("default");
 const irep_idt irept::a_ellipsis = dstring("ellipsis");
@@ -930,6 +929,7 @@ const irep_idt irept::s_offsetof_type = dstring("offsetof_type");
 
 const irep_idt irept::id_address_of = dstring("address_of");
 const irep_idt irept::id_and = dstring("and");
+const irep_idt irept::id_or = dstring("or");
 const irep_idt irept::id_array = dstring("array");
 const irep_idt irept::id_bool = dstring("bool");
 const irep_idt irept::id_code = dstring("code");

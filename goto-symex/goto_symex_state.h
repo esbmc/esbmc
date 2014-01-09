@@ -10,6 +10,8 @@
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_STATE_H
 
+#include <irep2.h>
+
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -120,12 +122,10 @@ public:
       guard(s.guard),
       thread_id(s.thread_id) {}
 
-  // Deny the use of goto_statet copy constructors
-  private:
-  goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
-  {
-    assert(0);
-  }
+    goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
+    {
+      abort();
+    }
 
   public:
     ~goto_statet() {
@@ -162,9 +162,11 @@ public:
     goto_programt::const_targett end_of_function;
     /** Expression to assign return values to. The lvalue that the calller
      *  assigns the result of this function call to at a higher level. */
-    exprt return_value;
+    expr2tc return_value;
 
-    typedef std::set<irep_idt> local_variablest;
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            local_variablest;
     /** Set of local variable l1 names. */
     local_variablest local_variables;
 
@@ -173,7 +175,7 @@ public:
      *  can point at, and that need to have calls set up to and executed. This
      *  member contains an iterator to the first goto instruction in the target
      *  and the target symbol name. */
-    std::list<std::pair<goto_programt::const_targett,exprt> >
+    std::list<std::pair<goto_programt::const_targett, symbol2tc> >
       cur_function_ptr_targets;
     /** Instruction where function pointer calls should seem to originate
      *  from. */
@@ -184,19 +186,21 @@ public:
     goto_programt::const_targett function_ptr_combine_target;
     /** Original function pointer call code. Contains arguments to setup
      *  resulting function invocations with. */
-    const code_function_callt *orig_func_ptr_call;
+    expr2tc orig_func_ptr_call;
 
-    typedef std::set<std::string> declaration_historyt;
-    /** List of variables names that have been declared. Used to detect when we
+    typedef hash_set_cont<renaming::level2t::name_record,
+                          renaming::level2t::name_rec_hash>
+            declaration_historyt;
+    /** Set of variables names that have been declared. Used to detect when we
      *  are in some kind of block that is entered then exited repeatedly -
      *  whenever that happens, a new l1 name is required. This caches the
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
     framet(unsigned int thread_id) :
-      return_value(static_cast<const exprt &>(get_nil_irep()))
+      return_value(expr2tc())
     {
-      level1._thread_id = thread_id;
+      level1.thread_id = thread_id;
     }
   };
 
@@ -206,62 +210,57 @@ public:
   {
   public:
     exceptiont() :
-      has_throw_target(false),
-      has_throw_decl(false),
-      throw_target(NULL)
+      has_throw_decl(false)
     {
     }
 
-    typedef std::map<irep_idt, goto_programt::targett> catch_mapt;
+    // types -> locations
+    typedef std::map<irep_idt, goto_programt::const_targett> catch_mapt;
     catch_mapt catch_map;
 
+    // types -> what order they were declared in, important for polymorphism etc
     typedef std::map<irep_idt, unsigned> catch_ordert;
     catch_ordert catch_order;
 
+    // list of exception types than can be thrown
     typedef std::set<irep_idt> throw_list_sett;
     throw_list_sett throw_list_set;
 
-    bool has_throw_target, has_throw_decl;
-    goto_programt::targett throw_target;
+    bool has_throw_decl;
   };
 
   // Macros
   /**
    *  Perform both levels of renaming.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol to perform renaming on.
    */
-  std::string
-  current_name(const irep_idt &identifier) const
+  void
+  current_name(expr2tc &symirep) const
   {
-    return current_name(level2, identifier);
+    current_name(level2, symirep);
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param plevel2 L2 renaming context to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const renaming::level2t &plevel2, const irep_idt &identifier) const
+  void
+  current_name(const renaming::level2t &plevel2, expr2tc &symirep) const
   {
-    irep_idt temp = top().level1.get_ident_name(identifier);
-    return plevel2.get_ident_name(temp);
+    top().level1.get_ident_name(symirep);
+    plevel2.get_ident_name(symirep);
   }
 
   /**
    *  Perform both levels of renaming.
    *  @param goto_state Detatched state containing L2 state to rename with.
-   *  @param identifier Identifier to rename.
-   *  @return Renamed identifier.
+   *  @param symirep Symbol irep to rename
    */
-  std::string
-  current_name(
-    const goto_statet &goto_state, const irep_idt &identifier) const
+  void
+  current_name(const goto_statet &goto_state, expr2tc &symirep) const
   {
-    return current_name(goto_state.level2, identifier);
+    current_name(goto_state.level2, symirep);
   }
 
   /**
@@ -331,7 +330,7 @@ public:
    *  Perform both levels of renaming on an expression.
    *  @param expr Expression to rename contents of.
    */
-  void rename(exprt &expr);
+  void rename(expr2tc &expr);
 
   /**
    *  Perform renaming of contents of an address_of operation.
@@ -340,7 +339,7 @@ public:
    *  object. So, don't perform second level of renaming in this function.
    *  @param expr Expression to rename contents of.
    */
-  void rename_address(exprt &expr);
+  void rename_address(expr2tc &expr);
 
   /**
    *  Make an L2 and value set assignment.
@@ -351,7 +350,7 @@ public:
    *  @param rhs Value being assigned to symbol.
    *  @param record_value Whether to enable constant propagation.
    */
-  void assignment(exprt &lhs, const exprt &rhs, bool record_value);
+  void assignment(expr2tc &lhs, const expr2tc &rhs, bool record_value);
 
   /**
    *  Determine whether to constant propagate the value of an expression.
@@ -361,7 +360,7 @@ public:
    *  @param expr Expression to decide whether to const propagate.
    *  @return True if constant propagation should be enabled.
    */
-  bool constant_propagation(const exprt &expr) const;
+  bool constant_propagation(const expr2tc &expr) const;
 
   /**
    *  Decide whether to constant_propagate an address_of
@@ -369,16 +368,7 @@ public:
    *  @param expr Expression to decide whether to const propagate.
    *  @return True if constant propagation should be enabled.
    */
-  bool constant_propagation_reference(const exprt &expr) const;
-
-  /**
-   *  Fetch an original l0 identifer.
-   *  Revokes both levels of renaming on an identifer, leaves us with the
-   *  original c-level identifier for a symbol.
-   *  @param identifier The identifier to reverse renaming on.
-   *  @return Renamed to l0 identifier.
-   */
-  const irep_idt get_original_name(const irep_idt &identifier) const;
+  bool constant_propagation_reference(const expr2tc &expr) const;
 
   /**
    *  Fetch an original l0 identifer.
@@ -387,7 +377,7 @@ public:
    *  all contents of an expression.
    *  @param expr The expression to un-rename in place.
    */
-  void get_original_name(exprt &expr) const;
+  void get_original_name(expr2tc &expr) const;
 
   /**
    *  Print stack trace of state to stdout.
@@ -405,6 +395,20 @@ public:
    */
   std::vector<dstring> gen_stack_trace(void) const;
 
+  /**
+   *  Fixup types after renaming: we might rename a symbol that we
+   *  believe to be a uint32_t ptr, to be what it statically is, the address
+   *  of a byte array. Or something. Either way, the renaming process changes
+   *  the ptr type of the expression, making all subsequent pointer arithmetic
+   *  croak.
+   *  This used to be just for pointers, but is now for everything in general,
+   *  because a variety of code (01_cbmc_Pointer7 for example) is renaming
+   *  symbols to differently sized constants, which leads to Problems.
+   *  @param expr The expression that's just been renamed
+   *  @param orig_type The original type of the expression, before renaming.
+   */
+  void fixup_renamed_type(expr2tc &expr, const type2tc &orig_type);
+
   // Members
 
   /** Number of instructions executed in this thread. */
@@ -415,11 +419,15 @@ public:
 
   /** Current state guard of this thread. */
   guardt guard;
+  /** Guard of global context. */
+  guardt global_guard;
   /** Current program location of this thread. */
   symex_targett::sourcet source;
-  /** Invocation count for each function name. Tracks how many times a function
-   *  has been called, used by l1 renaming as an activation record. */
-  std::map<irep_idt, unsigned> function_frame;
+  /** Counter for how many times a particular variable has been declared:
+   *  becomes the l1 renaming number in renamed variables. Used to be a counter
+   *  for each function invocation, but the existance of decl insns makes l1
+   *  re-naming out of step with function invocations. */
+  std::map<irep_idt, unsigned> variable_instance_nums;
   /** Record of how many loop unwinds we've performed. For each target in the
    *  program that contains a loop, record how many times we've unwound round
    *  it. */
@@ -439,6 +447,11 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
+
+  /** Map of what pointer values have been realloc'd, and what their new
+   *  realloc number is. No need for special consideration when merging states
+   *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
+  std::map<expr2tc, unsigned> realloc_map;
 };
 
 #endif

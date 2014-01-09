@@ -22,14 +22,12 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <sstream>
 #include <fstream>
 
+#include <irep2.h>
 #include <i2string.h>
 #include <location.h>
 #include <time_stopping.h>
 #include <message_stream.h>
-
-#include <solvers/sat/satcheck.h>
-
-#include <solvers/boolector/boolector_dec.h>
+#include <migrate.h>
 
 #include <langapi/mode.h>
 #include <langapi/languages.h>
@@ -38,40 +36,21 @@ Authors: Daniel Kroening, kroening@kroening.com
 #include <goto-symex/goto_trace.h>
 #include <goto-symex/build_goto_trace.h>
 #include <goto-symex/slice.h>
-#include <goto-symex/slice_by_trace.h>
 #include <goto-symex/xml_goto_trace.h>
 #include <goto-symex/reachability_tree.h>
 
 #include "bmc.h"
-#include "bv_cbmc.h"
 #include "document_subgoals.h"
 #include "version.h"
 
 static volatile bool checkpoint_sig = false;
 
 void
-sigusr1_handler(int sig)
+sigusr1_handler(int sig __attribute__((unused)))
 {
 
   checkpoint_sig = true;
   return;
-}
-
-/*******************************************************************\
-
-Function: bmct::do_unwind_module
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void bmct::do_unwind_module(
-  decision_proceduret &decision_procedure)
-{
 }
 
 /*******************************************************************\
@@ -92,9 +71,6 @@ void bmct::do_cbmc(prop_convt &solver, symex_target_equationt &equation)
 
   equation.convert(solver);
 
-  forall_expr_list(it, bmc_constraints)
-    solver.set_to_true(*it);
-
   // After all conversions, clear cache, which tends to contain a large
   // amount of stuff.
   solver.clear_cache();
@@ -112,7 +88,7 @@ Function: bmct::error_trace
 
 \*******************************************************************/
 
-void bmct::error_trace(const prop_convt &prop_conv,
+void bmct::error_trace(prop_convt &prop_conv,
                        symex_target_equationt &equation)
 {
   status("Building error trace");
@@ -158,7 +134,7 @@ Function: bmct::run_decision_procedure
 
 \*******************************************************************/
 
-decision_proceduret::resultt
+prop_convt::resultt
 bmct::run_decision_procedure(prop_convt &prop_conv,
                              symex_target_equationt &equation)
 {
@@ -171,14 +147,11 @@ bmct::run_decision_procedure(prop_convt &prop_conv,
   else
     logic = "integer/real arithmetic";
 
-  if (!(options.get_bool_option("minisat")) && !options.get_bool_option("smt")
-        && !options.get_bool_option("btor"))
+  if (!options.get_bool_option("smt") && !options.get_bool_option("btor"))
     std::cout << "Encoding remaining VCC(s) using " << logic << "\n";
 
   prop_conv.set_message_handler(message_handler);
   prop_conv.set_verbosity(get_verbosity());
-
-  do_unwind_module(prop_conv);
 
   fine_timet encode_start = current_time();
   do_cbmc(prop_conv, equation);
@@ -335,7 +308,7 @@ void bmct::show_program(symex_target_equationt &equation)
     if(it->is_assignment())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << string_value << std::endl;
       count++;
     }
@@ -343,15 +316,21 @@ void bmct::show_program(symex_target_equationt &equation)
     else if(it->is_assert())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assert)" << string_value << std::endl;
       count++;
     }
     else if(it->is_assume())
     {
       std::string string_value;
-      languages.from_expr(it->cond, string_value);
+      languages.from_expr(migrate_expr_back(it->cond), string_value);
       std::cout << "(" << count << ") " << "(assume)" << string_value << std::endl;
+      count++;
+    }
+    else if (it->is_renumber())
+    {
+      std::cout << "(" << count << ") " << "renumber: " <<
+                   from_expr(ns, "", it->lhs) << std::endl;
       count++;
     }
 #
@@ -371,7 +350,7 @@ Function: bmct::run
 
 \*******************************************************************/
 
-bool bmct::run(const goto_functionst &goto_functions)
+bool bmct::run(void)
 {
 #ifndef _WIN32
   struct sigaction act;
@@ -386,8 +365,8 @@ bool bmct::run(const goto_functionst &goto_functions)
   sigaction(SIGUSR1, &act, NULL);
 #endif
 
-  symex.options.set_option("unwind", options.get_option("unwind"));
-  symex.setup_for_new_explore();
+  symex->options.set_option("unwind", options.get_option("unwind"));
+  symex->setup_for_new_explore();
 
   if(options.get_bool_option("schedule"))
   {
@@ -416,7 +395,7 @@ bool bmct::run(const goto_functionst &goto_functions)
 
       reachability_treet::dfs_position pos(
                                          options.get_option("checkpoint-file"));
-      symex.restore_from_dfs_state((void*)&pos);
+      symex->restore_from_dfs_state((void*)&pos);
     }
 
     do
@@ -459,7 +438,7 @@ bool bmct::run(const goto_functionst &goto_functions)
       if (options.get_bool_option("interactive-ileaves"))
         return false;
 
-    } while(symex.setup_next_formula());
+    } while(symex->setup_next_formula());
   }
 
   if (options.get_bool_option("all-runs"))
@@ -502,11 +481,11 @@ bool bmct::run_thread()
   {
     if(options.get_bool_option("schedule"))
     {
-      result = symex.generate_schedule_formula();
+      result = symex->generate_schedule_formula();
     }
     else
     {
-      result = symex.get_next_formula();
+      result = symex->get_next_formula();
     }
   }
 
@@ -530,15 +509,12 @@ bool bmct::run_thread()
            i2string((unsigned long)equation->SSA_steps.size())+
            " assignments");
 
+  if (options.get_bool_option("double-assign-check")) {
+    equation->check_for_duplicate_assigns();
+  }
+
   try
   {
-    if(options.get_option("slice-by-trace")!="")
-    {
-      symex_slice_by_tracet symex_slice_by_trace;
-      symex_slice_by_trace.slice_by_trace
-      (options.get_option("slice-by-trace"), *equation);
-    }
-
     if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
@@ -591,35 +567,28 @@ bool bmct::run_thread()
 
     if (options.get_bool_option("smt"))
       if (interleaving_number !=
-          strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
+          (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    if(options.get_bool_option("minisat"))
-#ifdef MINISAT
-      solver = new minisat_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with minisat support";
-#endif
-    else if(options.get_bool_option("boolector-bv"))
-#ifdef BOOLECTOR
-      solver = new boolector_solver(*this);
-#else
-      throw "This version of ESBMC was not compiled with boolector support";
-#endif
-    else if(options.get_bool_option("z3"))
+    if(options.get_bool_option("z3")) {
 #ifdef Z3
-      solver = new z3_solver(*this);
+      if (options.get_bool_option("smt-during-symex")) {
+        solver = new z3_runtime_solver(*this, is_cpp, runtime_z3_conv);
+      } else {
+        solver = new z3_solver(*this, is_cpp, ns);
+      }
 #else
       throw "This version of ESBMC was not compiled with Z3 support";
 #endif
-    else
+    } else {
       // If we have Z3, default to Z3. Otherwise, user needs to explicitly
       // select an SMT solver
 #ifdef Z3
-      solver = new z3_solver(*this);
+      solver = new z3_solver(*this, is_cpp, ns);
 #else
       throw "Please specify a SAT/SMT solver to use";
 #endif
+    }
 
     ret = solver->run_solver(*equation);
     delete solver;
@@ -640,15 +609,15 @@ bool bmct::run_thread()
 }
 
 int
-bmct::ltl_run_thread(symex_target_equationt *equation)
+bmct::ltl_run_thread(symex_target_equationt *equation __attribute__((unused)))
 {
-  solver_base *solver;
-  bool ret;
-  unsigned int num_asserts = 0;
 #ifndef Z3
   std::cerr << "Can't run LTL checking without Z3 compiled in" << std::endl;
   exit(1);
 #else
+  solver_base *solver;
+  bool ret;
+  unsigned int num_asserts = 0;
   // LTL checking - first check for whether we have an indeterminate prefix,
   // and then check for all others.
 
@@ -669,7 +638,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_BAD" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this);
+    solver = new z3_solver(*this, is_cpp, ns);
     ret = solver->run_solver(*equation);
     delete solver;
     if (ret) {
@@ -706,7 +675,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_FAILING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this);
+    solver = new z3_solver(*this, is_cpp, ns);
     ret = solver->run_solver(*equation);
     delete solver;
     if (ret) {
@@ -743,7 +712,7 @@ bmct::ltl_run_thread(symex_target_equationt *equation)
 
   std::cout << "Checking for LTL_SUCCEEDING" << std::endl;
   if (num_asserts != 0) {
-    solver = new z3_solver(*this);
+    solver = new z3_solver(*this, is_cpp, ns);
     ret = solver->run_solver(*equation);
     delete solver;
     if (ret) {
@@ -772,14 +741,14 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
 {
   switch(bmc.run_decision_procedure(*conv, equation))
   {
-    case decision_proceduret::D_UNSATISFIABLE:
+    case prop_convt::P_UNSATISFIABLE:
       if(!bmc.options.get_bool_option("base-case"))
         bmc.report_success();
       else
         bmc.status("No bug has been found in the base case");
       return false;
 
-    case decision_proceduret::D_SATISFIABLE:
+    case prop_convt::P_SATISFIABLE:
       if (bmc.options.get_bool_option("inductive-step") &&
     		  bmc.options.get_bool_option("show-counter-example"))
       {
@@ -803,7 +772,7 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
   // Return failure if we didn't actually check anything, we just emitted the
   // test information to an SMTLIB formatted file. Causes esbmc to quit
   // immediately (with no error reported)
-  case decision_proceduret::D_SMTLIB:
+  case prop_convt::P_SMTLIB:
     return true;
 
   default:
@@ -812,43 +781,12 @@ bool bmct::solver_base::run_solver(symex_target_equationt &equation)
   }
 }
 
-#ifdef MINISAT
-bmct::minisat_solver::minisat_solver(bmct &bmc)
-  : solver_base(bmc), satcheck(), bv_cbmc(satcheck)
-{
-  satcheck.set_message_handler(bmc.message_handler);
-  satcheck.set_verbosity(bmc.get_verbosity());
-
-  if(bmc.options.get_option("arrays-uf")=="never")
-    bv_cbmc.unbounded_array=bv_cbmct::U_NONE;
-  else if(bmc.options.get_option("arrays-uf")=="always")
-    bv_cbmc.unbounded_array=bv_cbmct::U_ALL;
-
-  conv = &bv_cbmc;
-}
-
-bool bmct::minisat_solver::run_solver(symex_target_equationt &equation)
-{
-  bool result = bmct::solver_base::run_solver(equation);
-  return result;
-}
-#endif
-
-#ifdef BOOLECTOR
-bmct::boolector_solver::boolector_solver(bmct &bmc)
-  : solver_base(bmc), boolector_dec()
-{
-  boolector_dec.set_file(bmc.options.get_option("outfile"));
-  boolector_dec.set_btor(bmc.options.get_bool_option("btor"));
-  conv = &boolector_dec;
-}
-#endif
-
 #ifdef Z3
-bmct::z3_solver::z3_solver(bmct &bmc)
+bmct::z3_solver::z3_solver(bmct &bmc, bool is_cpp, const namespacet &ns)
   : solver_base(bmc), z3_conv(bmc.options.get_bool_option("uw-model"),
                                bmc.options.get_bool_option("int-encoding"),
-                               bmc.options.get_bool_option("smt"))
+                               bmc.options.get_bool_option("smt"),
+                               is_cpp, ns)
 {
   z3_conv.set_filename(bmc.options.get_option("outfile"));
   z3_conv.set_z3_core_size(atol(bmc.options.get_option("core-size").c_str()));
@@ -862,6 +800,23 @@ bool bmct::z3_solver::run_solver(symex_target_equationt &equation)
   bmc._number_of_assumptions = z3_conv.get_z3_number_of_assumptions();
   return result;
 }
+
+bmct::z3_runtime_solver::z3_runtime_solver(bmct &bmc,
+                                           bool is_cpp __attribute__((unused)),
+                                           z3_convt *c)
+  : solver_base(bmc), z3_conv(c)
+{
+  conv = c;
+}
+
+bool bmct::z3_runtime_solver::run_solver(symex_target_equationt &equation)
+{
+  bool result = bmct::solver_base::run_solver(equation);
+  bmc._unsat_core = z3_conv->get_z3_core_size();
+  bmc._number_of_assumptions = z3_conv->get_z3_number_of_assumptions();
+  return result;
+}
+
 #endif
 
 bmct::output_solver::output_solver(bmct &bmc)
@@ -902,7 +857,6 @@ bmct::output_solver::~output_solver()
 bool bmct::output_solver::run_solver(symex_target_equationt &equation)
 {
 
-  bmc.do_unwind_module(*conv);
   bmc.do_cbmc(*conv, equation);
   conv->dec_solve();
   return write_output();
@@ -925,6 +879,6 @@ void bmct::write_checkpoint(void)
     f = options.get_option("checkpoint-file");
   }
 
-  symex.save_checkpoint(f);
+  symex->save_checkpoint(f);
   return;
 }

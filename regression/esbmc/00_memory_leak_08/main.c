@@ -9,6 +9,7 @@ int main(){
    if ( k <= 0 ) return -1;
    
    a= malloc( k * sizeof(int));
+   __ESBMC_assume(a);
 
 //   __ESBMC_assume(a);
 //   __ESBMC_assume(k >= 100);

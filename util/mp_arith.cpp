@@ -206,7 +206,8 @@ const mp_integer binary2integer(const std::string &n, bool is_signed)
     }
     else
     {
-      throw "Invalid number fed to binary2integer";
+      std::cerr << "Invalid number fed to binary2integer" << std::endl;
+      abort();
     }
 
     mask=mask>>1;

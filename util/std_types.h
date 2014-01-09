@@ -137,7 +137,7 @@ public:
       return set("pretty_name", name);
     }
 
-    inline const bool get_anonymous() const
+    inline bool get_anonymous() const
     {
       return get_bool("anonymous");
     }

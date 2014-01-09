@@ -9,14 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <hash_cont.h>
 
 #include "slice.h"
-
-/*******************************************************************\
-
-   Class: symex_slicet
-
- Purpose:
-
-\*******************************************************************/
+#include "renaming.h"
 
 class symex_slicet
 {
@@ -24,67 +17,28 @@ public:
   void slice(symex_target_equationt &equation);
 
 protected:
-  typedef hash_set_cont<irep_idt, irep_id_hash> symbol_sett;
+  typedef hash_set_cont<renaming::level2t::name_record,
+                        renaming::level2t::name_rec_hash> symbol_sett;
   
   symbol_sett depends;
   
-  void get_symbols(const exprt &expr);
-  void get_symbols(const typet &type);
+  void get_symbols(const expr2tc &expr);
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
 };
 
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slicet::get_symbols(const exprt &expr)
+void symex_slicet::get_symbols(const expr2tc &expr)
 {
-  get_symbols(expr.type());
 
-  forall_operands(it, expr)
-    get_symbols(*it);
+  forall_operands2(it, idx, expr)
+    if (!is_nil_expr(*it))
+      get_symbols(*it);
 
-  if(expr.id()==exprt::symbol)
-    depends.insert(expr.identifier());
+  if (is_symbol2t(expr))
+    depends.insert(renaming::level2t::name_record(to_symbol2t(expr)));
 }
-
-/*******************************************************************\
-
-Function: symex_slicet::get_symbols
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-void symex_slicet::get_symbols(const typet &type)
-{
-}
-
-/*******************************************************************\
-
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_slicet::slice(symex_target_equationt &equation)
 {
@@ -96,18 +50,6 @@ void symex_slicet::slice(symex_target_equationt &equation)
       it++)
     slice(*it);
 }
-
-/*******************************************************************\
-
-Function: symex_slicet::slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
 {
@@ -130,30 +72,22 @@ void symex_slicet::slice(symex_target_equationt::SSA_stept &SSA_step)
   case goto_trace_stept::OUTPUT:
     break;
 
+  case goto_trace_stept::RENUMBER:
+    slice_renumber(SSA_step);
+    break;
+
   default:
     assert(false);  
   }
 }
 
-/*******************************************************************\
-
-Function: symex_slicet::slice_assignment
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void symex_slicet::slice_assignment(
   symex_target_equationt::SSA_stept &SSA_step)
 {
-  assert(SSA_step.lhs.id()==exprt::symbol);
+  assert(is_symbol2t(SSA_step.lhs));
 
-  if(depends.find(SSA_step.lhs.identifier())==
-     depends.end())
+  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
+              == depends.end())
   {
     // we don't really need it
     SSA_step.ignore=true;
@@ -162,35 +96,26 @@ void symex_slicet::slice_assignment(
     get_symbols(SSA_step.rhs);
 }
 
-/*******************************************************************\
+void symex_slicet::slice_renumber(
+  symex_target_equationt::SSA_stept &SSA_step)
+{
+  assert(is_symbol2t(SSA_step.lhs));
 
-Function: slice
+  if (depends.find(renaming::level2t::name_record(to_symbol2t(SSA_step.lhs)))
+              == depends.end())
+  {
+    // we don't really need it
+    SSA_step.ignore=true;
+  }
 
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
+  // Don't collect the symbol; this insn has no effect on dependencies.
+}
 
 void slice(symex_target_equationt &equation)
 {
   symex_slicet symex_slice;
   symex_slice.slice(equation);
 }
-
-/*******************************************************************\
-
-Function: simple_slice
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void simple_slice(symex_target_equationt &equation)
 {
@@ -216,4 +141,3 @@ void simple_slice(symex_target_equationt &equation)
         s_it++)
       s_it->ignore=true;
 }
-

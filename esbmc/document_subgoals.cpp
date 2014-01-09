@@ -152,7 +152,7 @@ Function: is_empty
 
 \*******************************************************************/
 
-bool is_empty(const std::string &s)
+bool is_empty_str(const std::string &s)
 {
   for(unsigned i=0; i<s.size(); i++)
     if(isgraph(s[i]))
@@ -223,7 +223,7 @@ void get_code(const irept &location, std::string &dest)
   for(std::list<linet>::iterator it=lines.begin();
       it!=lines.end();)
   {
-    if(is_empty(it->text))
+    if(is_empty_str(it->text))
       it=lines.erase(it);
     else
       break;
@@ -234,7 +234,7 @@ void get_code(const irept &location, std::string &dest)
   {
     it--;
 
-    if(is_empty(it->text))
+    if(is_empty_str(it->text))
       it=lines.erase(it);
     else
       break;

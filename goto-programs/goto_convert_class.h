@@ -12,7 +12,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <list>
 #include <queue>
 #include <namespace.h>
-#include <replace_expr.h>
 #include <guard.h>
 #include <std_code.h>
 #include <options.h>
@@ -46,10 +45,8 @@ public:
     while_block=false;
     state_counter=1;
     k_induction=false;
-    inductive_step=
-      options.get_bool_option("inductive-step");
-    base_case=
-      options.get_bool_option("base-case");
+    inductive_step=options.get_bool_option("inductive-step");
+    base_case=options.get_bool_option("base-case");
   }
 
   virtual ~goto_convertt()
@@ -83,6 +80,7 @@ protected:
   void make_temp_symbol(exprt &expr,goto_programt &dest);
   void read(exprt &expr, goto_programt &dest);
   unsigned int get_expr_number_globals(const exprt & expr);
+  unsigned int get_expr_number_globals(const expr2tc & expr);
   void break_globals2assignments(exprt & rhs, goto_programt & dest,const locationt & location);
   void break_globals2assignments(int & atomic, exprt & lhs, exprt & rhs, goto_programt & dest, const locationt & location);
   void break_globals2assignments(int & atomic, exprt & rhs, goto_programt & dest,const locationt & location);
@@ -183,8 +181,6 @@ protected:
   void convert_function_call(const code_function_callt &code, goto_programt &dest);
   void convert_atomic_begin(const codet &code, goto_programt &dest);
   void convert_atomic_end(const codet &code, goto_programt &dest);
-  void convert_bp_enforce(const codet &code, goto_programt &dest);
-  void convert_bp_abortif(const codet &code, goto_programt &dest);
   void convert(const codet &code, goto_programt &dest);
   void copy(const codet &code, goto_program_instruction_typet type, goto_programt &dest);
 
@@ -198,6 +194,7 @@ protected:
   //
   // k-induction conversion
   //
+  void add_global_variable_to_state();
   void make_nondet_assign(goto_programt &dest);
   void init_k_indice(goto_programt &dest);
   void assign_state_vector(const array_typet &state_vector, goto_programt &dest);
@@ -387,15 +384,15 @@ protected:
     bool k_induction, inductive_step, base_case;
     struct_typet state;
 
+    typedef std::map<exprt, struct_typet> loop_varst;
+    loop_varst loop_vars;
+
   private:
     bool is_thread, for_block, break_stmt,
          goto_stmt, while_block, ifthenelse_block;
     unsigned int state_counter;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
-
-    typedef std::map<exprt, struct_typet> loop_varst;
-    loop_varst loop_vars;
 };
 
 #endif

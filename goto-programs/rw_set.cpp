@@ -105,7 +105,7 @@ void rw_sett::read_write_rec(
     entry.object=object;
     entry.r=entry.r || r;
     entry.w=entry.w || w;
-    entry.guard=guard.as_expr();
+    entry.guard = migrate_expr_back(guard.as_expr());
   }
   else if(expr.id()=="member")
   {
@@ -130,7 +130,10 @@ void rw_sett::read_write_rec(
     read(expr.op0(), guard);
 
     exprt tmp(expr.op0());
-    dereference(target, tmp, ns, value_sets);
+    expr2tc tmp_expr;
+    migrate_expr(tmp, tmp_expr);
+    dereference(target, tmp_expr, ns, value_sets);
+    tmp = migrate_expr_back(tmp_expr);
 
     read_write_rec(tmp, r, w, suffix, guard);
   }
@@ -146,11 +149,14 @@ void rw_sett::read_write_rec(
     read(expr.op0(), guard);
 
     guardt true_guard(guard);
-    true_guard.add(expr.op0());
+    expr2tc tmp_expr;
+    migrate_expr(expr.op0(), tmp_expr);
+    true_guard.add(tmp_expr);
     read_write_rec(expr.op1(), r, w, suffix, true_guard);
 
     guardt false_guard(guard);
-    false_guard.add(gen_not(expr.op0()));
+    migrate_expr(gen_not(expr.op0()), tmp_expr);
+    false_guard.add(tmp_expr);
     read_write_rec(expr.op2(), r, w, suffix, false_guard);
   }
   else

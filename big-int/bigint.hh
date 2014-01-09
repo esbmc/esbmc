@@ -5,6 +5,8 @@
 #ifndef BIGINT_HH
 #define BIGINT_HH
 
+#include <stdint.h>
+
 // This one is pretty simple but has a fair divide implementation.
 // Though I'm not ambitious enough to do that FFT-like stuff.
 //
@@ -67,22 +69,8 @@
 #define true 1
 #endif
 
-// Minor optimization for gcc on some intel platforms.
-#if !defined _fast
-# if defined __GNUC__ && defined __i386__ && defined NDEBUG
-#  if defined _WIN32
-#   define _fast
-#   define _fasta			// Mingw-gcc crashes when alloca is used
-#  else					// inside a function declared regparm
-#   define _fasta _fast			// or stdcall (don't know which).
-#   define _fast __attribute__ ((__regparm__ (3),__stdcall__))
-#  endif
-# else
-#  define _fast
-#  define _fasta
-# endif
-#endif
-
+#define _fast
+#define _fasta
 
 class BigInt
 {
@@ -194,8 +182,9 @@ public:
   // Write and read in a compact byte-wise binary form. Effectively
   // print in base 256 with the most significant digit first. Also
   // read back from such a representation. Return success.
-  bool dump (unsigned char *, unsigned) _fast;
+  bool dump (unsigned char *, unsigned) _fast const;
   void load (unsigned char const *, unsigned) _fast;
+  unsigned int get_len(void) const { return length; }
 
   // Conversions to elementary types.
 
@@ -207,6 +196,8 @@ public:
   //operator ullong_t() const _fast;
   llong_t to_long() const _fast;
   ullong_t to_ulong() const _fast;
+  uint64_t to_uint64() const _fast;
+  int64_t to_int64() const _fast;
 
 #ifndef bool
   // Like int: non-zero is true. Equivalent to !is_zero().

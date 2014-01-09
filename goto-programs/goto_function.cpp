@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <i2string.h>
-#include <replace_expr.h>
 #include <expr_util.h>
 #include <location.h>
 #include <cprover_prefix.h>
@@ -95,6 +94,7 @@ void goto_convertt::do_function_call(
   else if(new_function.id()=="NULL-object")
   {
   }
+#if 0
   else if(new_function.id()=="member"
           && new_function.has_operands()
           && new_function.op0().statement()=="typeid")
@@ -125,11 +125,13 @@ void goto_convertt::do_function_call(
     {
       // Add new instruction throw
       goto_programt::targett t=dest.add_instruction(THROW);
-      t->code=codet("cpp-throw");
+      codet c("cpp-throw");
+      c.set("exception_list", exception_list);
+      migrate_expr(c, t->code);
       t->location=function.location();
-      t->code.set("exception_list", exception_list);
     }
   }
+#endif
   else
   {
     err_location(function);
@@ -197,13 +199,15 @@ void goto_convertt::do_function_call_if(
 
   // v: if(!c) goto y;
   v->make_goto(y);
-  v->guard=function.op0();
-  v->guard.make_not();
+  migrate_expr(function.op0(), v->guard);
+  v->guard = not2tc(v->guard);
   v->location=function.op0().location();
 
   unsigned int globals = get_expr_number_globals(v->guard);
-  if(globals > 1)
-	break_globals2assignments(v->guard, tmp_v,lhs.location());
+  if(globals > 1) {
+    exprt tmp = migrate_expr_back(v->guard);
+    break_globals2assignments(tmp, tmp_v,lhs.location());
+  }
 
   // w: f();
   goto_programt tmp_w;
@@ -250,5 +254,67 @@ void goto_convertt::do_function_call_dereference(
   function_call.arguments()=arguments;
 
   t->location=function.location();
-  t->code.swap(function_call);
+  migrate_expr(function_call, t->code);
+}
+
+#include "goto_functions.h"
+
+void goto_functionst::output(
+  const namespacet &ns,
+  std::ostream& out) const
+{
+  for(typename function_mapt::const_iterator
+      it=function_map.begin();
+      it!=function_map.end();
+      it++)
+  {
+    if(it->second.body_available)
+    {
+      out << "^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^" << std::endl;
+      out << std::endl;
+
+      const symbolt &symbol=ns.lookup(it->first);
+      out << symbol.display_name() << " (" << symbol.name << "):" << std::endl;
+      it->second.body.output(ns, symbol.name, out);
+    }
+  }
+}
+
+void goto_functionst::compute_location_numbers()
+{
+  unsigned nr=0;
+
+  for(typename function_mapt::iterator
+      it=function_map.begin();
+      it!=function_map.end();
+      it++)
+    it->second.body.compute_location_numbers(nr);
+}
+
+void goto_functionst::compute_incoming_edges()
+{
+  for(typename function_mapt::iterator
+      it=function_map.begin();
+      it!=function_map.end();
+      it++)
+    it->second.body.compute_incoming_edges();
+}
+
+void goto_functionst::compute_target_numbers()
+{
+  for(typename function_mapt::iterator
+      it=function_map.begin();
+      it!=function_map.end();
+      it++)
+    it->second.body.compute_target_numbers();
+}
+
+void goto_functionst::compute_loop_numbers()
+{
+  unsigned int num = 0;
+  for(typename function_mapt::iterator
+      it=function_map.begin();
+      it!=function_map.end();
+      it++)
+    it->second.body.compute_loop_numbers(num);
 }

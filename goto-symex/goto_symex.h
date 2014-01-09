@@ -9,6 +9,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 #define CPROVER_GOTO_SYMEX_GOTO_SYMEX_H
 
+#include <irep2.h>
+
 #include <map>
 #include <stack>
 #include <std_types.h>
@@ -17,6 +19,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <options.h>
 
 #include <goto-programs/goto_functions.h>
+
+#include <pointer-analysis/dereference.h>
 
 #include "goto_symex_state.h"
 #include "symex_target.h"
@@ -57,16 +61,17 @@ public:
   /** Records for dynamically allocated blobs of memory. */
   class allocated_obj {
   public:
-    allocated_obj(const exprt &s, const guardt &g)
+    allocated_obj(const expr2tc &s, const guardt &g)
       : obj(s), alloc_guard(g) { }
     /** Symbol identifying the pointer that was allocated. Must have ptr type */
-    exprt obj;
+    expr2tc obj;
     /** Guard when allocation occured. */
     guardt alloc_guard;
   };
 
   friend class symex_dereference_statet;
   friend class bmct;
+  friend class reachability_treet;
 
   typedef goto_symex_statet statet;
 
@@ -94,11 +99,14 @@ public:
    *  These guards are symbolic names for the truth of a guard on a GOTO jump.
    *  Assertions and other activity during the course of symbolic execution
    *  encode these execution guard in them.
-   *  @return Name of the guard
+   *  @return Symbol of the guard
    */
-  irep_idt guard_identifier(void)
+  symbol2tc
+  guard_identifier(void)
   {
-    return irep_idt(id2string(guard_identifier_s) + "!" + i2string(cur_state->top().level1._thread_id));
+    return symbol2tc(type_pool.get_bool(), id2string(guard_identifier_s),
+                     symbol2t::level1, 0, 0,
+                     cur_state->top().level1.thread_id, 0);
   };
 
   // Methods
@@ -136,27 +144,24 @@ protected:
   virtual void do_simplify(exprt &expr);
 
   /**
+   *  Perform simplification on an expression.
+   *  Essentially is just a call to simplify, but is guarded by the
+   *  --no-simplify option being turned off.
+   *  @param expr Expression to simplify, in place.
+   */
+  virtual void do_simplify(expr2tc &expr);
+
+  /**
    *  Dereference an expression.
    *  Finds dereference expressions within expr, takes the set of things that
    *  it might point at, according to value set tracking, and builds an
    *  if-then-else list of concrete references that it might point at.
    *  @param expr Expression to eliminate dereferences from.
    *  @param write Whether or not we're writing into this object.
+   *  @param free Whether we're freeing this pointer.
    */
-  void dereference(exprt &expr, const bool write);
-
-  /**
-   *  Recursive implementation of dereference method.
-   *  @param expr Expression to eliminate dereferences from.
-   *  @param guard Some guard (defunct?).
-   *  @param dereference Dereferencet object to operate with.
-   *  @param write Whether or not we're writing to this object.
-   */
-  void dereference_rec(
-    exprt &expr,
-    guardt &guard,
-    class dereferencet &dereference,
-    const bool write);
+  void dereference(expr2tc &expr, const bool write, bool free = false,
+                   bool internal = false);
 
   // symex
 
@@ -169,7 +174,7 @@ protected:
    *  description of how this is implemented... can go somewhere else.
    *  @param old_guard Renamed guard on this jump occuring.
    */
-  virtual void symex_goto(const exprt &old_guard);
+  virtual void symex_goto(const expr2tc &old_guard);
 
   /**
    *  Perform interpretation of RETURN instruction.
@@ -191,16 +196,14 @@ protected:
    *  @param expr Expression that must always be true.
    *  @param msg Textual message explaining assertion.
    */
-  virtual void claim(
-    const exprt &expr,
-    const std::string &msg);
+  virtual void claim(const expr2tc &expr, const std::string &msg);
 
   /**
    *  Perform an assumption.
    *  Adds to target an assumption that must always be true.
    *  @param assumption Assumption that must always be true.
    */
-  virtual void assume(const exprt &assumption);
+  virtual void assume(const expr2tc &assumption);
 
   // gotos
   /**
@@ -250,7 +253,7 @@ protected:
    *  not exceeded. Otherwise, just continue execution.
    *  @param guard Current state guard.
    */
-  void loop_bound_exceeded(const exprt &guard);
+  void loop_bound_exceeded(const expr2tc &guard);
 
   // function calls
 
@@ -268,7 +271,7 @@ protected:
    *  @param code The return statement we're interpreting.
    *  @return True if a return assignment was generated.
    */
-  bool make_return_assignment(code_assignt &assign, const code_returnt &code);
+  bool make_return_assignment(expr2tc &assign, const expr2tc &code_return);
 
   /**
    *  Perform function call.
@@ -276,7 +279,7 @@ protected:
    *  pointers.
    *  @param call Function call we're working on.
    */
-  void symex_function_call(const code_function_callt &call);
+  void symex_function_call(const expr2tc &call);
 
   /**
    *  End a functions interpretation.
@@ -287,12 +290,6 @@ protected:
   void symex_end_of_function(void);
 
   /**
-   *  Handle a call to a named function.
-   *  @param call Function call we're performing.
-   */
-  void symex_function_call_symbol(const code_function_callt &call);
-
-  /**
    *  Handle an indirect function call, to a pointer.
    *  Finds all potential targets, and sets up calls to them with the
    *  appropriate guards and targets. They are then put in a list, the first
@@ -301,7 +298,7 @@ protected:
    *  run, all func ptr call states are merged in.
    *  @param call Function call to interpret.
    */
-  virtual void symex_function_call_deref(const code_function_callt &call);
+  virtual void symex_function_call_deref(const expr2tc &call);
 
   /**
    *  Handle function call to fixed function
@@ -309,7 +306,7 @@ protected:
    *  recording.
    *  @param code Function code to actually call
    */
-  virtual void symex_function_call_code(const code_function_callt &call);
+  virtual void symex_function_call_code(const expr2tc &call);
 
   /**
    *  Discover whether recursion bound has been exceeded.
@@ -330,19 +327,18 @@ protected:
    *  @param arguments The arguments to assign to function arg variables.
    */
   void argument_assignments(
-    const code_typet &function_type,
-    const exprt::operandst &arguments);
+    const code_type2t &function_type,
+    const std::vector<expr2tc> &arguments);
 
   /**
    *  Fill goto_symex_statet::framet with renamed local variable names.
-   *  These names are all the names of local variables, renamed to level 1, so
-   *  that we have a list of all variables that are in fact local to this
-   *  particular function call.
-   *  @param frame_counter The function frame invocation number.
+   *  These names are all the names of local variables, renamed to level 1.
+   *  We also bump up the level 1 renaming number, effectively making all the
+   *  local variables new instances of those variables (which is what entering
+   *  a function and declaring variables does).
    *  @param goto_function The function we're working upon.
    */
-  void locality(unsigned frame_counter,
-    const goto_functionst::goto_functiont &goto_function);
+  void locality(const goto_functiont &goto_function);
 
   /**
    *  Setup next function in a chain of func ptr calls.
@@ -361,30 +357,36 @@ protected:
    *  @param art Reachability tree we're operating on.
    *  @param symname Name of intrinsic we're calling.
    */
-  void run_intrinsic(code_function_callt &call, reachability_treet &art,
+  void run_intrinsic(const code_function_call2t &call, reachability_treet &art,
                      const std::string symname);
+
+  /** Implementation of realloc. */
+  void intrinsic_realloc(const code_function_call2t &call,
+                         reachability_treet &arg);
 
   /** Perform yield; forces a context switch point. */
   void intrinsic_yield(reachability_treet &arg);
   /** Perform switch_to; switches control to explicit thread ID. */
-  void intrinsic_switch_to(code_function_callt &call, reachability_treet &art);
+  void intrinsic_switch_to(const code_function_call2t &c,
+                           reachability_treet &art);
   /** Yield, always switching away from this thread */
   void intrinsic_switch_from(reachability_treet &arg);
   /** Perform get_thread_id; return the current thread identifier. */
-  void intrinsic_get_thread_id(code_function_callt &call,
+  void intrinsic_get_thread_id(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform set_thread_state; store thread startup information. */
-  void intrinsic_set_thread_data(code_function_callt &call,
+  void intrinsic_set_thread_data(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform get_thread_data; get thread startup information. */
-  void intrinsic_get_thread_data(code_function_callt &call,
+  void intrinsic_get_thread_data(const code_function_call2t &call,
                                 reachability_treet &art);
   /** Perform spawn_thread; Generates a new thread at a named function. */
-  void intrinsic_spawn_thread(code_function_callt &call, reachability_treet &art);
+  void intrinsic_spawn_thread(const code_function_call2t &call,
+                              reachability_treet &art);
   /** Perform terminate_thread; Record thread as terminated. */
   void intrinsic_terminate_thread(reachability_treet &art);
   /** Perform get_thead_state... defunct. */
-  void intrinsic_get_thread_state(code_function_callt &call, reachability_treet &art);
+  void intrinsic_get_thread_state(const code_function_call2t &call, reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
   void intrinsic_really_atomic_begin(reachability_treet &art);
   /** Really atomic start/end - atomic blocks that just disable ileaves. */
@@ -394,7 +396,7 @@ protected:
   /** Context switch from the monitor thread. */
   void intrinsic_switch_from_monitor(reachability_treet &art);
   /** Register which thread is the monitor thread. */
-  void intrinsic_register_monitor(code_function_callt &call, reachability_treet &art);
+  void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
 
@@ -409,14 +411,14 @@ protected:
 
   /** Update throw target. */
   void update_throw_target(goto_symex_statet::exceptiont* except,
-    goto_programt::targett target, codet code=codet("nil"));
+    goto_programt::const_targett target, const expr2tc &code);
 
   /** Check if we can rethrow an exception:
    *  if we can then update the target.
    *  if we can't then gives a error.
    */
-  bool handle_rethrow(irept::subt exceptions_thrown,
-    const goto_programt::instructiont instruction);
+  bool handle_rethrow(const expr2tc &operand,
+    const goto_programt::instructiont &instruction);
 
   /** Check if we can throw an exception:
    *  if we can't then gives a error.
@@ -443,8 +445,8 @@ protected:
    *  the wrong place.
    *  @param expr Expression we're replacing the contents of.
    */
-  void replace_dynamic_allocation(exprt &expr);
-  void default_replace_dynamic_allocation(exprt &expr);
+  void replace_dynamic_allocation(expr2tc &expr);
+  void default_replace_dynamic_allocation(expr2tc &expr);
 
   /**
    *  Decide if symbol is valid or not.
@@ -462,10 +464,10 @@ protected:
    *  a single new value to be bound to a new symbol.
    *  @param code Code to assign; with lhs and rhs.
    */
-  virtual void symex_assign(const codet &code);
+  virtual void symex_assign(const expr2tc &code);
 
   /** Recursively perform symex assign. @see symex_assign */
-  void symex_assign_rec(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_rec(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a symbol.
@@ -475,7 +477,7 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_symbol(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_symbol(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a typecast irep.
@@ -484,7 +486,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_typecast(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_typecast(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an array.
@@ -495,7 +497,7 @@ protected:
    *  @param rhs Value to assign to symbol
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_array(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_array(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a struct.
@@ -505,7 +507,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_member(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_member(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to an "if".
@@ -517,7 +519,7 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_if(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_if(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /**
    *  Perform assignment to a byte extract.
@@ -528,18 +530,34 @@ protected:
    *  @param rhs Value to assign to lhs
    *  @param guard Guard; intent unknown
    */
-  void symex_assign_byte_extract(const exprt &lhs, exprt &rhs, guardt &guard);
+  void symex_assign_byte_extract(const expr2tc &lhs, expr2tc &rhs,
+                                 guardt &guard);
+
+  /**
+   *  Assign through a 'concat' operation. These are generated when we fail to
+   *  dereference something correctly, and generate a series of byte operations
+   *  that we then stitch back together. When that's on the left hand side of an
+   *  expression, this means that we have to decompose the right hand side into
+   *  a series of byte assignments.
+   *  @param lhs Concat to assign to
+   *  @param rhs Value to assign to lhs
+   *  @param guard Assignment guard.
+   */
+  void symex_assign_concat(const expr2tc &lhs, expr2tc &rhs, guardt &guard);
 
   /** Symbolic implementation of malloc. */
-  void symex_malloc(const exprt &lhs, const side_effect_exprt &code);
+  expr2tc symex_malloc(const expr2tc &lhs, const sideeffect2t &code);
+  /** Pointer modelling update function */
+  void track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                         expr2tc size = expr2tc());
   /** Symbolic implementation of free */
-  void symex_free(const codet &code);
+  void symex_free(const expr2tc &expr);
   /** Symbolic implementation of c++'s delete. */
-  void symex_cpp_delete(const codet &code);
+  void symex_cpp_delete(const expr2tc &code);
   /** Symbolic implementation of c++'s new. */
-  void symex_cpp_new(const exprt &lhs, const side_effect_exprt &code);
+  void symex_cpp_new(const expr2tc &lhs, const sideeffect2t &code);
   /** Symbolic implementation of printf */
-  void symex_printf(const exprt &lhs, const exprt &code);
+  void symex_printf(const expr2tc &lhs, const expr2tc &code);
 
   /**
    *  Replace nondet func calls with nondeterminism.
@@ -547,7 +565,7 @@ protected:
    *  encoded into its name. Is left as a free variable.
    *  @param expr Expr to search for nondet symbols.
    */
-  void replace_nondet(exprt &expr);
+  void replace_nondet(expr2tc &expr);
 
   /**
    *  Fetch reference to global dynamic object counter.
@@ -576,8 +594,6 @@ protected:
   unsigned remaining_claims;
   /** Reachability tree we're working with. */
   reachability_treet *art1;
-  /** Names of functions that we've complained about missing bodies of. */
-  hash_set_cont<irep_idt, irep_id_hash> body_warnings;
   /** Unwind bounds, loop number -> max unwinds. */
   std::map<unsigned, long> unwind_set;
   /** Global maximum number of unwinds. */
@@ -618,11 +634,57 @@ protected:
   /** Pointer to last thrown exception. */
   goto_programt::instructiont *last_throw;
 
+  /** Map of currently active exception targets, i.e. instructions where an
+   *  exception is going to be merged in in the future. Keys are iterators to
+   *  the instruction catching the object; domain is a symbol that the thrown
+   *  piece of data has been assigned to. */
+  std::map<goto_programt::const_targett, symbol2tc> thrown_obj_map;
+
   /** Flag to indicate if we are go into the unexpected flow. */
   bool inside_unexpected;
 
   /** Flag to indicate if we have an unwinding recursion assumption. */
   bool unwinding_recursion_assumption;
+
+  /** Depth limit, as given by the --depth option */
+  unsigned long depth_limit;
+  /** Instruction number we are to break at -- that is, trap, to the debugger.
+   *  Zero means no trap; there is a zero instruction, but there are better
+   *  ways of trapping at the start of symbolic execution to get at that. */
+  unsigned long break_insn;
+  /** Flag as to whether we're performing memory leak checks. Corresponds to
+   *  the option --memory-leak-check */
+  bool memory_leak_check;
+  /** Flag as to whether we're performing deadlock checking. Corresponds to
+   *  the option --deadlock-check */
+  bool deadlock_check;
+  /** Flag as to whether we're checking user assertions. Corresponds to
+   *  the option --no-assertions */
+  bool no_assertions;
+  /** Flag as to whether we're not simplifying exprs. Corresponds to
+   *  the option --no-simplify */
+  bool no_simplify;
+  /** Flag as to whether we're inserting unwinding assertions. Corresponds to
+   *  the option --no-unwinding-assertions */
+  bool no_unwinding_assertions;
+  /** Flag as to whether we're not enabling partial loops. Corresponds to
+   *  the option --partial-loops */
+  bool partial_loops;
+  /** Flag as to whether we're doing a k-induction. Corresponds to
+   *  the option --k-induction */
+  bool k_induction;
+  /** Flag as to whether we're doing a k-induction base case. Corresponds to
+   *  the option --base-case */
+  bool base_case;
+  /** Flag as to whether we're doing a k-induction forward condition.
+   *  Corresponds to the option --forward-condition */
+  bool forward_condition;
+  /** Names of functions that we've complained about missing bodies of. */
+  static hash_set_cont<irep_idt, irep_id_hash> body_warnings;
+  /** Set of dereference state records; this field is used as a mailbox between
+   *  the dereference code and the caller, who will inspect the contents after
+   *  a call to dereference (in INTERNAL mode) completes. */
+  std::list<dereference_callbackt::internal_item> internal_deref_items;
 };
 
 #endif

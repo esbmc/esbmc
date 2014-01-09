@@ -9,6 +9,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #ifndef CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 #define CPROVER_GOTO_PROGRAMS_STATIC_ANALYSIS_H
 
+#include <irep2.h>
 #include <map>
 #include <iostream>
 
@@ -56,12 +57,8 @@ public:
   
   virtual void get_reference_set(
     const namespacet &ns __attribute__((unused)),
-    const exprt &expr __attribute__((unused)),
-    std::list<exprt> &dest)
-  {
-    // dummy, overload me!
-    dest.clear();
-  }
+    const expr2tc &expr __attribute__((unused)),
+    std::list<expr2tc> &dest __attribute__((unused))) { assert(0); };
   
   // also add
   //
@@ -77,11 +74,11 @@ protected:
   // utilities  
   
   // get guard of a conditional edge
-  exprt get_guard(locationt from, locationt to) const;
+  expr2tc get_guard(locationt from, locationt to) const;
   
   // get lhs that return value is assigned to
   // for an edge that returns from a function
-  exprt get_return_lhs(locationt to) const;
+  expr2tc get_return_lhs(locationt to) const;
 };
 
 // don't use me -- I am just a base class
@@ -218,8 +215,8 @@ protected:
   // function calls
   void do_function_call_rec(
     locationt l_call,
-    const exprt &function,
-    const exprt::operandst &arguments,
+    const expr2tc &function,
+    const std::vector<expr2tc> &arguments,
     statet &new_state,
     const goto_functionst &goto_functions);
 
@@ -227,7 +224,7 @@ protected:
     locationt l_call,
     const goto_functionst &goto_functions,
     const goto_functionst::function_mapt::const_iterator f_it,
-    const exprt::operandst &arguments,
+    const std::vector<expr2tc> &arguments,
     statet &new_state);
 
   // abstract methods
@@ -241,8 +238,8 @@ protected:
 
   virtual void get_reference_set(
     locationt l,
-    const exprt &expr,
-    std::list<exprt> &dest)=0;
+    const expr2tc &expr,
+    std::list<expr2tc> &dest)=0;
 };
 
 // T is expected to be derived from abstract_domain_baset
@@ -318,15 +315,11 @@ protected:
 
   virtual void get_reference_set(
     locationt l,
-    const exprt &expr,
-    std::list<exprt> &dest)
+    const expr2tc &expr,
+    std::list<expr2tc> &dest)
   {
     state_map[l].get_reference_set(ns, expr, dest);
   }
-
-private:  
-  // to enforce that T is derived from abstract_domain_baset
-  void dummy(const T &s) { const statet &x=dummy1(s); }
 };
 
 #endif

@@ -24,7 +24,18 @@ endif
 # list of includes, potentially modified by includer
 INCLUDES+= -I$(ESBMCDIR) -I$(ESBMCDIR)/util
 
-EXTRACXXFLAGS+=-fpermissive
+# Strictness: Some code would appear to require -fpermissive to compile. This
+# is bad, but perhaps necessary in some circumstances. So by default, compile
+# with -fpermissive.
+# However for other pieces of code we might be able to compile with stricter
+# requirements; for directories where this is the case, define "STRICTCOMPILE",
+# which will result in additional strictness compile flags being used.
+
+ifndef STRICTCOMPILE
+CXXFLAGS+=-fpermissive -Wno-deprecated -Wall -Wextra -std=c++0x -fno-strict-aliasing
+else
+CXXFLAGS+= -W -Wall -Wextra -Werror -std=c++0x -fno-strict-aliasing
+endif
 
 CFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACFLAGS)
 CXXFLAGS+= $(GCCFLAGS) $(OPTS) $(INCLUDES) $(EXTRACXXFLAGS)
@@ -50,13 +61,13 @@ MAINOBJ=$(OBJDIR)/$(MAINOBJNAME)
 ifdef CROSSCOMPILE
 HOSTOBJ=$(HOSTOBJDIR)/$(MAINOBJNAME)
 $(HOSTOBJ): $(HOSTOBJS)
-	$(HOSTPARTLINKLD) $(HOSTPARTLINKOUT)$@ $^ $(HOSTPARTLINKOPTS)
+	$(HOSTPARTLINKLD) $(HOSTPARTLINKOUT) $@ $^ $(HOSTPARTLINKOPTS)
 else
 HOSTOBJ=
 endif
 
 $(MAINOBJ): $(OBJS) | $(HOSTOBJ)
-	$(PARTLINKLD) $(PARTLINKOUT)$@ $^ $(PARTLINKOPTS)
+	$(PARTLINKLD) $(PARTLINKOUT) $@ $^ $(PARTLINKOPTS)
 
 # Special purpose features,
 ifndef LINUX
@@ -79,7 +90,7 @@ $(OBJDIR)/.depends:
 	touch $(OBJDIR)/.depends
 
 $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS)):
-	$(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
+	unset CFLAGS && unset CXXFLAGS && $(MAKE) -C $(patsubst %/$(OBJDIR)/.deps,%,$@) depend
 
 depend: $(patsubst %,%/$(OBJDIR)/.deps,$(DIRS))
 else

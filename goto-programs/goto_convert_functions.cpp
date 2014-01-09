@@ -13,6 +13,7 @@ Date: June 2003
 #include <base_type.h>
 #include <prefix.h>
 #include <std_code.h>
+#include <std_expr.h>
 
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
@@ -38,10 +39,10 @@ goto_convert_functionst::goto_convert_functionst(
   goto_convertt(_context, _options, _message_handler),
   functions(_functions)
 {
-	if (options.get_bool_option("inlining"))
-	  inlining=true;
-	else
+	if (options.get_bool_option("no-inlining"))
 	  inlining=false;
+	else
+	  inlining=true;
 }
 
 /*******************************************************************\
@@ -94,14 +95,6 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
-
-  // inline those functions marked as "inlined"
-  if (!inlining) {
-    goto_partial_inline(
-      functions,
-      ns,
-      get_message_handler());
-  }
 }
 
 /*******************************************************************\
@@ -149,7 +142,7 @@ Function: goto_convert_functionst::add_return
 \*******************************************************************/
 
 void goto_convert_functionst::add_return(
-  goto_functionst::goto_functiont &f,
+  goto_functiont &f,
   const locationt &location)
 {
   if(!f.body.instructions.empty() &&
@@ -159,12 +152,12 @@ void goto_convert_functionst::add_return(
   // see if we have an unconditional goto at the end
   if(!f.body.instructions.empty() &&
      f.body.instructions.back().is_goto() &&
-     f.body.instructions.back().guard.is_true())
+     is_constant_bool2t(f.body.instructions.back().guard) &&
+     to_constant_bool2t(f.body.instructions.back().guard).constant_value)
     return;
 
   goto_programt::targett t=f.body.add_instruction();
   t->make_return();
-  t->code=code_returnt();
   t->location=location;
 
   const typet &thetype = (f.type.return_type().id() == "symbol")
@@ -172,7 +165,10 @@ void goto_convert_functionst::add_return(
                          : f.type.return_type();
   exprt rhs=exprt("sideeffect", thetype);
   rhs.statement("nondet");
-  t->code.move_to_operands(rhs);
+
+  expr2tc tmp_expr;
+  migrate_expr(rhs, tmp_expr);
+  t->code = code_return2tc(tmp_expr);
 }
 
 /*******************************************************************\
@@ -189,7 +185,7 @@ Function: goto_convert_functionst::convert_function
 
 void goto_convert_functionst::convert_function(const irep_idt &identifier)
 {
-  goto_functionst::goto_functiont &f=functions.function_map[identifier];
+  goto_functiont &f=functions.function_map[identifier];
   const symbolt &symbol=ns.lookup(identifier);
 
   // make tmp variables local to function
@@ -268,7 +264,8 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   goto_programt::targett t=f.body.add_instruction();
   t->type=END_FUNCTION;
   t->location=end_location;
-  t->code.identifier(identifier);
+  //t->code.identifier(identifier);
+  //XXXjmorse, disabled in migration, don't think this does anything
 
   if(to_code(symbol.value).get_statement()=="block")
     t->location=static_cast<const locationt &>(
@@ -527,6 +524,8 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
 
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and

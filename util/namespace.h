@@ -11,6 +11,9 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "context.h"
 
+#include <irep2.h>
+#include <migrate.h>
+
 // second: true <=> not found
 
 class namespacet
@@ -38,7 +41,15 @@ public:
   void follow_macros(exprt &expr) const;
 
   const typet &follow(const typet &src) const;
-
+  const type2tc follow(const type2tc &src) const
+  {
+    typet back = migrate_type_back(src);
+    typet followed = follow(back);
+    type2tc tmp;
+    migrate_type(followed, tmp);
+    return tmp;
+  }
+  
   namespacet(const contextt &_context)
   { context1=&_context; context2=NULL; }
 

@@ -12,21 +12,9 @@ Author: Daniel Kroening
 
 #include "build_goto_trace.h"
 
-/*******************************************************************\
-
-Function: build_goto_trace
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 void build_goto_trace(
   const symex_target_equationt &target,
-  const prop_convt &prop_conv,
+  prop_convt &prop_conv,
   goto_tracet &goto_trace)
 {
   unsigned step_nr=0;
@@ -38,7 +26,7 @@ void build_goto_trace(
   {
     const symex_target_equationt::SSA_stept &SSA_step=*it;
     tvt result;
-    result=prop_conv.prop.l_get(SSA_step.guard_literal);
+    result=prop_conv.l_get(SSA_step.guard_literal);
 
     if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
       continue;
@@ -63,38 +51,36 @@ void build_goto_trace(
     goto_trace_step.format_string=SSA_step.format_string;
     goto_trace_step.stack_trace = SSA_step.stack_trace;
 
-    if(SSA_step.lhs.is_not_nil())
-      goto_trace_step.value=prop_conv.get(SSA_step.lhs);
+    if(!is_nil_expr(SSA_step.lhs)) {
+      goto_trace_step.value = prop_conv.get(SSA_step.lhs);
+    }
 
-    for(std::list<exprt>::const_iterator
+    for(std::list<expr2tc>::const_iterator
         j=SSA_step.converted_output_args.begin();
         j!=SSA_step.converted_output_args.end();
         j++)
     {
-      const exprt &arg=*j;
-      if(arg.is_constant() ||
-         arg.id()=="string-constant")
+      const expr2tc &arg = *j;
+      if (is_constant_expr(arg))
         goto_trace_step.output_args.push_back(arg);
       else
-      {
-        exprt tmp=prop_conv.get(arg);
-        goto_trace_step.output_args.push_back(tmp);
-      }
+        goto_trace_step.output_args.push_back(prop_conv.get(arg));
     }
 
     if(SSA_step.is_assert() ||
        SSA_step.is_assume())
     {
-      result = prop_conv.prop.l_get(SSA_step.cond_literal);
+      result = prop_conv.l_get(SSA_step.cond_literal);
       if ((result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("arithmetic overflow on *")==0) ||
-    	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0))
-        goto_trace_step.guard=true;
-      else if (result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("unwinding assertion loop")==0)
-    	goto_trace_step.guard=false;
-      else if (result==tvt(tvt::TV_UNKNOWN))
-    	goto_trace_step.guard=true;
-      else
-        goto_trace_step.guard=result.is_true();
+    	 (result==tvt(false) && SSA_step.comment.compare("arithmetic overflow on *")==0)) {
+        goto_trace_step.guard = true;
+      } else if (result==tvt(tvt::TV_ASSUME) && SSA_step.comment.compare("unwinding assertion loop")==0) {
+        goto_trace_step.guard = false;
+      } else if (result==tvt(tvt::TV_UNKNOWN)) {
+        goto_trace_step.guard = true;
+      } else {
+        goto_trace_step.guard = result.is_true();
+      }
 
       if(!goto_trace_step.guard)
       {

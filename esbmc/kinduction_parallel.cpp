@@ -26,7 +26,7 @@ resultt base_caset::startSolving()
   r.result=0;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;
@@ -51,7 +51,7 @@ resultt forward_conditiont::startSolving()
   r.result=1;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;
@@ -77,7 +77,7 @@ resultt inductive_stept::startSolving()
   r.result=1;
   r.finished=false;
 
-  r.result=_bmc.run(_goto_functions);
+  r.result=_bmc.run();
   _bmc.options.set_option("unwind", i2string(++_k));
 
   return r;

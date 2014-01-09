@@ -6,11 +6,13 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <pointer-analysis/dereference.h>
 #include <langapi/language_util.h>
 
 #include "goto_symex.h"
-#include "renaming_ns.h"
 
 class symex_dereference_statet:
   public dereference_callbackt
@@ -34,109 +36,92 @@ protected:
   {
     return true;
   }
-#if 1
+
   virtual void dereference_failure(
     const std::string &property,
     const std::string &msg,
     const guardt &guard);
-#endif
+
   virtual void get_value_set(
-    const exprt &expr,
+    const expr2tc &expr,
     value_setst::valuest &value_set);
 
   virtual bool has_failed_symbol(
-    const exprt &expr,
+    const expr2tc &expr,
     const symbolt *&symbol);
+
+  virtual void rename(expr2tc &expr);
+
+  virtual void dump_internal_state(const std::list<struct internal_item> &data);
 };
 
 void symex_dereference_statet::dereference_failure(
   const std::string &property __attribute__((unused)),
-  const std::string &msg __attribute__((unused)),
-  const guardt &guard __attribute__((unused)))
+  const std::string &msg,
+  const guardt &guard)
 {
-  // XXXjmorse - this is clearly wrong, but we can't do anything about it until
-  // we fix the memory model.
+  expr2tc g = guard.as_expr();
+  goto_symex.replace_dynamic_allocation(g);
+  goto_symex.claim(not2tc(g), "dereference failure: " + msg);
 }
 
 bool symex_dereference_statet::has_failed_symbol(
-  const exprt &expr,
+  const expr2tc &expr,
   const symbolt *&symbol)
 {
-  renaming_nst renaming_ns(goto_symex.ns, state);
 
-  if(expr.id()==exprt::symbol)
+  if (is_symbol2t(expr))
   {
-    const symbolt &ptr_symbol=
-      renaming_ns.lookup(expr.identifier());
+    // Null and invalid name lookups will fail.
+    if (to_symbol2t(expr).thename == "NULL" ||
+        to_symbol2t(expr).thename == "INVALID")
+      return false;
+
+    const symbolt &ptr_symbol = goto_symex.ns.lookup(to_symbol2t(expr).thename);
 
     const irep_idt &failed_symbol=
       ptr_symbol.type.failed_symbol();
 
     if(failed_symbol=="") return false;
 
-    return !renaming_ns.lookup(failed_symbol, symbol);
+    return !goto_symex.ns.lookup(failed_symbol, symbol);
   }
 
   return false;
 }
 
 void symex_dereference_statet::get_value_set(
-  const exprt &expr,
+  const expr2tc &expr,
   value_setst::valuest &value_set)
 {
-  renaming_nst renaming_ns(goto_symex.ns, state);
 
-  state.value_set.get_value_set(expr, value_set, renaming_ns);
+  state.value_set.get_value_set(expr, value_set);
 }
 
-void goto_symext::dereference_rec(
-  exprt &expr,
-  guardt &guard,
-  dereferencet &dereference,
-  const bool write)
+void symex_dereference_statet::rename(expr2tc &expr)
 {
-  if(expr.id()==exprt::deref ||
-     expr.id()=="implicit_dereference")
-  {
-    if(expr.operands().size()!=1)
-      throw "dereference takes one operand";
-
-    exprt tmp;
-    tmp.swap(expr.op0());
-
-    // first make sure there are no dereferences in there
-    dereference_rec(tmp, guard, dereference, false);
-
-    dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
-    expr.swap(tmp);
-  }
-  else if(expr.id()==exprt::index &&
-          expr.operands().size()==2 &&
-          expr.op0().type().id()==typet::t_pointer)
-  {
-    exprt tmp(exprt::plus, expr.op0().type());
-    tmp.operands().swap(expr.operands());
-
-    // first make sure there are no dereferences in there
-    dereference_rec(tmp, guard, dereference, false);
-
-    dereference.dereference(tmp, guard, write?dereferencet::WRITE:dereferencet::READ);
-    tmp.swap(expr);
-  }
-  else
-  {
-    Forall_operands(it, expr)
-      dereference_rec(*it, guard, dereference, write);
-  }
+  goto_symex.cur_state->rename(expr);
+  return;
 }
 
-void goto_symext::dereference(exprt &expr, const bool write)
+void
+symex_dereference_statet::dump_internal_state(
+                      const std::list<struct internal_item> &data)
 {
+  goto_symex.internal_deref_items.insert(
+                          goto_symex.internal_deref_items.begin(),
+                          data.begin(), data.end());
+  return;
+}
+
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
+                              bool internal)
+{
+
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
-  renaming_nst renaming_ns(ns, *cur_state);
 
   dereferencet dereference(
-    renaming_ns,
+    ns,
     new_context,
     options,
     symex_dereference_state);
@@ -146,5 +131,21 @@ void goto_symext::dereference(exprt &expr, const bool write)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  dereference_rec(expr, guard, dereference, write);
+  if (internal) {
+    dereference.dereference_expr(expr, guard, dereferencet::INTERNAL);
+  } else if (free) {
+    expr2tc tmp = expr;
+    while (is_typecast2t(tmp))
+      tmp = to_typecast2t(tmp).from;
+
+    assert(is_pointer_type(tmp));
+    std::list<expr2tc> dummy;
+    // Dereference to byte type, because it's guarenteed to succeed.
+    tmp = dereference2tc(get_uint8_type(), tmp);
+
+    dereference.dereference_expr(tmp, guard, dereferencet::FREE);
+  } else {
+    dereference.dereference_expr(expr, guard, (write) ? dereferencet::WRITE
+                                                      : dereferencet::READ);
+  }
 }

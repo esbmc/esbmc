@@ -6,21 +6,12 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <irep2.h>
+#include <migrate.h>
+
 #include <std_code.h>
 
 #include "value_set_domain.h"
-
-/*******************************************************************\
-
-Function: value_set_domaint::transform
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
 
 void value_set_domaint::transform(
   const namespacet &ns,
@@ -33,22 +24,28 @@ void value_set_domaint::transform(
     // ignore for now
     break;
 
-  case END_FUNCTION:
-    value_set.do_end_function(get_return_lhs(to_l), ns);
-    break;
+  case END_FUNCTION:    
+  {
+    value_set->do_end_function(get_return_lhs(to_l));
+  }
+  break;
 
   case RETURN:
   case OTHER:
   case ASSIGN:
-    value_set.apply_code(from_l->code, ns);
+    {
+      expr2tc code = from_l->code;
+      value_set->apply_code(code);
+    }
     break;
 
   case FUNCTION_CALL:
     {
-      const code_function_callt &code=
-        to_code_function_call(from_l->code);
+      const code_function_call2t &code = to_code_function_call2t(from_l->code);
+      const symbolt &symbol = ns.lookup(to_l->function);
 
-      value_set.do_function_call(to_l->function, code.arguments(), ns);
+      const std::vector<expr2tc> &arguments = code.operands;
+      value_set->do_function_call(symbol, arguments);
     }
     break;
 

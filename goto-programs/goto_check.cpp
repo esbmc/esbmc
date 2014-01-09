@@ -25,14 +25,13 @@ public:
     const namespacet &_ns,
     optionst &_options):
     ns(_ns),
-    options(_options) { use_boolector=true; }
+    options(_options) { }
 
   void goto_check(goto_programt &goto_program);
 
 protected:
   const namespacet &ns;
   optionst &options;
-  bool use_boolector;
 
   void check_rec(const exprt &expr, guardt &guard, bool address);
   void check(const exprt &expr);
@@ -278,11 +277,18 @@ void goto_checkt::bounds_check(
   if(expr.id()!="index")
     return;
 
-  if(expr.is_bounds_check_set() && !expr.bounds_check())
-    return;
-
   if(expr.operands().size()!=2)
     throw "index takes two operands";
+
+  // Don't bounds check the initial index of argv in the "main" function; it's
+  // always correct, and just adds needless claims. In the past a "no bounds
+  // check" attribute in old irep handled this.
+  if (expr.op0().id_string() == "symbol" &&
+      expr.op0().identifier() == "c::argv'" &&
+      expr.op1().id_string() == "symbol" &&
+      expr.op1().identifier() == "c::argc'")
+    return;
+
 
   typet array_type=ns.follow(expr.op0().type());
 
@@ -433,7 +439,10 @@ void goto_checkt::add_guarded_claim(
   // first try simplifier on it
   if(!options.get_bool_option("no-simplify"))
   {
-    base_type(expr, ns);
+    expr2tc tmpexpr;
+    migrate_expr(expr, tmpexpr);
+    base_type(tmpexpr, ns);
+    expr = migrate_expr_back(tmpexpr);
     simplify(expr);
   }
 
@@ -441,7 +450,7 @@ void goto_checkt::add_guarded_claim(
     return;
 
   // add the guard
-  exprt guard_expr=guard.as_expr();
+  exprt guard_expr = migrate_expr_back(guard.as_expr());
 
   exprt new_expr;
 
@@ -457,7 +466,7 @@ void goto_checkt::add_guarded_claim(
   {
     goto_programt::targett t=new_code.add_instruction(ASSERT);
 
-    t->guard.swap(new_expr);
+    migrate_expr(new_expr, t->guard);
     t->location=location;
     t->location.comment(comment);
     t->location.property(property);
@@ -531,10 +540,16 @@ void goto_checkt::check_rec(
       {
         exprt tmp(op);
         tmp.make_not();
-        guard.move(tmp);
+        expr2tc tmp_expr;
+        migrate_expr(tmp, tmp_expr);
+        guard.move(tmp_expr);
       }
       else
-        guard.add(op);
+      {
+        expr2tc tmp;
+        migrate_expr(op, tmp);
+        guard.add(tmp);
+      }
     }
 
     guard.resize(old_guards);
@@ -558,7 +573,9 @@ void goto_checkt::check_rec(
 
     {
       unsigned old_guard=guard.size();
-      guard.add(expr.op0());
+      expr2tc tmp;
+      migrate_expr(expr.op0(), tmp);
+      guard.add(tmp);
       check_rec(expr.op1(), guard, false);
       guard.resize(old_guard);
     }
@@ -567,7 +584,9 @@ void goto_checkt::check_rec(
       unsigned old_guard=guard.size();
       exprt tmp(expr.op0());
       tmp.make_not();
-      guard.move(tmp);
+      expr2tc tmp_expr;
+      migrate_expr(tmp, tmp_expr);
+      guard.move(tmp_expr);
       check_rec(expr.op2(), guard, false);
       guard.resize(old_guard);
     }
@@ -619,7 +638,7 @@ void goto_checkt::check_rec(
   if (expr.id() == "ashr" || expr.id() == "lshr" ||
 	  expr.id() == "shl")
   {
-    if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
+    if (!options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
     {
       options.set_option("int-encoding", false);
@@ -629,7 +648,7 @@ void goto_checkt::check_rec(
 		   expr.id() == "bitxor" || expr.id() == "bitnand" ||
 		   expr.id() == "bitnor" || expr.id() == "bitnxor")
   {
-	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
+	if (!options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
           options.set_option("int-encoding", false);
@@ -640,7 +659,7 @@ void goto_checkt::check_rec(
     div_by_zero_check(expr, guard);
     nan_check(expr, guard);
 
-	if (!options.get_bool_option("boolector-bv") && !options.get_bool_option("z3-bv")
+	if (!options.get_bool_option("z3-bv")
 		&& !options.get_bool_option("z3-ir"))
 	{
           options.set_option("int-encoding", false);
@@ -650,12 +669,10 @@ void goto_checkt::check_rec(
 		    || expr.type().id()=="pointer" || expr.id()=="member" ||
 		    (expr.type().is_array() && expr.type().subtype().is_array()))
   {
-	use_boolector=false; //always deactivate boolector
 	options.set_option("z3", true); //activate Z3 for solving the VCs
   }
   else if (expr.type().id()=="fixedbv")
   {
-	use_boolector=false;
 	options.set_option("z3", true);
 
   if (!options.get_bool_option("z3-ir"))
@@ -667,14 +684,12 @@ void goto_checkt::check_rec(
 
   if (options.get_bool_option("qf_aufbv"))
   {
-	use_boolector=false; //always deactivate boolector
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", false);
   }
 
   if (options.get_bool_option("qf_auflira"))
   {
-	use_boolector=false; //always deactivate boolector
     options.set_option("z3", true); //activate Z3 to generate the file in SMT lib format
     options.set_option("int-encoding", true);
   }
@@ -731,39 +746,32 @@ void goto_checkt::goto_check(goto_programt &goto_program)
     new_code.clear();
     assertions.clear();
 
-    check(i.guard);
+    check(migrate_expr_back(i.guard));
 
     if(i.is_other())
     {
-      const irep_idt &statement=i.code.statement();
-
-      if(statement=="expression")
-      {
-        check(i.code);
-      }
-      else if(statement=="printf")
-      {
-        forall_operands(it, i.code)
-          check(*it);
+      if (is_code_expression2t(i.code)) {
+        check(migrate_expr_back(i.code));
+      } else if (is_code_printf2t(i.code)) {
+        forall_operands2(it, idx, i.code)
+          check(migrate_expr_back(*it));
       }
     }
-    else if(i.is_assign())
+    else if (i.is_assign())
     {
-      if(i.code.operands().size()!=2)
-        throw "assignment expects two operands";
-
-      check(i.code.op0());
-      check(i.code.op1());
+      const code_assign2t &assign = to_code_assign2t(i.code);
+      check(migrate_expr_back(assign.target));
+      check(migrate_expr_back(assign.source));
     }
-    else if(i.is_function_call())
+    else if (i.is_function_call())
     {
-      forall_operands(it, i.code)
-        check(*it);
+      forall_operands2(it, idx, i.code)
+        check(migrate_expr_back(*it));
     }
-    else if(i.is_return())
+    else if (i.is_return())
     {
-      if(i.code.operands().size()==1)
-        check(i.code.op0());
+      const code_return2t &ret = to_code_return2t(i.code);
+      check(migrate_expr_back(ret.operand));
     }
 
     for(goto_programt::instructionst::iterator

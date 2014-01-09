@@ -74,6 +74,16 @@ static void decl_statement(exprt &dest, ansi_c_declarationt &decl, exprt &initia
 static void merge_types(typet &dest, typet &src)
 {
 
+  if (dest.id() == "code") {
+    merge_types(dest.subtype(), src);
+    return;
+  } else if (src.id() == "code") {
+    merge_types(dest, src.subtype());
+    src.subtype() = dest;
+    dest = src;
+    return;
+  }
+
   if(dest.id()!="merged_type")
   {
     locationt location=dest.location();
