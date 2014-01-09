@@ -816,7 +816,7 @@ int cbmc_parseoptionst::doit_k_induction()
         r.finished=false;
 
         // Create and start base case checking
-        base_caset bc(bmc_base_case, goto_functions_base_case);
+        base_caset bc(bmc_base_case);
 
         for(k_step=1; k_step<=max_k_step; ++k_step)
         {
@@ -884,7 +884,7 @@ int cbmc_parseoptionst::doit_k_induction()
         r.finished=false;
 
         // Create and start base case checking
-        forward_conditiont fc(bmc_forward_condition, goto_functions_forward_condition);
+        forward_conditiont fc(bmc_forward_condition);
 
         for(k_step=2; k_step<=max_k_step; ++k_step)
         {
@@ -948,7 +948,7 @@ int cbmc_parseoptionst::doit_k_induction()
         r.finished=false;
 
         // Create and start base case checking
-        inductive_stept is(bmc_inductive_step, goto_functions_inductive_step);
+        inductive_stept is(bmc_inductive_step);
 
         for(k_step=2; k_step<=max_k_step; ++k_step)
         {
