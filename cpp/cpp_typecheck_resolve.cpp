@@ -2116,11 +2116,6 @@ void cpp_typecheck_resolvet::guess_template_args(
   //new stuff
   // const *T
 
-  #if 0
-  std::cout << "TT: " << template_type.pretty() << std::endl;
-  std::cout << "DT: " << desired_type.pretty() << std::endl;
-  #endif
-
   if(template_type.id()=="cpp-name")
   {
     // we only care about cpp_names that are template parameters!
