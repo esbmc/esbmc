@@ -401,6 +401,11 @@ dereferencet::dereference_expr_nonscalar(
                                                 scalar_step_list);
       scalar_step_list.pop_front();
 
+      if (is_nil_expr(res1))
+        res1 = theif.true_value;
+      if (is_nil_expr(res2))
+        res2 = theif.true_value;
+
       if2tc fin(res1->type, theif.cond, res1, res2);
       res = fin;
     } else {
@@ -1231,7 +1236,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       if (!is_scalar_type(*it) &&
             intref.constant_value >= offs &&
-            intref.constant_value <= (offs + size)) {
+            intref.constant_value < (offs + size)) {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
         mp_integer new_offs = intref.constant_value - offs;
