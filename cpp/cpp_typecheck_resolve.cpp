@@ -2176,15 +2176,6 @@ void cpp_typecheck_resolvet::guess_template_args(
           }
         }
 
-        // Give up
-        if(instantiated_args.is_nil())
-        {
-          cpp_typecheck.err_location(location);
-          cpp_typecheck.str
-            << "Can't instantiate `" << template_type
-            << "with:" << desired_type << std::endl;
-          throw 0;
-        }
       }
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
