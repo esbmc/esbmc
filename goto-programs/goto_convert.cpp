@@ -560,7 +560,7 @@ void goto_convertt::convert_sideeffect(
 
     if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
     {
-      const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+      symbolst::iterator it=context.symbols.find(expr.op0().identifier());
       if(it!=context.symbols.end())
         it->second.value.add("assignment_inside_loop")=irept("1");
     }
@@ -1057,7 +1057,7 @@ void goto_convertt::convert_assign(
 
   if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
   {
-    const symbolst::const_iterator it=context.symbols.find(code.op0().identifier());
+    symbolst::iterator it=context.symbols.find(code.op0().identifier());
     if(it!=context.symbols.end())
       it->second.value.add("assignment_inside_loop")=irept("1");
   }
