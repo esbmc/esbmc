@@ -3490,7 +3490,7 @@ void goto_convertt::replace_ifthenelse(
         {
           // Before returning we must check if the variable is dirty, if that is true
           // then we should replace it
-          if(it1->second.value.add("assignment_inside_loop") == irept(""))
+          if(it1->second.value.find("assignment_inside_loop").is_nil())
             return;
         }
     }
