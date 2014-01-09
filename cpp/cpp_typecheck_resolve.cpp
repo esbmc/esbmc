@@ -2125,18 +2125,30 @@ void cpp_typecheck_resolvet::guess_template_args(
 
     if(cpp_name.has_template_args())
     {
+      // This is a non-trivial name that has template arguments, for example
+      // std::list<X>. We're expected to deduce the type of X from the argument.
+      // To do that, a) the argument has to have instantiated template args
+      // itself, b) it has to match the format (std::list, etc) of the
+      // parameter, and c) not conflict with existing template arg assignments.
+
+      // Start off by trying to look up whether the argument has template args
+      // itself. No arguments means that substituation has failed.
       std::string base_name;
       cpp_template_args_non_tct template_args;
       resolve_scope(cpp_name, base_name, template_args);
+      bool has_args = false;
 
       cpp_template_args_non_tct instantiated_args;
       if(desired_type.find("#cpp_type").is_not_nil())
       {
         type_exprt type(desired_type);
         instantiated_args.arguments().push_back(type);
+        has_args = true;
       }
       else
       {
+        // Does the argument type we're dealing with already have assigned
+        // template arguments in its type?
         symbolt &s =
           const_cast<symbolt&>(cpp_typecheck.lookup(desired_type.identifier()));
         exprt &template_arguments=
@@ -2146,16 +2158,20 @@ void cpp_typecheck_resolvet::guess_template_args(
         if(template_arguments.is_not_nil())
         {
           instantiated_args=to_cpp_template_args_non_tc(template_arguments);
+          has_args = true;
         }
         else
         {
-          // We must look if the parent scope has the template arguments
+          // No; we must look if the parent scope has the template arguments
           cpp_scopet &scope=cpp_typecheck.cpp_scopes.get_scope(s.name);
 
           unsigned parent_size=scope.parents_size();
           while(parent_size)
           {
             cpp_scopet &parent=scope.get_parent();
+
+            // If we've reached the root scope, then we've failed to find
+            // template arguments
             if (parent.id_class == cpp_idt::ROOT_SCOPE)
               break;
 
@@ -2167,6 +2183,7 @@ void cpp_typecheck_resolvet::guess_template_args(
             if(template_arguments2.is_not_nil())
             {
               instantiated_args=to_cpp_template_args_non_tc(template_arguments2);
+              has_args = true;
               break;
             }
             else
@@ -2175,8 +2192,16 @@ void cpp_typecheck_resolvet::guess_template_args(
             }
           }
         }
-
       }
+
+      if (!has_args)
+        // We were unable to find any template arguments in the argument type.
+        // This means it definitely doesn't match this template, so substitution
+        // has failed. Record this by leaving template args unassigned.
+        // XXX: this is not robust. If another function argument assigns those
+        // template arguments correctly, this template will be accepted. Better
+        // error reporting is necessary.
+        return;
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
       for(unsigned i=0; i<args.size();++i)
