@@ -713,7 +713,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
           (!is_array_type(base_type_of_steps) ||
-           !to_array_type(base_type_of_steps).subtype->get_width() != 8)) {
+           !(to_array_type(base_type_of_steps).subtype->get_width() != 8))) {
         // Right, we're going to be accessing a byte array as not-a-byte-array.
         // Switch this access together.
         expr2tc offset_the_third =
