@@ -549,7 +549,7 @@ int cbmc_parseoptionst::doit_k_induction()
 
   if(cmdline.isset("k-induction-parallel"))
   {
-    unsigned whoAmI=-1;
+    int whoAmI=-1;
 
     if (pipe(commPipe))
     {
