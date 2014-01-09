@@ -2222,6 +2222,7 @@ void cpp_typecheck_resolvet::guess_template_args(
 
             if(t.id()=="unassigned")
             {
+              assert(instantiated_args.arguments().size() > i);
               t=instantiated_args.arguments()[i].type();
 
               // remove const, volatile (these can be added in the call)
