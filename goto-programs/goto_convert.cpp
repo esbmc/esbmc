@@ -2599,23 +2599,29 @@ void goto_convertt::convert_while(
   if (code.has_operands())
     if (code.op0().statement() == "decl-block")
     {
+      // XXX - I don't suppose someone wants to document this?
       if (!code.op0().op0().op0().is_nil() &&
           !code.op0().op0().op1().is_nil())
       {
-        exprt *lhs=&code.op0().op0().op0(),
-              *rhs=&code.op0().op0().op1();
-        if(rhs->id()=="sideeffect" &&
-            (rhs->statement()=="cpp_new" ||
-                rhs->statement()=="cpp_new[]"))
+        exprt lhs=code.op0().op0().op0(),
+              rhs=code.op0().op0().op1();
+        if(rhs.id()=="sideeffect" &&
+            (rhs.statement()=="cpp_new" ||
+                rhs.statement()=="cpp_new[]"))
         {
-          remove_sideeffects(*rhs, dest);
-          Forall_operands(it, *lhs)
+          remove_sideeffects(rhs, dest);
+          Forall_operands(it, lhs)
             remove_sideeffects(*it, dest);
-          code.op0() = code.op0().op0().op0();
-          if (!code.op0().type().is_bool())
-            code.op0().make_typecast(bool_typet());
 
-          do_cpp_new(*lhs, *rhs, dest);
+          // XXX -- why?
+          const_cast<exprt&>(code.op0()) =
+            code.op0().op0().op0();
+
+          // XXX -- again?
+          if (!code.op0().type().is_bool())
+            const_cast<exprt&>(code.op0()).make_typecast(bool_typet());
+
+          do_cpp_new(lhs, rhs, dest);
           cond = code.op0();
         }
       }
