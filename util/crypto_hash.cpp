@@ -127,4 +127,12 @@ crypto_hash::ingest(const void *data __attribute__((unused)),
   abort();
 }
 
+void
+crypto_hash::fin(void)
+{
+  abort();
+}
+
+
+
 #endif /* NO_OPENSSL */
