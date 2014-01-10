@@ -120,4 +120,11 @@ crypto_hash::crypto_hash()
   // by errors thrown from here.
 }
 
+void
+crypto_hash::ingest(const void *data __attribute__((unused)),
+                    unsigned int size __attribute__((unused)))
+{
+  abort();
+}
+
 #endif /* NO_OPENSSL */
