@@ -1392,6 +1392,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
 
       construct_struct_ref_from_dyn_offs_rec(memb, new_offset, type,
                                              range_guard, output);
+      i++;
     }
   } else {
     // Not legal
