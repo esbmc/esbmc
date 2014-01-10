@@ -133,6 +133,10 @@ crypto_hash::fin(void)
   abort();
 }
 
-
+void
+crypto_hash::setup_pointers()
+{
+  abort();
+}
 
 #endif /* NO_OPENSSL */
