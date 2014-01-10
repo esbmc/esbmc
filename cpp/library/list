@@ -1251,8 +1251,9 @@ public:
 		position.pos--;
 		position.it = &(this->_list[position.pos]);
 	}
-	void insert(iterator position, vector<value_type>::iterator n,
-			vector<value_type>::iterator x) {
+
+        template <class InputIterator>
+	void insert(iterator position, InputIterator n, InputIterator x) {
 		__ESBMC_assert(n != NULL,
 				"The second parameter must be different than NULL.");
 		while (n != x) {
