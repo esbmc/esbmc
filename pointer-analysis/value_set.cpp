@@ -645,9 +645,18 @@ void value_sett::get_reference_set_rec(
     // This index may be dereferencing a pointer. So, get the reference set of
     // the source value, and store a reference to all those things.
     const index2t &index = to_index2t(expr);
-    
+
     assert(is_array_type(index.source_value) ||
            is_string_type(index.source_value));
+
+    // Compute the offset introduced by this index.
+    mp_integer index_offset;
+    bool has_const_index_offset = false;
+    if (is_constant_int2t(index.index)) {
+      index_offset = to_constant_int2t(index.index).constant_value *
+                         type_byte_size(*index.type);
+      has_const_index_offset = true;
+    }
     
     object_mapt array_references;
     get_reference_set(index.source_value, array_references);
@@ -662,25 +671,18 @@ void value_sett::get_reference_set_rec(
       expr2tc object = object_numbering[a_it->first];
 
       if (is_unknown2t(object)) {
+        // Once an unknown, always an unknown.
         unknown2tc unknown(expr->type);
         insert(dest, unknown, mp_integer(0));
-      } else if (is_array_type(object) || is_string_type(object)) {
-        index2tc new_index(index.type, object, zero_uint);
-        
-        // adjust type?
-        if (object->type != index.source_value->type) {
-          object = typecast2tc(index.source_value->type, object);
-          new_index = index2tc(index.type, object, zero_uint);
-        }
-
+      } else {
+        // Whatever the base object is, apply the offset represented by this
+        // index expression.
         objectt o = a_it->second;
 
-        if (is_constant_int2t(index.index) &&
-            to_constant_int2t(index.index).constant_value.is_zero()) {
+        if (has_const_index_offset && index_offset == 0) {
           ;
-        } else if (is_constant_int2t(index.index) && o.offset_is_zero()) {
-          o.offset = to_constant_int2t(index.index).constant_value *
-                     type_byte_size(*index.type);
+        } else if (has_const_index_offset && o.offset_is_zero()) {
+          o.offset = index_offset;
         } else {
           // Non constant offset -- work out what the lowest alignment is.
           // Fetch the type size of the array index element.
@@ -701,11 +703,7 @@ void value_sett::get_reference_set_rec(
           o.offset_is_set = false;
         }
           
-        insert(dest, new_index, o);
-      } else {
-        std::cerr << "Unexpected type id " << get_type_id(object->type)
-                  << " in get_reference_set index handler" << std::endl;
-        abort();
+        insert(dest, object, o);
       }
     }
     
@@ -714,9 +712,11 @@ void value_sett::get_reference_set_rec(
   else if (is_member2t(expr))
   {
     // The set of things referred to here are all the things the struct source
-    // value may refer to, plus an additional member operation. So, fetc that
-    // reference set, then wrap each object in a member2t.
+    // value may refer to, plus an additional member operation. So, fetch that
+    // reference set, and add the relevant offset to the offset expr.
     const member2t &memb = to_member2t(expr);
+    mp_integer offset_in_bytes =
+      member_offset(to_struct_type(memb.source_value->type), memb.member);
 
     object_mapt struct_references;
     get_reference_set(memb.source_value, struct_references);
@@ -730,9 +730,7 @@ void value_sett::get_reference_set_rec(
     {
       expr2tc object = object_numbering[it->first];
       
-      // Don't allow a member operation to be applied to either unknown,
-      // a null object, or any typecast thereof. It can propagate all around
-      // the value set, and will cause mayhem when being converted to SMT.
+      // An unknown or null base is /always/ unknown or null.
       if (is_unknown2t(object) || is_null_object2t(object) ||
           (is_typecast2t(object) &&
            is_null_object2t(to_typecast2t(object).from))) {
@@ -741,18 +739,13 @@ void value_sett::get_reference_set_rec(
       } else {
         objectt o=it->second;
 
-        member2tc new_memb(memb.type, object,memb.member);
-        
-        // adjust type?
-        if (memb.source_value->type != object->type) {
-          object = typecast2tc(memb.source_value->type, object);
-          new_memb = member2tc(memb.type, object, memb.member);
-        }
-
         // XXX -- in terms of alignment, I believe this doesn't require
         // anything, as we're constructing an expression that takes account
         // of this. Also the same for references to indexes?
-        insert(dest, new_memb, o);
+        if (o.offset_is_set)
+          o.offset += offset_in_bytes;
+
+        insert(dest, object, o);
       }
     }
 

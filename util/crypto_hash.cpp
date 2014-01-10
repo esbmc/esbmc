@@ -48,7 +48,7 @@ crypto_hash::crypto_hash()
 }
 
 void
-crypto_hash::ingest(const void *data, unsigned int size)
+crypto_hash::ingest(void const *data, unsigned int size)
 {
 
   sha_update(&c, data, size);
@@ -113,34 +113,26 @@ crypto_hash::to_string() const
   return false;
 }
 
-void
-crypto_hash::init(const uint8_t *data __attribute__((unused)),
-                  int sz __attribute__((unused)))
-{
-
-  std::cerr << "This version of ESBMC was not built with OpenSSL support";
-  std::cerr << std::endl;
-  abort();
-}
-
-crypto_hash::crypto_hash(const uint8_t *data __attribute__((unused)),
-                         int sz __attribute__((unused)))
-{
-
-  init(NULL, 0);
-}
-
-crypto_hash::crypto_hash(std::string str __attribute__((unused)))
-{
-
-  init(NULL, 0);
-}
-
 crypto_hash::crypto_hash()
 {
   // Valid; some exist as default constructions within other parts of ESBMC.
   // Preventing this constructor running leads to *all* runtimes being blocked
   // by errors thrown from here.
 }
+
+void
+crypto_hash::ingest(const void *data __attribute__((unused)),
+                    unsigned int size __attribute__((unused)))
+{
+  abort();
+}
+
+void
+crypto_hash::fin(void)
+{
+  abort();
+}
+
+
 
 #endif /* NO_OPENSSL */

@@ -181,71 +181,71 @@ class constant_array2t;
  *  boosts shared_ptr.
  */
 template <class T>
-class irep_container : public boost::shared_ptr<T>
+class irep_container : public std::shared_ptr<T>
 {
 public:
-  irep_container() : boost::shared_ptr<T>() {}
+  irep_container() : std::shared_ptr<T>() {}
 
   template<class Y>
-  explicit irep_container(Y *p) : boost::shared_ptr<T>(p)
+  explicit irep_container(Y *p) : std::shared_ptr<T>(p)
     { }
 
   template<class Y>
-  explicit irep_container(const Y *p) : boost::shared_ptr<T>(const_cast<Y *>(p))
+  explicit irep_container(const Y *p) : std::shared_ptr<T>(const_cast<Y *>(p))
     { }
 
   irep_container(const irep_container &ref)
-    : boost::shared_ptr<T>(ref) {}
+    : std::shared_ptr<T>(ref) {}
 
   template <class Y>
   irep_container(const irep_container<Y> &ref)
-    : boost::shared_ptr<T>(static_cast<const boost::shared_ptr<Y> &>(ref))
+    : std::shared_ptr<T>(static_cast<const std::shared_ptr<Y> &>(ref))
   {
-    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
   }
 
   irep_container &operator=(irep_container const &ref)
   {
-    boost::shared_ptr<T>::operator=(ref);
+    std::shared_ptr<T>::operator=(ref);
     return *this;
   }
 
   template<class Y>
-  irep_container & operator=(boost::shared_ptr<Y> const & r)
+  irep_container & operator=(std::shared_ptr<Y> const & r)
   {
-    boost::shared_ptr<T>::operator=(r);
-    T *p = boost::shared_ptr<T>::operator->();
+    std::shared_ptr<T>::operator=(r);
+    T *p = std::shared_ptr<T>::operator->();
     return *this;
   }
 
   template <class Y>
   irep_container &operator=(const irep_container<Y> &ref)
   {
-    assert(dynamic_cast<const boost::shared_ptr<T> &>(ref) != NULL);
+    assert(dynamic_cast<const std::shared_ptr<T> &>(ref) != NULL);
     *this = boost::static_pointer_cast<T, Y>
-            (static_cast<const boost::shared_ptr<Y> &>(ref));
+            (static_cast<const std::shared_ptr<Y> &>(ref));
     return *this;
   }
 
   const T &operator*() const
   {
-    return *boost::shared_ptr<T>::get();
+    return *std::shared_ptr<T>::get();
   }
 
   const T * operator-> () const // never throws
   {
-    return boost::shared_ptr<T>::operator->();
+    return std::shared_ptr<T>::operator->();
   }
 
   const T * get() const // never throws
   {
-    return boost::shared_ptr<T>::get();
+    return std::shared_ptr<T>::get();
   }
 
   T * get() // never throws
   {
     detach();
-    T *tmp = boost::shared_ptr<T>::get();
+    T *tmp = std::shared_ptr<T>::get();
     tmp->crc_val = 0;
     return tmp;
   }
@@ -258,14 +258,14 @@ public:
     // Assign-operate ourself into containing a fresh copy of the data. This
     // creates a new reference counted object, and assigns it to ourself,
     // which causes the existing reference to be decremented.
-    const T *foo = boost::shared_ptr<T>::get();
+    const T *foo = std::shared_ptr<T>::get();
     *this = foo->clone();
     return;
   }
 
   uint32_t crc(void) const
   {
-    const T *foo = boost::shared_ptr<T>::get();
+    const T *foo = std::shared_ptr<T>::get();
     if (foo->crc_val != 0)
       return foo->crc_val;
 
@@ -4444,22 +4444,22 @@ public:
   static std::string field_names[esbmct::num_type_fields];
 };
 
-inline bool operator==(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator==(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*a.get() == *b.get());
 }
 
-inline bool operator!=(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator!=(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return !(a == b);
 }
 
-inline bool operator<(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator<(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*a.get() < *b.get());
 }
 
-inline bool operator>(boost::shared_ptr<type2t> const & a, boost::shared_ptr<type2t> const & b)
+inline bool operator>(std::shared_ptr<type2t> const & a, std::shared_ptr<type2t> const & b)
 {
   return (*b.get() < *a.get());
 }

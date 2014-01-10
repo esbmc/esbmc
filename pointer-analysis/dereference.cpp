@@ -45,12 +45,6 @@ get_arr_type(const expr2tc &expr)
     : to_array_type(to_constant_string2t(expr).to_array()->type);
 }
 
-static inline const type2tc
-get_arr_subtype(const expr2tc &expr)
-{
-  return get_arr_type(expr).subtype;
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -724,7 +718,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
           (!is_array_type(base_type_of_steps) ||
-           !to_array_type(base_type_of_steps).subtype->get_width() != 8)) {
+           !(to_array_type(base_type_of_steps).subtype->get_width() != 8))) {
         // Right, we're going to be accessing a byte array as not-a-byte-array.
         // Switch this access together.
         expr2tc offset_the_third =

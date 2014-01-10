@@ -450,7 +450,7 @@ void goto_convertt::convert_block(
   bool last_for=is_for_block();
   bool last_while=is_while_block();
 
-  if(inductive_step && code.add("inside_loop") != irept(""))
+  if(inductive_step)
     set_for_block(true);
 
   std::list<irep_idt> locals;
@@ -523,7 +523,6 @@ void goto_convertt::convert_block(
 
   if(inductive_step)
   {
-    code.remove("inside_loop");
     set_for_block(last_for);
     set_while_block(last_while);
   }
@@ -561,7 +560,7 @@ void goto_convertt::convert_sideeffect(
 
     if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
     {
-      const symbolst::const_iterator it=context.symbols.find(expr.op0().identifier());
+      symbolst::iterator it=context.symbols.find(expr.op0().identifier());
       if(it!=context.symbols.end())
         it->second.value.add("assignment_inside_loop")=irept("1");
     }
@@ -1058,7 +1057,7 @@ void goto_convertt::convert_assign(
 
   if((is_for_block() || is_while_block()) && !is_ifthenelse_block() && inductive_step)
   {
-    const symbolst::const_iterator it=context.symbols.find(code.op0().identifier());
+    symbolst::iterator it=context.symbols.find(code.op0().identifier());
     if(it!=context.symbols.end())
       it->second.value.add("assignment_inside_loop")=irept("1");
   }
@@ -2562,7 +2561,7 @@ void goto_convertt::convert_while(
     replace_cond(tmp, dest);
 
   array_typet state_vector;
-  const exprt &cond=tmp;
+  const exprt *cond=&tmp;
   const locationt &location=code.location();
 
 
@@ -2598,30 +2597,36 @@ void goto_convertt::convert_while(
   if (code.has_operands())
     if (code.op0().statement() == "decl-block")
     {
+      // XXX - I don't suppose someone wants to document this?
       if (!code.op0().op0().op0().is_nil() &&
           !code.op0().op0().op1().is_nil())
       {
-        exprt *lhs=&code.op0().op0().op0(),
-              *rhs=&code.op0().op0().op1();
-        if(rhs->id()=="sideeffect" &&
-            (rhs->statement()=="cpp_new" ||
-                rhs->statement()=="cpp_new[]"))
+        exprt lhs=code.op0().op0().op0(),
+              rhs=code.op0().op0().op1();
+        if(rhs.id()=="sideeffect" &&
+            (rhs.statement()=="cpp_new" ||
+                rhs.statement()=="cpp_new[]"))
         {
-          remove_sideeffects(*rhs, dest);
-          Forall_operands(it, *lhs)
+          remove_sideeffects(rhs, dest);
+          Forall_operands(it, lhs)
             remove_sideeffects(*it, dest);
-          code.op0() = code.op0().op0().op0();
-          if (!code.op0().type().is_bool())
-            code.op0().make_typecast(bool_typet());
 
-          do_cpp_new(*lhs, *rhs, dest);
-          cond = code.op0();
+          // XXX -- why?
+          const_cast<exprt&>(code.op0()) =
+            code.op0().op0().op0();
+
+          // XXX -- again?
+          if (!code.op0().type().is_bool())
+            const_cast<exprt&>(code.op0()).make_typecast(bool_typet());
+
+          do_cpp_new(lhs, rhs, dest);
+          cond = &code.op0();
         }
       }
     }
 
   goto_programt tmp_branch;
-  generate_conditional_branch(gen_not(cond), z, location, tmp_branch);
+  generate_conditional_branch(gen_not(*cond), z, location, tmp_branch);
 
   // do the v label
   goto_programt::targett v=tmp_branch.instructions.begin();
@@ -2674,7 +2679,7 @@ void goto_convertt::convert_while(
   //do the g label
   if (!is_break() && !is_goto()
 			&& (inductive_step))
-    assume_cond(cond, true, dest); //assume(!c)
+    assume_cond(*cond, true, dest); //assume(!c)
   else if (k_induction)
     assert_cond(tmp, true, dest); //assert(!c)
 
@@ -2909,7 +2914,8 @@ void goto_convertt::convert_switch(
 
         rhs.type()=code.op0().op0().op1().type();
 
-        code.op0() = code.op0().op0().op0();
+        // XXX - why?
+        const_cast<exprt&>(code.op0()) = code.op0().op0().op0();
         codet assignment("assign");
         assignment.copy_to_operands(lhs);
         assignment.move_to_operands(rhs);
@@ -3482,7 +3488,7 @@ void goto_convertt::replace_ifthenelse(
         {
           // Before returning we must check if the variable is dirty, if that is true
           // then we should replace it
-          if(it1->second.value.add("assignment_inside_loop") == irept(""))
+          if(it1->second.value.find("assignment_inside_loop").is_nil())
             return;
         }
     }
