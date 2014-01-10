@@ -555,7 +555,13 @@ const symbolt &cpp_typecheckt::instantiate_template(
 
     irep_idt sym_name = to_struct_type(symb.type).components().back().name();
     mark_template_instantiated(template_symbol.name, subscope_name, sym_name);
-    return lookup(sym_name);
+    symbolt &final_sym = context.symbols.find(sym_name)->second;
+
+    // Propagate the '#template' attributes
+    final_sym.type.set("#template", new_decl.find("#template"));
+    final_sym.type.set("#template_arguments",
+                       new_decl.find("#template_arguments"));
+    return final_sym;
   }
 
   // not a class template, not a class template method,
