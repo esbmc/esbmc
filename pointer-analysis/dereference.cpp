@@ -1347,7 +1347,9 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
     expr2tc gte = greaterthanequal2tc(offs, zero_uint);
-    expr2tc lt = lessthan2tc(offs, arr_type.array_size);
+    expr2tc arr_size_in_bytes =
+      mul2tc(sub_size->type, arr_type.array_size, sub_size);
+    expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
     construct_struct_ref_from_dyn_offs_rec(index, new_offset, type, range_guard,
