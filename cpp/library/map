@@ -899,10 +899,6 @@ public:
 		x = tmp;
 	}
 
-	void insert(const value_type& val) {
-		this->at(val.first) = val.second;
-	}
-
 	pair<iterator, bool> insert(value_type& val) {
 		unsigned int s = this->_size;
 		pair<iterator, bool> _pair;
