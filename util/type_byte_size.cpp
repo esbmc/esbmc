@@ -259,7 +259,7 @@ compute_pointer_offset(const expr2tc &expr)
     res_expr = add2tc(res_expr->type, res_expr,
                       compute_pointer_offset(memb.source_value));
 
-    return constant_int2tc(uint_type2(), result);
+    return res_expr;
   } else if (is_constant_expr(expr)) {
     // This is a constant struct, array, union, string, etc. There's nothing
     // at a lower level; the offset is zero.
