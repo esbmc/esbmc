@@ -2080,7 +2080,7 @@ Purpose:
 
 \*******************************************************************/
 
-void cpp_typecheck_resolvet::guess_template_args(
+bool cpp_typecheck_resolvet::guess_template_args(
   const typet &template_type,
   const typet &desired_type)
 {
@@ -2335,6 +2335,8 @@ void cpp_typecheck_resolvet::guess_template_args(
         to_array_type(desired_type_followed).size());
     }
   }
+
+  return false;
 }
 
 /*******************************************************************\
@@ -2460,7 +2462,10 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
       // sorts of trouble.
       cpp_convert_plain_type(arg_type);
 
-      guess_template_args(arg_type, fargs.operands[i].type());
+      // Guess the template argument; if there's an incompatibility, then
+      // deduction has failed.
+      if (guess_template_args(arg_type, fargs.operands[i].type()))
+        return nil_exprt();
     }
   }
 

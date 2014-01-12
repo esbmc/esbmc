@@ -108,7 +108,7 @@ protected:
     const exprt &expr,
     const cpp_typecheck_fargst &fargs);
 
-  void guess_template_args(
+  bool guess_template_args(
     const typet &template_parameter,
     const typet &desired_type);
 
