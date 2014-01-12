@@ -212,12 +212,12 @@ public:
 		char* pointer;
 		int pos;
 
-		/*const_iterator(iterator& i){
-		 pointer = i.pointer;
-		 pos = i.pos;
-		 }*/
+		const_iterator(const iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+		}
 
-		const_iterator(const_iterator& i) {
+		const_iterator(const const_iterator& i) {
 			pointer = i.pointer;
 			pos = i.pos;
 		}
