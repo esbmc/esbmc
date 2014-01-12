@@ -75,27 +75,51 @@ namespace std
 
 namespace std
 {
-  template < typename T >
-  istream& operator>> (istream& is, T val )
-  {
-    is._gcount=0;
-    return is;
-  }
-
-#if 0
-  // XXX - operator overloading template specialization isn't implemented.
-  template <>
-  istream& operator>> <bool> (istream& is, bool val )
+  // As with ostream, the spec says that these functions are explicitly
+  // declared and defined, not templated.
+  istream& operator>> (istream& is, bool &val )
   {
     dec(is);
     if (val == 1) {
       boolalpha(is);
     }
+    is._gcount=0; return is; }
+  istream& operator>> (istream& is, short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned short &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, int &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned int &val )
+  { is._gcount=0; return is; }
+#if __WORDSIZE == 64
+  istream& operator>> (istream& is, long &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned long &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, float &val )
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, double &val )
+  { is._gcount=0; return is; }
+#if 0
+  istream& operator>> (istream& is, long double &val )
+  { is._gcount=0; return is; }
+#endif
+  istream& operator>> (istream& is, void *&val )
+  { is._gcount=0; return is; }
 
-    is._gcount=0;
+  // Delightful special cases.
+  istream& operator>> (istream& is, ios& (*pf)(ios&))
+  {
+    pf(is);
     return is;
   }
-#endif
+  istream& operator>> (istream& is, ios_base& (*pf)(ios_base&))
+  {
+    pf(is);
+    return is;
+  }
 
   int istream::get()
   {
