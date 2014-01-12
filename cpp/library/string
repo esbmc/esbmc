@@ -34,7 +34,7 @@ public:
 		char* it_str;
 		int pos;
 
-		iterator(iterator& i) {
+		iterator(const iterator& i) {
 			pointer = i.pointer;
 			pos = i.pos;
 		}
