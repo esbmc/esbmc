@@ -163,7 +163,7 @@ bool cpp_typecheck_fargst::match(
       argument.type().set("#this", true);
     }
 
-    class cpp_typecast_rank rank;
+    cpp_typecast_rank rank;
     exprt new_expr;
 
     // can we do the standard conversion sequence?
