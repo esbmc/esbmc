@@ -2277,10 +2277,6 @@ void cpp_typecheck_resolvet::guess_template_args(
               // remove const, volatile (these can be added in the call)
               t.remove("#constant");
               t.remove("#volatile");
-              #if 0
-              std::cout << "ASSIGN " << id.identifier << " := "
-                        << cpp_typecheck.to_string(desired_type) << std::endl;
-              #endif
 
               // XXX: various implicit conversions are defined by section 14.1
               // of the spec, most notably that array types become element
