@@ -651,11 +651,18 @@ dereferencet::build_reference_to(
   // emits objects with some cruft built on top of them.
   value = get_base_object(value);
 
-  // If offset is unknown, or whatever, instead compute the pointer offset
-  // manually.
+  // If offset is unknown, or whatever, instead we have to consider it
+  // nondeterministic, and let the reference builders deal with it. The exact
+  // offset is the offset in the base pointer, plus any additional offset
+  // introduced by the dereferencing expression.
   if (!is_constant_int2t(final_offset)) {
-    final_offset = pointer_offset2tc(index_type2(), deref_expr);
     assert(o.alignment != 0);
+    final_offset = pointer_offset2tc(index_type2(), deref_expr);
+
+    if (scalar_step_list && scalar_step_list->size()) {
+      expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
+      final_offset = add2tc(final_offset->type, final_offset, extra_offs);
+    }
   }
 
   // If we're in internal mode, collect all of our data into one struct, insert
