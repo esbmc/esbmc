@@ -2356,6 +2356,9 @@ exprt cpp_typecheck_resolvet::guess_function_template_args(
   typet tmp=expr.type();
   cpp_typecheck.follow_symbol(tmp);
 
+  // XXX -- Spec allows for partial template argument specification, currently
+  // not handled.
+
   if(!tmp.get_bool("is_template"))
     return nil_exprt(); // not a template
 
