@@ -2068,6 +2068,29 @@ void cpp_typecheck_resolvet::guess_template_args(
   }
 }
 
+bool
+cpp_typecheck_resolvet::is_conversion_type_exact_match(
+  const typet &source_type,
+  const typet &dest_type)
+{
+  // Simplfy ask the implicit conversion sequence code. Construct a dummy symbol
+  // first though for it to manipulate.
+  symbol_exprt temp_src_value("fake_sym_for_templ_deduction_test", source_type);
+  exprt output_expr;
+
+  cpp_typecast_rank rank;
+  if (cpp_typecheck.implicit_conversion_sequence(
+        temp_src_value, dest_type, output_expr, rank))
+    return false; // No conversion.
+
+  // Only permit argument deduction where there's an exact match. Otherwise,
+  // this inteferes with overloading.
+  if (rank.rank >= 2)
+    return false;
+
+  return true;
+}
+
 /*******************************************************************\
 
 Function: cpp_typecheck_resolvet::guess_template_args
@@ -2239,6 +2262,12 @@ bool cpp_typecheck_resolvet::guess_template_args(
               // remove const, volatile (these can be added in the call)
               t.remove("#constant");
               t.remove("#volatile");
+            } else {
+              // This template has been deduced from another argument. If they
+              // don't have exactly matching types, then reject this deduction
+              // (See spec 14.8.2.4.2).
+              if (!is_conversion_type_exact_match(desired_type, t))
+                return true;
             }
           }
         }
@@ -2287,6 +2316,12 @@ bool cpp_typecheck_resolvet::guess_template_args(
                 t.id() = "pointer";
                 t.remove("size");
               }
+            } else {
+              // This template has been deduced from another argument. If they
+              // don't have exactly matching types, then reject this deduction
+              // (See spec 14.8.2.4.2).
+              if (!is_conversion_type_exact_match(desired_type, t))
+                return true;
             }
           }
         }

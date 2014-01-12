@@ -116,6 +116,10 @@ protected:
     const exprt &template_parameter,
     const exprt &desired_expr);
 
+  bool is_conversion_type_exact_match(
+    const typet &source_type,
+    const typet &dest_type);
+
   bool disambiguate_functions(
     const exprt &expr,
     cpp_typecast_rank &args_distance,
