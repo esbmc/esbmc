@@ -39,11 +39,6 @@ public:
 			pos = i.pos;
 		}
 
-		iterator(const_iterator& i) {
-			pointer = i.pointer;
-			pos = i.pos;
-		}
-
 		iterator() {
 			pointer = NULL;
 		}
