@@ -2079,7 +2079,7 @@ cpp_typecheck_resolvet::is_conversion_type_exact_match(
   exprt output_expr;
 
   cpp_typecast_rank rank;
-  if (cpp_typecheck.implicit_conversion_sequence(
+  if (!cpp_typecheck.implicit_conversion_sequence(
         temp_src_value, dest_type, output_expr, rank))
     return false; // No conversion.
 
