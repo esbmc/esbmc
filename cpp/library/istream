@@ -133,6 +133,9 @@ namespace std
   { is._gcount=0; return is; }
 #endif
 
+  istream& operator>> (istream& is, const smanip &val)
+  { is._gcount=0; return is; }
+
   int istream::get()
   {
     _gcount = 1;
