@@ -84,6 +84,8 @@ namespace std
       boolalpha(is);
     }
     is._gcount=0; return is; }
+  istream& operator>> (istream& is, char &val )
+  { is._gcount=0; return is; }
   istream& operator>> (istream& is, short &val )
   { is._gcount=0; return is; }
   istream& operator>> (istream& is, unsigned short &val )
