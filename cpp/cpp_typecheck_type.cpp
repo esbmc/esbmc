@@ -237,11 +237,6 @@ void cpp_typecheckt::typecheck_type(typet &type)
       type=e.type();
     }
   }
-  #ifdef CPP_SYSTEMC_EXTENSION
-  else if(type.id() == "verilogbv")
-  {
-  }
-  #endif
   else if(type.id()=="decltype")
   {
     exprt e=static_cast<const exprt &>(type.find("expr_arg"));

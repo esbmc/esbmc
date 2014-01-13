@@ -763,78 +763,6 @@ bool cpp_typecheckt::standard_conversion_boolean(
   return true;
 }
 
-#ifdef CPP_SYSTEMC_EXTENSION
-
-/*******************************************************************\
-
-Function: standard_conversion_verilogbv
-
-  Inputs: A typechecked expression 'expr'
-
-  Outputs: True iff the boolean conversion is possible.
-           The result of the conversion is stored in 'new_expr'.
-
-  Purpose:  standard conversion for sc_logic type.
-
-\*******************************************************************/
-
-bool cpp_typecheckt::standard_conversion_verilogbv(
-  const exprt &expr,
-  const typet &type,
-  exprt &new_expr) const
-{
-  if(expr.cmt_lvalue())
-    return false;
-
-  if(expr.id()=="string-constant")
-  {
-    std::string value=id2string(expr.value());
-
-    if(value.size() != (unsigned) atoi(type.width().c_str()))
-    return false;
-
-    for(unsigned i = 0; i < value.size(); i++)
-    {
-      if(value[i] == '1' || value[i] == '0' ||
-         value[i] == 'x' || value[i] == 'X' ||
-         value[i] == 'z' || value[i] == 'Z')
-      {
-        // ok
-      }
-      else
-        return false;
-    }
-
-    new_expr = exprt("constant", type);
-    new_expr.value(value);
-    return true;
-  }
-
-  if(expr.type().id() != "signedbv" &&
-     expr.type().id() != "unsignedbv" &&
-     expr.type().id() != "bool")
-    return false;
-
-  if(expr.type().id()=="bool" &&
-     type.width()=="1")
-  {
-    // ok
-  }
-  else if(expr.type().width()==type.width())
-  {
-    // ok
-  }
-  else
-    return false;
-
-  new_expr = expr;
-  new_expr.make_typecast(type);
-
-  return true;
-}
-
-#endif
-
 /*******************************************************************\
 
 Function: standard_conversion_sequence
@@ -958,14 +886,6 @@ bool cpp_typecheckt::standard_conversion_sequence(
       if (curr_expr.type().id() == "pointer")
         rank.has_ptr_to_bool = true;
     }
-    #ifdef CPP_SYSTEMC_EXTENSION
-    else if(type.id() == "verilogbv")
-    {
-      if(!standard_conversion_verilogbv(curr_expr, type, new_expr))
-         return false;
-      rank.rank += 3;
-    }
-    #endif
     else
       return false;
   }
@@ -2413,25 +2333,6 @@ bool cpp_typecheckt::static_typecast(
 
     return true;
   }
-
-  #ifdef CPP_SYSTEMC_EXTENSION
-  if(type.id() == "unsignedbv" &&
-     e.type().id() == "verilogbv" &&
-     type.width() == e.type().width())
-  {
-     new_expr = e;
-     new_expr.make_typecast(type);
-     return true;
-  }
-  else if(type.id() == "bool" &&
-     e.type().id() == "verilogbv" &&
-     e.type().width() == "1")
-  {
-    new_expr = e;
-    new_expr.make_typecast(type);
-    return true;
-  }
-  #endif
 
   if(type.id()=="pointer" && e.type().id()=="pointer")
   {

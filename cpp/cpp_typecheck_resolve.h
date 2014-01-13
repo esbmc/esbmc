@@ -163,24 +163,6 @@ protected:
   {
     return m1.cost<m2.cost;
   }
-
-  #ifdef CPP_SYSTEMC_EXTENSION
-  exprt do_builtin_sc_uint_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_int_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_logic_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-
-  exprt do_builtin_sc_lv_extension(
-    const cpp_namet &cpp_name,
-    const cpp_template_args_non_tct &template_args);
-  #endif
 };
 
 #endif
