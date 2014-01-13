@@ -1563,17 +1563,21 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
     arrsize = mul2tc(get_uint32_type(), arr_type.array_size, subtype_size);
   }
 
+  typecast2tc unsigned_offset(get_uint32_type(), offset);
+
   // Then, expressions as to whether the access is over or under the array
   // size.
   constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
-  add2tc upper_byte(get_uint32_type(), offset, access_size_e);
+  add2tc upper_byte(get_uint32_type(), unsigned_offset, access_size_e);
 
-  greaterthan2tc gt(upper_byte, arrsize);
+  greaterthan2tc gt(unsigned_offset, arrsize);
+  greaterthan2tc gt2(upper_byte, arrsize);
+  or2tc is_in_bounds(gt, gt2);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  tmp_guard1.move(gt);
+  tmp_guard1.move(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 
