@@ -121,6 +121,18 @@ namespace std
     return is;
   }
 
+  // These are also defined to be non-member functions by the spec.
+
+  istream& operator>> (istream& is, char *s)
+  { is._gcount=0; return is; }
+#if 0
+  // platform-dependant difference right now.
+  istream& operator>> (istream& is, signed char *s)
+  { is._gcount=0; return is; }
+  istream& operator>> (istream& is, unsigned char *s)
+  { is._gcount=0; return is; }
+#endif
+
   int istream::get()
   {
     _gcount = 1;
