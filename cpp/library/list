@@ -1314,7 +1314,7 @@ public:
 		this->~list();
 	}
 
-	void splice(iterator& position, list<value_type>& x) {
+	void splice(iterator position, list<value_type>& x) {
 		size_type _tmp = x._size;
 		for(int i = 0; i < _tmp;i++){
 			this->insert(position,x.front());
@@ -1323,12 +1323,12 @@ public:
 		x.clear();
 	}
 
-	void splice(iterator& position, list<value_type>& x, iterator i) {
+	void splice(iterator position, list<value_type>& x, iterator i) {
 		this->insert(position,*i.it);
 		x.erase(i);
 	}
 
-	void splice(iterator& position, list<value_type>& x, iterator& first, iterator& last) {
+	void splice(iterator position, list<value_type>& x, iterator first, iterator last) {
 		if(last.pos == x._size)
 			last--;
 		for(;first.pos != last.pos;last--){
