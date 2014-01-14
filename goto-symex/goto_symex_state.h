@@ -299,6 +299,7 @@ public:
    */
   inline void
   pop_frame() {
+    assert(call_stack.back().goto_state_map.size() == 0);
     call_stack.pop_back();
   }
 
