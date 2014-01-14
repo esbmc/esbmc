@@ -883,7 +883,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
                       tmp_guard);
 
     // This will construct from whatever the subtype is...
-    stitch_together_from_byte_array(value, type, mod2);
+    stitch_together_from_byte_array(value, type, div2);
   }
 
   return;
