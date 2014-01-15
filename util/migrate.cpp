@@ -1323,6 +1323,11 @@ migrate_expr(const exprt &expr, expr2tc &new_expr_ref)
     expr2tc op;
     migrate_expr(expr.op0(), op);
     new_expr_ref = isnormal2tc(op);
+  } else if (expr.id() ==  "concat") {
+    expr2tc op0, op1;
+    convert_operand_pair(expr, op0, op1);
+    migrate_type(expr.type(), type);
+    new_expr_ref = concat2tc(type, op0, op1);
   } else {
     expr.dump();
     throw new std::string("migrate expr failed");
@@ -2310,6 +2315,14 @@ migrate_expr_back(const expr2tc &ref)
     const isnormal2t &ref2 = to_isnormal2t(ref);
     exprt back("isnormal", bool_typet());
     back.copy_to_operands(migrate_expr_back(ref2.value));
+    return back;
+  }
+  case expr2t::concat_id:
+  {
+    const concat2t &ref2 = to_concat2t(ref);
+    exprt back("concat", migrate_type_back(ref2.type));
+    back.copy_to_operands(migrate_expr_back(ref2.side_1));
+    back.copy_to_operands(migrate_expr_back(ref2.side_2));
     return back;
   }
   default:

@@ -3089,6 +3089,9 @@ std::string expr2ct::convert(
   else if(src.id()=="extractbit")
     return convert_extractbit(src, precedence);
 
+  else if(src.id()=="concat")
+    return convert_function(src, "CONCAT", precedence=15);
+
   // no C language expression for internal representation
   return convert_norep(src, precedence);
 }
