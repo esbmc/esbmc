@@ -32,8 +32,7 @@ float sqrt(int n) {
 	return nondet_int();
 }
 
-double sqrt(double x) {
-	__ESBMC_assert(x >= 0, "The number must be greater or equal than 0");
+double sqrt(double n) {
     	__ESBMC_assert(n >= 0, "The number must be greater or equal than 0");
     	double x = n;
     	double y = 1;
