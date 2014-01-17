@@ -4436,6 +4436,8 @@ public:
   concat2t(const concat2t &ref)
     : concat_expr_methods(ref) { }
 
+  virtual expr2tc do_simplify(bool second) const;
+
   static std::string field_names[esbmct::num_type_fields];
 };
 

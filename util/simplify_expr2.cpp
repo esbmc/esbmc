@@ -1526,3 +1526,21 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
 
   return expr2tc();
 }
+
+expr2tc
+concat2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
+    return expr2tc();
+
+  const mp_integer &value1 = to_constant_int2t(side_1).constant_value;
+  const mp_integer &value2 = to_constant_int2t(side_2).constant_value;
+
+  // k; Take the values, and concatenate. Side 1 has higher end bits.
+  mp_integer accuml = value1;
+  accuml *= (1ULL << side_2->type->get_width());
+  accuml += value2;
+
+  return constant_int2tc(type, accuml);
+}
