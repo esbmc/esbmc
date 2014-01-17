@@ -2194,7 +2194,11 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, z3::expr &output)
 {
 
   if (is_bv_type(cast.from) || is_pointer_type(cast.from)) {
-    output = output != ctx.esbmc_int_val(0);
+    if (int_encoding) {
+      output = output != ctx.esbmc_int_val(0);
+    } else {
+      output = output != ctx.esbmc_int_val(0, cast.from->type->get_width());
+    }
   } else {
     throw new conv_error("Unimplemented bool typecast");
   }
