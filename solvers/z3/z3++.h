@@ -167,8 +167,10 @@ namespace z3 {
 
         expr esbmc_int_val(int n, unsigned int width = 0);
         expr esbmc_int_val(unsigned n, unsigned int width = 0);
+#if __WORDSIZE != 32
         expr esbmc_int_val(long unsigned int n, unsigned int width = 0);
         expr esbmc_int_val(long int n, unsigned int width = 0);
+#endif
         expr esbmc_int_val(char const * n, unsigned int width = 0);
 
         expr int_val(int n);
@@ -186,8 +188,10 @@ namespace z3 {
 
         expr bv_val(int n, unsigned sz);
         expr bv_val(unsigned n, unsigned sz);
+#if __WORDSIZE != 32
         expr bv_val(long unsigned int n, unsigned sz);
         expr bv_val(long int n, unsigned sz);
+#endif
         expr bv_val(char const * n, unsigned sz);
 
         expr num_val(int n, sort const & s);
@@ -1558,6 +1562,7 @@ namespace z3 {
         return bv_val(n, width);
       }
     }
+#if __WORDSIZE != 32
     inline expr context::esbmc_int_val(long int n, unsigned int width) {
       if (width == 0 || int_encoding) {
         Z3_ast r = Z3_mk_int64(m_ctx, n, *m_esbmc_int_sort);
@@ -1576,6 +1581,7 @@ namespace z3 {
         return bv_val(n, width);
       }
     }
+#endif
     inline expr context::esbmc_int_val(char const * n, unsigned int width) {
       if (width == 0 || int_encoding) {
         Z3_ast r = Z3_mk_numeral(m_ctx, n, *m_esbmc_int_sort);
@@ -1595,8 +1601,10 @@ namespace z3 {
 
     inline expr context::bv_val(int n, unsigned sz) { Z3_ast r = Z3_mk_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(unsigned n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+#if __WORDSIZE != 32
     inline expr context::bv_val(long unsigned int n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(long int n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+#endif
     inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
 
     inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
