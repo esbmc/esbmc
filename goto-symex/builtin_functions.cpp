@@ -677,6 +677,78 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call __attrib
                                        reachability_treet &art __attribute__((unused)))
 {
   // This will check a given system's stability based on its poles and zeros.
+
+  std::vector<expr2tc> args = call.operands;
+  assert(args.size()==2);
+
+  // Get the denominator coeficients
+  exprt denominator;
+  unsigned int denominator_size=0;
+
+  if (is_address_of2t(args.at(0)))
+  {
+    const address_of2t &addrof = to_address_of2t(args.at(0));
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if(is_symbol2t(idx.source_value))
+      {
+        const symbol2t &symbol = to_symbol2t(idx.source_value);
+        denominator = ns.lookup(symbol.thename).value;
+        denominator_size = denominator.operands().size();
+      }
+    }
+  }
+  else
+    assert(0);
+
+  double denominator_coeficients[denominator_size];
+  for(unsigned int i=0; i<denominator_size; ++i)
+  {
+    float value=0;
+    if(denominator.operands()[i].id()=="unary+")
+      value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str());
+    else if(denominator.operands()[i].id()=="unary-")
+      value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+    else
+      value=atof(denominator.operands()[i].get_string("#cformat").c_str());
+    denominator_coeficients[denominator_size-1-i]=value;
+  }
+
+  // Get the numerator coeficients
+  exprt numerator;
+  unsigned int numerator_size=0;
+
+  if (is_address_of2t(args.at(1)))
+  {
+    const address_of2t &addrof = to_address_of2t(args.at(1));
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if(is_symbol2t(idx.source_value))
+      {
+        const symbol2t &symbol = to_symbol2t(idx.source_value);
+        numerator = ns.lookup(symbol.thename).value;
+        numerator_size = numerator.operands().size();
+      }
+    }
+  }
+  else
+    assert(0);
+
+  double numerator_coeficients[numerator_size];
+  for(unsigned int i=0; i<numerator_size; ++i)
+  {
+    float value=0;
+    if(numerator.operands()[i].id()=="unary+")
+      value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str());
+    else if(numerator.operands()[i].id()=="unary-")
+      value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+    else
+      value=atof(numerator.operands()[i].get_string("#cformat").c_str());
+    numerator_coeficients[numerator_size-1-i]=value;
+  }
+
   abort();
   return;
 }
