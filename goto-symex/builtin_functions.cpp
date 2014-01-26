@@ -674,7 +674,7 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 
 void
 goto_symext::intrinsic_check_stability(const code_function_call2t &call __attribute__((unused)),
-                                       reachability_treet &arg __attribute__((unused)))
+                                       reachability_treet &art __attribute__((unused)))
 {
   // This will check a given system's stability based on its poles and zeros.
   abort();

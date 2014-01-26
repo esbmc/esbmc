@@ -401,7 +401,7 @@ protected:
   void intrinsic_kill_monitor(reachability_treet &art);
   /** Check digital filter stability */
   void intrinsic_check_stability(const code_function_call2t &call,
-                                 reachability_treet &arg);
+                                 reachability_treet &art);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
