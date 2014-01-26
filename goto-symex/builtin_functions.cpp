@@ -671,3 +671,12 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
   execution_statet &ex_state = art.get_cur_state();
   ex_state.kill_monitor_thread();
 }
+
+void
+goto_symext::intrinsic_check_stability(const code_function_call2t &call __attribute__((unused)),
+                                       reachability_treet &arg __attribute__((unused)))
+{
+  // This will check a given system's stability based on its poles and zeros.
+  abort();
+  return;
+}
