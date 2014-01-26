@@ -20,6 +20,9 @@ MINISAT = $(SATDIR)/MiniSat-p_v1.14
 CXXFLAGS+= -DMINISAT
 endif
 
+# System stability
+INCLUDES += -I/usr/include/eigen3/
+
 # Other goo
 
 ifdef TARGET32

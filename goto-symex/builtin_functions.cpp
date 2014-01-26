@@ -26,6 +26,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
+#include <unsupported/Eigen/Polynomials>
+
 expr2tc
 goto_symext::symex_malloc(
   const expr2tc &lhs,
