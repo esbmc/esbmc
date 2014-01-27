@@ -761,22 +761,24 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   }
 
   // Eigen solver object
-  Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> denominator_solver;
 
   // Solve denominator using QR decomposition
   // TODO: As pointed it out by Renato, we should know if the algorithm converges
-  solver.compute(denominator_coefficients);
+  denominator_solver.compute(denominator_coefficients);
 
   // Denominator roots
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots = solver.roots();
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots = denominator_solver.roots();
 
   // Solve numerator using QR decomposition
-  solver.compute(numerator_coefficients);
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> numerator_solver;
+  numerator_solver.compute(numerator_coefficients);
 
   // Numerator roots
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & numerator_roots = solver.roots();
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & numerator_roots = numerator_solver.roots();
 
   // Check stability
+  // TODO: the conjugate has the same modulo, why check its modulo then?
   bool is_stable=true;
   for(unsigned int i=0; i<denominator_roots.rows(); ++i)
   {
