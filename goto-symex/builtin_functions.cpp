@@ -683,10 +683,11 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   std::vector<expr2tc> args = call.operands;
   assert(args.size()==2);
 
-  // Get the denominator coeficients
+  // Get the denominator values
   exprt denominator;
   unsigned int denominator_size=0;
 
+  // Run through the irep2 object to get its values from the symbol
   if (is_address_of2t(args.at(0)))
   {
     const address_of2t &addrof = to_address_of2t(args.at(0));
@@ -704,20 +705,24 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   else
     assert(0);
 
-  double denominator_coeficients[denominator_size];
+  // Get the denominator coefficients
+  Eigen::VectorXd denominator_coefficients(denominator_size);
   for(unsigned int i=0; i<denominator_size; ++i)
   {
     float value=0;
+
+    // The following code is necessary because #cformat does not have signal information
     if(denominator.operands()[i].id()=="unary+")
       value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str());
     else if(denominator.operands()[i].id()=="unary-")
       value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
     else
       value=atof(denominator.operands()[i].get_string("#cformat").c_str());
-    denominator_coeficients[denominator_size-1-i]=value;
+
+    denominator_coefficients[denominator_size-1-i]=value;
   }
 
-  // Get the numerator coeficients
+  // Get the numerator values
   exprt numerator;
   unsigned int numerator_size=0;
 
@@ -738,18 +743,38 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   else
     assert(0);
 
-  double numerator_coeficients[numerator_size];
+  // Get the numerator coefficients
+  Eigen::VectorXd numerator_coefficients(numerator_size);
   for(unsigned int i=0; i<numerator_size; ++i)
   {
     float value=0;
+
+    // The following code is necessary because #cformat does not have signal information
     if(numerator.operands()[i].id()=="unary+")
       value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str());
     else if(numerator.operands()[i].id()=="unary-")
       value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
     else
       value=atof(numerator.operands()[i].get_string("#cformat").c_str());
-    numerator_coeficients[numerator_size-1-i]=value;
+
+    numerator_coefficients[numerator_size-1-i]=value;
   }
+
+  // Eigen solver object
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+
+  // Solve denominator using QR decomposition
+  // TODO: As pointed it out by Renato, we should know if the algorithm converges
+  solver.compute(denominator_coefficients);
+
+  // Denominator roots
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots = solver.roots();
+
+  // Solve numerator using QR decomposition
+  solver.compute(numerator_coefficients);
+
+  // Numerator roots
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & numerator_roots = solver.roots();
 
   // Final result
   constant_bool2tc result(false);
