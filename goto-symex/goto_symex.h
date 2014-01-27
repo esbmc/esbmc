@@ -25,6 +25,8 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "goto_symex_state.h"
 #include "symex_target.h"
 
+#include <unsupported/Eigen/Polynomials>
+
 class reachability_treet; // Forward dec
 class execution_statet; // Forward dec
 
@@ -399,9 +401,15 @@ protected:
   void intrinsic_register_monitor(const code_function_call2t &call, reachability_treet &art);
   /** Terminate the monitor thread */
   void intrinsic_kill_monitor(reachability_treet &art);
+
+  // Digital system stability related functions
+
   /** Check digital filter stability */
   void intrinsic_check_stability(const code_function_call2t &call,
                                  reachability_treet &art);
+
+  /** Get roots of a polynomial */
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType get_roots(expr2tc array_element);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();

@@ -26,8 +26,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-#include <unsupported/Eigen/Polynomials>
-
 expr2tc
 goto_symext::symex_malloc(
   const expr2tc &lhs,
@@ -683,99 +681,9 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   std::vector<expr2tc> args = call.operands;
   assert(args.size()==2);
 
-  // Get the denominator values
-  exprt denominator;
-  unsigned int denominator_size=0;
-
-  // Run through the irep2 object to get its values from the symbol
-  if (is_address_of2t(args.at(0)))
-  {
-    const address_of2t &addrof = to_address_of2t(args.at(0));
-    if (is_index2t(addrof.ptr_obj))
-    {
-      const index2t &idx = to_index2t(addrof.ptr_obj);
-      if(is_symbol2t(idx.source_value))
-      {
-        const symbol2t &symbol = to_symbol2t(idx.source_value);
-        denominator = ns.lookup(symbol.thename).value;
-        denominator_size = denominator.operands().size();
-      }
-    }
-  }
-  else
-    assert(0);
-
-  // Get the denominator coefficients
-  Eigen::VectorXd denominator_coefficients(denominator_size);
-  for(unsigned int i=0; i<denominator_size; ++i)
-  {
-    float value=0;
-
-    // The following code is necessary because #cformat does not have signal information
-    if(denominator.operands()[i].id()=="unary+")
-      value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str());
-    else if(denominator.operands()[i].id()=="unary-")
-      value=atof(denominator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
-    else
-      value=atof(denominator.operands()[i].get_string("#cformat").c_str());
-
-    denominator_coefficients[denominator_size-1-i]=value;
-  }
-
-  // Get the numerator values
-  exprt numerator;
-  unsigned int numerator_size=0;
-
-  if (is_address_of2t(args.at(1)))
-  {
-    const address_of2t &addrof = to_address_of2t(args.at(1));
-    if (is_index2t(addrof.ptr_obj))
-    {
-      const index2t &idx = to_index2t(addrof.ptr_obj);
-      if(is_symbol2t(idx.source_value))
-      {
-        const symbol2t &symbol = to_symbol2t(idx.source_value);
-        numerator = ns.lookup(symbol.thename).value;
-        numerator_size = numerator.operands().size();
-      }
-    }
-  }
-  else
-    assert(0);
-
-  // Get the numerator coefficients
-  Eigen::VectorXd numerator_coefficients(numerator_size);
-  for(unsigned int i=0; i<numerator_size; ++i)
-  {
-    float value=0;
-
-    // The following code is necessary because #cformat does not have signal information
-    if(numerator.operands()[i].id()=="unary+")
-      value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str());
-    else if(numerator.operands()[i].id()=="unary-")
-      value=atof(numerator.operands()[i].op0().get_string("#cformat").c_str())*(-1);
-    else
-      value=atof(numerator.operands()[i].get_string("#cformat").c_str());
-
-    numerator_coefficients[numerator_size-1-i]=value;
-  }
-
-  // Eigen solver object
-  Eigen::PolynomialSolver<double, Eigen::Dynamic> denominator_solver;
-
-  // Solve denominator using QR decomposition
-  // TODO: As pointed it out by Renato, we should know if the algorithm converges
-  denominator_solver.compute(denominator_coefficients);
-
   // Denominator roots
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots = denominator_solver.roots();
-
-  // Solve numerator using QR decomposition
-  Eigen::PolynomialSolver<double, Eigen::Dynamic> numerator_solver;
-  numerator_solver.compute(numerator_coefficients);
-
-  // Numerator roots
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & numerator_roots = numerator_solver.roots();
+  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots=
+    get_roots(args.at(0));
 
   // Check stability
   // TODO: the conjugate has the same modulo, why check its modulo then?
@@ -795,4 +703,56 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   symex_assign(assign);
 
   return;
+}
+
+const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType
+goto_symext::get_roots(expr2tc array_element)
+{
+  exprt element;
+
+  // Run through the irep2 object to get its values from the symbol
+  if (is_address_of2t(array_element))
+  {
+    const address_of2t &addrof = to_address_of2t(array_element);
+    if (is_index2t(addrof.ptr_obj))
+    {
+      const index2t &idx = to_index2t(addrof.ptr_obj);
+      if(is_symbol2t(idx.source_value))
+      {
+        const symbol2t &symbol = to_symbol2t(idx.source_value);
+        element = ns.lookup(symbol.thename).value;
+      }
+    }
+  }
+  else
+    assert(0);
+
+  unsigned int size=element.operands().size();
+
+  // Get the coefficients
+  Eigen::VectorXd coefficients(size);
+  for(unsigned int i=0; i<size; ++i)
+  {
+    float value=0;
+
+    // The following code is necessary because #cformat does not have signal information
+    if(element.operands()[i].id()=="unary+")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str());
+    else if(element.operands()[i].id()=="unary-")
+      value=atof(element.operands()[i].op0().get_string("#cformat").c_str())*(-1);
+    else
+      value=atof(element.operands()[i].get_string("#cformat").c_str());
+
+    coefficients[size-1-i]=value;
+  }
+
+  // Eigen solver object
+  Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
+
+  // Solve denominator using QR decomposition
+  // TODO: As pointed it out by Renato, we should know if the algorithm converges
+  solver.compute(coefficients);
+
+  // Denominator roots
+  return solver.roots();
 }
