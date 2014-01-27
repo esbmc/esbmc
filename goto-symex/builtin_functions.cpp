@@ -736,10 +736,10 @@ goto_symext::get_roots(expr2tc array_element)
   unsigned int size=element.operands().size();
 
   // Get the coefficients
-  Eigen::VectorXd coefficients(size);
+  std::list<double> coefficients_list;
   for(unsigned int i=0; i<size; ++i)
   {
-    float value=0;
+    double value=0;
 
     // The following code is necessary because #cformat does not have signal information
     if(element.operands()[i].id()=="unary+")
@@ -749,8 +749,28 @@ goto_symext::get_roots(expr2tc array_element)
     else
       value=atof(element.operands()[i].get_string("#cformat").c_str());
 
-    coefficients[size-1-i]=value;
+    coefficients_list.push_back(value);
   }
+
+  // Remove leading zeros
+  std::list<double>::iterator it=coefficients_list.begin();
+  for( ; it!=coefficients_list.end(); ++it)
+  {
+    if(*it != 0.0)
+      break;
+    coefficients_list.pop_front();
+  }
+
+  size=coefficients_list.size();
+  Eigen::VectorXd coefficients(coefficients_list.size());
+
+  // Copy elements from the list to the array
+  // Insert in reverse order
+  unsigned int i=0;
+  for(it=coefficients_list.begin();
+      it!=coefficients_list.end();
+      ++it, ++i)
+    coefficients[size-i-1] = *it;
 
   // Eigen solver object
   Eigen::PolynomialSolver<double, Eigen::Dynamic> solver;
