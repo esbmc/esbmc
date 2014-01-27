@@ -722,10 +722,16 @@ goto_symext::get_roots(expr2tc array_element)
         const symbol2t &symbol = to_symbol2t(idx.source_value);
         element = ns.lookup(symbol.thename).value;
       }
+      else
+        assert(0);
     }
+    else
+      assert(0);
   }
   else
     assert(0);
+
+  assert(element.operands().size());
 
   unsigned int size=element.operands().size();
 
