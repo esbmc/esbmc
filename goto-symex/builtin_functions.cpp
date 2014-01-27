@@ -675,7 +675,7 @@ goto_symext::intrinsic_kill_monitor(reachability_treet &art)
 }
 
 void
-goto_symext::intrinsic_check_stability(const code_function_call2t &call __attribute__((unused)),
+goto_symext::intrinsic_check_stability(const code_function_call2t &call,
                                        reachability_treet &art __attribute__((unused)))
 {
   // This will check a given system's stability based on its poles and zeros.
@@ -751,6 +751,10 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call __attrib
     numerator_coeficients[numerator_size-1-i]=value;
   }
 
-  abort();
+  // Final result
+  constant_bool2tc result(false);
+  code_assign2tc assign(call.ret, result);
+  symex_assign(assign);
+
   return;
 }
