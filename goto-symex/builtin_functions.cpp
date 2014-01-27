@@ -776,8 +776,19 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   // Numerator roots
   const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & numerator_roots = solver.roots();
 
+  // Check stability
+  bool is_stable=true;
+  for(unsigned int i=0; i<denominator_roots.rows(); ++i)
+  {
+    if(std::abs(denominator_roots[i])>=1)
+    {
+      is_stable=false;
+      break;
+    }
+  }
+
   // Final result
-  constant_bool2tc result(false);
+  constant_bool2tc result(is_stable);
   code_assign2tc assign(call.ret, result);
   symex_assign(assign);
 
