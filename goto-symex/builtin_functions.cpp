@@ -683,11 +683,52 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 
   // Denominator roots
   std::vector<RootType> denominator_roots;
-  int res = get_roots(args.at(0), denominator_roots);
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
+
+  std::vector<RootType> numerator_roots;
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
 
   bool is_stable=true;
-  if(!res)
+  if(!denominator_has_roots)
   {
+    // Remove duplicate roots if there is numerator roots
+    if(!numerator_has_roots)
+    {
+      std::vector<RootType>::iterator it=denominator_roots.begin();
+
+      while(it != denominator_roots.end())
+      {
+        bool is_duplicated=false;
+        std::vector<RootType>::iterator it1=numerator_roots.begin();
+
+        // Flag when we find duplicate roots
+        while (it1 != numerator_roots.end())
+        {
+          // We don't actually check if the roots are equal, most of the
+          // time, they are not. Instead, we check if they are approx the
+          // same, using 1e-12, the precision used by eigen to search for
+          // roots. Check eigen3/Eigen/src/Core/NumTraits.h:99
+          if( (std::abs(it->real() - it1->real()) < 1e-12)
+            && (std::abs(it->imag() - it1->imag()) < 1e-12))
+          {
+            is_duplicated=true;
+            break;
+          }
+          ++it1;
+        }
+
+        // Erase returns an iterator point to element to the left
+        // of the one erased, so no need to increment it
+        if(is_duplicated)
+        {
+          it = denominator_roots.erase(it);
+          it1 = numerator_roots.erase(it1);
+        }
+        else
+          ++it;
+      }
+    }
+
     // Check stability
     // TODO: the conjugate has the same modulo, why check its modulo then?
     for(unsigned int i=0; i<denominator_roots.size(); ++i)
@@ -716,7 +757,7 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
   // polynomial created by the values on the array
   // Possible results:
   // 0 - Roots found
-  // 1 - QR didn't converge (Roots not found)
+  // 1 - QR didn't converge (Roots not found) TODO
   // 2 - No polynomial generated, for example, an array = [ 0 0 0 0 0 ]
 
   exprt element;
