@@ -747,7 +747,7 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
   unsigned int size=element.operands().size();
 
   // Get the coefficients
-  std::list<double> coefficients_list;
+  std::vector<double> coefficients_vector;
   for(unsigned int i=0; i<size; ++i)
   {
     double value=0;
@@ -760,26 +760,31 @@ int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
     else
       value=atof(element.operands()[i].get_string("#cformat").c_str());
 
-    coefficients_list.push_back(value);
+    coefficients_vector.push_back(value);
   }
 
   // Remove leading zeros
-  std::list<double>::iterator it=coefficients_list.begin();
-  for( ; it!=coefficients_list.end(); ++it)
+  std::vector<double>::iterator it=coefficients_vector.begin();
+  while(it != coefficients_vector.end())
   {
     if(*it != 0.0)
       break;
-    coefficients_list.pop_front();
+    it=coefficients_vector.erase(it);
   }
 
-  size=coefficients_list.size();
-  Eigen::VectorXd coefficients(coefficients_list.size());
+  size=coefficients_vector.size();
+
+  // Check if there is any element left on the vector
+  if(!size)
+    return 2;
+
+  Eigen::VectorXd coefficients(coefficients_vector.size());
 
   // Copy elements from the list to the array
   // Insert in reverse order
   unsigned int i=0;
-  for(it=coefficients_list.begin();
-      it!=coefficients_list.end();
+  for(it=coefficients_vector.begin();
+      it!=coefficients_vector.end();
       ++it, ++i)
     coefficients[size-i-1] = *it;
 
