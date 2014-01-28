@@ -682,20 +682,25 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   assert(args.size()==2);
 
   // Denominator roots
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType & denominator_roots=
-    get_roots(args.at(0));
+  std::vector<RootType> denominator_roots;
+  int res = get_roots(args.at(0), denominator_roots);
 
-  // Check stability
-  // TODO: the conjugate has the same modulo, why check its modulo then?
   bool is_stable=true;
-  for(unsigned int i=0; i<denominator_roots.rows(); ++i)
+  if(!res)
   {
-    if(std::abs(denominator_roots[i])>=1)
+    // Check stability
+    // TODO: the conjugate has the same modulo, why check its modulo then?
+    for(unsigned int i=0; i<denominator_roots.size(); ++i)
     {
-      is_stable=false;
-      break;
+      if(std::abs(denominator_roots[i])>=1)
+      {
+        is_stable=false;
+        break;
+      }
     }
   }
+  else
+    is_stable=false;
 
   // Final result
   constant_bool2tc result(is_stable);
@@ -705,9 +710,15 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   return;
 }
 
-const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType
-goto_symext::get_roots(expr2tc array_element)
+int goto_symext::get_roots(expr2tc array_element, std::vector<RootType>& roots)
 {
+  // This code will get an irep2 of an array and return the roots of the
+  // polynomial created by the values on the array
+  // Possible results:
+  // 0 - Roots found
+  // 1 - QR didn't converge (Roots not found)
+  // 2 - No polynomial generated, for example, an array = [ 0 0 0 0 0 ]
+
   exprt element;
 
   // Run through the irep2 object to get its values from the symbol
@@ -779,6 +790,9 @@ goto_symext::get_roots(expr2tc array_element)
   // TODO: As pointed it out by Renato, we should know if the algorithm converges
   solver.compute(coefficients);
 
-  // Denominator roots
-  return solver.roots();
+  RootsType solver_roots = solver.roots();
+  for(unsigned int i=0; i<solver_roots.rows(); ++i)
+    roots.push_back(solver_roots[i]);
+
+  return 0;
 }

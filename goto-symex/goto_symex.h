@@ -403,13 +403,15 @@ protected:
   void intrinsic_kill_monitor(reachability_treet &art);
 
   // Digital system stability related functions
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootType RootType;
+  typedef Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType RootsType;
 
   /** Check digital filter stability */
   void intrinsic_check_stability(const code_function_call2t &call,
                                  reachability_treet &art);
 
   /** Get roots of a polynomial */
-  const Eigen::PolynomialSolver<double, Eigen::Dynamic>::RootsType get_roots(expr2tc array_element);
+  int get_roots(expr2tc array_element, std::vector<RootType>& roots);
 
   /** Walk back up stack frame looking for exception handler. */
   bool symex_throw();
