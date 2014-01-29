@@ -26,6 +26,11 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
+bool isApprox(double a, double b)
+{
+  return (std::abs(a-b) <= Eigen::NumTraits<double>::dummy_precision());
+}
+
 expr2tc
 goto_symext::symex_malloc(
   const expr2tc &lhs,
@@ -708,8 +713,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
           // time, they are not. Instead, we check if they are approx the
           // same, using 1e-12, the precision used by eigen to search for
           // roots. Check eigen3/Eigen/src/Core/NumTraits.h:99
-          if( (std::abs(it->real() - it1->real()) < 1e-12)
-            && (std::abs(it->imag() - it1->imag()) < 1e-12))
+          if(isApprox(it->real(), it1->real()) && isApprox(it->real(), it1->real()) )
           {
             is_duplicated=true;
             break;
