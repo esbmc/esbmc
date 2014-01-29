@@ -737,7 +737,8 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
     // TODO: the conjugate has the same modulo, why check its modulo then?
     for(unsigned int i=0; i<denominator_roots.size(); ++i)
     {
-      if(std::abs(denominator_roots[i])>=1)
+      double root_abs = std::abs(denominator_roots[i]);
+      if(root_abs>=1.0 or isApprox(root_abs, 1.0))
       {
         is_stable=false;
         break;
