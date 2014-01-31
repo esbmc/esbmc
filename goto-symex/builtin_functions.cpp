@@ -688,10 +688,10 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 
   // Denominator roots
   std::vector<RootType> denominator_roots;
-  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
+  int denominator_has_roots = get_roots(args.at(1), denominator_roots);
 
   std::vector<RootType> numerator_roots;
-  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
+  int numerator_has_roots = get_roots(args.at(0), numerator_roots);
 
   bool is_stable=true;
   if(!denominator_has_roots)
