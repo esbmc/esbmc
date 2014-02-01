@@ -67,14 +67,14 @@ namespace std{
         iterator& operator ++ (){
           return iterator(++pointer,++pos,vec_pos);
         }
-        iterator& operator ++ (int b){
+        iterator operator ++ (int b){
           return iterator(pointer++,pos++,vec_pos);
         }
 
         iterator& operator -- (){
           return iterator(--pointer,--pos,vec_pos);
         }
-        iterator& operator -- (int b){
+        iterator operator -- (int b){
           return iterator(pointer--,pos--,vec_pos);
         }
 
@@ -161,14 +161,14 @@ namespace std{
           const_iterator& operator ++ (){
             return const_iterator(++pointer,++pos,vec_pos);
           }
-          const_iterator& operator ++ (int b){
+          const_iterator operator ++ (int b){
             return const_iterator(pointer++,pos++,vec_pos);
           }
 
           const_iterator& operator -- (){
             return const_iterator(--pointer,--pos,vec_pos);
           }
-          const_iterator& operator -- (int b){
+          const_iterator operator -- (int b){
             return const_iterator(pointer--,pos--,vec_pos);
           }
 
@@ -232,7 +232,7 @@ namespace std{
           }
 
           reverse_iterator& operator ++ ();
-          reverse_iterator& operator ++ (int n){
+          reverse_iterator operator ++ (int n){
             reverse_iterator buffer;
             buffer.pointer = pointer;
             buffer.pos = pos;
@@ -243,7 +243,7 @@ namespace std{
           }
 
           reverse_iterator& operator -- ();
-          reverse_iterator& operator -- (int);
+          reverse_iterator operator -- (int);
 
           bool operator == ( const reverse_iterator&)const;
           bool operator != ( const reverse_iterator&)const;
@@ -272,10 +272,10 @@ namespace std{
           const T& operator * ();
 
           const_reverse_iterator& operator ++ ();
-          const_reverse_iterator& operator ++ (int);
+          const_reverse_iterator operator ++ (int);
 
           const_reverse_iterator& operator -- ();
-          const_reverse_iterator& operator -- (int);
+          const_reverse_iterator operator -- (int);
 
           bool operator == ( const const_reverse_iterator&)const;
           bool operator != ( const const_reverse_iterator&)const;
@@ -336,17 +336,16 @@ namespace std{
         _capacity = n;
       }
 
-      explicit vector(T t[], void* addr): _size(0),  _capacity(1)
+      template <typename InputIt>
+      vector(InputIt t, InputIt addr): _size(0),  _capacity(1)
       {
         int count = 0;
-        for (T *tmp = t; tmp != addr; tmp++)
+        for (InputIt tmp = t; tmp != addr; tmp++)
           count++;
 
         buf = new T[count];
-        T* t1 = (T*) t;
-        T* addr1 = (T*) addr;
         for (int i = 0; i < count; i++)
-          buf[i] = t1[i];
+          buf[i] = *t++;
 
         _size = count;
         _capacity = _size;
@@ -361,7 +360,7 @@ namespace std{
         _capacity = n;
       }
 
-      vector(const vector<T>& x): _size(0),  _capacity(1)
+      vector(const vector& x): _size(0),  _capacity(1)
       {
         buf = new T[x._size];
         _size = x._size;
@@ -370,7 +369,7 @@ namespace std{
         _capacity = _size;
       }
 
-      vector<T>& operator=(const vector<T>& x){
+      vector& operator=(const vector& x){
         buf = new T[x._size];
         _size = x._size;
         for(int i = 0 ; i < _size; i++)
@@ -479,11 +478,14 @@ namespace std{
         // Rather than repeatedly pushing back, bump up the size of the vector
         // once, and then fill it with default data.
         unsigned int difference = sz - _size;
-        _size = sz;
-        buf = static_cast<T*>(realloc(buf, sizeof(T)*_size));
-        for (unsigned int n = 0; n < difference; n++)
+        buf = static_cast<T*>(realloc(buf, sizeof(T) * sz));
+        // XXX -- really we should be initializing with a nondeterministic value
+        // to model the fact that these new elements are undefined.
+        for (unsigned int n = _size; n < sz; n++)
           buf[n] = T();
 
+        _size = sz;
+        _capacity = _size;
         return;
       }
 
@@ -657,9 +659,9 @@ namespace std{
         return it;
       }
 
-      void swap(vector<T>& v1)
+      void swap(vector& v1)
       {
-        vector<T> aux;
+        vector aux;
         aux = v1;
         v1 = *this;
         *this = aux;
@@ -673,7 +675,7 @@ namespace std{
       }
 
       // comparators:
-      bool operator==(const vector<T>& rhv)
+      bool operator==(const vector& rhv)
           {
         if(this->size() != rhv.size()) return false;
         int i = 0;
@@ -684,17 +686,17 @@ namespace std{
         return true;
           }
 
-      bool operator!=(const vector<T>& rhv)
+      bool operator!=(const vector& rhv)
           {
         return (!(*this == rhv));
           }
 
-      bool operator>=(const vector<T>& rhv)
+      bool operator>=(const vector& rhv)
           {
         return ((*this == rhv)||(this->size() > rhv.size()));
           }
 
-      bool operator<=(const vector<T>& rhv)
+      bool operator<=(const vector& rhv)
           {
         return ((*this == rhv)||(this->size() < rhv.size()));
           }

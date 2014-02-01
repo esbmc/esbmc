@@ -77,11 +77,11 @@ public:
 			return *this;
 		}
 
-		iterator operator --() {
+		iterator& operator --() {
 			this->it = this->it->prev;
 			return *this;
 		}
-		iterator& operator --(int) {
+		iterator operator --(int) {
 			this->it = this->it->prev;
 			return *this;
 		}
@@ -169,10 +169,10 @@ public:
 			return *this;
 		}
 
-		reverse_iterator operator --() {
+		reverse_iterator& operator --() {
 			return *this;
 		}
-		reverse_iterator& operator --(int) {
+		reverse_iterator operator --(int) {
 			return *this;
 		}
 
@@ -993,7 +993,7 @@ public:
 			return *this->it;
 		}
 
-		iterator operator ++() {
+		iterator& operator ++() {
 			this->it++;
 			this->pos++;
 			return *this;
@@ -1004,7 +1004,7 @@ public:
 			return *this;
 		}
 
-		iterator operator --() {
+		iterator& operator --() {
 			this->it--;
 			this->pos--;
 			return *this;
@@ -1063,7 +1063,7 @@ public:
 			return *this;
 		}
 
-		reverse_iterator operator --() {
+		reverse_iterator& operator --() {
 			//todo
 			return *this;
 		}
@@ -1134,13 +1134,13 @@ public:
 		this->_size = 0;
 	}
 
-	iterator& begin() {
+	iterator begin() {
 		iterator it;
 		it.it = &(this->_list[0]);
 		it.pos = 0;
 		return it;
 	}
-	iterator& end() {
+	iterator end() {
 		iterator it;
 		this->_list[this->_size] = value_type();
 		it.it = &(this->_list[this->_size]);
@@ -1227,18 +1227,21 @@ public:
 		this->_size++;
 	}
 
-	iterator insert(iterator& position, const value_type& x) {
-		for(int i = position.pos; i < this->_size; i++){
-			this->_list[i + 1] = this->_list[i];
+	iterator insert(iterator position, const value_type& x) {
+		// Backwards copy all higher elements upwards.
+		for(int i = this->_size; i > position.pos; i--) {
+			this->_list[i] = this->_list[i - 1];
 		}
+
 		this->_list[position.pos] = x;
 		this->_size++;
-		position.pos++;
-		position.it = &(this->_list[position.pos]);
+
+                // Return value points at the newly created element.
+                // So pos index and pointer stays the same.
 		return position;
 	}
 
-	void insert(iterator& position, size_type n, const value_type& x) {
+	void insert(iterator position, size_type n, const value_type& x) {
 		__ESBMC_assert(n >= 0,
 				"The second parameter must be greater or equal than zero.");
 		int i;
@@ -1248,8 +1251,9 @@ public:
 		position.pos--;
 		position.it = &(this->_list[position.pos]);
 	}
-	void insert(iterator& position, vector<value_type>::iterator n,
-			vector<value_type>::iterator x) {
+
+        template <class InputIterator>
+	void insert(iterator position, InputIterator n, InputIterator x) {
 		__ESBMC_assert(n != NULL,
 				"The second parameter must be different than NULL.");
 		while (n != x) {
@@ -1274,7 +1278,7 @@ public:
 		*this = list(n, u);
 	}
 
-	iterator& erase(iterator& position) {
+	iterator erase(iterator position) {
 		this->_size--;
 		for(int i = position.pos; i <  this->_size; i++){
 			this->_list[i] = this->_list[i+1];
@@ -1284,7 +1288,7 @@ public:
 		return position;
 	}
 
-	iterator& erase(iterator& position, iterator& last) {
+	iterator erase(iterator position, iterator& last) {
 		while(position.pos != last.pos){
 			this->erase(position);
 		}
@@ -1310,7 +1314,7 @@ public:
 		this->~list();
 	}
 
-	void splice(iterator& position, list<value_type>& x) {
+	void splice(iterator position, list<value_type>& x) {
 		size_type _tmp = x._size;
 		for(int i = 0; i < _tmp;i++){
 			this->insert(position,x.front());
@@ -1319,12 +1323,12 @@ public:
 		x.clear();
 	}
 
-	void splice(iterator& position, list<value_type>& x, iterator i) {
+	void splice(iterator position, list<value_type>& x, iterator i) {
 		this->insert(position,*i.it);
 		x.erase(i);
 	}
 
-	void splice(iterator& position, list<value_type>& x, iterator& first, iterator& last) {
+	void splice(iterator position, list<value_type>& x, iterator first, iterator last) {
 		if(last.pos == x._size)
 			last--;
 		for(;first.pos != last.pos;last--){
@@ -1342,24 +1346,19 @@ public:
 			}
 	}
 
-	void remove_if(pred* x) {
-		__ESBMC_assert(x != NULL, "The parameter must be different than NULL.");
-		for(iterator _it = this->begin(); _it.pos <= this->_size; _it++)
-			if(x(*_it.it)){
-				this->erase(_it);
-			}
-	}
 
-	template<class Predicate>
-	void remove_if(Predicate* pred) {
-		__ESBMC_assert(pred != NULL,
-				"The parameter must be different than NULL.");
-		for(iterator _it = this->begin(); _it.pos <= this->_size; _it++)
-			if(pred()(*_it.it)){
-				this->erase(_it);
-			}
-	}
-
+        template<class Predicate>
+        void remove_if(Predicate pred) {
+                __ESBMC_assert(pred != ((void *)0),
+                                "The parameter must be different than NULL.");
+                for(iterator _it = this->begin(); _it.pos < this->_size;) {
+                        if(pred(*_it.it)){
+                          _it = this->erase(_it);
+                        } else {
+                          _it++;
+                        }
+                }
+        }
 
 	void unique() {
 		size_type i;

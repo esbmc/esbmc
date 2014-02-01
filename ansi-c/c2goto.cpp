@@ -65,7 +65,8 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
 int main(int argc, const char **argv)
 {
   // To avoid the static initialization fiasco,
-  type_pool = type_poolt(true);
+  type_poolt bees(true);
+  type_pool = bees;
   init_expr_constants();
 
   c2goto_parseopt parseopt(argc, argv);

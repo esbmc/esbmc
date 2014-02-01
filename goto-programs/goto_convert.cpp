@@ -1136,7 +1136,6 @@ void goto_convertt::convert_assign(
   }
 
   if (inductive_step && lhs.type().id() != "empty") {
-  if (inductive_step) {
     get_struct_components(lhs);
     if (rhs.is_constant() && is_ifthenelse_block()) {
       nondet_vars.insert(std::pair<exprt,exprt>(lhs,rhs));
@@ -1147,7 +1146,6 @@ void goto_convertt::convert_assign(
       if (cache_result == nondet_vars.end())
         init_nondet_expr(lhs, dest);
     }
-  }
   }
 }
 

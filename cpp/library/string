@@ -34,12 +34,7 @@ public:
 		char* it_str;
 		int pos;
 
-		iterator(iterator& i) {
-			pointer = i.pointer;
-			pos = i.pos;
-		}
-
-		iterator(const_iterator& i) {
+		iterator(const iterator& i) {
 			pointer = i.pointer;
 			pos = i.pos;
 		}
@@ -217,12 +212,12 @@ public:
 		char* pointer;
 		int pos;
 
-		/*const_iterator(iterator& i){
-		 pointer = i.pointer;
-		 pos = i.pos;
-		 }*/
+		const_iterator(const iterator& i){
+			pointer = i.pointer;
+			pos = i.pos;
+		}
 
-		const_iterator(const_iterator& i) {
+		const_iterator(const const_iterator& i) {
 			pointer = i.pointer;
 			pos = i.pos;
 		}
@@ -258,7 +253,7 @@ public:
 		}
 
 		const_iterator& operator ++();
-		const_iterator& operator ++(int);
+		const_iterator operator ++(int);
 
 		//operator returns true if both members point to the same address
 		//returns false if not happen
@@ -342,7 +337,7 @@ public:
 	string(const string& str, size_t pos, size_t n);
 	string(string& s, size_t n);
 	string(char c, size_t n);
-	string(int len);
+	explicit string(int len);
 	string(const_iterator begin, const_iterator end);
 	char* c_str() const;
 	//bool operator==(string& b);
@@ -903,7 +898,12 @@ string::string(string& s, size_t n) {
 	__ESBMC_HIDE: __ESBMC_assert(n < s.length(), "string overflow");
 	__ESBMC_HIDE: __ESBMC_assert( s.str != NULL, "invalid string");
 	int i,j;
-	this->str = new char[s._size - n + 1];
+
+        // Avoid allocating a negative amount.
+        int sz = s._size - n + 1;
+        if (sz < 0)
+          sz = 0;
+	this->str = new char[sz];
 	this->_size = s._size - n;
 	for (i = n, j = 0; s.str[i] != '\0'; i++,j++)
 		this->str[j] = s.str[i];

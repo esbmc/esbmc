@@ -155,6 +155,14 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
 
   const code_assign2t &code = to_code_assign2t(code_assign);
 
+  // Sanity check: if the target has zero size, then we've ended up assigning
+  // to/from a C++ POD class with no fields. The rest of the model checker isn't
+  // rated for dealing with this concept; perform a NOP.
+  // (No exception catching as we guard for only struct types).
+  if (is_struct_type(code.target->type) &&
+      type_byte_size(*code.target->type) == 0)
+    return;
+
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 

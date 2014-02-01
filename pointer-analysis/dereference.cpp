@@ -714,8 +714,13 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       // Base must be struct or array. However we're going to burst into flames
       // if we access a byte array as a struct; except that's legitimate when
       // we've just malloc'd it. So, special case that too.
-      const type2tc &base_type_of_steps =
+      type2tc base_type_of_steps =
         (*scalar_step_list->front()->get_sub_expr(0))->type;
+
+      // The base type might be symbolic, btw. This is due to the return type
+      // of some dereferences being symbol types; something to chase and
+      // eliminate at a later date.
+      base_type_of_steps = ns.follow(base_type_of_steps);
 
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
@@ -865,8 +870,15 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     } else {
       // Badness has occurred; byte extract is needed.
       // XXX -- this should actually extract and stitch.
-      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
-                              is_big_endian);
+      if (type->get_width() == 8)
+        // You can always read a byte out of anything.
+        value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
+                                is_big_endian);
+      else
+        // XXX XXX XXX -- bail for the moment. We're now producing invalid
+        // formula as a result of the fact that byte extract always gets
+        // converted to one byte, rather than what we request.
+        value = make_failed_symbol(type);
     }
   } else {
     // This either isn't aligned or is the wrong size. That might be fine if
@@ -1072,7 +1084,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       guardt newguard(guard);
       newguard.add(field_guard);
       dereference_failure("pointer dereference",
-                          "Oversized field offset", guard);
+                          "Oversized field offset", newguard);
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     } else if (alignment >= (config.ansi_c.word_size / 8)) {
@@ -1589,8 +1601,11 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
   // Check that either the base type that these steps are applied to matches
   // the type of the object we're wrapping in these steps. It's a type error
   // if there isn't a match.
-  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-  if (dereference_type_compare(value, base_of_steps->type)) {
+  type2tc base_of_steps_type =
+    (*scalar_step_list->front()->get_sub_expr(0))->type;
+  base_of_steps_type = ns.follow(base_of_steps_type);
+
+  if (dereference_type_compare(value, base_of_steps_type)) {
     // We can just reconstruct this.
     expr2tc accuml = value;
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();

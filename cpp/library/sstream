@@ -70,14 +70,19 @@ namespace std
         char* temp = new char[NUM_SIZE];
         itoa(val, temp, DEC);
         _string.append(temp);
-        _string._size = strlen(_string.str) + strlen(temp);
         return *this;
       }
 
       ostream& operator<< (long& val) {
         char* temp = new char[NUM_SIZE];
         itoa(val, temp, DEC);
-        _string._size = strlen(_string.str) + strlen(temp);
+        _string.append(temp);
+        return *this;
+      }
+
+      ostream& operator<< (unsigned int& val) {
+        char* temp = new char[NUM_SIZE];
+        itoa(val, temp, DEC);
         _string.append(temp);
         return *this;
       }
@@ -89,7 +94,7 @@ namespace std
         itoa(n, temp, DEC);
         strcat(temp, ".");
         val = val - (float) n;
-        for(int i = 0;i < NUM_SIZE, val != 0;i++){
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
           val = val * DEC;
           n = (int) val;
           itoa(n, temp2, DEC);
@@ -106,7 +111,7 @@ namespace std
         itoa(n, temp, DEC);
         strcat(temp, ".");
         val = val - (double) n;
-        for(int i = 0;i < NUM_SIZE, val != 0;i++){
+        for(int i = 0;i < NUM_SIZE && val != 0;i++){
           val = val * DEC;
           n = (int) val;
           itoa(n, temp2, DEC);

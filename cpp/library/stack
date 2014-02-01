@@ -76,7 +76,7 @@ namespace std
     const T& top ( ) const
     {
       assert(!empty());
-      return (const T)buf[_top-1];
+      return (const T&)buf[_top-1];
     }
 
   };

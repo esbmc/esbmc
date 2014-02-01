@@ -33,6 +33,24 @@ round_up_to_word(mp_integer &mp)
   return;
 }
 
+static inline void
+round_up_to_int64(mp_integer &mp)
+{
+  const unsigned int word_bytes = 8;
+  const unsigned int align_mask = 7;
+
+  if (mp == 0) {
+    return;
+  } else if (mp < word_bytes) {
+    mp = mp_integer(word_bytes);
+  // Or if it's an array of chars etc. that doesn't end on a boundry,
+  } else if (mp.to_ulong() & align_mask) {
+    mp += word_bytes - (mp.to_ulong() & align_mask);
+  }
+
+  return;
+}
+
 mp_integer
 member_offset(const struct_type2t &type, const irep_idt &member)
 {
@@ -40,6 +58,18 @@ member_offset(const struct_type2t &type, const irep_idt &member)
   unsigned bit_field_bits = 0, idx = 0;
 
   forall_types(it, type.members) {
+    // If the current field is 64 bits, and we're on a 32 bit machine, then we
+    // _must_ round up to 64 bits now.
+    if (is_scalar_type(*it) && !is_code_type(*it) &&
+        (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+      round_up_to_int64(result);
+
+    if (is_structure_type(*it))
+      round_up_to_int64(result);
+
+    if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
+      round_up_to_int64(result);
+
     if (type.member_names[idx] == member.as_string())
       break;
 
@@ -128,6 +158,22 @@ type_byte_size(const type2t &type)
     const struct_type2t &t2 = static_cast<const struct_type2t&>(type);
     mp_integer accumulated_size(0);
     forall_types(it, t2.members) {
+      // If the current field is 64 bits, and we're on a 32 bit machine, then we
+      // _must_ round up to 64 bits now. Also guard against symbolic types
+      // as operands.
+      if (is_scalar_type(*it) && !is_code_type(*it) &&
+          (*it)->get_width() > 32 && config.ansi_c.word_size == 32)
+        round_up_to_int64(accumulated_size);
+
+      // While we're at it, round any struct/union up to 64 bit alignment too,
+      // as that might require such alignment due to internal doubles.
+      if (is_structure_type(*it))
+        round_up_to_int64(accumulated_size);
+
+      // Also arrays of int64's. One onders why I bother.
+      if (is_array_type(*it) && to_array_type(*it).subtype->get_width() > 32)
+        round_up_to_int64(accumulated_size);
+
       mp_integer memb_size = type_byte_size(**it);
 
       round_up_to_word(memb_size);
