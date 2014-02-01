@@ -5,11 +5,9 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
 
+  assert(is_scalar_type(data.source_value) && "Byte extract now only works on "
+         "scalar variables");
   if (!is_constant_int2t(data.source_offset)) {
-    assert(!is_structure_type(data.source_value) &&
-           !is_array_type(data.source_value) && "Composite typed argument to "
-           "byte extract");
-
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
     if (!is_bv_type(source)) {
@@ -33,23 +31,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
   const constant_int2t &intref = to_constant_int2t(data.source_offset);
 
   unsigned width;
-  try {
-    width = data.source_value->type->get_width();
-  } catch (array_type2t::dyn_sized_array_excp *p) {
-    // Dynamically sized array. How to handle -- for now, assume that it's a
-    // byte array, and select the relevant portions out.
-    const array_type2t &arr_type = to_array_type(data.source_value->type);
-    assert(is_scalar_type(arr_type.subtype) && "Can't cope with dynamic "
-           "nonscalar arrays right now, sorry");
-
-    expr2tc src_offs = data.source_offset;
-    expr2tc expr = index2tc(arr_type.subtype, data.source_value, src_offs);
-
-    if (!is_number_type(arr_type.subtype))
-      expr = typecast2tc(get_uint8_type(), expr);
-
-    return convert_ast(expr);
-  }
+  width = data.source_value->type->get_width();
 
   uint64_t upper, lower;
   if (!data.big_endian) {
@@ -68,40 +50,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
                  "bitvector mode" << std::endl;
     abort();
   } else {
-    if (is_struct_type(data.source_value)) {
-      const struct_type2t &struct_type =to_struct_type(data.source_value->type);
-      unsigned i = 0, num_elems = struct_type.members.size();
-      const smt_ast *struct_elem[num_elems + 1], *struct_elem_inv[num_elems +1];
-
-      forall_types(it, struct_type.members) {
-        struct_elem[i] = tuple_project(source, convert_sort(*it), i);
-        i++;
-      }
-
-      for (unsigned k = 0; k < num_elems; k++)
-        struct_elem_inv[(num_elems - 1) - k] = struct_elem[k];
-
-      // Concat into one massive vector.
-      const smt_ast *args[2];
-      for (unsigned k = 0; k < num_elems; k++)
-      {
-        if (k == 1) {
-          args[0] = struct_elem_inv[k - 1];
-          args[1] = struct_elem_inv[k];
-          // FIXME: sorts
-          struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
-                                                   2);
-        } else if (k > 1) {
-          args[0] = struct_elem_inv[num_elems];
-          args[1] = struct_elem_inv[k];
-          // FIXME: sorts
-          struct_elem_inv[num_elems] = mk_func_app(NULL, SMT_FUNC_CONCAT, args,
-                                                   2);
-        }
-      }
-
-      source = struct_elem_inv[num_elems];
-    } else if (is_bv_type(data.source_value)) {
+    if (is_bv_type(data.source_value)) {
       ;
     } else if (is_fixedbv_type(data.source_value)) {
       ;
@@ -126,9 +75,8 @@ smt_convt::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
 
-  // op0 is the object to update
-  // op1 is the byte number
-  // op2 is the value to update with
+  assert(is_scalar_type(data.source_value) && "Byte update only works on "
+         "scalar variables now");
 
   if (!is_constant_int2t(data.source_offset)) {
     if (is_pointer_type(data.type)) {
@@ -137,10 +85,6 @@ smt_convt::convert_byte_update(const expr2tc &expr)
       const smt_sort *s = convert_sort(data.type);
       return mk_fresh(s, "updated_ptr");
     }
-
-    assert(!is_structure_type(data.source_value) &&
-           !is_array_type(data.source_value) && "Composite typed argument to "
-           "byte update");
 
     expr2tc source = data.source_value;
     unsigned int src_width = source->type->get_width();
@@ -170,12 +114,9 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(bitor2tc(offs->type, shl2, source));
   }
 
-  const constant_int2t &intref = to_constant_int2t(data.source_offset);
-
-  const smt_ast *tuple, *value;
+  const smt_ast *value;
   unsigned int width_op0, width_op2;
 
-  tuple = convert_ast(data.source_value);
   value = convert_ast(data.update_value);
 
   width_op2 = data.update_value->type->get_width();
@@ -186,26 +127,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     abort();
   }
 
-  if (is_struct_type(data.source_value)) {
-    const struct_type2t &struct_type = to_struct_type(data.source_value->type);
-    bool has_field = false;
-
-    // XXXjmorse, this isn't going to be the case if it's a with.
-
-    forall_types(it, struct_type.members) {
-      width_op0 = (*it)->get_width();
-
-      if (((*it)->type_id == data.update_value->type->type_id) &&
-          (width_op0 == width_op2))
-	has_field = true;
-    }
-
-    if (has_field)
-      return tuple_update(tuple, intref.constant_value.to_long(),
-                          data.update_value);
-    else
-      return tuple;
-  } else if (is_signedbv_type(data.source_value->type)) {
+  if (is_signedbv_type(data.source_value->type)) {
     width_op0 = data.source_value->type->get_width();
 
     if (width_op0 == 0) {
