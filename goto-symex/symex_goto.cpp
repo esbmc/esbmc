@@ -250,57 +250,50 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (it->base_name == guard_identifier_s)
       continue;  // just a guard
 
-    try
-    {
-      // changed!
-      const symbolt &symbol = ns.lookup(it->base_name);
+    // changed!
+    const symbolt &symbol = ns.lookup(it->base_name);
 
-      type2tc type;
-      typet old_type = symbol.type;
-      migrate_type(symbol.type, type);
+    type2tc type;
+    typet old_type = symbol.type;
+    migrate_type(symbol.type, type);
 
-      expr2tc rhs;
+    expr2tc rhs;
 
-      if (cur_state->guard.is_false()) {
-        rhs = symbol2tc(type, symbol.name);
-        cur_state->current_name(goto_state, rhs);
-      } else if (goto_state.guard.is_false())    {
-        rhs = symbol2tc(type, symbol.name);
-        cur_state->current_name(goto_state, rhs);
-      } else   {
-	guardt tmp_guard(goto_state.guard);
+    if (cur_state->guard.is_false()) {
+      rhs = symbol2tc(type, symbol.name);
+      cur_state->current_name(goto_state, rhs);
+    } else if (goto_state.guard.is_false())    {
+      rhs = symbol2tc(type, symbol.name);
+      cur_state->current_name(goto_state, rhs);
+    } else   {
+      guardt tmp_guard(goto_state.guard);
 
-	// this gets the diff between the guards
-	tmp_guard -= cur_state->guard;
+      // this gets the diff between the guards
+      tmp_guard -= cur_state->guard;
 
-	symbol2tc true_val(type, symbol.name);
-	symbol2tc false_val(type, symbol.name);
-        cur_state->current_name(goto_state, true_val);
-        cur_state->current_name(false_val);
-        rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
-      }
-
-      exprt tmp_lhs(symbol_expr(symbol));
-      expr2tc lhs;
-      migrate_expr(tmp_lhs, lhs);
-      expr2tc new_lhs = lhs;
-
-      cur_state->assignment(new_lhs, rhs, false);
-
-      guardt true_guard;
-
-      target->assignment(
-        true_guard.as_expr(),
-        new_lhs, lhs,
-        rhs,
-        cur_state->source,
-        cur_state->gen_stack_trace(),
-        symex_targett::HIDDEN);
+      symbol2tc true_val(type, symbol.name);
+      symbol2tc false_val(type, symbol.name);
+      cur_state->current_name(goto_state, true_val);
+      cur_state->current_name(false_val);
+      rhs = if2tc(type, tmp_guard.as_expr(), true_val, false_val);
     }
-    catch (const std::string e)
-    {
-      continue;
-    }
+
+    exprt tmp_lhs(symbol_expr(symbol));
+    expr2tc lhs;
+    migrate_expr(tmp_lhs, lhs);
+    expr2tc new_lhs = lhs;
+
+    cur_state->assignment(new_lhs, rhs, false);
+
+    guardt true_guard;
+
+    target->assignment(
+      true_guard.as_expr(),
+      new_lhs, lhs,
+      rhs,
+      cur_state->source,
+      cur_state->gen_stack_trace(),
+      symex_targett::HIDDEN);
   }
 }
 
