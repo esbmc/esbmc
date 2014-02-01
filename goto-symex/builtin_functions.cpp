@@ -6,6 +6,8 @@ Author: Daniel Kroening, kroening@kroening.com
 
 \*******************************************************************/
 
+#include <sstream>
+
 #include <irep2.h>
 #include <migrate.h>
 
@@ -24,13 +26,14 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
-void goto_symext::symex_malloc(
+expr2tc
+goto_symext::symex_malloc(
   const expr2tc &lhs,
   const sideeffect2t &code)
 {
 
   if (is_nil_expr(lhs))
-    return; // ignore
+    return expr2tc(); // ignore
 
   // size
   type2tc type = code.alloctype;
@@ -119,17 +122,60 @@ void goto_symext::symex_malloc(
   guardt guard;
   symex_assign_rec(lhs, rhs, guard);
 
+  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
+  track_new_pointer(ptr_obj, new_type);
+
+  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+
+  return rhs_addrof->ptr_obj;
+}
+
+void
+goto_symext::track_new_pointer(const expr2tc &ptr_obj, const type2tc &new_type,
+                               expr2tc size)
+{
+  guardt guard;
+
+  // Also update all the accounting data.
+
   // Mark that object as being dynamic, in the __ESBMC_is_dynamic array
   type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
                                               expr2tc(), true));
-  symbol2tc sym(sym_type, "c::__ESBMC_is_dynamic");
+  symbol2tc sym(sym_type, dyn_info_arr_name);
 
-  pointer_object2tc ptr_obj(int_type2(), ptr_rhs);
   index2tc idx(get_bool_type(), sym, ptr_obj);
   expr2tc truth = true_expr;
   symex_assign_rec(idx, truth, guard);
 
-  dynamic_memory.push_back(allocated_obj(rhs_copy, cur_state->guard));
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  truth = true_expr;
+  symex_assign_rec(valid_index_expr, truth, guard);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc falseity = false_expr;
+  symex_assign_rec(dealloc_index_expr, falseity, guard);
+
+  type2tc sz_sym_type = type2tc(new array_type2t(uint_type2(), expr2tc(),true));
+  symbol2tc sz_sym(sz_sym_type, alloc_size_arr_name);
+  index2tc sz_index_expr(get_bool_type(), sz_sym, ptr_obj);
+
+  expr2tc object_size_exp;
+  if (is_nil_expr(size)) {
+    try {
+      mp_integer object_size = type_byte_size(*new_type);
+      object_size_exp = gen_uint(object_size.to_ulong());
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      object_size_exp = e->size;
+    }
+  } else {
+    object_size_exp = size;
+  }
+
+  symex_assign_rec(sz_index_expr, object_size_exp, guard);
+
+  return;
 }
 
 void goto_symext::symex_free(const expr2tc &expr)
@@ -142,9 +188,25 @@ void goto_symext::symex_free(const expr2tc &expr)
   dereference(tmp, false, true);
 
   address_of2tc addrof(code.operand->type, tmp);
-  pointer_offset2tc ptr_obj(uint_type2(), addrof);
-  equality2tc eq(ptr_obj, zero_uint);
+  pointer_offset2tc ptr_offs(uint_type2(), addrof);
+  equality2tc eq(ptr_offs, zero_uint);
   claim(eq, "Operand of free must have zero pointer offset");
+
+  // Clear the alloc bit, and set the deallocated bit.
+  guardt guard;
+  type2tc sym_type = type2tc(new array_type2t(get_bool_type(),
+                                              expr2tc(), true));
+  pointer_object2tc ptr_obj(uint_type2(), code.operand);
+
+  symbol2tc dealloc_sym(sym_type, deallocd_arr_name);
+  index2tc dealloc_index_expr(get_bool_type(), dealloc_sym, ptr_obj);
+  expr2tc truth = true_expr;
+  symex_assign_rec(dealloc_index_expr, truth, guard);
+
+  symbol2tc valid_sym(sym_type, valid_ptr_arr_name);
+  index2tc valid_index_expr(get_bool_type(), valid_sym, ptr_obj);
+  expr2tc falsity = false_expr;
+  symex_assign_rec(valid_index_expr, falsity, guard);
 }
 
 void goto_symext::symex_printf(
@@ -258,6 +320,79 @@ void goto_symext::symex_cpp_new(
 void goto_symext::symex_cpp_delete(const expr2tc &code __attribute__((unused)))
 {
   //bool do_array=code.statement()=="delete[]";
+}
+
+void
+goto_symext::intrinsic_realloc(const code_function_call2t &call,
+                               reachability_treet &arg __attribute__((unused)))
+{
+  assert(call.operands.size() == 2);
+  expr2tc src_ptr = call.operands[0];
+  expr2tc realloc_size = call.operands[1];
+
+  internal_deref_items.clear();
+  dereference2tc deref(get_empty_type(), src_ptr);
+  dereference(deref, false, false, true);
+  // src_ptr is now invalidated.
+
+  // Free the given pointer. This just uses the pointer object from the pointer
+  // variable that's the argument to realloc. It also leads to pointer validity
+  // checking, and checks that the offset is zero.
+  code_free2tc fr(call.operands[0]);
+  symex_free(fr);
+
+  // We now have a list of things to work on. Recurse into them, build a result,
+  // and then switch between those results afterwards.
+  // Result list is the address of the reallocated piece of data, and the guard.
+  std::list<std::pair<expr2tc,expr2tc> > result_list;
+  for (auto &item : internal_deref_items) {
+    expr2tc guard = item.guard;
+    cur_state->rename_address(item.object);
+    cur_state->guard.guard_expr(guard);
+    target->renumber(guard, item.object, realloc_size, cur_state->source);
+    type2tc new_ptr = type2tc(new pointer_type2t(item.object->type));
+    address_of2tc addrof(new_ptr, item.object);
+    result_list.push_back(std::pair<expr2tc,expr2tc>(addrof, item.guard));
+
+    // Bump the realloc-numbering of the object. This ensures that, after
+    // renaming, the address_of we just generated compares differently to
+    // previous address_of's before the realloc.
+    unsigned int cur_num = 0;
+    if (cur_state->realloc_map.find(item.object) !=
+        cur_state->realloc_map.end()) {
+      cur_num = cur_state->realloc_map[item.object];
+    }
+
+    cur_num++;
+    std::map<expr2tc, unsigned>::value_type v(item.object, cur_num);
+    cur_state->realloc_map.insert(v);
+  }
+
+  // Rebuild a gigantic if-then-else chain from the result list.
+  expr2tc result;
+  if (result_list.size() == 0) {
+    // Nothing happened; there was nothing, or only null, to point at.
+    // In this case, just return right now and leave the pointer free. The
+    // symex_free that occurred above should trigger a dereference failure.
+    return;
+  } else {
+    result = expr2tc();
+    for (auto it = result_list.begin(); it != result_list.end(); it++) {
+      if (is_nil_expr(result))
+        result = it->first;
+      else
+        result = if2tc(result->type, it->second, it->first, result);
+    }
+  }
+
+  // Install pointer modelling data into the relevant arrays.
+  pointer_object2tc ptr_obj(int_type2(), result);
+  track_new_pointer(ptr_obj, type2tc(), realloc_size);
+
+  // Assign the result to the left hand side.
+  code_assign2tc eq(call.ret, result);
+  symex_assign(eq);
+  return;
 }
 
 void

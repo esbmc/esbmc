@@ -267,6 +267,22 @@ Function: goto_checkt::bounds_check
 
 \*******************************************************************/
 
+static bool
+has_dereference(const exprt &expr)
+{
+  if (expr.id() == "dereference")
+    return true;
+  else if (expr.id() == "index" && expr.op0().type().id() == "pointer")
+    // This is an index of a pointer, which is a dereference
+    return true;
+  else if (expr.operands().size() > 0 && expr.op0().is_not_nil())
+    // Recurse through all subsequent source objects, which are always operand
+    // zero.
+    return has_dereference(expr.op0());
+  else
+    return false;
+}
+
 void goto_checkt::bounds_check(
   const exprt &expr,
   const guardt &guard)
@@ -301,6 +317,12 @@ void goto_checkt::bounds_check(
   }
   else if(!array_type.is_array())
     throw "bounds check expected array type, got "+array_type.id_string();
+
+  // Otherwise, if there's a dereference in the array source, this bounds check
+  // should be performed by the symex-time dereferencing code, as the base thing
+  // being accessed may be anything.
+  if (has_dereference(expr.op0()))
+    return;
 
   std::string name=array_name(expr.op0());
 

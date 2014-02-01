@@ -51,6 +51,8 @@ protected:
     const symbolt *&symbol);
 
   virtual void rename(expr2tc &expr);
+
+  virtual void dump_internal_state(const std::list<struct internal_item> &data);
 };
 
 void symex_dereference_statet::dereference_failure(
@@ -102,7 +104,18 @@ void symex_dereference_statet::rename(expr2tc &expr)
   return;
 }
 
-void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
+void
+symex_dereference_statet::dump_internal_state(
+                      const std::list<struct internal_item> &data)
+{
+  goto_symex.internal_deref_items.insert(
+                          goto_symex.internal_deref_items.begin(),
+                          data.begin(), data.end());
+  return;
+}
+
+void goto_symext::dereference(expr2tc &expr, const bool write, bool free,
+                              bool internal)
 {
 
   symex_dereference_statet symex_dereference_state(*this, *cur_state);
@@ -118,7 +131,9 @@ void goto_symext::dereference(expr2tc &expr, const bool write, bool free)
   cur_state->top().level1.rename(expr);
 
   guardt guard;
-  if (free) {
+  if (internal) {
+    dereference.dereference_expr(expr, guard, dereferencet::INTERNAL);
+  } else if (free) {
     expr2tc tmp = expr;
     while (is_typecast2t(tmp))
       tmp = to_typecast2t(tmp).from;

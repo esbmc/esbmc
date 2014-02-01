@@ -59,7 +59,7 @@ class c2goto_parseopt : public parseoptions_baset, public language_uit
     return 0;
   }
 
-  int doit_k_induction(){};
+  int doit_k_induction(){ return 0; };
 };
 
 int main(int argc, const char **argv)

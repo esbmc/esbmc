@@ -147,6 +147,7 @@ static const char *cpp_normal_defs[] = {
 "__VERIFIER_assume=__ESBMC_assume",
 "__VERIFIER_atomic_begin=__ESBMC_atomic_begin",
 "__VERIFIER_atomic_end=__ESBMC_atomic_end",
+"realloc=__ESBMC_realloc",
 NULL
 };
 

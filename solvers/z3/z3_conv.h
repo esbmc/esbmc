@@ -181,11 +181,14 @@ public:
   std::list<z3::expr> assumpt;
   std::list<std::list<z3::expr>::iterator> assumpt_ctx_stack;
 
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, z3::expr> renumber_mapt;
+  renumber_mapt renumber_map;
+
   // Array of obj ID -> address range tuples
   z3::sort addr_space_tuple_sort;
   z3::sort addr_space_arr_sort;
   z3::func_decl addr_space_tuple_decl;
-  std::list<unsigned long> total_mem_space;
 
   // Debug map, for naming pieces of AST and auto-numbering them
   std::map<std::string, unsigned> debug_label_map;

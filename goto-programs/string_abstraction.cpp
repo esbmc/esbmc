@@ -180,7 +180,7 @@ protected:
   // the calling function.
   unsigned int func_return_num;
   
-  void abstract(irep_idt name, goto_function_templatet<goto_programt> &dest);
+  void abstract(irep_idt name, goto_functiont &dest);
 };
 
 /*******************************************************************\
@@ -251,8 +251,7 @@ Function: string_abstractiont::abstract
 
 \*******************************************************************/
 
-void string_abstractiont::abstract(irep_idt name,
-                                   goto_function_templatet<goto_programt> &dest)
+void string_abstractiont::abstract(irep_idt name, goto_functiont &dest)
 {
   locals.clear();
   func_return_num = 0;

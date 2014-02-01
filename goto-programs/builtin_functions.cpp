@@ -9,7 +9,6 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <assert.h>
 
 #include <i2string.h>
-#include <replace_expr.h>
 #include <expr_util.h>
 #include <location.h>
 #include <cprover_prefix.h>
@@ -18,6 +17,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <simplify_expr.h>
 #include <std_code.h>
 #include <std_expr.h>
+#include <type_byte_size.h>
 
 #include <ansi-c/c_types.h>
 
@@ -284,64 +284,6 @@ void goto_convertt::do_malloc(
   t_n->code = new_assign_expr;
   t_n->location=location;
 
-  exprt lhs_pointer=lhs;
-  if(lhs_pointer.type().id()!="pointer")
-    lhs_pointer.make_typecast(pointer_typet(empty_typet()));
-
-  // set up some expressions
-  exprt valid_expr("valid_object", typet("bool"));
-  valid_expr.copy_to_operands(lhs_pointer);
-  valid_expr.location()=location;
-  exprt neg_valid_expr=gen_not(valid_expr);
-
-  //tse paper
-#if TSE_PAPER
-  exprt deallocated_expr("deallocated_object", typet("bool"));
-  deallocated_expr.copy_to_operands(lhs_pointer);
-  deallocated_expr.location()=location;
-  exprt neg_deallocated_expr=gen_not(deallocated_expr);
-#endif
-
-  exprt pointer_offset_expr("pointer_offset", pointer_type());
-  pointer_offset_expr.location()=location;
-  pointer_offset_expr.copy_to_operands(lhs_pointer);
-
-  equality_exprt offset_is_zero_expr(
-    pointer_offset_expr, gen_zero(pointer_type()));
-
-  // first assume that it's available and that it's a dynamic object
-  goto_programt::targett t_a=dest.add_instruction(ASSUME);
-
-  expr2tc new_offs_is_zero;
-  migrate_expr(offset_is_zero_expr, new_offs_is_zero);
-  t_a->guard = new_offs_is_zero;
-
-  // set size
-  //nec: ex37.c
-  exprt dynamic_size("dynamic_size", int_type()/*uint_type()*/);
-  dynamic_size.copy_to_operands(lhs_pointer);
-  dynamic_size.location()=location;
-  goto_programt::targett t_s_s=dest.add_instruction(ASSIGN);
-
-  exprt assign_expr = code_assignt(dynamic_size, alloc_size);
-  migrate_expr(assign_expr, t_s_s->code);
-  t_s_s->location=location;
-
-  // now set alloc bit
-  goto_programt::targett t_s_a=dest.add_instruction(ASSIGN);
-  assign_expr = code_assignt(valid_expr, true_exprt());
-  migrate_expr(assign_expr, t_s_a->code);
-  t_s_a->location=location;
-
-  //tse paper
-#if TSE_PAPER
-  //now set deallocated bit
-  goto_programt::targett t_d_i=dest.add_instruction(ASSIGN);
-  assign_expr = code_assignt(deallocated_expr, false_exprt());
-  migrate_expr(assign_expr, t_d_i->code);
-  t_d_i->location=location;
-#endif
-  
   //the k-induction does not support dynamic memory allocation yet
   if (inductive_step)
   {
@@ -386,6 +328,17 @@ void goto_convertt::do_cpp_new(
       alloc_size.make_typecast(uint_type());
 
     remove_sideeffects(alloc_size, dest);
+
+    // jmorse: multiply alloc size by size of subtype.
+    type2tc subtype;
+    expr2tc alloc_units;
+    migrate_expr(alloc_size, alloc_units);
+    migrate_type(rhs.type(), subtype);
+    mp_integer sz = type_byte_size(*subtype);
+    constant_int2tc sz_expr(uint_type2(), sz);
+    mul2tc byte_size(uint_type2(), alloc_units, sz_expr);
+    alloc_size = migrate_expr_back(byte_size);
+
     const_cast<irept&>(rhs.size_irep()) = alloc_size;
   }
   else
@@ -651,32 +604,6 @@ void goto_convertt::do_free(
   goto_programt::targett t_f=dest.add_instruction(OTHER);
   migrate_expr(free_statement, t_f->code);
   t_f->location=function.location();
-
-  exprt valid_expr("valid_object", bool_typet());
-  valid_expr.copy_to_operands(arguments[0]);
-
-  //tse paper
-#if TSE_PAPER
-  exprt deallocated_expr("deallocated_object", bool_typet());
-  deallocated_expr.copy_to_operands(arguments[0]);
-#endif
-
-  // clear alloc bit
-
-  goto_programt::targett t_c=dest.add_instruction(ASSIGN);
-  exprt assign = code_assignt(valid_expr, false_exprt());
-  migrate_expr(assign, t_c->code);
-  t_c->location=function.location();
-
-  //tse paper
-#if TSE_PAPER
-  //indicate that memory has been deallocated
-
-  goto_programt::targett t_d=dest.add_instruction(ASSIGN);
-  assign = code_assignt(deallocated_expr, true_exprt());
-  migrate_expr(assign, t_d->code);
-  t_d->location=function.location();
-#endif
 }
 
 /*******************************************************************\

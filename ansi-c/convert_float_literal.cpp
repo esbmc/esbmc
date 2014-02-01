@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include <arith_tools.h>
 #include <config.h>
-#include <ieee_float.h>
 #include <std_types.h>
 
 #include "c_types.h"
@@ -78,11 +77,7 @@ void convert_float_literal(
   }
   else
   {
-    ieee_floatt a;
-
-    a.spec=to_floatbv_type(dest.type());
-    a.from_base10(significand, exponent);
-
-    dest.value(integer2binary(a.pack(), a.spec.width()));
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
   }
 }

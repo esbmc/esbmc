@@ -29,7 +29,7 @@ class crypto_hash {
   std::string to_string() const;
 
   crypto_hash();
-  void ingest(const void *data, unsigned int size);
+  void ingest(void const *data, unsigned int size);
   void fin();
 
   protected:

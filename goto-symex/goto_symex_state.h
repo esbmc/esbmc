@@ -124,7 +124,7 @@ public:
 
     goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
     {
-      assert(0);
+      abort();
     }
 
   public:
@@ -299,6 +299,7 @@ public:
    */
   inline void
   pop_frame() {
+    assert(call_stack.back().goto_state_map.size() == 0);
     call_stack.pop_back();
   }
 
@@ -447,6 +448,11 @@ public:
 
   /** Namespace to work with. */
   const namespacet &ns;
+
+  /** Map of what pointer values have been realloc'd, and what their new
+   *  realloc number is. No need for special consideration when merging states
+   *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
+  std::map<expr2tc, unsigned> realloc_map;
 };
 
 #endif

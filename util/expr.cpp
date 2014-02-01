@@ -11,7 +11,6 @@ Author: Daniel Kroening, kroening@kroening.com
 
 #include "mp_arith.h"
 #include "fixedbv.h"
-#include "ieee_float.h"
 #include "expr.h"
 
 /*******************************************************************\
@@ -426,7 +425,8 @@ bool exprt::is_zero() const
     }
     else if(type_id=="floatbv")
     {
-      if(ieee_floatt(*this)==0) return true;
+      std::cerr << "floatbv unsupported, sorry" << std::endl;
+      abort();
     }
     else if(type_id=="pointer")
     {
@@ -473,8 +473,8 @@ bool exprt::is_one() const
     }
     else if(type_id=="floatbv")
     {
-      if(ieee_floatt(*this)==1)
-        return true;
+      std::cerr << "floatbv unsupported, sorry" << std::endl;
+      abort();
     }
   }
 
@@ -525,10 +525,8 @@ bool exprt::sum(const exprt &expr)
   }
   else if(type_id=="floatbv")
   {
-    ieee_floatt f(*this);
-    f+=ieee_floatt(expr);
-    *this=f.to_expr();
-    return false;
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
   }
 
   return true;
@@ -577,10 +575,8 @@ bool exprt::mul(const exprt &expr)
   }
   else if(type_id=="floatbv")
   {
-    ieee_floatt f(*this);
-    f*=ieee_floatt(expr);
-    *this=f.to_expr();
-    return false;
+    std::cerr << "floatbv unsupported, sorry" << std::endl;
+    abort();
   }
 
   return true;

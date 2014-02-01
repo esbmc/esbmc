@@ -45,12 +45,6 @@ get_arr_type(const expr2tc &expr)
     : to_array_type(to_constant_string2t(expr).to_array()->type);
 }
 
-static inline const type2tc
-get_arr_subtype(const expr2tc &expr)
-{
-  return get_arr_type(expr).subtype;
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -282,7 +276,9 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       output = typecast2tc(expr->type, output);
       expr = output;
     } else {
-      return; // Doesn't contain a deref?
+      // It's not something that we can simplify from &foo->bar[baz] to not have
+      // a dereference, but might still contain a dereference.
+      dereference_expr(addrof.ptr_obj, guard, mode);
     }
   }
 
@@ -361,8 +357,8 @@ dereferencet::dereference_expr_nonscalar(
     index2t &index = to_index2t(expr);
 
     // first make sure there are no dereferences in there
-    dereference_expr(index.source_value, guard, mode);
-    dereference_expr(index.index, guard, mode);
+    dereference_expr(index.source_value, guard, dereferencet::READ);
+    dereference_expr(index.index, guard, dereferencet::READ);
 
     add2tc tmp(index.source_value->type, index.source_value, index.index);
     expr2tc result = dereference(tmp, type2tc(), guard, mode,
@@ -378,7 +374,7 @@ dereferencet::dereference_expr_nonscalar(
                                         mode, scalar_step_list);
       scalar_step_list.pop_front();
     } else if (is_index2t(expr)) {
-      dereference_expr(to_index2t(expr).index, guard, mode);
+      dereference_expr(to_index2t(expr).index, guard, dereferencet::READ);
       scalar_step_list.push_front(expr);
       res = dereference_expr_nonscalar(to_index2t(expr).source_value, guard,
                                        mode, scalar_step_list);
@@ -398,6 +394,11 @@ dereferencet::dereference_expr_nonscalar(
       expr2tc res2 = dereference_expr_nonscalar(theif.false_value, g2, mode,
                                                 scalar_step_list);
       scalar_step_list.pop_front();
+
+      if (is_nil_expr(res1))
+        res1 = theif.true_value;
+      if (is_nil_expr(res2))
+        res2 = theif.true_value;
 
       if2tc fin(res1->type, theif.cond, res1, res2);
       res = fin;
@@ -439,6 +440,7 @@ dereferencet::dereference(
   std::list<expr2tc> *scalar_step_list)
 {
   assert(is_pointer_type(src));
+  internal_items.clear();
 
   // Target type is either a scalar type passed down to us, or we have a chain
   // of scalar steps available that end up at a scalar type. The result of this
@@ -477,12 +479,16 @@ dereferencet::dereference(
     }
   }
 
-  if (is_nil_expr(value))
+  if (is_nil_expr(value) && mode != INTERNAL)
   {
     // Dereference failed entirely; various assertions will explode later down
     // the line. To make this a valid formula though, return a failed symbol,
     // so that this assignment gets a well typed free value.
     value = make_failed_symbol(type);
+  } else if (mode == INTERNAL) {
+    // Deposit internal values with the caller, then clear.
+    dereference_callback.dump_internal_state(internal_items);
+    internal_items.clear();
   }
 
   return value;
@@ -580,6 +586,7 @@ dereferencet::build_reference_to(
     guardt tmp_guard(guard);
     tmp_guard.move(invalid_pointer_expr);
     dereference_failure("pointer dereference", "invalid pointer", tmp_guard);
+
     return value;
   }
 
@@ -644,11 +651,30 @@ dereferencet::build_reference_to(
   // emits objects with some cruft built on top of them.
   value = get_base_object(value);
 
-  // If offset is unknown, or whatever, instead compute the pointer offset
-  // manually.
+  // If offset is unknown, or whatever, instead we have to consider it
+  // nondeterministic, and let the reference builders deal with it. The exact
+  // offset is the offset in the base pointer, plus any additional offset
+  // introduced by the dereferencing expression.
   if (!is_constant_int2t(final_offset)) {
-    final_offset = pointer_offset2tc(index_type2(), deref_expr);
     assert(o.alignment != 0);
+    final_offset = pointer_offset2tc(index_type2(), deref_expr);
+
+    if (scalar_step_list && scalar_step_list->size()) {
+      expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
+      final_offset = add2tc(final_offset->type, final_offset, extra_offs);
+    }
+  }
+
+  // If we're in internal mode, collect all of our data into one struct, insert
+  // it into the list of internal data, and then bail. The caller does not want
+  // to have a reference built at all.
+  if (mode == INTERNAL) {
+    dereference_callbackt::internal_item internal;
+    internal.object = value;
+    internal.offset = final_offset;
+    internal.guard = pointer_guard;
+    internal_items.push_back(internal);
+    return expr2tc();
   }
 
   // Encode some access bounds checks.
@@ -694,7 +720,7 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
           (!is_array_type(base_type_of_steps) ||
-           !to_array_type(base_type_of_steps).subtype->get_width() != 8)) {
+           !(to_array_type(base_type_of_steps).subtype->get_width() != 8))) {
         // Right, we're going to be accessing a byte array as not-a-byte-array.
         // Switch this access together.
         expr2tc offset_the_third =
@@ -857,7 +883,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
                       tmp_guard);
 
     // This will construct from whatever the subtype is...
-    stitch_together_from_byte_array(value, type, mod2);
+    stitch_together_from_byte_array(value, type, div2);
   }
 
   return;
@@ -1211,7 +1237,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       if (!is_scalar_type(*it) &&
             intref.constant_value >= offs &&
-            intref.constant_value <= (offs + size)) {
+            intref.constant_value < (offs + size)) {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
         mp_integer new_offs = intref.constant_value - offs;
@@ -1328,7 +1354,9 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
     expr2tc gte = greaterthanequal2tc(offs, zero_uint);
-    expr2tc lt = lessthan2tc(offs, arr_type.array_size);
+    expr2tc arr_size_in_bytes =
+      mul2tc(sub_size->type, arr_type.array_size, sub_size);
+    expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
     construct_struct_ref_from_dyn_offs_rec(index, new_offset, type, range_guard,
@@ -1371,6 +1399,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
 
       construct_struct_ref_from_dyn_offs_rec(memb, new_offset, type,
                                              range_guard, output);
+      i++;
     }
   } else {
     // Not legal
@@ -1422,7 +1451,8 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
       accuml = elem;
     } else {
       // XXX -- byte order.
-      type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
+      type2tc res_type =
+        get_uint_type(accuml->type->get_width() + (subtype_sz * 8));
       accuml = concat2tc(res_type, accuml, elem);
     }
 
@@ -1505,34 +1535,49 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
 
   assert(is_array_type(expr) || is_string_type(expr));
 
-  // Dance around getting the array type normalised.
-  type2tc new_string_type;
-  const array_type2t arr_type = get_arr_type(expr);
+  expr2tc arrsize;
+  const symbolt &sym = ns.lookup(to_symbol2t(expr).thename);
+  if (has_prefix(sym.name.as_string(), "symex_dynamic::")) {
+    // Construct a dynamic_size irep.
+    address_of2tc addrof(expr->type, expr);
+    arrsize = dynamic_size2tc(addrof);
+  } else {
+    // Calculate size from type.
 
-  // XXX --  arrays were assigned names, but we're skipping that for the moment
-  // std::string name = array_name(ns, expr.source_value);
+    // Dance around getting the array type normalised.
+    type2tc new_string_type;
+    const array_type2t arr_type = get_arr_type(expr);
 
-  // Firstly, bail if this is an infinite sized array. There are no bounds
-  // checks to be performed.
-  if (arr_type.size_is_infinite)
-    return;
+    // XXX -- arrays were assigned names, but we're skipping that for the moment
+    // std::string name = array_name(ns, expr.source_value);
 
-  // Secondly, try to calc the size of the array.
-  unsigned long subtype_size_int = type_byte_size(*arr_type.subtype).to_ulong();
-  constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
-  mul2tc arrsize(get_uint32_type(), arr_type.array_size, subtype_size);
+    // Firstly, bail if this is an infinite sized array. There are no bounds
+    // checks to be performed.
+    if (arr_type.size_is_infinite)
+      return;
+
+    // Secondly, try to calc the size of the array.
+    unsigned long subtype_size_int
+      = type_byte_size(*arr_type.subtype).to_ulong();
+    constant_int2tc subtype_size(get_uint32_type(), BigInt(subtype_size_int));
+    arrsize = mul2tc(get_uint32_type(), arr_type.array_size, subtype_size);
+  }
+
+  typecast2tc unsigned_offset(get_uint32_type(), offset);
 
   // Then, expressions as to whether the access is over or under the array
   // size.
   constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
-  add2tc upper_byte(get_uint32_type(), offset, access_size_e);
+  add2tc upper_byte(get_uint32_type(), unsigned_offset, access_size_e);
 
-  greaterthan2tc gt(upper_byte, arrsize);
+  greaterthan2tc gt(unsigned_offset, arrsize);
+  greaterthan2tc gt2(upper_byte, arrsize);
+  or2tc is_in_bounds(gt, gt2);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  tmp_guard1.move(gt);
+  tmp_guard1.move(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 

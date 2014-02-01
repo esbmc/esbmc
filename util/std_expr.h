@@ -858,32 +858,6 @@ inline member_exprt &to_member_expr(exprt &expr)
   return static_cast<member_exprt &>(expr);
 }
 
-class isnan_exprt:public predicate_exprt
-{
-public:
-  explicit isnan_exprt(const exprt &op):predicate_exprt(exprt::isnan, op)
-  {
-  }
-
-  isnan_exprt():predicate_exprt(exprt::isnan)
-  {
-    operands().resize(1);
-  }
-};
-
-class ieee_float_equal_exprt:public binary_relation_exprt
-{
-public:
-  ieee_float_equal_exprt():binary_relation_exprt(exprt::ieee_floateq)
-  {
-  }
-
-  ieee_float_equal_exprt(const exprt &_lhs, const exprt &_rhs):
-    binary_relation_exprt(_lhs, exprt::ieee_floateq, _rhs)
-  {
-  }
-};
-
 class type_exprt:public exprt
 {
 public:

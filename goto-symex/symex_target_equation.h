@@ -77,6 +77,12 @@ public:
     std::vector<dstring> stack_trace,
     const sourcet &source);
 
+  virtual void renumber(
+    const expr2tc &guard,
+    const expr2tc &symbol,
+    const expr2tc &size,
+    const sourcet &source);
+
   virtual void convert(smt_convt &smt_conv);
   void convert_internal_step(smt_convt &smt_conv, const smt_ast *&assumpt_ast,
                              smt_convt::ast_vec &assertions, SSA_stept &s);
@@ -97,6 +103,7 @@ public:
     bool is_assume() const     { return type==goto_trace_stept::ASSUME; }
     bool is_assignment() const { return type==goto_trace_stept::ASSIGNMENT; }
     bool is_output() const     { return type==goto_trace_stept::OUTPUT; }
+    bool is_renumber() const   { return type==goto_trace_stept::RENUMBER; }
     
     expr2tc guard;
 

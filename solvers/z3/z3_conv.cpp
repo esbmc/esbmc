@@ -19,7 +19,6 @@
 #include <expr_util.h>
 #include <string2array.h>
 #include <type_byte_size.h>
-#include <find_symbols.h>
 #include <prefix.h>
 #include <fixedbv.h>
 #include <base_type.h>
@@ -68,7 +67,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   solver = z3::solver(ctx);
 
   setup_pointer_sort();
-  total_mem_space.push_back(0);
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
@@ -108,7 +106,9 @@ z3_convt::intr_push_ctx(void)
 {
 
   // Also push/duplicate pointer logic state.
-  total_mem_space.push_back(total_mem_space.back());
+  pointer_logic.push_back(pointer_logic.back());
+  addr_space_sym_num.push_back(addr_space_sym_num.back());
+  addr_space_data.push_back(addr_space_data.back());
 
   // Store where we are in the list of assumpts.
   std::list<z3::expr>::iterator it = assumpt.end();
@@ -125,8 +125,6 @@ z3_convt::intr_pop_ctx(void)
   ++it;
   assumpt.erase(it, assumpt.end());
   assumpt_ctx_stack.pop_back();
-
-  total_mem_space.pop_back();
 }
 
 void
@@ -1154,7 +1152,7 @@ namespace z3 {
 //
 // So, don't distribute this.
 #ifdef NDEBUG
-#error Don't distribute/release shadily licensed MS workaround code. And don't delete this error without asking jmorse.
+
 #endif
 
 Z3_ast

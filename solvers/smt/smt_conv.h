@@ -295,6 +295,10 @@ public:
 
   // Internal foo
 
+  void renumber_symbol_address(const expr2tc &guard,
+                               const expr2tc &addr_symbol,
+                               const expr2tc &new_size);
+
   smt_sort *convert_sort(const type2tc &type);
   smt_ast *convert_terminal(const expr2tc &expr);
   const smt_ast *convert_ast(const expr2tc &expr);
@@ -305,6 +309,7 @@ public:
   const smt_ast *convert_member(const expr2tc &expr, const smt_ast *src);
   const smt_ast *convert_identifier_pointer(const expr2tc &expr,
                                             std::string sym);
+  smt_ast *init_pointer_obj(unsigned int obj_num, const expr2tc &size);
   const smt_ast *convert_sign_ext(const smt_ast *a, const smt_sort *s,
                                   unsigned int topbit, unsigned int topwidth);
   const smt_ast *convert_zero_ext(const smt_ast *a, const smt_sort *s,
@@ -483,6 +488,10 @@ public:
   const struct_type2t *addr_space_type_data;
   type2tc addr_space_arr_type;
   std::list<std::map<unsigned, unsigned> > addr_space_data;
+
+  // XXX - push-pop will break here.
+  typedef std::map<std::string, smt_ast *> renumber_mapt;
+  renumber_mapt renumber_map;
 
   static const expr_op_convert smt_convert_table[expr2t::end_expr_id];
   static const std::string smt_func_name_table[expr2t::end_expr_id];

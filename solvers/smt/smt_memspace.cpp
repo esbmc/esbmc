@@ -170,6 +170,42 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
   abort();
 }
 
+void
+smt_convt::renumber_symbol_address(const expr2tc &guard,
+    const expr2tc &addr_symbol, const expr2tc &new_size)
+{
+  const symbol2t &sym = to_symbol2t(addr_symbol);
+  std::string str = sym.get_symbol_name();
+
+  // Two different approaches if we do or don't have an address-of pointer
+  // variable already.
+
+  renumber_mapt::iterator it = renumber_map.find(str);
+  if (it != renumber_map.end()) {
+    // There's already an address-of variable for this pointer. Set up a new
+    // object number, and nondeterministically pick the new value.
+
+    unsigned int new_obj_num = pointer_logic.back().get_free_obj_num();
+    smt_ast *output = init_pointer_obj(new_obj_num, new_size);
+
+    // Now merge with the old value for all future address-of's
+
+    const smt_ast *args[3];
+    args[0] = convert_ast(guard);
+    args[1] = output;
+    args[2] = it->second;
+    it->second = mk_func_app(output->sort, SMT_FUNC_ITE, args, 3);
+  } else {
+    // Newly bumped pointer. Still needs a new number though.
+    unsigned int obj_num = pointer_logic.back().get_free_obj_num();
+    smt_ast *output = init_pointer_obj(obj_num, new_size);
+
+    // Store in renumbered store.
+    renumber_mapt::value_type v(str, output);
+    renumber_map.insert(v);
+  }
+}
+
 const smt_ast *
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
@@ -177,7 +213,6 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   const smt_sort *s;
   std::string cte, identifier;
   unsigned int obj_num;
-  bool got_obj_num = false;
 
   if (!ptr_foo_inited) {
     std::cerr << "SMT solver must call smt_post_init immediately after "
@@ -188,15 +223,27 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   if (is_symbol2t(expr)) {
     const symbol2t &sym = to_symbol2t(expr);
     if (sym.thename == "NULL" || sym.thename == "0") {
+      // For null, other pieces of code will have already initialized its
+      // value, so we can just refer to a symbol.
       obj_num = pointer_logic.back().get_null_object();
-      got_obj_num = true;
+
+      if (!tuple_support) {
+        type2tc t(new pointer_type2t(get_empty_type()));
+        symbol2tc sym(t, symbol);
+        a = mk_tuple_symbol(sym);
+      } else {
+        s = convert_sort(pointer_struct);
+        a = mk_smt_symbol(symbol, s);
+      }
+
+      return a;
     }
   }
 
-  if (!got_obj_num)
-    // add object won't duplicate objs for identical exprs (it's a map)
-    obj_num = pointer_logic.back().add_object(expr);
+  // add object won't duplicate objs for identical exprs (it's a map)
+  obj_num = pointer_logic.back().add_object(expr);
 
+  // Produce a symbol representing this.
   s = convert_sort(pointer_struct);
   if (!tuple_support) {
     type2tc t(new pointer_type2t(get_empty_type()));
@@ -210,13 +257,41 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   // assert that the symbol has the object ID we've allocated, and then fill out
   // the address space record.
   if (addr_space_data.back().find(obj_num) == addr_space_data.back().end()) {
+    // Fetch a size.
+    type2tc ptr_loc_type(new unsignedbv_type2t(config.ansi_c.int_width));
+    expr2tc size;
+    try {
+      uint64_t type_size = expr->type->get_width() / 8;
+      size = constant_int2tc(ptr_loc_type, BigInt(type_size));
+    } catch (array_type2t::dyn_sized_array_excp *e) {
+      size = e->size;
+    } catch (type2t::symbolic_type_excp *e) {
+      // Type is empty or code -- something that we can never have a real size
+      // for. In that case, create an object of size 1: this means we have a
+      // valid entry in the address map, but that any modification of the
+      // pointer leads to invalidness, because there's no size to think about.
+      size = constant_int2tc(ptr_loc_type, BigInt(1));
+    }
 
+    smt_ast *output = init_pointer_obj(obj_num, size);
+    const smt_ast *args[2];
+    args[0] = a;
+    args[1] = output;
+    smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
+    assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
+  }
+
+  return a;
+}
+
+smt_ast *
+smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
+{
     std::vector<expr2tc> membs;
     membs.push_back(constant_int2tc(machine_ptr, BigInt(obj_num)));
     membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
     constant_struct2tc ptr_val_s(pointer_struct, membs);
-    const smt_ast *ptr_val = tuple_create(ptr_val_s);
-    assert_ast(tuple_equality(a, ptr_val));
+    smt_ast *ptr_val = tuple_create(ptr_val_s);
 
     type2tc ptr_loc_type = machine_ptr;
 
@@ -233,26 +308,9 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     // from start. Express this in irep.
     expr2tc endisequal;
     expr2tc the_offs;
-    try {
-      uint64_t type_size = expr->type->get_width() / 8;
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(type_size));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (array_type2t::dyn_sized_array_excp *e) {
-      // Dynamically (nondet) sized array; take that size and use it for the
-      // offset-to-end expression.
-      the_offs = e->size;
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    } catch (type2t::symbolic_type_excp *e) {
-      // Type is empty or code -- something that we can never have a real size
-      // for. In that case, create an object of size 1: this means we have a
-      // valid entry in the address map, but that any modification of the
-      // pointer leads to invalidness, because there's no size to think about.
-      the_offs = constant_int2tc(ptr_loc_type, BigInt(1));
-      add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
-      endisequal = equality2tc(start_plus_offs, end_sym);
-    }
+    the_offs = size;
+    add2tc start_plus_offs(ptr_loc_type, start_sym, the_offs);
+    endisequal = equality2tc(start_plus_offs, end_sym);
 
     // Assert that start + offs == end
     assert_expr(endisequal);
@@ -295,9 +353,8 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     index2tc idx(get_bool_type(), allocarr, objid);
     equality2tc dyn_eq(idx, false_expr);
     assert_expr(dyn_eq);
-  }
 
-  return a;
+    return ptr_val;
 }
 
 void

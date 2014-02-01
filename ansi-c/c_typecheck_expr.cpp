@@ -295,6 +295,18 @@ void c_typecheck_baset::typecheck_expr_operands(exprt &expr)
     // don't do function operand
     assert(expr.operands().size()==2);
 
+    if(is_loop && config.options.get_bool_option("inductive-step"))
+    {
+      irep_idt identifier=expr.op0().identifier();
+
+      symbolst::iterator s_it=context.symbols.find(identifier);
+      if(s_it!=context.symbols.end())
+      {
+        symbolt &symbol=s_it->second;
+        symbol.value.add("inside_loop") = true_exprt();
+      }
+    }
+
     typecheck_expr(expr.op1()); // arguments
   }
   else if(expr.id()=="sideeffect" &&

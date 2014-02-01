@@ -1136,15 +1136,22 @@ typecast2t::do_simplify(bool second) const
     if (is_symbol_type(ptr_to.subtype) || is_symbol_type(ptr_from.subtype) ||
         is_code_type(ptr_to.subtype) || is_code_type(ptr_from.subtype))
       return expr2tc(); // Not worth thinking about
-    unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
-                            : ptr_to.subtype->get_width();
-    unsigned int from_width = (is_empty_type(ptr_from.subtype)) ? 8
-                            : ptr_from.subtype->get_width();
 
-    if (to_width == from_width)
-      return from;
-    else
+    try {
+      unsigned int to_width = (is_empty_type(ptr_to.subtype)) ? 8
+                              : ptr_to.subtype->get_width();
+      unsigned int from_width = (is_empty_type(ptr_from.subtype)) ? 8
+                              : ptr_from.subtype->get_width();
+
+      if (to_width == from_width)
+        return from;
+      else
+        return expr2tc();
+    } catch (array_type2t::dyn_sized_array_excp*e) {
+      // Something crazy, and probably C++ based, occurred. Don't attempt to
+      // simplify.
       return expr2tc();
+    }
   } else if (is_constant_expr(from)) {
     // Casts from constant operands can be done here.
     if (is_constant_bool2t(from) && is_bv_type(type)) {
@@ -1518,4 +1525,22 @@ same_object2t::do_simplify(bool second __attribute__((unused))) const
     return true_expr;
 
   return expr2tc();
+}
+
+expr2tc
+concat2t::do_simplify(bool second __attribute__((unused))) const
+{
+
+  if (!is_constant_int2t(side_1) || !is_constant_int2t(side_2))
+    return expr2tc();
+
+  const mp_integer &value1 = to_constant_int2t(side_1).constant_value;
+  const mp_integer &value2 = to_constant_int2t(side_2).constant_value;
+
+  // k; Take the values, and concatenate. Side 1 has higher end bits.
+  mp_integer accuml = value1;
+  accuml *= (1ULL << side_2->type->get_width());
+  accuml += value2;
+
+  return constant_int2tc(type, accuml);
 }

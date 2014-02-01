@@ -35,6 +35,7 @@ protected:
 
   void slice(symex_target_equationt::SSA_stept &SSA_step);
   void slice_assignment(symex_target_equationt::SSA_stept &SSA_step);
+  void slice_renumber(symex_target_equationt::SSA_stept &SSA_step);
 };
 
 #endif
