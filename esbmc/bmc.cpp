@@ -477,6 +477,7 @@ bool bmct::run_thread()
   symex_target_equationt *equation;
   bool ret;
 
+  fine_timet symex_start = current_time();
   try
   {
     if(options.get_bool_option("schedule"))
@@ -502,6 +503,14 @@ bool bmct::run_thread()
     message_stream.error(error_str);
     return true;
   }
+
+  fine_timet symex_stop = current_time();
+
+  std::ostringstream str;
+  str << "Symex completed in: ";
+  output_time(symex_stop - symex_start, str);
+  str << "s";
+  status(str.str());
 
   equation = dynamic_cast<symex_target_equationt*>(result->target);
 
