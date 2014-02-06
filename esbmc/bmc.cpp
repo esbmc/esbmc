@@ -524,6 +524,8 @@ bool bmct::run_thread()
 
   try
   {
+
+    fine_timet slice_start = current_time();
     if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
@@ -532,6 +534,13 @@ bool bmct::run_thread()
     {
       simple_slice(*equation);
     }
+    fine_timet slice_stop = current_time();
+
+    std::ostringstream str;
+    str << "Slicing time: ";
+    output_time(slice_stop - slice_start, str);
+    str << "s";
+    status(str.str());
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))
