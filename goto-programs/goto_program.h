@@ -106,9 +106,6 @@ public:
     //! guard for gotos, assume, assert
     expr2tc guard;
 
-    // for sync
-    irep_idt event;
-
     //! the target for gotos and for start_thread nodes
     typedef std::list<class instructiont>::iterator targett;
     typedef std::list<class instructiont>::const_iterator const_targett;
@@ -133,7 +130,6 @@ public:
       type=_type;
       targets.clear();
       guard = true_expr;
-      event="";
       code = expr2tc();
     }
 
@@ -232,7 +228,6 @@ public:
       instruction.location.swap(location);
       std::swap(instruction.type, type);
       instruction.guard.swap(guard);
-      instruction.event.swap(event);
       instruction.targets.swap(targets);
       instruction.local_variables.swap(local_variables);
       instruction.function.swap(function);
