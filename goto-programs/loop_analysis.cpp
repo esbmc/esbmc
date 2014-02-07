@@ -88,9 +88,26 @@ void mark_loop_insns(goto_programt &goto_program)
   for (auto elem : loop_spans) {
     for (goto_programt::instructionst::iterator it = elem.start;
          it != elem.end; it++) {
-      it->loop_membership.push_back(elem.loop_num);
+      it->loop_membership.insert(elem.loop_num);
     }
   }
+
+  // Look through the loops, and ensure that if there's any overlap between
+  // them, that one loop is entirely nested within the other.
+  bool well_formed = true;
+  for (auto elem : loop_spans) {
+    // Check each loop the first insn is in...
+    for (unsigned int loopnum : elem.start->loop_membership) {
+      // ..and if we're not still in that loop at the _end_ of this loop span,
+      // then it's not entirely nested, and this particular program isn't well
+      // formed.
+      if (elem.end->loop_membership.find(loopnum) ==
+          elem.end->loop_membership.end())
+        well_formed = false;
+    }
+  }
+
+  goto_program.loops_well_formed = well_formed;
 }
 
 void mark_loop_insns(goto_functionst &goto_functions)
