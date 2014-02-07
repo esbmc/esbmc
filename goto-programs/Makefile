@@ -11,7 +11,7 @@ SRCS= goto_convert.cpp goto_function.cpp goto_main.cpp goto_sideeffects.cpp \
       static_analysis.cpp string_abstraction.cpp \
       goto_program_serialization.cpp goto_function_serialization.cpp \
       read_bin_goto_object.cpp goto_program_irep.cpp \
-      format_strings.cpp loop_numbers.cpp \
+      format_strings.cpp loop_analysis.cpp \
       write_goto_binary.cpp
 
 clean:

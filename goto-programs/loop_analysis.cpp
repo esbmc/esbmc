@@ -10,7 +10,7 @@ Author: Daniel Kroening, kroening@kroening.com
 #include <xml_irep.h>
 #include <i2string.h>
 
-#include "loop_numbers.h"
+#include "loop_analysis.h"
 
 void show_loop_numbers(
   ui_message_handlert::uit ui,
