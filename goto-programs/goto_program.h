@@ -120,6 +120,9 @@ public:
 
     std::set<targett> incoming_edges;
 
+    typedef std::vector<unsigned int> loop_membershipt;
+    loop_membershipt loop_membership;
+
     //! is this node a branch target?
     inline bool is_target() const
     { return target_number!=unsigned(-1); }
@@ -131,6 +134,7 @@ public:
       targets.clear();
       guard = true_expr;
       code = expr2tc();
+      loop_membership.clear();
     }
 
     inline void make_goto() { clear(GOTO); }
@@ -231,6 +235,7 @@ public:
       instruction.targets.swap(targets);
       instruction.local_variables.swap(local_variables);
       instruction.function.swap(function);
+      instruction.loop_membership.swap(loop_membership);
     }
 
     //! A globally unique number to identify a program location.
