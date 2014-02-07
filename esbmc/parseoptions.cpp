@@ -1745,6 +1745,9 @@ bool cbmc_parseoptionst::process_goto_program(
     // add loop ids
     goto_functions.compute_loop_numbers();
 
+    // Analyse some of the loops
+    mark_loop_insns(goto_functions);
+
     if(cmdline.isset("data-races-check"))
     {
       status("Adding Data Race Checks");
