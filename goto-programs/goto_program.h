@@ -122,7 +122,7 @@ public:
 
     std::set<targett> incoming_edges;
 
-    typedef std::vector<unsigned int> loop_membershipt;
+    typedef std::set<unsigned int> loop_membershipt;
     loop_membershipt loop_membership;
 
     //! is this node a branch target?
