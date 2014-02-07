@@ -68,6 +68,7 @@ public:
   {
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     assert(src.instructions.empty());
+    loops_well_formed = false;
   }
 
   /*! \brief assignment operator
@@ -81,6 +82,7 @@ public:
     assert(src.instructions.empty());
     instructions.clear();
     update();
+    loops_well_formed = false;
     return *this;
   }
 
@@ -417,6 +419,7 @@ public:
   //! Constructor
   goto_programt()
   {
+    loops_well_formed = false;
   }
 
   virtual ~goto_programt()
@@ -427,12 +430,14 @@ public:
   inline void swap(goto_programt &program)
   {
     program.instructions.swap(instructions);
+    std::swap(loops_well_formed, program.loops_well_formed);
   }
 
   //! Clear the goto program
   inline void clear()
   {
     instructions.clear();
+    loops_well_formed = false;
   }
 
   //! Copy a full goto program, preserving targets
@@ -449,6 +454,7 @@ public:
     bool show_location=true,
     bool show_variables=false) const;
 
+  bool loops_well_formed;
 };
 
 bool operator<(const goto_programt::const_targett i1,
