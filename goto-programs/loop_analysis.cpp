@@ -83,6 +83,14 @@ void mark_loop_insns(goto_programt &goto_program)
       loop_spans.push_back(span);
     }
   }
+
+  // Mark all instructions to indicate what loops they are members of.
+  for (auto elem : loop_spans) {
+    for (goto_programt::instructionst::iterator it = elem.start;
+         it != elem.end; it++) {
+      it->loop_membership.push_back(elem.loop_num);
+    }
+  }
 }
 
 void mark_loop_insns(goto_functionst &goto_functions)
