@@ -59,3 +59,37 @@ void show_loop_numbers(
       it++)
     show_loop_numbers(ui, it->second.body);
 }
+
+void mark_loop_insns(goto_programt &goto_program)
+{
+  struct loop_spant {
+    goto_programt::instructionst::iterator start;
+    goto_programt::instructionst::iterator end;
+    unsigned int loop_num;
+  };
+
+  std::vector<loop_spant> loop_spans;
+
+  for(goto_programt::instructionst::iterator
+      it=goto_program.instructions.begin();
+      it!=goto_program.instructions.end();
+      it++) {
+    if (it->is_backwards_goto()) {
+      assert(it->targets.size() == 1);
+      loop_spant span;
+      span.start = *it->targets.begin();
+      span.end = it;
+      span.loop_num = it->loop_number;
+      loop_spans.push_back(span);
+    }
+  }
+}
+
+void mark_loop_insns(goto_functionst &goto_functions)
+{
+  for(goto_functionst::function_mapt::iterator
+      it=goto_functions.function_map.begin();
+      it!=goto_functions.function_map.end();
+      it++)
+    mark_loop_insns(it->second.body);
+}
