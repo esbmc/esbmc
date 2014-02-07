@@ -10,6 +10,7 @@
 #include <irep2.h>
 #include <migrate.h>
 #include <assert.h>
+#include <prefix.h>
 
 #include <expr_util.h>
 #include <std_expr.h>
@@ -233,6 +234,9 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
 
     if (it->base_name == guard_identifier_s)
       continue;  // just a guard
+
+    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
+      continue;
 
     // changed!
     const symbolt &symbol = ns.lookup(it->base_name);
