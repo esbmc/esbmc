@@ -389,7 +389,7 @@ public:
   inline void compute_local_location_numbers()
   {
     unsigned nr=0;
-    for (auto insn : instructions) {
+    for (auto &insn : instructions) {
       insn.location_number = nr++;
     }
   }

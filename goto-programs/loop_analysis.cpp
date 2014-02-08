@@ -85,7 +85,7 @@ void mark_loop_insns(goto_programt &goto_program)
   }
 
   // Mark all instructions to indicate what loops they are members of.
-  for (auto elem : loop_spans) {
+  for (auto &elem : loop_spans) {
     for (goto_programt::instructionst::iterator it = elem.start;
          it != elem.end; it++) {
       it->loop_membership.insert(elem.loop_num);
@@ -95,7 +95,7 @@ void mark_loop_insns(goto_programt &goto_program)
   // Look through the loops, and ensure that if there's any overlap between
   // them, that one loop is entirely nested within the other.
   bool well_formed = true;
-  for (auto elem : loop_spans) {
+  for (auto &elem : loop_spans) {
     // Check each loop the first insn is in...
     for (unsigned int loopnum : elem.start->loop_membership) {
       // ..and if we're not still in that loop at the _end_ of this loop span,

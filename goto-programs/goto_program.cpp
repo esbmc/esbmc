@@ -358,7 +358,7 @@ void goto_programt::get_successors(
 
 void goto_programt::update(unsigned int &insn_nr)
 {
-  for (auto insn : instructions) {
+  for (auto &insn : instructions) {
     insn.location_number = insn_nr++;
   }
 }
