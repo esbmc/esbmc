@@ -453,6 +453,9 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
+
+  /** Set of current loop numbers we're in. */
+  goto_programt::instructiont::loop_membershipt cur_loops;
 };
 
 #endif
