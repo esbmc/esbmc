@@ -176,6 +176,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     state_pc = goto_target;
   }
 
+  const symex_targett::sourcet &src_insn = cur_state->source;
   cur_state->source.pc = state_pc;
 
   // put into state-queue
@@ -226,6 +227,17 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     } else   {
       cur_state->guard.add(guard_expr);
       new_state.guard.add(not_guard_expr);
+    }
+  }
+
+  // Record exits from loops. Ordering (backwards-false / forwards-true)
+  // already handled via indirection above.
+  loop_transitionst exits =
+    find_loop_transitions(src_insn.pc->loop_membership,
+                          new_state_pc->loop_membership);
+  for (auto &item : exits) {
+    if (!item.second) {
+      cur_state->top().loop_exit_guards[item.first].push_back(new_state.guard);
     }
   }
 }
