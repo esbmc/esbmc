@@ -509,6 +509,9 @@ void
 goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     const expr2tc &continue_cond)
 {
+  if (!cur_state->source.pc->function->loops_well_formed)
+    return;
+
   const guardt &old_guard = cur_state->top().prev_loop_guards[loopno];
   if (old_guard.empty()) {
     // Haven't been around this loop before. Take the entry conditions and
