@@ -42,9 +42,8 @@ goto_symext::exit_insn()
     return;
 
   // Check whether or not loop status has changed.
-  std::vector<std::pair<unsigned int, bool> > loop_changes =
-    find_loop_transitions(cur_state->cur_loops,
-                          cur_state->source.pc->loop_membership);
+  loop_transitionst loop_changes =find_loop_transitions(cur_state->cur_loops,
+                                         cur_state->source.pc->loop_membership);
 
   // Only thing at the insn level that we care about at this stage is the
   // initial entry to the loop, not via any merged states.
@@ -55,7 +54,7 @@ goto_symext::exit_insn()
   }
 }
 
-std::vector<std::pair<unsigned int, bool> >
+goto_symext::loop_transitionst
 goto_symext::find_loop_transitions(
    const goto_programt::instructiont::loop_membershipt &old,
    const goto_programt::instructiont::loop_membershipt &now)

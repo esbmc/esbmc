@@ -165,14 +165,15 @@ protected:
 
   // symex
 
+  typedef std::vector<std::pair<unsigned int, bool> > loop_transitionst;
+
   /** Determine from loop membership records, whether an entry of exit from
    *  a loop is present.
    *  @param old A past loop membership record
    *  @param now The current loop membership record
    *  @return Vector of loops entered/exited. Pairs of loop number integers,
    *          and the value true for entry, false for exit. */
-  std::vector<std::pair<unsigned int, bool> >
-  find_loop_transitions(
+  loop_transitionst find_loop_transitions(
       const goto_programt::instructiont::loop_membershipt &old,
       const goto_programt::instructiont::loop_membershipt &now);
 
