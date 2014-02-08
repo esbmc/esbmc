@@ -394,13 +394,8 @@ public:
     }
   }
 
-  //! Compute loop numbers
-  void compute_loop_numbers(unsigned int &num);
-
-  void set_program_ptrs();
-
   //! Update all indices
-  void update(unsigned int &insn_nr);
+  void update(unsigned int &insn_nr, unsigned int &loop_nr);
 
   //! Is the program empty?
   inline bool empty() const

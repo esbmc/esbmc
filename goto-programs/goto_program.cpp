@@ -268,16 +268,6 @@ bool operator<(const goto_programt::const_targett i1,
   return &_i1<&_i2;
 }
 
-void goto_programt::compute_loop_numbers(unsigned int &num)
-{
-  for(instructionst::iterator
-      it=instructions.begin();
-      it!=instructions.end();
-      it++)
-    if(it->is_backwards_goto())
-      it->loop_number=num++;
-}
-
 void goto_programt::get_successors(
   targett target,
   targetst &successors)
@@ -356,10 +346,18 @@ void goto_programt::get_successors(
     successors.push_back(next);
 }
 
-void goto_programt::update(unsigned int &insn_nr)
+void goto_programt::update(unsigned int &insn_nr, unsigned int &loop_num)
 {
   for (auto &insn : instructions) {
     insn.location_number = insn_nr++;
+    insn.function = this;
+  }
+
+  // This needs to be completed _after_ insn nums are assigned.
+  for (auto &insn : instructions) {
+    insn.location_number = insn_nr++;
+    if(insn.is_backwards_goto())
+      insn.loop_number=loop_num++;
   }
 }
 
@@ -516,11 +514,4 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
   }
 
   return out;
-}
-
-void goto_programt::set_program_ptrs()
-{
-  for (auto &insn : instructions) {
-    insn.function = this;
-  }
 }
