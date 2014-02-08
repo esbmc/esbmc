@@ -318,3 +318,17 @@ void goto_functionst::compute_loop_numbers()
       it++)
     it->second.body.compute_loop_numbers(num);
 }
+
+void goto_functionst::set_program_ptrs()
+{
+  for (auto it=function_map.begin(); it!=function_map.end(); it++) {
+    it->second.body.set_program_ptrs();
+  }
+}
+
+void goto_functionst::set_names()
+{
+  for (auto it=function_map.begin(); it!=function_map.end(); it++) {
+    it->second.body.name = it->first;
+  }
+}

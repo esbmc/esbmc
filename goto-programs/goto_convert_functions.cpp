@@ -280,7 +280,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
   Forall_goto_program_instructions(i_it, f.body)
   {
     i_it->add_local_variables(arg_ids);
-    i_it->function=identifier;
   }
 
   // remove_skip depends on the target numbers

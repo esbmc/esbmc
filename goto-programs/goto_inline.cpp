@@ -80,7 +80,6 @@ void goto_inlinet::parameter_assignments(
       exprt tmp = code_declt(symbol_expr(symbol));
       migrate_expr(tmp, decl->code);
       decl->location=location;
-      decl->function=location.get_function(); 
       decl->local_variables=local_variables;
     }
 
@@ -143,7 +142,6 @@ void goto_inlinet::parameter_assignments(
       dest.instructions.back().location=location;
       migrate_expr(assignment, dest.instructions.back().code);
       dest.instructions.back().local_variables=local_variables;
-      dest.instructions.back().function=location.get_function();      
     }
 
     it1++;
@@ -196,7 +194,6 @@ void goto_inlinet::replace_return(
         migrate_expr(code_assign, assignment->code);
         assignment->location=it->location;
         assignment->local_variables=it->local_variables;
-        assignment->function=it->location.get_function();
 
         
         assert(constrain.is_nil()); // bp_constrain gumpf reomved
@@ -214,7 +211,6 @@ void goto_inlinet::replace_return(
         expression->code=codet("expression");
         expression->code.move_to_operands(it->code.op0());
         expression->location=it->location;
-        expression->function=it->location.get_function();
         expression->local_variables=it->local_variables;
         
         dest.insert_swap(it, *expression);
@@ -380,7 +376,6 @@ void goto_inlinet::expand_function_call(
       goto_programt::targett t=tmp.add_instruction();
       t->make_other();
       t->location=target->location;
-      t->function=target->location.get_function();
       t->local_variables=target->local_variables;
       expr2tc tmp_expr;
       migrate_expr(*it, tmp_expr);
@@ -399,7 +394,6 @@ void goto_inlinet::expand_function_call(
     
       goto_programt::targett t=tmp.add_instruction(ASSIGN);
       t->location=target->location;
-      t->function=target->location.get_function();
       t->local_variables=target->local_variables;
       migrate_expr(code, t->code);
     }

@@ -97,7 +97,7 @@ public:
     expr2tc code;
 
     //! function this belongs to
-    irep_idt function;
+    const goto_programt *function;
 
     //! the location of the instruction in the source file
     locationt location;
@@ -236,7 +236,7 @@ public:
       instruction.guard.swap(guard);
       instruction.targets.swap(targets);
       instruction.local_variables.swap(local_variables);
-      instruction.function.swap(function);
+      std::swap(instruction.function, function);
       instruction.loop_membership.swap(loop_membership);
     }
 
@@ -407,6 +407,8 @@ public:
   //! Compute loop numbers
   void compute_loop_numbers(unsigned int &num);
 
+  void set_program_ptrs();
+
   //! Update all indices
   void update();
 
@@ -455,6 +457,8 @@ public:
     bool show_variables=false) const;
 
   bool loops_well_formed;
+
+  irep_idt name;
 };
 
 bool operator<(const goto_programt::const_targett i1,

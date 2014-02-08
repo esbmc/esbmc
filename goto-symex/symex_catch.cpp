@@ -373,7 +373,7 @@ void goto_symext::update_throw_target(goto_symex_statet::exceptiont* except
     goto_symex_statet::call_stackt::reverse_iterator i;
     for (i = cur_state->call_stack.rbegin();
          i != cur_state->call_stack.rend(); i++) {
-      if (i->function_identifier == target->function) {
+      if (i->function_identifier == target->function->name) {
         statet::goto_state_listt &goto_state_list = i->goto_state_map[target];
 
         goto_state_list.push_back(statet::goto_statet(*cur_state));

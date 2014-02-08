@@ -222,7 +222,7 @@ execution_statet::symex_step(reachability_treet &art)
   if (symex_trace) {
     const goto_programt p_dummy;
     goto_functionst::function_mapt::const_iterator it =
-      goto_functions.function_map.find(instruction.function);
+      goto_functions.function_map.find(instruction.function->name);
 
     const goto_programt &p_real = it->second.body;
     const goto_programt &p = (it == goto_functions.function_map.end()) ? p_dummy : p_real;
@@ -231,7 +231,7 @@ execution_statet::symex_step(reachability_treet &art)
 
   switch (instruction.type) {
     case END_FUNCTION:
-      if (instruction.function == "main") {
+      if (instruction.function->name == "main") {
         end_thread();
         force_cswitch();
       } else {

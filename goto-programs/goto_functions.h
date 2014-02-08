@@ -74,12 +74,16 @@ public:
   void compute_loop_numbers();
   void compute_target_numbers();
   void compute_incoming_edges();
+  void set_program_ptrs();
+  void set_names();
 
   void update()
   {
     compute_incoming_edges();
     compute_target_numbers();
     compute_location_numbers();
+    set_program_ptrs();
+    set_names();
   }
 
   irep_idt main_id() const

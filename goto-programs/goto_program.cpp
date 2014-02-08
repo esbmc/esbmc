@@ -550,3 +550,10 @@ std::ostream &operator<<(std::ostream &out, goto_program_instruction_typet t)
 
   return out;
 }
+
+void goto_programt::set_program_ptrs()
+{
+  for (auto &insn : instructions) {
+    insn.function = this;
+  }
+}
