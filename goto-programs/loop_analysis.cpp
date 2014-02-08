@@ -90,6 +90,9 @@ void mark_loop_insns(goto_programt &goto_program)
          it != elem.end; it++) {
       it->loop_membership.insert(elem.loop_num);
     }
+
+    // Add it to the end one too.
+    elem.end->loop_membership.insert(elem.loop_num);
   }
 
   // Look through the loops, and ensure that if there's any overlap between
