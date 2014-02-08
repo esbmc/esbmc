@@ -109,12 +109,3 @@ void mark_loop_insns(goto_programt &goto_program)
 
   goto_program.loops_well_formed = well_formed;
 }
-
-void mark_loop_insns(goto_functionst &goto_functions)
-{
-  for(goto_functionst::function_mapt::iterator
-      it=goto_functions.function_map.begin();
-      it!=goto_functions.function_map.end();
-      it++)
-    mark_loop_insns(it->second.body);
-}

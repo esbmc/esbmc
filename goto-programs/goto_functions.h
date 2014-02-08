@@ -76,14 +76,7 @@ public:
     }
   }
 
-  void update()
-  {
-    unsigned int nr = 0, loop_num = 0;
-    for (auto it=function_map.begin(); it!=function_map.end(); it++) {
-      it->second.body.update(nr, loop_num);
-      it->second.body.name = it->first;
-    }
-  }
+  void update();
 
   irep_idt main_id() const
   {

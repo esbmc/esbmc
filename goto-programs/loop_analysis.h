@@ -21,6 +21,6 @@ void show_loop_numbers(
   ui_message_handlert::uit ui,
   const goto_programt &goto_program);
 
-void mark_loop_insns(goto_functionst &goto_functions);
+void mark_loop_insns(goto_programt &prog);
 
 #endif

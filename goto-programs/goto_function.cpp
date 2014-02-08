@@ -279,3 +279,15 @@ void goto_functionst::output(
     }
   }
 }
+
+#include "loop_analysis.h"
+
+void goto_functionst::update()
+{
+  unsigned int nr = 0, loop_num = 0;
+  for (auto it=function_map.begin(); it!=function_map.end(); it++) {
+    it->second.body.update(nr, loop_num);
+    mark_loop_insns(it->second.body);
+    it->second.body.name = it->first;
+  }
+}
