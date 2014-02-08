@@ -50,18 +50,18 @@ goto_symext::exit_insn()
   // OK, that's changed. Now, have we entered or exited a loop?
   for (unsigned int loopid : cur_state->cur_loops) {
     if (next_loops.find(loopid) == next_loops.end()) {
-      // We've left a loop. XXX implement.
+      // We've left a loop.
+      cur_state->loop_exit_guards[loopid].push_back(cur_state->guard);
     }
   }
 
   // How about entry?
   for (unsigned int loopid : next_loops) {
     if (cur_state->cur_loops.find(loopid) == cur_state->cur_loops.end()) {
-      // Entered a loop. Also do a thing.
+      // Entered a loop.
+      cur_state->loop_entry_guards[loopid].push_back(cur_state->guard);
     }
   }
-
-
 }
 
 void
@@ -123,6 +123,9 @@ goto_symext::symex_goto(const expr2tc &old_guard)
 
   if (!forward) { // backwards?
     unsigned unwind;
+
+    cur_state->loop_entry_guards.clear();
+    cur_state->loop_exit_guards.clear();
 
     unwind = cur_state->unwind_map[cur_state->source];
     unwind++;

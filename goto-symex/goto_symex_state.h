@@ -459,6 +459,9 @@ public:
 
   /** Whether or not loop analysis should operate on this insn. */
   bool check_loop_structure;
+
+  std::map<unsigned, std::vector<guardt> > loop_entry_guards;
+  std::map<unsigned, std::vector<guardt> > loop_exit_guards;
 };
 
 #endif
