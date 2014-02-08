@@ -456,6 +456,9 @@ public:
 
   /** Set of current loop numbers we're in. */
   goto_programt::instructiont::loop_membershipt cur_loops;
+
+  /** Whether or not loop analysis should operate on this insn. */
+  bool check_loop_structure;
 };
 
 #endif

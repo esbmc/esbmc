@@ -54,6 +54,8 @@ goto_symex_statet::operator=(const goto_symex_statet &state)
   function_unwind = state.function_unwind;
   use_value_set = state.use_value_set;
   call_stack = state.call_stack;
+  cur_loops = state.cur_loops;
+  check_loop_structure = state.check_loop_structure;
   return *this;
 }
 

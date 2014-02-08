@@ -25,6 +25,13 @@ goto_symext::enter_insn()
 
   // Store the current set of loops we're in.
   cur_state->cur_loops = cur_state->source.pc->loop_membership;
+  if (cur_state->source.pc->type == FUNCTION_CALL ||
+      cur_state->source.pc->type == END_FUNCTION)
+    cur_state->check_loop_structure = false;
+  else if (!cur_state->source.pc->function->loops_well_formed)
+    cur_state->check_loop_structure = false;
+  else
+    cur_state->check_loop_structure = true;
 }
 
 void
