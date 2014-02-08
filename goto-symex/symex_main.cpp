@@ -57,6 +57,11 @@ void
 goto_symext::assume(const expr2tc &assumption)
 {
 
+  guardt aguard;
+  aguard.add(assumption);
+  for (unsigned int loop_num : cur_state->source.pc->loop_membership)
+    cur_state->top().loop_assumpts[loop_num].push_back(aguard);
+
   // Irritatingly, assumption destroys its expr argument
   expr2tc tmp_guard = cur_state->guard.as_expr();
   cur_state->global_guard.guard_expr(tmp_guard);

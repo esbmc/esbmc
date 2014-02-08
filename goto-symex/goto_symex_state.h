@@ -203,6 +203,7 @@ public:
     // Loop analysis guards for this frame.
     std::map<unsigned, std::vector<guardt> > loop_entry_guards;
     std::map<unsigned, std::vector<guardt> > loop_exit_guards;
+    std::map<unsigned, std::vector<guardt> > loop_assumpts;
 
     framet(unsigned int thread_id) :
       return_value(expr2tc())
