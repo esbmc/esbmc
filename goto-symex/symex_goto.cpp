@@ -257,6 +257,16 @@ goto_symext::merge_gotos(void)
 
     merge_value_sets(goto_state);
 
+    // If we've merged into a loop, record as an entry. Ignore exits.
+    loop_transitionst transitions =
+      find_loop_transitions(goto_state.src_loops,
+                            cur_state->source.pc->loop_membership);
+    for (auto &i : transitions) {
+      if (i.second) {
+        cur_state->top().loop_entry_guards[i.first].push_back(goto_state.guard);
+      }
+    }
+
     // adjust guard
     cur_state->guard |= goto_state.guard;
 
