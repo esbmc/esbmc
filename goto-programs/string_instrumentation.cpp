@@ -299,8 +299,6 @@ void string_instrumentationt::do_function_call(
       do_snprintf(dest, target, call);
     else if (identifier=="c::fscanf")
       do_fscanf(dest, target, call);
-
-    dest.update();
   }
 }
 

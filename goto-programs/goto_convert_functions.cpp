@@ -285,8 +285,6 @@ void goto_convert_functionst::convert_function(const irep_idt &identifier)
 
   remove_skip(f.body);
 
-  f.body.update();
-
   if(hide(f.body))
     f.type.hide(true);
 }

@@ -229,7 +229,6 @@ void add_race_assertions(
   add_race_assertions(value_sets, context, goto_program, w_guards);
 
   w_guards.add_initialization(goto_program);
-  goto_program.update();
 }
 
 /*******************************************************************\
@@ -263,6 +262,4 @@ void add_race_assertions(
     goto_programt &main=m_it->second.body;
     w_guards.add_initialization(main);
   }
-
-  goto_functions.update();
 }

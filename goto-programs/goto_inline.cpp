@@ -460,7 +460,6 @@ void goto_inlinet::goto_inline_rec(goto_programt &dest, bool full)
   if(changed)
   {
     remove_skip(dest);  
-    dest.update();
   }
 }
 
