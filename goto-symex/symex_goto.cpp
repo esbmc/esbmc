@@ -484,12 +484,15 @@ goto_symext::assign_guard_symbol(std::string basename, const expr2tc &val)
 
 expr2tc
 goto_symext::accuml_guard_symbol(std::string name,
-    const std::vector<guardt> &guards)
+    const std::vector<guardt> &guards,
+    const guardt &prefix)
 {
   guardt entry_guard;
 
-  for (const guardt &g : guards)
+  for (auto g : guards) {
+    g -= prefix;
     entry_guard |= g;
+  }
 
   return assign_guard_symbol(name, entry_guard.as_expr());
 }
@@ -547,7 +550,37 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     // We _have_ been around this loop before. Thus, we shouldn't have received
     // any new entry conditions.
     assert(cur_state->top().loop_entry_guards[loopno].empty());
+    const guardt &prev_guard = cur_state->top().prev_loop_guards[loopno];
 
     // There may have been exits though.
+    expr2tc exit_cond = false_expr;
+    if (!cur_state->top().loop_exit_guards[loopno].empty()) {
+      std::stringstream ss2;
+      ss2 << "symex::exit_conds_loop_" << cur_state->source.pc->loop_number;
+      exit_cond = accuml_guard_symbol(ss2.str(),
+          cur_state->top().loop_exit_guards[loopno], prev_guard);
+      cur_state->top().loop_exit_guards[loopno].clear();
+    }
+
+    // Accumulate any assumptions into the continue condition.
+    expr2tc to_continue = continue_cond;
+    if (!cur_state->top().loop_assumpts[loopno].empty()) {
+      std::stringstream ss3;
+      ss3 << "symex::continue_conds_loop_" << cur_state->source.pc->loop_number;
+      expr2tc tmp = accuml_guard_symbol(ss3.str(),
+          cur_state->top().loop_assumpts[loopno], prev_guard);
+      cur_state->top().loop_assumpts[loopno].clear();
+
+      to_continue = and2tc(to_continue, tmp);
+    }
+
+    // OK. Revert to the guard for the previous iteration.
+    cur_state->guard = prev_guard;
+    // Add that we haven't exited
+    cur_state->guard.add(not2tc(exit_cond));
+    // And that we continue
+    cur_state->guard.add(to_continue);
+
+    cur_state->top().prev_loop_guards[loopno] = cur_state->guard;
   }
 }

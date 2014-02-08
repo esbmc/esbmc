@@ -223,7 +223,8 @@ protected:
   void exit_insn();
   void fix_backwards_goto_guard(unsigned int loopno, const expr2tc &cont_cond);
   expr2tc accuml_guard_symbol(std::string basename,
-                              const std::vector<guardt> &guards);
+                              const std::vector<guardt> &guards,
+                              const guardt &prefix = guardt());
   expr2tc assign_guard_symbol(std::string basename, const expr2tc &val);
 
   /**
