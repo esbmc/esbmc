@@ -167,6 +167,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     }
 
     if (new_guard_true) {
+      fix_backwards_goto_guard(cur_state->source.pc->loop_number, true_expr);
       cur_state->source.pc = goto_target;
       return; // nothing else to do
     }
@@ -195,11 +196,12 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   statet::goto_statet &new_state = goto_state_list.back();
 
   // adjust guards
+  expr2tc guard_expr;
   if (new_guard_true) {
     cur_state->guard.make_false();
+    guard_expr = true_expr;
   } else {
     // produce new guard symbol
-    expr2tc guard_expr;
 
     if (is_symbol2t(new_guard) ||
         (is_not2t(new_guard) && is_symbol2t(to_not2t(new_guard).value))) {
@@ -248,6 +250,9 @@ goto_symext::symex_goto(const expr2tc &old_guard)
       cur_state->top().loop_exit_guards[item.first].push_back(new_state.guard);
     }
   }
+
+  if (!forward)
+    fix_backwards_goto_guard(src_insn.pc->loop_number, guard_expr);
 }
 
 void
