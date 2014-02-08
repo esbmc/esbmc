@@ -37,6 +37,31 @@ goto_symext::enter_insn()
 void
 goto_symext::exit_insn()
 {
+
+  if (!cur_state->check_loop_structure)
+    return;
+
+  // Check whether or not loop status has changed.
+  const goto_programt::instructiont::loop_membershipt &next_loops =
+    cur_state->source.pc->loop_membership;
+  if (next_loops == cur_state->cur_loops)
+    return;
+
+  // OK, that's changed. Now, have we entered or exited a loop?
+  for (unsigned int loopid : cur_state->cur_loops) {
+    if (next_loops.find(loopid) == next_loops.end()) {
+      // We've left a loop. XXX implement.
+    }
+  }
+
+  // How about entry?
+  for (unsigned int loopid : next_loops) {
+    if (cur_state->cur_loops.find(loopid) == cur_state->cur_loops.end()) {
+      // Entered a loop. Also do a thing.
+    }
+  }
+
+
 }
 
 void
