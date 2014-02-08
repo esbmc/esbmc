@@ -165,6 +165,16 @@ protected:
 
   // symex
 
+  /** Determine from loop membership records, whether an entry of exit from
+   *  a loop is present.
+   *  @param old A past loop membership record
+   *  @param now The current loop membership record
+   *  @return Vector of loops entered/exited. Pairs of loop number integers,
+   *          and the value true for entry, false for exit. */
+  std::vector<std::pair<unsigned int, bool> >
+  find_loop_transitions(goto_programt::instructiont::loop_membershipt &old,
+                        goto_programt::instructiont::loop_membershipt &now);
+
   /**
    *  Perform GOTO jump using current instruction.
    *  Handle a GOTO jump between locations. This isn't just the factor of there

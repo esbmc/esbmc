@@ -64,6 +64,32 @@ goto_symext::exit_insn()
   }
 }
 
+std::vector<std::pair<unsigned int, bool> >
+goto_symext::find_loop_transitions(
+   goto_programt::instructiont::loop_membershipt &old,
+   goto_programt::instructiont::loop_membershipt &now)
+{
+  std::vector<std::pair<unsigned int, bool> > returnvec;
+
+  // OK, that's changed. Now, have we entered or exited a loop?
+  for (unsigned int loopid : old) {
+    if (now.find(loopid) == now.end()) {
+      // We've left a loop.
+      returnvec.push_back(std::make_pair(loopid, false));
+    }
+  }
+
+  // How about entry?
+  for (unsigned int loopid : now) {
+    if (old.find(loopid) == old.end()) {
+      // Entered a loop.
+      returnvec.push_back(std::make_pair(loopid, true));
+    }
+  }
+
+  return returnvec;
+}
+
 void
 goto_symext::symex_goto(const expr2tc &old_guard)
 {
