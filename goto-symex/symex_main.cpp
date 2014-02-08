@@ -57,7 +57,7 @@ void
 goto_symext::assume(const expr2tc &assumption)
 {
 
-  guardt aguard;
+  guardt aguard = cur_state->guard;
   aguard.add(assumption);
   for (unsigned int loop_num : cur_state->source.pc->loop_membership)
     cur_state->top().loop_assumpts[loop_num].push_back(aguard);
