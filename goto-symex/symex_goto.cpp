@@ -504,17 +504,27 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     // assign that to a new symbol. Same for the exit conditions. Conjoin with
     // assumpts and continuation conditions, to make new guard. Worry about
     // reducing duplicate symbols in the future.
+
+    // Has to have been at least one entry condition.
+    assert(!cur_state->top().loop_entry_guards[loopno].empty() &&
+           "Every loop has to have at least one entry");
+
     std::stringstream ss, ss2;
     ss << "symex::entry_conds_loop_" << cur_state->source.pc->loop_number;
     expr2tc entry_sym = accuml_guard_symbol(ss.str(),
         cur_state->top().loop_entry_guards[loopno]);
     cur_state->top().loop_entry_guards[loopno].clear();
 
-    ss2 << "symex::exit_conds_loop_" << cur_state->source.pc->loop_number;
-    expr2tc exit_sym = accuml_guard_symbol(ss2.str(),
-        cur_state->top().loop_exit_guards[loopno]);
-    cur_state->top().loop_exit_guards[loopno].clear();
+    // Optionally collect together all of the loop exit conditions.
+    expr2tc exit_cond = false_expr;
+    if (!cur_state->top().loop_exit_guards[loopno].empty()) {
+      ss2 << "symex::exit_conds_loop_" << cur_state->source.pc->loop_number;
+      exit_cond = accuml_guard_symbol(ss2.str(),
+          cur_state->top().loop_exit_guards[loopno]);
+      cur_state->top().loop_exit_guards[loopno].clear();
+    }
 
+    // Accumulate any assumptions into the continue condition.
     expr2tc to_continue = continue_cond;
     if (!cur_state->top().loop_assumpts[loopno].empty()) {
       std::stringstream ss3;
@@ -527,7 +537,7 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     // OK. Final new guard is: entry & !exit & continue
     cur_state->guard.make_true();
     cur_state->guard.add(entry_sym);
-    cur_state->guard.add(not2tc(exit_sym));
+    cur_state->guard.add(not2tc(exit_cond));
     cur_state->guard.add(to_continue);
 
     cur_state->top().prev_loop_guards[loopno] = cur_state->guard;
@@ -535,5 +545,7 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     // We _have_ been around this loop before. Thus, we shouldn't have received
     // any new entry conditions.
     assert(cur_state->top().loop_entry_guards[loopno].empty());
+
+    // There may have been exits though.
   }
 }
