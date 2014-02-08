@@ -221,6 +221,7 @@ protected:
 
   void enter_insn();
   void exit_insn();
+  void fix_backwards_goto_guard();
 
   /**
    *  Merge converging states into current state.

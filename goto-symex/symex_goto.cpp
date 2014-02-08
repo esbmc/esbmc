@@ -446,3 +446,8 @@ goto_symext::get_unwind(
 }
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;
+
+void
+goto_symext::fix_backwards_goto_guard()
+{
+}
