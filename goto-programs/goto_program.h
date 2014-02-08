@@ -120,8 +120,6 @@ public:
     typedef std::list<irep_idt> labelst;
     labelst labels;
 
-    std::set<targett> incoming_edges;
-
     typedef std::set<unsigned int> loop_membershipt;
     loop_membershipt loop_membership;
 
@@ -303,8 +301,6 @@ public:
   void get_successors(
     const_targett target,
     const_targetst &successors) const;
-
-  void compute_incoming_edges();
 
   //! Insertion that preserves jumps to "target".
   //! The instruction is destroyed.
