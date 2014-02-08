@@ -50,6 +50,13 @@ goto_symext::exit_insn()
   for (auto thepair : loop_changes) {
     if (thepair.second) {
       cur_state->top().loop_entry_guards[thepair.first].push_back(cur_state->guard);
+    } else {
+      // On exit from a loop for whatever reason, clear remaining accounting
+      // data.
+      cur_state->top().loop_entry_guards[thepair.first].clear();
+      cur_state->top().loop_exit_guards[thepair.first].clear();
+      cur_state->top().loop_assumpts[thepair.first].clear();
+      cur_state->top().prev_loop_guards[thepair.first].make_true();
     }
   }
 }
