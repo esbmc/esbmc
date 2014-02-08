@@ -172,8 +172,9 @@ protected:
    *  @return Vector of loops entered/exited. Pairs of loop number integers,
    *          and the value true for entry, false for exit. */
   std::vector<std::pair<unsigned int, bool> >
-  find_loop_transitions(goto_programt::instructiont::loop_membershipt &old,
-                        goto_programt::instructiont::loop_membershipt &now);
+  find_loop_transitions(
+      const goto_programt::instructiont::loop_membershipt &old,
+      const goto_programt::instructiont::loop_membershipt &now);
 
   /**
    *  Perform GOTO jump using current instruction.

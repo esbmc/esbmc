@@ -42,32 +42,16 @@ goto_symext::exit_insn()
     return;
 
   // Check whether or not loop status has changed.
-  const goto_programt::instructiont::loop_membershipt &next_loops =
-    cur_state->source.pc->loop_membership;
-  if (next_loops == cur_state->cur_loops)
-    return;
-
-  // OK, that's changed. Now, have we entered or exited a loop?
-  for (unsigned int loopid : cur_state->cur_loops) {
-    if (next_loops.find(loopid) == next_loops.end()) {
-      // We've left a loop.
-      cur_state->loop_exit_guards[loopid].push_back(cur_state->guard);
-    }
-  }
-
-  // How about entry?
-  for (unsigned int loopid : next_loops) {
-    if (cur_state->cur_loops.find(loopid) == cur_state->cur_loops.end()) {
-      // Entered a loop.
-      cur_state->loop_entry_guards[loopid].push_back(cur_state->guard);
-    }
-  }
+  std::vector<std::pair<unsigned int, bool> > loop_changes =
+    find_loop_transitions(cur_state->cur_loops,
+                          cur_state->source.pc->loop_membership);
+  // XXX
 }
 
 std::vector<std::pair<unsigned int, bool> >
 goto_symext::find_loop_transitions(
-   goto_programt::instructiont::loop_membershipt &old,
-   goto_programt::instructiont::loop_membershipt &now)
+   const goto_programt::instructiont::loop_membershipt &old,
+   const goto_programt::instructiont::loop_membershipt &now)
 {
   std::vector<std::pair<unsigned int, bool> > returnvec;
 
