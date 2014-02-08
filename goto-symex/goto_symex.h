@@ -206,6 +206,10 @@ protected:
   virtual void assume(const expr2tc &assumption);
 
   // gotos
+
+  void enter_insn();
+  void exit_insn();
+
   /**
    *  Merge converging states into current state.
    *  Jumps forwards are handled by recording a merge of the current state in

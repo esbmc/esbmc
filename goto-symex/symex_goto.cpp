@@ -19,6 +19,20 @@
 #include "symex_target_equation.h"
 
 void
+goto_symext::enter_insn()
+{
+  merge_gotos();
+
+  // Store the current set of loops we're in.
+  cur_state->cur_loops = cur_state->source.pc->loop_membership;
+}
+
+void
+goto_symext::exit_insn()
+{
+}
+
+void
 goto_symext::symex_goto(const expr2tc &old_guard)
 {
   const goto_programt::instructiont &instruction = *cur_state->source.pc;

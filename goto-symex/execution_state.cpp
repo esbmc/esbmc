@@ -206,7 +206,7 @@ execution_statet::symex_step(reachability_treet &art)
   statet &state = get_active_state();
   const goto_programt::instructiont &instruction = *state.source.pc;
 
-  merge_gotos();
+  enter_insn();
 
   if (break_insn != 0 && break_insn == instruction.location_number) {
     // If you're developing ESBMC on a machine that isn't x86, I'll send you
@@ -273,6 +273,7 @@ execution_statet::symex_step(reachability_treet &art)
       goto_symext::symex_step(art);
   }
 
+  exit_insn();
   return;
 }
 
