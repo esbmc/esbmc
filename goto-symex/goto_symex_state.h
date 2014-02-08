@@ -102,6 +102,7 @@ public:
     value_sett value_set;
     guardt guard;
     unsigned int thread_id;
+    goto_programt::instructiont::loop_membershipt src_loops;
 
     explicit
     goto_statet(const goto_symex_statet &s) :
@@ -110,7 +111,8 @@ public:
       level2(*level2_ptr),
       value_set(s.value_set),
       guard(s.guard),
-      thread_id(s.source.thread_nr)
+      thread_id(s.source.thread_nr),
+      src_loops(s.source.pc->loop_membership)
     {
     }
 
@@ -120,7 +122,8 @@ public:
       level2(*level2_ptr),
       value_set(s.value_set),
       guard(s.guard),
-      thread_id(s.thread_id) {}
+      thread_id(s.thread_id),
+      src_loops(s.src_loops) {}
 
     goto_statet &operator=(const goto_statet &ref __attribute__((unused)))
     {
