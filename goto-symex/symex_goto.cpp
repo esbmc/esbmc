@@ -447,7 +447,93 @@ goto_symext::get_unwind(
 
 hash_set_cont<irep_idt, irep_id_hash> goto_symext::body_warnings;
 
-void
-goto_symext::fix_backwards_goto_guard()
+expr2tc
+goto_symext::assign_guard_symbol(std::string basename, const expr2tc &val)
 {
+  irep_idt name(basename);
+  const symbolt *sym = NULL;
+  if (ns.lookup(name, sym)) {
+    symbolt newsym;
+    newsym.name = name;
+    newsym.type = bool_typet();
+    newsym.base_name = name;
+    new_context.add(newsym);
+    sym = &newsym;
+  }
+
+  exprt tmp_lhs(symbol_expr(*sym));
+  expr2tc lhs;
+  migrate_expr(tmp_lhs, lhs);
+  expr2tc new_lhs = lhs;
+
+  cur_state->assignment(new_lhs, val, false);
+
+  guardt true_guard;
+
+  target->assignment(
+    true_guard.as_expr(),
+    new_lhs, lhs,
+    val,
+    cur_state->source,
+    cur_state->gen_stack_trace(),
+    symex_targett::HIDDEN);
+
+  return new_lhs;
+}
+
+
+expr2tc
+goto_symext::accuml_guard_symbol(std::string name,
+    const std::vector<guardt> &guards)
+{
+  guardt entry_guard;
+
+  for (const guardt &g : guards)
+    entry_guard |= g;
+
+  return assign_guard_symbol(name, entry_guard.as_expr());
+}
+
+void
+goto_symext::fix_backwards_goto_guard(unsigned int loopno,
+    const expr2tc &continue_cond)
+{
+  const guardt &old_guard = cur_state->top().prev_loop_guards[loopno];
+  if (old_guard.empty()) {
+    // Haven't been around this loop before. Take the entry conditions and
+    // assign that to a new symbol. Same for the exit conditions. Conjoin with
+    // assumpts and continuation conditions, to make new guard. Worry about
+    // reducing duplicate symbols in the future.
+    std::stringstream ss, ss2;
+    ss << "symex::entry_conds_loop_" << cur_state->source.pc->loop_number;
+    expr2tc entry_sym = accuml_guard_symbol(ss.str(),
+        cur_state->top().loop_entry_guards[loopno]);
+    cur_state->top().loop_entry_guards[loopno].clear();
+
+    ss2 << "symex::exit_conds_loop_" << cur_state->source.pc->loop_number;
+    expr2tc exit_sym = accuml_guard_symbol(ss2.str(),
+        cur_state->top().loop_exit_guards[loopno]);
+    cur_state->top().loop_exit_guards[loopno].clear();
+
+    expr2tc to_continue = continue_cond;
+    if (!cur_state->top().loop_assumpts[loopno].empty()) {
+      std::stringstream ss3;
+      ss3 << "symex::continue_conds_loop_" << cur_state->source.pc->loop_number;
+      to_continue = accuml_guard_symbol(ss3.str(),
+          cur_state->top().loop_assumpts[loopno]);
+      cur_state->top().loop_assumpts[loopno].clear();
+    }
+
+    // OK. Final new guard is: entry & !exit & continue
+    cur_state->guard.make_true();
+    cur_state->guard.add(entry_sym);
+    cur_state->guard.add(not2tc(exit_sym));
+    cur_state->guard.add(to_continue);
+
+    cur_state->top().prev_loop_guards[loopno] = cur_state->guard;
+  } else {
+    // We _have_ been around this loop before. Thus, we shouldn't have received
+    // any new entry conditions.
+    assert(cur_state->top().loop_entry_guards[loopno].empty());
+  }
 }
