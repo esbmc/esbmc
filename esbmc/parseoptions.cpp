@@ -1784,8 +1784,15 @@ bool cbmc_parseoptionst::process_goto_program(
     // show it?
     if(cmdline.isset("show-goto-functions"))
     {
+      goto_functions.compute_target_numbers();
       goto_functions.output(ns, std::cout);
       return true;
+    }
+
+    // If symex trace is enabled, we'll want target numbers too
+    if(cmdline.isset("symex-trace"))
+    {
+      goto_functions.compute_target_numbers();
     }
   }
 

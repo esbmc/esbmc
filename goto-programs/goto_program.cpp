@@ -358,7 +358,6 @@ void goto_programt::get_successors(
 
 void goto_programt::update()
 {
-  compute_target_numbers();
   compute_location_numbers();
 }
 
