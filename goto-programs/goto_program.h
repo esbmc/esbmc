@@ -386,20 +386,12 @@ public:
   void compute_target_numbers();
 
   //! Compute location numbers
-  void compute_location_numbers(unsigned &nr)
-  {
-    for(instructionst::iterator
-        it=instructions.begin();
-        it!=instructions.end();
-        it++)
-      it->location_number=nr++;
-  }
-
-  //! Compute location numbers
-  inline void compute_location_numbers()
+  inline void compute_local_location_numbers()
   {
     unsigned nr=0;
-    compute_location_numbers(nr);
+    for (auto insn : instructions) {
+      insn.location_number = nr++;
+    }
   }
 
   //! Compute loop numbers
@@ -408,7 +400,7 @@ public:
   void set_program_ptrs();
 
   //! Update all indices
-  void update();
+  void update(unsigned int &insn_nr);
 
   //! Is the program empty?
   inline bool empty() const

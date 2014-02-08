@@ -52,7 +52,6 @@ bool write_goto_binary(
   {
     if (it->second.body_available)
     {
-      it->second.body.compute_location_numbers();
       write_string(out, it->first.as_string());
       gfconverter.convert(it->second, out);        
     }

@@ -356,9 +356,11 @@ void goto_programt::get_successors(
     successors.push_back(next);
 }
 
-void goto_programt::update()
+void goto_programt::update(unsigned int &insn_nr)
 {
-  compute_location_numbers();
+  for (auto insn : instructions) {
+    insn.location_number = insn_nr++;
+  }
 }
 
 std::ostream& goto_programt::output(

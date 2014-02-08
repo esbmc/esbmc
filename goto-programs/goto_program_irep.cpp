@@ -144,7 +144,7 @@ void convert( const irept &irep, goto_programt &program )
     }
   }
 
-  program.compute_location_numbers();
+  program.compute_local_location_numbers();
 
   // resolve targets
   std::list< std::list<unsigned> >::iterator nit=

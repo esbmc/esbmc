@@ -80,7 +80,7 @@ public:
   {
     unsigned int nr = 0, loop_num = 0;
     for (auto it=function_map.begin(); it!=function_map.end(); it++) {
-      it->second.body.compute_location_numbers(nr);
+      it->second.body.update(nr);
       it->second.body.compute_loop_numbers(loop_num);
       it->second.body.set_program_ptrs();
       it->second.body.name = it->first;
