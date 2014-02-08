@@ -24,7 +24,7 @@ goto_symext::enter_insn()
   merge_gotos();
 
   // Store the current set of loops we're in.
-  cur_state->cur_loops = cur_state->source.pc->loop_membership;
+  cur_state->top().cur_loops = cur_state->source.pc->loop_membership;
   if (cur_state->source.pc->type == FUNCTION_CALL ||
       cur_state->source.pc->type == END_FUNCTION)
     cur_state->check_loop_structure = false;
@@ -42,8 +42,9 @@ goto_symext::exit_insn()
     return;
 
   // Check whether or not loop status has changed.
-  loop_transitionst loop_changes =find_loop_transitions(cur_state->cur_loops,
-                                         cur_state->source.pc->loop_membership);
+  loop_transitionst loop_changes =
+    find_loop_transitions(cur_state->top().cur_loops,
+                          cur_state->source.pc->loop_membership);
 
   // Only thing at the insn level that we care about at this stage is the
   // initial entry to the loop, not via any merged states.

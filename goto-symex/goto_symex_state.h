@@ -200,6 +200,9 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
+    /** Set of current loop numbers we're in. */
+    goto_programt::instructiont::loop_membershipt cur_loops;
+
     // Loop analysis guards for this frame.
     std::map<unsigned, std::vector<guardt> > loop_entry_guards;
     std::map<unsigned, std::vector<guardt> > loop_exit_guards;
@@ -462,9 +465,6 @@ public:
    *  realloc number is. No need for special consideration when merging states
    *  at phi nodes: the renumbering update itself is guarded at the SMT layer.*/
   std::map<expr2tc, unsigned> realloc_map;
-
-  /** Set of current loop numbers we're in. */
-  goto_programt::instructiont::loop_membershipt cur_loops;
 
   /** Whether or not loop analysis should operate on this insn. */
   bool check_loop_structure;
