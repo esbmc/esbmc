@@ -197,6 +197,10 @@ public:
      *  already seen names in a function for making that decision. */
     declaration_historyt declaration_history;
 
+    // Loop analysis guards for this frame.
+    std::map<unsigned, std::vector<guardt> > loop_entry_guards;
+    std::map<unsigned, std::vector<guardt> > loop_exit_guards;
+
     framet(unsigned int thread_id) :
       return_value(expr2tc())
     {
@@ -459,9 +463,6 @@ public:
 
   /** Whether or not loop analysis should operate on this insn. */
   bool check_loop_structure;
-
-  std::map<unsigned, std::vector<guardt> > loop_entry_guards;
-  std::map<unsigned, std::vector<guardt> > loop_exit_guards;
 };
 
 #endif

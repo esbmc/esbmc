@@ -50,7 +50,7 @@ goto_symext::exit_insn()
   // initial entry to the loop, not via any merged states.
   for (auto thepair : loop_changes) {
     if (thepair.second) {
-      cur_state->loop_entry_guards[thepair.first].push_back(cur_state->guard);
+      cur_state->top().loop_entry_guards[thepair.first].push_back(cur_state->guard);
     }
   }
 }
@@ -141,8 +141,8 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   if (!forward) { // backwards?
     unsigned unwind;
 
-    cur_state->loop_entry_guards.clear();
-    cur_state->loop_exit_guards.clear();
+    cur_state->top().loop_entry_guards.clear();
+    cur_state->top().loop_exit_guards.clear();
 
     unwind = cur_state->unwind_map[cur_state->source];
     unwind++;
