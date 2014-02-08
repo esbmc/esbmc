@@ -529,9 +529,11 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
     if (!cur_state->top().loop_assumpts[loopno].empty()) {
       std::stringstream ss3;
       ss3 << "symex::continue_conds_loop_" << cur_state->source.pc->loop_number;
-      to_continue = accuml_guard_symbol(ss3.str(),
+      expr2tc tmp = accuml_guard_symbol(ss3.str(),
           cur_state->top().loop_assumpts[loopno]);
       cur_state->top().loop_assumpts[loopno].clear();
+
+      to_continue = and2tc(to_continue, tmp);
     }
 
     // OK. Final new guard is: entry & !exit & continue
