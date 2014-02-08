@@ -45,7 +45,14 @@ goto_symext::exit_insn()
   std::vector<std::pair<unsigned int, bool> > loop_changes =
     find_loop_transitions(cur_state->cur_loops,
                           cur_state->source.pc->loop_membership);
-  // XXX
+
+  // Only thing at the insn level that we care about at this stage is the
+  // initial entry to the loop, not via any merged states.
+  for (auto thepair : loop_changes) {
+    if (thepair.second) {
+      cur_state->loop_entry_guards[thepair.first].push_back(cur_state->guard);
+    }
+  }
 }
 
 std::vector<std::pair<unsigned int, bool> >
