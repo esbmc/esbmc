@@ -81,7 +81,6 @@ public:
     // DO NOT COPY ME! I HAVE POINTERS IN ME!
     assert(src.instructions.empty());
     instructions.clear();
-    update();
     loops_well_formed = false;
     return *this;
   }
@@ -96,7 +95,7 @@ public:
   public:
     expr2tc code;
 
-    //! function this belongs to
+    //! function this belongs to. Not stable until after goto processing.
     const goto_programt *function;
 
     //! the location of the instruction in the source file
@@ -240,14 +239,17 @@ public:
 
     //! A globally unique number to identify a program location.
     //! It's guaranteed to be ordered in program order within
-    //! one goto_program.
+    //! one goto_program. Not stable until after goto processing.
     unsigned location_number;
 
-    //! Number unique per function to identify loops
+    //! Number unique per function to identify loops. Not stable until after
+    //goto processing.
     unsigned loop_number;
 
     //! A number to identify branch targets.
     //! This is -1 if it's not a target.
+    //! This is purely cosmetic: it isn't calculated unless an option is given
+    //! on the command line indicating that instructions are going to be printed
     unsigned target_number;
 
     //! Returns true if the instruction is a backwards branch.
