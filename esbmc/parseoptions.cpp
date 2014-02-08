@@ -1742,9 +1742,6 @@ bool cbmc_parseoptionst::process_goto_program(
     // recalculate numbers, etc.
     goto_functions.update();
 
-    // add loop ids
-    goto_functions.compute_loop_numbers();
-
     // Analyse some of the loops
     mark_loop_insns(goto_functions);
 

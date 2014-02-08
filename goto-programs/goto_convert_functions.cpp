@@ -93,8 +93,6 @@ void goto_convert_functionst::goto_convert()
   {
     convert_function(*it);
   }
-
-  functions.compute_location_numbers();
 }
 
 /*******************************************************************\

@@ -70,20 +70,17 @@ public:
     const namespacet &ns,
     std::ostream &out) const;
 
-  void compute_location_numbers();
-  void compute_loop_numbers();
-  void compute_target_numbers();
-  void compute_incoming_edges();
-  void set_program_ptrs();
-  void set_names();
-
   void update()
   {
-    compute_incoming_edges();
-    compute_target_numbers();
-    compute_location_numbers();
-    set_program_ptrs();
-    set_names();
+    unsigned int nr = 0, loop_num = 0;
+    for (auto it=function_map.begin(); it!=function_map.end(); it++) {
+      it->second.body.compute_location_numbers(nr);
+      it->second.body.compute_incoming_edges();
+      it->second.body.compute_target_numbers();
+      it->second.body.compute_loop_numbers(loop_num);
+      it->second.body.set_program_ptrs();
+      it->second.body.name = it->first;
+    }
   }
 
   irep_idt main_id() const
