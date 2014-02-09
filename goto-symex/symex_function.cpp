@@ -547,6 +547,16 @@ goto_symext::symex_return(void)
 
   goto_state_list.push_back(statet::goto_statet(*cur_state));
 
+  // Consider possible loop transitions that that caused.
+  loop_transitionst exits =
+    find_loop_transitions(cur_state->source.pc->loop_membership,
+                          cur_state->top().end_of_function->loop_membership);
+  for (auto &item : exits) {
+    if (!item.second) {
+      cur_state->top().loop_exit_guards[item.first].push_back(cur_state->guard);
+    }
+  }
+
   // kill this one
   cur_state->guard.make_false();
 }
