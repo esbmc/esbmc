@@ -25,10 +25,7 @@ goto_symext::enter_insn()
 
   // Store the current set of loops we're in.
   cur_state->top().cur_loops = cur_state->source.pc->loop_membership;
-  if (cur_state->source.pc->type == FUNCTION_CALL ||
-      cur_state->source.pc->type == END_FUNCTION)
-    cur_state->check_loop_structure = false;
-  else if (!cur_state->source.pc->function->loops_well_formed)
+  if (!cur_state->source.pc->function->loops_well_formed)
     cur_state->check_loop_structure = false;
   else
     cur_state->check_loop_structure = true;
@@ -41,6 +38,8 @@ goto_symext::exit_insn()
   if (!cur_state->check_loop_structure)
     return;
 
+  // Entry / exit of a function is guarded against by the fact that the current
+  // loop membership is stored in the stack frame.
   check_loop_transitions(cur_state->top().cur_loops,
       cur_state->source.pc->loop_membership, cur_state->guard);
 }
