@@ -505,6 +505,7 @@ goto_symext::accuml_guard_symbol(std::string name,
     const guardt &prefix)
 {
   guardt entry_guard;
+  entry_guard.make_false();
 
   for (auto g : guards) {
     g -= prefix;
