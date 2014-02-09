@@ -148,9 +148,6 @@ goto_symext::symex_goto(const expr2tc &old_guard)
   if (!forward) { // backwards?
     unsigned unwind;
 
-    cur_state->top().loop_entry_guards.clear();
-    cur_state->top().loop_exit_guards.clear();
-
     unwind = cur_state->unwind_map[cur_state->source];
     unwind++;
     cur_state->unwind_map[cur_state->source] = unwind;
