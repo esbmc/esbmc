@@ -63,7 +63,6 @@ goto_symext::check_loop_transitions(const loop_membershipt &old,
       // data.
       cur_state->top().loop_entry_guards[thepair.first].clear();
       cur_state->top().loop_exit_guards[thepair.first].clear();
-      cur_state->top().loop_assumpts[thepair.first].clear();
       cur_state->top().prev_loop_guards[thepair.first].make_true();
     }
   }
@@ -526,7 +525,7 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
   if (old_guard.empty()) {
     // Haven't been around this loop before. Take the entry conditions and
     // assign that to a new symbol. Same for the exit conditions. Conjoin with
-    // assumpts and continuation conditions, to make new guard. Worry about
+    // continuation conditions, to make new guard. Worry about
     // reducing duplicate symbols in the future.
 
     // Has to have been at least one entry condition.
@@ -548,23 +547,11 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
       cur_state->top().loop_exit_guards[loopno].clear();
     }
 
-    // Accumulate any assumptions into the continue condition.
-    expr2tc to_continue = continue_cond;
-    if (!cur_state->top().loop_assumpts[loopno].empty()) {
-      std::stringstream ss3;
-      ss3 << "symex::continue_conds_loop_" << cur_state->source.pc->loop_number;
-      expr2tc tmp = accuml_guard_symbol(ss3.str(),
-          cur_state->top().loop_assumpts[loopno]);
-      cur_state->top().loop_assumpts[loopno].clear();
-
-      to_continue = and2tc(to_continue, tmp);
-    }
-
     // OK. Final new guard is: entry & !exit & continue
     cur_state->guard.make_true();
     cur_state->guard.add(entry_sym);
     cur_state->guard.add(not2tc(exit_cond));
-    cur_state->guard.add(to_continue);
+    cur_state->guard.add(continue_cond);
 
     cur_state->top().prev_loop_guards[loopno] = cur_state->guard;
   } else {
@@ -583,24 +570,12 @@ goto_symext::fix_backwards_goto_guard(unsigned int loopno,
       cur_state->top().loop_exit_guards[loopno].clear();
     }
 
-    // Accumulate any assumptions into the continue condition.
-    expr2tc to_continue = continue_cond;
-    if (!cur_state->top().loop_assumpts[loopno].empty()) {
-      std::stringstream ss3;
-      ss3 << "symex::continue_conds_loop_" << cur_state->source.pc->loop_number;
-      expr2tc tmp = accuml_guard_symbol(ss3.str(),
-          cur_state->top().loop_assumpts[loopno], prev_guard);
-      cur_state->top().loop_assumpts[loopno].clear();
-
-      to_continue = and2tc(to_continue, tmp);
-    }
-
     // OK. Revert to the guard for the previous iteration.
     cur_state->guard = prev_guard;
     // Add that we haven't exited
     cur_state->guard.add(not2tc(exit_cond));
     // And that we continue
-    cur_state->guard.add(to_continue);
+    cur_state->guard.add(continue_cond);
 
     cur_state->top().prev_loop_guards[loopno] = cur_state->guard;
   }
