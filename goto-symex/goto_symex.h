@@ -75,6 +75,8 @@ public:
 
   typedef goto_symex_statet statet;
 
+  typedef goto_programt::instructiont::loop_membershipt loop_membershipt;
+
   /**
    *  Class recording the outcome of symbolic execution.
    *  Contains the things that are of interest to the BMC class: The object
@@ -221,6 +223,8 @@ protected:
 
   void enter_insn();
   void exit_insn();
+  void check_loop_transitions(const loop_membershipt &old,
+      const loop_membershipt &now, const guardt &newguard);
   void fix_backwards_goto_guard(unsigned int loopno, const expr2tc &cont_cond);
   expr2tc accuml_guard_symbol(std::string basename,
                               const std::vector<guardt> &guards,

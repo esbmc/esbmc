@@ -41,16 +41,23 @@ goto_symext::exit_insn()
   if (!cur_state->check_loop_structure)
     return;
 
+  check_loop_transitions(cur_state->top().cur_loops,
+      cur_state->source.pc->loop_membership, cur_state->guard);
+}
+
+void
+goto_symext::check_loop_transitions(const loop_membershipt &old,
+    const loop_membershipt &now, const guardt &newguard)
+{
+
   // Check whether or not loop status has changed.
-  loop_transitionst loop_changes =
-    find_loop_transitions(cur_state->top().cur_loops,
-                          cur_state->source.pc->loop_membership);
+  loop_transitionst loop_changes = find_loop_transitions(old, now);
 
   // Only thing at the insn level that we care about at this stage is the
   // initial entry to the loop, not via any merged states.
   for (auto thepair : loop_changes) {
     if (thepair.second) {
-      cur_state->top().loop_entry_guards[thepair.first].push_back(cur_state->guard);
+      cur_state->top().loop_entry_guards[thepair.first].push_back(newguard);
     } else {
       // On exit from a loop for whatever reason, clear remaining accounting
       // data.
