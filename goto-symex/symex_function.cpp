@@ -250,6 +250,11 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
   cur_state->source.is_set = true;
   cur_state->source.pc = goto_function.body.instructions.begin();
   cur_state->source.prog = &goto_function.body;
+
+  // Trigger detection of loop entry, in case the first insn is in a loop.
+  loop_membershipt noloops;
+  check_loop_transitions(noloops, cur_state->source.pc->loop_membership,
+                          cur_state->guard);
 }
 
 static std::list<std::pair<guardt, symbol2tc> >
