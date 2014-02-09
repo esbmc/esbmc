@@ -189,7 +189,7 @@ goto_symext::symex_goto(const expr2tc &old_guard)
     state_pc = goto_target;
   }
 
-  const symex_targett::sourcet &src_insn = cur_state->source;
+  symex_targett::sourcet src_insn = cur_state->source;
   cur_state->source.pc = state_pc;
 
   // put into state-queue
