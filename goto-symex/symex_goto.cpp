@@ -55,7 +55,7 @@ goto_symext::check_loop_transitions(const loop_membershipt &old,
 
   // Only thing at the insn level that we care about at this stage is the
   // initial entry to the loop, not via any merged states.
-  for (auto thepair : loop_changes) {
+  for (const auto &thepair : loop_changes) {
     if (thepair.second) {
       cur_state->top().loop_entry_guards[thepair.first].push_back(newguard);
     } else {
