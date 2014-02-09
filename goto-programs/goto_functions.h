@@ -71,7 +71,7 @@ public:
     std::ostream &out) const;
 
   void compute_target_numbers() {
-    for (auto it : function_map) {
+    for (auto &it : function_map) {
       it.second.body.compute_target_numbers();
     }
   }
