@@ -339,7 +339,7 @@ goto_symext::phi_function(const statet::goto_statet &goto_state)
     if (it->base_name == guard_identifier_s)
       continue;  // just a guard
 
-    if (has_prefix(it->base_name.as_string(),"symex::invalid_object"))
+    if (has_prefix(it->base_name.as_string(),"symex::"))
       continue;
 
     // changed!
