@@ -690,7 +690,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
 
   // Denominator roots
   std::vector<RootType> denominator_roots;
-  int denominator_has_roots = get_roots(args.at(1), denominator_roots);
+  int denominator_has_roots = get_roots(args.at(0), denominator_roots);
   if(denominator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the denominator roots are zero." << std::endl;
@@ -698,7 +698,7 @@ goto_symext::intrinsic_check_stability(const code_function_call2t &call,
   }
 
   std::vector<RootType> numerator_roots;
-  int numerator_has_roots = get_roots(args.at(0), numerator_roots);
+  int numerator_has_roots = get_roots(args.at(1), numerator_roots);
   if(numerator_has_roots == 2)
   {
     std::cerr << "**** WARNING: No practical filter if the numerator roots are zero." << std::endl;
