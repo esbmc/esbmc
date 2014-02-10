@@ -1896,16 +1896,16 @@ public:
   const type2tc &get_empty() const { return empty_type; }
 
   // For other types, have a pool of them for quick lookup.
-  std::map<const typet, type2tc> struct_map;
-  std::map<const typet, type2tc> union_map;
-  std::map<const typet, type2tc> array_map;
-  std::map<const typet, type2tc> pointer_map;
-  std::map<const typet, type2tc> unsignedbv_map;
-  std::map<const typet, type2tc> signedbv_map;
-  std::map<const typet, type2tc> fixedbv_map;
-  std::map<const typet, type2tc> string_map;
-  std::map<const typet, type2tc> symbol_map;
-  std::map<const typet, type2tc> code_map;
+  std::map<typet, type2tc> struct_map;
+  std::map<typet, type2tc> union_map;
+  std::map<typet, type2tc> array_map;
+  std::map<typet, type2tc> pointer_map;
+  std::map<typet, type2tc> unsignedbv_map;
+  std::map<typet, type2tc> signedbv_map;
+  std::map<typet, type2tc> fixedbv_map;
+  std::map<typet, type2tc> string_map;
+  std::map<typet, type2tc> symbol_map;
+  std::map<typet, type2tc> code_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;
