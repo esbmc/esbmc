@@ -2272,7 +2272,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
               // and fully explored, rather than monkey-patched.
               if (t.id() == "array") {
                 // Morph irep.
-                t.id() = "pointer";
+                t.id("pointer");
                 t.remove("size");
               }
             } else {
