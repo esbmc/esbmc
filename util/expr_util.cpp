@@ -40,7 +40,6 @@ exprt gen_zero(const typet &type)
   }
   else if(type_id=="unsignedbv" ||
           type_id=="signedbv" ||
-          type_id=="verilogbv" ||
           type_id=="floatbv" ||
           type_id=="fixedbv" ||
           type_id=="c_enum")

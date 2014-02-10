@@ -79,7 +79,7 @@ public:
 		iterator& operator ++ (){
 			return iterator(base, ++pos);
 		}
-		iterator& operator ++ (int b){
+		iterator operator ++ (int b){
 			return iterator(base, pos++);
 		}
 
@@ -90,7 +90,7 @@ public:
 		iterator& operator -- (){
 			return iterator(base, --pos);
 		}
-		iterator& operator -- (int b){
+		iterator operator -- (int b){
 			return iterator(base, pos--);
 		}
 
@@ -123,6 +123,11 @@ public:
 			base = i.base;
 		}
 
+		const_iterator(const iterator& i){
+			pos = i.pos;
+			base = i.base;
+		}
+
 		const_iterator(key_type *bbase, int ppos){
 			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
@@ -135,11 +140,7 @@ public:
 		const_iterator& operator=(const const_iterator& i){
 			this->pos = i.pos;
 			this->base = i.base;
-		}
-
-		const_iterator& operator=(const iterator& i){
-			this->pos = i.pos;
-			this->base = i.base;
+                        return *this;
 		}
 
 		value_type * operator -> (){
@@ -153,7 +154,7 @@ public:
 		const_iterator& operator ++ (){
 			return const_iterator(base, ++pos);
 		}
-		const_iterator& operator ++ (int b){
+		const_iterator operator ++ (int b){
 			return const_iterator(base, pos++);
 		}
 
@@ -164,7 +165,7 @@ public:
 		const_iterator& operator -- (){
 			return const_iterator(base, --pos);
 		}
-		const_iterator& operator -- (int b){
+		const_iterator operator -- (int b){
 			return const_iterator(base, pos--);
 		}
 
@@ -175,15 +176,8 @@ public:
 		bool operator == (const const_iterator& it) const{
 			return ((base == it.base)&&(pos == it.pos));
 		}
-		bool operator == (const iterator& it) const{
-			return ((base == it.base)&&(pos == it.pos));
-		}
 
 		bool operator != (const const_iterator& it) const{
-			return !((base == it.base)&&(pos == it.pos));
-		}
-
-		bool operator != (const iterator& it) const{
 			return !((base == it.base)&&(pos == it.pos));
 		}
 
@@ -228,7 +222,7 @@ public:
 		reverse_iterator& operator ++ (){
 			return reverse_iterator(base, --pos);
 		}
-		reverse_iterator& operator ++ (int b){
+		reverse_iterator operator ++ (int b){
 			return reverse_iterator(base, pos--);
 		}
 
@@ -239,7 +233,7 @@ public:
 		reverse_iterator& operator -- (){
 			return reverse_iterator(base, ++pos);
 		}
-		reverse_iterator& operator -- (int b){
+		reverse_iterator operator -- (int b){
 			return reverse_iterator(base, pos++);
 		}
 
@@ -294,7 +288,7 @@ public:
 		const_reverse_iterator& operator ++ (){
 			return const_reverse_iterator(base, --pos);
 		}
-		const_reverse_iterator& operator ++ (int b){
+		const_reverse_iterator operator ++ (int b){
 			return const_reverse_iterator(base, pos--);
 		}
 
@@ -305,7 +299,7 @@ public:
 		const_reverse_iterator& operator -- (){
 			return const_reverse_iterator(base, ++pos);
 		}
-		const_reverse_iterator& operator -- (int b){
+		const_reverse_iterator operator -- (int b){
 			return const_reverse_iterator(base, pos++);
 		}
 
@@ -436,24 +430,22 @@ public:
 			insert(*first++);
 	}
 
-	template<class Iterator>
-	iterator insert(Iterator *first, Iterator *last){
-		__ESBMC_assert(last > first, "Invalid pointer range: the second argument must be greater than the first one");
-		while(first!=last)
-			insert(*first++);
-	}
-
 	// modifiers:
-	iterator insert(const value_type& x){
+        std::pair<iterator, bool>
+        insert(const value_type& x){
 		iterator it = begin();
 		int i, aux;
-		while(it != end())
-			if(*it == x) break;
+		while(it != end()) {
+                  if(*it == x) {
+                    return make_pair(it, false);
+                  }
+                  it++;
+                }
 
 		_size++;
 		i = _size;
 
-
+                // it is equal to end() already.
 		while( it.pos - 1<i){
 			aux = i +1;
 			buf[aux] = buf[i];
@@ -461,7 +453,7 @@ public:
 		}
 
 		buf[it.pos] = x;
-		return it;
+		return make_pair(it, true);
 	}
 
 	iterator insert(iterator position, const value_type& x){
@@ -552,7 +544,7 @@ public:
 		return counter;
 	}
 
-	iterator lower_bound(const key_type& x) const{
+	iterator lower_bound(const key_type& x) {
 		int first = 0, last = _size;
 		while(first != last)
 		{
@@ -563,19 +555,50 @@ public:
 		return iterator(buf,first);
 	}
 
-	iterator upper_bound(const key_type& x) const{
+	const_iterator lower_bound(const key_type& x) const{
+		int first = 0, last = _size;
+		while(first != last)
+		{
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((x< buf[first])||(x == buf[first]))
+                          return const_iterator(buf,first);
+			else first++;
+		}
+		return const_iterator(buf,first);
+	}
+
+	iterator upper_bound(const key_type& x) {
 		int first = 0, last = _size - 1;
 		while(first != last)
 		{
 			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
-			if((buf[last]< x)||(x == buf[last])) return iterator(buf,last+1);
+			if((buf[last]< x)||(x == buf[last]))
+                          return iterator(buf,last+1);
 			else last--;
 
 		}
 		return iterator(buf,last);
 	}
 
-	pair<iterator,iterator> equal_range(const key_type& x) const{
+	const_iterator upper_bound(const key_type& x) const {
+		int first = 0, last = _size - 1;
+		while(first != last)
+		{
+			//When the Compare() is used, may fail in some cases. Replace the operator < with it.
+			if((buf[last]< x)||(x == buf[last]))
+                          return const_iterator(buf,last+1);
+			else last--;
+
+		}
+		return const_iterator(buf,last);
+	}
+
+	pair<iterator,iterator> equal_range(const key_type& x) {
+		return make_pair(upper_bound(x), lower_bound(x));
+	}
+
+	pair<const_iterator, const_iterator>
+          equal_range(const key_type& x) const{
 		return make_pair(upper_bound(x), lower_bound(x));
 	}
 
@@ -636,7 +659,7 @@ public:
 		iterator& operator ++ (){
 			return iterator(base, ++pos);
 		}
-		iterator& operator ++ (int b){
+		iterator operator ++ (int b){
 			return iterator(base, pos++);
 		}
 
@@ -647,7 +670,7 @@ public:
 		iterator& operator -- (){
 			return iterator(base, --pos);
 		}
-		iterator& operator -- (int b){
+		iterator operator -- (int b){
 			return iterator(base, pos--);
 		}
 
@@ -680,6 +703,11 @@ public:
 			base = i.base;
 		}
 
+		const_iterator(const iterator& i){
+			pos = i.pos;
+			base = i.base;
+		}
+
 		const_iterator(key_type *bbase, int ppos){
 			__ESBMC_assert(bbase!=NULL,"Invalid null pointer");
 			pos = ppos;
@@ -692,6 +720,7 @@ public:
 		const_iterator& operator=(const const_iterator& i){
 			this->pos = i.pos;
 			this->base = i.base;
+                        return *this;
 		}
 
 		value_type * operator -> (){
@@ -705,7 +734,7 @@ public:
 		const_iterator& operator ++ (){
 			return const_iterator(base, ++pos);
 		}
-		const_iterator& operator ++ (int b){
+		const_iterator operator ++ (int b){
 			return const_iterator(base, pos++);
 		}
 
@@ -716,7 +745,7 @@ public:
 		const_iterator& operator -- (){
 			return const_iterator(base, --pos);
 		}
-		const_iterator& operator -- (int b){
+		const_iterator operator -- (int b){
 			return const_iterator(base, pos--);
 		}
 
@@ -772,7 +801,7 @@ public:
 		reverse_iterator& operator ++ (){
 			return reverse_iterator(base, --pos);
 		}
-		reverse_iterator& operator ++ (int b){
+		reverse_iterator operator ++ (int b){
 			return reverse_iterator(base, pos--);
 		}
 
@@ -783,7 +812,7 @@ public:
 		reverse_iterator& operator -- (){
 			return reverse_iterator(base, ++pos);
 		}
-		reverse_iterator& operator -- (int b){
+		reverse_iterator operator -- (int b){
 			return reverse_iterator(base, pos++);
 		}
 
@@ -838,7 +867,7 @@ public:
 		const_reverse_iterator& operator ++ (){
 			return const_reverse_iterator(base, --pos);
 		}
-		const_reverse_iterator& operator ++ (int b){
+		const_reverse_iterator operator ++ (int b){
 			return const_reverse_iterator(base, pos--);
 		}
 
@@ -849,7 +878,7 @@ public:
 		const_reverse_iterator& operator -- (){
 			return const_reverse_iterator(base, ++pos);
 		}
-		const_reverse_iterator& operator -- (int b){
+		const_reverse_iterator operator -- (int b){
 			return const_reverse_iterator(base, pos++);
 		}
 
@@ -982,11 +1011,12 @@ public:
 	pair<iterator,bool> insert(const value_type& x){
 		iterator it = begin();
 		int i, aux;
-		while(it != end())
-			if(*it == x) break;
-
-		if(it != end())
-			return make_pair(it, false);
+		while(it != end()) {
+                  if(*it == x) {
+                    return make_pair(it, false);
+                  }
+                  it++;
+                }
 
 		_size++;
 		i = _size;
@@ -1088,34 +1118,70 @@ public:
 		return counter;
 	}
 
-	iterator lower_bound(const key_type& x) const{
+	iterator lower_bound(const key_type& x) {
 		int first = 0, last = _size;
 		int y;
 		while(first != last)
 		{
 			y = buf[first];
-			if(Compare()(x, y)||(x == y)) return iterator(buf,first);
+			if(Compare()(x, y)||(x == y))
+                          return iterator(buf,first);
 			else first++;
 		}
 		return iterator(buf,first);
 	}
 
-	iterator upper_bound(const key_type& x) const{
+	const_iterator lower_bound(const key_type& x) const{
+		int first = 0, last = _size;
+		int y;
+		while(first != last)
+		{
+			y = buf[first];
+			if(Compare()(x, y)||(x == y))
+                          return const_iterator(buf,first);
+			else first++;
+		}
+		return const_iterator(buf,first);
+	}
+
+	iterator upper_bound(const key_type& x) {
 		int first = 0, last = _size;
 		last--;
 		int y;
 		while(first != last)
 		{
 			y = buf[first];
-			if(!Compare()(x, y)) return iterator(buf,last);
+			if(!Compare()(x, y))
+                          return iterator(buf,last);
 			else last--;
 		}
 		return iterator(buf,last);
 	}
 
-	pair<iterator,iterator> equal_range(const key_type& x) const{
+	const_iterator upper_bound(const key_type& x) const {
+		int first = 0, last = _size;
+		last--;
+		int y;
+		while(first != last)
+		{
+			y = buf[first];
+			if(!Compare()(x, y))
+                          return const_iterator(buf,last);
+			else last--;
+		}
+		return const_iterator(buf,last);
+	}
+
+
+	pair<iterator,iterator> equal_range(const key_type& x) {
 		return make_pair(upper_bound(x), lower_bound(x));
 	}
+
+	pair<const_iterator, const_iterator>
+          equal_range(const key_type& x) const {
+		return make_pair(upper_bound(x), lower_bound(x));
+	}
+
 
 };
 

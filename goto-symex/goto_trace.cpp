@@ -366,22 +366,24 @@ show_goto_trace(
 
 	out << "  " << it->comment << std::endl;
 
-	if (it->pc->is_assert()) {
-	  if (!goto_trace.metadata_filename.empty() &&
-	      !is_constant_bool2t(it->pc->guard)) {
-	    std::string assertsrt, varname;
-	    assertsrt = from_expr(ns, "", it->pc->guard);
-	    varname = get_varname_from_guard(it, goto_trace);
-	    if (!goto_trace.llvm_varmap.find(varname)->second.empty()) {
-	      assertsrt.replace(assertsrt.find(varname),
-	                        varname.length(),
-	                        goto_trace.llvm_varmap.find(varname)->second);
-	      out << "  " << assertsrt << std::endl;
-	    }
-	  } else
-	    out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
-	}
+        if (!goto_trace.metadata_filename.empty() &&
+            !is_constant_bool2t(it->pc->guard)) {
+          std::string assertsrt, varname;
+          assertsrt = from_expr(ns, "", it->pc->guard);
+          varname = get_varname_from_guard(it, goto_trace);
+          if (!goto_trace.llvm_varmap.find(varname)->second.empty()) {
+            assertsrt.replace(assertsrt.find(varname),
+                              varname.length(),
+                              goto_trace.llvm_varmap.find(varname)->second);
+            out << "  " << assertsrt << std::endl;
+          }
+        } else {
+          out << "  " << from_expr(ns, "", it->pc->guard) << std::endl;
+        }
 	out << std::endl;
+
+        // Having printed a property violation, don't print more steps.
+        return;
       }
       break;
 

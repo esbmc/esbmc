@@ -404,6 +404,8 @@ void cpp_typecheckt::default_cpctor(
     mem_init.add("operands").get_sub().push_back(memberexpr);
     initializers.move_to_sub(mem_init);
   }
+
+  cpctor.type().set("#default_copy_cons", "1");
 }
 
 /*******************************************************************\

@@ -59,11 +59,6 @@ public:
     bool lock_check;
   } ansi_c;
 
-  struct verilogt
-  {
-    std::list<std::string> include_paths;
-  } verilog;
-
   std::string main;
 
   bool set(const cmdlinet &cmdline);

@@ -477,6 +477,7 @@ bool bmct::run_thread()
   symex_target_equationt *equation;
   bool ret;
 
+  fine_timet symex_start = current_time();
   try
   {
     if(options.get_bool_option("schedule"))
@@ -503,6 +504,14 @@ bool bmct::run_thread()
     return true;
   }
 
+  fine_timet symex_stop = current_time();
+
+  std::ostringstream str;
+  str << "Symex completed in: ";
+  output_time(symex_stop - symex_start, str);
+  str << "s";
+  status(str.str());
+
   equation = dynamic_cast<symex_target_equationt*>(result->target);
 
   print(8, "size of program expression: "+
@@ -515,6 +524,8 @@ bool bmct::run_thread()
 
   try
   {
+
+    fine_timet slice_start = current_time();
     if(!options.get_bool_option("no-slice"))
     {
       slice(*equation);
@@ -523,6 +534,13 @@ bool bmct::run_thread()
     {
       simple_slice(*equation);
     }
+    fine_timet slice_stop = current_time();
+
+    std::ostringstream str;
+    str << "Slicing time: ";
+    output_time(slice_stop - slice_start, str);
+    str << "s";
+    status(str.str());
 
     if (options.get_bool_option("program-only") ||
         options.get_bool_option("program-too"))

@@ -15,10 +15,6 @@ ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 # Static? (Linux only)
 #STATICLINK=1
 
-# Enable linux compatibility (gcc34)
-
-#LINUXCOMPAT=1
-
 # What sat solvers to use? Comment out to disable
 USE_SOLVER_Z3=1
 #USE_SOLVER_BOOLECTOR=1
