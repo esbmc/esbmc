@@ -2183,7 +2183,7 @@ bool cpp_typecheck_resolvet::guess_template_args(
         // XXX: this is not robust. If another function argument assigns those
         // template arguments correctly, this template will be accepted. Better
         // error reporting is necessary.
-        return;
+        return false; // return value unused.
 
       cpp_template_args_non_tct::argumentst args=template_args.arguments();
       for(unsigned i=0; i<args.size();++i)
