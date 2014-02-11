@@ -305,7 +305,12 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     args[0] = a;
     args[1] = output;
     smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
-    assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
+
+    if (tuple_support) {
+      assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
+    } else {
+      assert_ast(tuple_equality(args[0], args[1]));
+    }
   }
 
   return a;
