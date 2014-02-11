@@ -25,8 +25,7 @@ public:
   void slice_for_symbols(symex_target_equationt &equation, const expr2tc &expr);
 
 protected:
-  typedef hash_set_cont<renaming::level2t::name_record,
-                        renaming::level2t::name_rec_hash> symbol_sett;
+  typedef hash_set_cont<std::string, string_hash> symbol_sett;
 
   symbol_sett depends;
   bool single_slice;

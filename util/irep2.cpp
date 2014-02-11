@@ -816,7 +816,7 @@ type_poolt::type_poolt(bool yolo __attribute__((unused)))
 }
 
 static const type2tc &
-get_type_from_pool(const typet &val, std::map<const typet, type2tc> &map)
+get_type_from_pool(const typet &val, std::map<typet, type2tc> &map)
 {
 #if 0
   std::map<const typet, type2tc>::const_iterator it = map.find(val);

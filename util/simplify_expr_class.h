@@ -30,8 +30,6 @@ public:
   typedef enum { NORMAL, ADDRESS_OF } modet;
 
   bool simplify_typecast(exprt &expr, modet mode);
-  bool simplify_extractbit(exprt &expr);
-  bool simplify_extractbits(exprt &expr);
   bool simplify_concatenation(exprt &expr);
   bool simplify_multiplication(exprt &expr);
   bool simplify_division(exprt &expr);

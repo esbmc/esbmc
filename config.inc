@@ -15,10 +15,6 @@ ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 # Static? (Linux only)
 #STATICLINK=1
 
-# Enable linux compatibility (gcc34)
-
-#LINUXCOMPAT=1
-
 # What sat solvers to use? The following have native (in ESBMC) support.
 # There's also the 'smtlib' backend that will print a benchmark, and that
 # attempts to interpret a counterexample if it's hooked up with a solver

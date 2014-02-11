@@ -274,7 +274,7 @@ public:
   }
 };
 
-typedef std::shared_ptr<type2t> type2tc;
+typedef irep_container<type2t> type2tc;
 typedef irep_container<expr2t> expr2tc;
 
 typedef std::pair<std::string,std::string> member_entryt;
@@ -436,6 +436,11 @@ public:
    *  @param hash Object to accumulate hash data into.
    */
   virtual void hash(crypto_hash &hash) const;
+
+  /** Clone method. Self explanatory.
+   *  @return New container, containing a duplicate of this object.
+   */
+  virtual type2tc clone(void) const = 0;
 
   /** Instance of type_ids recording this types type. */
   type_ids type_id;
@@ -1861,16 +1866,16 @@ public:
   const type2tc &get_empty() const { return empty_type; }
 
   // For other types, have a pool of them for quick lookup.
-  std::map<const typet, type2tc> struct_map;
-  std::map<const typet, type2tc> union_map;
-  std::map<const typet, type2tc> array_map;
-  std::map<const typet, type2tc> pointer_map;
-  std::map<const typet, type2tc> unsignedbv_map;
-  std::map<const typet, type2tc> signedbv_map;
-  std::map<const typet, type2tc> fixedbv_map;
-  std::map<const typet, type2tc> string_map;
-  std::map<const typet, type2tc> symbol_map;
-  std::map<const typet, type2tc> code_map;
+  std::map<typet, type2tc> struct_map;
+  std::map<typet, type2tc> union_map;
+  std::map<typet, type2tc> array_map;
+  std::map<typet, type2tc> pointer_map;
+  std::map<typet, type2tc> unsignedbv_map;
+  std::map<typet, type2tc> signedbv_map;
+  std::map<typet, type2tc> fixedbv_map;
+  std::map<typet, type2tc> string_map;
+  std::map<typet, type2tc> symbol_map;
+  std::map<typet, type2tc> code_map;
 
   // And refs to some of those for /really/ quick lookup;
   const type2tc *uint8;

@@ -5,8 +5,6 @@ function usage() {
   echo "Options:" >&2
   echo "  -3 dir    Specify directory containing 32 bit solvers" >&2
   echo "  -6 dir       ''       ''        ''     64 bit solvers" >&2
-  echo "  -2 dir       ''       ''        ''     32 bit compatibility solvers" >&2
-  echo "  -5 dir       ''       ''        ''     64 bit compatibility solvers" >&2
   echo "  -h ref    Checkout and build the git reference 'ref'" >&2
   echo "  -i        Incremental build; don't clean objdirs after building" >&2
   echo "  -c        Clean build objdir directories" >&2
@@ -22,7 +20,7 @@ function usage() {
   echo "  -T        Disable a partricular build target" >&2
   echo "  -O        Disable 32 bit versions" >&2
   echo "  -N        Disable 64 bit versions" >&2
-  echo "Valid build targets: linux, linuxcompat, linuxstatic, windows" >&2
+  echo "Valid build targets: linux, linuxstatic, windows" >&2
 }
 
 function checksanity() {
@@ -68,7 +66,6 @@ checksanity
 
 # 2d Array of build targets with the following indicies:
 target_linuxplain=0
-target_linuxcompat=0
 target_linuxstatic=0
 target_windows=0
 
@@ -87,9 +84,6 @@ function settarget() {
   case $target in
     linux)
       target_linuxplain=$val
-      ;;
-    linuxcompat)
-      target_linuxcompat=$val
       ;;
     linuxstatic)
       target_linuxstatic=$val
@@ -110,21 +104,14 @@ while getopts ":3:6:2:5:r:t:T:onONaicj" opt; do
     3)
       satdir32=$OPTARG
       ;;
-    2)
-      satdir32compat=$OPTARG
-      ;;
     6)
       satdir64=$OPTARG
-      ;;
-    5)
-      satdir64compat=$OPTARG
       ;;
     r)
       targetrefname=$OPTARG
       ;;
     a)
       target_linuxplain=1
-      target_linuxcompat=1
       target_linuxstatic=1
       target_windows=1
       target_32bit=1
@@ -171,12 +158,10 @@ while getopts ":3:6:2:5:r:t:T:onONaicj" opt; do
 done
 
 if test $target_linuxplain = "0"; then
-  if test $target_linuxcompat = "0"; then
-    if test $target_linuxstatic = "0"; then
-      if test $target_windows = "0"; then
-        echo "No targets enabled, nothing is going to be built. This probably isn't what you want" >&2
-        exit 1
-      fi
+  if test $target_linuxstatic = "0"; then
+    if test $target_windows = "0"; then
+      echo "No targets enabled, nothing is going to be built. This probably isn't what you want" >&2
+      exit 1
     fi
   fi
 fi
@@ -215,12 +200,6 @@ else
   plainbuild=0
 fi
 
-if test $target_linuxcompat -eq 1; then
-  compatbuild=1;
-else
-  compatbuild=0;
-fi
-
 if test $plainbuild -eq 1 -a $target_32bit -eq 1; then
   satdir32=`setdefaultsatdir "$satdir32" "$SATDIR32" "32-bit solvers" "-3"`
   if test $? = "1"; then exit 1; fi
@@ -229,23 +208,6 @@ fi
 if test $plainbuild -eq 1 -a $target_64bit -eq 1; then
   satdir64=`setdefaultsatdir "$satdir64" "$SATDIR64" "64-bit solvers" "-6"`
   if test $? = "1"; then exit 1; fi
-fi
-
-if test $compatbuild -eq 1 -a $target_32bit -eq 1; then
-  satdir32compat=`setdefaultsatdir "$satdir32compat" "$SATDIR32" "32-bit compat solvers" "-2"`
-  if test $? = "1"; then exit 1; fi
-fi
-
-if test $compatbuild -eq 1 -a $target_64bit -eq 1; then
-  satdir64compat=`setdefaultsatdir "$satdir64compat" "$SATDIR64" "64-bit compat solvers" "-5"`
-  if test $? = "1"; then exit 1; fi
-fi
-
-if test "$satdir32" = "$satdir32compat"; then
-  echo "NB: no compat-specific 32 bit solver dir"
-fi
-if test "$satdir64" = "$satdir64compat"; then
-  echo "NB: no compat-specific 64 bit solver dir"
 fi
 
 # Tell the user about what version of Z3 we're about to compile with
@@ -257,8 +219,6 @@ function printz3 {
 
 printz3 $satdir64 "Linux64"
 printz3 $satdir32 "Linux32"
-printz3 $satdir64compat "LinuxCompat64"
-printz3 $satdir32compat "LinuxCompat32"
 
 # Then, checkout whatever we've been told to release
 # Allow the user to have a dirty tree, but bitch about it.
@@ -354,7 +314,6 @@ function buildstep () {
 
 # IDX for different config options
 envstr_linuxplain="LINUX=1"
-envstr_linuxcompat="LINUX=1 LINUXCOMPAT=1"
 envstr_linuxstatic="LINUX=1 STATICLINK=1"
 envstr_windows="WIN_MINGW32=1"
 
@@ -393,11 +352,6 @@ function dobuild () {
 
   buildstep "$envstr_windows" "$target_windows" "_windows" "windows" "mingw"
   if test $? != 0; then return 1; fi
-
-  export SATDIR32=$satdir32compat
-  export SATDIR64=$satdir64compat
-  buildstep "$envstr_linuxcompat" "$target_linuxcompat" "_compat" "compat linux" "compat"
-  if test $? != 0; then return 1; fi
 }
 
 function cleanup () {
@@ -408,8 +362,6 @@ function cleanup () {
     env OBJDIR=.release_64_linux make clean > /dev/null 2>&1
     env OBJDIR=.release_32_static make clean > /dev/null 2>&1
     env OBJDIR=.release_64_static make clean > /dev/null 2>&1
-    env OBJDIR=.release_32_compat make clean > /dev/null 2>&1
-    env OBJDIR=.release_64_compat make clean > /dev/null 2>&1
     env OBJDIR=.release_32_mingw make clean > /dev/null 2>&1
     env OBJDIR=.release_64_mingw make clean > /dev/null 2>&1
   fi
@@ -464,8 +416,6 @@ function buildtarballs() {
   buildtgz "$version" "linux-32" ".release/esbmc32"
   buildtgz "$version" "linux-64-static" ".release/esbmc_static"
   buildtgz "$version" "linux-32-static" ".release/esbmc32_static"
-  buildtgz "$version" "linux-64-compat" ".release/esbmc_compat"
-  buildtgz "$version" "linux-32-compat" ".release/esbmc32_compat"
   buildtgz "$version" "windows-64" ".release/esbmc_windows"
   buildtgz "$version" "windows-32" ".release/esbmc32_windows"
 }
