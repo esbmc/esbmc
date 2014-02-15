@@ -155,6 +155,17 @@ void goto_symext::symex_assign(const expr2tc &code_assign)
 
   const code_assign2t &code = to_code_assign2t(code_assign);
 
+  // Sanity check: if the target has zero size, then we've ended up assigning
+  // to/from a C++ POD class with no fields. The rest of the model checker isn't
+  // rated for dealing with this concept; perform a NOP.
+  try {
+    if (is_struct_type(code.target->type) &&
+        type_byte_size(*code.target->type) == 0)
+      return;
+  } catch (array_type2t::dyn_sized_array_excp*foo) {
+    delete foo;
+  }
+
   expr2tc lhs = code.target;
   expr2tc rhs = code.source;
 
@@ -414,37 +425,24 @@ void goto_symext::symex_assign_concat(
   if (!is_bv_type(rhs))
     rhs = typecast2tc(get_uint_type(rhs->type->get_width()), rhs);
 
-  if (cat.side_1->type->get_width() == 8) {
-    unsigned int shift_distance = cat.type->get_width() - 8;
-    expr2tc shift_dist = gen_uint(shift_distance);
-    shift_dist = typecast2tc(rhs->type, shift_dist);
-    ashr2tc shr(rhs->type, rhs, shift_dist);
-    typecast2tc shr_cast(get_uint8_type(), shr);
+  // Right. To split this up, work out the size that should be being assigned
+  // to each part of the contact, and cut up the rhs appropriately.
+  unsigned int side1_size = cat.side_1->type->get_width();
+  unsigned int side2_size = cat.side_2->type->get_width();
 
-    // Assign byte from rhs to first lhs operand.
-    symex_assign_rec(cat.side_1, shr_cast, guard);
+  // Position to split it is side2_size bits up from the zero position. Now,
+  // perform this split.
+  // Side2 rhs takes the lower bits, so just downcast the rhs to that num of bit
+  expr2tc side2_rhs = typecast2tc(get_uint_type(side2_size), rhs);
+  // Side1 needs to have that number of lower bits clipped off.
+  expr2tc shift_dist = gen_uint(side2_size);
+  expr2tc side1_rhs = lshr2tc(rhs->type, rhs, shift_dist);
+  // Now downcast it to the desired number of bits.
+  side1_rhs = typecast2tc(get_uint_type(side1_size), side1_rhs);
 
-    // Assign the remainder of the rhs to the lhs's second operand.
-    // XXX -- am I assuming little endian here?
-    typecast2tc cast(get_uint_type(shift_distance), rhs);
-    symex_assign_rec(cat.side_2, cast, guard);
-  } else {
-    assert(cat.side_2->type->get_width() == 8);
-    // Extract lower byte
-    typecast2tc cast(get_uint8_type(), rhs);
-    symex_assign_rec(cat.side_2, cast, guard);
-
-    // Shift one byte off the end, and assign the remainder to the other
-    // operand.
-    unsigned int shift_distance = 8;
-    expr2tc shift_dist = gen_uint(shift_distance);
-    shift_dist = typecast2tc(rhs->type, shift_dist);
-    ashr2tc shr(rhs->type, rhs, shift_dist);
-
-    unsigned int cast_size = cat.type->get_width() - 8;
-    typecast2tc cast2(get_uint_type(cast_size), rhs);
-    symex_assign_rec(cat.side_1, cast2, guard);
-  }
+  // And now, perform the new assignments.
+  symex_assign_rec(cat.side_1, side1_rhs, guard);
+  symex_assign_rec(cat.side_2, side2_rhs, guard);
 }
 
 void goto_symext::replace_nondet(expr2tc &expr)

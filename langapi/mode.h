@@ -29,7 +29,6 @@ extern const char *extensions_ansi_c[];
 extern const char *extensions_intrep[];
 extern const char *extensions_pvs[];
 extern const char *extensions_vhdl[];
-extern const char *extensions_verilog[];
 extern const char *extensions_smv[];
 extern const char *extensions_csp[];
 extern const char *extensions_netlist[];
@@ -62,7 +61,6 @@ languaget *new_pvs_language();
 languaget *new_simplify_language();
 languaget *new_smv_language();
 languaget *new_specc_language();
-languaget *new_verilog_language();
 languaget *new_vhdl_language();
 languaget *new_smt_language();
 languaget *new_nsf_language();
@@ -79,8 +77,6 @@ languaget *new_mdl_language();
   { "PVS",      &new_pvs_language,      extensions_pvs      }
 #define LANGAPI_HAVE_MODE_VHDL \
   { "VHDL",     &new_vhdl_language,     extensions_vhdl     }
-#define LANGAPI_HAVE_MODE_VERILOG \
-  { "Verilog",  &new_verilog_language,  extensions_verilog  }
 #define LANGAPI_HAVE_MODE_SMV \
   { "SMV",      &new_smv_language,      extensions_smv      }
 #define LANGAPI_HAVE_MODE_CSP \
@@ -122,7 +118,6 @@ languaget *new_language(const char *mode);
 #define MODE_IREP     "intrep"
 #define MODE_PVS      "PVS"
 #define MODE_VHDL     "VHDL"
-#define MODE_VERILOG  "Verilog"
 #define MODE_SMV      "SMV"
 #define MODE_CONF     "CSP"
 #define MODE_NETLIST  "Netlist"

@@ -1680,6 +1680,7 @@ z3_convt::convert_smt_expr(const byte_extract2t &data, void *_bv)
     z3::expr src, o;
     convert_bv(source, src);
     convert_bv(offs, o);
+    o = o * ctx.esbmc_int_val(8);
     output = z3::to_expr(ctx, Z3_mk_bvlshr(ctx, src, o));
     output = z3::to_expr(ctx, Z3_mk_extract(z3_ctx, 7, 0, output));
     return;
@@ -2194,7 +2195,11 @@ z3_convt::convert_typecast_bool(const typecast2t &cast, z3::expr &output)
 {
 
   if (is_bv_type(cast.from) || is_pointer_type(cast.from)) {
-    output = output != ctx.esbmc_int_val(0);
+    if (int_encoding) {
+      output = output != ctx.esbmc_int_val(0);
+    } else {
+      output = output != ctx.esbmc_int_val(0, cast.from->type->get_width());
+    }
   } else {
     throw new conv_error("Unimplemented bool typecast");
   }

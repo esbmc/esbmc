@@ -1,12 +1,10 @@
-void *malloc(unsigned);
+#include <stdlib.h>
 
 struct S
 {
   int x;
   char a[];
 };
-
-void *malloc(int);
 
 int main()
 {

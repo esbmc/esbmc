@@ -225,9 +225,12 @@ z3_convt::bv_get_rec(const Z3_ast bv, const type2tc &type)
     tmp = Z3_get_app_arg(z3_ctx, app, num_fields - 1);
 
     assert(Z3_get_ast_kind(z3_ctx, tmp) == Z3_NUMERAL_AST);
+#ifdef NDEBUG
+    Z3_get_numeral_int64(z3_ctx, tmp, &comp_nr);
+#else
     Z3_bool tbool = Z3_get_numeral_int64(z3_ctx, tmp, &comp_nr);
     assert(tbool);
-    tbool = tbool;
+#endif
 
     if (num_fields == 0)
       return expr2tc();

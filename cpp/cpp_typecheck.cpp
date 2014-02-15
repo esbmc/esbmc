@@ -385,6 +385,8 @@ void cpp_typecheckt::do_not_typechecked()
   {
     cont = false;
 
+    std::vector<symbolt*> to_typecheck_list;
+
     Forall_symbols(s_it, context.symbols)
     {
       symbolt &symbol=s_it->second;
@@ -394,26 +396,30 @@ void cpp_typecheckt::do_not_typechecked()
       {
         assert(symbol.type.id()=="code");
 
-        if(symbol.base_name =="operator=")
-        {
-          cpp_declaratort declarator;
-          declarator.location() = symbol.location;
-          default_assignop_value(
-            lookup(symbol.type.get("#member_name")),declarator);
-          symbol.value.swap(declarator.value());
-          convert_function(symbol);
-          cont=true;
-        }
-        else if(symbol.value.operands().size() == 1)
-        {
-          exprt tmp = symbol.value.operands()[0];
-          symbol.value.swap(tmp);
-          convert_function(symbol);
-          cont=true;
-        }
-        else
-          assert(0); // Don't know what to do!
+        to_typecheck_list.push_back(&symbol);
       }
+    }
+
+    for (symbolt *sym : to_typecheck_list) {
+      if (sym->base_name =="operator=")
+      {
+        cpp_declaratort declarator;
+        declarator.location() = sym->location;
+        default_assignop_value(
+          lookup(sym->type.get("#member_name")),declarator);
+        sym->value.swap(declarator.value());
+        convert_function(*sym);
+        cont=true;
+      }
+      else if (sym->value.operands().size() == 1)
+      {
+        exprt tmp = sym->value.operands()[0];
+        sym->value.swap(tmp);
+        convert_function(*sym);
+        cont=true;
+      }
+      else
+        assert(0); // Don't know what to do!
     }
   }
   while(cont);

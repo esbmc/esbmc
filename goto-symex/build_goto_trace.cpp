@@ -28,7 +28,7 @@ void build_goto_trace(
     tvt result;
     result=prop_conv.l_get(SSA_step.guard_literal);
 
-    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME))
+    if(result!=tvt(true) && result!=tvt(tvt::TV_ASSUME) && SSA_step.type != goto_trace_stept::ASSERT)
       continue;
 
     if(it->is_assignment() &&
@@ -80,15 +80,6 @@ void build_goto_trace(
         goto_trace_step.guard = true;
       } else {
         goto_trace_step.guard = result.is_true();
-      }
-
-      if(!goto_trace_step.guard)
-      {
-    	if (!SSA_step.is_assert())
-    	{
-      	  goto_trace_step.type=goto_trace_stept::ASSERT;
-    	}
-        break;
       }
     }
   }

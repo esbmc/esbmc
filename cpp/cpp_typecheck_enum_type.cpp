@@ -60,7 +60,7 @@ void cpp_typecheckt::typecheck_enum_body(symbolt &enum_symbol)
     symbol.base_name=name;
     symbol.value.swap(final_value);
     symbol.location=static_cast<const locationt &>(it->find("#location"));
-    symbol.mode=current_mode;
+    symbol.mode="C++"; // All types are c++ types
     symbol.module=module;
     symbol.type=enum_type;
     symbol.is_type=false;
@@ -148,7 +148,7 @@ void cpp_typecheckt::typecheck_enum_type(typet &type)
     symbol.base_name=base_name;
     symbol.value.make_nil();
     symbol.location=type.location();
-    symbol.mode=current_mode;
+    symbol.mode="C++"; // All types are c++ types.
     symbol.module=module;
     symbol.type.swap(type);
     symbol.is_type=true;

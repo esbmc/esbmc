@@ -175,6 +175,13 @@ goto_symext::symex_function_call_code(const expr2tc &expr)
             "recursion unwinding assertion");
     else if (base_case)
 			unwinding_recursion_assumption=true;
+    else {
+      // Add an unwinding assumption.
+      expr2tc now_guard = cur_state->guard.as_expr();
+      not2tc not_now(now_guard);
+      target->assumption(now_guard, not_now, cur_state->source);
+    }
+
 
     cur_state->source.pc++;
     return;

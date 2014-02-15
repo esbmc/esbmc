@@ -474,17 +474,6 @@ FwdIt2 swap_ranges(FwdIt1 first1, FwdIt1 last1, FwdIt2 last2) {
 	return last2;
 }
 
-template<class FwdIt1, class FwdIt2>
-FwdIt2 swap_ranges(FwdIt1 first1[], FwdIt1 *last1, FwdIt2 *last2) {
-	//while (first1!=last1) swap(*first1++, *last2++);
-	//return *last2;
-}
-
-template<class ForwardIterator1, class ForwardIterator2>
-void iter_swap(ForwardIterator1 a[], ForwardIterator2 b) {
-	swap(*a, *b);
-}
-
 template<class ForwardIterator1, class ForwardIterator2>
 void iter_swap(ForwardIterator1 a, ForwardIterator2 b) {
 	swap(*a, *b);
@@ -654,43 +643,31 @@ FwdIt unique(FwdIt first, FwdIt last, Pr pred) {
 template<class InIt, class OutIt>
 OutIt unique_copy(InIt first, InIt last, OutIt dest) {
 	InIt value = first;
-	dest = first;
+	*dest++ = *first;
 	while (++first != last) {
-		if (!(value == *first)){
-			*(++dest) = value;
-			*value = *first;
+		if (!(*value == *first)){
+			*dest++ = *first;
+			value = first;
 		}
 	}
-	return ++dest;
-}
-
-template<class InIt, class OutIt>
-OutIt unique_copy(InIt *first, InIt *last, OutIt dest) {
-	InIt value = *first;
-	*dest = *first;
-	while (++first != last) {
-		if (!(value == *first)){
-			dest++;
-			*dest = value = *first;
-		}
-	}
-	return ++dest;
+	return dest;
 }
 
 template<class InIt, class OutIt, class Pr>
 OutIt unique_copy(InIt first, InIt last, OutIt dest, Pr pred) {
-#if 1
-	InIt value = first;
-	dest = first;
+
+        if (first == last)
+          return dest;
+
+        InIt value = first;
+        *dest++ = *first;
 	while (++first != last) {
 		if (!pred(*value, *first)){
-			dest++;
-			*dest = *value;
-			*value = *first;
+                        *dest++ = *first;
+                        value = first;
 		}
 	}
-	return ++dest;
-#endif
+	return dest;
 }
 
 template<class BidIt>
@@ -733,8 +710,9 @@ void rotate(FwdIt first, FwdIt middle, FwdIt last) {
 
 template<class FwdIt, class OutIt>
 OutIt rotate_copy(FwdIt first, FwdIt mid, FwdIt last, OutIt dest) {
+        FwdIt orig_mid = mid;
 	while (mid!=last) *dest++ = *mid++;
-	while (first!=mid) *dest++ = *first++;
+	while (first!=orig_mid) *dest++ = *first++;
 	return dest;
 }
 
@@ -742,8 +720,9 @@ template<class FwdIt, class OutIt>
 OutIt rotate_copy(FwdIt *first, FwdIt *mid, FwdIt *last, OutIt dest) {
 	//dest=copy (mid,last,dest);
 	//return dest; //copy (first,mid,dest);
+        FwdIt *orig_mid = mid;
 	while (mid!=last) *dest++ = *mid++;
-	while (first!=mid) *dest++ = *first++;
+	while (first!=orig_mid) *dest++ = *first++;
 	return dest;
 }
 
@@ -1217,7 +1196,8 @@ FwdIt upper_bound(FwdIt first, FwdIt last, const Ty& val, Pr pred) {
 	last--;
 	while(first != last)
 	{
-		if(pred(val, *last) || val == *first) return last;
+          // Return the iterator _before_ the predicate becomes true.
+		if(!pred(val, *last)) return ++last;
 		else last--;
 	}
 	return last;
@@ -1329,23 +1309,6 @@ bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2) {
 	return false;
 }
 
-template<class InIt1, class InIt2>
-bool includes(InIt1 first1[], InIt1 *last1, InIt2 first2[], InIt2 *last2) {
-	while (first1 != last1) {
-		if (*first2 < *first1)
-			break;
-		else if (*first1 < *first2)
-			++first1;
-		else {
-			++first1;
-			++first2;
-		}
-		if (first2 == last2)
-			return true;
-	}
-	return false;
-}
-
 template<class InIt1, class InIt2, class Pr>
 bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred){
 	while (first1 != last1) {
@@ -1361,25 +1324,6 @@ bool includes(InIt1 first1, InIt1 last1, InIt2 first2, InIt2 last2, Pr pred){
 			return true;
 	}
 	return false;
-}
-
-template<class InIt1, class InIt2, class Pr>
-bool includes(InIt1 *first1, InIt1 *last1, InIt2 *first2, InIt2 *last2,
-		Pr pred){
-	while (first1 != last1) {
-		if (pred(*first2, *first1))
-			break;
-		else if (pred(*first1, *first2))
-			++first1;
-		else {
-			++first1;
-			++first2;
-		}
-		if (first2 == last2)
-			return true;
-	}
-	return false;
-
 }
 
 template<class InIt1, class InIt2, class OutIt>
@@ -1919,7 +1863,7 @@ void make_heap(RanIt first, RanIt last){
 	while(t++!=last)
 		n++;
 	int i = n/2;
-	int pai, filho;
+	int parent, child;
 	t = last;
 	for (int j = 0;j < n/2;j++){
 
@@ -1935,20 +1879,20 @@ void make_heap(RanIt first, RanIt last){
 			*t = *(first+n);
 			*(first+n) = *first;
 		}
-		pai = i;
-		filho = i*2+1;
-		while (filho < n){
-			if ((filho + 1 < n)  &&  (*(first+filho + 1) > *(first+filho)))
-				filho++;
-			if (*(first+filho) > *t){
-				*(first+pai) = *(first+filho);
-				pai = filho;
-				filho = pai*2 + 1;
+		parent = i;
+		child = i*2+1;
+		while (child < n){
+			if ((child + 1 < n)  &&  (*(first+child + 1) > *(first+child)))
+				child++;
+			if (*(first+child) > *t){
+				*(first+parent) = *(first+child);
+				parent = child;
+				child = parent*2 + 1;
 			}
 			else
 				break;
 		}
-		*(first+pai) = *t;
+		*(first+parent) = *t;
 	}
 }
 
@@ -2129,7 +2073,7 @@ int* min_element(int *first, int *last) {
 
 template<class FwdIt, class Pr>
 FwdIt min_element(FwdIt first, FwdIt last, Pr pred) {
-	FwdIt *lowest = first;
+	FwdIt lowest = first;
 	if (first == last)
 		return last;
 	while (++first != last)

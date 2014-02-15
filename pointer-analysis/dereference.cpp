@@ -45,12 +45,6 @@ get_arr_type(const expr2tc &expr)
     : to_array_type(to_constant_string2t(expr).to_array()->type);
 }
 
-static inline const type2tc
-get_arr_subtype(const expr2tc &expr)
-{
-  return get_arr_type(expr).subtype;
-}
-
 // Look for the base of an expression such as &a->b[1];, where all we're doing
 // is performing some pointer arithmetic, rather than actually performing some
 // dereference operation.
@@ -282,7 +276,9 @@ dereferencet::dereference_addrof_expr(expr2tc &expr, guardt &guard, modet mode)
       output = typecast2tc(expr->type, output);
       expr = output;
     } else {
-      return; // Doesn't contain a deref?
+      // It's not something that we can simplify from &foo->bar[baz] to not have
+      // a dereference, but might still contain a dereference.
+      dereference_expr(addrof.ptr_obj, guard, mode);
     }
   }
 
@@ -398,6 +394,11 @@ dereferencet::dereference_expr_nonscalar(
       expr2tc res2 = dereference_expr_nonscalar(theif.false_value, g2, mode,
                                                 scalar_step_list);
       scalar_step_list.pop_front();
+
+      if (is_nil_expr(res1))
+        res1 = theif.true_value;
+      if (is_nil_expr(res2))
+        res2 = theif.true_value;
 
       if2tc fin(res1->type, theif.cond, res1, res2);
       res = fin;
@@ -650,11 +651,18 @@ dereferencet::build_reference_to(
   // emits objects with some cruft built on top of them.
   value = get_base_object(value);
 
-  // If offset is unknown, or whatever, instead compute the pointer offset
-  // manually.
+  // If offset is unknown, or whatever, instead we have to consider it
+  // nondeterministic, and let the reference builders deal with it. The exact
+  // offset is the offset in the base pointer, plus any additional offset
+  // introduced by the dereferencing expression.
   if (!is_constant_int2t(final_offset)) {
-    final_offset = pointer_offset2tc(index_type2(), deref_expr);
     assert(o.alignment != 0);
+    final_offset = pointer_offset2tc(index_type2(), deref_expr);
+
+    if (scalar_step_list && scalar_step_list->size()) {
+      expr2tc extra_offs = compute_pointer_offset(scalar_step_list->back());
+      final_offset = add2tc(final_offset->type, final_offset, extra_offs);
+    }
   }
 
   // If we're in internal mode, collect all of our data into one struct, insert
@@ -706,13 +714,18 @@ dereferencet::build_reference_rec(expr2tc &value, const expr2tc &offset,
       // Base must be struct or array. However we're going to burst into flames
       // if we access a byte array as a struct; except that's legitimate when
       // we've just malloc'd it. So, special case that too.
-      const type2tc &base_type_of_steps =
+      type2tc base_type_of_steps =
         (*scalar_step_list->front()->get_sub_expr(0))->type;
+
+      // The base type might be symbolic, btw. This is due to the return type
+      // of some dereferences being symbol types; something to chase and
+      // eliminate at a later date.
+      base_type_of_steps = ns.follow(base_type_of_steps);
 
       if (is_array_type(value->type) &&
           to_array_type(value->type).subtype->get_width() == 8 &&
           (!is_array_type(base_type_of_steps) ||
-           !to_array_type(base_type_of_steps).subtype->get_width() != 8)) {
+           !(to_array_type(base_type_of_steps).subtype->get_width() != 8))) {
         // Right, we're going to be accessing a byte array as not-a-byte-array.
         // Switch this access together.
         expr2tc offset_the_third =
@@ -857,8 +870,15 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
     } else {
       // Badness has occurred; byte extract is needed.
       // XXX -- this should actually extract and stitch.
-      value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
-                              is_big_endian);
+      if (type->get_width() == 8)
+        // You can always read a byte out of anything.
+        value = byte_extract2tc(get_uint_type(deref_size * 8), value, mod2,
+                                is_big_endian);
+      else
+        // XXX XXX XXX -- bail for the moment. We're now producing invalid
+        // formula as a result of the fact that byte extract always gets
+        // converted to one byte, rather than what we request.
+        value = make_failed_symbol(type);
     }
   } else {
     // This either isn't aligned or is the wrong size. That might be fine if
@@ -875,7 +895,7 @@ dereferencet::construct_from_array(expr2tc &value, const expr2tc &offset,
                       tmp_guard);
 
     // This will construct from whatever the subtype is...
-    stitch_together_from_byte_array(value, type, mod2);
+    stitch_together_from_byte_array(value, type, div2);
   }
 
   return;
@@ -1064,7 +1084,7 @@ dereferencet::construct_from_dyn_struct_offset(expr2tc &value,
       guardt newguard(guard);
       newguard.add(field_guard);
       dereference_failure("pointer dereference",
-                          "Oversized field offset", guard);
+                          "Oversized field offset", newguard);
       // Push nothing back, allow fall-through of the if-then-else chain to
       // resolve to a failed deref symbol.
     } else if (alignment >= (config.ansi_c.word_size / 8)) {
@@ -1229,7 +1249,7 @@ dereferencet::construct_struct_ref_from_const_offset(expr2tc &value,
 
       if (!is_scalar_type(*it) &&
             intref.constant_value >= offs &&
-            intref.constant_value <= (offs + size)) {
+            intref.constant_value < (offs + size)) {
         // It's this field. Don't make a decision about whether it's correct
         // or not, recurse to make that happen.
         mp_integer new_offs = intref.constant_value - offs;
@@ -1346,7 +1366,9 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
     // (offs >= 0 && offs < size_of_this_array)
     expr2tc new_offset = mod;
     expr2tc gte = greaterthanequal2tc(offs, zero_uint);
-    expr2tc lt = lessthan2tc(offs, arr_type.array_size);
+    expr2tc arr_size_in_bytes =
+      mul2tc(sub_size->type, arr_type.array_size, sub_size);
+    expr2tc lt = lessthan2tc(offs, arr_size_in_bytes);
     expr2tc range_guard = and2tc(accuml_guard, and2tc(gte, lt));
 
     construct_struct_ref_from_dyn_offs_rec(index, new_offset, type, range_guard,
@@ -1389,6 +1411,7 @@ dereferencet::construct_struct_ref_from_dyn_offs_rec(const expr2tc &value,
 
       construct_struct_ref_from_dyn_offs_rec(memb, new_offset, type,
                                              range_guard, output);
+      i++;
     }
   } else {
     // Not legal
@@ -1440,7 +1463,8 @@ dereferencet::stitch_together_from_byte_array(expr2tc &value,
       accuml = elem;
     } else {
       // XXX -- byte order.
-      type2tc res_type = get_uint_type((i+1) * subtype_sz * 8);
+      type2tc res_type =
+        get_uint_type(accuml->type->get_width() + (subtype_sz * 8));
       accuml = concat2tc(res_type, accuml, elem);
     }
 
@@ -1551,17 +1575,21 @@ void dereferencet::bounds_check(const expr2tc &expr, const expr2tc &offset,
     arrsize = mul2tc(get_uint32_type(), arr_type.array_size, subtype_size);
   }
 
+  typecast2tc unsigned_offset(get_uint32_type(), offset);
+
   // Then, expressions as to whether the access is over or under the array
   // size.
   constant_int2tc access_size_e(get_uint32_type(), BigInt(access_size));
-  add2tc upper_byte(get_uint32_type(), offset, access_size_e);
+  add2tc upper_byte(get_uint32_type(), unsigned_offset, access_size_e);
 
-  greaterthan2tc gt(upper_byte, arrsize);
+  greaterthan2tc gt(unsigned_offset, arrsize);
+  greaterthan2tc gt2(upper_byte, arrsize);
+  or2tc is_in_bounds(gt, gt2);
 
   // Report these as assertions; they'll be simplified away if they're constant
 
   guardt tmp_guard1(guard);
-  tmp_guard1.move(gt);
+  tmp_guard1.move(is_in_bounds);
   dereference_failure("array bounds", "array bounds violated", tmp_guard1);
 }
 
@@ -1573,8 +1601,11 @@ dereferencet::wrap_in_scalar_step_list(expr2tc &value,
   // Check that either the base type that these steps are applied to matches
   // the type of the object we're wrapping in these steps. It's a type error
   // if there isn't a match.
-  expr2tc base_of_steps = *scalar_step_list->front()->get_sub_expr(0);
-  if (dereference_type_compare(value, base_of_steps->type)) {
+  type2tc base_of_steps_type =
+    (*scalar_step_list->front()->get_sub_expr(0))->type;
+  base_of_steps_type = ns.follow(base_of_steps_type);
+
+  if (dereference_type_compare(value, base_of_steps_type)) {
     // We can just reconstruct this.
     expr2tc accuml = value;
     for (std::list<expr2tc>::const_iterator it = scalar_step_list->begin();

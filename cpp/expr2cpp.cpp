@@ -35,8 +35,6 @@ protected:
   virtual std::string convert(const exprt &src, unsigned &precedence);
   virtual std::string convert_cpp_this(const exprt &src, unsigned precedence);
   virtual std::string convert_cpp_new(const exprt &src, unsigned precedence);
-  virtual std::string convert_extractbit(const exprt &src, unsigned precedence);
-  virtual std::string convert_extractbits(const exprt &src, unsigned precedence);
   virtual std::string convert_code_cpp_delete(const exprt &src, unsigned precedence);
   virtual std::string convert_struct(const exprt &src, unsigned &precedence);
   virtual std::string convert_code(const codet &src, unsigned indent);
@@ -336,8 +334,6 @@ std::string expr2cppt::convert_rec(
     }
     return dest;
   }
-  else if(src.id() == "verilogbv")
-    return "sc_lv["+id2string(src.width())+"]";
   else if(src.id()=="unassigned")
     return "?";
   else
@@ -449,16 +445,10 @@ std::string expr2cppt::convert(
 {
   if(src.id()=="cpp-this")
     return convert_cpp_this(src, precedence=15);
-  if(src.id()=="extractbit")
-    return convert_extractbit(src, precedence=15);
-  else if(src.id()=="extractbits")
-    return convert_extractbits(src, precedence=15);
   else if(src.id()=="sideeffect" &&
           (src.statement()=="cpp_new" ||
            src.statement()=="cpp_new[]"))
     return convert_cpp_new(src, precedence=15);
-  else if(src.is_constant() && src.type().id() == "verilogbv")
-    return "'" + id2string(src.value()) + "'";
   else if(src.id()=="unassigned")
     return "?";
   else if(src.id()=="pod_constructor")
@@ -494,48 +484,6 @@ std::string expr2cppt::convert_code(
     return convert_cpp_new(src,indent);
 
   return expr2ct::convert_code(src, indent);
-}
-
-
-/*******************************************************************\
-
-Function: expr2cppt::extractbit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string expr2cppt::convert_extractbit(
-  const exprt &src,
-  unsigned precedence)
-{
-  assert(src.operands().size() == 2);
-  return convert(src.op0()) + "[" + convert(src.op1()) + "]";
-}
-
-/*******************************************************************\
-
-Function: expr2cppt::extractbit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-std::string expr2cppt::convert_extractbits(
-  const exprt &src,
-  unsigned precedence)
-{
-  assert(src.operands().size() == 3);
-  return convert(src.op0()) + ".range(" + convert(src.op1()) + ","
-         + convert(src.op2()) + ")";
 }
 
 /*******************************************************************\

@@ -1066,52 +1066,6 @@ bool simplify_exprt::simplify_bitwise(exprt &expr)
 
 /*******************************************************************\
 
-Function: simplify_exprt::simplify_extractbit
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
-bool simplify_exprt::simplify_extractbit(exprt &expr)
-{
-  const typet &op0_type=expr.op0().type();
-
-  if(!is_bitvector_type(op0_type))
-    return true;
-
-  unsigned width=bv_width(op0_type);
-
-  assert(expr.operands().size()==2);
-
-  mp_integer i;
-
-  if(to_integer(expr.op1(), i))
-    return true;
-
-  if(!expr.op0().is_constant())
-    return true;
-
-  if(i<0 || i>=width)
-    return true;
-
-  const irep_idt &value=expr.op0().value();
-
-  if(value.size()!=width)
-    return true;
-
-  bool bit=(id2string(value)[width-integer2long(i)-1]=='1');
-
-  expr.make_bool(bit);
-
-  return false;
-}
-
-/*******************************************************************\
-
 Function: simplify_exprt::simplify_concatenation
 
   Inputs:
@@ -3160,66 +3114,6 @@ bool simplify_exprt::sort_and_join(exprt &expr)
 
 /*******************************************************************\
 
-Function: simplify_exprt::simplify_extractbits
-
-  Inputs:
-
- Outputs:
-
- Purpose: Simplifies extracting of bits from a constant.
-
-\*******************************************************************/
-
-bool simplify_exprt::simplify_extractbits(exprt &expr)
-{
-  assert(expr.operands().size()==3);
-
-  const typet &op0_type=expr.op0().type();
-
-  if(!is_bitvector_type(op0_type) &&
-     !is_bitvector_type(expr.type()))
-    return true;
-
-  if(expr.op0().is_constant())
-  {
-    unsigned width=bv_width(op0_type);
-    mp_integer start, end;
-
-    if(to_integer(expr.op1(), start))
-      return true;
-
-    if(to_integer(expr.op2(), end))
-      return true;
-
-    if(start<0 || start>=width ||
-       end  <0 || end  >=width)
-      return true;
-
-    assert(start>=end); //is this always the case??
-
-    const irep_idt &value=expr.op0().value();
-
-    if(value.size()!=width)
-      return true;
-
-    std::string svalue=id2string(value);
-
-    std::string extracted_value=
-      svalue.substr(width-integer2long(start)-1,
-                    integer2long(start-end+1));
-
-    exprt tmp("constant", expr.type());
-    tmp.value(extracted_value);
-    expr.swap(tmp);
-
-    return false;
-  }
-
-  return true;
-}
-
-/*******************************************************************\
-
 Function:
 
   Inputs:
@@ -3407,12 +3301,8 @@ bool simplify_exprt::simplify_node(exprt &expr, modet mode)
     result=simplify_address_of(expr) && result;
   else if(expr.id()=="pointer_offset")
     result=simplify_pointer_offset(expr) && result;
-  else if(expr.id()=="extractbit")
-    result=simplify_extractbit(expr) && result;
   else if(expr.id()=="concatenation")
     result=simplify_concatenation(expr) && result;
-  else if(expr.id()=="extractbits")
-    result=simplify_extractbits(expr) && result;
   else if(expr.id()=="ieee_float_equal" ||
           expr.id()=="ieee_float_notequal")
     result=simplify_ieee_float_relation(expr) && result;
