@@ -386,11 +386,11 @@ protected:
 
     typedef std::map<exprt, struct_typet> loop_varst;
     loop_varst loop_vars;
+    unsigned int state_counter;
 
   private:
     bool is_thread, for_block, break_stmt,
          goto_stmt, while_block, ifthenelse_block;
-    unsigned int state_counter;
     typedef std::map<exprt, exprt> nondet_varst;
     nondet_varst nondet_vars;
 };

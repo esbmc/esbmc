@@ -18,6 +18,8 @@ Date: June 2003
 #include "goto_convert_functions.h"
 #include "goto_inline.h"
 #include "remove_skip.h"
+#include "i2string.h"
+#include "ansi-c/c_types.h"
 
 /*******************************************************************\
 
@@ -95,6 +97,20 @@ void goto_convert_functionst::goto_convert()
   }
 
   functions.compute_location_numbers();
+
+  // Create inductive step variable's symbol and add to context
+  for(unsigned int i=1; i<state_counter; ++i)
+  {
+    // First is kindice
+    symbolt kindice_symbol;
+    kindice_symbol.name="kindice$"+i2string(i);
+    kindice_symbol.base_name="kindice$"+i2string(i);
+    kindice_symbol.type=uint_type();
+    kindice_symbol.static_lifetime=true;
+
+    symbolt *symbol_ptr;
+    context.move(kindice_symbol, symbol_ptr);
+  }
 }
 
 /*******************************************************************\
