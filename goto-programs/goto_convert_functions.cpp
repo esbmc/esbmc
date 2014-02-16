@@ -107,9 +107,26 @@ void goto_convert_functionst::goto_convert()
     kindice_symbol.base_name="kindice$"+i2string(i);
     kindice_symbol.type=uint_type();
     kindice_symbol.static_lifetime=true;
+    kindice_symbol.lvalue=true;
 
     symbolt *symbol_ptr;
     context.move(kindice_symbol, symbol_ptr);
+
+    // Then state_vector s
+    // Its type is incomplete array
+    typet incomplete_array_type("incomplete_array");
+
+    // XXX: using this ugly name so it can't be matched by an user program
+    incomplete_array_type.subtype() = symbol_typet("c::tag-state$vector");
+
+    symbolt state_vector_symbol;
+    state_vector_symbol.name="s$"+i2string(i);
+    state_vector_symbol.base_name="s$"+i2string(i);
+    state_vector_symbol.type=incomplete_array_type;
+    state_vector_symbol.static_lifetime=true;
+    state_vector_symbol.lvalue=true;
+
+    context.move(state_vector_symbol, symbol_ptr);
   }
 }
 
