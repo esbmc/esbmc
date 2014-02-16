@@ -2380,23 +2380,6 @@ void goto_convertt::set_expr_to_nondet(
     cache_result = nondet_vars.find(tmp.op0());
     if (cache_result == nondet_vars.end())
       init_nondet_expr(tmp.op0(), dest);
-#if 0
-    else {
-      //declare variables x$ of type uint
-      std::string identifier;
-      identifier = "c::x$"+i2string(state_counter);
-      exprt x_expr = symbol_exprt(identifier, uint_type());
-      get_struct_components(x_expr);
-      exprt nondet_expr=side_effect_expr_nondett(uint_type());
-
-      //initialize x=nondet_uint();
-      code_assignt new_assign_nondet(x_expr,nondet_expr);
-      copy(new_assign_nondet, ASSIGN, dest);
-
-      exprt new_expr = gen_binary(exprt::i_gt, bool_typet(), x_expr, tmp.op1());
-			tmp.swap(new_expr);
-		}
-#endif
   }
 }
 
