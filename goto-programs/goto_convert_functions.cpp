@@ -98,6 +98,22 @@ void goto_convert_functionst::goto_convert()
 
   functions.compute_location_numbers();
 
+  symbolt *symbol_ptr=NULL;
+  // Before the creation of the variables on the context
+  // we must create the state$vector type
+  // XXX: using this ugly name so it can't be matched by an program struct
+
+  symbolt state_symbol;
+  state_symbol.name="c::state$vector";
+  state_symbol.base_name="state$vector";
+  state_symbol.is_type=true;
+  state_symbol.type=state;
+  state_symbol.mode="C";
+  state_symbol.module="main";
+  state_symbol.pretty_name="struct state$vector";
+
+  context.move(state_symbol, symbol_ptr);
+
   // Create inductive step variable's symbol and add to context
   for(unsigned int i=1; i<state_counter; ++i)
   {
@@ -109,7 +125,6 @@ void goto_convert_functionst::goto_convert()
     kindice_symbol.static_lifetime=true;
     kindice_symbol.lvalue=true;
 
-    symbolt *symbol_ptr;
     context.move(kindice_symbol, symbol_ptr);
 
     // Then state_vector s
