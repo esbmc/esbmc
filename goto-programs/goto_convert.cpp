@@ -870,7 +870,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
       return;
 
     if (is_for_block() || is_while_block())
-      loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
+      loop_vars.insert(exp);
 
     if (!is_expr_in_state(exp, state))
     {

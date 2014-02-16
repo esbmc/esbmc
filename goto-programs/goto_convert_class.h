@@ -384,7 +384,7 @@ protected:
     bool k_induction, inductive_step, base_case;
     struct_typet state;
 
-    typedef std::map<exprt, struct_typet> loop_varst;
+    typedef std::set<exprt> loop_varst;
     loop_varst loop_vars;
     unsigned int state_counter;
 
