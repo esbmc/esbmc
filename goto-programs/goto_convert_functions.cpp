@@ -130,7 +130,7 @@ void goto_convert_functionst::goto_convert()
     // Then state_vector s
     // Its type is incomplete array
     typet incomplete_array_type("incomplete_array");
-    incomplete_array_type.subtype() = symbol_typet("c::tag-state$vector");
+    incomplete_array_type.subtype() = struct_typet();
 
     symbolt state_vector_symbol;
     state_vector_symbol.name="s$"+i2string(i);
