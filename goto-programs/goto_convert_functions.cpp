@@ -115,8 +115,6 @@ void goto_convert_functionst::goto_convert()
     // Then state_vector s
     // Its type is incomplete array
     typet incomplete_array_type("incomplete_array");
-
-    // XXX: using this ugly name so it can't be matched by an user program
     incomplete_array_type.subtype() = symbol_typet("c::tag-state$vector");
 
     symbolt state_vector_symbol;
@@ -127,6 +125,19 @@ void goto_convert_functionst::goto_convert()
     state_vector_symbol.lvalue=true;
 
     context.move(state_vector_symbol, symbol_ptr);
+
+    // Finally, the current state cs
+    typet state_type("struct");
+    state_type.tag("state$vector");
+
+    symbolt current_state_symbol;
+    current_state_symbol.name="cs$"+i2string(i);
+    current_state_symbol.base_name="cs$"+i2string(i);
+    current_state_symbol.type=state_type;
+    current_state_symbol.static_lifetime=true;
+    current_state_symbol.lvalue=true;
+
+    context.move(current_state_symbol, symbol_ptr);
   }
 }
 
