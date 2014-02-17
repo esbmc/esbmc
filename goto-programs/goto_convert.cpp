@@ -2444,8 +2444,6 @@ void goto_convertt::replace_cond(
   else if ( exprid == "and" || exprid == "or")
   {
     assert(tmp.operands().size()==2);
-    assert(tmp.op0().operands().size()==2);
-    assert(tmp.op1().operands().size()==2);
 
     //check whether we have the same variable
     if (!tmp.op0().op0().is_constant())
