@@ -77,6 +77,9 @@ Function: goto_convert_functionst::goto_convert
 
 void goto_convert_functionst::goto_convert()
 {
+  // If it is the inductive step, it will add the global variables to the statet
+  add_global_variable_to_state();
+
   // warning! hash-table iterators are not stable
 
   typedef std::list<irep_idt> symbol_listt;
@@ -98,62 +101,8 @@ void goto_convert_functionst::goto_convert()
 
   functions.compute_location_numbers();
 
-  symbolt *symbol_ptr=NULL;
-  // Before the creation of the variables on the context
-  // we must create the state$vector type
-  // XXX: using this ugly name so it can't be matched by an program struct
-
-  symbolt state_symbol;
-  state_symbol.name="c::state$vector";
-  state_symbol.base_name="state$vector";
-  state_symbol.is_type=true;
-  state_symbol.type=state;
-  state_symbol.mode="C";
-  state_symbol.module="main";
-  state_symbol.pretty_name="struct state$vector";
-
-  context.move(state_symbol, symbol_ptr);
-
-  // Create inductive step variable's symbol and add to context
-  for(unsigned int i=1; i<state_counter; ++i)
-  {
-    // First is kindice
-    symbolt kindice_symbol;
-    kindice_symbol.name="kindice$"+i2string(i);
-    kindice_symbol.base_name="kindice$"+i2string(i);
-    kindice_symbol.type=uint_type();
-    kindice_symbol.static_lifetime=true;
-    kindice_symbol.lvalue=true;
-
-    context.move(kindice_symbol, symbol_ptr);
-
-    // Then state_vector s
-    // Its type is incomplete array
-    typet incomplete_array_type("incomplete_array");
-    incomplete_array_type.subtype() = struct_typet();
-
-    symbolt state_vector_symbol;
-    state_vector_symbol.name="s$"+i2string(i);
-    state_vector_symbol.base_name="s$"+i2string(i);
-    state_vector_symbol.type=incomplete_array_type;
-    state_vector_symbol.static_lifetime=true;
-    state_vector_symbol.lvalue=true;
-
-    context.move(state_vector_symbol, symbol_ptr);
-
-    // Finally, the current state cs
-    typet state_type("struct");
-    state_type.tag("state$vector");
-
-    symbolt current_state_symbol;
-    current_state_symbol.name="cs$"+i2string(i);
-    current_state_symbol.base_name="cs$"+i2string(i);
-    current_state_symbol.type=state_type;
-    current_state_symbol.static_lifetime=true;
-    current_state_symbol.lvalue=true;
-
-    context.move(current_state_symbol, symbol_ptr);
-  }
+  // If it is the inductive step, it will add the new variables to context
+  add_new_variables_to_context();
 }
 
 /*******************************************************************\
@@ -588,9 +537,6 @@ goto_convert_functionst::wallop_type(irep_idt name,
 void
 goto_convert_functionst::thrash_type_symbols(void)
 {
-  // If it is the inductive step, it will add the global variables to the statet
-  add_global_variable_to_state();
-
   // This function has one purpose: remove as many type symbols as possible.
   // This is easy enough by just following each type symbol that occurs and
   // replacing it with the value of the type name. However, if we have a pointer

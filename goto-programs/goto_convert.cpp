@@ -1927,6 +1927,80 @@ void goto_convertt::convert_for(
   state_counter++;
 }
 
+/*******************************************************************\
+
+Function: goto_convertt::add_new_variables_to_context
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::add_new_variables_to_context()
+{
+  if(!inductive_step)
+    return;
+
+  symbolt *symbol_ptr=NULL;
+  // Before the creation of the variables on the context
+  // we must create the state$vector type
+  // XXX: using this ugly name so it can't be matched by an program struct
+
+  symbolt state_symbol;
+  state_symbol.name="c::state$vector";
+  state_symbol.base_name="state$vector";
+  state_symbol.is_type=true;
+  state_symbol.type=state;
+  state_symbol.mode="C";
+  state_symbol.module="main";
+  state_symbol.pretty_name="struct state$vector";
+
+  context.move(state_symbol, symbol_ptr);
+
+  // Create inductive step variable's symbol and add to context
+  for(unsigned int i=1; i<state_counter; ++i)
+  {
+    // First is kindice
+    symbolt kindice_symbol;
+    kindice_symbol.name="kindice$"+i2string(i);
+    kindice_symbol.base_name="kindice$"+i2string(i);
+    kindice_symbol.type=uint_type();
+    kindice_symbol.static_lifetime=true;
+    kindice_symbol.lvalue=true;
+
+    context.move(kindice_symbol, symbol_ptr);
+
+    // Then state_vector s
+    // Its type is incomplete array
+    typet incomplete_array_type("incomplete_array");
+    incomplete_array_type.subtype() = struct_typet();
+
+    symbolt state_vector_symbol;
+    state_vector_symbol.name="s$"+i2string(i);
+    state_vector_symbol.base_name="s$"+i2string(i);
+    state_vector_symbol.type=incomplete_array_type;
+    state_vector_symbol.static_lifetime=true;
+    state_vector_symbol.lvalue=true;
+
+    context.move(state_vector_symbol, symbol_ptr);
+
+    // Finally, the current state cs
+    typet state_type("struct");
+    state_type.tag("state$vector");
+
+    symbolt current_state_symbol;
+    current_state_symbol.name="cs$"+i2string(i);
+    current_state_symbol.base_name="cs$"+i2string(i);
+    current_state_symbol.type=state_type;
+    current_state_symbol.static_lifetime=true;
+    current_state_symbol.lvalue=true;
+
+    context.move(current_state_symbol, symbol_ptr);
+  }
+}
 
 /*******************************************************************\
 
@@ -2500,9 +2574,9 @@ void goto_convertt::increment_var(
 {
   if (var.is_true())
   {
-	std::string identifier;
-	identifier = "c::i$"+i2string(state_counter);
-	exprt lhs_expr = symbol_exprt(identifier, uint_type());
+    std::string identifier;
+    identifier = "c::i$"+i2string(state_counter);
+    exprt lhs_expr = symbol_exprt(identifier, uint_type());
 
     //increment var by 1
     exprt one_expr = gen_one(uint_type());
