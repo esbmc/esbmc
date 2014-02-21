@@ -1898,8 +1898,8 @@ void goto_convertt::convert_for(
 
   dest.destructive_append(tmp_w);
 
-  if (inductive_step)
-    increment_var(code.op1(), dest);
+//  if (inductive_step)
+//    increment_var(code.op1(), dest);
 
   dest.destructive_append(tmp_x);
 
@@ -2715,8 +2715,8 @@ void goto_convertt::convert_while(
   if (inductive_step)
     update_state_vector(state_vector, dest);
 
-  if (inductive_step)
-    increment_var(code.op0(), dest);
+//  if (inductive_step)
+//    increment_var(code.op0(), dest);
 
   dest.destructive_append(tmp_x);
 
