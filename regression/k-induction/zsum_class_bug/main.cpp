@@ -20,7 +20,6 @@ class Sum
     }
 };
 
-int nondet_int();
 int N=nondet_int();
 
 int main() 
