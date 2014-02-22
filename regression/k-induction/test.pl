@@ -65,6 +65,7 @@ sub test($$) {
   my ($input, $options, @results) = load($test);
 
   my $output = $input;
+  $output =~ s/\.c$/.out/;
   $output =~ s/\.cpp$/.out/;
 
   if($output eq $input) {
