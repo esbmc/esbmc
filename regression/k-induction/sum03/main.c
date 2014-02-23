@@ -11,7 +11,7 @@ int main() {
   //for(i=1; i<=n; i++) {
   while(1){
     //loop1++;
-     	if (x<10) //first case
+     	//if (x<10) //first case
     sn = sn + a; //second case OK
     //if (i==4) sn=-10; //third case OK
     x++;
