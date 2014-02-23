@@ -1941,7 +1941,7 @@ Function: goto_convertt::add_new_variables_to_context
 
 void goto_convertt::add_new_variables_to_context()
 {
-  if(!inductive_step)
+  if(!options.get_bool_option("inductive-step"))
     return;
 
   symbolt *symbol_ptr=NULL;
