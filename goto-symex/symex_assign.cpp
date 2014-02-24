@@ -81,6 +81,12 @@ goto_symext::goto_symext(const namespacet &_ns, contextt &_new_context,
     deallocd_arr_name = "cpp::__ESBMC_deallocated";
     dyn_info_arr_name = "cpp::__ESBMC_is_dynamic";
   }
+
+  symbolt sym;
+  sym.name = "symex_throw::thrown_obj";
+  sym.base_name = "thrown_obj";
+  // Type left deliberately undefined. XXX, is this wise?
+  new_context.move(sym);
 }
 
 goto_symext::goto_symext(const goto_symext &sym) :
