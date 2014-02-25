@@ -520,53 +520,6 @@ smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
   return truepart->ite(this, condast, falsepart);
 }
 
-void
-smt_convt::tuple_ite_rec(const expr2tc &result, const expr2tc &cond_exp,
-                         const expr2tc &true_val_exp,
-                         const expr2tc &false_val_exp)
-{
-  // So - we need to generate an ite between true_val and false_val, that gets
-  // switched on based on cond, and store the output into result. Do this by
-  // projecting each member out of our arguments and computing another ite
-  // over each member. Note that we always make assertions here, because the
-  // ite is always true, we don't return anything.
-  const tuple_smt_ast *true_val = to_tuple_ast(convert_ast(true_val_exp));
-  const tuple_smt_ast *false_val = to_tuple_ast(convert_ast(false_val_exp));
-
-  const struct_union_data &data = get_type_def(result->type);
-
-  // Iterate through each field and encode an ite.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
-      // Recurse.
-
-      expr2tc res_item = tuple_project_sym(result, i, true);
-      expr2tc true_item = tuple_project_sym(true_val_exp, i, true);
-      expr2tc false_item = tuple_project_sym(false_val_exp, i, true);
-      if (is_tuple_ast_type(*it)) {
-        tuple_ite_rec(res_item, cond_exp, true_item, false_item);
-      } else {
-        const array_type2t &array_type = to_array_type(*it);
-        type2tc dom_sort = make_array_domain_sort_exp(array_type);
-        tuple_array_ite_rec(true_item, false_item, cond_exp, true_item->type,
-                            dom_sort, res_item);
-      }
-    } else {
-      // Normal field: create symbols for the member in each of the arguments,
-      // then create an ite between them, and assert it.
-      expr2tc trueitem = tuple_project_sym(true_val, i);
-      expr2tc falseitem = tuple_project_sym(false_val, i);
-      if2tc ite(trueitem->type, cond_exp, trueitem, falseitem);
-      expr2tc resitem = tuple_project_sym(result, i);
-      equality2tc eq(resitem, ite);
-      assert_ast(convert_ast(eq));
-    }
-
-    i++;
-  }
-}
-
 const smt_ast *
 smt_convt::tuple_array_create(const type2tc &array_type,
                               const smt_ast **inputargs,

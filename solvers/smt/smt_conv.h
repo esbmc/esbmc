@@ -918,9 +918,6 @@ public:
   /** Create a new, constant tuple, from the given arguments. */
   void tuple_create_rec(const std::string &name, const type2tc &structtype,
                         const smt_ast **inputargs);
-  /** Compute an ITE between tuples into the result symbol2tc */
-  void tuple_ite_rec(const expr2tc &result, const expr2tc &cond,
-                     const expr2tc &true_val, const expr2tc &false_val);
   /** Select data from input array into the tuple ast result */
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
                               const tuple_smt_ast *result, const expr2tc &field,
