@@ -932,11 +932,6 @@ public:
                               const expr2tc &idx, const tuple_smt_ast *res,
                               const expr2tc &arr_width,
                               const type2tc &subtype);
-  /** Compute an equality between all the elements of the given tuple array */
-  const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
-                                           const tuple_smt_ast *b,
-                                           const expr2tc &arr_width,
-                                           const type2tc &subtype);
   /** Compute an ITE between two tuple arrays, store output into symbol given
    *  by the res symbol2tc */
   void tuple_array_ite_rec(const expr2tc &true_val, const expr2tc &false_val,

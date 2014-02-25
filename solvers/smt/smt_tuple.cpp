@@ -757,44 +757,6 @@ smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
 }
 
 const smt_ast *
-smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
-                                    const tuple_smt_ast *b,
-                                    const expr2tc &arr_width,
-                                    const type2tc &subtype)
-{
-  // Same as tuple equality rec, but with arrays instead of their normal types.
-  ast_vec eqs;
-  const struct_union_data &struct_type = get_type_def(subtype);
-
-  unsigned int i = 0;
-  forall_types(it, struct_type.members) {
-    if (is_tuple_ast_type(*it)) {
-      // Recurse, as ever.
-      type2tc arrtype(new array_type2t(*it, arr_width, false));
-      const smt_sort *tmp = convert_sort(arrtype);
-      std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
-      std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
-      const tuple_smt_ast *new1 = new array_smt_ast(tmp, name1);
-      const tuple_smt_ast *new2 = new array_smt_ast(tmp, name2);
-      eqs.push_back(tuple_array_equality_rec(new1, new2, arr_width, *it));
-    } else {
-      // Normal equality between members (which are in fact arrays).
-      std::string name1 = a->name + struct_type.member_names[i].as_string();
-      std::string name2 = b->name + struct_type.member_names[i].as_string();
-      type2tc arrtype(new array_type2t(*it, arr_width, false));
-      symbol2tc arr1(arrtype, irep_idt(name1));
-      symbol2tc arr2(arrtype, irep_idt(name2));
-      const smt_ast *eq = convert_array_equality(arr1, arr2);
-      eqs.push_back(eq);
-    }
-
-    i++;
-  }
-
-  return make_conjunct(eqs);
-}
-
-const smt_ast *
 smt_convt::tuple_array_ite(const expr2tc &cond, const expr2tc &trueval,
                            const expr2tc &falseval)
 {
