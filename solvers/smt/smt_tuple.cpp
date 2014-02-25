@@ -613,7 +613,8 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
   forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       // If it's a tuple itself, we have to recurse.
-      const smt_sort *sort = convert_sort(*it);
+      type2tc arrtype(new array_type2t(*it, arr_width, false));
+      const smt_sort *sort = convert_sort(arrtype);
       const tuple_smt_ast *result_field =
         to_tuple_ast(tuple_project(result, sort, i));
       std::string substruct_name =
@@ -679,7 +680,8 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
   forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       // This is a struct; we need to do recurse again.
-      const smt_sort *tmp = convert_sort(*it);
+      type2tc arrtype(new array_type2t(*it, arr_width, false));
+      const smt_sort *tmp = convert_sort(arrtype);
       std::string resname = result->name +
                             struct_type.member_names[i].as_string() +
                             ".";
@@ -746,7 +748,8 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
   forall_types(it, struct_type.members) {
     if (is_tuple_ast_type(*it)) {
       // Recurse, as ever.
-      const smt_sort *tmp = convert_sort(*it);
+      type2tc arrtype(new array_type2t(*it, arr_width, false));
+      const smt_sort *tmp = convert_sort(arrtype);
       std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
       const tuple_smt_ast *new1 = new array_smt_ast(tmp, name1);
