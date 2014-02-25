@@ -135,6 +135,34 @@ smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
+const smt_ast *
+tuple_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
+{
+  // We have two tuple_smt_asts and need to create a boolean ast representing
+  // their equality: iterate over all their members, compute an equality for
+  // each of them, and then combine that into a final ast.
+  const tuple_smt_ast *ta = this;
+  const tuple_smt_ast *tb = to_tuple_ast(other);
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+
+  smt_convt::ast_vec eqs;
+  eqs.reserve(data.members.size());
+
+  // Iterate through each field and encode an equality.
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    const smt_sort *sort = ctx->convert_sort(*it);
+    const smt_ast *side1 = ctx->tuple_project(ta, sort, i);
+    const smt_ast *side2 = ctx->tuple_project(tb, sort, i);
+    eqs.push_back(side1->eq(ctx, side2));
+    i++;
+  }
+
+  // Create an ast representing the fact that all the members are equal.
+  return ctx->make_conjunct(eqs);
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
@@ -480,54 +508,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 const smt_ast *
 smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 {
-  // We have two tuple_smt_asts and need to create a boolean ast representing
-  // their equality: iterate over all their members, compute an equality for
-  // each of them, and then combine that into a final ast.
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
-
-  ast_vec eqs;
-  eqs.reserve(data.members.size());
-
-  // Iterate through each field and encode an equality.
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
-      // Recurse.
-      const smt_sort *sort = convert_sort(*it);
-      const smt_ast *side1 = tuple_project(a, sort, i);
-      const smt_ast *side2 = tuple_project(b, sort, i);
-
-      const smt_ast *r;
-      if (is_tuple_ast_type(*it))
-        r = tuple_equality(side1, side2);
-      else
-        r = tuple_array_equality(side1, side2);
-
-      eqs.push_back(r);
-    } else if (is_array_type(*it)) {
-      expr2tc side1 = tuple_project_sym(a, i);
-      expr2tc side2 = tuple_project_sym(b, i);
-      eqs.push_back(convert_array_equality(side1, side2));
-    } else {
-      // This is a normal piece of data, project it to get a normal smt symbol
-      // and encode an equality between the two values.
-      const smt_ast *args[2];
-      const smt_sort *sort = convert_sort(*it);
-      args[0] = tuple_project(a, sort, i);
-      args[1] = tuple_project(b, sort, i);
-      const smt_ast *eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      eqs.push_back(eq);
-    }
-
-    i++;
-  }
-
-  // Create an ast representing the fact that all the members are equal.
-  return make_conjunct(eqs);
+  return a->eq(this, b);
 }
 
 const smt_ast *
