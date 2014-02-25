@@ -180,7 +180,10 @@ smt_convt::tuple_fresh(const smt_sort *s)
 
   smt_ast *a = mk_smt_symbol(name, s);
   (void)a;
-  return new tuple_smt_ast(s, name);
+  if (s->id == SMT_SORT_ARRAY)
+    return new array_smt_ast(s, name);
+  else
+    return new tuple_smt_ast(s, name);
 }
 
 const struct_union_data &
@@ -220,8 +223,10 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
       // was converted, we already created an appropriate tuple_smt_ast, so we
       // just need to equality it into the tuple with the passed in name.
       std::string subname = name + data.member_names[i].as_string() + ".";
-      const tuple_smt_ast *target =
-        new tuple_smt_ast(convert_sort(*it), subname);
+      const smt_sort *thesort = convert_sort(*it);
+      const tuple_smt_ast *target = (is_tuple_array_ast_type(*it))
+        ? new array_smt_ast(thesort, subname)
+        : new tuple_smt_ast(thesort, subname);
       const smt_ast *src = inputargs[i];
 
       if (is_tuple_ast_type(*it))
@@ -259,6 +264,7 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
     name += ".";
 
   const smt_sort *sort = convert_sort(sym.type);
+  assert(sort->id != SMT_SORT_ARRAY);
   return new tuple_smt_ast(sort, name);
 }
 
@@ -269,7 +275,7 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   const smt_sort *sort = convert_sort(sym.type);
-  return new tuple_smt_ast(sort, name);
+  return new array_smt_ast(sort, name);
 }
 
 smt_ast *
@@ -313,7 +319,10 @@ smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    return new tuple_smt_ast(s, sym_name);
+    if (is_tuple_array_ast_type(restype))
+      return new array_smt_ast(s, sym_name);
+    else
+      return new tuple_smt_ast(s, sym_name);
   } else {
     // This is a normal variable, so create a normal symbol of its name.
     return mk_smt_symbol(sym_name, s);
@@ -533,7 +542,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   // XXX - probably more efficient to update each member array, but not now.
   const smt_sort *sort = convert_sort(array_type);
   std::string name = mk_fresh_name("tuple_array_create::") + ".";
-  const smt_ast *newsym = new tuple_smt_ast(sort, name);
+  const smt_ast *newsym = new array_smt_ast(sort, name);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -583,7 +592,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   std::string name = mk_fresh_name("tuple_array_select::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(s, name);
+  const tuple_smt_ast *result = new array_smt_ast(s, name);
 
   type2tc newtype = flatten_array_type(ts->thetype);
   const array_type2t &array_type = to_array_type(newtype);
@@ -617,7 +626,7 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
         to_tuple_ast(tuple_project(result, sort, i));
       std::string substruct_name =
         ta->name + struct_type.member_names[i].as_string() + ".";
-      const tuple_smt_ast *array_name = new tuple_smt_ast(sort, substruct_name);
+      const tuple_smt_ast *array_name = new array_smt_ast(sort, substruct_name);
       tuple_array_select_rec(array_name, *it, result_field, field, arr_width);
     } else {
       // Otherwise assume it's a normal variable: create its name (which is of
@@ -652,7 +661,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
   const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
 
   std::string name = mk_fresh_name("tuple_array_update[]::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
+  const tuple_smt_ast *result = new array_smt_ast(a->sort, name);
 
   type2tc newtype = flatten_array_type(ts->thetype);
   const array_type2t &array_type = to_array_type(newtype);
@@ -686,9 +695,9 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
                             ".";
       std::string valname = tv->name + struct_type.member_names[i].as_string() +
                             ".";
-      const tuple_smt_ast *target = new tuple_smt_ast(tmp, resname);
-      const tuple_smt_ast *src = new tuple_smt_ast(tmp, srcname);
-      const tuple_smt_ast *val = new tuple_smt_ast(tmp, valname);
+      const tuple_smt_ast *target = new array_smt_ast(tmp, resname);
+      const tuple_smt_ast *src = new array_smt_ast(tmp, srcname);
+      const tuple_smt_ast *val = new array_smt_ast(tmp, valname);
 
       tuple_array_update_rec(src, val, idx, target, arr_width, *it);
     } else {
@@ -748,8 +757,8 @@ smt_convt::tuple_array_equality_rec(const tuple_smt_ast *a,
       const smt_sort *tmp = convert_sort(*it);
       std::string name1 = a->name + struct_type.member_names[i].as_string()+".";
       std::string name2 = b->name + struct_type.member_names[i].as_string()+".";
-      const tuple_smt_ast *new1 = new tuple_smt_ast(tmp, name1);
-      const tuple_smt_ast *new2 = new tuple_smt_ast(tmp, name2);
+      const tuple_smt_ast *new1 = new array_smt_ast(tmp, name1);
+      const tuple_smt_ast *new2 = new array_smt_ast(tmp, name2);
       eqs.push_back(tuple_array_equality_rec(new1, new2, arr_width, *it));
     } else {
       // Normal equality between members (which are in fact arrays).
@@ -991,7 +1000,7 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
   const smt_sort *sort = convert_sort(arrtype);
-  const smt_ast *newsym = new tuple_smt_ast(sort, name);
+  const smt_ast *newsym = new array_smt_ast(sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++) {
