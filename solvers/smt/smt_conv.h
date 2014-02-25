@@ -296,7 +296,7 @@ public:
 
   // "this" is the true operand.
   virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
-      const smt_ast *falseop);
+      const smt_ast *falseop) const;
 };
 
 /** Function app representing a tuple sorted value.
@@ -327,7 +327,7 @@ public:
 
 
   virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
-      const smt_ast *falseop);
+      const smt_ast *falseop) const;
 };
 
 class array_smt_ast : public tuple_smt_ast

@@ -74,7 +74,7 @@ to_tuple_sort(const smt_sort *a)
 }
 
 const smt_ast *
-smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
+smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) const
 {
   const smt_ast *args[3];
   args[0] = cond;
@@ -84,7 +84,7 @@ smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
 }
 
 const smt_ast *
-tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
+tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
@@ -512,20 +512,12 @@ smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
 
 const smt_ast *
 smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
-                     const expr2tc &false_val, const type2tc &type)
+                     const expr2tc &false_val, const type2tc &type __attribute__((unused)))
 {
-  // Prepare to create an ite between our arguments; the heavy lifting is done
-  // by tuple_ite_rec, here we generate a new name for these things to be stored
-  // into, then pass everything down to tuple_ite_rec.
-
-  // Create a fresh tuple to store the result in
-  std::string name = mk_fresh_name("tuple_ite::") + ".";
-  symbol2tc result(type, irep_idt(name));
-
-  tuple_ite_rec(result, cond,
-                force_expr_to_tuple_sym(true_val),
-                force_expr_to_tuple_sym(false_val));
-  return convert_ast(result);
+  const smt_ast *truepart = convert_ast(force_expr_to_tuple_sym(true_val));
+  const smt_ast *falsepart = convert_ast(force_expr_to_tuple_sym(false_val));
+  const smt_ast *condast = convert_ast(cond);
+  return truepart->ite(this, condast, falsepart);
 }
 
 void
