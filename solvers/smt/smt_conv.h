@@ -84,6 +84,8 @@
  *  @see smt_convt::mk_func_app
  */
 
+struct smt_convt; // Forward dec.
+
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
  *  identifier. To be able to describe multiple kinds at the same time, they
@@ -291,6 +293,9 @@ public:
 
   smt_ast(const smt_sort *s) : sort(s) { }
   virtual ~smt_ast() { }
+
+  // "this" is the true operand.
+  virtual smt_ast *ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop);
 };
 
 /** Function app representing a tuple sorted value.

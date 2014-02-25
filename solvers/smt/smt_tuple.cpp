@@ -74,6 +74,16 @@ to_tuple_sort(const smt_sort *a)
 }
 
 smt_ast *
+smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
+{
+  const smt_ast *args[3];
+  args[0] = cond;
+  args[1] = this;
+  args[2] = falseop;
+  return ctx->mk_func_app(sort, SMT_FUNC_ITE, args, 3);
+}
+
+smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
   // From a vector of expressions, create a tuple representation by creating
