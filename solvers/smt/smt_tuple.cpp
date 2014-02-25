@@ -124,6 +124,17 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
   return ctx->convert_ast(result);
 }
 
+const smt_ast *
+smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
+{
+  // Simple approach: this is a leaf piece of SMT, compute a basic equality.
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = other;
+  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
