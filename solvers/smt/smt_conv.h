@@ -295,7 +295,8 @@ public:
   virtual ~smt_ast() { }
 
   // "this" is the true operand.
-  virtual smt_ast *ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop);
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop);
 };
 
 /** Function app representing a tuple sorted value.
@@ -323,6 +324,10 @@ public:
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
   const std::string name;
+
+
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop);
 };
 
 class array_smt_ast : public tuple_smt_ast

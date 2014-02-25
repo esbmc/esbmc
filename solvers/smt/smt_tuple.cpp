@@ -73,7 +73,7 @@ to_tuple_sort(const smt_sort *a)
   return ta;
 }
 
-smt_ast *
+const smt_ast *
 smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
 {
   const smt_ast *args[3];
@@ -81,6 +81,47 @@ smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
   args[1] = this;
   args[2] = falseop;
   return ctx->mk_func_app(sort, SMT_FUNC_ITE, args, 3);
+}
+
+const smt_ast *
+tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop)
+{
+  // So - we need to generate an ite between true_val and false_val, that gets
+  // switched on based on cond, and store the output into result. Do this by
+  // projecting each member out of our arguments and computing another ite
+  // over each member. Note that we always make assertions here, because the
+  // ite is always true. We return the output symbol.
+  const tuple_smt_ast *true_val = this;
+  const tuple_smt_ast *false_val = to_tuple_ast(falseop);
+  const tuple_smt_sort *thissort = to_tuple_sort(sort);
+  std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
+  symbol2tc result(thissort->thetype, name);
+
+  const struct_union_data &data = ctx->get_type_def(thissort->thetype);
+
+  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+
+  // Iterate through each field and encode an ite.
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    smt_sort *thesort = ctx->convert_sort(*it);
+    smt_ast *truepart = ctx->tuple_project(true_val, thesort, i);
+    smt_ast *falsepart = ctx->tuple_project(false_val, thesort, i);
+
+    const smt_ast *result_ast = truepart->ite(ctx, cond, falsepart);
+
+    expr2tc resitem = ctx->tuple_project_sym(result, i);
+    const smt_ast *result_sym_ast = ctx->convert_ast(resitem);
+
+    const smt_ast *args[2];
+    args[0] = result_ast;
+    args[1] = result_sym_ast;
+    ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+
+    i++;
+  }
+
+  return ctx->convert_ast(result);
 }
 
 smt_ast *
