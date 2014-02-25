@@ -340,6 +340,8 @@ public:
     : tuple_smt_ast(s, _name) { }
   virtual ~array_smt_ast() { }
 
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop) const;
   virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
 };
 

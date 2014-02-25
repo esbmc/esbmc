@@ -125,6 +125,48 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
 }
 
 const smt_ast *
+array_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) const
+{
+  // Similar to tuple ite's, but the leafs are arrays.
+  const tuple_smt_ast *true_val = this;
+  const tuple_smt_ast *false_val = to_tuple_ast(falseop);
+  const tuple_smt_sort *thissort = to_tuple_sort(sort);
+  assert(is_array_type(thissort->thetype));
+  const array_type2t &array_type = to_array_type(thissort->thetype);
+  std::string name = ctx->mk_fresh_name("tuple_array_ite::") + ".";
+  symbol2tc result(thissort->thetype, name);
+
+  const struct_union_data &data = ctx->get_type_def(thissort->thetype);
+
+  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+
+  // Iterate through each field and encode an ite.
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    type2tc arrtype(new array_type2t(*it, array_type.array_size,
+          array_type.size_is_infinite));
+
+    smt_sort *thesort = ctx->convert_sort(arrtype);
+    smt_ast *truepart = ctx->tuple_project(true_val, thesort, i);
+    smt_ast *falsepart = ctx->tuple_project(false_val, thesort, i);
+
+    const smt_ast *result_ast = truepart->ite(ctx, cond, falsepart);
+
+    expr2tc resitem = ctx->tuple_project_sym(result, i);
+    const smt_ast *result_sym_ast = ctx->convert_ast(resitem);
+
+    const smt_ast *args[2];
+    args[0] = result_ast;
+    args[1] = result_sym_ast;
+    ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+
+    i++;
+  }
+
+  return ctx->convert_ast(result);
+}
+
+const smt_ast *
 smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
@@ -719,6 +761,11 @@ const smt_ast *
 smt_convt::tuple_array_ite(const expr2tc &cond, const expr2tc &trueval,
                            const expr2tc &falseval)
 {
+  const smt_ast *condast = convert_ast(cond);
+  const smt_ast *truevalast = convert_ast(trueval);
+  const smt_ast *falsevalast = convert_ast(falseval);
+  return truevalast->ite(this, condast, falsevalast);
+
   // Same deal as tuple_ite, but with array types. In this function we create
   // the fresh tuple array in which to store all the results into.
   std::string name = mk_fresh_name("tuple_array_ite[]::") + ".";
