@@ -811,13 +811,6 @@ public:
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
-  /** Comparison between two arrays.
-   *  @param a First array to compare.
-   *  @param b Second array to compare.
-   *  @return Boolean valued AST representing the result of this equality. */
-  virtual const smt_ast *convert_array_equality(const expr2tc &a,
-                                                const expr2tc &b);
-
   /** @} */
 
   /** @{

@@ -466,9 +466,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
   // Take the tuple_smt_ast a and update the ith field with the value v. As
   // ever, we do this by creating a new tuple. The non-ith values are just
   // assigned into the new tuple, and the ith member is replaced with v.
-  const smt_ast *args[2];
   ast_vec eqs;
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   const smt_ast *v = convert_ast(ve);
 
@@ -493,25 +491,10 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
     } else {
       // This is not an updated field; extract the member out of the input
       // tuple (a) and assign it into the fresh tuple.
-      if (is_tuple_ast_type(*it)) {
-        // A tuple equality is required for tuples.
-        std::stringstream ss2;
-        ss2 << name << data.member_names[j] << ".";
-        std::string field_name = name;
-        const smt_sort *tmp = convert_sort(*it);
-        const smt_ast *field1 = tuple_project(ta, tmp, j);
-        const smt_ast *field2 = tuple_project(result, tmp, j);
-        eqs.push_back(tuple_equality(field1, field2));
-      } else if (is_array_type(*it)) {
-        expr2tc side1 = tuple_project_sym(result, j);
-        expr2tc side2 = tuple_project_sym(ta, j);
-        eqs.push_back(convert_array_equality(side1, side2));
-      } else {
-        const smt_sort *tmp = convert_sort(*it);
-        args[0] = tuple_project(ta, tmp, j);
-        args[1] = tuple_project(result, tmp, j);
-        eqs.push_back(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
-      }
+      const smt_sort *tmp = convert_sort(*it);
+      const smt_ast *field1 = tuple_project(ta, tmp, j);
+      const smt_ast *field2 = tuple_project(result, tmp, j);
+      eqs.push_back(field1->eq(this, field2));
     }
 
     j++;
@@ -727,7 +710,9 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
 
       // Now assign that ast into the result tuple array.
       symbol2tc ressym(this_arr_type, irep_idt(resname));
-      const smt_ast *eq = convert_array_equality(ressym, store);
+      const smt_ast *ressym_ast = convert_ast(ressym);
+      const smt_ast *store_ast = convert_ast(store);
+      const smt_ast *eq = ressym_ast->eq(this, store_ast);
       assert_ast(eq);
     }
 
@@ -968,7 +953,9 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 
     expr2tc target_array = tuple_project_sym(tuple_arr_of_sym, i);
 
-    assert_ast(convert_array_equality(target_array, sub_array_of));
+    const smt_ast *target_array_ast = convert_ast(target_array);
+    const smt_ast *sub_array_of_ast = convert_ast(sub_array_of);
+    assert_ast(target_array_ast->eq(this, sub_array_of_ast));
   }
 
   return newsym;
@@ -1021,13 +1008,3 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr,
   }
 }
 
-const smt_ast *
-smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
-{
-  const smt_ast *args[2];
-  args[0] = convert_ast(a);
-  args[1] = convert_ast(b);
-
-  // XXX is this function redundant now?
-  return args[0]->eq(this, args[1]);
-}
