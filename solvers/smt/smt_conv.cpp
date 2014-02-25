@@ -556,13 +556,10 @@ expr_handle_table:
   {
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
-    if (is_structure_type(expr) || is_pointer_type(expr)) {
-      a = tuple_ite(if_ref.cond, if_ref.true_value, if_ref.false_value,
-                    if_ref.type);
-    } else {
-      assert(is_array_type(expr));
-      a = tuple_array_ite(if_ref.cond, if_ref.true_value, if_ref.false_value);
-    }
+    args[0] = convert_ast(if_ref.cond);
+    args[1] = convert_ast(if_ref.true_value);
+    args[2] = convert_ast(if_ref.false_value);
+    a = args[1]->ite(this, args[0], args[2]);
     break;
   }
   case expr2t::isnan_id:

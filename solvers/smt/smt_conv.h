@@ -701,16 +701,6 @@ public:
                                       const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
 
-  /** ITE operation between two tuple arrays. Note that this doesn't accept
-   *  any smt_ast's (can't remember why).
-   *  @param cond Condition to switch this ite operation on.
-   *  @param trueval Tuple array to evaluate to if cond is true.
-   *  @param falaseval Tuple array to evaluate to if cond is false.
-   *  @return AST representing the result of this ITE operation. */
-  virtual const smt_ast *tuple_array_ite(const expr2tc &cond,
-                                         const expr2tc &trueval,
-                                         const expr2tc &false_val);
-
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
    *  sort.
@@ -915,12 +905,6 @@ public:
                               const expr2tc &idx, const tuple_smt_ast *res,
                               const expr2tc &arr_width,
                               const type2tc &subtype);
-  /** Compute an ITE between two tuple arrays, store output into symbol given
-   *  by the res symbol2tc */
-  void tuple_array_ite_rec(const expr2tc &true_val, const expr2tc &false_val,
-                           const expr2tc &cond, const type2tc &type,
-                           const type2tc &dom_sort,
-                           const expr2tc &res);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
