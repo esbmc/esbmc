@@ -325,6 +325,14 @@ public:
   const std::string name;
 };
 
+class array_smt_ast : public tuple_smt_ast
+{
+public:
+  array_smt_ast (const smt_sort *s, const std::string &_name)
+    : tuple_smt_ast(s, _name) { }
+  virtual ~array_smt_ast() { }
+};
+
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
