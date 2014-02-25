@@ -339,6 +339,8 @@ public:
   array_smt_ast (const smt_sort *s, const std::string &_name)
     : tuple_smt_ast(s, _name) { }
   virtual ~array_smt_ast() { }
+
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
 };
 
 /** The base SMT-conversion class/interface.

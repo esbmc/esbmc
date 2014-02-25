@@ -163,6 +163,38 @@ tuple_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   return ctx->make_conjunct(eqs);
 }
 
+
+const smt_ast *
+array_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
+{
+  // We have two tuple_smt_asts and need to create a boolean ast representing
+  // their equality: iterate over all their members, compute an equality for
+  // each of them, and then combine that into a final ast.
+  const tuple_smt_ast *ta = this;
+  const tuple_smt_ast *tb = to_tuple_ast(other);
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const array_type2t &arrtype = to_array_type(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
+
+  smt_convt::ast_vec eqs;
+  eqs.reserve(data.members.size());
+
+  // Iterate through each field and encode an equality.
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
+          arrtype.size_is_infinite));
+    const smt_sort *sort = ctx->convert_sort(tmparrtype);
+    const smt_ast *side1 = ctx->tuple_project(ta, sort, i);
+    const smt_ast *side2 = ctx->tuple_project(tb, sort, i);
+    eqs.push_back(side1->eq(ctx, side2));
+    i++;
+  }
+
+  // Create an ast representing the fact that all the members are equal.
+  return ctx->make_conjunct(eqs);
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
@@ -721,17 +753,7 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
 const smt_ast *
 smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
 {
-  // Almost exactly the same as tuple equality, but all the types are arrays
-  // instead of their normal types.
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_ast *tb = to_tuple_ast(b);
-  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
-
-  // Descend through multidimensional arrays.
-  type2tc newtype = flatten_array_type(ts->thetype);
-  const array_type2t &array_type = to_array_type(newtype);
-  return tuple_array_equality_rec(ta, tb, array_type.array_size,
-                                  array_type.subtype);
+  return a->eq(this, b);
 }
 
 const smt_ast *
