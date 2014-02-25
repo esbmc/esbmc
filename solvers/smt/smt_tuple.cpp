@@ -579,7 +579,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   const tuple_smt_sort *ts = to_tuple_sort(a->sort);
 
   std::string name = mk_fresh_name("tuple_array_select::") + ".";
-  const tuple_smt_ast *result = new array_smt_ast(s, name);
+  const tuple_smt_ast *result = new tuple_smt_ast(s, name);
 
   type2tc newtype = flatten_array_type(ts->thetype);
   const array_type2t &array_type = to_array_type(newtype);
