@@ -615,32 +615,9 @@ expr_handle_table:
   case expr2t::equality_id:
   {
     const equality2t &eq = to_equality2t(expr);
-    if (is_struct_type(eq.side_1->type) && is_struct_type(eq.side_2->type)) {
-      // Struct equality
-      a = tuple_equality(args[0], args[1]);
-    } else if (is_array_type(eq.side_1->type) &&
-               is_array_type(eq.side_2->type)) {
-      if (is_structure_type(to_array_type(eq.side_1->type).subtype) ||
-          is_pointer_type(to_array_type(eq.side_1->type).subtype)) {
-        // Array of structs equality.
-        args[0] = convert_ast(eq.side_1);
-        args[1] = convert_ast(eq.side_2);
-        a = tuple_array_equality(args[0], args[1]);
-      } else {
-        // Normal array equality
-        a = convert_array_equality(eq.side_1, eq.side_2);
-      }
-    } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
-      // Pointers are tuples
-      a = tuple_equality(args[0], args[1]);
-    } else if (is_union_type(eq.side_1) && is_union_type(eq.side_2)) {
-      // Unions are also tuples
-      a = tuple_equality(args[0], args[1]);
-    } else {
-      std::cerr << "Unrecognized equality form" << std::endl;
-      expr->dump();
-      abort();
-    }
+    const smt_ast *b = convert_ast(eq.side_1);
+    const smt_ast *c = convert_ast(eq.side_2);
+    a = b->eq(this, c);
     break;
   }
   case expr2t::shl_id:

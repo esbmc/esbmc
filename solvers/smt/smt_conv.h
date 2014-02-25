@@ -705,12 +705,6 @@ public:
                                       const expr2tc &field,
                                       const smt_ast *val, const smt_sort *s);
 
-  /** Compute the equality of two tuple arrays.
-   *  @param a First tuple array to compare.
-   *  @param b Second tuple array to compare.
-   *  @return Boolean valued AST representing the outcome of this equality. */
-  virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
-
   /** ITE operation between two tuple arrays. Note that this doesn't accept
    *  any smt_ast's (can't remember why).
    *  @param cond Condition to switch this ite operation on.

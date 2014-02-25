@@ -300,10 +300,7 @@ smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
         : new tuple_smt_ast(thesort, subname);
       const smt_ast *src = inputargs[i];
 
-      if (is_tuple_ast_type(*it))
-        assert_ast(tuple_equality(target, src));
-      else
-        assert_ast(tuple_array_equality(target, src));
+      assert_ast(target->eq(this, src));
     } else {
       // This is a normal field -- take the value from the inputargs array,
       // compute the members name, and then make an equality.
@@ -492,19 +489,7 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
       const smt_sort *tmp = convert_sort(*it);
       const smt_ast *thefield = tuple_project(result, tmp, j);
 
-      if (is_tuple_ast_type(*it)) {
-        // If it's of tuple type though, we need to generate a tuple equality.
-        eqs.push_back(tuple_equality(thefield, v));
-      } else if (is_tuple_array_ast_type(*it)) {
-        eqs.push_back(tuple_array_equality(thefield, v));
-      } else if (is_array_type(*it)) {
-        expr2tc update_val_expr = tuple_project_sym(result, j);
-        eqs.push_back(convert_array_equality(update_val_expr, ve));
-      } else {
-        args[0] = thefield;
-        args[1] = v;
-        eqs.push_back(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
-      }
+      eqs.push_back(thefield->eq(this, v));
     } else {
       // This is not an updated field; extract the member out of the input
       // tuple (a) and assign it into the fresh tuple.
@@ -748,12 +733,6 @@ smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
 
     i++;
   }
-}
-
-const smt_ast *
-smt_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
-{
-  return a->eq(this, b);
 }
 
 const smt_ast *
@@ -1046,17 +1025,9 @@ const smt_ast *
 smt_convt::convert_array_equality(const expr2tc &a, const expr2tc &b)
 {
   const smt_ast *args[2];
-  const smt_sort * s = mk_sort(SMT_SORT_BOOL);
   args[0] = convert_ast(a);
   args[1] = convert_ast(b);
 
-  // Did we generate a tuple ast?
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(args[0]);
-
-  // If we did, we need to do a tuple array equality.
-  if (ta != NULL) {
-    return tuple_array_equality(args[0], args[1]);
-  } else {
-    return mk_func_app(s, SMT_FUNC_EQ, args, 2);
-  }
+  // XXX is this function redundant now?
+  return args[0]->eq(this, args[1]);
 }
