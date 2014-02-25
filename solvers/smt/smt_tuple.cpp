@@ -173,6 +173,7 @@ array_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   const tuple_smt_ast *ta = this;
   const tuple_smt_ast *tb = to_tuple_ast(other);
   const tuple_smt_sort *ts = to_tuple_sort(sort);
+  assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
 
