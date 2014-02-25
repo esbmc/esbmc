@@ -700,17 +700,10 @@ expr_handle_table:
   }
   case expr2t::notequal_id:
   {
-    const notequal2t &notequal = to_notequal2t(expr);
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
-    if (is_structure_type(notequal.side_1) ||is_pointer_type(notequal.side_1)) {
-      a = tuple_equality(args[0], args[1]);
-      a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
-    } else {
-      std::cerr << "Unexpected inequailty operands" << std::endl;
-      expr->dump();
-      abort();
-    }
+    a = args[0]->eq(this, args[1]);
+    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
   }
   case expr2t::abs_id:

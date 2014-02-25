@@ -405,7 +405,6 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   smt_sort *fresh_sort = convert_sort(cast.type);
   smt_ast *fresh = tuple_fresh(fresh_sort);
   const smt_ast *src_ast = convert_ast(cast.from);
-  smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   if (same_format) {
     // Alas, Z3 considers field names as being part of the type, so we can't
@@ -416,12 +415,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       smt_sort *this_sort = convert_sort(*it);
       args[0] = tuple_project(src_ast, this_sort, i2);
       args[1] = tuple_project(fresh, this_sort, i2);
-      const smt_ast *eq;
-      if (is_struct_type(*it) || is_union_type(*it) || is_pointer_type(*it))
-        eq = tuple_equality(args[0], args[1]);
-      else
-        eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      assert_ast(eq);
+      assert_ast(args[0]->eq(this, args[1]));
       i2++;
     }
   } else {
@@ -451,13 +445,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       args[0] = tuple_project(src_ast, this_sort, i3);
       args[1] = tuple_project(fresh, this_sort, i2);
 
-      const smt_ast *eq;
-      if (is_struct_type(thetype) || is_union_type(thetype) ||
-          is_pointer_type(thetype))
-        eq = tuple_equality(args[0], args[1]);
-      else
-        eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
-      assert_ast(eq);
+      assert_ast(args[0]->eq(this, args[1]));
       i2++;
     }
    }

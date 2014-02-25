@@ -654,12 +654,6 @@ public:
   virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                       const expr2tc &val);
 
-  /** Evaluate whether two tuples are equal.
-   *  @param a An AST handle to a tuple.
-   *  @param b Another AST handle to a tuple, of the same sort as a.
-   *  @result A boolean valued AST representing the equality of a and b. */
-  virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
-
   /** Select operation for tuples. Identical to the 'ITE' smt func, or 'if'
    *  irep, but for tuples instead of single values.
    *  @param cond The condition to switch the resulting AST on. Boolean valued.

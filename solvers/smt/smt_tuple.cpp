@@ -506,12 +506,6 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 }
 
 const smt_ast *
-smt_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
-{
-  return a->eq(this, b);
-}
-
-const smt_ast *
 smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
                      const expr2tc &false_val, const type2tc &type __attribute__((unused)))
 {
