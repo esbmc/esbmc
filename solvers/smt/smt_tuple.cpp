@@ -290,6 +290,8 @@ tuple_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
       const smt_ast *field2 = ctx->tuple_project(result, tmp, j);
       eqs.push_back(field1->eq(ctx, field2));
     }
+
+    j++;
   }
 
   return result;
