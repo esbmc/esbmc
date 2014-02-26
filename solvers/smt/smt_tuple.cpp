@@ -289,6 +289,7 @@ tuple_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
     j++;
   }
 
+  ctx->assert_ast(ctx->make_conjunct(eqs));
   return result;
 }
 
