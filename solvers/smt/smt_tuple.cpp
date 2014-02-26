@@ -297,6 +297,44 @@ tuple_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
   return result;
 }
 
+const smt_ast *
+array_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
+    expr2tc idx_expr) const
+{
+  smt_convt::ast_vec eqs;
+  expr2tc index = is_nil_expr(idx_expr) ? gen_uint(idx) : idx_expr;
+
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const array_type2t array_type = to_array_type(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+
+  std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
+  const tuple_smt_ast *result = new array_smt_ast(sort, name);
+
+  // Iterate over all members. They are _all_ indexed and updated.
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    type2tc arrtype(new array_type2t(*it, array_type.array_size,
+          array_type.size_is_infinite));
+    const smt_sort *arrsort = ctx->convert_sort(arrtype);
+    const smt_sort *normalsort = ctx->convert_sort(*it);
+
+    // Project and update a field in 'this'
+    const smt_ast *field = ctx->tuple_project(this, arrsort, i);
+    const smt_ast *resval = ctx->tuple_project(value, normalsort, i);
+    const smt_ast *updated = field->update(ctx, resval, 0, index);
+
+    // Now equality it into the result object
+    const smt_ast *res_field = ctx->tuple_project(result, arrsort, i);
+    eqs.push_back(res_field->eq(ctx, updated));
+
+    i++;
+  }
+
+  ctx->assert_ast(ctx->make_conjunct(eqs));
+  return result;
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
