@@ -630,7 +630,6 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
-  type2tc arrwidth = make_array_domain_sort_exp(arr_type);
   uint64_t sz = thesize.constant_value.to_ulong();
 
   if (const_array) {
@@ -638,16 +637,14 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // indexes.
     const smt_ast *init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
-      constant_int2tc idx(arrwidth, BigInt(i));
-      newsym = newsym->update(this, init, 0, idx);
+      newsym = newsym->update(this, init, i);
     }
 
     return newsym;
   } else {
     // Repeatedly store operands into this.
     for (unsigned int i = 0; i < sz; i++) {
-      constant_int2tc idx(index_type2(), BigInt(i));
-      newsym = newsym->update(this, inputargs[i], 0, idx);
+      newsym = newsym->update(this, inputargs[i], i);
     }
 
     return newsym;
