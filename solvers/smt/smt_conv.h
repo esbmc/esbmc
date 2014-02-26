@@ -888,12 +888,6 @@ public:
   /** Extract the assignment to a tuple-array symbol from the SMT solvers
    *  model */
   expr2tc tuple_array_get(const expr2tc &expr);
-  /** Given a tuple_smt_ast, create a new name that identifies the f'th element
-   *  of the tuple. 'dot' identifies whether to tack a dot on the end of the
-   *  symbol (it might already have one). */
-  expr2tc tuple_project_sym(const smt_ast *a, unsigned int f, bool dot = false);
-  /** Like the other tuple_project_sym, but for exprs */
-  expr2tc tuple_project_sym(const expr2tc &a, unsigned int f, bool dot = false);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
