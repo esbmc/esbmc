@@ -889,11 +889,12 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
     type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
     constant_array_of2tc sub_array_of(subarr_type, val);
 
-    expr2tc target_array = tuple_project_sym(tuple_arr_of_sym, i);
+    const smt_sort *array_sort = convert_sort(subarr_type);
+    const smt_ast *target_array =
+      tuple_project(convert_ast(tuple_arr_of_sym), array_sort,i);
 
-    const smt_ast *target_array_ast = convert_ast(target_array);
     const smt_ast *sub_array_of_ast = convert_ast(sub_array_of);
-    assert_ast(target_array_ast->eq(this, sub_array_of_ast));
+    assert_ast(target_array->eq(this, sub_array_of_ast));
   }
 
   return newsym;
