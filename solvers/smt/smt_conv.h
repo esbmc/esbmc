@@ -656,16 +656,6 @@ public:
   virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
                                       const expr2tc &val);
 
-  /** Select operation for tuples. Identical to the 'ITE' smt func, or 'if'
-   *  irep, but for tuples instead of single values.
-   *  @param cond The condition to switch the resulting AST on. Boolean valued.
-   *  @param trueval The tuple to evaluate to if cond is true.
-   *  @param falseval The tuple to evaluate to if cond is false.
-   *  @param sort The type of the tuple being operated upon.
-   *  @return AST representation of the created ITE. */
-  virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
-                             const expr2tc &false_val, const type2tc &sort);
-
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
    *  Essentially a way of converting a constant_array2tc, with tuple type.

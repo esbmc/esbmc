@@ -549,16 +549,6 @@ smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
 }
 
 const smt_ast *
-smt_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
-                     const expr2tc &false_val, const type2tc &type __attribute__((unused)))
-{
-  const smt_ast *truepart = convert_ast(force_expr_to_tuple_sym(true_val));
-  const smt_ast *falsepart = convert_ast(force_expr_to_tuple_sym(false_val));
-  const smt_ast *condast = convert_ast(cond);
-  return truepart->ite(this, condast, falsepart);
-}
-
-const smt_ast *
 smt_convt::tuple_array_create(const type2tc &array_type,
                               const smt_ast **inputargs,
                               bool const_array,
