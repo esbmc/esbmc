@@ -769,22 +769,7 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
                               const smt_ast *val,
                               const smt_sort *fieldsort __attribute__((unused)))
 {
-  // Like tuple array select, but backwards: create a fresh new tuple array,
-  // and assign into each member of it the array of values from the source,
-  // but with the specified index updated. Here, we create the fresh value,
-  // then recurse on it.
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_ast *tv = to_tuple_ast(val);
-  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
-
-  std::string name = mk_fresh_name("tuple_array_update[]::") + ".";
-  const tuple_smt_ast *result = new array_smt_ast(a->sort, name);
-
-  type2tc newtype = flatten_array_type(ts->thetype);
-  const array_type2t &array_type = to_array_type(newtype);
-  tuple_array_update_rec(ta, tv, index, result, array_type.array_size,
-                         array_type.subtype);
-  return result;
+  return a->update(this, val, 0, index);
 }
 
 void
