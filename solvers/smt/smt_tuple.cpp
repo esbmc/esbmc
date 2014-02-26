@@ -99,7 +99,6 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
 
   const struct_union_data &data = ctx->get_type_def(thissort->thetype);
 
-  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
@@ -112,11 +111,7 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
 
     expr2tc resitem = ctx->tuple_project_sym(result, i);
     const smt_ast *result_sym_ast = ctx->convert_ast(resitem);
-
-    const smt_ast *args[2];
-    args[0] = result_ast;
-    args[1] = result_sym_ast;
-    ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
+    ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
 
     i++;
   }
