@@ -96,6 +96,7 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
   const tuple_smt_sort *thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(thissort->thetype, name);
+  const smt_ast *result_sym = ctx->convert_ast(result);
 
   const struct_union_data &data = ctx->get_type_def(thissort->thetype);
 
@@ -109,8 +110,8 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
 
     const smt_ast *result_ast = truepart->ite(ctx, cond, falsepart);
 
-    expr2tc resitem = ctx->tuple_project_sym(result, i);
-    const smt_ast *result_sym_ast = ctx->convert_ast(resitem);
+    const smt_ast *result_sym_ast =
+      ctx->tuple_project(result_sym, result_ast->sort, i);
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
 
     i++;
