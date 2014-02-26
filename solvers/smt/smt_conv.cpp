@@ -1503,11 +1503,10 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     typecast2tc cast(get_uint_type(1), update_val);
     return mk_store(with.source_value, newidx, cast, ressort);
   } else if (is_tuple_array_ast_type(with.type)) {
-    const smt_sort *sort = convert_sort(with.update_value->type);
     const smt_ast *src, *update;
     src = convert_ast(with.source_value);
     update = convert_ast(update_val);
-    return tuple_array_update(src, newidx, update, sort);
+    return src->update(this, update, 0, newidx);
   } else {
     // Normal operation
     return mk_store(with.source_value, newidx, update_val, ressort);

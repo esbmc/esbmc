@@ -671,7 +671,6 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     abort();
   }
 
-  const smt_sort *fieldsort = convert_sort(arr_type.subtype);
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
@@ -681,7 +680,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     const smt_ast *init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
       constant_int2tc idx(index_type2(), BigInt(i));
-      newsym = tuple_array_update(newsym, idx, init, fieldsort);
+      newsym = newsym->update(this, init, 0, idx);
     }
 
     return newsym;
@@ -689,7 +688,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // Repeatedly store operands into this.
     for (unsigned int i = 0; i < sz; i++) {
       constant_int2tc idx(index_type2(), BigInt(i));
-      newsym = tuple_array_update(newsym, idx, inputargs[i], fieldsort);
+      newsym = newsym->update(this, inputargs[i], 0, idx);
     }
 
     return newsym;
@@ -762,14 +761,6 @@ smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
 
     i++;
   }
-}
-
-const smt_ast *
-smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
-                              const smt_ast *val,
-                              const smt_sort *fieldsort __attribute__((unused)))
-{
-  return a->update(this, val, 0, index);
 }
 
 expr2tc

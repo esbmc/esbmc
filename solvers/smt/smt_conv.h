@@ -690,16 +690,6 @@ public:
   virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
                                       const expr2tc &field);
 
-  /** Update an element in a tuple array.
-   *  @param a The tuple array to update an element in.
-   *  @param field Expression evaluating to the index we wish to update.
-   *  @param val AST representing tuple value to store into tuple array.
-   *  @param s Sort of the value we will be inserting into this array.
-   *  @return AST of tuple array, with element at field updated. */
-  virtual const smt_ast *tuple_array_update(const smt_ast *a,
-                                      const expr2tc &field,
-                                      const smt_ast *val, const smt_sort *s);
-
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
    *  sort.
