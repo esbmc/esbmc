@@ -257,6 +257,44 @@ smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
   return ctx->mk_func_app(sort, SMT_FUNC_STORE, args, 3);
 }
 
+const smt_ast *
+tuple_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
+    expr2tc idx_expr) const
+{
+  smt_convt::ast_vec eqs;
+  assert(is_nil_expr(idx_expr) && "Can't apply non-constant index update to "
+         "structure");
+
+  // XXX: future work, accept member_name exprs?
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+
+  std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
+  const tuple_smt_ast *result = new tuple_smt_ast(sort, name);
+
+  // Iterate over all members, deciding what to do with them.
+  unsigned int j = 0;
+  forall_types(it, data.members) {
+    if (j == idx) {
+      // This is the updated field -- generate the name of its variable with
+      // tuple project and assign it in.
+      const smt_sort *tmp = ctx->convert_sort(*it);
+      const smt_ast *thefield = ctx->tuple_project(result, tmp, j);
+
+      eqs.push_back(thefield->eq(ctx, value));
+    } else {
+      // This is not an updated field; extract the member out of the input
+      // tuple (a) and assign it into the fresh tuple.
+      const smt_sort *tmp = ctx->convert_sort(*it);
+      const smt_ast *field1 = ctx->tuple_project(this, tmp, j);
+      const smt_ast *field2 = ctx->tuple_project(result, tmp, j);
+      eqs.push_back(field1->eq(ctx, field2));
+    }
+  }
+
+  return result;
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
