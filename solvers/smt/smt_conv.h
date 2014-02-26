@@ -299,6 +299,9 @@ public:
       const smt_ast *falseop) const;
 
   virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
 };
 
 /** Function app representing a tuple sorted value.

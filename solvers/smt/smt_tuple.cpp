@@ -238,6 +238,25 @@ array_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   return ctx->make_conjunct(eqs);
 }
 
+const smt_ast *
+smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
+    expr2tc idx_expr) const
+{
+  // If we're having an update applied to us, then the only valid situation
+  // this can occur in is if we're an array.
+  assert(sort->id == SMT_SORT_ARRAY);
+
+  // We're an array; just generate a 'with' operation.
+  expr2tc index = (is_nil_expr(idx_expr)) ? gen_uint(idx) : idx_expr;
+
+  const smt_ast *args[3];
+  args[0] = this;
+  args[1] = ctx->convert_ast(index);
+  args[2] = value;
+
+  return ctx->mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
