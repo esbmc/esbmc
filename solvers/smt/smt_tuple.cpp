@@ -298,11 +298,18 @@ array_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
     expr2tc idx_expr) const
 {
   smt_convt::ast_vec eqs;
-  expr2tc index = is_nil_expr(idx_expr) ? gen_uint(idx) : idx_expr;
 
   const tuple_smt_sort *ts = to_tuple_sort(sort);
   const array_type2t array_type = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+
+  expr2tc index;
+  if (is_nil_expr(idx_expr)) {
+    index = constant_int2tc(ctx->make_array_domain_sort_exp(array_type),
+                            BigInt(idx));
+  } else {
+    index = idx_expr;
+  }
 
   std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
   const tuple_smt_ast *result = new array_smt_ast(sort, name);
@@ -623,6 +630,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   }
 
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  type2tc arrwidth = make_array_domain_sort_exp(arr_type);
   uint64_t sz = thesize.constant_value.to_ulong();
 
   if (const_array) {
@@ -630,7 +638,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // indexes.
     const smt_ast *init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
-      constant_int2tc idx(index_type2(), BigInt(i));
+      constant_int2tc idx(arrwidth, BigInt(i));
       newsym = newsym->update(this, init, 0, idx);
     }
 
