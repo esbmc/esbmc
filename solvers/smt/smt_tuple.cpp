@@ -601,51 +601,6 @@ smt_convt::tuple_project_sym(const expr2tc &a, unsigned int i, bool dot)
 }
 
 const smt_ast *
-smt_convt::tuple_update(const smt_ast *a, unsigned int i, const expr2tc &ve)
-{
-  // Take the tuple_smt_ast a and update the ith field with the value v. As
-  // ever, we do this by creating a new tuple. The non-ith values are just
-  // assigned into the new tuple, and the ith member is replaced with v.
-  ast_vec eqs;
-
-  const smt_ast *v = convert_ast(ve);
-
-  // Create a fresh tuple to store the result in
-  std::string name = mk_fresh_name("tuple_update::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(a->sort, name);
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_sort *ts = to_tuple_sort(ta->sort);
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
-
-  // Iterate over all members, deciding what to do with them.
-  unsigned int j = 0;
-  forall_types(it, data.members) {
-    if (j == i) {
-      // This is the updated field -- generate the name of its variable with
-      // tuple project and assign it in.
-      const smt_sort *tmp = convert_sort(*it);
-      const smt_ast *thefield = tuple_project(result, tmp, j);
-
-      eqs.push_back(thefield->eq(this, v));
-    } else {
-      // This is not an updated field; extract the member out of the input
-      // tuple (a) and assign it into the fresh tuple.
-      const smt_sort *tmp = convert_sort(*it);
-      const smt_ast *field1 = tuple_project(ta, tmp, j);
-      const smt_ast *field2 = tuple_project(result, tmp, j);
-      eqs.push_back(field1->eq(this, field2));
-    }
-
-    j++;
-  }
-
-  // Assert all the equalities we just generated.
-  assert_ast(make_conjunct(eqs));
-  return result;
-}
-
-const smt_ast *
 smt_convt::tuple_array_create(const type2tc &array_type,
                               const smt_ast **inputargs,
                               bool const_array,

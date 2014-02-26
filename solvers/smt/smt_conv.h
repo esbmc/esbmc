@@ -657,14 +657,6 @@ public:
   virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
                                  unsigned int field);
 
-  /** Update a field in a tuple.
-   *  @param a The source tuple that we are going to be updating.
-   *  @param field The index of the field to update.
-   *  @param val The expression to update the field with.
-   *  @return An AST representing the source tuple with the updated field */
-  virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                      const expr2tc &val);
-
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
    *  Essentially a way of converting a constant_array2tc, with tuple type.

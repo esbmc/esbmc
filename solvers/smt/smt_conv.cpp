@@ -501,7 +501,8 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(convert_ast(with.source_value), idx, with.update_value);
+      const smt_ast *srcval = convert_ast(with.source_value);
+      a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
       a = convert_array_store(expr, sort);
     }
