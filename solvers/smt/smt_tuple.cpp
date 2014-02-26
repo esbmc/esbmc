@@ -772,63 +772,6 @@ smt_convt::tuple_array_update(const smt_ast *a, const expr2tc &index,
   return a->update(this, val, 0, index);
 }
 
-void
-smt_convt::tuple_array_update_rec(const tuple_smt_ast *ta,
-                                  const tuple_smt_ast *tv,
-                                  const expr2tc &idx,
-                                  const tuple_smt_ast *result,
-                                  const expr2tc &arr_width,
-                                  const type2tc &subtype)
-{
-  // Implementation of tuple array update: for each member take its array
-  // variable from the source (in ta), then update it with the relevant member
-  // of tv at index idx. Then assign that value into result.
-  const struct_union_data &struct_type = get_type_def(subtype);
-
-  unsigned int i = 0;
-  forall_types(it, struct_type.members) {
-    if (is_tuple_ast_type(*it)) {
-      // This is a struct; we need to do recurse again.
-      type2tc arrtype(new array_type2t(*it, arr_width, false));
-      const smt_sort *tmp = convert_sort(arrtype);
-      std::string resname = result->name +
-                            struct_type.member_names[i].as_string() +
-                            ".";
-      std::string srcname = ta->name + struct_type.member_names[i].as_string() +
-                            ".";
-      std::string valname = tv->name + struct_type.member_names[i].as_string() +
-                            ".";
-      const tuple_smt_ast *target = new array_smt_ast(tmp, resname);
-      const tuple_smt_ast *src = new array_smt_ast(tmp, srcname);
-      const tuple_smt_ast *val = new array_smt_ast(tmp, valname);
-
-      tuple_array_update_rec(src, val, idx, target, arr_width, *it);
-    } else {
-      // Normal value; name, update, assign.
-      std::string arrname = ta->name + struct_type.member_names[i].as_string();
-      std::string valname = tv->name + struct_type.member_names[i].as_string();
-      std::string resname = result->name +
-                            struct_type.member_names[i].as_string();
-      type2tc this_arr_type(new array_type2t(*it, arr_width,
-                                             is_nil_expr(arr_width)));
-      // Take the source array variable and update it into an ast.
-      symbol2tc arrsym(this_arr_type, arrname);
-      expr2tc tmp_idx = fix_array_idx(idx, this_arr_type);
-      symbol2tc valsym(*it, valname);
-      with2tc store(this_arr_type, arrsym, tmp_idx, valsym);
-
-      // Now assign that ast into the result tuple array.
-      symbol2tc ressym(this_arr_type, irep_idt(resname));
-      const smt_ast *ressym_ast = convert_ast(ressym);
-      const smt_ast *store_ast = convert_ast(store);
-      const smt_ast *eq = ressym_ast->eq(this, store_ast);
-      assert_ast(eq);
-    }
-
-    i++;
-  }
-}
-
 expr2tc
 smt_convt::tuple_get(const expr2tc &expr)
 {

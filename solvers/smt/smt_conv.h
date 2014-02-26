@@ -899,11 +899,6 @@ public:
   void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
                               const tuple_smt_ast *result, const expr2tc &field,
                               const expr2tc &arr_width);
-  /** Update data from the tuple ast into the given tuple array */
-  void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
-                              const expr2tc &idx, const tuple_smt_ast *res,
-                              const expr2tc &arr_width,
-                              const type2tc &subtype);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
