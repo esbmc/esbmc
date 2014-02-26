@@ -374,14 +374,15 @@ smt_convt::union_create(const expr2tc &unidef)
   assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
          "initializer");
   const expr2tc &init = uni.datatype_members[0];
+  const smt_ast *result_ast = convert_ast(result);
+  const smt_ast *init_ast = convert_ast(init);
 
   unsigned int i = 0;
   forall_types(it, def.members) {
     if (base_type_eq(*it, init->type, ns)) {
       // Assign in.
-      expr2tc target_memb = tuple_project_sym(result, i);
-      equality2tc eq(target_memb, init);
-      assert_ast(convert_ast(eq));
+      const smt_ast *target_memb = tuple_project(result_ast, init_ast->sort, i);
+      assert_ast(target_memb->eq(this, init_ast));
     }
     i++;
   }
