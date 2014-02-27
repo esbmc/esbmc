@@ -91,27 +91,12 @@ private:
 
   virtual smt_ast *tuple_create(const expr2tc &structdef);
   virtual smt_ast *tuple_fresh(const smt_sort *s);
-  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
-                                 unsigned int field);
-  virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                      const expr2tc &val);
-  virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *val);
-  virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
-                             const expr2tc &false_val, const type2tc &sort);
   virtual expr2tc tuple_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,
                                             bool const_array,
                                             const smt_sort *domain);
-  virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const expr2tc &field);
-  virtual smt_ast *tuple_array_update(const smt_ast *a, const expr2tc &field,
-                                      const smt_ast *val, const smt_sort *s);
-  virtual smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
-  virtual smt_ast *tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
-                                   const smt_ast *false_val,
-                                   const smt_sort *sort);
 
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);

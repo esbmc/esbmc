@@ -767,41 +767,6 @@ z3_convt::tuple_fresh(const smt_sort *s)
   return new z3_smt_ast(output, zs);
 }
 
-smt_ast *
-z3_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int field)
-{
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  return new z3_smt_ast(mk_tuple_select(za->e, field), s);
-}
-
-const smt_ast *
-z3_convt::tuple_update(const smt_ast *a, unsigned int field, const expr2tc &val)
-{
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  const z3_smt_ast *zu = z3_smt_downcast(convert_ast(val));
-  return new z3_smt_ast(mk_tuple_update(za->e, field, zu->e), za->sort);
-}
-
-const smt_ast *
-z3_convt::tuple_equality(const smt_ast *a, const smt_ast *b)
-{
-  const z3_smt_ast *za = z3_smt_downcast(a);
-  const z3_smt_ast *zb = z3_smt_downcast(b);
-  const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  return new z3_smt_ast((za->e == zb->e), sort);
-}
-
-const smt_ast *
-z3_convt::tuple_ite(const expr2tc &cond, const expr2tc &true_val,
-                    const expr2tc &false_val, const type2tc &sort)
-{
-
-  return new z3_smt_ast(z3::ite(z3_smt_downcast(convert_ast(cond))->e,
-                                z3_smt_downcast(convert_ast(true_val))->e,
-                                z3_smt_downcast(convert_ast(false_val))->e),
-                                convert_sort(sort));
-}
-
 const smt_ast *
 z3_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
 {
@@ -875,48 +840,6 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   smt_sort *asort = mk_sort(SMT_SORT_ARRAY, domain, ssort);
   return new z3_smt_ast(output, asort);
 }
-
-const smt_ast *
-z3_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
-                             const expr2tc &idx)
-{
-
-  z3::expr output = select(z3_smt_downcast(a)->e,
-                           z3_smt_downcast(convert_ast(idx))->e);
-  return new z3_smt_ast(output, s);
-}
-
-smt_ast *
-z3_convt::tuple_array_update(const smt_ast *a, const expr2tc &field,
-                             const smt_ast *val,
-                             const smt_sort *s __attribute__((unused)))
-{
-  Z3_ast ast = Z3_mk_store(z3_ctx, z3_smt_downcast(a)->e,
-                          z3_smt_downcast(convert_ast(field))->e,
-                          z3_smt_downcast(val)->e);
-  z3::expr output = z3::to_expr(ctx, ast);
-  return new z3_smt_ast(output, a->sort);
-}
-
-
-smt_ast *
-z3_convt::tuple_array_equality(const smt_ast *a, const smt_ast *b)
-{
-  z3::expr e = z3_smt_downcast(a)->e == z3_smt_downcast(b)->e;
-  const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  return new z3_smt_ast(e, s);
-}
-
-smt_ast *
-z3_convt::tuple_array_ite(const smt_ast *cond, const smt_ast *trueval,
-                          const smt_ast *false_val, const smt_sort *sort)
-{
-  z3::expr output = z3::ite(z3_smt_downcast(cond)->e,
-                            z3_smt_downcast(trueval)->e,
-                            z3_smt_downcast(false_val)->e);
-  return new z3_smt_ast(output, sort);
-}
-
 
 expr2tc
 z3_convt::tuple_get(const expr2tc &expr)
