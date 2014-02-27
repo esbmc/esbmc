@@ -71,26 +71,26 @@ private:
   z3::expr mk_tuple_select(const z3::expr &t, unsigned i);
 
   // SMT-abstraction migration:
-  virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
+  virtual smt_astt mk_func_app(const smt_sort *s, smt_func_kind k,
                                const smt_ast * const *args,
                                unsigned int numargs);
   virtual smt_sort *mk_sort(const smt_sort_kind k, ...);
 
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign);
-  virtual smt_ast *mk_smt_real(const std::string &str);
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
+  virtual smt_astt mk_smt_int(const mp_integer &theint, bool sign);
+  virtual smt_astt mk_smt_real(const std::string &str);
+  virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
-  virtual smt_ast *mk_smt_bool(bool val);
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
+  virtual smt_astt mk_smt_bool(bool val);
+  virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
-  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
+  virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
   virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
 
-  virtual smt_ast *tuple_create(const expr2tc &structdef);
-  virtual smt_ast *tuple_fresh(const smt_sort *s);
+  virtual smt_astt tuple_create(const expr2tc &structdef);
+  virtual smt_astt tuple_fresh(const smt_sort *s);
   virtual expr2tc tuple_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,

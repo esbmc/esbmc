@@ -4,7 +4,7 @@
 
 #include "smt_conv.h"
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_bool(const typecast2t &cast)
 {
 
@@ -23,10 +23,10 @@ smt_convt::convert_typecast_bool(const typecast2t &cast)
   }
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
 {
-  const smt_ast *args[4];
+  smt_astt args[4];
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
@@ -37,8 +37,8 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     abort();
   }
 
-  const smt_ast *a = convert_ast(cast.from);
-  const smt_sort *s = convert_sort(cast.type);
+  smt_astt a = convert_ast(cast.from);
+  smt_sortt s = convert_sort(cast.type);
 
   if (is_bv_type(cast.from)) {
     unsigned from_width = cast.from->type->get_width();
@@ -47,12 +47,12 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
       // Just concat fraction ozeros at the bottom
       args[0] = a;
     } else if (from_width > to_integer_bits) {
-      const smt_sort *tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
+      smt_sortt tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
                                     false);
       args[0] = mk_extract(a, to_integer_bits-1, 0, tmp);
     } else {
       assert(from_width < to_integer_bits);
-      const smt_sort *tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+      smt_sortt tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
       args[0] = convert_sign_ext(a, tmp, from_width,
                                  to_integer_bits - from_width);
     }
@@ -61,8 +61,8 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     args[1] = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
     return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
   } else if (is_bool_type(cast.from)) {
-    const smt_ast *args[3];
-    const smt_sort *intsort;
+    smt_astt args[3];
+    smt_sortt intsort;
     args[0] = a;
     args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
     args[2] = mk_smt_bvint(BigInt(1), false, to_integer_bits);
@@ -73,7 +73,7 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
   } else if (is_fixedbv_type(cast.from)) {
     // FIXME: conversion here for to_int_bits > from_int_bits is factually
     // broken, run 01_cbmc_Fixedbv8 with --no-simplify
-    const smt_ast *magnitude, *fraction;
+    smt_astt magnitude, fraction;
 
     const fixedbv_type2t &from_fbvt = to_fixedbv_type(cast.from->type);
 
@@ -82,14 +82,14 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     unsigned from_width = from_fbvt.width;
 
     if (to_integer_bits <= from_integer_bits) {
-      const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
+      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
       magnitude = mk_extract(a, (from_fraction_bits + to_integer_bits - 1),
                              from_fraction_bits, tmp_sort);
     } else   {
       assert(to_integer_bits > from_integer_bits);
-      const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV,
+      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV,
                                         from_width - from_fraction_bits, false);
-      const smt_ast *ext = mk_extract(a, from_width - 1, from_fraction_bits,
+      smt_astt ext = mk_extract(a, from_width - 1, from_fraction_bits,
                                       tmp_sort);
 
       tmp_sort = mk_sort(SMT_SORT_BV, (from_width - from_fraction_bits)
@@ -101,13 +101,13 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
     }
 
     if (to_fraction_bits <= from_fraction_bits) {
-      const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
+      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, to_fraction_bits, false);
       fraction = mk_extract(a, from_fraction_bits - 1,
                             from_fraction_bits - to_fraction_bits, tmp_sort);
     } else {
-      const smt_ast *args[2];
+      smt_astt args[2];
       assert(to_fraction_bits > from_fraction_bits);
-      const smt_sort *tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
+      smt_sortt tmp_sort = mk_sort(SMT_SORT_BV, from_fraction_bits,
                                          false);
       args[0] = mk_extract(a, from_fraction_bits -1, 0, tmp_sort);
       args[1] = mk_smt_bvint(BigInt(0), false,
@@ -117,7 +117,7 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
       fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
     }
 
-    const smt_ast *args[2];
+    smt_astt args[2];
     args[0] = magnitude;
     args[1] = fraction;
     return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
@@ -127,12 +127,12 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
   abort();
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_to_ints(const typecast2t &cast)
 {
   unsigned to_width = cast.type->get_width();
-  const smt_sort *s = convert_sort(cast.type);
-  const smt_ast *a = convert_ast(cast.from);
+  smt_sortt s = convert_sort(cast.type);
+  smt_astt a = convert_ast(cast.from);
 
   if (is_signedbv_type(cast.from) || is_fixedbv_type(cast.from)) {
     unsigned from_width = cast.from->type->get_width();
@@ -216,7 +216,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       }
     }
   } else if (is_bool_type(cast.from)) {
-    const smt_ast *zero, *one;
+    smt_astt zero, one;
     unsigned width = cast.type->get_width();
 
     if (is_bv_type(cast.type)) {
@@ -235,7 +235,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       abort();
     }
 
-    const smt_ast *args[3];
+    smt_astt args[3];
     args[0] = a;
     args[1] = one;
     args[2] = zero;
@@ -246,7 +246,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
   abort();
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
 {
 
@@ -337,7 +337,7 @@ smt_convt::convert_typecast_to_ptr(const typecast2t &cast)
   return convert_ast(prev_in_chain);
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
 {
 
@@ -363,7 +363,7 @@ smt_convt::convert_typecast_from_ptr(const typecast2t &cast)
   return convert_ast(new_cast);
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast_struct(const typecast2t &cast)
 {
 
@@ -402,16 +402,16 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
     }
   }
 
-  smt_sort *fresh_sort = convert_sort(cast.type);
-  smt_ast *fresh = tuple_fresh(fresh_sort);
-  const smt_ast *src_ast = convert_ast(cast.from);
+  smt_sortt fresh_sort = convert_sort(cast.type);
+  smt_astt fresh = tuple_fresh(fresh_sort);
+  smt_astt src_ast = convert_ast(cast.from);
 
   if (same_format) {
     // Alas, Z3 considers field names as being part of the type, so we can't
     // just consider the source expression to be the casted expression.
     i2 = 0;
     forall_types(it, struct_type_to.members) {
-      const smt_ast *args[2];
+      smt_astt args[2];
       args[0] = src_ast->project(this, i2);
       args[1] = fresh->project(this, i2);
       assert_ast(args[0]->eq(this, args[1]));
@@ -438,7 +438,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       // Could assert that the types are the same, however Z3 is going to
       // complain mightily if we get it wrong.
 
-      const smt_ast *args[2];
+      smt_astt args[2];
       args[0] = src_ast->project(this, i3);
       args[1] = fresh->project(this, i2);
 
@@ -450,7 +450,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   return fresh;
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_typecast(const expr2tc &expr)
 {
 

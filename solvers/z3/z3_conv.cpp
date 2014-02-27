@@ -505,7 +505,7 @@ z3_convt::mk_tuple_select(const z3::expr &t, unsigned i)
 
 // SMT-abstraction migration routines.
 
-smt_ast *
+smt_astt
 z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
                       const smt_ast * const *args,
                       unsigned int numargs)
@@ -642,7 +642,7 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                      const smt_sort *s)
 {
@@ -651,7 +651,7 @@ z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                                          z3_smt_downcast(a)->e)), s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
   smt_sort *s = mk_sort(SMT_SORT_INT, sign);
@@ -661,14 +661,14 @@ z3_convt::mk_smt_int(const mp_integer &theint, bool sign)
     return new z3_smt_ast(ctx.int_val(theint.to_uint64()), s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_smt_real(const std::string &str)
 {
   smt_sort *s = mk_sort(SMT_SORT_REAL);
   return new z3_smt_ast(ctx.real_val(str.c_str()), s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
 {
   smt_sort *s = mk_sort(SMT_SORT_BV, width, sign);
@@ -678,14 +678,14 @@ z3_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int width)
     return new z3_smt_ast(ctx.bv_val(theint.to_uint64(), width), s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_smt_bool(bool val)
 {
   smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new z3_smt_ast(ctx.bool_val(val), s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);
@@ -809,7 +809,7 @@ z3_convt::z3_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   return new z3_smt_ast(z3_ctx->mk_tuple_select(e, elem), idx_sort);
 }
 
-smt_ast *
+smt_astt
 z3_convt::tuple_create(const expr2tc &structdef)
 {
   z3::expr e;
@@ -822,7 +822,7 @@ z3_convt::tuple_create(const expr2tc &structdef)
   return new z3_smt_ast(e, s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::tuple_fresh(const smt_sort *s)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
@@ -1376,11 +1376,11 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
   unsigned long bv_size = array->sort->get_domain_width();
-  z3_smt_ast *idx;
+  const z3_smt_ast *idx;
   if (int_encoding)
-    idx = static_cast<z3_smt_ast*>(mk_smt_int(BigInt(index), false));
+    idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));
   else
-    idx = static_cast<z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
+    idx = static_cast<const z3_smt_ast*>(mk_smt_bvint(BigInt(index), false, bv_size));
 
   z3::expr e = select(za->e, idx->e);
   delete idx;
