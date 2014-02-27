@@ -975,6 +975,8 @@ public:
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
   expr2tc get_array(smt_astt array, const type2tc &t);
 
+  void delete_all_asts();
+
   /** @} */
 
   // Types

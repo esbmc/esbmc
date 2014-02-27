@@ -124,6 +124,16 @@ smt_convt::~smt_convt(void)
 }
 
 void
+smt_convt::delete_all_asts()
+{
+
+  // Erase all the remaining asts in the live ast vector.
+  for (smt_ast *ast : live_asts)
+    delete ast;
+  live_asts.clear();
+}
+
+void
 smt_convt::smt_post_init(void)
 {
   if (int_encoding) {
