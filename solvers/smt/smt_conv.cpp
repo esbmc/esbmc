@@ -849,8 +849,10 @@ smt_convt::convert_sort(const type2tc &type)
     while (is_array_type(range))
       range = to_array_type(range).subtype;
 
+    unsigned int range_width = range->get_width();
     if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
-      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
+      return new tuple_smt_sort(type, range_width,
+          calculate_array_domain_width(arr));
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
