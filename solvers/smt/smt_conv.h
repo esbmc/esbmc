@@ -732,18 +732,6 @@ public:
   virtual const smt_ast *convert_array_store(const expr2tc &expr,
                                              const smt_sort *ressort);
 
-  /** Create a 'Store' AST -- as with mk_select, this is called from the
-   *  higher level method convert_array_store, after high level wrangling has
-   *  been taken care of.
-   *  @param array Array expression that we are looking to update.
-   *  @param idx Index of the element that is to be modified.
-   *  @param value The value that we are going to insert into the array.
-   *  @param ressort Sort of the resulting AST from this method.
-   *  @return AST representation of the resulting store operation. */
-  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
-                                  const expr2tc &value,
-                                  const smt_sort *ressort);
-
   /** Create an array with a single initializer. This may be a small, fixed
    *  size array, or it may be a nondeterministically sized array with a
    *  word-sized domain. Default implementation is to repeatedly store into

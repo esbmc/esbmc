@@ -1478,7 +1478,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
 }
 
 const smt_ast *
-smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
+smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort __attribute__((unused)))
 {
   const with2t &with = to_with2t(expr);
   expr2tc update_val = with.update_value;
@@ -1497,19 +1497,19 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     newidx = tmp_idx;
 
   assert(is_array_type(expr->type));
+  const smt_ast *src, *update;
   const array_type2t &arrtype = to_array_type(expr->type);
+
+  // Workaround for bools-in-arrays.
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
     typecast2tc cast(get_uint_type(1), update_val);
-    return mk_store(with.source_value, newidx, cast, ressort);
-  } else if (is_tuple_array_ast_type(with.type)) {
-    const smt_ast *src, *update;
-    src = convert_ast(with.source_value);
-    update = convert_ast(update_val);
-    return src->update(this, update, 0, newidx);
+    update = convert_ast(cast);
   } else {
-    // Normal operation
-    return mk_store(with.source_value, newidx, update_val, ressort);
+    update = convert_ast(update_val);
   }
+
+  src = convert_ast(with.source_value);
+  return src->update(this, update, 0, newidx);
 }
 
 type2tc
@@ -1527,18 +1527,6 @@ smt_convt::flatten_array_type(const type2tc &type)
   uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
-}
-
-const smt_ast *
-smt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
-                    const expr2tc &value, const smt_sort *ressort)
-{
-  const smt_ast *args[3];
-
-  args[0] = convert_ast(array);
-  args[1] = convert_ast(idx);
-  args[2] = convert_ast(value);
-  return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
 }
 
 std::string
