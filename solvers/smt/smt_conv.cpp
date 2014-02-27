@@ -1465,17 +1465,14 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
     return mk_select(src_value, newidx, ressort);
   }
 
+  a = convert_ast(src_value);
+  a = a->select(this, newidx);
+
   const array_type2t &arrtype = to_array_type(index.source_value->type);
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
-    // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-    const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
-    a = mk_select(src_value, newidx, tmpsort);
     return make_bit_bool(a);
-  } else if (is_tuple_array_ast_type(index.source_value->type)) {
-    a = convert_ast(src_value);
-    return tuple_array_select(a, ressort, newidx);
   } else {
-    return mk_select(src_value, newidx, ressort);
+    return a;
   }
 }
 

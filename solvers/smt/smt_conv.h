@@ -675,16 +675,6 @@ public:
                                             bool const_array,
                                             const smt_sort *domain);
 
-  /** Select an element from a tuple array. i.e., given a tuple array, and an
-   *  element, return the tuple at that index.
-   *  @param a The tuple array to select values from
-   *  @param s The sort of the array element we are selecting.
-   *  @param field An expression that evaluates to the field of array that we
-   *         are going to be selecting.
-   *  @return An AST of tuple sort, the result of this select. */
-  virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const expr2tc &field);
-
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
    *  sort.

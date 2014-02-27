@@ -645,18 +645,6 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   }
 }
 
-const smt_ast *
-smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s __attribute__((unused)),
-                              const expr2tc &field)
-{
-  // Select everything at the given element into a fresh tuple. Don't attempt
-  // to support selecting array fields. In the future we can arrange something
-  // whereby tuple operations are aware of this array situation and don't
-  // have to take this inefficient approach.
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  return ta->select(this, field);
-}
-
 expr2tc
 smt_convt::tuple_get(const expr2tc &expr)
 {
