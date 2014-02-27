@@ -394,7 +394,6 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, smt_sortt sort)
   }
   case SMT_SORT_ARRAY:
   {
-    delete a;
     result = this->fresh_array(s, name);
     break;
   }
