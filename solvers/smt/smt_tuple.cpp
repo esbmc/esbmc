@@ -394,6 +394,47 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return result;
 }
 
+const smt_ast *
+smt_ast::project(smt_convt *ctx __attribute__((unused)),
+    unsigned int idx __attribute__((unused))) const
+{
+  std::cerr << "Projecting from non-tuple based AST" << std::endl;
+  abort();
+}
+
+const smt_ast *
+tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+{
+  // Create an AST representing the i'th field of the tuple a. This means we
+  // have to open up the (tuple symbol) a, tack on the field name to the end
+  // of that name, and then return that. It now names the variable that contains
+  // the value of that field. If it's actually another tuple, we instead return
+  // a new tuple_smt_ast containing its name.
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const struct_union_data &data = ctx->get_type_def(ts->thetype);
+
+  assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
+  const std::string &fieldname = data.member_names[idx].as_string();
+  std::string sym_name = name + fieldname;
+
+  // Cope with recursive structs.
+  const type2tc &restype = data.members[idx];
+  const smt_sort *s = ctx->convert_sort(restype);
+
+  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
+    // This is a struct within a struct, so just generate the name prefix of
+    // the internal struct being projected.
+    sym_name = sym_name + ".";
+    if (is_tuple_array_ast_type(restype))
+      return new array_smt_ast(s, sym_name);
+    else
+      return new tuple_smt_ast(s, sym_name);
+  } else {
+    // This is a normal variable, so create a normal symbol of its name.
+    return ctx->mk_smt_symbol(sym_name, s);
+  }
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
