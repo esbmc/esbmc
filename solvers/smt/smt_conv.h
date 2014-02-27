@@ -1112,6 +1112,14 @@ public:
   typedef std::map<std::string, smt_astt> renumber_mapt;
   renumber_mapt renumber_map;
 
+  /** Lifetime tracking of smt ast's. When a context is pop'd, all the ASTs
+   *  created in that context are freed. */
+  std::vector<smt_ast *> live_asts;
+  /** Accounting of live_asts for push/pop. Records the number of pointers
+   *  contained when a push occurred. On pop, the live_asts vector is reset
+   *  back to that point. */
+  std::vector<unsigned int> live_asts_sizes;
+
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
    *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
