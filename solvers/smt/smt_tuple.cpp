@@ -646,7 +646,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
 }
 
 const smt_ast *
-smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
+smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s __attribute__((unused)),
                               const expr2tc &field)
 {
   // Select everything at the given element into a fresh tuple. Don't attempt
@@ -654,16 +654,7 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s,
   // whereby tuple operations are aware of this array situation and don't
   // have to take this inefficient approach.
   const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
-
-  std::string name = mk_fresh_name("tuple_array_select::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(s, name);
-
-  type2tc newtype = flatten_array_type(ts->thetype);
-  const array_type2t &array_type = to_array_type(newtype);
-  tuple_array_select_rec(ta, array_type.subtype, result, field,
-                         array_type.array_size);
-  return result;
+  return ta->select(this, field);
 }
 
 void
