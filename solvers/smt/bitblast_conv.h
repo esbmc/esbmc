@@ -22,7 +22,7 @@ class bitblast_smt_sort : public smt_sort {
 class bitblast_smt_ast : public smt_ast {
 public:
 #define bitblast_ast_downcast(x) static_cast<const bitblast_smt_ast*>(x)
-  bitblast_smt_ast(const smt_sort *s) : smt_ast(s) { }
+  bitblast_smt_ast(smt_convt *ctx, const smt_sort *s) : smt_ast(ctx, s) { }
 
   // Everything is, to a greater or lesser extend, a vector of booleans
   bvt bv;
@@ -134,6 +134,10 @@ public:
                          bool subtract, bool is_signed);
   void adder_no_overflow(const bvt &op0, const bvt &op1, bvt &res);
   bool is_constant(const bvt &bv);
+
+  inline bitblast_smt_ast *new_ast(smt_sortt ressort) {
+    return new bitblast_smt_ast(this, ressort);
+  }
 
   // Members
 

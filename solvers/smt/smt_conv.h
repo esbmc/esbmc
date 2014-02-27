@@ -306,7 +306,7 @@ public:
   /** The sort of this function application. */
   smt_sortt sort;
 
-  smt_ast(smt_sortt s) : sort(s) { }
+  smt_ast(smt_convt *ctx, smt_sortt s);
   virtual ~smt_ast() { }
 
   // "this" is the true operand.
@@ -361,8 +361,8 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_smt_ast (smt_sortt s, const std::string &_name) : smt_ast(s),
-            name(_name) { }
+  tuple_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : smt_ast(ctx, s), name(_name) { }
   virtual ~tuple_smt_ast() { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
@@ -383,8 +383,8 @@ public:
 class array_smt_ast : public tuple_smt_ast
 {
 public:
-  array_smt_ast (smt_sortt s, const std::string &_name)
-    : tuple_smt_ast(s, _name) { }
+  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : tuple_smt_ast(ctx, s, _name) { }
   virtual ~array_smt_ast() { }
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -975,6 +975,8 @@ public:
    *  solver model, computing a constant_array2tc by calling get_array_elem. */
   expr2tc get_array(smt_astt array, const type2tc &t);
 
+  void delete_all_asts();
+
   /** @} */
 
   // Types
@@ -1109,6 +1111,14 @@ public:
   typedef std::map<std::string, smt_astt> renumber_mapt;
   renumber_mapt renumber_map;
 
+  /** Lifetime tracking of smt ast's. When a context is pop'd, all the ASTs
+   *  created in that context are freed. */
+  std::vector<smt_ast *> live_asts;
+  /** Accounting of live_asts for push/pop. Records the number of pointers
+   *  contained when a push occurred. On pop, the live_asts vector is reset
+   *  back to that point. */
+  std::vector<unsigned int> live_asts_sizes;
+
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
    *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
@@ -1121,5 +1131,11 @@ public:
   /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
+
+// Define here to enable inlining
+extern inline
+smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
+  ctx->live_asts.push_back(this);
+}
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

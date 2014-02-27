@@ -137,6 +137,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
 smtlib_convt::~smtlib_convt()
 {
+  delete_all_asts();
 }
 
 std::string
@@ -527,7 +528,7 @@ smtlib_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
                           unsigned int numargs)
 {
   assert(numargs <= 4 && "Too many arguments to smtlib mk_func_app");
-  smtlib_smt_ast *a = new smtlib_smt_ast(s, k);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, k);
   a->num_args = numargs;
   for (unsigned int i = 0; i < 4; i++)
     a->args[i] = args[i];
@@ -576,7 +577,7 @@ smt_ast *
 smtlib_convt::mk_smt_int(const mp_integer &theint, bool sign)
 {
   smt_sort *s = mk_sort(SMT_SORT_INT, sign);
-  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_INT);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_INT);
   a->intval = theint;
   return a;
 }
@@ -585,7 +586,7 @@ smt_ast *
 smtlib_convt::mk_smt_real(const std::string &str)
 {
   smt_sort *s = mk_sort(SMT_SORT_REAL);
-  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_REAL);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_REAL);
   a->realval = str;
   return a;
 }
@@ -594,7 +595,7 @@ smt_ast *
 smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 {
   smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
-  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_BVINT);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_BVINT);
   a->intval = theint;
   return a;
 }
@@ -602,7 +603,8 @@ smtlib_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
 smt_ast *
 smtlib_convt::mk_smt_bool(bool val)
 {
-  smtlib_smt_ast *a = new smtlib_smt_ast(mk_sort(SMT_SORT_BOOL), SMT_FUNC_BOOL);
+  smtlib_smt_ast *a =
+    new smtlib_smt_ast(this,mk_sort(SMT_SORT_BOOL), SMT_FUNC_BOOL);
   a->boolval = val;
   return a;
 }
@@ -610,7 +612,7 @@ smtlib_convt::mk_smt_bool(bool val)
 smt_ast *
 smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
-  smtlib_smt_ast *a = new smtlib_smt_ast(s, SMT_FUNC_SYMBOL);
+  smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
   symbol_table[name] = s;
   return a;
@@ -634,7 +636,7 @@ smt_ast *
 smtlib_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                          const smt_sort *s)
 {
-  smtlib_smt_ast *n = new smtlib_smt_ast(s, SMT_FUNC_EXTRACT);
+  smtlib_smt_ast *n = new smtlib_smt_ast(this, s, SMT_FUNC_EXTRACT);
   n->extract_high = high;
   n->extract_low = low;
   n->num_args = 1;

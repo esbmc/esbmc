@@ -23,14 +23,14 @@ class array_ast : public smt_ast {
 public:
 #define array_downcast(x) static_cast<const array_ast*>(x)
 
-  array_ast(const smt_sort *_s)
-    : smt_ast(_s), symname(""), array_fields()
+  array_ast(smt_convt *ctx, const smt_sort *_s)
+    : smt_ast(ctx, _s), symname(""), array_fields()
   {
   }
 
-  array_ast(const smt_sort *_s,
+  array_ast(smt_convt *ctx, const smt_sort *_s,
                     const std::vector<const smt_ast *> &_a)
-    : smt_ast(_s), symname(""), array_fields(_a)
+    : smt_ast(ctx, _s), symname(""), array_fields(_a)
   {
   }
 
@@ -122,6 +122,15 @@ public:
   void add_initial_ackerman_constraints(
                                     const std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc,unsigned> &idx_map);
+
+  inline array_ast *new_ast(smt_sortt _s) {
+    return new array_ast(this, _s);
+  }
+
+  inline array_ast *new_ast(smt_sortt _s,
+      const std::vector<const smt_ast *> &_a) {
+    return new array_ast(this, _s, _a);
+  }
 
   // Members
 
