@@ -131,8 +131,7 @@ array_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
   symbol2tc result(thissort->thetype, name);
   const smt_ast *result_sym = ctx->convert_ast(result);
 
-  const struct_union_data &data = ctx->get_type_def(thissort->thetype);
-
+  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
