@@ -504,7 +504,7 @@ expr_handle_table:
       const smt_ast *srcval = convert_ast(with.source_value);
       a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
-      a = convert_array_store(expr, sort);
+      a = convert_array_store(expr);
     }
     break;
   }
@@ -1478,7 +1478,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
 }
 
 const smt_ast *
-smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort __attribute__((unused)))
+smt_convt::convert_array_store(const expr2tc &expr)
 {
   const with2t &with = to_with2t(expr);
   expr2tc update_val = with.update_value;

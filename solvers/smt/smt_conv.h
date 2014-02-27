@@ -727,10 +727,8 @@ public:
   /** Partner method to convert_array_index, for stores.
    *  XXX, why is this virtual?
    *  @param expr with2tc operation to convert to SMT.
-   *  @param ressort Sort of the resulting array ast.
    *  @return AST representing the result of evaluating expr. */
-  virtual const smt_ast *convert_array_store(const expr2tc &expr,
-                                             const smt_sort *ressort);
+  virtual const smt_ast *convert_array_store(const expr2tc &expr);
 
   /** Create an array with a single initializer. This may be a small, fixed
    *  size array, or it may be a nondeterministically sized array with a
