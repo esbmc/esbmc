@@ -146,6 +146,8 @@ smt_convt::push_ctx(void)
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
 
+  live_asts_sizes.push_back(live_asts.size());
+
   ctx_level++;
 }
 
@@ -161,6 +163,15 @@ smt_convt::pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+
+  // Go through all the asts created since the last push and delete them.
+
+  for (unsigned int idx = live_asts_sizes.back(); idx < live_asts.size(); idx++)
+    delete live_asts[idx];
+
+  // And reset the storage back to that point.
+  live_asts.resize(live_asts_sizes.back());
+  live_asts_sizes.pop_back();
 }
 
 smt_astt 
