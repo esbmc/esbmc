@@ -383,6 +383,10 @@ public:
   virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
 };
 
+typedef const smt_ast * smt_astt;
+typedef const tuple_smt_ast * tuple_smt_astt;
+typedef const array_smt_ast * array_smt_astt;
+
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
