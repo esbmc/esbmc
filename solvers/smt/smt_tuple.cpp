@@ -356,6 +356,14 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   return ctx->mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
 }
 
+const smt_ast *
+tuple_smt_ast::select(smt_convt *ctx __attribute__((unused)),
+    const expr2tc &idx __attribute__((unused))) const
+{
+  std::cerr << "Select operation applied to tuple" << std::endl;
+  abort();
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
