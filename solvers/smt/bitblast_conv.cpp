@@ -19,7 +19,7 @@ bitblast_convt<subclass>::~bitblast_convt()
 
 template <class subclass>
 void
-bitblast_convt<subclass>::assert_ast(const smt_ast *a)
+bitblast_convt<subclass>::assert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   const bitblast_smt_ast *ba = bitblast_ast_downcast(a);
@@ -121,7 +121,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_BVUGT:
   {
     // Same as LT flipped
-    const smt_ast *args2[2];
+    smt_astt args2[2];
     args2[0] = _args[1];
     args2[1] = _args[0];
     return mk_func_app(ressort, SMT_FUNC_BVULT, args2, 2);
@@ -160,7 +160,7 @@ bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
   case SMT_FUNC_BVSGT:
   {
     // Same as LT flipped
-    const smt_ast *args2[2];
+    smt_astt args2[2];
     args2[0] = _args[1];
     args2[1] = _args[0];
     return mk_func_app(ressort, SMT_FUNC_BVSLT, args2, 2);
@@ -430,7 +430,7 @@ bitblast_convt<subclass>::mk_union_sort(const type2tc &t __attribute__((unused))
 
 template <class subclass>
 smt_ast*
-bitblast_convt<subclass>::mk_extract(const smt_ast *src, unsigned int high,
+bitblast_convt<subclass>::mk_extract(smt_astt src, unsigned int high,
                           unsigned int low, const smt_sort *s)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
@@ -443,8 +443,8 @@ bitblast_convt<subclass>::mk_extract(const smt_ast *src, unsigned int high,
 
 template <class subclass>
 bitblast_smt_ast *
-bitblast_convt<subclass>::mk_ast_equality(const smt_ast *_a,
-                                const smt_ast *_b,
+bitblast_convt<subclass>::mk_ast_equality(smt_astt _a,
+                                smt_astt _b,
                                 const smt_sort *ressort)
 {
   const bitblast_smt_ast *a = bitblast_ast_downcast(_a);
@@ -481,7 +481,7 @@ bitblast_convt<subclass>::mk_ast_equality(const smt_ast *_a,
 
 template <class subclass>
 expr2tc
-bitblast_convt<subclass>::get_bool(const smt_ast *a)
+bitblast_convt<subclass>::get_bool(smt_astt a)
 {
   tvt t = this->l_get(a);
   if (t.is_true())
@@ -495,7 +495,7 @@ bitblast_convt<subclass>::get_bool(const smt_ast *a)
 
 template <class subclass>
 tvt
-bitblast_convt<subclass>::l_get(const smt_ast *a)
+bitblast_convt<subclass>::l_get(smt_astt a)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
   return this->l_get(mast->bv[0]);
@@ -503,7 +503,7 @@ bitblast_convt<subclass>::l_get(const smt_ast *a)
 
 template <class subclass>
 expr2tc
-bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
+bitblast_convt<subclass>::get_bv(const type2tc &t, smt_astt a)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(a);
   unsigned int sz = t->get_width();
@@ -526,7 +526,7 @@ bitblast_convt<subclass>::get_bv(const type2tc &t, const smt_ast *a)
 }
 
 template <class subclass>
-const smt_ast *
+smt_astt 
 bitblast_convt<subclass>::make_disjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;
@@ -543,7 +543,7 @@ bitblast_convt<subclass>::make_disjunct(const smt_convt::ast_vec &v)
 }
 
 template <class subclass>
-const smt_ast *
+smt_astt 
 bitblast_convt<subclass>::make_conjunct(const smt_convt::ast_vec &v)
 {
   bvt bv;

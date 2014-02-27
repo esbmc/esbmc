@@ -1,6 +1,6 @@
 #include "smt_conv.h"
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_byte_extract(const expr2tc &expr)
 {
   const byte_extract2t &data = to_byte_extract2t(expr);
@@ -23,8 +23,8 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
       offs = typecast2tc(source->type, data.source_offset);
 
     lshr2tc shr(source->type, source, offs);
-    const smt_ast *ext = convert_ast(shr);
-    const smt_ast *res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
+    smt_astt ext = convert_ast(shr);
+    smt_astt res = mk_extract(ext, 7, 0, convert_sort(get_uint8_type()));
     return res;
   }
 
@@ -43,7 +43,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
     lower = max - ((intref.constant_value.to_long() + 1) * 8 - 1); //max-((i+1)*w-1);
   }
 
-  const smt_ast *source = convert_ast(data.source_value);;
+  smt_astt source = convert_ast(data.source_value);;
 
   if (int_encoding) {
     std::cerr << "Refusing to byte extract in integer mode; re-run in "
@@ -70,7 +70,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
   }
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_byte_update(const expr2tc &expr)
 {
   const byte_update2t &data = to_byte_update2t(expr);
@@ -114,7 +114,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     return convert_ast(bitor2tc(offs->type, shl2, source));
   }
 
-  const smt_ast *value;
+  smt_astt value;
   unsigned int width_op0, width_op2;
 
   value = convert_ast(data.update_value);

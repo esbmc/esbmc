@@ -1,6 +1,6 @@
 #include "smt_conv.h"
 
-const smt_ast *
+smt_astt 
 smt_convt::overflow_arith(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.
@@ -117,7 +117,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
     assert(is_mul2t(overflow.operand) && "unexpected overflow_arith operand");
 
     // Zero extend; multiply; Make a decision based on the top half.
-    const smt_ast *args[3], *mulargs[2];
+    smt_astt args[3], mulargs[2];
     unsigned int sz = zero->type->get_width();
     const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
     const smt_sort *normalsort = mk_sort(SMT_SORT_BV, sz, false);
@@ -127,9 +127,9 @@ smt_convt::overflow_arith(const expr2tc &expr)
     constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
                                                  ? 0xFFFFFFFFFFFFFFFFULL
                                                  : ((1ULL << sz) - 1)));
-    const smt_ast *allonesvector = convert_ast(allonesexpr);
+    smt_astt allonesvector = convert_ast(allonesexpr);
 
-    const smt_ast *arg1_ext, *arg2_ext;
+    smt_astt arg1_ext, arg2_ext;
     if (is_signed) {
       // sign extend top bits.
       arg1_ext = convert_ast(opers.side_1);
@@ -146,10 +146,10 @@ smt_convt::overflow_arith(const expr2tc &expr)
 
     mulargs[0] = arg1_ext;
     mulargs[1] = arg2_ext;
-    const smt_ast *result = mk_func_app(bigsort, SMT_FUNC_BVMUL, mulargs, 2);
+    smt_astt result = mk_func_app(bigsort, SMT_FUNC_BVMUL, mulargs, 2);
 
     // Extract top half.
-    const smt_ast *toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
+    smt_astt toppart = mk_extract(result, (sz * 2) - 1, sz, normalsort);
 
     if (is_signed) {
       // It should either be zero or all one's; which depends on what
@@ -157,8 +157,8 @@ smt_convt::overflow_arith(const expr2tc &expr)
       // should all be zeros, otherwise all ones. Implement with xor.
       args[0] = convert_ast(op1neg);
       args[1] = convert_ast(op2neg);
-      const smt_ast *allonescond = mk_func_app(boolsort, SMT_FUNC_XOR, args, 2);
-      const smt_ast *zerovector = convert_ast(zero);
+      smt_astt allonescond = mk_func_app(boolsort, SMT_FUNC_XOR, args, 2);
+      smt_astt zerovector = convert_ast(zero);
 
       args[0] = allonescond;
       args[1] = allonesvector;
@@ -209,8 +209,8 @@ smt_convt::overflow_cast(const expr2tc &expr)
 
   constant_int2tc zero(ocast.operand->type, BigInt(0));
   lessthan2tc isnegexpr(ocast.operand, zero);
-  const smt_ast *isneg = convert_ast(isnegexpr);
-  const smt_ast *orig_val = convert_ast(ocast.operand);
+  smt_astt isneg = convert_ast(isnegexpr);
+  smt_astt orig_val = convert_ast(ocast.operand);
 
   // Difference bits
   unsigned int pos_zero_bits = width - bits;
@@ -221,41 +221,41 @@ smt_convt::overflow_cast(const expr2tc &expr)
   const smt_sort *neg_one_bits_sort =
     mk_sort(SMT_SORT_BV, neg_one_bits, false);
 
-  const smt_ast *pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
-  const smt_ast *neg_bits = mk_smt_bvint(BigInt((1 << neg_one_bits) - 1),
+  smt_astt pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);
+  smt_astt neg_bits = mk_smt_bvint(BigInt((1 << neg_one_bits) - 1),
                                          false, neg_one_bits);
 
-  const smt_ast *pos_sel = mk_extract(orig_val, width - 1,
+  smt_astt pos_sel = mk_extract(orig_val, width - 1,
                                       width - pos_zero_bits,
                                       pos_zero_bits_sort);
-  const smt_ast *neg_sel = mk_extract(orig_val, width - 1,
+  smt_astt neg_sel = mk_extract(orig_val, width - 1,
                                       width - neg_one_bits,
                                       neg_one_bits_sort);
 
-  const smt_ast *args[2];
+  smt_astt args[2];
   args[0] = pos_bits;
   args[1] = pos_sel;
-  const smt_ast *pos_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt pos_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
   args[0] = neg_bits;
   args[1] = neg_sel;
-  const smt_ast *neg_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt neg_eq = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
   // isneg -> neg_eq, !isneg -> pos_eq
-  const smt_ast *notisneg = mk_func_app(boolsort, SMT_FUNC_NOT, &isneg, 1);
+  smt_astt notisneg = mk_func_app(boolsort, SMT_FUNC_NOT, &isneg, 1);
   args[0] = isneg;
   args[1] = neg_eq;
-  const smt_ast *c1 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
+  smt_astt c1 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
   args[0] = notisneg;
   args[1] = pos_eq;
-  const smt_ast *c2 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
+  smt_astt c2 = mk_func_app(boolsort, SMT_FUNC_IMPLIES, args, 2);
 
   args[0] = c1;
   args[1] = c2;
-  const smt_ast *nooverflow = mk_func_app(boolsort, SMT_FUNC_AND, args, 2);
+  smt_astt nooverflow = mk_func_app(boolsort, SMT_FUNC_AND, args, 2);
   return mk_func_app(boolsort, SMT_FUNC_NOT, &nooverflow, 1);
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::overflow_neg(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.

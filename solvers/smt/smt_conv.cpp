@@ -163,11 +163,11 @@ smt_convt::pop_ctx(void)
   addr_space_data.pop_back();
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::make_disjunct(const ast_vec &v)
 {
-  const smt_ast *args[v.size()];
-  const smt_ast *result = NULL;
+  smt_astt args[v.size()];
+  smt_astt result = NULL;
   unsigned int i = 0;
 
   // This is always true.
@@ -182,7 +182,7 @@ smt_convt::make_disjunct(const ast_vec &v)
   // Chain these.
   if (i > 1) {
     unsigned int j;
-    const smt_ast *argstwo[2];
+    smt_astt argstwo[2];
     const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
@@ -197,11 +197,11 @@ smt_convt::make_disjunct(const ast_vec &v)
   return result;
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::make_conjunct(const ast_vec &v)
 {
-  const smt_ast *args[v.size()];
-  const smt_ast *result;
+  smt_astt args[v.size()];
+  smt_astt result;
   unsigned int i;
 
   // Funky on account of conversion from land...
@@ -212,7 +212,7 @@ smt_convt::make_conjunct(const ast_vec &v)
   // Chain these.
   if (i > 1) {
     unsigned int j;
-    const smt_ast *argstwo[2];
+    smt_astt argstwo[2];
     const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
@@ -227,18 +227,18 @@ smt_convt::make_conjunct(const ast_vec &v)
   return result;
 }
 
-const smt_ast *
-smt_convt::invert_ast(const smt_ast *a)
+smt_astt 
+smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
   return mk_func_app(a->sort, SMT_FUNC_NOT, &a, 1);
 }
 
-const smt_ast *
-smt_convt::imply_ast(const smt_ast *a, const smt_ast *b)
+smt_astt 
+smt_convt::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
-  const smt_ast *args[2];
+  smt_astt args[2];
   args[0] = a;
   args[1] = b;
   return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
@@ -248,7 +248,7 @@ void
 smt_convt::set_to(const expr2tc &expr, bool value)
 {
 
-  const smt_ast *a = convert_ast(expr);
+  smt_astt a = convert_ast(expr);
   if (value == false)
     a = invert_ast(a);
   assert_ast(a);
@@ -280,14 +280,14 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   }
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_ast(const expr2tc &expr)
 {
   // Variable length array; constant array's and so forth can have hundreds
   // of fields.
-  const smt_ast *args[expr->get_num_sub_exprs()];
+  smt_astt args[expr->get_num_sub_exprs()];
   const smt_sort *sort;
-  const smt_ast *a;
+  smt_astt a;
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
   bool make_ints_reals = false;
@@ -470,9 +470,9 @@ expr_handle_table:
       const smt_sort *s2 = convert_sort(div.side_2->type);
 
       args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
-      const smt_ast *zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
-      const smt_ast *op0 = args[0];
-      const smt_ast *concatargs[2];
+      smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
+      smt_astt op0 = args[0];
+      smt_astt concatargs[2];
       concatargs[0] = op0;
       concatargs[1] = zero;
       args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, concatargs, 2);
@@ -501,7 +501,7 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      const smt_ast *srcval = convert_ast(with.source_value);
+      smt_astt srcval = convert_ast(with.source_value);
       a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
       a = convert_array_store(expr);
@@ -610,8 +610,8 @@ expr_handle_table:
   case expr2t::equality_id:
   {
     const equality2t &eq = to_equality2t(expr);
-    const smt_ast *b = convert_ast(eq.side_1);
-    const smt_ast *c = convert_ast(eq.side_2);
+    smt_astt b = convert_ast(eq.side_1);
+    smt_astt c = convert_ast(eq.side_2);
     a = b->eq(this, c);
     break;
   }
@@ -630,7 +630,7 @@ expr_handle_table:
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
       constant_int2tc two(shl.type, BigInt(2));
-      const smt_ast *powargs[2];
+      smt_astt powargs[2];
       powargs[0] = args[1];
       powargs[1] = convert_ast(two);
       args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
@@ -656,7 +656,7 @@ expr_handle_table:
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
       constant_int2tc two(ashr.type, BigInt(2));
-      const smt_ast *powargs[2];
+      smt_astt powargs[2];
       powargs[0] = args[1];
       powargs[1] = convert_ast(two);
       args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
@@ -683,7 +683,7 @@ expr_handle_table:
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
       constant_int2tc two(lshr.type, BigInt(2));
-      const smt_ast *powargs[2];
+      smt_astt powargs[2];
       powargs[0] = args[1];
       powargs[1] = convert_ast(two);
       args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
@@ -1002,10 +1002,10 @@ smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
   return mk_smt_symbol(mk_fresh_name(tag), s);
 }
 
-const smt_ast *
-smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
+smt_astt 
+smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
-  const smt_ast *args[3];
+  smt_astt args[3];
   const isnan2t &isnan = to_isnan2t(expr);
   const smt_sort *bs = mk_sort(SMT_SORT_BOOL);
 
@@ -1013,8 +1013,8 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
   assert(is_fixedbv_type(isnan.value));
   unsigned width = isnan.value->type->get_width();
 
-  const smt_ast *t = mk_smt_bool(true);
-  const smt_ast *f = mk_smt_bool(false);
+  smt_astt t = mk_smt_bool(true);
+  smt_astt f = mk_smt_bool(false);
 
   if (int_encoding) {
     args[0] = round_real_to_int(operand);
@@ -1033,8 +1033,8 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
   }
 }
 
-const smt_ast *
-smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
+smt_astt 
+smt_convt::convert_member(const expr2tc &expr, smt_astt src)
 {
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
@@ -1076,19 +1076,19 @@ smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
   return src->project(this, idx);
 }
 
-const smt_ast *
-smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
+smt_astt 
+smt_convt::convert_sign_ext(smt_astt a, const smt_sort *s,
                             unsigned int topbit, unsigned int topwidth)
 {
-  const smt_ast *args[4];
+  smt_astt args[4];
 
   const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
   args[0] = mk_extract(a, topbit-1, topbit-1, bit);
   args[1] = mk_smt_bvint(BigInt(0), false, 1);
   const smt_sort *b = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
+  smt_astt t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
 
-  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
+  smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
 
   // Calculate the exact value; SMTLIB text parsers don't like taking an
   // over-full integer literal.
@@ -1096,33 +1096,33 @@ smt_convt::convert_sign_ext(const smt_ast *a, const smt_sort *s,
   unsigned int num_topbits = 64 - topwidth;
   big >>= num_topbits;
   BigInt big_int(big);
-  const smt_ast *f = mk_smt_bvint(big_int, false, topwidth);
+  smt_astt f = mk_smt_bvint(big_int, false, topwidth);
 
   args[0] = t;
   args[1] = z;
   args[2] = f;
   const smt_sort *topsort = mk_sort(SMT_SORT_BV, topwidth, false);
-  const smt_ast *topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3);
+  smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3);
 
   args[0] = topbits;
   args[1] = a;
   return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 }
 
-const smt_ast *
-smt_convt::convert_zero_ext(const smt_ast *a, const smt_sort *s,
+smt_astt 
+smt_convt::convert_zero_ext(smt_astt a, const smt_sort *s,
                             unsigned int topwidth)
 {
-  const smt_ast *args[2];
+  smt_astt args[2];
 
-  const smt_ast *z = mk_smt_bvint(BigInt(0), false, topwidth);
+  smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
   args[0] = z;
   args[1] = a;
   return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 }
 
-const smt_ast *
-smt_convt::round_real_to_int(const smt_ast *a)
+smt_astt 
+smt_convt::round_real_to_int(smt_astt a)
 {
   // SMT truncates downwards; however C truncates towards zero, which is not
   // the same. (Technically, it's also platform dependant). To get around this,
@@ -1131,18 +1131,18 @@ smt_convt::round_real_to_int(const smt_ast *a)
   const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
   const smt_sort *intsort = mk_sort(SMT_SORT_INT);
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *args[3];
+  smt_astt args[3];
   args[0] = a;
   args[1] = mk_smt_real("0");
-  const smt_ast *is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
+  smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
 
   // The actual conversion
-  const smt_ast *as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, args, 2);
+  smt_astt as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, args, 2);
 
-  const smt_ast *one = mk_smt_int(BigInt(1), false);
+  smt_astt one = mk_smt_int(BigInt(1), false);
   args[0] = one;
   args[1] = as_int;
-  const smt_ast *plus_one = mk_func_app(intsort, SMT_FUNC_ADD, args, 2);
+  smt_astt plus_one = mk_func_app(intsort, SMT_FUNC_ADD, args, 2);
 
   // If it's an integer, just keep it's untruncated value.
   args[0] = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
@@ -1156,15 +1156,15 @@ smt_convt::round_real_to_int(const smt_ast *a)
   return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
 }
 
-const smt_ast *
-smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
+smt_astt 
+smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
                                 unsigned int towidth)
 {
   // Perform C rounding: just truncate towards zero. Annoyingly, this isn't
   // that simple for negative numbers, because they're represented as a negative
   // integer _plus_ a positive fraction. So we need to round up if there's a
   // nonzero fraction, and not if there's not.
-  const smt_ast *args[3];
+  smt_astt args[3];
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
@@ -1174,20 +1174,20 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
 
   // Determine whether the source is signed from its topmost bit.
-  const smt_ast *is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
-  const smt_ast *true_bit = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
+  smt_astt true_bit = mk_smt_bvint(BigInt(1), false, 1);
 
   // Also collect data for dealing with the magnitude.
-  const smt_ast *magnitude = mk_extract(a, fromwidth-1, frac_width, halfwidth);
-  const smt_ast *intvalue = convert_sign_ext(magnitude, tosort, frac_width,
+  smt_astt magnitude = mk_extract(a, fromwidth-1, frac_width, halfwidth);
+  smt_astt intvalue = convert_sign_ext(magnitude, tosort, frac_width,
                                              frac_width);
 
   // Data for inspecting fraction part
-  const smt_ast *frac_part = mk_extract(a, frac_width-1, 0, bit);
-  const smt_ast *zero = mk_smt_bvint(BigInt(0), false, frac_width);
+  smt_astt frac_part = mk_extract(a, frac_width-1, 0, bit);
+  smt_astt zero = mk_smt_bvint(BigInt(0), false, frac_width);
   args[0] = frac_part;
   args[1] = zero;
-  const smt_ast *is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
   // So, we have a base number (the magnitude), and need to decide whether to
   // round up or down. If it's positive, round down towards zero. If it's neg
@@ -1196,17 +1196,17 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   // We may need a value + 1.
   args[0] = intvalue;
   args[1] = mk_smt_bvint(BigInt(1), false, towidth);
-  const smt_ast *intvalue_plus_one =
+  smt_astt intvalue_plus_one =
     mk_func_app(tosort, SMT_FUNC_BVADD, args, 2);
 
   args[0] = is_zero_frac;
   args[1] = intvalue;
   args[2] = intvalue_plus_one;
-  const smt_ast *neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+  smt_astt neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 
   args[0] = true_bit;
   args[1] = is_neg_bit;
-  const smt_ast *is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 
   // final switch
   args[0] = is_neg;
@@ -1215,30 +1215,30 @@ smt_convt::round_fixedbv_to_int(const smt_ast *a, unsigned int fromwidth,
   return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
 }
 
-const smt_ast *
-smt_convt::make_bool_bit(const smt_ast *a)
+smt_astt 
+smt_convt::make_bool_bit(smt_astt a)
 {
 
   assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
          "smt_convt::make_bool_bit");
-  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-  const smt_ast *zero = mk_smt_bvint(BigInt(0), false, 1);
-  const smt_ast *args[3];
+  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt zero = mk_smt_bvint(BigInt(0), false, 1);
+  smt_astt args[3];
   args[0] = a;
   args[1] = one;
   args[2] = zero;
   return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
 }
 
-const smt_ast *
-smt_convt::make_bit_bool(const smt_ast *a)
+smt_astt 
+smt_convt::make_bit_bool(smt_astt a)
 {
 
   assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
          "smt_convt::make_bit_bool");
   const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const smt_ast *one = mk_smt_bvint(BigInt(1), false, 1);
-  const smt_ast *args[2];
+  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt args[2];
   args[0] = a;
   args[1] = one;
   return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
@@ -1441,10 +1441,10 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
   return output;
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_array_index(const expr2tc &expr)
 {
-  const smt_ast *a;
+  smt_astt a;
   const index2t &index = to_index2t(expr);
   expr2tc src_value = index.source_value;
   expr2tc newidx;
@@ -1461,7 +1461,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
-    const smt_ast *tmp = convert_ast(src_value);
+    smt_astt tmp = convert_ast(src_value);
     return tmp->select(this, newidx);
   }
 
@@ -1476,7 +1476,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
   }
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_array_store(const expr2tc &expr)
 {
   const with2t &with = to_with2t(expr);
@@ -1496,7 +1496,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
     newidx = tmp_idx;
 
   assert(is_array_type(expr->type));
-  const smt_ast *src, *update;
+  smt_astt src, update;
   const array_type2t &arrtype = to_array_type(expr->type);
 
   // Workaround for bools-in-arrays.
@@ -1770,7 +1770,7 @@ smt_convt::get(const expr2tc &expr)
 }
 
 expr2tc
-smt_convt::get_array(const smt_ast *array, const type2tc &t)
+smt_convt::get_array(smt_astt array, const type2tc &t)
 {
   // XXX -- printing multidimensional arrays?
 

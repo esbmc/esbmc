@@ -29,7 +29,7 @@
  *  map a pointer to its integer representation, and back again.
  */
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
                            const expr2tc &templ_expr)
 {
@@ -68,7 +68,7 @@ smt_convt::convert_ptr_cmp(const expr2tc &side1, const expr2tc &side2,
   return convert_ast(res);
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 {
   const arith_2ops &expr_ref = static_cast<const arith_2ops &>(*expr);
@@ -113,7 +113,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
 
         if (ret_is_ptr) {
           // Update field in tuple.
-          const smt_ast *the_ptr = convert_ast(side1);
+          smt_astt the_ptr = convert_ast(side1);
           return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
         } else {
           return convert_ast(the_ptr_offs);
@@ -182,7 +182,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
       }
 
       // Voila, we have our pointer arithmatic
-      const smt_ast *the_ptr = convert_ast(ptr_op);
+      smt_astt the_ptr = convert_ast(ptr_op);
 
       expr2tc tmp = newexpr->simplify();
       if (!is_nil_expr(tmp))
@@ -217,7 +217,7 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
 
     // Now merge with the old value for all future address-of's
 
-    const smt_ast *args[3];
+    smt_astt args[3];
     args[0] = convert_ast(guard);
     args[1] = output;
     args[2] = it->second;
@@ -233,10 +233,10 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
   }
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
-  const smt_ast *a;
+  smt_astt a;
   const smt_sort *s;
   std::string cte, identifier;
   unsigned int obj_num;
@@ -301,7 +301,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     }
 
     smt_ast *output = init_pointer_obj(obj_num, size);
-    const smt_ast *args[2];
+    smt_astt args[2];
     args[0] = a;
     args[1] = output;
 
@@ -420,7 +420,7 @@ smt_convt::finalize_pointer_chain(unsigned int objnum)
   return;
 }
 
-const smt_ast *
+smt_astt 
 smt_convt::convert_addr_of(const expr2tc &expr)
 {
   const address_of2t &obj = to_address_of2t(expr);
@@ -458,7 +458,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
     address_of2tc addr(type2tc(new pointer_type2t(memb.source_value->type)),
                        memb.source_value);
 
-    const smt_ast *a = convert_ast(addr);
+    smt_astt a = convert_ast(addr);
 
     // Update pointer offset to offset to that field.
     constant_int2tc offset(machine_int, BigInt(offs));
