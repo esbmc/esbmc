@@ -357,6 +357,7 @@ public:
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
   virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
 };
 
 /** The base SMT-conversion class/interface.

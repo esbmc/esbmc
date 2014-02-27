@@ -435,6 +435,38 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   }
 }
 
+const smt_ast *
+array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+{
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+
+  // Pull struct type out, access the relevent element, then wrap it in an
+  // array type.
+
+  const array_type2t &arr = to_array_type(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(arr.subtype);
+
+  assert(idx < data.members.size() &&
+      "Out-of-bounds tuple-array element accessed");
+  const std::string &fieldname = data.member_names[idx].as_string();
+  std::string sym_name = name + fieldname;
+
+  const type2tc &restype = data.members[idx];
+  type2tc new_arr_type(new array_type2t(restype, arr.array_size,
+        arr.size_is_infinite));
+  const smt_sort *s = ctx->convert_sort(new_arr_type);
+
+  if (!is_scalar_type(restype)) {
+    // This is a struct within a struct, so just generate the name prefix of
+    // the internal struct being projected.
+    sym_name = sym_name + ".";
+    return new array_smt_ast(s, sym_name);
+  } else {
+    // This is a normal variable, so create a normal symbol of its name.
+    return ctx->mk_smt_symbol(sym_name, s);
+  }
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
