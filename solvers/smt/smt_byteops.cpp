@@ -62,7 +62,7 @@ smt_convt::convert_byte_extract(const expr2tc &expr)
 
     unsigned int sort_sz = data.source_value->type->get_width();
     if (sort_sz <= upper) {
-      const smt_sort *s = mk_sort(SMT_SORT_BV, 8, false);
+      smt_sortt s = mk_sort(SMT_SORT_BV, 8, false);
       return mk_smt_symbol("out_of_bounds_byte_extract", s);
     } else {
       return mk_extract(source, upper, lower, convert_sort(expr->type));
@@ -82,7 +82,7 @@ smt_convt::convert_byte_update(const expr2tc &expr)
     if (is_pointer_type(data.type)) {
       // Just return a free pointer. Seriously, this is going to be faster,
       // easier, and probably accurate than anything else.
-      const smt_sort *s = convert_sort(data.type);
+      smt_sortt s = convert_sort(data.type);
       return mk_fresh(s, "updated_ptr");
     }
 

@@ -199,6 +199,12 @@ enum smt_func_kind {
  *  and are thus actually stored in the sort object itself.
  *  @see smt_ast
  */
+
+class smt_sort;
+class tuple_smt_sort;
+typedef const smt_sort *smt_sortt;
+typedef const tuple_smt_sort *tuple_smt_sortt;
+
 class smt_sort {
 public:
   /** Identifies what /kind/ of sort this is.

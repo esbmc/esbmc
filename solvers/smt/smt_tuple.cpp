@@ -66,7 +66,7 @@ to_tuple_ast(smt_astt a)
 }
 
 __attribute__((always_inline)) static inline const tuple_smt_sort *
-to_tuple_sort(const smt_sort *a)
+to_tuple_sort(smt_sortt a)
 {
   const tuple_smt_sort *ta = dynamic_cast<const tuple_smt_sort *>(a);
   assert(ta != NULL && "Tuple AST mismatch");
@@ -160,7 +160,7 @@ smt_ast::eq(smt_convt *ctx, smt_astt other) const
   smt_astt args[2];
   args[0] = this;
   args[1] = other;
-  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
   return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
 }
 
@@ -342,7 +342,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   args[1] = ctx->convert_ast(idx);
 
   // Guess the resulting sort. This could be a lot, lot better.
-  const smt_sort *range_sort = NULL;
+  smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
     range_sort = ctx->mk_sort(SMT_SORT_BOOL);
   else
@@ -365,7 +365,7 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   const tuple_smt_sort *ts = to_tuple_sort(sort);
   const array_type2t &array_type = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
-  const smt_sort *result_sort = ctx->convert_sort(array_type.subtype);
+  smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
   tuple_smt_astt result = new tuple_smt_ast(result_sort, name);
@@ -412,7 +412,7 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 
   // Cope with recursive structs.
   const type2tc &restype = data.members[idx];
-  const smt_sort *s = ctx->convert_sort(restype);
+  smt_sortt s = ctx->convert_sort(restype);
 
   if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
     // This is a struct within a struct, so just generate the name prefix of
@@ -447,7 +447,7 @@ array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   const type2tc &restype = data.members[idx];
   type2tc new_arr_type(new array_type2t(restype, arr.array_size,
         arr.size_is_infinite));
-  const smt_sort *s = ctx->convert_sort(new_arr_type);
+  smt_sortt s = ctx->convert_sort(new_arr_type);
 
   if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
     // This is a struct within a struct, so just generate the name prefix of
@@ -513,7 +513,7 @@ smt_convt::union_create(const expr2tc &unidef)
 }
 
 smt_ast *
-smt_convt::tuple_fresh(const smt_sort *s)
+smt_convt::tuple_fresh(smt_sortt s)
 {
   std::string name = mk_fresh_name("tuple_fresh::") + ".";
 
@@ -549,7 +549,7 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
   if (name[name.size() - 1] != '.')
     name += ".";
 
-  const smt_sort *sort = convert_sort(sym.type);
+  smt_sortt sort = convert_sort(sym.type);
   assert(sort->id != SMT_SORT_ARRAY);
   return new tuple_smt_ast(sort, name);
 }
@@ -560,7 +560,7 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
   // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
-  const smt_sort *sort = convert_sort(sym.type);
+  smt_sortt sort = convert_sort(sym.type);
   return new array_smt_ast(sort, name);
 }
 
@@ -568,14 +568,14 @@ smt_astt
 smt_convt::tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
                               bool const_array,
-                              const smt_sort *domain __attribute__((unused)))
+                              smt_sortt domain __attribute__((unused)))
 {
   // Create a tuple array from a constant representation. This means that
   // either we have an array_of or a constant_array. Handle this by creating
   // a fresh tuple array symbol, then repeatedly updating it with tuples at each
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
-  const smt_sort *sort = convert_sort(array_type);
+  smt_sortt sort = convert_sort(array_type);
   std::string name = mk_fresh_name("tuple_array_create::") + ".";
   smt_astt newsym = new array_smt_ast(sort, name);
 
@@ -770,7 +770,7 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
   std::string name = mk_fresh_name("tuple_array_of::") + ".";
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
-  const smt_sort *sort = convert_sort(arrtype);
+  smt_sortt sort = convert_sort(arrtype);
   smt_astt newsym = new array_smt_ast(sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
@@ -812,7 +812,7 @@ smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
 
 smt_astt 
 smt_convt::tuple_array_create_despatch(const expr2tc &expr,
-                                       const smt_sort *domain)
+                                       smt_sortt domain)
 {
   // Take a constant_array2t or an array_of, and format the data from them into
   // a form palatable to tuple_array_create.

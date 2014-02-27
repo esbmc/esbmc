@@ -119,9 +119,9 @@ smt_convt::overflow_arith(const expr2tc &expr)
     // Zero extend; multiply; Make a decision based on the top half.
     smt_astt args[3], mulargs[2];
     unsigned int sz = zero->type->get_width();
-    const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-    const smt_sort *normalsort = mk_sort(SMT_SORT_BV, sz, false);
-    const smt_sort *bigsort = mk_sort(SMT_SORT_BV, sz * 2, false);
+    smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
+    smt_sortt normalsort = mk_sort(SMT_SORT_BV, sz, false);
+    smt_sortt bigsort = mk_sort(SMT_SORT_BV, sz * 2, false);
 
     // All one bit vector is tricky, might be 64 bits wide for all we know.
     constant_int2tc allonesexpr(zero->type, BigInt((sz == 64)
@@ -195,7 +195,7 @@ smt_convt::overflow_cast(const expr2tc &expr)
   const overflow_cast2t &ocast = to_overflow_cast2t(expr);
   unsigned int width = ocast.operand->type->get_width();
   unsigned int bits = ocast.bits;
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
 
   if (ocast.bits >= width || ocast.bits == 0) {
     std::cerr << "SMT conversion: overflow-typecast got wrong number of bits"
@@ -216,9 +216,9 @@ smt_convt::overflow_cast(const expr2tc &expr)
   unsigned int pos_zero_bits = width - bits;
   unsigned int neg_one_bits = (width - bits) + 1;
 
-  const smt_sort *pos_zero_bits_sort =
+  smt_sortt pos_zero_bits_sort =
     mk_sort(SMT_SORT_BV, pos_zero_bits, false);
-  const smt_sort *neg_one_bits_sort =
+  smt_sortt neg_one_bits_sort =
     mk_sort(SMT_SORT_BV, neg_one_bits, false);
 
   smt_astt pos_bits = mk_smt_bvint(BigInt(0), false, pos_zero_bits);

@@ -29,7 +29,7 @@ bitblast_convt<subclass>::assert_ast(smt_astt a)
 
 template <class subclass>
 smt_ast*
-bitblast_convt<subclass>::mk_func_app(const smt_sort *ressort,
+bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
                             smt_func_kind f, const smt_ast* const* _args,
                             unsigned int numargs)
 {
@@ -367,7 +367,7 @@ bitblast_convt<subclass>::mk_smt_bool(bool boolval)
 
 template <class subclass>
 smt_ast*
-bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, const smt_sort *sort)
+bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, smt_sortt sort)
 {
   // Like metasmt, bitblast doesn't have a symbol table. So, build our own.
   symtable_type::iterator it = sym_table.find(name);
@@ -431,7 +431,7 @@ bitblast_convt<subclass>::mk_union_sort(const type2tc &t __attribute__((unused))
 template <class subclass>
 smt_ast*
 bitblast_convt<subclass>::mk_extract(smt_astt src, unsigned int high,
-                          unsigned int low, const smt_sort *s)
+                          unsigned int low, smt_sortt s)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
   bitblast_smt_ast *result = new bitblast_smt_ast(s);
@@ -445,7 +445,7 @@ template <class subclass>
 bitblast_smt_ast *
 bitblast_convt<subclass>::mk_ast_equality(smt_astt _a,
                                 smt_astt _b,
-                                const smt_sort *ressort)
+                                smt_sortt ressort)
 {
   const bitblast_smt_ast *a = bitblast_ast_downcast(_a);
   const bitblast_smt_ast *b = bitblast_ast_downcast(_b);
@@ -536,7 +536,7 @@ bitblast_convt<subclass>::make_disjunct(const smt_convt::ast_vec &v)
 
   literalt l = lor(bv);
 
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
   bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
   ba->bv.push_back(l);
   return ba;
@@ -553,7 +553,7 @@ bitblast_convt<subclass>::make_conjunct(const smt_convt::ast_vec &v)
 
   literalt l = land(bv);
 
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
   bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
   ba->bv.push_back(l);
   return ba;

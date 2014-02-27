@@ -183,7 +183,7 @@ smt_convt::make_disjunct(const ast_vec &v)
   if (i > 1) {
     unsigned int j;
     smt_astt argstwo[2];
-    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
       argstwo[1] = args[j];
@@ -213,7 +213,7 @@ smt_convt::make_conjunct(const ast_vec &v)
   if (i > 1) {
     unsigned int j;
     smt_astt argstwo[2];
-    const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
+    smt_sortt sort = mk_sort(SMT_SORT_BOOL);
     argstwo[0] = args[0];
     for (j = 1; j < i; j++) {
       argstwo[1] = args[j];
@@ -286,7 +286,7 @@ smt_convt::convert_ast(const expr2tc &expr)
   // Variable length array; constant array's and so forth can have hundreds
   // of fields.
   smt_astt args[expr->get_num_sub_exprs()];
-  const smt_sort *sort;
+  smt_sortt sort;
   smt_astt a;
   unsigned int num_args, used_sorts = 0;
   bool seen_signed_operand = false;
@@ -413,7 +413,7 @@ expr_handle_table:
     }
 
     // Domain sort may be mesed with:
-    const smt_sort *domain;
+    smt_sortt domain;
     if (int_encoding) {
       domain = machine_int_sort;
     } else {
@@ -444,8 +444,8 @@ expr_handle_table:
       const fixedbv_type2t &fbvt = to_fixedbv_type(mul.type);
       unsigned int fraction_bits = fbvt.width - fbvt.integer_bits;
       unsigned int topbit = mul.side_1->type->get_width();
-      const smt_sort *s1 = convert_sort(mul.side_1->type);
-      const smt_sort *s2 = convert_sort(mul.side_2->type);
+      smt_sortt s1 = convert_sort(mul.side_1->type);
+      smt_sortt s2 = convert_sort(mul.side_2->type);
       args[0] = convert_sign_ext(args[0], s1, topbit, fraction_bits);
       args[1] = convert_sign_ext(args[1], s2, topbit, fraction_bits);
       a = mk_func_app(sort, SMT_FUNC_BVMUL, args, 2);
@@ -467,7 +467,7 @@ expr_handle_table:
 
       unsigned int fraction_bits = fbt.spec.get_fraction_bits();
       unsigned int topbit2 = div.side_2->type->get_width();
-      const smt_sort *s2 = convert_sort(div.side_2->type);
+      smt_sortt s2 = convert_sort(div.side_2->type);
 
       args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
       smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
@@ -752,7 +752,7 @@ expr_handle_table:
 
     unsigned long accuml_side =
       cat.side_1->type->get_width() + cat.side_2->type->get_width();
-    const smt_sort *s = mk_sort(SMT_SORT_BV, accuml_side, false);
+    smt_sortt s = mk_sort(SMT_SORT_BV, accuml_side, false);
     a = mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
 
     break;
@@ -842,7 +842,7 @@ smt_convt::convert_sort(const type2tc &type)
     // Unless it's either infinite or dynamic in size, in which case use the
     // machine int size. Also, faff about if it's an array of arrays, extending
     // the domain.
-    const smt_sort *d = make_array_domain_sort(arr);
+    smt_sortt d = make_array_domain_sort(arr);
 
     // Determine the range if we have arrays of arrays.
     type2tc range = arr.subtype;
@@ -977,7 +977,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
     // Just a normal symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
-    const smt_sort *sort = convert_sort(sym.type);
+    smt_sortt sort = convert_sort(sym.type);
     return mk_smt_symbol(name, sort);
   }
   default:
@@ -997,7 +997,7 @@ smt_convt::mk_fresh_name(const std::string &tag)
 }
 
 smt_ast *
-smt_convt::mk_fresh(const smt_sort *s, const std::string &tag)
+smt_convt::mk_fresh(smt_sortt s, const std::string &tag)
 {
   return mk_smt_symbol(mk_fresh_name(tag), s);
 }
@@ -1007,7 +1007,7 @@ smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
   smt_astt args[3];
   const isnan2t &isnan = to_isnan2t(expr);
-  const smt_sort *bs = mk_sort(SMT_SORT_BOOL);
+  smt_sortt bs = mk_sort(SMT_SORT_BOOL);
 
   // Assumes operand is fixedbv.
   assert(is_fixedbv_type(isnan.value));
@@ -1077,15 +1077,15 @@ smt_convt::convert_member(const expr2tc &expr, smt_astt src)
 }
 
 smt_astt 
-smt_convt::convert_sign_ext(smt_astt a, const smt_sort *s,
+smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
                             unsigned int topbit, unsigned int topwidth)
 {
   smt_astt args[4];
 
-  const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
+  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
   args[0] = mk_extract(a, topbit-1, topbit-1, bit);
   args[1] = mk_smt_bvint(BigInt(0), false, 1);
-  const smt_sort *b = mk_sort(SMT_SORT_BOOL);
+  smt_sortt b = mk_sort(SMT_SORT_BOOL);
   smt_astt t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
 
   smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
@@ -1101,7 +1101,7 @@ smt_convt::convert_sign_ext(smt_astt a, const smt_sort *s,
   args[0] = t;
   args[1] = z;
   args[2] = f;
-  const smt_sort *topsort = mk_sort(SMT_SORT_BV, topwidth, false);
+  smt_sortt topsort = mk_sort(SMT_SORT_BV, topwidth, false);
   smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3);
 
   args[0] = topbits;
@@ -1110,7 +1110,7 @@ smt_convt::convert_sign_ext(smt_astt a, const smt_sort *s,
 }
 
 smt_astt 
-smt_convt::convert_zero_ext(smt_astt a, const smt_sort *s,
+smt_convt::convert_zero_ext(smt_astt a, smt_sortt s,
                             unsigned int topwidth)
 {
   smt_astt args[2];
@@ -1128,9 +1128,9 @@ smt_convt::round_real_to_int(smt_astt a)
   // the same. (Technically, it's also platform dependant). To get around this,
   // add one to the result in all circumstances, except where the value was
   // already an integer.
-  const smt_sort *realsort = mk_sort(SMT_SORT_REAL);
-  const smt_sort *intsort = mk_sort(SMT_SORT_INT);
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt realsort = mk_sort(SMT_SORT_REAL);
+  smt_sortt intsort = mk_sort(SMT_SORT_INT);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
   smt_astt args[3];
   args[0] = a;
   args[1] = mk_smt_real("0");
@@ -1168,10 +1168,10 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
-  const smt_sort *bit = mk_sort(SMT_SORT_BV, 1, false);
-  const smt_sort *halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
-  const smt_sort *tosort = mk_sort(SMT_SORT_BV, towidth, false);
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
+  smt_sortt halfwidth = mk_sort(SMT_SORT_BV, frac_width, false);
+  smt_sortt tosort = mk_sort(SMT_SORT_BV, towidth, false);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
 
   // Determine whether the source is signed from its topmost bit.
   smt_astt is_neg_bit = mk_extract(a, fromwidth-1, fromwidth-1, bit);
@@ -1236,7 +1236,7 @@ smt_convt::make_bit_bool(smt_astt a)
 
   assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
          "smt_convt::make_bit_bool");
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
+  smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
   smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
   smt_astt args[2];
   args[0] = a;
@@ -1250,7 +1250,7 @@ smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
   if (int_encoding)
     return idx;
 
-  const smt_sort *s = convert_sort(arr_sort);
+  smt_sortt s = convert_sort(arr_sort);
   unsigned int domain_width = s->get_domain_width();
   if (domain_width == config.ansi_c.int_width)
     return idx;
@@ -1292,7 +1292,7 @@ smt_convt::calculate_array_domain_width(const array_type2t &arr)
   }
 }
 
-const smt_sort *
+smt_sortt 
 smt_convt::make_array_domain_sort(const array_type2t &arr)
 {
 
@@ -1791,7 +1791,7 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
-  const smt_sort *subtype_sort = convert_sort(ar.subtype);
+  smt_sortt subtype_sort = convert_sort(ar.subtype);
 
   for (size_t i = 0; i < (1ULL << w); i++) {
     fields.push_back(get_array_elem(array, i, subtype_sort));

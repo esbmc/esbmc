@@ -237,7 +237,7 @@ smt_astt
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
   smt_astt a;
-  const smt_sort *s;
+  smt_sortt s;
   std::string cte, identifier;
   unsigned int obj_num;
 
