@@ -137,6 +137,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
 smtlib_convt::~smtlib_convt()
 {
+  delete_all_asts();
 }
 
 std::string

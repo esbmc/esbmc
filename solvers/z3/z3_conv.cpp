@@ -76,8 +76,7 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
 z3_convt::~z3_convt()
 {
-  // All deconstruction handled by reference counters (save the lifetime-of
-  // smt-ast issue)
+  delete_all_asts();
 }
 
 void
