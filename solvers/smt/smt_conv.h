@@ -721,10 +721,8 @@ public:
    *  arrays into one domain sort, or turning bool arrays into bit arrays.
    *  XXX, why is this virtual?
    *  @param expr An index2tc expression to convert to an SMT AST.
-   *  @param ressort The resulting sort of this operation.
    *  @return An AST representing the index operation in the expression. */
-  virtual const smt_ast *convert_array_index(const expr2tc &expr,
-                                             const smt_sort *ressort);
+  virtual const smt_ast *convert_array_index(const expr2tc &expr);
 
   /** Partner method to convert_array_index, for stores.
    *  XXX, why is this virtual?

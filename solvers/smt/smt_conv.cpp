@@ -491,7 +491,7 @@ expr_handle_table:
   }
   case expr2t::index_id:
   {
-    a = convert_array_index(expr, sort);
+    a = convert_array_index(expr);
     break;
   }
   case expr2t::with_id:
@@ -1443,7 +1443,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 }
 
 const smt_ast *
-smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort __attribute__((unused)))
+smt_convt::convert_array_index(const expr2tc &expr)
 {
   const smt_ast *a;
   const index2t &index = to_index2t(expr);
