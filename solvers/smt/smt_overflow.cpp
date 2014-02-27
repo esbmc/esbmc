@@ -185,7 +185,7 @@ smt_convt::overflow_arith(const expr2tc &expr)
   return NULL;
 }
 
-smt_ast *
+smt_astt
 smt_convt::overflow_cast(const expr2tc &expr)
 {
   // If in integer mode, this is completely pointless. Return false.

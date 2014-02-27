@@ -574,7 +574,7 @@ public:
    *  @param numargs The number of elements in args. Should be consistent with
    *         the function kind k.
    *  @return The resulting function application, wrapped in an smt_ast. */
-  virtual smt_ast *mk_func_app(smt_sortt s, smt_func_kind k,
+  virtual smt_astt mk_func_app(smt_sortt s, smt_func_kind k,
                                smt_astt  const *args,
                                unsigned int numargs) = 0;
 
@@ -733,7 +733,7 @@ public:
    *  the dropped bits are never significant / used.
    *  @param expr Cast to test for dropped / overflowed data in.
    *  @return Boolean valued AST representing whether an overflow occurs. */
-  virtual smt_ast *overflow_cast(const expr2tc &expr);
+  virtual smt_astt overflow_cast(const expr2tc &expr);
 
   /** Detects integer overflows in negation. This only tests for the case where
    *  MIN_INT is being negated, in which case there is no positive
@@ -1106,7 +1106,7 @@ public:
   std::list<std::map<unsigned, unsigned> > addr_space_data;
 
   // XXX - push-pop will break here.
-  typedef std::map<std::string, smt_ast *> renumber_mapt;
+  typedef std::map<std::string, smt_astt> renumber_mapt;
   renumber_mapt renumber_map;
 
   /** Table containing information about how to handle expressions to convert
