@@ -468,9 +468,21 @@ smt_convt::tuple_create(const expr2tc &structdef)
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
     args[i] = convert_ast(*structdef->get_sub_expr(i));
 
-  tuple_create_rec(name, structdef->type, args);
+  smt_ast *result = new tuple_smt_ast(convert_sort(structdef->type), name);
 
-  return new tuple_smt_ast(convert_sort(structdef->type), name);
+  const struct_union_data &data = get_type_def(structdef->type);
+
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    const smt_ast *elem = result->project(this, i);
+    const smt_ast *src = args[i];
+
+    assert_ast(elem->eq(this, src));
+
+    i++;
+  }
+
+  return result;
 }
 
 smt_ast *
@@ -525,45 +537,6 @@ smt_convt::get_type_def(const type2tc &type) const
   return (is_pointer_type(type))
         ? *pointer_type_data
         : dynamic_cast<const struct_union_data &>(*type.get());
-}
-
-void
-smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
-                            const smt_ast **inputargs)
-{
-  // Iterate over the members of a struct; if a member is a struct itself,
-  // recurse, otherwise compute the name of the field and assign in the value
-  // of that field.
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &data = get_type_def(structtype);
-
-  unsigned int i = 0;
-  forall_types(it, data.members) {
-    if (is_tuple_ast_type(*it) || is_tuple_array_ast_type(*it)) {
-      // This is a complicated field, but when the ast for this tuple / array
-      // was converted, we already created an appropriate tuple_smt_ast, so we
-      // just need to equality it into the tuple with the passed in name.
-      std::string subname = name + data.member_names[i].as_string() + ".";
-      const smt_sort *thesort = convert_sort(*it);
-      const tuple_smt_ast *target = (is_tuple_array_ast_type(*it))
-        ? new array_smt_ast(thesort, subname)
-        : new tuple_smt_ast(thesort, subname);
-      const smt_ast *src = inputargs[i];
-
-      assert_ast(target->eq(this, src));
-    } else {
-      // This is a normal field -- take the value from the inputargs array,
-      // compute the members name, and then make an equality.
-      std::string symname = name + data.member_names[i].as_string();
-      const smt_sort *sort = convert_sort(*it);
-      const smt_ast *args[2];
-      args[0] = mk_smt_symbol(symname, sort);
-      args[1] = inputargs[i];
-      assert_ast(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
-    }
-
-    i++;
-  }
 }
 
 smt_ast *

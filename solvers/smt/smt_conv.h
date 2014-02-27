@@ -836,9 +836,6 @@ public:
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   /** Like mk_tuple_symbol, but for arrays */
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
-  /** Create a new, constant tuple, from the given arguments. */
-  void tuple_create_rec(const std::string &name, const type2tc &structtype,
-                        const smt_ast **inputargs);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
