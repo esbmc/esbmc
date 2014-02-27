@@ -89,8 +89,8 @@ private:
   virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);
 
-  virtual smt_ast *tuple_create(const expr2tc &structdef);
-  virtual smt_ast *tuple_fresh(const smt_sort *s);
+  virtual smt_astt tuple_create(const expr2tc &structdef);
+  virtual smt_astt tuple_fresh(const smt_sort *s);
   virtual expr2tc tuple_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,

@@ -460,7 +460,7 @@ array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   }
 }
 
-smt_ast *
+smt_astt
 smt_convt::tuple_create(const expr2tc &structdef)
 {
   // From a vector of expressions, create a tuple representation by creating
@@ -480,7 +480,7 @@ smt_convt::tuple_create(const expr2tc &structdef)
   return result;
 }
 
-smt_ast *
+smt_astt
 smt_convt::union_create(const expr2tc &unidef)
 {
   // Unions are known to be brok^W fragile. Create a free new structure, and
@@ -512,7 +512,7 @@ smt_convt::union_create(const expr2tc &unidef)
   return new tuple_smt_ast(convert_sort(unidef->type), name);
 }
 
-smt_ast *
+smt_astt
 smt_convt::tuple_fresh(smt_sortt s)
 {
   std::string name = mk_fresh_name("tuple_fresh::") + ".";

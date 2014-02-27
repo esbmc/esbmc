@@ -809,7 +809,7 @@ z3_convt::z3_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   return new z3_smt_ast(z3_ctx->mk_tuple_select(e, elem), idx_sort);
 }
 
-smt_ast *
+smt_astt
 z3_convt::tuple_create(const expr2tc &structdef)
 {
   z3::expr e;
@@ -822,7 +822,7 @@ z3_convt::tuple_create(const expr2tc &structdef)
   return new z3_smt_ast(e, s);
 }
 
-smt_ast *
+smt_astt
 z3_convt::tuple_fresh(const smt_sort *s)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);

@@ -683,14 +683,14 @@ public:
    *  @param structdef A constant_struct2tc, describing all the members of the
    *         tuple to create.
    *  @return AST representing the created tuple */
-  virtual smt_ast *tuple_create(const expr2tc &structdef);
+  virtual smt_astt tuple_create(const expr2tc &structdef);
 
-  virtual smt_ast *union_create(const expr2tc &unidef);
+  virtual smt_astt union_create(const expr2tc &unidef);
 
   /** Create a fresh tuple, with freely valued fields.
    *  @param s Sort of the tuple to create
    *  @return AST representing the created tuple */
-  virtual smt_ast *tuple_fresh(smt_sortt s);
+  virtual smt_astt tuple_fresh(smt_sortt s);
 
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
