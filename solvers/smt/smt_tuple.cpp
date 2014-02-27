@@ -104,14 +104,12 @@ tuple_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
   forall_types(it, data.members) {
-    smt_sort *thesort = ctx->convert_sort(*it);
-    smt_ast *truepart = ctx->tuple_project(true_val, thesort, i);
-    smt_ast *falsepart = ctx->tuple_project(false_val, thesort, i);
+    const smt_ast *truepart = true_val->project(ctx, i);
+    const smt_ast *falsepart = false_val->project(ctx, i);
 
     const smt_ast *result_ast = truepart->ite(ctx, cond, falsepart);
 
-    const smt_ast *result_sym_ast =
-      ctx->tuple_project(result_sym, result_ast->sort, i);
+    const smt_ast *result_sym_ast = result_sym->project(ctx, i);
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
 
     i++;
@@ -142,14 +140,12 @@ array_smt_ast::ite(smt_convt *ctx, const smt_ast *cond, const smt_ast *falseop) 
     type2tc arrtype(new array_type2t(*it, array_type.array_size,
           array_type.size_is_infinite));
 
-    smt_sort *thesort = ctx->convert_sort(arrtype);
-    smt_ast *truepart = ctx->tuple_project(true_val, thesort, i);
-    smt_ast *falsepart = ctx->tuple_project(false_val, thesort, i);
+    const smt_ast *truepart = true_val->project(ctx, i);
+    const smt_ast *falsepart = false_val->project(ctx, i);
 
     const smt_ast *result_ast = truepart->ite(ctx, cond, falsepart);
 
-    const smt_ast *result_sym_ast =
-      ctx->tuple_project(result_sym, result_ast->sort, i);
+    const smt_ast *result_sym_ast = result_sym->project(ctx, i);
 
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
     i++;
@@ -186,9 +182,8 @@ tuple_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   // Iterate through each field and encode an equality.
   unsigned int i = 0;
   forall_types(it, data.members) {
-    const smt_sort *sort = ctx->convert_sort(*it);
-    const smt_ast *side1 = ctx->tuple_project(ta, sort, i);
-    const smt_ast *side2 = ctx->tuple_project(tb, sort, i);
+    const smt_ast *side1 = ta->project(ctx, i);
+    const smt_ast *side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
     i++;
   }
@@ -219,9 +214,8 @@ array_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
   forall_types(it, data.members) {
     type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
           arrtype.size_is_infinite));
-    const smt_sort *sort = ctx->convert_sort(tmparrtype);
-    const smt_ast *side1 = ctx->tuple_project(ta, sort, i);
-    const smt_ast *side2 = ctx->tuple_project(tb, sort, i);
+    const smt_ast *side1 = ta->project(ctx, i);
+    const smt_ast *side2 = tb->project(ctx, i);
     eqs.push_back(side1->eq(ctx, side2));
     i++;
   }
@@ -270,16 +264,14 @@ tuple_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
     if (j == idx) {
       // This is the updated field -- generate the name of its variable with
       // tuple project and assign it in.
-      const smt_sort *tmp = ctx->convert_sort(*it);
-      const smt_ast *thefield = ctx->tuple_project(result, tmp, j);
+      const smt_ast *thefield = result->project(ctx, j);
 
       eqs.push_back(thefield->eq(ctx, value));
     } else {
       // This is not an updated field; extract the member out of the input
       // tuple (a) and assign it into the fresh tuple.
-      const smt_sort *tmp = ctx->convert_sort(*it);
-      const smt_ast *field1 = ctx->tuple_project(this, tmp, j);
-      const smt_ast *field2 = ctx->tuple_project(result, tmp, j);
+      const smt_ast *field1 = project(ctx, j);
+      const smt_ast *field2 = result->project(ctx, j);
       eqs.push_back(field1->eq(ctx, field2));
     }
 
@@ -316,16 +308,14 @@ array_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
   forall_types(it, data.members) {
     type2tc arrtype(new array_type2t(*it, array_type.array_size,
           array_type.size_is_infinite));
-    const smt_sort *arrsort = ctx->convert_sort(arrtype);
-    const smt_sort *normalsort = ctx->convert_sort(*it);
 
     // Project and update a field in 'this'
-    const smt_ast *field = ctx->tuple_project(this, arrsort, i);
-    const smt_ast *resval = ctx->tuple_project(value, normalsort, i);
+    const smt_ast *field = project(ctx, i);
+    const smt_ast *resval = value->project(ctx, i);
     const smt_ast *updated = field->update(ctx, resval, 0, index);
 
     // Now equality it into the result object
-    const smt_ast *res_field = ctx->tuple_project(result, arrsort, i);
+    const smt_ast *res_field = result->project(ctx, i);
     eqs.push_back(res_field->eq(ctx, updated));
 
     i++;
@@ -379,11 +369,9 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   forall_types(it, data.members) {
     type2tc arrtype(new array_type2t(*it, array_type.array_size,
           array_type.size_is_infinite));
-    const smt_sort *arr_sort = ctx->convert_sort(arrtype);
-    const smt_sort *sort = ctx->convert_sort(*it);
 
-    const smt_ast *result_field = ctx->tuple_project(result, sort, i);
-    const smt_ast *sub_array = ctx->tuple_project(this, arr_sort, i);
+    const smt_ast *result_field = result->project(ctx, i);
+    const smt_ast *sub_array = project(ctx, i);
 
     const smt_ast *selected = sub_array->select(ctx, idx);
     ctx->assert_ast(result_field->eq(ctx, selected));
@@ -508,7 +496,7 @@ smt_convt::union_create(const expr2tc &unidef)
   forall_types(it, def.members) {
     if (base_type_eq(*it, init->type, ns)) {
       // Assign in.
-      const smt_ast *target_memb = tuple_project(result_ast, init_ast->sort, i);
+      const smt_ast *target_memb = result_ast->project(this, i);
       assert_ast(target_memb->eq(this, init_ast));
     }
     i++;
@@ -888,9 +876,8 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
     type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
     constant_array_of2tc sub_array_of(subarr_type, val);
 
-    const smt_sort *array_sort = convert_sort(subarr_type);
-    const smt_ast *target_array =
-      tuple_project(convert_ast(tuple_arr_of_sym), array_sort,i);
+    const smt_ast *tuple_arr_of_sym_ast = convert_ast(tuple_arr_of_sym);
+    const smt_ast *target_array = tuple_arr_of_sym_ast->project(this, i);
 
     const smt_ast *sub_array_of_ast = convert_ast(sub_array_of);
     assert_ast(target_array->eq(this, sub_array_of_ast));
