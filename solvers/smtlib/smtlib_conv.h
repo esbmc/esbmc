@@ -42,7 +42,8 @@ public:
 
 class smtlib_smt_ast : public smt_ast {
 public:
-  smtlib_smt_ast(const smt_sort *s, smt_func_kind k) : smt_ast(s), kind(k) { }
+  smtlib_smt_ast(smt_convt *ctx, const smt_sort *s, smt_func_kind k)
+    : smt_ast(ctx, s), kind(k) { }
   ~smtlib_smt_ast() { }
   smt_func_kind kind;
   std::string symname;

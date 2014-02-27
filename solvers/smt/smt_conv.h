@@ -306,7 +306,10 @@ public:
   /** The sort of this function application. */
   smt_sortt sort;
 
-  smt_ast(smt_sortt s) : sort(s) { }
+  smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
+    // Do some things with ctx here.
+    ctx = ctx;
+  }
   virtual ~smt_ast() { }
 
   // "this" is the true operand.
@@ -361,8 +364,8 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_smt_ast (smt_sortt s, const std::string &_name) : smt_ast(s),
-            name(_name) { }
+  tuple_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : smt_ast(ctx, s), name(_name) { }
   virtual ~tuple_smt_ast() { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
@@ -383,8 +386,8 @@ public:
 class array_smt_ast : public tuple_smt_ast
 {
 public:
-  array_smt_ast (smt_sortt s, const std::string &_name)
-    : tuple_smt_ast(s, _name) { }
+  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : tuple_smt_ast(ctx, s, _name) { }
   virtual ~array_smt_ast() { }
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
