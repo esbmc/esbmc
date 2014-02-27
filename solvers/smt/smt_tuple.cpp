@@ -534,7 +534,7 @@ smt_convt::get_type_def(const type2tc &type) const
         : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
-smt_ast *
+smt_astt
 smt_convt::mk_tuple_symbol(const expr2tc &expr)
 {
   // Assuming this is a symbol, convert it to being an ast with tuple type.
@@ -554,7 +554,7 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
   return new tuple_smt_ast(sort, name);
 }
 
-smt_ast *
+smt_astt
 smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
 {
   // Exactly the same as creating a tuple symbol, but for arrays.

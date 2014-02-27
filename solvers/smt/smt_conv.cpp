@@ -906,7 +906,7 @@ fixed_point(std::string v, unsigned width)
   return result;
 }
 
-smt_ast *
+smt_astt
 smt_convt::convert_terminal(const expr2tc &expr)
 {
   switch (expr->expr_id) {

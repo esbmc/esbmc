@@ -803,7 +803,7 @@ public:
   /** Convert a terminal expression into an SMT AST. This despatches control to
    *  the appropriate method in the subclassing solver converter for terminal
    *  conversion */
-  smt_ast *convert_terminal(const expr2tc &expr);
+  smt_astt convert_terminal(const expr2tc &expr);
 
   /** Flatten pointer arithmetic. When faced with an addition or subtraction
    *  between a pointer and some integer or other pointer, perform whatever
@@ -870,9 +870,9 @@ public:
   smt_astt tuple_array_create_despatch(const expr2tc &expr,
                                              smt_sortt domain);
   /** Convert a symbol2tc to a tuple_smt_ast */
-  smt_ast *mk_tuple_symbol(const expr2tc &expr);
+  smt_astt mk_tuple_symbol(const expr2tc &expr);
   /** Like mk_tuple_symbol, but for arrays */
-  smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
+  smt_astt mk_tuple_array_symbol(const expr2tc &expr);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
