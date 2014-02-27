@@ -880,10 +880,6 @@ public:
   /** Create a new, constant tuple, from the given arguments. */
   void tuple_create_rec(const std::string &name, const type2tc &structtype,
                         const smt_ast **inputargs);
-  /** Select data from input array into the tuple ast result */
-  void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
-                              const tuple_smt_ast *result, const expr2tc &field,
-                              const expr2tc &arr_width);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */

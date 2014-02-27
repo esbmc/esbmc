@@ -657,53 +657,6 @@ smt_convt::tuple_array_select(const smt_ast *a, const smt_sort *s __attribute__(
   return ta->select(this, field);
 }
 
-void
-smt_convt::tuple_array_select_rec(const tuple_smt_ast *ta,
-                                  const type2tc &subtype,
-                                  const tuple_smt_ast *result,
-                                  const expr2tc &field,
-                                  const expr2tc &arr_width)
-{
-  // Implementation of selecting out of a tuple array: ta contains the source
-  // tuple array, and result is a new tuple that we're assigning things into.
-  // For each member of the tuple, create the member name from the tuple array 
-  // to get an array variable, and then index that variable to actually perform
-  // the select operation.
-  const smt_sort *boolsort = mk_sort(SMT_SORT_BOOL);
-  const struct_union_data &struct_type = get_type_def(subtype);
-
-  unsigned int i = 0;
-  // For each member...
-  forall_types(it, struct_type.members) {
-    if (is_tuple_ast_type(*it)) {
-      // If it's a tuple itself, we have to recurse.
-      type2tc arrtype(new array_type2t(*it, arr_width, false));
-      const smt_sort *sort = convert_sort(arrtype);
-      const tuple_smt_ast *result_field =
-        to_tuple_ast(tuple_project(result, sort, i));
-      std::string substruct_name =
-        ta->name + struct_type.member_names[i].as_string() + ".";
-      const tuple_smt_ast *array_name = new array_smt_ast(sort, substruct_name);
-      tuple_array_select_rec(array_name, *it, result_field, field, arr_width);
-    } else {
-      // Otherwise assume it's a normal variable: create its name (which is of
-      // array type), and then extract the value from that array at the
-      // specified index.
-      std::string name = ta->name + struct_type.member_names[i].as_string();
-      type2tc this_arr_type(new array_type2t(*it, arr_width, false));
-      const smt_ast *args[2];
-      const smt_sort *field_sort = convert_sort(*it);
-      symbol2tc array_sym(this_arr_type, name);
-      expr2tc tmpidx = fix_array_idx(field, this_arr_type);
-      args[0] = mk_select(array_sym, tmpidx, field_sort);
-      args[1] = tuple_project(result, field_sort, i);
-      assert_ast(mk_func_app(boolsort, SMT_FUNC_EQ, args, 2));
-    }
-
-    i++;
-  }
-}
-
 expr2tc
 smt_convt::tuple_get(const expr2tc &expr)
 {
