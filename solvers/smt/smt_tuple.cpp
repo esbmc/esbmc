@@ -517,7 +517,7 @@ smt_convt::tuple_fresh(smt_sortt s)
 {
   std::string name = mk_fresh_name("tuple_fresh::") + ".";
 
-  smt_ast *a = mk_smt_symbol(name, s);
+  smt_astt a = mk_smt_symbol(name, s);
   (void)a;
   if (s->id == SMT_SORT_ARRAY)
     return new array_smt_ast(s, name);

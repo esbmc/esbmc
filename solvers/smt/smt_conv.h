@@ -597,7 +597,7 @@ public:
    *  @param theint BigInt representation of the number to create.
    *  @param sign Whether this integer is considered signed or not.
    *  @return The newly created terminal smt_ast of this integer. */
-  virtual smt_ast *mk_smt_int(const mp_integer &theint, bool sign) = 0;
+  virtual smt_astt mk_smt_int(const mp_integer &theint, bool sign) = 0;
 
   /** Create a real in a smt_ast.
    *  @param str String representation of the real, to be parsed by the solver.
@@ -605,7 +605,7 @@ public:
    *         all other options, there are none that are good, this is a
    *         legitimate use of strings.
    *  @return The newly created terminal smt_ast of this real. */
-  virtual smt_ast *mk_smt_real(const std::string &str) = 0;
+  virtual smt_astt mk_smt_real(const std::string &str) = 0;
 
   /** Create a bitvector.
    *  @param theint Integer representation of the bitvector. Any excess bits
@@ -613,13 +613,13 @@ public:
    *  @param sign Whether this bitvector is to be considered signed or not.
    *  @param w Width, in bits, of the bitvector to create.
    *  @return The newly created terminal smt_ast of this bitvector. */
-  virtual smt_ast *mk_smt_bvint(const mp_integer &theint, bool sign,
+  virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w) = 0;
 
   /** Create a boolean.
    *  @param val Whether to create a true or false boolean.
    *  @return The newly created terminal smt_ast of this boolean. */
-  virtual smt_ast *mk_smt_bool(bool val) = 0;
+  virtual smt_astt mk_smt_bool(bool val) = 0;
 
   /** Create a symbol / variable. These correspond to renamed SSA variables in
    *  the SSA program, although any other names can be used too, so long as they
@@ -627,7 +627,7 @@ public:
    *  @param name Textual name of the symbol to create.
    *  @param s The sort of the symbol we're creating.
    *  @param The newly created terminal smt_ast of this symbol. */
-  virtual smt_ast *mk_smt_symbol(const std::string &name, smt_sortt s) =0;
+  virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) =0;
 
   /** Create a sort representing a struct. i.e., a tuple. Ideally this should
    *  actually be part of the overridden tuple api, but due to history it isn't
