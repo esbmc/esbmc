@@ -354,6 +354,7 @@ public:
   virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
 };
 
 /** The base SMT-conversion class/interface.

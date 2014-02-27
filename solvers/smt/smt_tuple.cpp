@@ -364,6 +364,36 @@ tuple_smt_ast::select(smt_convt *ctx __attribute__((unused)),
   abort();
 }
 
+const smt_ast *
+array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(array_type.subtype);
+  const smt_sort *result_sort = ctx->convert_sort(array_type.subtype);
+
+  std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
+  const tuple_smt_ast *result = new tuple_smt_ast(result_sort, name);
+
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    type2tc arrtype(new array_type2t(*it, array_type.array_size,
+          array_type.size_is_infinite));
+    const smt_sort *arr_sort = ctx->convert_sort(arrtype);
+    const smt_sort *sort = ctx->convert_sort(*it);
+
+    const smt_ast *result_field = ctx->tuple_project(result, sort, i);
+    const smt_ast *sub_array = ctx->tuple_project(this, arr_sort, i);
+
+    const smt_ast *selected = sub_array->select(ctx, idx);
+    ctx->assert_ast(result_field->eq(ctx, selected));
+
+    i++;
+  }
+
+  return result;
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
