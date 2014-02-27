@@ -32,9 +32,13 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
 
 boolector_convt::~boolector_convt(void)
 {
-  // Don't delete boolector: it aborts because we didn't release all its
-  // references.
-  // boolector_delete(btor);
+  // Erase all the remaining asts in the live ast vector.
+  for (smt_ast *ast : live_asts)
+    delete ast;
+  live_asts.clear();
+
+  boolector_delete(btor);
+
   btor = NULL;
   if (debugfile)
     fclose(debugfile);
