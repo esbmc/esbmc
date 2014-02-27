@@ -65,10 +65,10 @@ to_tuple_ast(smt_astt a)
   return ta;
 }
 
-__attribute__((always_inline)) static inline const tuple_smt_sort *
+__attribute__((always_inline)) static inline tuple_smt_sortt 
 to_tuple_sort(smt_sortt a)
 {
-  const tuple_smt_sort *ta = dynamic_cast<const tuple_smt_sort *>(a);
+  tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
   assert(ta != NULL && "Tuple AST mismatch");
   return ta;
 }
@@ -93,7 +93,7 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // ite is always true. We return the output symbol.
   tuple_smt_astt true_val = this;
   tuple_smt_astt false_val = to_tuple_ast(falseop);
-  const tuple_smt_sort *thissort = to_tuple_sort(sort);
+  tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(thissort->thetype, name);
   smt_astt result_sym = ctx->convert_ast(result);
@@ -124,7 +124,7 @@ array_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // Similar to tuple ite's, but the leafs are arrays.
   tuple_smt_astt true_val = this;
   tuple_smt_astt false_val = to_tuple_ast(falseop);
-  const tuple_smt_sort *thissort = to_tuple_sort(sort);
+  tuple_smt_sortt thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
   std::string name = ctx->mk_fresh_name("tuple_array_ite::") + ".";
@@ -172,7 +172,7 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // each of them, and then combine that into a final ast.
   tuple_smt_astt ta = this;
   tuple_smt_astt tb = to_tuple_ast(other);
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   smt_convt::ast_vec eqs;
@@ -200,7 +200,7 @@ array_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // each of them, and then combine that into a final ast.
   tuple_smt_astt ta = this;
   tuple_smt_astt tb = to_tuple_ast(other);
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
@@ -257,7 +257,7 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
          "structure");
 
   // XXX: future work, accept member_name exprs?
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
@@ -293,7 +293,7 @@ array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 {
   smt_convt::ast_vec eqs;
 
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t array_type = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
 
@@ -362,7 +362,7 @@ tuple_smt_ast::select(smt_convt *ctx __attribute__((unused)),
 smt_astt 
 array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t &array_type = to_array_type(ts->thetype);
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
   smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
@@ -403,7 +403,7 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
   // a new tuple_smt_ast containing its name.
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
@@ -431,7 +431,7 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 smt_astt 
 array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
-  const tuple_smt_sort *ts = to_tuple_sort(sort);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
 
   // Pull struct type out, access the relevent element, then wrap it in an
   // array type.
