@@ -450,7 +450,7 @@ array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
         arr.size_is_infinite));
   const smt_sort *s = ctx->convert_sort(new_arr_type);
 
-  if (!is_scalar_type(restype)) {
+  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
