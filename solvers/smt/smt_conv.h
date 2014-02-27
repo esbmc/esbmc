@@ -306,10 +306,7 @@ public:
   /** The sort of this function application. */
   smt_sortt sort;
 
-  smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
-    // Do some things with ctx here.
-    ctx = ctx;
-  }
+  smt_ast(smt_convt *ctx, smt_sortt s);
   virtual ~smt_ast() { }
 
   // "this" is the true operand.
@@ -1132,5 +1129,11 @@ public:
   /** Mapping of SMT function IDs to their names. XXX, incorrect size. */
   static const std::string smt_func_name_table[expr2t::end_expr_id];
 };
+
+// Define here to enable inlining
+extern inline
+smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
+  ctx->live_asts.push_back(this);
+}
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */
