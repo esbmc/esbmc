@@ -57,10 +57,10 @@
  * slower approach works.
  */
 
-__attribute__((always_inline)) static inline const tuple_smt_ast *
+__attribute__((always_inline)) static inline tuple_smt_astt
 to_tuple_ast(smt_astt a)
 {
-  const tuple_smt_ast *ta = dynamic_cast<const tuple_smt_ast *>(a);
+  tuple_smt_astt ta = dynamic_cast<tuple_smt_astt>(a);
   assert(ta != NULL && "Tuple AST mismatch");
   return ta;
 }
@@ -91,8 +91,8 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // projecting each member out of our arguments and computing another ite
   // over each member. Note that we always make assertions here, because the
   // ite is always true. We return the output symbol.
-  const tuple_smt_ast *true_val = this;
-  const tuple_smt_ast *false_val = to_tuple_ast(falseop);
+  tuple_smt_astt true_val = this;
+  tuple_smt_astt false_val = to_tuple_ast(falseop);
   const tuple_smt_sort *thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(thissort->thetype, name);
@@ -122,8 +122,8 @@ smt_astt
 array_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
-  const tuple_smt_ast *true_val = this;
-  const tuple_smt_ast *false_val = to_tuple_ast(falseop);
+  tuple_smt_astt true_val = this;
+  tuple_smt_astt false_val = to_tuple_ast(falseop);
   const tuple_smt_sort *thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
@@ -170,8 +170,8 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // We have two tuple_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
-  const tuple_smt_ast *ta = this;
-  const tuple_smt_ast *tb = to_tuple_ast(other);
+  tuple_smt_astt ta = this;
+  tuple_smt_astt tb = to_tuple_ast(other);
   const tuple_smt_sort *ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
@@ -198,8 +198,8 @@ array_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // We have two tuple_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
-  const tuple_smt_ast *ta = this;
-  const tuple_smt_ast *tb = to_tuple_ast(other);
+  tuple_smt_astt ta = this;
+  tuple_smt_astt tb = to_tuple_ast(other);
   const tuple_smt_sort *ts = to_tuple_sort(sort);
   assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
@@ -261,7 +261,7 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(sort, name);
+  tuple_smt_astt result = new tuple_smt_ast(sort, name);
 
   // Iterate over all members, deciding what to do with them.
   unsigned int j = 0;
@@ -306,7 +306,7 @@ array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   }
 
   std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
-  const tuple_smt_ast *result = new array_smt_ast(sort, name);
+  tuple_smt_astt result = new array_smt_ast(sort, name);
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
@@ -368,7 +368,7 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   const smt_sort *result_sort = ctx->convert_sort(array_type.subtype);
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
-  const tuple_smt_ast *result = new tuple_smt_ast(result_sort, name);
+  tuple_smt_astt result = new tuple_smt_ast(result_sort, name);
 
   unsigned int i = 0;
   forall_types(it, data.members) {
