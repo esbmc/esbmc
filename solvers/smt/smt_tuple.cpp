@@ -665,8 +665,7 @@ smt_convt::array_create(const expr2tc &expr)
   expr2tc newsym = symbol2tc(expr->type, name);
 
   // Check size
-  const array_type2t &arr_type =
-    static_cast<const array_type2t &>(*expr->type.get());
+  const array_type2t &arr_type = to_array_type(expr->type);
   if (arr_type.size_is_infinite) {
     // Guarentee nothing, this is modelling only.
     return convert_ast(newsym);
