@@ -733,7 +733,7 @@ z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(SMT_SORT_STRUCT, s);
+  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
 }
 
 smt_sort *
@@ -741,7 +741,7 @@ z3_convt::mk_union_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(SMT_SORT_UNION, s);
+  return new z3_smt_sort(SMT_SORT_UNION, s, type);
 }
 
 const smt_ast *
