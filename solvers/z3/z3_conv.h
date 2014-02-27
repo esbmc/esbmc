@@ -133,8 +133,8 @@ public:
   #define z3_smt_downcast(x) static_cast<const z3_smt_ast *>(x)
   class z3_smt_ast : public smt_ast {
   public:
-    z3_smt_ast(z3::expr _e, const smt_sort *_s) :
-              smt_ast(_s), e(_e) { }
+    z3_smt_ast(smt_convt *ctx, z3::expr _e, const smt_sort *_s) :
+              smt_ast(ctx, _s), e(_e) { }
     virtual ~z3_smt_ast() { }
     z3::expr e;
 
@@ -144,6 +144,11 @@ public:
     virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
     virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
   };
+
+  inline z3_smt_ast *
+  new_ast(z3::expr _e, const smt_sort *_s) {
+    return new z3_smt_ast(this, _e, _s);
+  }
 
   class z3_smt_sort : public smt_sort {
   public:
