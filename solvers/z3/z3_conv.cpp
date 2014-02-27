@@ -760,18 +760,29 @@ z3_convt::z3_smt_ast::update(smt_convt *ctx, const smt_ast *value,
 {
 
   expr2tc index;
-  if (is_nil_expr(idx_expr)) {
-    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
-          BigInt(idx));
-  } else {
-    index = idx_expr;
-  }
 
-  const smt_ast *args[3];
-  args[0] = this;
-  args[1] = ctx->convert_ast(index);
-  args[2] = value;
-  return ctx->mk_func_app(args[0]->sort, SMT_FUNC_STORE, args, 3);
+  if (sort->id == SMT_SORT_ARRAY) {
+    if (is_nil_expr(idx_expr)) {
+      index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+            BigInt(idx));
+    } else {
+      index = idx_expr;
+    }
+
+    const smt_ast *args[3];
+    args[0] = this;
+    args[1] = ctx->convert_ast(index);
+    args[2] = value;
+    return ctx->mk_func_app(args[0]->sort, SMT_FUNC_STORE, args, 3);
+  } else {
+    assert(sort->id == SMT_SORT_STRUCT || sort->id == SMT_SORT_UNION);
+    assert(is_nil_expr(idx_expr) &&
+           "Can only update constant index tuple elems");
+
+    z3_convt *z3_ctx = static_cast<z3_convt*>(ctx);
+    const z3_smt_ast *updateval = z3_smt_downcast(value);
+    return new z3_smt_ast(z3_ctx->mk_tuple_update(e, idx, updateval->e), sort);
+  }
 }
 
 const smt_ast *
