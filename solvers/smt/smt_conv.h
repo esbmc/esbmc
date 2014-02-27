@@ -839,7 +839,7 @@ public:
   smt_astt convert_identifier_pointer(const expr2tc &expr,
                                             std::string sym);
 
-  smt_ast *init_pointer_obj(unsigned int obj_num, const expr2tc &size);
+  smt_astt init_pointer_obj(unsigned int obj_num, const expr2tc &size);
 
   /** Given a signed, upwards cast, extends the sign of the given AST to the
    *  desired length.
