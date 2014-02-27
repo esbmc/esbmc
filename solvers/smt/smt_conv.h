@@ -84,6 +84,8 @@
  *  @see smt_convt::mk_func_app
  */
 
+struct smt_convt; // Forward dec.
+
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
  *  identifier. To be able to describe multiple kinds at the same time, they
@@ -244,8 +246,9 @@ public:
   {
   }
 
-  tuple_smt_sort(const type2tc &type, unsigned long dom_width)
-    : smt_sort(SMT_SORT_STRUCT, 0, dom_width), thetype(type)
+  tuple_smt_sort(const type2tc &type, unsigned long range_width,
+                 unsigned long dom_width)
+    : smt_sort(SMT_SORT_ARRAY, range_width, dom_width), thetype(type)
   {
   }
 
@@ -291,6 +294,17 @@ public:
 
   smt_ast(const smt_sort *s) : sort(s) { }
   virtual ~smt_ast() { }
+
+  // "this" is the true operand.
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop) const;
+
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
 };
 
 /** Function app representing a tuple sorted value.
@@ -318,6 +332,33 @@ public:
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
   const std::string name;
+
+
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop) const;
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
+};
+
+class array_smt_ast : public tuple_smt_ast
+{
+public:
+  array_smt_ast (const smt_sort *s, const std::string &_name)
+    : tuple_smt_ast(s, _name) { }
+  virtual ~array_smt_ast() { }
+
+  virtual const smt_ast *ite(smt_convt *ctx, const smt_ast *cond,
+      const smt_ast *falseop) const;
+  virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+  virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
 };
 
 /** The base SMT-conversion class/interface.
@@ -615,38 +656,6 @@ public:
    *  @return AST representing the created tuple */
   virtual smt_ast *tuple_fresh(const smt_sort *s);
 
-  /** Project a field from a tuple.
-   *  @param a AST handle for the tuple to project from.
-   *  @param s Sort of the field that we are projecting.
-   *  @param field Index of the field in the tuple to project.
-   *  @return AST handle to the element of the tuple we've projected */
-  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
-                                 unsigned int field);
-
-  /** Update a field in a tuple.
-   *  @param a The source tuple that we are going to be updating.
-   *  @param field The index of the field to update.
-   *  @param val The expression to update the field with.
-   *  @return An AST representing the source tuple with the updated field */
-  virtual const smt_ast *tuple_update(const smt_ast *a, unsigned int field,
-                                      const expr2tc &val);
-
-  /** Evaluate whether two tuples are equal.
-   *  @param a An AST handle to a tuple.
-   *  @param b Another AST handle to a tuple, of the same sort as a.
-   *  @result A boolean valued AST representing the equality of a and b. */
-  virtual const smt_ast *tuple_equality(const smt_ast *a, const smt_ast *b);
-
-  /** Select operation for tuples. Identical to the 'ITE' smt func, or 'if'
-   *  irep, but for tuples instead of single values.
-   *  @param cond The condition to switch the resulting AST on. Boolean valued.
-   *  @param trueval The tuple to evaluate to if cond is true.
-   *  @param falseval The tuple to evaluate to if cond is false.
-   *  @param sort The type of the tuple being operated upon.
-   *  @return AST representation of the created ITE. */
-  virtual const smt_ast *tuple_ite(const expr2tc &cond, const expr2tc &trueval,
-                             const expr2tc &false_val, const type2tc &sort);
-
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
    *  Essentially a way of converting a constant_array2tc, with tuple type.
@@ -661,42 +670,6 @@ public:
                                             const smt_ast **input_args,
                                             bool const_array,
                                             const smt_sort *domain);
-
-  /** Select an element from a tuple array. i.e., given a tuple array, and an
-   *  element, return the tuple at that index.
-   *  @param a The tuple array to select values from
-   *  @param s The sort of the array element we are selecting.
-   *  @param field An expression that evaluates to the field of array that we
-   *         are going to be selecting.
-   *  @return An AST of tuple sort, the result of this select. */
-  virtual const smt_ast *tuple_array_select(const smt_ast *a, const smt_sort *s,
-                                      const expr2tc &field);
-
-  /** Update an element in a tuple array.
-   *  @param a The tuple array to update an element in.
-   *  @param field Expression evaluating to the index we wish to update.
-   *  @param val AST representing tuple value to store into tuple array.
-   *  @param s Sort of the value we will be inserting into this array.
-   *  @return AST of tuple array, with element at field updated. */
-  virtual const smt_ast *tuple_array_update(const smt_ast *a,
-                                      const expr2tc &field,
-                                      const smt_ast *val, const smt_sort *s);
-
-  /** Compute the equality of two tuple arrays.
-   *  @param a First tuple array to compare.
-   *  @param b Second tuple array to compare.
-   *  @return Boolean valued AST representing the outcome of this equality. */
-  virtual const smt_ast *tuple_array_equality(const smt_ast *a, const smt_ast *b);
-
-  /** ITE operation between two tuple arrays. Note that this doesn't accept
-   *  any smt_ast's (can't remember why).
-   *  @param cond Condition to switch this ite operation on.
-   *  @param trueval Tuple array to evaluate to if cond is true.
-   *  @param falaseval Tuple array to evaluate to if cond is false.
-   *  @return AST representing the result of this ITE operation. */
-  virtual const smt_ast *tuple_array_ite(const expr2tc &cond,
-                                         const expr2tc &trueval,
-                                         const expr2tc &false_val);
 
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
@@ -744,40 +717,14 @@ public:
    *  arrays into one domain sort, or turning bool arrays into bit arrays.
    *  XXX, why is this virtual?
    *  @param expr An index2tc expression to convert to an SMT AST.
-   *  @param ressort The resulting sort of this operation.
    *  @return An AST representing the index operation in the expression. */
-  virtual const smt_ast *convert_array_index(const expr2tc &expr,
-                                             const smt_sort *ressort);
+  virtual const smt_ast *convert_array_index(const expr2tc &expr);
 
   /** Partner method to convert_array_index, for stores.
    *  XXX, why is this virtual?
    *  @param expr with2tc operation to convert to SMT.
-   *  @param ressort Sort of the resulting array ast.
    *  @return AST representing the result of evaluating expr. */
-  virtual const smt_ast *convert_array_store(const expr2tc &expr,
-                                             const smt_sort *ressort);
-
-  /** Create a 'Select' AST. Called from convert_array_index after special
-   *  cases are handled. Default action is to call mk_func_app, unless
-   *  overridden by the subclass.
-   *  @param array The array-typed expression to select an element from.
-   *  @param idx Index of the element to select.
-   *  @param ressort Resulting sort of this operation.
-   *  @return AST representing this select operation. */
-  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
-                                   const smt_sort *ressort);
-
-  /** Create a 'Store' AST -- as with mk_select, this is called from the
-   *  higher level method convert_array_store, after high level wrangling has
-   *  been taken care of.
-   *  @param array Array expression that we are looking to update.
-   *  @param idx Index of the element that is to be modified.
-   *  @param value The value that we are going to insert into the array.
-   *  @param ressort Sort of the resulting AST from this method.
-   *  @return AST representation of the resulting store operation. */
-  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
-                                  const expr2tc &value,
-                                  const smt_sort *ressort);
+  virtual const smt_ast *convert_array_store(const expr2tc &expr);
 
   /** Create an array with a single initializer. This may be a small, fixed
    *  size array, or it may be a nondeterministically sized array with a
@@ -793,13 +740,6 @@ public:
    *  @return An AST representing the created constant array. */
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
-
-  /** Comparison between two arrays.
-   *  @param a First array to compare.
-   *  @param b Second array to compare.
-   *  @return Boolean valued AST representing the result of this equality. */
-  virtual const smt_ast *convert_array_equality(const expr2tc &a,
-                                                const expr2tc &b);
 
   /** @} */
 
@@ -897,32 +837,6 @@ public:
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   /** Like mk_tuple_symbol, but for arrays */
   smt_ast *mk_tuple_array_symbol(const expr2tc &expr);
-  /** Create a new, constant tuple, from the given arguments. */
-  void tuple_create_rec(const std::string &name, const type2tc &structtype,
-                        const smt_ast **inputargs);
-  /** Compute an ITE between tuples into the result symbol2tc */
-  void tuple_ite_rec(const expr2tc &result, const expr2tc &cond,
-                     const expr2tc &true_val, const expr2tc &false_val);
-  /** Select data from input array into the tuple ast result */
-  void tuple_array_select_rec(const tuple_smt_ast *ta, const type2tc &subtype,
-                              const tuple_smt_ast *result, const expr2tc &field,
-                              const expr2tc &arr_width);
-  /** Update data from the tuple ast into the given tuple array */
-  void tuple_array_update_rec(const tuple_smt_ast *ta, const tuple_smt_ast *val,
-                              const expr2tc &idx, const tuple_smt_ast *res,
-                              const expr2tc &arr_width,
-                              const type2tc &subtype);
-  /** Compute an equality between all the elements of the given tuple array */
-  const smt_ast * tuple_array_equality_rec(const tuple_smt_ast *a,
-                                           const tuple_smt_ast *b,
-                                           const expr2tc &arr_width,
-                                           const type2tc &subtype);
-  /** Compute an ITE between two tuple arrays, store output into symbol given
-   *  by the res symbol2tc */
-  void tuple_array_ite_rec(const expr2tc &true_val, const expr2tc &false_val,
-                           const expr2tc &cond, const type2tc &type,
-                           const type2tc &dom_sort,
-                           const expr2tc &res);
 
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
@@ -930,12 +844,6 @@ public:
   /** Extract the assignment to a tuple-array symbol from the SMT solvers
    *  model */
   expr2tc tuple_array_get(const expr2tc &expr);
-  /** Given a tuple_smt_ast, create a new name that identifies the f'th element
-   *  of the tuple. 'dot' identifies whether to tack a dot on the end of the
-   *  symbol (it might already have one). */
-  expr2tc tuple_project_sym(const smt_ast *a, unsigned int f, bool dot = false);
-  /** Like the other tuple_project_sym, but for exprs */
-  expr2tc tuple_project_sym(const expr2tc &a, unsigned int f, bool dot = false);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
@@ -973,9 +881,6 @@ public:
   /** Extract a type definition (i.e. a struct_union_data object) from a type.
    *  This method abstracts the fact that a pointer type is in fact a tuple. */
   const struct_union_data &get_type_def(const type2tc &type) const;
-  /** Ensure that the given symbol is a tuple symbol, rather than any other
-   *  kind of expression */
-  expr2tc force_expr_to_tuple_sym(const expr2tc &expr);
 
   /** Convert a boolean to a bitvector with one bit. */
   const smt_ast *make_bool_bit(const smt_ast *a);

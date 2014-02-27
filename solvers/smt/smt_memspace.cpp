@@ -114,7 +114,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         if (ret_is_ptr) {
           // Update field in tuple.
           const smt_ast *the_ptr = convert_ast(side1);
-          return tuple_update(the_ptr, 1, the_ptr_offs);
+          return the_ptr->update(this, convert_ast(the_ptr_offs), 1);
         } else {
           return convert_ast(the_ptr_offs);
         }
@@ -189,7 +189,7 @@ smt_convt::convert_pointer_arith(const expr2tc &expr, const type2tc &type)
         newexpr = tmp;
 
       // That calculated the offset; update field in pointer.
-      return tuple_update(the_ptr, 1, newexpr);
+      return the_ptr->update(this, convert_ast(newexpr), 1);
     }
   }
 
@@ -304,13 +304,8 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     const smt_ast *args[2];
     args[0] = a;
     args[1] = output;
-    smt_sort *bool_sort = mk_sort(SMT_SORT_BOOL);
 
-    if (tuple_support) {
-      assert_ast(mk_func_app(bool_sort, SMT_FUNC_EQ, args, 2));
-    } else {
-      assert_ast(tuple_equality(args[0], args[1]));
-    }
+    assert_ast(args[0]->eq(this, args[1]));
   }
 
   return a;
@@ -467,7 +462,7 @@ smt_convt::convert_addr_of(const expr2tc &expr)
 
     // Update pointer offset to offset to that field.
     constant_int2tc offset(machine_int, BigInt(offs));
-    return tuple_update(a, 1, offset);
+    return a->update(this, convert_ast(offset), 1);
   } else if (is_symbol2t(obj.ptr_obj)) {
 // XXXjmorse             obj.ptr_obj->expr_id == expr2t::code_id) {
 

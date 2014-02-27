@@ -491,7 +491,7 @@ expr_handle_table:
   }
   case expr2t::index_id:
   {
-    a = convert_array_index(expr, sort);
+    a = convert_array_index(expr);
     break;
   }
   case expr2t::with_id:
@@ -501,9 +501,10 @@ expr_handle_table:
     // We reach here if we're with'ing a struct, not an array. Or a bool.
     if (is_struct_type(expr) || is_union_type(expr) || is_pointer_type(expr)) {
       unsigned int idx = get_member_name_field(expr->type, with.update_field);
-      a = tuple_update(convert_ast(with.source_value), idx, with.update_value);
+      const smt_ast *srcval = convert_ast(with.source_value);
+      a = srcval->update(this, convert_ast(with.update_value), idx);
     } else {
-      a = convert_array_store(expr, sort);
+      a = convert_array_store(expr);
     }
     break;
   }
@@ -515,15 +516,13 @@ expr_handle_table:
   case expr2t::same_object_id:
   {
     // Two projects, then comparison.
-    smt_sort *s = convert_sort(pointer_type_data->members[0]);
-    args[0] = tuple_project(args[0], s, 0);
-    args[1] = tuple_project(args[1], s, 0);
+    args[0] = args[0]->project(this, 0);
+    args[1] = args[1]->project(this, 0);
     a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
     break;
   }
   case expr2t::pointer_offset_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[1]);
     const pointer_offset2t &obj = to_pointer_offset2t(expr);
     // Can you cay super irritating?
     const expr2tc *ptr = &obj.ptr_obj;
@@ -531,12 +530,11 @@ expr_handle_table:
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 1);
+    a = args[0]->project(this, 1);
     break;
   }
   case expr2t::pointer_object_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[0]);
     const pointer_object2t &obj = to_pointer_object2t(expr);
     // Can you cay super irritating?
     const expr2tc *ptr = &obj.ptr_obj;
@@ -544,7 +542,7 @@ expr_handle_table:
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 0);
+    a = args[0]->project(this, 0);
     break;
   }
   case expr2t::typecast_id:
@@ -556,13 +554,10 @@ expr_handle_table:
   {
     // Only attempt to handle struct.s
     const if2t &if_ref = to_if2t(expr);
-    if (is_structure_type(expr) || is_pointer_type(expr)) {
-      a = tuple_ite(if_ref.cond, if_ref.true_value, if_ref.false_value,
-                    if_ref.type);
-    } else {
-      assert(is_array_type(expr));
-      a = tuple_array_ite(if_ref.cond, if_ref.true_value, if_ref.false_value);
-    }
+    args[0] = convert_ast(if_ref.cond);
+    args[1] = convert_ast(if_ref.true_value);
+    args[2] = convert_ast(if_ref.false_value);
+    a = args[1]->ite(this, args[0], args[2]);
     break;
   }
   case expr2t::isnan_id:
@@ -588,7 +583,7 @@ expr_handle_table:
   case expr2t::zero_length_string_id:
   {
     // Extremely unclear.
-    a = tuple_project(args[0], sort, 0);
+    a = args[0]->project(this, 0);
     break;
   }
   case expr2t::zero_string_id:
@@ -615,32 +610,9 @@ expr_handle_table:
   case expr2t::equality_id:
   {
     const equality2t &eq = to_equality2t(expr);
-    if (is_struct_type(eq.side_1->type) && is_struct_type(eq.side_2->type)) {
-      // Struct equality
-      a = tuple_equality(args[0], args[1]);
-    } else if (is_array_type(eq.side_1->type) &&
-               is_array_type(eq.side_2->type)) {
-      if (is_structure_type(to_array_type(eq.side_1->type).subtype) ||
-          is_pointer_type(to_array_type(eq.side_1->type).subtype)) {
-        // Array of structs equality.
-        args[0] = convert_ast(eq.side_1);
-        args[1] = convert_ast(eq.side_2);
-        a = tuple_array_equality(args[0], args[1]);
-      } else {
-        // Normal array equality
-        a = convert_array_equality(eq.side_1, eq.side_2);
-      }
-    } else if (is_pointer_type(eq.side_1) && is_pointer_type(eq.side_2)) {
-      // Pointers are tuples
-      a = tuple_equality(args[0], args[1]);
-    } else if (is_union_type(eq.side_1) && is_union_type(eq.side_2)) {
-      // Unions are also tuples
-      a = tuple_equality(args[0], args[1]);
-    } else {
-      std::cerr << "Unrecognized equality form" << std::endl;
-      expr->dump();
-      abort();
-    }
+    const smt_ast *b = convert_ast(eq.side_1);
+    const smt_ast *c = convert_ast(eq.side_2);
+    a = b->eq(this, c);
     break;
   }
   case expr2t::shl_id:
@@ -723,17 +695,10 @@ expr_handle_table:
   }
   case expr2t::notequal_id:
   {
-    const notequal2t &notequal = to_notequal2t(expr);
     // Handle all kinds of structs by inverted equality. The only that's really
     // going to turn up is pointers though.
-    if (is_structure_type(notequal.side_1) ||is_pointer_type(notequal.side_1)) {
-      a = tuple_equality(args[0], args[1]);
-      a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
-    } else {
-      std::cerr << "Unexpected inequailty operands" << std::endl;
-      expr->dump();
-      abort();
-    }
+    a = args[0]->eq(this, args[1]);
+    a = mk_func_app(sort, SMT_FUNC_NOT, &a, 1);
     break;
   }
   case expr2t::abs_id:
@@ -884,8 +849,10 @@ smt_convt::convert_sort(const type2tc &type)
     while (is_array_type(range))
       range = to_array_type(range).subtype;
 
+    unsigned int range_width = range->get_width();
     if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
-      return new tuple_smt_sort(type, calculate_array_domain_width(arr));
+      return new tuple_smt_sort(type, range_width,
+          calculate_array_domain_width(arr));
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
@@ -1068,7 +1035,6 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
 const smt_ast *
 smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
 {
-  const smt_sort *sort = convert_sort(expr->type);
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
 
@@ -1106,7 +1072,7 @@ smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
     idx = get_member_name_field(member.source_value->type, member.member);
   }
 
-  return tuple_project(src, sort, idx);
+  return src->project(this, idx);
 }
 
 const smt_ast *
@@ -1475,7 +1441,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 }
 
 const smt_ast *
-smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
+smt_convt::convert_array_index(const expr2tc &expr)
 {
   const smt_ast *a;
   const index2t &index = to_index2t(expr);
@@ -1494,25 +1460,23 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
-    return mk_select(src_value, newidx, ressort);
+    const smt_ast *tmp = convert_ast(src_value);
+    return tmp->select(this, newidx);
   }
+
+  a = convert_ast(src_value);
+  a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
-    // Perform a fix for QF_AUFBV, only arrays of bv's are allowed.
-    const smt_sort *tmpsort = mk_sort(SMT_SORT_BV, 1, false);
-    a = mk_select(src_value, newidx, tmpsort);
     return make_bit_bool(a);
-  } else if (is_tuple_array_ast_type(index.source_value->type)) {
-    a = convert_ast(src_value);
-    return tuple_array_select(a, ressort, newidx);
   } else {
-    return mk_select(src_value, newidx, ressort);
+    return a;
   }
 }
 
 const smt_ast *
-smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
+smt_convt::convert_array_store(const expr2tc &expr)
 {
   const with2t &with = to_with2t(expr);
   expr2tc update_val = with.update_value;
@@ -1531,20 +1495,19 @@ smt_convt::convert_array_store(const expr2tc &expr, const smt_sort *ressort)
     newidx = tmp_idx;
 
   assert(is_array_type(expr->type));
+  const smt_ast *src, *update;
   const array_type2t &arrtype = to_array_type(expr->type);
+
+  // Workaround for bools-in-arrays.
   if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
     typecast2tc cast(get_uint_type(1), update_val);
-    return mk_store(with.source_value, newidx, cast, ressort);
-  } else if (is_tuple_array_ast_type(with.type)) {
-    const smt_sort *sort = convert_sort(with.update_value->type);
-    const smt_ast *src, *update;
-    src = convert_ast(with.source_value);
-    update = convert_ast(update_val);
-    return tuple_array_update(src, newidx, update, sort);
+    update = convert_ast(cast);
   } else {
-    // Normal operation
-    return mk_store(with.source_value, newidx, update_val, ressort);
+    update = convert_ast(update_val);
   }
+
+  src = convert_ast(with.source_value);
+  return src->update(this, update, 0, newidx);
 }
 
 type2tc
@@ -1562,29 +1525,6 @@ smt_convt::flatten_array_type(const type2tc &type)
   uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
-}
-
-const smt_ast *
-smt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
-                     const smt_sort *ressort)
-{
-  assert(ressort->id != SMT_SORT_ARRAY);
-  const smt_ast *args[2];
-  args[0] = convert_ast(array);
-  args[1] = convert_ast(idx);
-  return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
-}
-
-const smt_ast *
-smt_convt::mk_store(const expr2tc &array, const expr2tc &idx,
-                    const expr2tc &value, const smt_sort *ressort)
-{
-  const smt_ast *args[3];
-
-  args[0] = convert_ast(array);
-  args[1] = convert_ast(idx);
-  args[2] = convert_ast(value);
-  return mk_func_app(ressort, SMT_FUNC_STORE, args, 3);
 }
 
 std::string
@@ -1642,7 +1582,7 @@ smt_convt::smt_convert_table[expr2t::end_expr_id] =  {
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //const array_of
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //symbol
 { SMT_FUNC_HACKS, SMT_FUNC_HACKS, SMT_FUNC_HACKS, 0, 0},  //typecast
-{ SMT_FUNC_ITE, SMT_FUNC_ITE, SMT_FUNC_ITE, 3, SMT_SORT_ALLINTS | SMT_SORT_BOOL | SMT_SORT_ARRAY},  //if
+{ SMT_FUNC_ITE, SMT_FUNC_ITE, SMT_FUNC_ITE, 3, SMT_SORT_ALLINTS | SMT_SORT_BOOL },  //if
 { SMT_FUNC_EQ, SMT_FUNC_EQ, SMT_FUNC_EQ, 2, SMT_SORT_ALLINTS | SMT_SORT_BOOL},  //equality
 { SMT_FUNC_NOTEQ, SMT_FUNC_NOTEQ, SMT_FUNC_NOTEQ, 2, SMT_SORT_ALLINTS | SMT_SORT_BOOL},  //notequal
 { SMT_FUNC_LT, SMT_FUNC_BVSLT, SMT_FUNC_BVULT, 2, SMT_SORT_ALLINTS},  //lt
