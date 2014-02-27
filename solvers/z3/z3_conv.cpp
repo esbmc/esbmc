@@ -801,6 +801,7 @@ z3_convt::z3_smt_ast::project(smt_convt *ctx, unsigned int elem) const
   z3_convt *z3_ctx = static_cast<z3_convt*>(ctx);
 
   const z3_smt_sort *thesort = z3_sort_downcast(sort);
+  assert(!is_nil_type(thesort->tupletype));
   const struct_union_data &data = ctx->get_type_def(thesort->tupletype);
   assert(elem < data.members.size());
   const smt_sort *idx_sort = ctx->convert_sort(data.members[elem]);
