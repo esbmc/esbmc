@@ -58,20 +58,20 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   case SMT_FUNC_NOT:
   {
     literalt res = this->lnot(args[0]->bv[0]);
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(res);
     break;
   }
   case SMT_FUNC_OR:
   {
     literalt res = this->lor(args[0]->bv[0], args[1]->bv[0]);
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(res);
     break;
   }
   case SMT_FUNC_IMPLIES:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(this->limplies(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
@@ -81,7 +81,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
       return this->array_ite(_args[0], _args[1], _args[2], ressort);
     } else {
       assert(args[1]->bv.size() == args[2]->bv.size());
-      result = new bitblast_smt_ast(ressort);
+      result = new_ast(ressort);
       for (unsigned int i = 0; i < args[1]->bv.size(); i++)
         result->bv.push_back(this->lselect(args[0]->bv[0], args[1]->bv[i],
                                      args[2]->bv[i]));
@@ -90,13 +90,13 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_AND:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(this->land(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
   case SMT_FUNC_XOR:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(this->lxor(args[0]->bv[0], args[1]->bv[0]));
     break;
   }
@@ -104,7 +104,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   {
     literalt carry_in = const_literal(false);
     literalt carry_out;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     full_adder(args[0]->bv, args[1]->bv, result->bv, carry_in, carry_out);
     break;
   }
@@ -112,7 +112,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   {
     literalt carry_in = const_literal(true);
     literalt carry_out;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     bvt op1 = args[1]->bv;
     invert(op1);
     full_adder(args[0]->bv, op1, result->bv, carry_in, carry_out);
@@ -135,13 +135,13 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_BVULT:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(unsigned_less_than(args[0]->bv, args[1]->bv));
     break;
   }
   case SMT_FUNC_BVULTE:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, false));
     break;
   }
@@ -153,7 +153,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_BVSLTE:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(lt_or_le(true, args[0]->bv, args[1]->bv, true));
     break;
   }
@@ -167,13 +167,13 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_BVSLT:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.push_back(lt_or_le(false, args[0]->bv, args[1]->bv, true));
     break;
   }
   case SMT_FUNC_BVMUL:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     const bitblast_smt_sort *sort0 = bitblast_sort_downcast(args[0]->sort);
     const bitblast_smt_sort *sort1 = bitblast_sort_downcast(args[1]->sort);
     if (sort0->sign || sort1->sign) {
@@ -185,7 +185,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_CONCAT:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     result->bv.insert(result->bv.begin(), args[0]->bv.begin(),
                       args[0]->bv.end());
     result->bv.insert(result->bv.begin(), args[1]->bv.begin(),
@@ -194,45 +194,45 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   }
   case SMT_FUNC_BVAND:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     bvand(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVXOR:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     bvxor(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVOR:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     bvor(args[0]->bv, args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVNOT:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     bvnot(args[0]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVASHR:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     barrel_shift(args[0]->bv, bitblast_convt::shiftt::ARIGHT,
                  args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVLSHR:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     barrel_shift(args[0]->bv, bitblast_convt::shiftt::LRIGHT,
                  args[1]->bv, result->bv);
     break;
   }
   case SMT_FUNC_BVSHL:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     barrel_shift(args[0]->bv, bitblast_convt::shiftt::LEFT,
                  args[1]->bv, result->bv);
     break;
@@ -240,34 +240,34 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   case SMT_FUNC_BVSDIV:
   {
     bvt rem;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     signed_divider(args[0]->bv, args[1]->bv, result->bv, rem);
     break;
   }
   case SMT_FUNC_BVUDIV:
   {
     bvt rem;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     unsigned_divider(args[0]->bv, args[1]->bv, result->bv, rem);
     break;
   }
   case SMT_FUNC_BVSMOD:
   {
     bvt res;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     signed_divider(args[0]->bv, args[1]->bv, res, result->bv);
     break;
   }
   case SMT_FUNC_BVUMOD:
   {
     bvt res;
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     unsigned_divider(args[0]->bv, args[1]->bv, res, result->bv);
     break;
   }
   case SMT_FUNC_BVNEG:
   {
-    result = new bitblast_smt_ast(ressort);
+    result = new_ast(ressort);
     negate(args[0]->bv, result->bv);
     break;
   }
@@ -341,7 +341,7 @@ bitblast_convt<subclass>::mk_smt_bvint(const mp_integer &intval, bool sign,
                             unsigned int w)
 {
   smt_sort *s = mk_sort(SMT_SORT_BV, w, sign);
-  bitblast_smt_ast *a = new bitblast_smt_ast(s);
+  bitblast_smt_ast *a = new_ast(s);
   a->bv.resize(w);
   int64_t u = intval.to_long();
   for (unsigned int i = 0; i < w; i++) {
@@ -360,7 +360,7 @@ bitblast_convt<subclass>::mk_smt_bool(bool boolval)
   literalt l = const_literal(boolval);
 
   smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *a = new bitblast_smt_ast(s);
+  bitblast_smt_ast *a = new_ast(s);
   a->bv.push_back(l);
   return a;
 }
@@ -375,7 +375,7 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, smt_sortt sort)
     return it->second;
 
   // Otherwise, we need to build this AST ourselves.
-  bitblast_smt_ast *a = new bitblast_smt_ast(sort);
+  bitblast_smt_ast *a = new_ast(sort);
   smt_ast *result = a;
   const bitblast_smt_sort *s = bitblast_sort_downcast(sort);
   switch (sort->id) {
@@ -433,7 +433,7 @@ bitblast_convt<subclass>::mk_extract(smt_astt src, unsigned int high,
                           unsigned int low, smt_sortt s)
 {
   const bitblast_smt_ast *mast = bitblast_ast_downcast(src);
-  bitblast_smt_ast *result = new bitblast_smt_ast(s);
+  bitblast_smt_ast *result = new_ast(s);
   for (unsigned int i = low; i <= high; i++)
     result->bv.push_back(mast->bv[i]);
 
@@ -453,13 +453,13 @@ bitblast_convt<subclass>::mk_ast_equality(smt_astt _a,
   case SMT_SORT_BOOL:
   {
     literalt res = this->lequal(a->bv[0], b->bv[0]);
-    bitblast_smt_ast *n = new bitblast_smt_ast(a->sort);
+    bitblast_smt_ast *n = new_ast(a->sort);
     n->bv.push_back(res);
     return n;
   }
   case SMT_SORT_BV:
   {
-    bitblast_smt_ast *n = new bitblast_smt_ast(ressort);
+    bitblast_smt_ast *n = new_ast(ressort);
     n->bv.push_back(equal(a->bv, b->bv));
     return n;
   }
@@ -536,7 +536,7 @@ bitblast_convt<subclass>::make_disjunct(const smt_convt::ast_vec &v)
   literalt l = lor(bv);
 
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
+  bitblast_smt_ast *ba = new_ast(boolsort);
   ba->bv.push_back(l);
   return ba;
 }
@@ -553,7 +553,7 @@ bitblast_convt<subclass>::make_conjunct(const smt_convt::ast_vec &v)
   literalt l = land(bv);
 
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  bitblast_smt_ast *ba = new bitblast_smt_ast(boolsort);
+  bitblast_smt_ast *ba = new_ast(boolsort);
   ba->bv.push_back(l);
   return ba;
 }

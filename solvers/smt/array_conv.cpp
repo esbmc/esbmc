@@ -62,7 +62,7 @@ array_convt<subclass>::fresh_array(smt_sortt ms, const std::string &name)
   smt_sortt range_sort =
     this->mk_sort(SMT_SORT_BV, ms->get_range_width(), false);
 
-  array_ast *mast = new array_ast(ms);
+  array_ast *mast = new_ast(ms);
   mast->symname = name;
   assign_array_symbol(name, mast);
 
@@ -171,7 +171,7 @@ array_convt<subclass>::mk_store(const expr2tc &array, const expr2tc &idx,
   assert(ma->array_fields.size() != 0);
 
   array_ast *mast =
-    new array_ast(ressort, ma->array_fields);
+    new_ast(ressort, ma->array_fields);
 
   // If this is a constant index, simple. If not, not.
   if (is_constant_int2t(idx)) {
@@ -246,7 +246,7 @@ array_convt<subclass>::mk_unbounded_store(const array_ast *ma,
   array_indexes[ma->base_array_id].insert(idx);
 
   // More nuanced: allocate a new array representation.
-  array_ast *newarr = new array_ast(ressort);
+  array_ast *newarr = new_ast(ressort);
   newarr->base_array_id = ma->base_array_id;
   newarr->array_update_num = array_updates[ma->base_array_id].size();
 
@@ -287,7 +287,7 @@ array_convt<subclass>::array_ite(smt_astt _cond,
   // For each element, make an ite.
   assert(true_arr->array_fields.size() != 0 &&
          true_arr->array_fields.size() == false_arr->array_fields.size());
-  array_ast *mast = new array_ast(thesort);
+  array_ast *mast = new_ast(thesort);
   smt_astt args[3];
   args[0] = cond;
   unsigned long i;
@@ -314,7 +314,7 @@ array_convt<subclass>::unbounded_array_ite(const array_ast *cond,
   assert(true_arr->base_array_id == false_arr->base_array_id &&
          "ITE between two arrays with different bases are unsupported");
 
-  array_ast *newarr = new array_ast(thesort);
+  array_ast *newarr = new_ast(thesort);
   newarr->base_array_id = true_arr->base_array_id;
   newarr->array_update_num = array_updates[true_arr->base_array_id].size();
 
@@ -346,7 +346,7 @@ array_convt<subclass>::convert_array_of(const expr2tc &init_val,
 
   smt_sortt arr_sort = this->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
 
-  array_ast *mast = new array_ast(arr_sort);
+  array_ast *mast = new_ast(arr_sort);
 
   smt_astt init = this->convert_ast(init_val);
   if (!this->int_encoding && is_bool_type(init_val) && this->no_bools_in_arrays)
