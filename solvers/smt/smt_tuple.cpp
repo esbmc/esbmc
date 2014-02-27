@@ -335,6 +335,27 @@ array_smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
   return result;
 }
 
+const smt_ast *
+smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  assert(sort->id == SMT_SORT_ARRAY && "Select operation applied to non-array "
+         "scalar AST");
+
+  // Just apply a select operation to the current array. Index should be fixed.
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+
+  // Guess the resulting sort. This could be a lot, lot better.
+  const smt_sort *sort = NULL;
+  if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
+    sort = ctx->mk_sort(SMT_SORT_BOOL);
+  else
+    sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); // XXX sign?
+
+  return ctx->mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
+}
+
 smt_ast *
 smt_convt::tuple_create(const expr2tc &structdef)
 {
