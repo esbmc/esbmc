@@ -527,17 +527,6 @@ smt_convt::get_type_def(const type2tc &type) const
         : dynamic_cast<const struct_union_data &>(*type.get());
 }
 
-expr2tc
-smt_convt::force_expr_to_tuple_sym(const expr2tc &expr)
-{
-  // Arguments may have any expression form; however the code we call into
-  // expects to be dealing with a set of expressions that are just names
-  // of tuple variables, wrapped in a symbol2t. To ensure that this is the
-  // case, convert an argument to tuple ast, then back to symbol.
-  const tuple_smt_ast *val = to_tuple_ast(convert_ast(expr));
-  return symbol2tc(expr->type, val->name);
-}
-
 void
 smt_convt::tuple_create_rec(const std::string &name, const type2tc &structtype,
                             const smt_ast **inputargs)

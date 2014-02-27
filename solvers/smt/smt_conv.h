@@ -883,9 +883,6 @@ public:
   /** Extract a type definition (i.e. a struct_union_data object) from a type.
    *  This method abstracts the fact that a pointer type is in fact a tuple. */
   const struct_union_data &get_type_def(const type2tc &type) const;
-  /** Ensure that the given symbol is a tuple symbol, rather than any other
-   *  kind of expression */
-  expr2tc force_expr_to_tuple_sym(const expr2tc &expr);
 
   /** Convert a boolean to a bitvector with one bit. */
   const smt_ast *make_bool_bit(const smt_ast *a);
