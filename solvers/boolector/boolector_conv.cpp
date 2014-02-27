@@ -114,19 +114,19 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_BVADD:
-    return new btor_smt_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_add(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSUB:
-    return new btor_smt_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_sub(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVMUL:
-    return new btor_smt_ast(s, boolector_mul(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_mul(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSMOD:
-    return new btor_smt_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_srem(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUMOD:
-    return new btor_smt_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_urem(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSDIV:
-    return new btor_smt_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_sdiv(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUDIV:
-    return new btor_smt_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_udiv(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSHL:
   {
     // Boolector demands that shifts have only the bitwidth to describe numbers
@@ -134,72 +134,71 @@ boolector_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     // all the way out of a bv. XXX, this may break things.
     unsigned int bwidth = log2(asts[1]->sort->data_width);
     BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new btor_smt_ast(s, boolector_sll(btor, asts[0]->e, tmp));
+    return new_ast(s, boolector_sll(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVLSHR:
   {
     unsigned int bwidth = log2(asts[1]->sort->data_width);
     BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new btor_smt_ast(s, boolector_srl(btor, asts[0]->e, tmp));
+    return new_ast(s, boolector_srl(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVASHR:
   {
     unsigned int bwidth = log2(asts[1]->sort->data_width);
     BtorNode *tmp = boolector_slice(btor, asts[1]->e, bwidth-1, 0);
-    return new btor_smt_ast(s, boolector_sra(btor, asts[0]->e, tmp));
+    return new_ast(s, boolector_sra(btor, asts[0]->e, tmp));
   }
   case SMT_FUNC_BVNEG:
-    return new btor_smt_ast(s, boolector_neg(btor, asts[0]->e));
+    return new_ast(s, boolector_neg(btor, asts[0]->e));
   case SMT_FUNC_BVNOT:
   case SMT_FUNC_NOT:
-    return new btor_smt_ast(s, boolector_not(btor, asts[0]->e));
+    return new_ast(s, boolector_not(btor, asts[0]->e));
   case SMT_FUNC_BVNXOR:
-    return new btor_smt_ast(s, boolector_xnor(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_xnor(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVNOR:
-    return new btor_smt_ast(s, boolector_nor(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_nor(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVNAND:
-    return new btor_smt_ast(s, boolector_nand(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_nand(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVXOR:
   case SMT_FUNC_XOR:
-    return new btor_smt_ast(s, boolector_xor(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_xor(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVOR:
   case SMT_FUNC_OR:
-    return new btor_smt_ast(s, boolector_or(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_or(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVAND:
   case SMT_FUNC_AND:
-    return new btor_smt_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_and(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_IMPLIES:
-    return new btor_smt_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_implies(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVULT:
-    return new btor_smt_ast(s, boolector_ult(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_ult(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSLT:
-    return new btor_smt_ast(s, boolector_slt(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_slt(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVULTE:
-    return new btor_smt_ast(s, boolector_ulte(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_ulte(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSLTE:
-    return new btor_smt_ast(s, boolector_slte(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_slte(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUGT:
-    return new btor_smt_ast(s, boolector_ugt(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_ugt(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSGT:
-    return new btor_smt_ast(s, boolector_sgt(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_sgt(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVUGTE:
-    return new btor_smt_ast(s, boolector_ugte(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_ugte(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_BVSGTE:
-    return new btor_smt_ast(s, boolector_sgte(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_sgte(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_EQ:
-    return new btor_smt_ast(s, boolector_eq(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_eq(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_NOTEQ:
-    return new btor_smt_ast(s, boolector_ne(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_ne(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_ITE:
-    return new btor_smt_ast(s, boolector_cond(btor, asts[0]->e, asts[1]->e,
-                                              asts[2]->e));
+    return new_ast(s, boolector_cond(btor, asts[0]->e, asts[1]->e, asts[2]->e));
   case SMT_FUNC_STORE:
-    return new btor_smt_ast(s, boolector_write(btor, asts[0]->e, asts[1]->e,
+    return new_ast(s, boolector_write(btor, asts[0]->e, asts[1]->e,
                                                asts[2]->e));
   case SMT_FUNC_SELECT:
-    return new btor_smt_ast(s, boolector_read(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_read(btor, asts[0]->e, asts[1]->e));
   case SMT_FUNC_CONCAT:
-    return new btor_smt_ast(s, boolector_concat(btor, asts[0]->e, asts[1]->e));
+    return new_ast(s, boolector_concat(btor, asts[0]->e, asts[1]->e));
   default:
     std::cerr << "Unhandled SMT func \"" << smt_func_name_table[k]
               << "\" in boolector conv" << std::endl;
@@ -292,7 +291,7 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
     }
 
     BtorNode *node = boolector_const(btor, buffer);
-    return new btor_smt_ast(s, node);
+    return new_ast(s, node);
   }
 
   BtorNode *node;
@@ -302,7 +301,7 @@ boolector_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
     node = boolector_unsigned_int(btor, theint.to_ulong(), w);
   }
 
-  return new btor_smt_ast(s, node);
+  return new_ast(s, node);
 }
 
 smt_ast *
@@ -310,7 +309,7 @@ boolector_convt::mk_smt_bool(bool val)
 {
   BtorNode *node = (val) ? boolector_true(btor) : boolector_false(btor);
   const smt_sort *sort = mk_sort(SMT_SORT_BOOL);
-  return new btor_smt_ast(sort, node);
+  return new_ast(sort, node);
 }
 
 smt_ast *
@@ -336,7 +335,7 @@ boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
     return NULL; // Hax.
   }
 
-  btor_smt_ast *ast = new btor_smt_ast(s, node);
+  btor_smt_ast *ast = new_ast(s, node);
 
   symtable.insert(symtable_type::value_type(name, ast));
   return ast;
@@ -360,7 +359,7 @@ boolector_convt::mk_extract(const smt_ast *a, unsigned int high,
 {
   const btor_smt_ast *ast = btor_ast_downcast(a);
   BtorNode *b = boolector_slice(btor, ast->e, high, low);
-  return new btor_smt_ast(s, b);
+  return new_ast(s, b);
 }
 
 expr2tc
@@ -490,5 +489,5 @@ boolector_convt::overflow_arith(const expr2tc &expr)
   }
 
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  return new btor_smt_ast(s, res);
+  return new_ast(s, res);
 }
