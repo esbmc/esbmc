@@ -607,57 +607,6 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
   return new array_smt_ast(sort, name);
 }
 
-smt_ast *
-smt_convt::tuple_project(const smt_ast *a, const smt_sort *s, unsigned int i)
-{
-  // Create an AST representing the i'th field of the tuple a. This means we
-  // have to open up the (tuple symbol) a, tack on the field name to the end
-  // of that name, and then return that. It now names the variable that contains
-  // the value of that field. If it's actually another tuple, we instead return
-  // a new tuple_smt_ast containing its name.
-  const tuple_smt_ast *ta = to_tuple_ast(a);
-  const tuple_smt_sort *ts = to_tuple_sort(a->sort);
-
-  if (is_array_type(ts->thetype)) {
-    // Project, then wrap in an array.
-    const array_type2t &arr = to_array_type(ts->thetype);
-    const smt_sort *oldsort = a->sort;
-    const smt_sort *subtype = convert_sort(arr.subtype);
-    smt_ast *a2 = const_cast<smt_ast*>(a);
-    a2->sort = subtype;
-    smt_ast *result = tuple_project(a2, s, i);
-    a2->sort = oldsort;
-
-    // Perform array wrapping
-    const smt_sort *s2 = mk_sort(SMT_SORT_ARRAY, make_array_domain_sort(arr),
-                                result->sort);
-    result->sort = s2;
-    return result;
-  }
-
-  const struct_union_data &data =
-    dynamic_cast<const struct_union_data &>(*ts->thetype.get());
-
-  assert(i < data.members.size() && "Out-of-bounds tuple element accessed");
-  const std::string &fieldname = data.member_names[i].as_string();
-  std::string sym_name = ta->name + fieldname;
-
-  // Cope with recursive structs.
-  const type2tc &restype = data.members[i];
-  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
-    // This is a struct within a struct, so just generate the name prefix of
-    // the internal struct being projected.
-    sym_name = sym_name + ".";
-    if (is_tuple_array_ast_type(restype))
-      return new array_smt_ast(s, sym_name);
-    else
-      return new tuple_smt_ast(s, sym_name);
-  } else {
-    // This is a normal variable, so create a normal symbol of its name.
-    return mk_smt_symbol(sym_name, s);
-  }
-}
-
 const smt_ast *
 smt_convt::tuple_array_create(const type2tc &array_type,
                               const smt_ast **inputargs,

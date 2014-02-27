@@ -516,15 +516,13 @@ expr_handle_table:
   case expr2t::same_object_id:
   {
     // Two projects, then comparison.
-    smt_sort *s = convert_sort(pointer_type_data->members[0]);
-    args[0] = tuple_project(args[0], s, 0);
-    args[1] = tuple_project(args[1], s, 0);
+    args[0] = args[0]->project(this, 0);
+    args[1] = args[1]->project(this, 0);
     a = mk_func_app(sort, SMT_FUNC_EQ, &args[0], 2);
     break;
   }
   case expr2t::pointer_offset_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[1]);
     const pointer_offset2t &obj = to_pointer_offset2t(expr);
     // Can you cay super irritating?
     const expr2tc *ptr = &obj.ptr_obj;
@@ -532,12 +530,11 @@ expr_handle_table:
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 1);
+    a = args[0]->project(this, 1);
     break;
   }
   case expr2t::pointer_object_id:
   {
-    smt_sort *s = convert_sort(pointer_type_data->members[0]);
     const pointer_object2t &obj = to_pointer_object2t(expr);
     // Can you cay super irritating?
     const expr2tc *ptr = &obj.ptr_obj;
@@ -545,7 +542,7 @@ expr_handle_table:
       ptr = &to_typecast2t(*ptr).from;
 
     args[0] = convert_ast(*ptr);
-    a = tuple_project(args[0], s, 0);
+    a = args[0]->project(this, 0);
     break;
   }
   case expr2t::typecast_id:
@@ -586,7 +583,7 @@ expr_handle_table:
   case expr2t::zero_length_string_id:
   {
     // Extremely unclear.
-    a = tuple_project(args[0], sort, 0);
+    a = args[0]->project(this, 0);
     break;
   }
   case expr2t::zero_string_id:
@@ -1036,7 +1033,6 @@ smt_convt::convert_is_nan(const expr2tc &expr, const smt_ast *operand)
 const smt_ast *
 smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
 {
-  const smt_sort *sort = convert_sort(expr->type);
   const member2t &member = to_member2t(expr);
   unsigned int idx = -1;
 
@@ -1074,7 +1070,7 @@ smt_convt::convert_member(const expr2tc &expr, const smt_ast *src)
     idx = get_member_name_field(member.source_value->type, member.member);
   }
 
-  return tuple_project(src, sort, idx);
+  return src->project(this, idx);
 }
 
 const smt_ast *

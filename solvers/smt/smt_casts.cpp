@@ -412,9 +412,8 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
     i2 = 0;
     forall_types(it, struct_type_to.members) {
       const smt_ast *args[2];
-      smt_sort *this_sort = convert_sort(*it);
-      args[0] = tuple_project(src_ast, this_sort, i2);
-      args[1] = tuple_project(fresh, this_sort, i2);
+      args[0] = src_ast->project(this, i2);
+      args[1] = fresh->project(this, i2);
       assert_ast(args[0]->eq(this, args[1]));
       i2++;
     }
@@ -440,10 +439,8 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
       // complain mightily if we get it wrong.
 
       const smt_ast *args[2];
-      const type2tc &thetype = struct_type_from.members[i3];
-      smt_sort *this_sort = convert_sort(thetype);
-      args[0] = tuple_project(src_ast, this_sort, i3);
-      args[1] = tuple_project(fresh, this_sort, i2);
+      args[0] = src_ast->project(this, i3);
+      args[1] = fresh->project(this, i2);
 
       assert_ast(args[0]->eq(this, args[1]));
       i2++;

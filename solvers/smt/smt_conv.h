@@ -655,14 +655,6 @@ public:
    *  @return AST representing the created tuple */
   virtual smt_ast *tuple_fresh(const smt_sort *s);
 
-  /** Project a field from a tuple.
-   *  @param a AST handle for the tuple to project from.
-   *  @param s Sort of the field that we are projecting.
-   *  @param field Index of the field in the tuple to project.
-   *  @return AST handle to the element of the tuple we've projected */
-  virtual smt_ast *tuple_project(const smt_ast *a, const smt_sort *s,
-                                 unsigned int field);
-
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
    *  Essentially a way of converting a constant_array2tc, with tuple type.
