@@ -862,6 +862,11 @@ smt_convt::convert_sort(const type2tc &type)
     } else {
       r = convert_sort(range);
     }
+
+    // And finally, work around infinite arrays...
+    if (arr.size_is_infinite)
+      r = mk_sort(SMT_SORT_BV, config.ansi_c.int_width, false);
+
     return mk_sort(SMT_SORT_ARRAY, d, r);
   }
   case type2t::cpp_name_id:

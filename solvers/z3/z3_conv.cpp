@@ -698,27 +698,25 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   va_list ap;
   z3_smt_sort *s = NULL, *dom, *range;
   unsigned long uint;
-  bool thebool;
 
   va_start(ap, k);
   switch (k) {
   case SMT_SORT_INT:
-    thebool = va_arg(ap, int);
-    s = new z3_smt_sort(k, ctx.int_sort(), 0, thebool);
+    s = new z3_smt_sort(k, ctx.int_sort(), 0);
     break;
   case SMT_SORT_REAL:
     s = new z3_smt_sort(k, ctx.real_sort());
     break;
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
-    s = new z3_smt_sort(k, ctx.bv_sort(uint), uint, thebool);
+    s = new z3_smt_sort(k, ctx.bv_sort(uint), uint);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
+    assert(dom->data_width != 0);
     s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), range->data_width,
-                        dom->data_width);
+                        dom->data_width, range);
     break;
   case SMT_SORT_BOOL:
     s = new z3_smt_sort(k, ctx.bool_sort());
@@ -835,7 +833,7 @@ z3_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
   long unsigned int range_width = range->data_width;
   long unsigned int dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
   smt_sort *s =
-    new z3_smt_sort(SMT_SORT_ARRAY, array_sort, range_width, dom_width);
+    new z3_smt_sort(SMT_SORT_ARRAY, array_sort, range_width, dom_width, range);
   return new z3_smt_ast(output, s);
 }
 
