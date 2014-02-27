@@ -996,7 +996,7 @@ smt_convt::mk_fresh_name(const std::string &tag)
   return ss.str();
 }
 
-smt_ast *
+smt_astt
 smt_convt::mk_fresh(smt_sortt s, const std::string &tag)
 {
   return mk_smt_symbol(mk_fresh_name(tag), s);
