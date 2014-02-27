@@ -682,21 +682,19 @@ smt_convt::array_create(const expr2tc &expr)
   const constant_array2t &array = to_constant_array2t(expr);
 
   // Repeatedly store things into this.
+  const smt_ast *newsym_ast = convert_ast(newsym);
   for (unsigned int i = 0; i < sz; i++) {
-    constant_int2tc field(
-                      type2tc(new unsignedbv_type2t(config.ansi_c.int_width)),
-                      BigInt(i));
     expr2tc init = array.datatype_members[i];
 
+    // Workaround for bools-in-arrays
     if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
         no_bools_in_arrays)
-      init = typecast2tc(type2tc(new unsignedbv_type2t(1)),
-                         array.datatype_members[i]);
+      init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
 
-    newsym = with2tc(newsym->type, newsym, field, init);
+    newsym_ast = newsym_ast->update(this, convert_ast(init), i);
   }
 
-  return convert_ast(newsym);
+  return newsym_ast;
 }
 
 const smt_ast *
