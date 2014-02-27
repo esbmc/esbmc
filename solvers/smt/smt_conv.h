@@ -247,7 +247,7 @@ public:
   }
 
   tuple_smt_sort(const type2tc &type, unsigned long dom_width)
-    : smt_sort(SMT_SORT_STRUCT, 0, dom_width), thetype(type)
+    : smt_sort(SMT_SORT_ARRAY, 0, dom_width), thetype(type)
   {
   }
 
