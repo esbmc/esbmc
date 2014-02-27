@@ -233,7 +233,13 @@ smt_ast::update(smt_convt *ctx, const smt_ast *value, unsigned int idx,
   assert(sort->id == SMT_SORT_ARRAY);
 
   // We're an array; just generate a 'with' operation.
-  expr2tc index = (is_nil_expr(idx_expr)) ? gen_uint(idx) : idx_expr;
+  expr2tc index;
+  if (is_nil_expr(idx_expr)) {
+    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+          BigInt(idx));
+  } else {
+    index = idx_expr;
+  }
 
   const smt_ast *args[3];
   args[0] = this;
