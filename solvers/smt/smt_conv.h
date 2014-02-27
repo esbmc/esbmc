@@ -734,16 +734,6 @@ public:
   virtual const smt_ast *convert_array_store(const expr2tc &expr,
                                              const smt_sort *ressort);
 
-  /** Create a 'Select' AST. Called from convert_array_index after special
-   *  cases are handled. Default action is to call mk_func_app, unless
-   *  overridden by the subclass.
-   *  @param array The array-typed expression to select an element from.
-   *  @param idx Index of the element to select.
-   *  @param ressort Resulting sort of this operation.
-   *  @return AST representing this select operation. */
-  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
-                                   const smt_sort *ressort);
-
   /** Create a 'Store' AST -- as with mk_select, this is called from the
    *  higher level method convert_array_store, after high level wrangling has
    *  been taken care of.

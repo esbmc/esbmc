@@ -1443,7 +1443,7 @@ smt_convt::decompose_store_chain(const expr2tc &expr, expr2tc &base)
 }
 
 const smt_ast *
-smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
+smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort __attribute__((unused)))
 {
   const smt_ast *a;
   const index2t &index = to_index2t(expr);
@@ -1462,7 +1462,8 @@ smt_convt::convert_array_index(const expr2tc &expr, const smt_sort *ressort)
 
   // Firstly, if it's a string, shortcircuit.
   if (is_string_type(index.source_value)) {
-    return mk_select(src_value, newidx, ressort);
+    const smt_ast *tmp = convert_ast(src_value);
+    return tmp->select(this, newidx);
   }
 
   a = convert_ast(src_value);
@@ -1526,17 +1527,6 @@ smt_convt::flatten_array_type(const type2tc &type)
   uint64_t arr_size = 1ULL << arrbits;
   constant_int2tc arr_size_expr(index_type2(), BigInt(arr_size));
   return type2tc(new array_type2t(type_rec, arr_size_expr, false));
-}
-
-const smt_ast *
-smt_convt::mk_select(const expr2tc &array, const expr2tc &idx,
-                     const smt_sort *ressort)
-{
-  assert(ressort->id != SMT_SORT_ARRAY);
-  const smt_ast *args[2];
-  args[0] = convert_ast(array);
-  args[1] = convert_ast(idx);
-  return mk_func_app(ressort, SMT_FUNC_SELECT, args, 2);
 }
 
 const smt_ast *
