@@ -714,7 +714,7 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
-    assert(dom->data_width != 0);
+    assert(int_encoding || dom->data_width != 0);
     s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), range->data_width,
                         dom->data_width, range);
     break;
