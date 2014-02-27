@@ -347,13 +347,13 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   args[1] = ctx->convert_ast(idx);
 
   // Guess the resulting sort. This could be a lot, lot better.
-  const smt_sort *sort = NULL;
+  const smt_sort *range_sort = NULL;
   if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
-    sort = ctx->mk_sort(SMT_SORT_BOOL);
+    range_sort = ctx->mk_sort(SMT_SORT_BOOL);
   else
-    sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); // XXX sign?
+    range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
 
-  return ctx->mk_func_app(sort, SMT_FUNC_SELECT, args, 2);
+  return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT, args, 2);
 }
 
 const smt_ast *
