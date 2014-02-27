@@ -202,7 +202,7 @@ enum smt_func_kind {
 
 class smt_sort;
 class tuple_smt_sort;
-typedef const smt_sort *smt_sortt;
+typedef const smt_sort * smt_sortt;
 typedef const tuple_smt_sort *tuple_smt_sortt;
 
 class smt_sort {
@@ -304,9 +304,9 @@ typedef const array_smt_ast * array_smt_astt;
 class smt_ast {
 public:
   /** The sort of this function application. */
-  const smt_sort *sort;
+  smt_sortt sort;
 
-  smt_ast(const smt_sort *s) : sort(s) { }
+  smt_ast(smt_sortt s) : sort(s) { }
   virtual ~smt_ast() { }
 
   // "this" is the true operand.
@@ -361,7 +361,7 @@ public:
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_smt_ast (const smt_sort *s, const std::string &_name) : smt_ast(s),
+  tuple_smt_ast (smt_sortt s, const std::string &_name) : smt_ast(s),
             name(_name) { }
   virtual ~tuple_smt_ast() { }
 
@@ -383,7 +383,7 @@ public:
 class array_smt_ast : public tuple_smt_ast
 {
 public:
-  array_smt_ast (const smt_sort *s, const std::string &_name)
+  array_smt_ast (smt_sortt s, const std::string &_name)
     : tuple_smt_ast(s, _name) { }
   virtual ~array_smt_ast() { }
 
@@ -574,7 +574,7 @@ public:
    *  @param numargs The number of elements in args. Should be consistent with
    *         the function kind k.
    *  @return The resulting function application, wrapped in an smt_ast. */
-  virtual smt_ast *mk_func_app(const smt_sort *s, smt_func_kind k,
+  virtual smt_ast *mk_func_app(smt_sortt s, smt_func_kind k,
                                smt_astt  const *args,
                                unsigned int numargs) = 0;
 
@@ -627,7 +627,7 @@ public:
    *  @param name Textual name of the symbol to create.
    *  @param s The sort of the symbol we're creating.
    *  @param The newly created terminal smt_ast of this symbol. */
-  virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s) =0;
+  virtual smt_ast *mk_smt_symbol(const std::string &name, smt_sortt s) =0;
 
   /** Create a sort representing a struct. i.e., a tuple. Ideally this should
    *  actually be part of the overridden tuple api, but due to history it isn't
@@ -654,7 +654,7 @@ public:
    *  @param low The lowest bit to select from the source.
    *  @param s The sort of the resulting piece of ast. */
   virtual smt_ast *mk_extract(smt_astt a, unsigned int high,
-                              unsigned int low, const smt_sort *s) = 0;
+                              unsigned int low, smt_sortt s) = 0;
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.
    *  @param a The AST whos value we wish to know.
@@ -672,7 +672,7 @@ public:
    *  @param sort The sort of the element we are extracting, i.e. array range
    *  @return Expression representation of the element */
   virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
-                                 const smt_sort *sort) = 0;
+                                 smt_sortt sort) = 0;
 
   /** @} */
 
@@ -690,7 +690,7 @@ public:
   /** Create a fresh tuple, with freely valued fields.
    *  @param s Sort of the tuple to create
    *  @return AST representing the created tuple */
-  virtual smt_ast *tuple_fresh(const smt_sort *s);
+  virtual smt_ast *tuple_fresh(smt_sortt s);
 
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
@@ -705,7 +705,7 @@ public:
   virtual smt_astt tuple_array_create(const type2tc &array_type,
                                             smt_astt *input_args,
                                             bool const_array,
-                                            const smt_sort *domain);
+                                            smt_sortt domain);
 
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple
@@ -788,7 +788,7 @@ public:
 
   /** Create a free variable with the given sort, and a unique name, with the
    *  prefix given in 'tag' */
-  virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
+  virtual smt_ast *mk_fresh(smt_sortt s, const std::string &tag);
   /** Create a previously un-used variable name with the prefix given in tag */
   std::string mk_fresh_name(const std::string &tag);
 
@@ -848,10 +848,10 @@ public:
    *  @param topbit The highest bit of the bitvector (1-based)
    *  @param topwidth The number of bits to extend the input by
    *  @return A bitvector with topwidth more bits, of the appropriate sign. */
-  smt_astt convert_sign_ext(smt_astt a, const smt_sort *s,
+  smt_astt convert_sign_ext(smt_astt a, smt_sortt s,
                                   unsigned int topbit, unsigned int topwidth);
   /** Identical to convert_sign_ext, but extends AST with zeros */
-  smt_astt convert_zero_ext(smt_astt a, const smt_sort *s,
+  smt_astt convert_zero_ext(smt_astt a, smt_sortt s,
                                   unsigned int topwidth);
   /** Checks for equality with NaN representation. Nto sure if this works. */
   smt_astt convert_is_nan(const expr2tc &expr, smt_astt oper);
@@ -868,7 +868,7 @@ public:
   /** Mangle constant_array / array_of data with tuple array type, into a
    *  more convenient format, acceptable by tuple_array_create */
   smt_astt tuple_array_create_despatch(const expr2tc &expr,
-                                             const smt_sort *domain);
+                                             smt_sortt domain);
   /** Convert a symbol2tc to a tuple_smt_ast */
   smt_ast *mk_tuple_symbol(const expr2tc &expr);
   /** Like mk_tuple_symbol, but for arrays */
@@ -934,7 +934,7 @@ public:
    *  machine integer width. */
   unsigned long calculate_array_domain_width(const array_type2t &arr);
   /** Given an array type, create an smt sort representing its domain. */
-  const smt_sort *make_array_domain_sort(const array_type2t &arr);
+  smt_sortt make_array_domain_sort(const array_type2t &arr);
   /** Like make_array_domain_sort, but a type2tc not an smt_sort */
   type2tc make_array_domain_sort_exp(const array_type2t &arr);
   /** Cast the given expression to the domain width of the array in type */
@@ -1054,9 +1054,9 @@ public:
   /** The type of the machine integer that can store a pointer. */
   type2tc machine_ptr;
   /** The SMT sort of this machines integer type. */
-  const smt_sort *machine_int_sort;
+  smt_sortt machine_int_sort;
   /** The SMT sort of this machines unsigned integer type. */
-  const smt_sort *machine_uint_sort;
+  smt_sortt machine_uint_sort;
   /** Whether or not we are using the SMT cache. */
   bool caching;
   /** Whether we are encoding expressions in integer mode or not. */
