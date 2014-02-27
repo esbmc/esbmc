@@ -360,6 +360,9 @@ runtime_encoded_equationt::runtime_encoded_equationt(const namespacet &_ns,
 void
 runtime_encoded_equationt::flush_latest_instructions(void)
 {
+  if (scoped_end_points.size() == 0)
+    return;
+
   SSA_stepst::iterator run_it = scoped_end_points.back();
 
   // Convert this run.
