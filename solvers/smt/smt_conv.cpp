@@ -780,7 +780,7 @@ smt_convt::assert_expr(const expr2tc &e)
   return;
 }
 
-smt_sort *
+smt_sortt
 smt_convt::convert_sort(const type2tc &type)
 {
   bool is_signed = true;
@@ -856,7 +856,7 @@ smt_convt::convert_sort(const type2tc &type)
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
-    smt_sort *r;
+    smt_sortt r;
     if (!int_encoding && is_bool_type(range) && no_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {

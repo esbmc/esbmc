@@ -590,7 +590,7 @@ public:
    *
    *  @param k The kind of SMT sort that will be created.
    *  @return The smt_sort wrapper for the sort. Lifetime currently undefined */
-  virtual smt_sort *mk_sort(const smt_sort_kind k, ...) = 0;
+  virtual smt_sortt mk_sort(const smt_sort_kind k, ...) = 0;
 
   /** Create an integer smt_ast. That is, an integer in QF_AUFLIRA, rather than
    *  a bitvector.
@@ -634,7 +634,7 @@ public:
    *  yet. If solvers don't support tuples, implement this to abort.
    *  @param type The struct type to create a tuple representation of.
    *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sort *mk_struct_sort(const type2tc &type) = 0;
+  virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
 
   // XXX XXX XXX -- turn this into a formulation on top of structs.
 
@@ -643,7 +643,7 @@ public:
    *  yet. If solvers don't support tuples, implement this to abort.
    *  @param type The union type to create a tuple representation of.
    *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sort *mk_union_sort(const type2tc &type) = 0;
+  virtual smt_sortt mk_union_sort(const type2tc &type) = 0;
 
   /** Create an 'extract' func app. Due to the fact that we can't currently
    *  encode integer constants as function arguments without serious faff,
@@ -799,7 +799,7 @@ public:
   /** Convert a type2tc into an smt_sort. This despatches control to the
    *  appropriate method in the subclassing solver converter for type
    *  conversion */
-  smt_sort *convert_sort(const type2tc &type);
+  smt_sortt convert_sort(const type2tc &type);
   /** Convert a terminal expression into an SMT AST. This despatches control to
    *  the appropriate method in the subclassing solver converter for terminal
    *  conversion */
