@@ -464,22 +464,12 @@ smt_convt::tuple_create(const expr2tc &structdef)
   // Add a . suffix because this is of tuple type.
   name += ".";
 
-  const smt_ast *args[structdef->get_num_sub_exprs()];
-  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++)
-    args[i] = convert_ast(*structdef->get_sub_expr(i));
-
   smt_ast *result = new tuple_smt_ast(convert_sort(structdef->type), name);
 
-  const struct_union_data &data = get_type_def(structdef->type);
-
-  unsigned int i = 0;
-  forall_types(it, data.members) {
+  for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
+    const smt_ast *tmp = convert_ast(*structdef->get_sub_expr(i));
     const smt_ast *elem = result->project(this, i);
-    const smt_ast *src = args[i];
-
-    assert_ast(elem->eq(this, src));
-
-    i++;
+    assert_ast(elem->eq(this, tmp));
   }
 
   return result;
