@@ -746,6 +746,59 @@ z3_convt::mk_union_sort(const type2tc &type)
   return new z3_smt_sort(SMT_SORT_UNION, s);
 }
 
+const smt_ast *
+z3_convt::z3_smt_ast::eq(smt_convt *ctx, const smt_ast *other) const
+{
+  const smt_sort *boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = other;
+  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+}
+
+const smt_ast *
+z3_convt::z3_smt_ast::update(smt_convt *ctx, const smt_ast *value,
+                   unsigned int idx, expr2tc idx_expr) const
+{
+
+  expr2tc index;
+  if (is_nil_expr(idx_expr)) {
+    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+          BigInt(idx));
+  } else {
+    index = idx_expr;
+  }
+
+  const smt_ast *args[3];
+  args[0] = this;
+  args[1] = ctx->convert_ast(index);
+  args[2] = value;
+  return ctx->mk_func_app(args[0]->sort, SMT_FUNC_STORE, args, 3);
+}
+
+const smt_ast *
+z3_convt::z3_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  const smt_ast *args[2];
+  args[0] = this;
+  args[1] = ctx->convert_ast(idx);
+  const smt_sort *rangesort = z3_sort_downcast(sort)->rangesort;
+  return ctx->mk_func_app(rangesort, SMT_FUNC_SELECT, args, 2);
+}
+
+const smt_ast *
+z3_convt::z3_smt_ast::project(smt_convt *ctx, unsigned int elem) const
+{
+  z3_convt *z3_ctx = static_cast<z3_convt*>(ctx);
+
+  const z3_smt_sort *thesort = z3_sort_downcast(sort);
+  const struct_union_data &data = ctx->get_type_def(thesort->tupletype);
+  assert(elem < data.members.size());
+  const smt_sort *idx_sort = ctx->convert_sort(data.members[elem]);
+
+  return new z3_smt_ast(z3_ctx->mk_tuple_select(e, elem), idx_sort);
+}
+
 smt_ast *
 z3_convt::tuple_create(const expr2tc &structdef)
 {

@@ -137,22 +137,33 @@ public:
               smt_ast(_s), e(_e) { }
     virtual ~z3_smt_ast() { }
     z3::expr e;
+
+    virtual const smt_ast *eq(smt_convt *ctx, const smt_ast *other) const;
+    virtual const smt_ast *update(smt_convt *ctx, const smt_ast *value,
+                                  unsigned int idx, expr2tc idx_expr) const;
+    virtual const smt_ast *select(smt_convt *ctx, const expr2tc &idx) const;
+    virtual const smt_ast *project(smt_convt *ctx, unsigned int elem) const;
   };
 
   class z3_smt_sort : public smt_sort {
   public:
   #define z3_sort_downcast(x) static_cast<const z3_smt_sort *>(x)
     z3_smt_sort(smt_sort_kind i, z3::sort _s)
-      : smt_sort(i), s(_s), is_signed(false) { }
+      : smt_sort(i), s(_s), is_signed(false), rangesort(NULL) { }
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, const type2tc &_tupletype)
+      : smt_sort(i), s(_s), is_signed(false), rangesort(NULL), tupletype(_tupletype) { }
     z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, bool sign)
-      : smt_sort(i, w), s(_s), is_signed(sign) { }
-    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw)
-      : smt_sort(i, w, dw), s(_s), is_signed(false) { }
+      : smt_sort(i, w), s(_s), is_signed(sign), rangesort(NULL) { }
+    z3_smt_sort(smt_sort_kind i, z3::sort _s, unsigned long w, unsigned long dw,
+                const smt_sort *_rangesort)
+      : smt_sort(i, w, dw), s(_s), is_signed(false), rangesort(_rangesort) { }
 
     virtual ~z3_smt_sort() { }
 
     z3::sort s;
     bool is_signed;
+    const smt_sort *rangesort;
+    type2tc tupletype;
   };
 
   //  Must be first member; that way it's the last to be destroyed.
