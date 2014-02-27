@@ -84,7 +84,7 @@ private:
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
-  virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
+  virtual smt_astt mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
   virtual const smt_ast *make_disjunct(const ast_vec &v);
   virtual const smt_ast *make_conjunct(const ast_vec &v);

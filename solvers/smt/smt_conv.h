@@ -653,7 +653,7 @@ public:
    *  @param high The topmost bit to select from the source, down to low.
    *  @param low The lowest bit to select from the source.
    *  @param s The sort of the resulting piece of ast. */
-  virtual smt_ast *mk_extract(smt_astt a, unsigned int high,
+  virtual smt_astt mk_extract(smt_astt a, unsigned int high,
                               unsigned int low, smt_sortt s) = 0;
 
   /** Extract the assignment to a boolean variable from the SMT solvers model.

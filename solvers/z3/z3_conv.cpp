@@ -642,7 +642,7 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
   }
 }
 
-smt_ast *
+smt_astt
 z3_convt::mk_extract(const smt_ast *a, unsigned int high, unsigned int low,
                      const smt_sort *s)
 {
