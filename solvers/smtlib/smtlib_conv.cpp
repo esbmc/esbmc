@@ -323,20 +323,14 @@ smtlib_convt::dec_solve()
   }
 }
 
-// NB: this is a legitimate case of having to special-case smt_convt::get.
-// It could be done in smt_convt's way, but this is good for now.
 expr2tc
-smtlib_convt::get(const expr2tc &expr)
+smtlib_convt::get_bv(const type2tc &t, smt_astt a)
 {
 
-  // Tuples need to be special cased.
-  if (is_structure_type(expr->type) || is_pointer_type(expr->type))
-    return tuple_get(expr);
-
   // This should always be a symbol.
-  assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
-  const symbol2t &sym = to_symbol2t(expr);
-  std::string name = sym.get_symbol_name();
+  const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast*>(a);
+  assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib expr get_bv()");
+  std::string name = sa->symname;
 
   fprintf(out_stream, "(get-value (|%s|))\n", name.c_str());
   fflush(out_stream);
@@ -386,22 +380,22 @@ smtlib_convt::get(const expr2tc &expr)
 
   // Generate the appropriate expr.
   expr2tc result;
-  if (is_bv_type(expr->type)) {
+  if (is_bv_type(t)) {
     assert(was_integer && "smtlib solver didn't provide integer response to "
            "integer get-value");
-    result = constant_int2tc(expr->type, m);
-  } else if (is_fixedbv_type(expr->type)) {
+    result = constant_int2tc(t, m);
+  } else if (is_fixedbv_type(t)) {
     assert(!int_encoding && "Can't parse reals right now in smtlib solver "
            "responses");
     assert(was_integer && "smtlib solver didn't provide integer/bv response to "
            "fixedbv get-value");
-    const fixedbv_type2t &fbtype = to_fixedbv_type(expr->type);
+    const fixedbv_type2t &fbtype = to_fixedbv_type(t);
     fixedbv_spect spec(fbtype.width, fbtype.integer_bits);
     fixedbvt fbt;
     fbt.spec = spec;
     fbt.from_integer(m);
-    result = constant_fixedbv2tc(expr->type, fbt);
-  } else if (is_bool_type(expr->type)) {
+    result = constant_fixedbv2tc(t, fbt);
+  } else if (is_bool_type(t)) {
     if (respval.token == TOK_KW_TRUE) {
       result = constant_bool2tc(true);
     } else if (respval.token == TOK_KW_FALSE) {
@@ -416,6 +410,20 @@ smtlib_convt::get(const expr2tc &expr)
 
   delete smtlib_output;
   return result;
+}
+
+expr2tc
+smtlib_convt::get_bool(smt_astt a)
+{
+  tvt res = l_get(a);
+  if (res.is_true())
+    return true_expr;
+  else if (res.is_false())
+    return false_expr;
+  else {
+    std::cerr << "Non-true, non-false value read from smtlib model" <<std::endl;
+    abort();
+  }
 }
 
 tvt

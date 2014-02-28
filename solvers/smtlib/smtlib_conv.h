@@ -63,7 +63,6 @@ public:
   ~smtlib_convt();
 
   virtual resultt dec_solve();
-  virtual expr2tc get(const expr2tc &expr);
   virtual tvt l_get(const smt_ast *a);
   virtual const std::string solver_text();
 
@@ -83,16 +82,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
-  // We don't use smt_convt's get method, so we don't need to implement this
-  virtual expr2tc get_bool(const smt_ast *a __attribute__((unused))) {
-    std::cerr << "get_bool called in smtlib_convt" << std::endl;
-    abort();
-  }
-  virtual expr2tc get_bv(const type2tc &t __attribute__((unused)),
-                         const smt_ast *a __attribute__((unused))) {
-    std::cerr << "get_bv called in smtlib_convt" << std::endl;
-    abort();
-  }
+  virtual expr2tc get_bool(const smt_ast *a);
+  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
   virtual expr2tc get_array_elem(const smt_ast *array __attribute__((unused)),
                                  uint64_t index __attribute__((unused)),
                                  const smt_sort *sort __attribute__((unused))) {
