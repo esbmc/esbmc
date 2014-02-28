@@ -1816,10 +1816,9 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
-  smt_sortt subtype_sort = convert_sort(ar.subtype);
 
   for (size_t i = 0; i < (1ULL << w); i++) {
-    fields.push_back(get_array_elem(array, i, subtype_sort));
+    fields.push_back(get_array_elem(array, i, ar.subtype));
   }
 
   return constant_array2tc(arr_type, fields);

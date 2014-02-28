@@ -1,4 +1,8 @@
+// Standards, how do they work?
+#define __STDC_FORMAT_MACROS
+
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <sstream>
 
@@ -413,6 +417,100 @@ smtlib_convt::get_bv(const type2tc &t, smt_astt a)
 }
 
 expr2tc
+smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
+    const type2tc &t)
+{
+
+  // This should always be a symbol.
+  const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast*>(array);
+  assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib get_array_elem");
+  std::string name = sa->symname;
+
+  // XXX -- this is not safe when the array index sort is 64 bits.
+  fprintf(out_stream,
+      "(get-value (select |%s| (_ bv%" PRIu64 " %" PRIu64 ")))\n",
+      name.c_str(), index, config.ansi_c.int_width);
+  fflush(out_stream);
+  smtlib_send_start_code = 1;
+  smtlibparse(TOK_START_VALUE);
+
+  if (smtlib_output->token == TOK_KW_ERROR) {
+    std::cerr << "Error from smtlib solver when fetching literal value: \""
+              << smtlib_output->data << "\"" << std::endl;
+    abort();
+  } else if (smtlib_output->token != 0) {
+    std::cerr << "Unrecognized response to get-value from smtlib solver"
+              << std::endl;
+  }
+
+  // Unpack our value from response list.
+  assert(smtlib_output->sexpr_list.size() == 1 && "More than one response to "
+         "get-value from smtlib solver");
+  sexpr &response = *smtlib_output->sexpr_list.begin();
+  // Now we have a valuation pair. First is the symbol
+  assert(response.sexpr_list.size() == 2 && "Expected 2 operands in "
+         "valuation_pair_list from smtlib solver");
+  std::list<sexpr>::iterator it = response.sexpr_list.begin();
+  sexpr &symname = *it++;
+  sexpr &respval = *it++;
+  assert(symname.token == TOK_SIMPLESYM && symname.data == name &&
+         "smtlib solver returned different symbol from get-value");
+
+  // Attempt to read an integer.
+  BigInt m;
+  bool was_integer = true;
+  if (respval.token == TOK_DECIMAL) {
+    m = string2integer(respval.data);
+  } else if (respval.token == TOK_NUMERAL) {
+    std::cerr << "Numeral value for integer symbol from smtlib solver"
+              << std::endl;
+    abort();
+  } else if (respval.token == TOK_HEXNUM) {
+    std::string data = respval.data.substr(2);
+    m = string2integer(data, 16);
+  } else if (respval.token == TOK_BINNUM) {
+    std::string data = respval.data.substr(2);
+    m = string2integer(data, 2);
+  } else {
+    was_integer = false;
+  }
+
+  // Generate the appropriate expr.
+  expr2tc result;
+  if (is_bv_type(t)) {
+    assert(was_integer && "smtlib solver didn't provide integer response to "
+           "integer get-value");
+    result = constant_int2tc(t, m);
+  } else if (is_fixedbv_type(t)) {
+    assert(!int_encoding && "Can't parse reals right now in smtlib solver "
+           "responses");
+    assert(was_integer && "smtlib solver didn't provide integer/bv response to "
+           "fixedbv get-value");
+    const fixedbv_type2t &fbtype = to_fixedbv_type(t);
+    fixedbv_spect spec(fbtype.width, fbtype.integer_bits);
+    fixedbvt fbt;
+    fbt.spec = spec;
+    fbt.from_integer(m);
+    result = constant_fixedbv2tc(t, fbt);
+  } else if (is_bool_type(t)) {
+    if (respval.token == TOK_KW_TRUE) {
+      result = constant_bool2tc(true);
+    } else if (respval.token == TOK_KW_FALSE) {
+      result = constant_bool2tc(false);
+    } else {
+      std::cerr << "Unexpected token reading value of boolean symbol from "
+                   "smtlib solver" << std::endl;
+    }
+  } else {
+    abort();
+  }
+
+  delete smtlib_output;
+  return result;
+}
+
+
+expr2tc
 smtlib_convt::get_bool(smt_astt a)
 {
   tvt res = l_get(a);
@@ -463,7 +561,7 @@ smtlib_convt::l_get(const smt_ast *a)
   assert(pair.sexpr_list.size() == 2 && "Valuation pair in smtlib get-value "
          "output without two operands");
   std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
-  const sexpr &first = *it++;
+//  const sexpr &first = *it++;
   const sexpr &second = *it++;
 //  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
 //         "Unexpected valuation variable from smtlib solver");

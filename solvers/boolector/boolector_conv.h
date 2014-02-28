@@ -56,7 +56,7 @@ public:
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
   expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                         const smt_sort *sort);
+                         const type2tc &subtype);
 
   virtual const smt_ast *overflow_arith(const expr2tc &expr);
 

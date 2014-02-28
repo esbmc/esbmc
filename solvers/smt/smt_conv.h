@@ -669,10 +669,10 @@ public:
   /** Extract an element from the model of an array, at an explicit index.
    *  @param array AST representing the array we are extracting from
    *  @param index The index of the element we wish to expect
-   *  @param sort The sort of the element we are extracting, i.e. array range
+   *  @param subtype The type of the element we are extracting, i.e. array range
    *  @return Expression representation of the element */
   virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
-                                 smt_sortt sort) = 0;
+                                 const type2tc &subtype) = 0;
 
   /** @} */
 

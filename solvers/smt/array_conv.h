@@ -89,7 +89,7 @@ public:
                                    const smt_ast *false_arr,
                                    const smt_sort *thesort);
   expr2tc get_array_elem(const smt_ast *a, uint64_t index,
-                         const smt_sort *elem_sort);
+                         const type2tc &subtype);
   void add_array_constraints(void);
 
   // Internal funk:

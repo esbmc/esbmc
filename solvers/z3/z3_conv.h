@@ -49,7 +49,7 @@ public:
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
   virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                                 const smt_sort *elem_sort);
+                                 const type2tc &subtype);
 
 private:
   bool assign_z3_expr(const exprt expr);

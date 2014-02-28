@@ -422,7 +422,7 @@ boolector_convt::get_bv(const type2tc &t, const smt_ast *a)
 
 expr2tc
 boolector_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                                const smt_sort *sort __attribute__((unused)))
+                                const type2tc &subtype __attribute__((unused)))
 {
   // Super inefficient, but never mind.
   assert(array->sort->id == SMT_SORT_ARRAY);

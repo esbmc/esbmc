@@ -369,7 +369,7 @@ array_convt<subclass>::convert_array_of(const expr2tc &init_val,
 template <class subclass>
 expr2tc
 array_convt<subclass>::get_array_elem(smt_astt a, uint64_t index,
-                                      smt_sortt elem_sort)
+                                      const type2tc &subtype)
 {
   const array_ast *mast = array_downcast(a);
 

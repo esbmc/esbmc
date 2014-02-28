@@ -1371,7 +1371,7 @@ z3_convt::get_bv(const type2tc &t, const smt_ast *a)
 
 expr2tc
 z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                         const smt_sort *elem_sort)
+                         const type2tc &subtype)
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
   unsigned long bv_size = array->sort->get_domain_width();
@@ -1390,7 +1390,7 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
     return expr2tc();
   }
 
-  z3_smt_ast *value = new_ast(e, elem_sort);
+  z3_smt_ast *value = new_ast(e, convert_sort(subtype));
   type2tc res_type = (int_encoding) ? get_int_type(64) : get_uint_type(bv_size);
   expr2tc result = get_bv(res_type, value);
   delete value;

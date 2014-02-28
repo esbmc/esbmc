@@ -84,12 +84,8 @@ public:
 
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
-  virtual expr2tc get_array_elem(const smt_ast *array __attribute__((unused)),
-                                 uint64_t index __attribute__((unused)),
-                                 const smt_sort *sort __attribute__((unused))) {
-    std::cerr << "get_array_elem called in smtlib_convt" << std::endl;
-    abort();
-  }
+  virtual expr2tc get_array_elem(const smt_ast *array, uint64_t index,
+                                 const type2tc &type);
 
   std::string sort_to_string(const smt_sort *s) const;
   unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);
