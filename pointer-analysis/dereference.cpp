@@ -920,6 +920,9 @@ dereferencet::construct_from_const_offset(expr2tc &value, const expr2tc &offset,
     if (!base_type_eq(value->type, type, ns)) {
       value = typecast2tc(type, value);
     }
+  } else if (value->type->get_width() < type->get_width()) {
+    // Oversized read -> give up, rely on dereference failure
+    value = expr2tc();
   } else {
     // Either nonzero offset, or a smaller / bigger read.
     // XXX -- refactor to become concat based.

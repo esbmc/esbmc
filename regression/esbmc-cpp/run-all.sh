@@ -35,6 +35,7 @@ for module in $MODULES; do
   echo "Done!"
   END=$(date +"%s")
   echo "Time elapsed: " $(( $END - $START )) "s"
+  echo "Time elapsed: " $(( $END - $START )) "s" >> logs/esbmc.$module.log
 done
 echo "============================== "
 
