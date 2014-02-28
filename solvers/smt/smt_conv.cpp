@@ -86,6 +86,8 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 
   addr_space_sym_num.push_back(0);
 
+  renumber_map.push_back(renumber_mapt());
+
   members.clear();
   names.clear();
   members.push_back(type_pool.get_uint(config.ansi_c.pointer_width));
@@ -155,6 +157,7 @@ smt_convt::push_ctx(void)
   addr_space_data.push_back(addr_space_data.back());
   addr_space_sym_num.push_back(addr_space_sym_num.back());
   pointer_logic.push_back(pointer_logic.back());
+  renumber_map.push_back(renumber_map.back());
 
   live_asts_sizes.push_back(live_asts.size());
 
@@ -173,6 +176,7 @@ smt_convt::pop_ctx(void)
   pointer_logic.pop_back();
   addr_space_sym_num.pop_back();
   addr_space_data.pop_back();
+  renumber_map.pop_back();
 
   // Go through all the asts created since the last push and delete them.
 

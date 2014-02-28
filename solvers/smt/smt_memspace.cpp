@@ -207,8 +207,8 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
   // Two different approaches if we do or don't have an address-of pointer
   // variable already.
 
-  renumber_mapt::iterator it = renumber_map.find(str);
-  if (it != renumber_map.end()) {
+  renumber_mapt::iterator it = renumber_map.back().find(str);
+  if (it != renumber_map.back().end()) {
     // There's already an address-of variable for this pointer. Set up a new
     // object number, and nondeterministically pick the new value.
 
@@ -229,7 +229,7 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
 
     // Store in renumbered store.
     renumber_mapt::value_type v(str, output);
-    renumber_map.insert(v);
+    renumber_map.back().insert(v);
   }
 }
 

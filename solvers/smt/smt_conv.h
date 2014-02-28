@@ -1109,7 +1109,7 @@ public:
 
   // XXX - push-pop will break here.
   typedef std::map<std::string, smt_astt> renumber_mapt;
-  renumber_mapt renumber_map;
+  std::vector<renumber_mapt> renumber_map;
 
   /** Lifetime tracking of smt ast's. When a context is pop'd, all the ASTs
    *  created in that context are freed. */
