@@ -122,7 +122,7 @@ public:
   > symbol_tablet;
 
   symbol_tablet symbol_table;
-  unsigned int temp_sym_count;
+  std::vector<unsigned long> temp_sym_count;
   static const std::string temp_prefix;
 };
 

@@ -20,7 +20,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   : smt_convt(false, int_encoding, _ns, is_cpp, false, true, false),
     options(_opts)
 {
-  temp_sym_count = 1;
+  temp_sym_count.push_back(1);
   std::string cmd;
 
   // We may be being instructed to just output to a file.
@@ -256,7 +256,7 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
                             args[i]);
 
   // Get a temporary sym name
-  unsigned int tempnum = temp_sym_count++;
+  unsigned int tempnum = temp_sym_count.back()++;
   std::stringstream ss;
   ss << temp_prefix << tempnum;
   std::string tempname = ss.str();
@@ -299,9 +299,6 @@ smtlib_convt::dec_solve()
 
   // Flush out command, starting model check
   fflush(out_stream);
-
-  // Reset temp symbol name count. XXX incremental?
-  temp_sym_count = 0;
 
   // If we're just outputing to a file, this is where we terminate.
   if (in_stream == NULL)
