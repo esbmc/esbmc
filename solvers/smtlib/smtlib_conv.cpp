@@ -452,10 +452,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   assert(response.sexpr_list.size() == 2 && "Expected 2 operands in "
          "valuation_pair_list from smtlib solver");
   std::list<sexpr>::iterator it = response.sexpr_list.begin();
-  sexpr &symname = *it++;
   sexpr &respval = *it++;
-  assert(symname.token == TOK_SIMPLESYM && symname.data == name &&
-         "smtlib solver returned different symbol from get-value");
 
   // Attempt to read an integer.
   BigInt m;
