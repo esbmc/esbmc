@@ -125,18 +125,6 @@ void bmct::error_trace(smt_convt &smt_conv,
   }
 }
 
-/*******************************************************************\
-
-Function: bmct::run_decision_procedure
-
-  Inputs:
-
- Outputs:
-
- Purpose:
-
-\*******************************************************************/
-
 smt_convt::resultt
 bmct::run_decision_procedure(smt_convt &smt_conv,
                              symex_target_equationt &equation)
