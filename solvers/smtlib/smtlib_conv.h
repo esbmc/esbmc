@@ -101,7 +101,27 @@ public:
 
   // Actual solving data
   // The set of symbols and their sorts.
-  std::map<std::string, const smt_sort *> symbol_table;
+
+  struct symbol_table_rec {
+    std::string ident;
+    unsigned int level;
+    smt_sortt sort;
+  };
+
+  typedef boost::multi_index_container<
+    symbol_table_rec,
+    boost::multi_index::indexed_by<
+      boost::multi_index::hashed_unique<
+        BOOST_MULTI_INDEX_MEMBER(symbol_table_rec, std::string, ident)
+      >,
+      boost::multi_index::ordered_non_unique<
+        BOOST_MULTI_INDEX_MEMBER(symbol_table_rec, unsigned int, level),
+        std::greater<unsigned int>
+      >
+    >
+  > symbol_tablet;
+
+  symbol_tablet symbol_table;
   unsigned int temp_sym_count;
   static const std::string temp_prefix;
 };

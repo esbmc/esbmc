@@ -725,14 +725,14 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
 
-  std::map<std::string, const smt_sort *>::iterator it =
-    symbol_table.find(name);
+  symbol_tablet::iterator it = symbol_table.find(name);
 
   if (it != symbol_table.end())
     return a;
 
   // Record the type of this symbol
-  symbol_table[name] = s;
+  struct symbol_table_rec record = { name, ctx_level, s };
+  symbol_table.insert(record);
 
   if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
     return a;;
