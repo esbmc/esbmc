@@ -419,16 +419,21 @@ smtlib_convt::get(const expr2tc &expr)
 }
 
 tvt
-smtlib_convt::l_get(const smt_ast *a __attribute__((unused)))
+smtlib_convt::l_get(const smt_ast *a)
 {
-  std::cerr << "l_get in smtlib_convt currently broken" << std::endl;
-  // Specifically, how are we reading these things?
-abort();
-#if 0
-  std::stringstream ss;
-  ss << "l" << a.var_no();
+  fprintf(out_stream, "(get-value (");
 
-  fprintf(out_stream, "(get-value (%s))\n", ss.str().c_str());
+  std::string output;
+  unsigned int brace_level =
+    emit_ast(static_cast<const smtlib_smt_ast*>(a), output);
+  fprintf(out_stream, "%s", output.c_str());
+
+  // Emit a ton of end braces.
+  for (unsigned int i = 0; i < brace_level; i++)
+    fputc(')', out_stream);
+
+  fprintf(out_stream, "))\n");
+
   fflush(out_stream);
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
@@ -452,8 +457,8 @@ abort();
   std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
   const sexpr &first = *it++;
   const sexpr &second = *it++;
-  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
-         "Unexpected valuation variable from smtlib solver");
+//  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
+//         "Unexpected valuation variable from smtlib solver");
 
   // And finally we have our value. It should be true or false.
   tvt result;
@@ -468,7 +473,6 @@ abort();
 
   delete smtlib_output;
   return result;
-#endif
 }
 
 const std::string
