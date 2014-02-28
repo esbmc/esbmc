@@ -775,4 +775,26 @@ smtliberror(int startsym __attribute__((unused)), const std::string &error)
   abort();
 }
 
+void
+smtlib_convt::push_ctx()
+{
+  smt_convt::push_ctx();
+  temp_sym_count.push_back(temp_sym_count.back());
+
+  fprintf(out_stream, "(push)\n");
+}
+
+void
+smtlib_convt::pop_ctx()
+{
+  fprintf(out_stream, "(pop)\n");
+
+  // Wipe this level of symbol table.
+  symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
+  syms_numindex.erase(ctx_level);
+  temp_sym_count.pop_back();
+
+  smt_convt::pop_ctx();
+}
+
 const std::string smtlib_convt::temp_prefix = "?x";

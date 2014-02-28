@@ -91,6 +91,9 @@ public:
   unsigned int emit_terminal_ast(const smtlib_smt_ast *a, std::string &output);
   unsigned int emit_ast(const smtlib_smt_ast *ast, std::string &output);
 
+  void push_ctx();
+  void pop_ctx();
+
   // Members
   const optionst &options;
   pid_t solver_proc_pid;
