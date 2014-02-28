@@ -51,22 +51,19 @@ public:
     ltl_results_seen[ltl_res_succeeding] = 0;
     ltl_results_seen[ltl_res_good] = 0;
 
-#ifdef Z3
-    runtime_z3_conv = new z3_convt(opts.get_bool_option("int-encoding"),
-                                   is_cpp, ns);
+    runtime_solver = create_solver_factory("", is_cpp,
+                                           opts.get_bool_option("int-encoding"),
+                                           ns, options);
 
     if (options.get_bool_option("smt-during-symex")) {
       symex = new reachability_treet(funcs, ns, options,
-                          new runtime_encoded_equationt(ns, *runtime_z3_conv),
+                          new runtime_encoded_equationt(ns, *runtime_solver),
                           _context, _message_handler);
     } else {
-#endif
       symex = new reachability_treet(funcs, ns, options,
                                      new symex_target_equationt(ns),
                                      _context, _message_handler);
-#ifdef Z3
     }
-#endif
   }
 
   optionst &options;
@@ -91,9 +88,7 @@ public:
 protected:
   const contextt &context;
   namespacet ns;
-#ifdef Z3
-  z3_convt *runtime_z3_conv;
-#endif
+  smt_convt *runtime_solver;
   reachability_treet *symex;
 
   // use gui format

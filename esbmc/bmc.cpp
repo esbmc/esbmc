@@ -446,7 +446,6 @@ bool bmct::run(void)
 bool bmct::run_thread()
 {
   goto_symext::symex_resultt *result;
-  smt_convt *solver;
   symex_target_equationt *equation;
   bool ret;
 
@@ -561,12 +560,7 @@ bool bmct::run_thread()
           (unsigned int) strtol(options.get_option("smtlib-ileave-num").c_str(), NULL, 10))
         return false;
 
-    solver = create_solver_factory("", is_cpp,
-                                   options.get_bool_option("int-encoding"),
-                                   ns, options);
-
-    ret = run_solver(*equation, solver);
-    delete solver;
+    ret = run_solver(*equation, runtime_solver);
     return ret;
   }
 
