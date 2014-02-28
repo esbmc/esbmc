@@ -496,6 +496,20 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
       result = constant_bool2tc(true);
     } else if (respval.token == TOK_KW_FALSE) {
       result = constant_bool2tc(false);
+    } else if (respval.token == TOK_BINNUM) {
+      assert(respval.data.size() == 3 && "Boolean-typed binary number should "
+          "be 3 characters long (e.g. #b0)");
+
+      std::string data = respval.data.substr(2);
+      if (data[0] == '0')
+        result = false_expr;
+      else if (data[0] == '1')
+        result = true_expr;
+      else {
+        std::cerr << "Unrecognized boolean-typed binary number format";
+        std::cerr << std::endl;
+        abort();
+      }
     } else {
       std::cerr << "Unexpected token reading value of boolean symbol from "
                    "smtlib solver" << std::endl;
