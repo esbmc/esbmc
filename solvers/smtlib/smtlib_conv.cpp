@@ -426,11 +426,11 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   assert(sa->kind == SMT_FUNC_SYMBOL && "Non-symbol in smtlib get_array_elem");
   std::string name = sa->symname;
 
-  // XXX -- this is not safe when the array index sort is 64 bits.
   // XXX -- double bracing this may be a Z3 ecentricity
+  unsigned int domain_width = array->sort->get_domain_width();
   fprintf(out_stream,
       "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
-      name.c_str(), index, config.ansi_c.int_width);
+      name.c_str(), index, domain_width);
   fflush(out_stream);
   smtlib_send_start_code = 1;
   smtlibparse(TOK_START_VALUE);
