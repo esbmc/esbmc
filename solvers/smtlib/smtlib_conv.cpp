@@ -560,7 +560,7 @@ smtlib_convt::l_get(const smt_ast *a)
   assert(pair.sexpr_list.size() == 2 && "Valuation pair in smtlib get-value "
          "output without two operands");
   std::list<sexpr>::const_iterator it = pair.sexpr_list.begin();
-//  const sexpr &first = *it++;
+  const sexpr &first = *it++;
   const sexpr &second = *it++;
 //  assert(first.token == TOK_SIMPLESYM && first.data == ss.str() &&
 //         "Unexpected valuation variable from smtlib solver");
