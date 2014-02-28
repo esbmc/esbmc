@@ -300,31 +300,6 @@ smtlib_convt::dec_solve()
            sort_to_string(it->second).c_str());
   }
 
-  // Emit all constraints
-  std::list<const smtlib_smt_ast *>::const_iterator it2;
-  for (it2 = assertion_list.begin(); it2 != assertion_list.end(); it2++) {
-    // Encode an assertion
-    fprintf(out_stream, "(assert\n");
-
-    // The algorithm: descend through the AST operands, binding values to
-    // temporary symbols, then emit functions on those temporary symbols.
-    // All recursively. The non-trivial bit is tracking how many ending
-    // braces are required.
-    // This is inspired by the output from Z3 that I've seen.
-    std::string output;
-    unsigned int brace_level = emit_ast(*it2, output);
-
-    // Emit the final temporary symbol - this is what gets asserted.
-    fprintf(out_stream, "%s", output.c_str());
-
-    // Emit a ton of end braces.
-    for (unsigned int i = 0; i < brace_level; i++)
-      fputc(')', out_stream);
-
-    // Final brace for closing the 'assert'.
-    fprintf(out_stream, ")\n");
-  }
-
   fprintf(out_stream, "(check-sat)\n");
 
   // Flush out command, starting model check
@@ -519,7 +494,28 @@ smtlib_convt::solver_text()
 void
 smtlib_convt::assert_ast(const smt_ast *a)
 {
-  assertion_list.push_back(static_cast<const smtlib_smt_ast *>(a));
+  const smtlib_smt_ast *sa = static_cast<const smtlib_smt_ast *>(a);
+
+  // Encode an assertion
+  fprintf(out_stream, "(assert\n");
+
+  // The algorithm: descend through the AST operands, binding values to
+  // temporary symbols, then emit functions on those temporary symbols.
+  // All recursively. The non-trivial bit is tracking how many ending
+  // braces are required.
+  // This is inspired by the output from Z3 that I've seen.
+  std::string output;
+  unsigned int brace_level = emit_ast(sa, output);
+
+  // Emit the final temporary symbol - this is what gets asserted.
+  fprintf(out_stream, "%s", output.c_str());
+
+  // Emit a ton of end braces.
+  for (unsigned int i = 0; i < brace_level; i++)
+    fputc(')', out_stream);
+
+  // Final brace for closing the 'assert'.
+  fprintf(out_stream, ")\n");
 }
 
 smt_ast *
@@ -614,7 +610,15 @@ smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
   a->symname = name;
+
   symbol_table[name] = s;
+
+  if (s->id == SMT_SORT_STRUCT || s->id == SMT_SORT_UNION)
+    return a;;
+
+  fprintf(out_stream, "(declare-fun |%s| () %s)\n", name.c_str(),
+         sort_to_string(s).c_str());
+
   return a;
 }
 
