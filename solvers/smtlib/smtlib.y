@@ -80,6 +80,7 @@ sexpr *smtlib_output = NULL;
 %type <expr> get_info_response response gen_response status check_sat_response
 %type <expr> get_value_response valuation_pair valuation_pair_list term numlist
 %type <expr> identifier qual_identifier sort sort_list varbind_list var_binding
+%type <expr> term_list_empt
 %%
 
 /* Rules */
@@ -337,13 +338,14 @@ sortvar_list: sorted_var | sortvar_list sorted_var
 
 term_list: term | term_list term
 
-term_list_empt: | term | term_list term
+term_list_empt: { $$ = new sexpr(); } | term | term_list term
 
 term: spec_constant
        | qual_identifier
-       | TOK_LPAREN qual_identifier TOK_RPAREN
+       | TOK_LPAREN qual_identifier term_list_empt TOK_RPAREN
          {
            $$ = $2;
+           $$->sexpr_list.splice($$->sexpr_list.begin(), $3->sexpr_list);
          }
        | TOK_LPAREN TOK_KW_LET TOK_LPAREN varbind_list TOK_RPAREN term TOK_RPAREN
          {
