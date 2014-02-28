@@ -34,6 +34,10 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     solver_name = "Text output";
     solver_version = "";
     solver_proc_pid = 0;
+
+    fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+    fprintf(out_stream, "(set-info :status unknown)\n");
+
     smt_post_init();
     return;
   }
@@ -89,6 +93,9 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
   // Point lexer input at output stream
   smtlibin = in_stream;
+
+  fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+  fprintf(out_stream, "(set-info :status unknown)\n");
 
   // Fetch solver name and version.
   fprintf(out_stream, "(get-info :name)\n");
@@ -283,10 +290,6 @@ smtlib_convt::dec_solve()
   // Declare all the symbols + sorts
   // Emit constraints
   // check-sat
-
-  // Preliminaries
-  fprintf(out_stream, "(set-logic QF_AUFBV)\n");
-  fprintf(out_stream, "(set-info :status unknown)\n");
 
   // Declare all symbols
   std::map<std::string, const smt_sort *>::const_iterator it;
