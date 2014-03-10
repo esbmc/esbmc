@@ -450,7 +450,7 @@ void goto_convertt::convert_block(
   bool last_for=is_for_block();
   bool last_while=is_while_block();
 
-  if(inductive_step)
+  if(inductive_step && (const_cast<codet&>(code).add("inside_loop") != irept("")))
     set_for_block(true);
 
   std::list<irep_idt> locals;
@@ -523,6 +523,7 @@ void goto_convertt::convert_block(
 
   if(inductive_step)
   {
+    const_cast<codet&>(code).remove("inside_loop");
     set_for_block(last_for);
     set_while_block(last_while);
   }
@@ -870,7 +871,7 @@ void goto_convertt::get_struct_components(const exprt &exp)
       return;
 
     if (is_for_block() || is_while_block())
-      loop_vars.insert(std::pair<exprt,struct_typet>(exp,state));
+      loop_vars.insert(exp);
 
     if (!is_expr_in_state(exp, state))
     {
@@ -1897,8 +1898,8 @@ void goto_convertt::convert_for(
 
   dest.destructive_append(tmp_w);
 
-  if (inductive_step)
-    increment_var(code.op1(), dest);
+//  if (inductive_step)
+//    increment_var(code.op1(), dest);
 
   dest.destructive_append(tmp_x);
 
@@ -1926,6 +1927,80 @@ void goto_convertt::convert_for(
   state_counter++;
 }
 
+/*******************************************************************\
+
+Function: goto_convertt::add_new_variables_to_context
+
+  Inputs:
+
+ Outputs:
+
+ Purpose:
+
+\*******************************************************************/
+
+void goto_convertt::add_new_variables_to_context()
+{
+  if(!options.get_bool_option("inductive-step"))
+    return;
+
+  symbolt *symbol_ptr=NULL;
+  // Before the creation of the variables on the context
+  // we must create the state$vector type
+  // XXX: using this ugly name so it can't be matched by an program struct
+
+  symbolt state_symbol;
+  state_symbol.name="c::state$vector";
+  state_symbol.base_name="state$vector";
+  state_symbol.is_type=true;
+  state_symbol.type=state;
+  state_symbol.mode="C";
+  state_symbol.module="main";
+  state_symbol.pretty_name="struct state$vector";
+
+  context.move(state_symbol, symbol_ptr);
+
+  // Create inductive step variable's symbol and add to context
+  for(unsigned int i=1; i<state_counter; ++i)
+  {
+    // First is kindice
+    symbolt kindice_symbol;
+    kindice_symbol.name="kindice$"+i2string(i);
+    kindice_symbol.base_name="kindice$"+i2string(i);
+    kindice_symbol.type=uint_type();
+    kindice_symbol.static_lifetime=true;
+    kindice_symbol.lvalue=true;
+
+    context.move(kindice_symbol, symbol_ptr);
+
+    // Then state_vector s
+    // Its type is incomplete array
+    typet incomplete_array_type("incomplete_array");
+    incomplete_array_type.subtype() = struct_typet();
+
+    symbolt state_vector_symbol;
+    state_vector_symbol.name="s$"+i2string(i);
+    state_vector_symbol.base_name="s$"+i2string(i);
+    state_vector_symbol.type=incomplete_array_type;
+    state_vector_symbol.static_lifetime=true;
+    state_vector_symbol.lvalue=true;
+
+    context.move(state_vector_symbol, symbol_ptr);
+
+    // Finally, the current state cs
+    typet state_type("struct");
+    state_type.tag("state$vector");
+
+    symbolt current_state_symbol;
+    current_state_symbol.name="cs$"+i2string(i);
+    current_state_symbol.base_name="cs$"+i2string(i);
+    current_state_symbol.type=state_type;
+    current_state_symbol.static_lifetime=true;
+    current_state_symbol.lvalue=true;
+
+    context.move(current_state_symbol, symbol_ptr);
+  }
+}
 
 /*******************************************************************\
 
@@ -2380,23 +2455,6 @@ void goto_convertt::set_expr_to_nondet(
     cache_result = nondet_vars.find(tmp.op0());
     if (cache_result == nondet_vars.end())
       init_nondet_expr(tmp.op0(), dest);
-#if 0
-    else {
-      //declare variables x$ of type uint
-      std::string identifier;
-      identifier = "c::x$"+i2string(state_counter);
-      exprt x_expr = symbol_exprt(identifier, uint_type());
-      get_struct_components(x_expr);
-      exprt nondet_expr=side_effect_expr_nondett(uint_type());
-
-      //initialize x=nondet_uint();
-      code_assignt new_assign_nondet(x_expr,nondet_expr);
-      copy(new_assign_nondet, ASSIGN, dest);
-
-      exprt new_expr = gen_binary(exprt::i_gt, bool_typet(), x_expr, tmp.op1());
-			tmp.swap(new_expr);
-		}
-#endif
   }
 }
 
@@ -2460,8 +2518,6 @@ void goto_convertt::replace_cond(
   else if ( exprid == "and" || exprid == "or")
   {
     assert(tmp.operands().size()==2);
-    assert(tmp.op0().operands().size()==2);
-    assert(tmp.op1().operands().size()==2);
 
     //check whether we have the same variable
     if (!tmp.op0().op0().is_constant())
@@ -2518,9 +2574,9 @@ void goto_convertt::increment_var(
 {
   if (var.is_true())
   {
-	std::string identifier;
-	identifier = "c::i$"+i2string(state_counter);
-	exprt lhs_expr = symbol_exprt(identifier, uint_type());
+    std::string identifier;
+    identifier = "c::i$"+i2string(state_counter);
+    exprt lhs_expr = symbol_exprt(identifier, uint_type());
 
     //increment var by 1
     exprt one_expr = gen_one(uint_type());
@@ -2659,8 +2715,8 @@ void goto_convertt::convert_while(
   if (inductive_step)
     update_state_vector(state_vector, dest);
 
-  if (inductive_step)
-    increment_var(code.op0(), dest);
+//  if (inductive_step)
+//    increment_var(code.op0(), dest);
 
   dest.destructive_append(tmp_x);
 
