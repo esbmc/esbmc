@@ -578,6 +578,45 @@ public:
                                smt_astt  const *args,
                                unsigned int numargs) = 0;
 
+  // Some helpers
+
+  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1)
+  {
+    smt_astt args[1];
+    args[0] = arg1;
+    return mk_func_app(s, k, args, 1);
+  }
+
+  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
+      smt_astt arg2)
+  {
+    smt_astt args[2];
+    args[0] = arg1;
+    args[1] = arg2;
+    return mk_func_app(s, k, args, 2);
+  }
+
+  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
+      smt_astt arg2, smt_astt arg3)
+  {
+    smt_astt args[3];
+    args[0] = arg1;
+    args[1] = arg2;
+    args[2] = arg3;
+    return mk_func_app(s, k, args, 3);
+  }
+
+  inline smt_astt mk_func_app(smt_sortt s, smt_func_kind k, smt_astt arg1,
+      smt_astt arg2, smt_astt arg3, smt_astt arg4)
+  {
+    smt_astt args[4];
+    args[0] = arg1;
+    args[1] = arg2;
+    args[2] = arg3;
+    args[3] = arg4;
+    return mk_func_app(s, k, args, 4);
+  }
+
   /** Create an SMT sort. The sort kind k indicates what kind of sort to create,
    *  and the parameters of the sort are passed in as varargs. Briefly, these
    *  arguments are:
