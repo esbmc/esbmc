@@ -129,7 +129,7 @@ cpp_scopet &cpp_typecheckt::tag_scope(
 
 std::string
 cpp_typecheckt::fetch_compound_name(
-  const typet &type) const
+  const typet &type)
 {
   // get the tag name
   bool anonymous=type.find("tag").is_nil();
