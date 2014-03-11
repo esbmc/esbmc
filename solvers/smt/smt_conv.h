@@ -84,7 +84,7 @@
  *  @see smt_convt::mk_func_app
  */
 
-struct smt_convt; // Forward dec.
+class smt_convt; // Forward dec.
 
 /** Identifier for SMT sort kinds
  *  Each different kind of sort (i.e. arrays, bv's, bools, etc) gets its own
