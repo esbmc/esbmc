@@ -1079,13 +1079,12 @@ smt_astt
 smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
                             unsigned int topbit, unsigned int topwidth)
 {
-  smt_astt args[4];
 
   smt_sortt bit = mk_sort(SMT_SORT_BV, 1, false);
-  args[0] = mk_extract(a, topbit-1, topbit-1, bit);
-  args[1] = mk_smt_bvint(BigInt(0), false, 1);
+  smt_astt the_top_bit = mk_extract(a, topbit-1, topbit-1, bit);
+  smt_astt zero_bit = mk_smt_bvint(BigInt(0), false, 1);
   smt_sortt b = mk_sort(SMT_SORT_BOOL);
-  smt_astt t = mk_func_app(b, SMT_FUNC_EQ, args, 2);
+  smt_astt t = mk_func_app(b, SMT_FUNC_EQ, the_top_bit, zero_bit);
 
   smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
 
@@ -1097,27 +1096,19 @@ smt_convt::convert_sign_ext(smt_astt a, smt_sortt s,
   BigInt big_int(big);
   smt_astt f = mk_smt_bvint(big_int, false, topwidth);
 
-  args[0] = t;
-  args[1] = z;
-  args[2] = f;
   smt_sortt topsort = mk_sort(SMT_SORT_BV, topwidth, false);
-  smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, args, 3);
+  smt_astt topbits = mk_func_app(topsort, SMT_FUNC_ITE, t, z, f);
 
-  args[0] = topbits;
-  args[1] = a;
-  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+  return mk_func_app(s, SMT_FUNC_CONCAT, topbits, a);
 }
 
 smt_astt 
 smt_convt::convert_zero_ext(smt_astt a, smt_sortt s,
                             unsigned int topwidth)
 {
-  smt_astt args[2];
 
   smt_astt z = mk_smt_bvint(BigInt(0), false, topwidth);
-  args[0] = z;
-  args[1] = a;
-  return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+  return mk_func_app(s, SMT_FUNC_CONCAT, z, a);
 }
 
 smt_astt 
