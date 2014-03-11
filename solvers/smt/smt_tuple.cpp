@@ -76,11 +76,7 @@ to_tuple_sort(smt_sortt a)
 smt_astt 
 smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
-  smt_astt args[3];
-  args[0] = cond;
-  args[1] = this;
-  args[2] = falseop;
-  return ctx->mk_func_app(sort, SMT_FUNC_ITE, args, 3);
+  return ctx->mk_func_app(sort, SMT_FUNC_ITE, cond, this, falseop);
 }
 
 smt_astt 
@@ -157,11 +153,8 @@ smt_astt
 smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   // Simple approach: this is a leaf piece of SMT, compute a basic equality.
-  smt_astt args[2];
-  args[0] = this;
-  args[1] = other;
   smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
-  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
 }
 
 smt_astt 
@@ -240,12 +233,8 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     index = idx_expr;
   }
 
-  smt_astt args[3];
-  args[0] = this;
-  args[1] = ctx->convert_ast(index);
-  args[2] = value;
-
-  return ctx->mk_func_app(sort, SMT_FUNC_STORE, args, 3);
+  return ctx->mk_func_app(sort, SMT_FUNC_STORE,
+                          this, ctx->convert_ast(index), value);
 }
 
 smt_astt 
@@ -337,9 +326,6 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
          "scalar AST");
 
   // Just apply a select operation to the current array. Index should be fixed.
-  smt_astt args[2];
-  args[0] = this;
-  args[1] = ctx->convert_ast(idx);
 
   // Guess the resulting sort. This could be a lot, lot better.
   smt_sortt range_sort = NULL;
@@ -348,7 +334,8 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   else
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
 
-  return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT, args, 2);
+  return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
+                          this, ctx->convert_ast(idx));
 }
 
 smt_astt 
