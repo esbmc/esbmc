@@ -457,7 +457,8 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
     abort();
   }
 
-  z3::expr new_fields[num_fields];
+  std::vector<z3::expr> new_fields;
+  new_fields.resize(num_fields);
   for (j = 0; j < num_fields; j++) {
     if (i == j) {
       /* use new_val at position i */
@@ -473,7 +474,7 @@ z3_convt::mk_tuple_update(const z3::expr &t, unsigned i, const z3::expr &newval)
   z3::func_decl mk_tuple_decl =
     z3::to_func_decl(ctx, Z3_get_tuple_sort_mk_decl(ctx, ty));
 
-  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields);
+  return mk_tuple_decl.make_tuple_from_array(num_fields, new_fields.data());
 }
 
 z3::expr
