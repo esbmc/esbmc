@@ -215,7 +215,6 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
   va_list ap;
   smt_sort *s = NULL, *dom, *range;
   unsigned long uint;
-  bool thebool;
 
   va_start(ap, k);
   switch (k) {
@@ -225,8 +224,6 @@ boolector_convt::mk_sort(const smt_sort_kind k, ...)
     abort();
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
-    thebool = va_arg(ap, int);
-    thebool = thebool;
     s = new smt_sort(k, uint);
     break;
   case SMT_SORT_ARRAY:
