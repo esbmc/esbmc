@@ -26,7 +26,6 @@ smt_convt::convert_typecast_bool(const typecast2t &cast)
 smt_astt 
 smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
 {
-  smt_astt args[4];
   const typecast2t &cast = to_typecast2t(expr);
   const fixedbv_type2t &fbvt = to_fixedbv_type(cast.type);
   unsigned to_fraction_bits = fbvt.width - fbvt.integer_bits;
@@ -43,33 +42,31 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
   if (is_bv_type(cast.from)) {
     unsigned from_width = cast.from->type->get_width();
 
+    smt_astt frontpart;
     if (from_width == to_integer_bits) {
       // Just concat fraction ozeros at the bottom
-      args[0] = a;
+      frontpart = a;
     } else if (from_width > to_integer_bits) {
       smt_sortt tmp = mk_sort(SMT_SORT_BV, from_width - to_integer_bits,
                                     false);
-      args[0] = mk_extract(a, to_integer_bits-1, 0, tmp);
+      frontpart = mk_extract(a, to_integer_bits-1, 0, tmp);
     } else {
       assert(from_width < to_integer_bits);
       smt_sortt tmp = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-      args[0] = convert_sign_ext(a, tmp, from_width,
+      frontpart = convert_sign_ext(a, tmp, from_width,
                                  to_integer_bits - from_width);
     }
 
     // Make all zeros fraction bits
-    args[1] = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+    smt_astt zero_fracbits = mk_smt_bvint(BigInt(0), false, to_fraction_bits);
+    return mk_func_app(s, SMT_FUNC_CONCAT, frontpart, zero_fracbits);
   } else if (is_bool_type(cast.from)) {
-    smt_astt args[3];
     smt_sortt intsort;
-    args[0] = a;
-    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
-    args[2] = mk_smt_bvint(BigInt(1), false, to_integer_bits);
+    smt_astt zero = mk_smt_bvint(BigInt(0), false, to_integer_bits);
+    smt_astt one = mk_smt_bvint(BigInt(1), false, to_integer_bits);
     intsort = mk_sort(SMT_SORT_BV, to_integer_bits, false);
-    args[0] = mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
-    args[1] = mk_smt_bvint(BigInt(0), false, to_integer_bits);
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+    smt_astt switched = mk_func_app(intsort, SMT_FUNC_ITE, a, zero, one);
+    return mk_func_app(s, SMT_FUNC_CONCAT, switched, zero);
   } else if (is_fixedbv_type(cast.from)) {
     // FIXME: conversion here for to_int_bits > from_int_bits is factually
     // broken, run 01_cbmc_Fixedbv8 with --no-simplify
@@ -117,10 +114,7 @@ smt_convt::convert_typecast_fixedbv_nonint(const expr2tc &expr)
       fraction = mk_func_app(tmp_sort, SMT_FUNC_CONCAT, args, 2);
     }
 
-    smt_astt args[2];
-    args[0] = magnitude;
-    args[1] = fraction;
-    return mk_func_app(s, SMT_FUNC_CONCAT, args, 2);
+    return mk_func_app(s, SMT_FUNC_CONCAT, magnitude, fraction);
   }
 
   std::cerr << "unexpected typecast to fixedbv" << std::endl;
@@ -235,11 +229,7 @@ smt_convt::convert_typecast_to_ints(const typecast2t &cast)
       abort();
     }
 
-    smt_astt args[3];
-    args[0] = a;
-    args[1] = one;
-    args[2] = zero;
-    return mk_func_app(s, SMT_FUNC_ITE, args, 3);
+    return mk_func_app(s, SMT_FUNC_ITE, a, one, zero);
   }
 
   std::cerr << "Unexpected type in int/ptr typecast" << std::endl;
