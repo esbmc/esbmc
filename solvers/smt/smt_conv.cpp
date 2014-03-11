@@ -340,8 +340,7 @@ smt_convt::convert_ast(const expr2tc &expr)
     args[i] = convert_ast(*it);
 
     if (make_ints_reals && args[i]->sort->id == SMT_SORT_INT) {
-      args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL,
-                            &args[i], 1);
+      args[i] = mk_func_app(mk_sort(SMT_SORT_REAL), SMT_FUNC_INT2REAL, args[i]);
     }
 
     used_sorts |= args[i]->sort->id;
@@ -490,10 +489,7 @@ expr_handle_table:
       args[1] = convert_sign_ext(args[1], s2, topbit2,fraction_bits);
       smt_astt zero = mk_smt_bvint(BigInt(0), false, fraction_bits);
       smt_astt op0 = args[0];
-      smt_astt concatargs[2];
-      concatargs[0] = op0;
-      concatargs[1] = zero;
-      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, concatargs, 2);
+      args[0] = mk_func_app(s2, SMT_FUNC_CONCAT, op0, zero);
 
       // Sorts.
       a = mk_func_app(s2, SMT_FUNC_BVSDIV, args, 2);
@@ -648,10 +644,7 @@ expr_handle_table:
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
       constant_int2tc two(shl.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
@@ -674,10 +667,7 @@ expr_handle_table:
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
       constant_int2tc two(ashr.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
@@ -701,10 +691,7 @@ expr_handle_table:
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
       constant_int2tc two(lshr.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      args[1] = mk_func_app(sort, SMT_FUNC_POW, args[1], convert_ast(two));
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
@@ -1023,7 +1010,6 @@ smt_convt::mk_fresh(smt_sortt s, const std::string &tag)
 smt_astt 
 smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
 {
-  smt_astt args[3];
   const isnan2t &isnan = to_isnan2t(expr);
   smt_sortt bs = mk_sort(SMT_SORT_BOOL);
 
@@ -1035,19 +1021,14 @@ smt_convt::convert_is_nan(const expr2tc &expr, smt_astt operand)
   smt_astt f = mk_smt_bool(false);
 
   if (int_encoding) {
-    args[0] = round_real_to_int(operand);
-    args[1] = mk_smt_int(BigInt(0), false);
-    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2);
-    args[1] = t;
-    args[2] = f;
-    return mk_func_app(bs, SMT_FUNC_ITE, args, 3);
+    smt_astt asint = round_real_to_int(operand);
+    smt_astt zero = mk_smt_int(BigInt(0), false);
+    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, asint, zero);
+    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
   } else {
-    args[0] = operand;
-    args[1] = mk_smt_bvint(BigInt(0), false, width);
-    args[0] = mk_func_app(bs, SMT_FUNC_GTE, args, 2);
-    args[1] = t;
-    args[2] = f;
-    return mk_func_app(bs, SMT_FUNC_ITE, args, 3);
+    smt_astt zero =  mk_smt_bvint(BigInt(0), false, width);
+    smt_astt gte = mk_func_app(bs, SMT_FUNC_GTE, operand, zero);
+    return mk_func_app(bs, SMT_FUNC_ITE, gte, t, f);
   }
 }
 
