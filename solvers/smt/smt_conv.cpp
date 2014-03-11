@@ -1145,7 +1145,6 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   // that simple for negative numbers, because they're represented as a negative
   // integer _plus_ a positive fraction. So we need to round up if there's a
   // nonzero fraction, and not if there's not.
-  smt_astt args[3];
   unsigned int frac_width = fromwidth / 2;
 
   // Sorts
@@ -1166,34 +1165,24 @@ smt_convt::round_fixedbv_to_int(smt_astt a, unsigned int fromwidth,
   // Data for inspecting fraction part
   smt_astt frac_part = mk_extract(a, frac_width-1, 0, bit);
   smt_astt zero = mk_smt_bvint(BigInt(0), false, frac_width);
-  args[0] = frac_part;
-  args[1] = zero;
-  smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt is_zero_frac = mk_func_app(boolsort, SMT_FUNC_EQ, frac_part, zero);
 
   // So, we have a base number (the magnitude), and need to decide whether to
   // round up or down. If it's positive, round down towards zero. If it's neg
   // and the fraction is zero, leave it, otherwise round towards zero.
 
   // We may need a value + 1.
-  args[0] = intvalue;
-  args[1] = mk_smt_bvint(BigInt(1), false, towidth);
+  smt_astt one = mk_smt_bvint(BigInt(1), false, towidth);
   smt_astt intvalue_plus_one =
-    mk_func_app(tosort, SMT_FUNC_BVADD, args, 2);
+    mk_func_app(tosort, SMT_FUNC_BVADD, intvalue, one);
 
-  args[0] = is_zero_frac;
-  args[1] = intvalue;
-  args[2] = intvalue_plus_one;
-  smt_astt neg_val = mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+  smt_astt neg_val =
+    mk_func_app(tosort, SMT_FUNC_ITE, is_zero_frac, intvalue,intvalue_plus_one);
 
-  args[0] = true_bit;
-  args[1] = is_neg_bit;
-  smt_astt is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  smt_astt is_neg = mk_func_app(boolsort, SMT_FUNC_EQ, true_bit, is_neg_bit);
 
   // final switch
-  args[0] = is_neg;
-  args[1] = neg_val;
-  args[2] = intvalue;
-  return mk_func_app(tosort, SMT_FUNC_ITE, args, 3);
+  return mk_func_app(tosort, SMT_FUNC_ITE, is_neg, neg_val, intvalue);
 }
 
 smt_astt 
@@ -1204,11 +1193,7 @@ smt_convt::make_bool_bit(smt_astt a)
          "smt_convt::make_bool_bit");
   smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
   smt_astt zero = mk_smt_bvint(BigInt(0), false, 1);
-  smt_astt args[3];
-  args[0] = a;
-  args[1] = one;
-  args[2] = zero;
-  return mk_func_app(one->sort, SMT_FUNC_ITE, args, 3);
+  return mk_func_app(one->sort, SMT_FUNC_ITE, a, one, zero);
 }
 
 smt_astt 
@@ -1219,10 +1204,7 @@ smt_convt::make_bit_bool(smt_astt a)
          "smt_convt::make_bit_bool");
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
   smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
-  smt_astt args[2];
-  args[0] = a;
-  args[1] = one;
-  return mk_func_app(boolsort, SMT_FUNC_EQ, args, 2);
+  return mk_func_app(boolsort, SMT_FUNC_EQ, a, one);
 }
 
 expr2tc
