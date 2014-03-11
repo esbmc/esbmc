@@ -235,14 +235,12 @@ smt_convt::make_conjunct(const ast_vec &v)
   // Chain these.
   if (i > 1) {
     unsigned int j;
-    smt_astt argstwo[2];
     smt_sortt sort = mk_sort(SMT_SORT_BOOL);
-    argstwo[0] = args[0];
+    smt_astt accuml = args[0];
     for (j = 1; j < i; j++) {
-      argstwo[1] = args[j];
-      argstwo[0] = mk_func_app(sort, SMT_FUNC_AND, argstwo, 2);
+      accuml = mk_func_app(sort, SMT_FUNC_AND, accuml, args[j]);
     }
-    result = argstwo[0];
+    result = accuml;
   } else {
     result = args[0];
   }
@@ -254,17 +252,14 @@ smt_astt
 smt_convt::invert_ast(smt_astt a)
 {
   assert(a->sort->id == SMT_SORT_BOOL);
-  return mk_func_app(a->sort, SMT_FUNC_NOT, &a, 1);
+  return mk_func_app(a->sort, SMT_FUNC_NOT, a);
 }
 
 smt_astt 
 smt_convt::imply_ast(smt_astt a, smt_astt b)
 {
   assert(a->sort->id == SMT_SORT_BOOL && b->sort->id == SMT_SORT_BOOL);
-  smt_astt args[2];
-  args[0] = a;
-  args[1] = b;
-  return mk_func_app(a->sort, SMT_FUNC_IMPLIES, args, 2);
+  return mk_func_app(a->sort, SMT_FUNC_IMPLIES, a, b);
 }
 
 void
