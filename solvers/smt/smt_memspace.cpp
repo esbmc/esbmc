@@ -217,11 +217,8 @@ smt_convt::renumber_symbol_address(const expr2tc &guard,
 
     // Now merge with the old value for all future address-of's
 
-    smt_astt args[3];
-    args[0] = convert_ast(guard);
-    args[1] = output;
-    args[2] = it->second;
-    it->second = mk_func_app(output->sort, SMT_FUNC_ITE, args, 3);
+    it->second = mk_func_app(output->sort, SMT_FUNC_ITE,
+                             convert_ast(guard), output, it->second);
   } else {
     // Newly bumped pointer. Still needs a new number though.
     unsigned int obj_num = pointer_logic.back().get_free_obj_num();
