@@ -1121,29 +1121,20 @@ smt_convt::round_real_to_int(smt_astt a)
   smt_sortt realsort = mk_sort(SMT_SORT_REAL);
   smt_sortt intsort = mk_sort(SMT_SORT_INT);
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  smt_astt args[3];
-  args[0] = a;
-  args[1] = mk_smt_real("0");
-  smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, args, 2);
+  smt_astt is_lt_zero = mk_func_app(realsort, SMT_FUNC_LT, a, mk_smt_real("0"));
 
   // The actual conversion
-  smt_astt as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, args, 2);
+  smt_astt as_int = mk_func_app(intsort, SMT_FUNC_REAL2INT, a);
 
   smt_astt one = mk_smt_int(BigInt(1), false);
-  args[0] = one;
-  args[1] = as_int;
-  smt_astt plus_one = mk_func_app(intsort, SMT_FUNC_ADD, args, 2);
+  smt_astt plus_one = mk_func_app(intsort, SMT_FUNC_ADD, one, as_int);
 
   // If it's an integer, just keep it's untruncated value.
-  args[0] = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
-  args[1] = as_int;
-  args[2] = plus_one;
-  args[1] = mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
+  smt_astt is_int = mk_func_app(boolsort, SMT_FUNC_IS_INT, &a, 1);
+  smt_astt selected = mk_func_app(intsort, SMT_FUNC_ITE, is_int, as_int, plus_one);
 
   // Switch on whether it's > or < 0.
-  args[0] = is_lt_zero;
-  args[2] = as_int;
-  return mk_func_app(intsort, SMT_FUNC_ITE, args, 3);
+  return mk_func_app(intsort, SMT_FUNC_ITE, is_lt_zero, selected, as_int);
 }
 
 smt_astt 
