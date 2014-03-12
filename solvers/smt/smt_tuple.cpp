@@ -320,7 +320,7 @@ array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   }
 
   std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
-  tuple_smt_astt result = new array_smt_ast(ctx, sort, name);
+  array_smt_ast *result = new array_smt_ast(ctx, sort, name);
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
@@ -336,6 +336,7 @@ array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     // Now equality it into the result object
     smt_astt res_field = result->project(ctx, i);
     eqs.push_back(res_field->eq(ctx, updated));
+    result->elements[i] = updated;
 
     i++;
   }
