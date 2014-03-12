@@ -107,9 +107,9 @@ array_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
+
   std::string name = ctx->mk_fresh_name("tuple_array_ite::") + ".";
-  symbol2tc result(thissort->thetype, name);
-  smt_astt result_sym = ctx->convert_ast(result);
+  array_smt_ast *result_sym = new array_smt_ast(ctx, thissort, name);
 
   const struct_union_data &data = ctx->get_type_def(array_type.subtype);
 
@@ -127,10 +127,11 @@ array_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
     smt_astt result_sym_ast = result_sym->project(ctx, i);
 
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
+    result_sym->elements[i] = result_ast;
     i++;
   }
 
-  return ctx->convert_ast(result);
+  return result_sym;
 }
 
 smt_astt 
