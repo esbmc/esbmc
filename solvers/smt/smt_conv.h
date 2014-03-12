@@ -369,6 +369,7 @@ public:
    *  string (i.e., no associated type). */
   const std::string name;
 
+  std::vector<tuple_smt_ast *> elements;
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
