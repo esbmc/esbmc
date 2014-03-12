@@ -381,11 +381,26 @@ public:
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 };
 
+inline tuple_smt_astt
+to_tuple_ast(smt_astt a)
+{
+  tuple_smt_astt ta = dynamic_cast<tuple_smt_astt>(a);
+  assert(ta != NULL && "Tuple AST mismatch");
+  return ta;
+}
+
+inline tuple_smt_sortt
+to_tuple_sort(smt_sortt a)
+{
+  tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
+  assert(ta != NULL && "Tuple AST mismatch");
+  return ta;
+}
+
 class array_smt_ast : public tuple_smt_ast
 {
 public:
-  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
-    : tuple_smt_ast(ctx, s, _name) { }
+  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name);
   virtual ~array_smt_ast() { }
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
@@ -1176,6 +1191,37 @@ public:
 extern inline
 smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
   ctx->live_asts.push_back(this);
+}
+
+extern inline
+array_smt_ast::array_smt_ast(smt_convt *ctx, smt_sortt s,
+    const std::string &_name)
+    : tuple_smt_ast(ctx, s, _name) {
+  // A new array is inherently fresh; thus field each element slot with
+  // a fresh new array.
+
+  tuple_smt_sortt ts = to_tuple_sort(s);
+  const array_type2t &array_type = to_array_type(ts->thetype);
+  const struct_union_data &strct = ctx->get_type_def(array_type.subtype);
+
+  unsigned int i = 0;
+  elements.resize(strct.members.size());
+  forall_types(it, strct.members) {
+    type2tc new_arrtype(new array_type2t(*it, array_type.array_size,
+                                         array_type.size_is_infinite));
+    smt_sortt newsort = ctx->convert_sort(new_arrtype);
+
+    // Normal elements are just normal arrays. Everything else requires
+    // a recursive array_smt_ast.
+    if (is_tuple_ast_type(*it)) {
+      elements[i] = new array_smt_ast(ctx, newsort,
+                              _name + "." + strct.member_names[i].as_string());
+    } else {
+      elements[i] = ctx->mk_fresh(newsort, "array_smt_ast");
+    }
+
+    i++;
+  }
 }
 
 #endif /* _ESBMC_PROP_SMT_SMT_CONV_H_ */

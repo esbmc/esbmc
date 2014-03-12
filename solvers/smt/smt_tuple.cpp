@@ -57,22 +57,6 @@
  * slower approach works.
  */
 
-__attribute__((always_inline)) static inline tuple_smt_astt
-to_tuple_ast(smt_astt a)
-{
-  tuple_smt_astt ta = dynamic_cast<tuple_smt_astt>(a);
-  assert(ta != NULL && "Tuple AST mismatch");
-  return ta;
-}
-
-__attribute__((always_inline)) static inline tuple_smt_sortt 
-to_tuple_sort(smt_sortt a)
-{
-  tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
-  assert(ta != NULL && "Tuple AST mismatch");
-  return ta;
-}
-
 smt_astt 
 smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
