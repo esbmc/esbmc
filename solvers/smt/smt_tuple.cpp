@@ -60,7 +60,9 @@
 void
 tuple_smt_ast::make_free(smt_convt *ctx)
 {
-  assert(elements.size() == 0);
+  if (elements.size() != 0)
+    return;
+
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &strct = ctx->get_type_def(ts->thetype);
 
