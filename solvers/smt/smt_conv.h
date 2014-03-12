@@ -412,7 +412,7 @@ public:
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
-  mutable bool is_still_free;
+  bool is_still_free;
 };
 
 /** The base SMT-conversion class/interface.
