@@ -103,6 +103,9 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   tuple_smt_ast *result_sym = new tuple_smt_ast(ctx, sort, name);
 
+  const_cast<tuple_smt_ast*>(true_val)->make_free(ctx);
+  const_cast<tuple_smt_ast*>(false_val)->make_free(ctx);
+
   const struct_union_data &data = ctx->get_type_def(thissort->thetype);
   result_sym->elements.resize(data.members.size());
 
@@ -114,9 +117,7 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
     smt_astt result_ast = truepart->ite(ctx, cond, falsepart);
 
-    smt_astt result_sym_ast = result_sym->project(ctx, i);
-    ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
-    result_sym->elements[i] = result_sym_ast;
+    result_sym->elements[i] = result_ast;
 
     i++;
   }
@@ -183,12 +184,12 @@ assign_tuple_smt_ast(smt_convt *ctx, tuple_smt_astt dst, tuple_smt_astt src)
 smt_astt 
 tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
-#if 0
+  const_cast<tuple_smt_ast*>(to_tuple_ast(other))->make_free(ctx);
+
   // First, is this an assignment?
   if (elements.size() == 0)
     // yes
     return assign_tuple_smt_ast(ctx, this, to_tuple_ast(other));
-#endif
 
   // We have two tuple_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
@@ -446,26 +447,12 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
+  // If someone is projecting out of us, then now is an excellent time to
+  // actually allocate all our pieces of ASTs as variables.
+  const_cast<tuple_smt_ast*>(this)->make_free(ctx);
+
   assert(idx < data.members.size() && "Out-of-bounds tuple element accessed");
-  const std::string &fieldname = data.member_names[idx].as_string();
-  std::string sym_name = name + fieldname;
-
-  // Cope with recursive structs.
-  const type2tc &restype = data.members[idx];
-  smt_sortt s = ctx->convert_sort(restype);
-
-  if (is_tuple_ast_type(restype) || is_tuple_array_ast_type(restype)) {
-    // This is a struct within a struct, so just generate the name prefix of
-    // the internal struct being projected.
-    sym_name = sym_name + ".";
-    if (is_tuple_array_ast_type(restype))
-      return new array_smt_ast(ctx, s, sym_name);
-    else
-      return new tuple_smt_ast(ctx, s, sym_name);
-  } else {
-    // This is a normal variable, so create a normal symbol of its name.
-    return ctx->mk_smt_symbol(sym_name, s);
-  }
+  return elements[idx];
 }
 
 smt_astt 
@@ -515,9 +502,6 @@ smt_convt::tuple_create(const expr2tc &structdef)
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
     smt_astt tmp = convert_ast(*structdef->get_sub_expr(i));
-    smt_astt elem = result->project(this, i);
-    assert_ast(elem->eq(this, tmp));
-
     result->elements[i] = tmp;
   }
 
