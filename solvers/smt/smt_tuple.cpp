@@ -273,7 +273,9 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  tuple_smt_astt result = new tuple_smt_ast(ctx, sort, name);
+  tuple_smt_ast *result = new tuple_smt_ast(ctx, sort, name);
+  result->elements = elements;
+  result->elements[idx] = value;
 
   // Iterate over all members, deciding what to do with them.
   unsigned int j = 0;
