@@ -57,6 +57,28 @@
  * slower approach works.
  */
 
+void
+tuple_smt_ast::make_free(smt_convt *ctx)
+{
+  assert(elements.size() == 0);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
+  const struct_union_data &strct = ctx->get_type_def(ts->thetype);
+
+  elements.resize(strct.members.size());
+  unsigned int i = 0;
+  forall_types(it, strct.members) {
+    smt_sortt newsort = ctx->convert_sort(*it);
+    if (is_tuple_ast_type(*it)) {
+      elements[i] = ctx->tuple_fresh(newsort);
+    } else if (is_tuple_array_ast_type(*it)) {
+      std::string n = name + "." + strct.member_names[i].as_string();
+      elements[i] = new array_smt_ast(ctx, newsort, n);
+    } else {
+      elements[i] = ctx->mk_fresh(newsort, "tuple_smt_filler");
+    }
+  }
+}
+
 smt_astt 
 smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {

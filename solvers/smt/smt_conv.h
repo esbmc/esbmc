@@ -379,6 +379,8 @@ public:
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+
+  void make_free(smt_convt *ctx);
 };
 
 inline tuple_smt_astt
