@@ -584,7 +584,8 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = convert_sort(array_type);
   std::string name = mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = new array_smt_ast(this, sort, name);
+  array_smt_ast *the_array = new array_smt_ast(this, sort, name);
+  smt_astt newsym = the_array;
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -600,12 +601,15 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
   uint64_t sz = thesize.constant_value.to_ulong();
 
+  the_array->elements.resize(sz);
+
   if (const_array) {
     // Repeatedly store the same value into this at all the demanded
     // indexes.
     smt_astt init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
       newsym = newsym->update(this, init, i);
+      the_array->elements[i] = init;
     }
 
     return newsym;
@@ -613,6 +617,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // Repeatedly store operands into this.
     for (unsigned int i = 0; i < sz; i++) {
       newsym = newsym->update(this, inputargs[i], i);
+      the_array->elements[i] = inputargs[i];
     }
 
     return newsym;
