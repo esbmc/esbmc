@@ -626,7 +626,6 @@ expr_handle_table:
     const equality2t &eq = to_equality2t(expr);
     smt_astt b = convert_ast(eq.side_1);
     smt_astt c = convert_ast(eq.side_2);
-    assert(is_symbol2t(eq.side_1));
     a = b->eq(this, c);
     break;
   }
