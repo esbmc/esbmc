@@ -188,10 +188,29 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
+smt_astt
+assign_array_smt_ast(smt_convt *ctx, array_smt_astt dst, array_smt_astt src)
+{
+  array_smt_ast *destination = const_cast<array_smt_ast *>(dst);
+
+  // Just copy across element data.
+  destination->elements = src->elements;
+  destination->is_still_free = false;
+
+  // XXX XXX XXX Funk for the future:
+  return ctx->convert_ast(true_expr);
+}
 
 smt_astt 
 array_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
+#if 0
+  // First, is this an assignment?
+  if (is_still_free)
+    // yes
+    return assign_array_smt_ast(ctx, this, to_array_ast(other));
+#endif
+
   // We have two tuple_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
