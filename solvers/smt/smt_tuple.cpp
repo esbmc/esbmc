@@ -78,6 +78,8 @@ tuple_smt_ast::make_free(smt_convt *ctx)
     } else {
       elements[i] = ctx->mk_fresh(newsort, "tuple_smt_filler");
     }
+
+    i++;
   }
 }
 
