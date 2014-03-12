@@ -299,10 +299,7 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_smt_ast *result = new tuple_smt_ast(ctx, sort, name);
   result->elements = elements;
-
-  if (result->elements.size() == 0)
-    result->elements.resize(data.members.size());
-
+  result->make_free(ctx);
   result->elements[idx] = value;
 
   // Iterate over all members, deciding what to do with them.
