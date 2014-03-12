@@ -456,12 +456,16 @@ smt_convt::tuple_create(const expr2tc &structdef)
   // Add a . suffix because this is of tuple type.
   name += ".";
 
-  smt_ast *result = new tuple_smt_ast(this, convert_sort(structdef->type),name);
+  tuple_smt_ast *result =
+    new tuple_smt_ast(this, convert_sort(structdef->type),name);
+  result->elements.resize(structdef->get_num_sub_exprs());
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
     smt_astt tmp = convert_ast(*structdef->get_sub_expr(i));
     smt_astt elem = result->project(this, i);
     assert_ast(elem->eq(this, tmp));
+
+    result->elements[i] = tmp;
   }
 
   return result;
