@@ -411,6 +411,8 @@ public:
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+
+  mutable bool is_still_free;
 };
 
 /** The base SMT-conversion class/interface.
@@ -1199,6 +1201,8 @@ array_smt_ast::array_smt_ast(smt_convt *ctx, smt_sortt s,
     : tuple_smt_ast(ctx, s, _name) {
   // A new array is inherently fresh; thus field each element slot with
   // a fresh new array.
+
+  is_still_free = true;
 
   tuple_smt_sortt ts = to_tuple_sort(s);
   const array_type2t &array_type = to_array_type(ts->thetype);
