@@ -503,7 +503,15 @@ smt_convt::union_create(const expr2tc &unidef)
 
       result_t_ast->elements[i] = init_ast;
     } else {
-      result_t_ast->elements[i] = NULL;
+      // XXX indirection
+      if (is_tuple_ast_type(*it)) {
+        result_t_ast->elements[i] = tuple_fresh(convert_sort(*it));
+      } else if (is_tuple_array_ast_type(*it)) {
+        // XXX XXX XXX fresh array method?
+        std::string name = mk_fresh_name("union_create_elem");
+        smt_sortt sort = convert_sort(*it);
+        result_t_ast->elements[i] = new array_smt_ast(this, sort, name);
+      }
     }
     i++;
   }
