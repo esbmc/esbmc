@@ -530,7 +530,7 @@ smt_convt::init_addr_space_array(void)
   membs.push_back(obj0_end);
   constant_struct2tc addr0_tuple(addr_space_type, membs);
   symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
-  equality2tc addr0_range_eq(addr0_tuple, addr0_range);
+  equality2tc addr0_range_eq(addr0_range, addr0_tuple);
   assert_expr(addr0_range_eq);
 
   membs.clear();
@@ -538,7 +538,7 @@ smt_convt::init_addr_space_array(void)
   membs.push_back(obj1_end);
   constant_struct2tc addr1_tuple(addr_space_type, membs);
   symbol2tc addr1_range(addr_space_type, "__ESBMC_ptr_addr_range_1");
-  equality2tc addr1_range_eq(addr1_tuple, addr1_range);
+  equality2tc addr1_range_eq(addr1_range, addr1_tuple);
   assert_expr(addr1_range_eq);
 
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);

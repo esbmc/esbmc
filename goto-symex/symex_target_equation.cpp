@@ -176,7 +176,7 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
       else
       {
         symbol2tc sym(tmp->type, "symex::output::"+i2string(output_count++));
-        equality2tc eq(tmp, sym);
+        equality2tc eq(sym, tmp);
         smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }
