@@ -490,12 +490,20 @@ smt_convt::union_create(const expr2tc &unidef)
   smt_astt result_ast = convert_ast(result);
   smt_astt init_ast = convert_ast(init);
 
+  tuple_smt_ast *result_t_ast =
+    const_cast<tuple_smt_ast *>(to_tuple_ast(result_ast));
+  result_t_ast->elements.resize(def.members.size());
+
   unsigned int i = 0;
   forall_types(it, def.members) {
     if (base_type_eq(*it, init->type, ns)) {
       // Assign in.
       smt_astt target_memb = result_ast->project(this, i);
       assert_ast(target_memb->eq(this, init_ast));
+
+      result_t_ast->elements[i] = init_ast;
+    } else {
+      result_t_ast->elements[i] = NULL;
     }
     i++;
   }
