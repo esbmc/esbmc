@@ -75,11 +75,10 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   tuple_smt_astt false_val = to_tuple_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
-  symbol2tc result(thissort->thetype, name);
-  smt_astt result_sym = ctx->convert_ast(result);
+  tuple_smt_ast *result_sym = new tuple_smt_ast(ctx, sort, name);
 
   const struct_union_data &data = ctx->get_type_def(thissort->thetype);
-
+  result_sym->elements.resize(data.members.size());
 
   // Iterate through each field and encode an ite.
   unsigned int i = 0;
@@ -91,11 +90,12 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 
     smt_astt result_sym_ast = result_sym->project(ctx, i);
     ctx->assert_ast(result_sym_ast->eq(ctx, result_ast));
+    result_sym->elements[i] = result_sym_ast;
 
     i++;
   }
 
-  return ctx->convert_ast(result);
+  return result_sym;
 }
 
 smt_astt 
