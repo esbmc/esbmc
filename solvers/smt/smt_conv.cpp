@@ -227,6 +227,8 @@ smt_convt::make_conjunct(const ast_vec &v)
   smt_astt result;
   unsigned int i;
 
+  assert(v.size() != 0);
+
   // Funky on account of conversion from land...
   for (i = 0; i < v.size(); i++) {
     args[i] = v[i];
