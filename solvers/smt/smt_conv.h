@@ -415,8 +415,18 @@ public:
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
+  void assign(array_smt_astt src) const;
+
   bool is_still_free;
 };
+
+inline array_smt_astt
+to_array_ast(smt_astt a)
+{
+  array_smt_astt ta = dynamic_cast<array_smt_astt>(a);
+  assert(ta != NULL && "Tuple-Array AST mismatch");
+  return ta;
+}
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when

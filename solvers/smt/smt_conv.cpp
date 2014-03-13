@@ -280,6 +280,10 @@ smt_convt::convert_assign(const expr2tc &expr)
     tuple_smt_astt side1 = to_tuple_ast(convert_ast(eq.side_1));
     tuple_smt_astt side2 = to_tuple_ast(convert_ast(eq.side_2));
     side1->assign(this, side2);
+  } else if (!tuple_support && is_tuple_array_ast_type(eq.side_1->type)) {
+    array_smt_astt side1 = to_array_ast(convert_ast(eq.side_1));
+    array_smt_astt side2 = to_array_ast(convert_ast(eq.side_2));
+    side1->assign(side2);
   } else {
     assert_ast(convert_ast(expr));
   }
