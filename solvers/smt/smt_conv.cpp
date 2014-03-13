@@ -270,10 +270,23 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   if (value == false)
     a = invert_ast(a);
   assert_ast(a);
+}
+
+void
+smt_convt::convert_assign(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  if (!tuple_support && is_tuple_ast_type(eq.side_1)) {
+    tuple_smt_astt side1 = to_tuple_ast(convert_ast(eq.side_1));
+    tuple_smt_astt side2 = to_tuple_ast(convert_ast(eq.side_2));
+    side1->assign(this, side2);
+  } else {
+    assert_ast(convert_ast(expr));
+  }
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
-  if (is_equality2t(expr) && value) {
+  if (is_equality2t(expr)) {
     const equality2t eq = to_equality2t(expr);
     if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
       const symbol2t sym = to_symbol2t(eq.side_1);
@@ -296,20 +309,6 @@ smt_convt::set_to(const expr2tc &expr, bool value)
       union_vars.insert(mapentry);
     }
   }
-}
-
-void
-smt_convt::convert_assign(const expr2tc &expr)
-{
-  const equality2t &eq = to_equality2t(expr);
-  if (!tuple_support && is_tuple_ast_type(eq.side_1)) {
-    tuple_smt_astt side1 = to_tuple_ast(convert_ast(eq.side_1));
-    tuple_smt_astt side2 = to_tuple_ast(convert_ast(eq.side_2));
-    side1->assign(this, side2);
-    return;
-  }
-
-  assert_ast(convert_ast(expr));
 }
 
 smt_astt 
