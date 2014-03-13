@@ -562,6 +562,9 @@ smt_convt::init_addr_space_array(void)
   equality2tc null_eq(null_ptr, null_ptr_tuple);
   equality2tc invalid_eq(invalid_ptr, invalid_ptr_tuple);
 
+  null_ptr_ast = convert_ast(null_ptr_tuple);
+  invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
+
   assert_expr(zero_eq);
   assert_expr(null_eq);
   assert_expr(invalid_eq);

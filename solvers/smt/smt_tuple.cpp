@@ -587,6 +587,13 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name();
 
+  // Because this tuple flattening doesn't join tuples through the symbol
+  // table, there are some special names that need to be intercepted.
+  if (name == "0" || name == "NULL")
+    return null_ptr_ast;
+  else if (name == "INVALID")
+    return invalid_ptr_ast;
+
   // We put a '.' on the end of all symbols to deliminate the rest of the
   // name. However, these names may become expressions again, then be converted
   // again, thus accumulating dots. So don't.

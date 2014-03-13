@@ -1143,6 +1143,9 @@ public:
    *  constructor. */
   std::string dyn_info_arr_name;
 
+  smt_astt null_ptr_ast;
+  smt_astt invalid_ptr_ast;
+
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has
    *  been used, and thus what number should be appended to make the name
