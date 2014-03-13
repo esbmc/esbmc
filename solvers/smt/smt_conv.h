@@ -381,6 +381,7 @@ public:
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
   void make_free(smt_convt *ctx);
+  void assign(smt_convt *ctx, tuple_smt_astt src) const;
 };
 
 inline tuple_smt_astt
@@ -514,6 +515,8 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
+
+  void convert_assign(const expr2tc &expr);
 
   /** Make an n-ary 'or' function application.
    *  Takes a vector of smt_ast's, all boolean sorted, and creates a single

@@ -298,6 +298,20 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   }
 }
 
+void
+smt_convt::convert_assign(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  if (is_tuple_ast_type(eq.side_1)) {
+    tuple_smt_astt side1 = to_tuple_ast(convert_ast(eq.side_1));
+    tuple_smt_astt side2 = to_tuple_ast(convert_ast(eq.side_2));
+    side1->assign(this, side2);
+    return;
+  }
+
+  assert_ast(convert_ast(expr));
+}
+
 smt_astt 
 smt_convt::convert_ast(const expr2tc &expr)
 {

@@ -169,27 +169,23 @@ smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
 }
 
-smt_astt
-assign_tuple_smt_ast(smt_convt *ctx, tuple_smt_astt dst, tuple_smt_astt src)
+void
+tuple_smt_ast::assign(smt_convt *ctx, tuple_smt_astt other) const
 {
-  tuple_smt_ast *destination = const_cast<tuple_smt_ast *>(dst);
+  const_cast<tuple_smt_ast*>(to_tuple_ast(other))->make_free(ctx);
+  assert(elements.size() == 0 && "tuple smt assign with elems populated");
+
+  tuple_smt_ast *destination = const_cast<tuple_smt_ast *>(this);
 
   // Just copy across element data.
-  destination->elements = src->elements;
-
-  // XXX XXX XXX Funk for the future:
-  return ctx->convert_ast(true_expr);
+  destination->elements = other->elements;
+  return;
 }
 
 smt_astt 
 tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
   const_cast<tuple_smt_ast*>(to_tuple_ast(other))->make_free(ctx);
-
-  // First, is this an assignment?
-  if (elements.size() == 0)
-    // yes
-    return assign_tuple_smt_ast(ctx, this, to_tuple_ast(other));
 
   // We have two tuple_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
