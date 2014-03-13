@@ -70,13 +70,14 @@ tuple_smt_ast::make_free(smt_convt *ctx)
   unsigned int i = 0;
   forall_types(it, strct.members) {
     smt_sortt newsort = ctx->convert_sort(*it);
+    std::string fieldname = name + "." + strct.member_names[i].as_string();
+
     if (is_tuple_ast_type(*it)) {
-      elements[i] = ctx->tuple_fresh(newsort);
+      elements[i] = ctx->tuple_fresh(newsort, fieldname);
     } else if (is_tuple_array_ast_type(*it)) {
-      std::string n = name + "." + strct.member_names[i].as_string();
-      elements[i] = new array_smt_ast(ctx, newsort, n);
+      elements[i] = new array_smt_ast(ctx, newsort, fieldname);
     } else {
-      elements[i] = ctx->mk_fresh(newsort, "tuple_smt_filler");
+      elements[i] = ctx->mk_fresh(newsort, fieldname);
     }
 
     i++;
@@ -528,9 +529,10 @@ smt_convt::union_create(const expr2tc &unidef)
 }
 
 smt_astt
-smt_convt::tuple_fresh(smt_sortt s)
+smt_convt::tuple_fresh(smt_sortt s, std::string name)
 {
-  std::string name = mk_fresh_name("tuple_fresh::") + ".";
+  if (name == "")
+    name = mk_fresh_name("tuple_fresh::") + ".";
 
   smt_astt a = mk_smt_symbol(name, s);
   (void)a;

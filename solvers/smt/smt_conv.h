@@ -752,7 +752,7 @@ public:
   /** Create a fresh tuple, with freely valued fields.
    *  @param s Sort of the tuple to create
    *  @return AST representing the created tuple */
-  virtual smt_astt tuple_fresh(smt_sortt s);
+  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
 
   /** Create an array of tuple values. Takes a type, and an array of ast's,
    *  and creates an array where the elements have the value of the input asts.
