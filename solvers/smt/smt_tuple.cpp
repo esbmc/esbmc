@@ -291,37 +291,12 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   assert(is_nil_expr(idx_expr) && "Can't apply non-constant index update to "
          "structure");
 
-  // XXX: future work, accept member_name exprs?
-  tuple_smt_sortt ts = to_tuple_sort(sort);
-  const struct_union_data &data = ctx->get_type_def(ts->thetype);
-
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
   tuple_smt_ast *result = new tuple_smt_ast(ctx, sort, name);
   result->elements = elements;
   result->make_free(ctx);
   result->elements[idx] = value;
 
-  // Iterate over all members, deciding what to do with them.
-  unsigned int j = 0;
-  forall_types(it, data.members) {
-    if (j == idx) {
-      // This is the updated field -- generate the name of its variable with
-      // tuple project and assign it in.
-      smt_astt thefield = result->project(ctx, j);
-
-      eqs.push_back(thefield->eq(ctx, value));
-    } else {
-      // This is not an updated field; extract the member out of the input
-      // tuple (a) and assign it into the fresh tuple.
-      smt_astt field1 = project(ctx, j);
-      smt_astt field2 = result->project(ctx, j);
-      eqs.push_back(field1->eq(ctx, field2));
-    }
-
-    j++;
-  }
-
-  ctx->assert_ast(ctx->make_conjunct(eqs));
   return result;
 }
 
