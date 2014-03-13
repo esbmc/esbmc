@@ -939,6 +939,7 @@ public:
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
   virtual expr2tc tuple_get(const expr2tc &expr);
+  expr2tc tuple_get_rec(tuple_smt_astt tuple);
   /** Extract the assignment to a tuple-array symbol from the SMT solvers
    *  model */
   expr2tc tuple_array_get(const expr2tc &expr);

@@ -643,31 +643,53 @@ smt_convt::tuple_get(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name();
 
-  const type2tc &thetype = (is_structure_type(expr->type))
-    ? expr->type : pointer_struct;
-  const struct_union_data &strct = get_type_def(thetype);
+  tuple_smt_astt a = to_tuple_ast(convert_ast(expr));
+  return tuple_get_rec(a);
+}
+
+expr2tc
+smt_convt::tuple_get_rec(tuple_smt_astt tuple)
+{
+  tuple_smt_sortt sort = to_tuple_sort(tuple->sort);
 
   // XXX - what's the correct type to return here.
-  constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
+  constant_struct2tc outstruct(sort->thetype, std::vector<expr2tc>());
+  const struct_union_data &strct = get_type_def(sort->thetype);
 
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
   forall_types(it, strct.members) {
-    std::stringstream ss;
-    ss << name << "." << strct.member_names[i];
-    symbol2tc sym(*it, ss.str());
-    outstruct.get()->datatype_members.push_back(get(sym));
+    expr2tc res;
+
+    if (is_tuple_ast_type(*it)) {
+      res = tuple_get_rec(to_tuple_ast(tuple->elements[i]));
+    } else if (is_tuple_array_ast_type(*it)) {
+      res = expr2tc(); // XXX currently unimplemented
+    } else if (is_number_type(*it)) {
+      res = get_bv(*it, tuple->elements[i]);
+    } else if (is_bool_type(*it)) {
+      res = get_bool(tuple->elements[i]);
+    } else if (is_array_type(*it)) {
+      std::cerr << "Fetching array elements inside tuples currently unimplemented, sorry" << std::endl;
+      res = expr2tc();
+    } else {
+      std::cerr << "Unexpected type in tuple_get_rec" << std::endl;
+      abort();
+    }
+
+    outstruct.get()->datatype_members.push_back(res);
     i++;
   }
 
   // If it's a pointer, rewrite.
-  if (is_pointer_type(expr->type)) {
+  if (is_pointer_type(sort->thetype) || sort->thetype == pointer_struct) {
     uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
                                     .constant_value.to_uint64();
     uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
                                      .constant_value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
+    return pointer_logic.back().pointer_expr(p,
+                                 type2tc(new pointer_type2t(get_empty_type())));
   }
 
   return outstruct;
