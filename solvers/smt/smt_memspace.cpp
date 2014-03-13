@@ -264,6 +264,16 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     }
   }
 
+  // Construct canonical address-of this thing, and check the cache. The addrof
+  // expression this is sourced from might have ended up with the wrong type,
+  // alas.
+  address_of2tc new_addr_of(expr->type, expr);
+  if (caching) {
+    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    if (cache_result != smt_cache.end())
+      return (cache_result->ast);
+  }
+
   // add object won't duplicate objs for identical exprs (it's a map)
   obj_num = pointer_logic.back().add_object(expr);
 
@@ -303,6 +313,12 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     args[1] = output;
 
     assert_ast(args[0]->eq(this, args[1]));
+  }
+
+  // Insert canonical address-of this expression.
+  if (caching) {
+    struct smt_cache_entryt entry = { new_addr_of, a, ctx_level };
+    smt_cache.insert(entry);
   }
 
   return a;
