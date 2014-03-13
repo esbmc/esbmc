@@ -269,7 +269,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   // alas.
   address_of2tc new_addr_of(expr->type, expr);
   if (caching) {
-    smt_cachet::const_iterator cache_result = smt_cache.find(expr);
+    smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
     if (cache_result != smt_cache.end())
       return (cache_result->ast);
   }
