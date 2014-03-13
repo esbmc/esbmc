@@ -364,6 +364,7 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
   tuple_smt_ast *result = new tuple_smt_ast(ctx, result_sort, name);
+  result->elements.resize(data.members.size());
 
   unsigned int i = 0;
   forall_types(it, data.members) {
