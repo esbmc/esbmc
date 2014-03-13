@@ -656,6 +656,15 @@ smt_convt::tuple_get_rec(tuple_smt_astt tuple)
   constant_struct2tc outstruct(sort->thetype, std::vector<expr2tc>());
   const struct_union_data &strct = get_type_def(sort->thetype);
 
+  // If this tuple was free and never read, don't attempt to extract data from
+  // it. There isn't any.
+  if (tuple->elements.size() == 0) {
+    forall_types(it, strct.members) {
+      outstruct.get()->datatype_members.push_back(expr2tc());
+    }
+    return outstruct;
+  }
+
   // Run through all fields and despatch to 'get' again.
   unsigned int i = 0;
   forall_types(it, strct.members) {
