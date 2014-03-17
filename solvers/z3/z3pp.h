@@ -188,10 +188,8 @@ namespace z3 {
 
         expr bv_val(int n, unsigned sz);
         expr bv_val(unsigned n, unsigned sz);
-#if __WORDSIZE != 32
-        expr bv_val(long unsigned int n, unsigned sz);
-        expr bv_val(long int n, unsigned sz);
-#endif
+        expr bv_val(uint64_t n, unsigned sz);
+        expr bv_val(int64_t n, unsigned sz);
         expr bv_val(char const * n, unsigned sz);
 
         expr num_val(int n, sort const & s);
@@ -1601,10 +1599,8 @@ namespace z3 {
 
     inline expr context::bv_val(int n, unsigned sz) { Z3_ast r = Z3_mk_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(unsigned n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-#if __WORDSIZE != 32
-    inline expr context::bv_val(long unsigned int n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-    inline expr context::bv_val(long int n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
-#endif
+    inline expr context::bv_val(uint64_t n, unsigned sz) { Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
+    inline expr context::bv_val(int64_t n, unsigned sz) { Z3_ast r = Z3_mk_int64(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
     inline expr context::bv_val(char const * n, unsigned sz) { Z3_ast r = Z3_mk_numeral(m_ctx, n, bv_sort(sz)); check_error(); return expr(*this, r); }
 
     inline expr context::num_val(int n, sort const & s) { Z3_ast r = Z3_mk_int(m_ctx, n, s); check_error(); return expr(*this, r); }
