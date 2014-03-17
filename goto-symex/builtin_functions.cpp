@@ -26,10 +26,12 @@ Author: Daniel Kroening, kroening@kroening.com
 #include "execution_state.h"
 #include "reachability_tree.h"
 
+#ifdef EIGEN_LIB
 bool isApprox(double a, double b)
 {
   return (std::abs(a-b) <= Eigen::NumTraits<double>::dummy_precision());
 }
+#endif
 
 expr2tc
 goto_symext::symex_malloc(
