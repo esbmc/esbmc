@@ -381,6 +381,7 @@ public:
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual void assign(smt_convt *ctx, const expr2tc &sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
@@ -388,7 +389,6 @@ public:
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 
   void make_free(smt_convt *ctx);
-  void assign(smt_convt *ctx, tuple_smt_astt src) const;
 };
 
 inline tuple_smt_astt
@@ -416,13 +416,12 @@ public:
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual void assign(smt_convt *ctx, const expr2tc &sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-
-  void assign(array_smt_astt src) const;
 
   bool is_still_free;
 };

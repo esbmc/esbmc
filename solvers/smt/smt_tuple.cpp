@@ -175,15 +175,19 @@ smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 void
-tuple_smt_ast::assign(smt_convt *ctx, tuple_smt_astt other) const
+tuple_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
 {
-  const_cast<tuple_smt_ast*>(to_tuple_ast(other))->make_free(ctx);
-  assert(elements.size() == 0 && "tuple smt assign with elems populated");
+  // If we're being assigned to something, populate all our vars first
+  const_cast<tuple_smt_ast*>(this)->make_free(ctx);
 
-  tuple_smt_ast *destination = const_cast<tuple_smt_ast *>(this);
+  tuple_smt_astt target = to_tuple_ast(ctx->convert_ast(expr));
+  assert(target->elements.size() == 0 &&
+        "tuple smt assign with elems populated");
+
+  tuple_smt_ast *destination = const_cast<tuple_smt_ast *>(target);
 
   // Just copy across element data.
-  destination->elements = other->elements;
+  destination->elements = elements;
   return;
 }
 
@@ -217,13 +221,15 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 void
-array_smt_ast::assign(array_smt_astt src) const
+array_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
 {
-  assert(is_still_free && "Non-free array ast assigned");
-  array_smt_ast *destination = const_cast<array_smt_ast *>(this);
+  array_smt_astt target = to_array_ast(ctx->convert_ast(sym));
+
+  assert(target->is_still_free && "Non-free array ast assigned");
+  array_smt_ast *destination = const_cast<array_smt_ast *>(target);
 
   // Just copy across element data.
-  destination->elements = src->elements;
+  destination->elements = elements;
   destination->is_still_free = false;
 }
 
