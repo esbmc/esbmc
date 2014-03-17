@@ -278,15 +278,8 @@ void
 smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
-  if (!tuple_support && is_tuple_ast_type(eq.side_1)) {
-    tuple_smt_astt side2 = to_tuple_ast(convert_ast(eq.side_2));
-    side2->assign(this, eq.side_1);
-  } else if (!tuple_support && is_tuple_array_ast_type(eq.side_1->type)) {
-    array_smt_astt side2 = to_array_ast(convert_ast(eq.side_2));
-    side2->assign(this, eq.side_1);
-  } else {
-    assert_ast(convert_ast(expr));
-  }
+  smt_astt side2 = convert_ast(eq.side_2);
+  side2->assign(this, eq.side_1);
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
