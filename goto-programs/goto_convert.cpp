@@ -1855,11 +1855,7 @@ void goto_convertt::convert_for(
   {
     exprt tmp_B=code.op2();
     //clean_expr(tmp_B, tmp_x, false);
-    remove_sideeffects(tmp_B, tmp_x, false);
-    if(tmp_x.instructions.empty())
-    {
-      convert(to_code(code.op2()), tmp_x);
-    }
+    convert(to_code(code.op2()), tmp_x);
   }
 
   // optimize the v label
