@@ -320,6 +320,13 @@ public:
    *  @return Boolean typed AST representing an equality */
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
 
+  /** Abstractly produce an assign. Defaults to being an equality, however
+   *  for some special cases up to the backend, there may be optimisations made
+   *  for array or tuple assigns, and so forth.
+   *  @param ctx SMT context to do the assignment in.
+   *  @param name Symbol to assign to */
+  virtual void assign(smt_convt *ctx, const expr2tc &other) const;
+
   /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.
    *  @param value Value to insert into the updated field

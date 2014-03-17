@@ -58,6 +58,14 @@
  */
 
 void
+smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
+{
+  smt_astt s = ctx->convert_ast(sym);
+  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, s, this));
+}
+
+void
 tuple_smt_ast::make_free(smt_convt *ctx)
 {
   if (elements.size() != 0)
