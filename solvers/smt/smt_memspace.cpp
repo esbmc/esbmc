@@ -604,7 +604,7 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
   symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
-  assert_expr(eq);
+  convert_assign(eq);
   return;
 }
 
