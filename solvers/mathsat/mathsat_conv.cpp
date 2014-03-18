@@ -114,7 +114,7 @@ mathsat_convt::get_bv(const type2tc &_t __attribute__((unused)),
 
 expr2tc
 mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
-                              const smt_sort *elem_sort)
+                              const type2tc &elem_sort)
 {
   size_t orig_w = array->sort->get_domain_width();
   const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
@@ -124,7 +124,7 @@ mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
   msat_term t = msat_make_array_read(env, mast->t, tmpa->t);
   free(tmpast);
 
-  mathsat_smt_ast *tmpb = new mathsat_smt_ast(elem_sort, t);
+  mathsat_smt_ast *tmpb = new mathsat_smt_ast(this, convert_sort(elem_sort), t);
   expr2tc result = get_bv(type2tc(), tmpb);
   free(tmpb);
 
@@ -333,7 +333,7 @@ mathsat_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     abort();
   }
 
-  return new mathsat_smt_ast(s, r);
+  return new mathsat_smt_ast(this, s, r);
 }
 
 smt_sort *
@@ -405,14 +405,14 @@ mathsat_convt::mk_smt_bvint(const mp_integer &theint,
   msat_term t = msat_make_bv_number(env, str.c_str(), w, 2);
   assert(!MSAT_ERROR_TERM(t) && "Error creating mathsat BV integer term");
   smt_sort *s = mk_sort(SMT_SORT_BV, w, false);
-  return new mathsat_smt_ast(s, t);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_ast *
 mathsat_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
-  return new mathsat_smt_ast(s, (val) ? msat_make_true(env)
+  return new mathsat_smt_ast(this, s, (val) ? msat_make_true(env)
                                       : msat_make_false(env));
 }
 
@@ -425,7 +425,7 @@ mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   assert(!MSAT_ERROR_DECL(d) && "Invalid function symbol declaration sort");
   msat_term t = msat_make_constant(env, d);
   assert(!MSAT_ERROR_TERM(t) && "Invalid function decl for mathsat term");
-  return new mathsat_smt_ast(s, t);
+  return new mathsat_smt_ast(this, s, t);
 }
 
 smt_sort *
@@ -446,5 +446,5 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
 {
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
-  return new mathsat_smt_ast(s, t);
+  return new mathsat_smt_ast(this, s, t);
 }
