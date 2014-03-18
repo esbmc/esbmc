@@ -701,7 +701,7 @@ public:
    *  @param const_array If true, only the first element of input_args is valid,
    *         and is repeated for every element in this (fixed size) array.
    *  @param domain Sort of the domain of this array. */
-  virtual smt_astt tuple_array_create(const type2tc &array_type,
+  virtual smt_astt tuple_array_create1(const type2tc &array_type,
                                             smt_astt *input_args,
                                             bool const_array,
                                             smt_sortt domain);
@@ -866,8 +866,7 @@ public:
   smt_astt array_create(const expr2tc &expr);
   /** Mangle constant_array / array_of data with tuple array type, into a
    *  more convenient format, acceptable by tuple_array_create */
-  smt_astt tuple_array_create_despatch(const expr2tc &expr,
-                                             smt_sortt domain);
+  smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain);
   /** Convert a symbol2tc to a tuple_smt_ast */
   smt_astt mk_tuple_symbol(const expr2tc &expr);
   /** Like mk_tuple_symbol, but for arrays */

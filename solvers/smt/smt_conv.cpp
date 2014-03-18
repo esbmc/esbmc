@@ -455,7 +455,7 @@ expr_handle_table:
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
-      a = tuple_array_create_despatch(expr, domain);
+      a = tuple_array_create(expr, domain);
     else
       a = array_create(expr);
     break;
