@@ -78,6 +78,8 @@ cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
 {
   const cvc_smt_ast *carray = cvc_ast_downcast(array);
   unsigned int orig_w = array->sort->get_domain_width();
+  if (orig_w == 0)
+    orig_w = config.ansi_c.int_width;
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(index), false, orig_w);
   const cvc_smt_ast *tmpa = cvc_ast_downcast(tmpast);
