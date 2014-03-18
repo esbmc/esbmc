@@ -257,7 +257,7 @@ cvc_convt::mk_sort(const smt_sort_kind k, ...)
     thebool = va_arg(ap, int);
     thebool = thebool;
     CVC4::BitVectorType t = em.mkBitVectorType(uint);
-    return new cvc_smt_sort(k, t);
+    return new cvc_smt_sort(k, t, uint);
   }
   case SMT_SORT_ARRAY:
   {
