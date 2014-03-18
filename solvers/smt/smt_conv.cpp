@@ -1775,3 +1775,76 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
 
   return constant_array2tc(arr_type, fields);
 }
+
+// Default behaviours for SMT AST's
+
+smt_astt
+smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
+{
+  smt_astt s = ctx->convert_ast(sym);
+  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, s, this));
+  return s;
+}
+
+smt_astt
+smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+{
+  return ctx->mk_func_app(sort, SMT_FUNC_ITE, cond, this, falseop);
+}
+
+smt_astt
+smt_ast::eq(smt_convt *ctx, smt_astt other) const
+{
+  // Simple approach: this is a leaf piece of SMT, compute a basic equality.
+  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
+}
+
+smt_astt
+smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
+    expr2tc idx_expr) const
+{
+  // If we're having an update applied to us, then the only valid situation
+  // this can occur in is if we're an array.
+  assert(sort->id == SMT_SORT_ARRAY);
+
+  // We're an array; just generate a 'with' operation.
+  expr2tc index;
+  if (is_nil_expr(idx_expr)) {
+    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+          BigInt(idx));
+  } else {
+    index = idx_expr;
+  }
+
+  return ctx->mk_func_app(sort, SMT_FUNC_STORE,
+                          this, ctx->convert_ast(index), value);
+}
+
+smt_astt
+smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  assert(sort->id == SMT_SORT_ARRAY && "Select operation applied to non-array "
+         "scalar AST");
+
+  // Just apply a select operation to the current array. Index should be fixed.
+
+  // Guess the resulting sort. This could be a lot, lot better.
+  smt_sortt range_sort = NULL;
+  if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
+    range_sort = ctx->mk_sort(SMT_SORT_BOOL);
+  else
+    range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
+
+  return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
+                          this, ctx->convert_ast(idx));
+}
+
+smt_astt
+smt_ast::project(smt_convt *ctx __attribute__((unused)),
+    unsigned int idx __attribute__((unused))) const
+{
+  std::cerr << "Projecting from non-tuple based AST" << std::endl;
+  abort();
+}
