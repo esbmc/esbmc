@@ -167,10 +167,8 @@ namespace z3 {
 
         expr esbmc_int_val(int n, unsigned int width = 0);
         expr esbmc_int_val(unsigned n, unsigned int width = 0);
-#if __WORDSIZE != 32
-        expr esbmc_int_val(long unsigned int n, unsigned int width = 0);
-        expr esbmc_int_val(long int n, unsigned int width = 0);
-#endif
+        expr esbmc_int_val(uint64_t n, unsigned int width = 0);
+        expr esbmc_int_val(int64_t n, unsigned int width = 0);
         expr esbmc_int_val(char const * n, unsigned int width = 0);
 
         expr int_val(int n);
@@ -1560,8 +1558,8 @@ namespace z3 {
         return bv_val(n, width);
       }
     }
-#if __WORDSIZE != 32
-    inline expr context::esbmc_int_val(long int n, unsigned int width) {
+
+    inline expr context::esbmc_int_val(int64_t n, unsigned int width) {
       if (width == 0 || int_encoding) {
         Z3_ast r = Z3_mk_int64(m_ctx, n, *m_esbmc_int_sort);
         check_error();
@@ -1570,7 +1568,7 @@ namespace z3 {
         return bv_val(n, width);
       }
     }
-    inline expr context::esbmc_int_val(long unsigned int n, unsigned int width) {
+    inline expr context::esbmc_int_val(uint64_t n, unsigned int width) {
       if (width == 0 || int_encoding) {
         Z3_ast r = Z3_mk_unsigned_int64(m_ctx, n, *m_esbmc_int_sort);
         check_error();
@@ -1579,7 +1577,7 @@ namespace z3 {
         return bv_val(n, width);
       }
     }
-#endif
+
     inline expr context::esbmc_int_val(char const * n, unsigned int width) {
       if (width == 0 || int_encoding) {
         Z3_ast r = Z3_mk_numeral(m_ctx, n, *m_esbmc_int_sort);
