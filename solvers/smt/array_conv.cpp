@@ -37,7 +37,7 @@ array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr
   // And copy across it's valuation
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
-  destination->array_update_num = destination->array_update_num;
+  destination->array_update_num = source->array_update_num;
 
   // Return the resulting ast -- this gets shoved into the AST/expr cache.
   return destination;
