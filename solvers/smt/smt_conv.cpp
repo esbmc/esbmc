@@ -1778,6 +1778,15 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   return constant_array2tc(arr_type, fields);
 }
 
+const struct_union_data &
+smt_convt::get_type_def(const type2tc &type) const
+{
+
+  return (is_pointer_type(type))
+        ? *pointer_type_data
+        : dynamic_cast<const struct_union_data &>(*type.get());
+}
+
 // Default behaviours for SMT AST's
 
 smt_astt
