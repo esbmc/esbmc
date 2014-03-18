@@ -421,12 +421,12 @@ expr_handle_table:
   }
   case expr2t::constant_struct_id:
   {
-    a = tuple_create(expr);
+    a = tuple_api->tuple_create(expr);
     break;
   }
   case expr2t::constant_union_id:
   {
-    a = union_create(expr);
+    a = tuple_api->union_create(expr);
     break;
   }
   case expr2t::constant_array_id:
@@ -439,7 +439,7 @@ expr_handle_table:
       // Otherwise, mk_fresh.
       if ((is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))
           && !tuple_support)
-        a = tuple_fresh(sort);
+        a = tuple_api->tuple_fresh(sort);
       else
         a = mk_fresh(sort, "inf_array");
       break;
@@ -813,20 +813,20 @@ smt_convt::convert_sort(const type2tc &type)
     if (!tuple_support) {
       return new tuple_smt_sort(type);
     } else {
-      return mk_struct_sort(type);
+      return tuple_api->mk_struct_sort(type);
     }
   case type2t::union_id:
     if (!tuple_support) {
       return new tuple_smt_sort(type);
     } else {
-      return mk_union_sort(type);
+      return tuple_api->mk_union_sort(type);
     }
   case type2t::code_id:
   case type2t::pointer_id:
     if (!tuple_support) {
       return new tuple_smt_sort(pointer_struct);
     } else {
-      return mk_struct_sort(pointer_struct);
+      return tuple_api->mk_struct_sort(pointer_struct);
     }
   case type2t::unsignedbv_id:
     is_signed = false;
