@@ -70,6 +70,8 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
     tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
+  tuple_api = static_cast<tuple_iface*>(this);
+
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 

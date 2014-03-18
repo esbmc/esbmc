@@ -392,7 +392,7 @@ typedef const array_smt_ast * array_smt_astt;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget
+class smt_convt : public messaget, private tuple_iface
 {
 public:
   /** Shorthand for a vector of smt_ast's */
@@ -1121,6 +1121,8 @@ public:
    *  contained when a push occurred. On pop, the live_asts vector is reset
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
+
+  tuple_iface *tuple_api;
 
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
