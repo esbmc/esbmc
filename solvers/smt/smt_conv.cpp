@@ -1770,6 +1770,9 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   if (w > 10)
     w = 10;
 
+  if (w == 0)
+    w = config.ansi_c.int_width;
+
   constant_int2tc arr_size(index_type2(), BigInt(1 << w));
   type2tc arr_type = type2tc(new array_type2t(ar.subtype, arr_size, false));
   std::vector<expr2tc> fields;
