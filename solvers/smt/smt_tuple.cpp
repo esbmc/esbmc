@@ -5,6 +5,7 @@
 #include <base_type.h>
 
 #include "smt_conv.h"
+#include "smt_tuple.h"
 
 /** @file smt_tuple.cpp
  * So, the SMT-encoding-with-no-tuple-support. SMT itself doesn't support
