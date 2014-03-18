@@ -161,7 +161,7 @@ public:
   struct array_select {
     unsigned int src_array_update_num;
     expr2tc idx;
-    smt_ast *val;
+    smt_astt val;
   };
   std::vector<std::vector<std::list<struct array_select> > > array_values;
 
@@ -179,12 +179,12 @@ public:
     union {
       struct {
         unsigned int src_array_update_num;
-        const smt_ast *val;
+        smt_astt val;
       } w;
       struct {
         unsigned int src_array_update_true;
         unsigned int src_array_update_false;
-        const smt_ast *cond;
+        smt_astt cond;
       } i;
     } u;
   };

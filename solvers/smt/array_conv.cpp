@@ -205,7 +205,7 @@ array_convt<subclass>::mk_unbounded_select(const array_ast<subclass> *ma,
   array_indexes[ma->base_array_id].insert(real_idx);
 
   // Generate a new free variable
-  smt_ast *a = this->mk_fresh(ressort, "mk_unbounded_select");
+  smt_astt a = this->mk_fresh(ressort, "mk_unbounded_select");
 
   struct array_select sel;
   sel.src_array_update_num = ma->array_update_num;
