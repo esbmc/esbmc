@@ -27,7 +27,6 @@ array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr
 {
 
   assert(is_symbol2t(dst));
-  const symbol2t &the_sym = to_symbol2t(dst);
 
   const array_ast<subclass> *destination = array_downcast(this->convert_ast(dst));
   const array_ast<subclass> *source = src;
