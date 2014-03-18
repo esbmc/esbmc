@@ -74,7 +74,7 @@ cvc_convt::get_bv(const type2tc &t __attribute__((unused)), const smt_ast *a)
 
 expr2tc
 cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
-                          const smt_sort *elem_sort)
+                          const type2tc &elem_sort)
 {
   const cvc_smt_ast *carray = cvc_ast_downcast(array);
   unsigned int orig_w = array->sort->get_domain_width();
@@ -84,7 +84,7 @@ cvc_convt::get_array_elem(const smt_ast *array, uint64_t index,
   CVC4::Expr e = em.mkExpr(CVC4::kind::SELECT, carray->e, tmpa->e);
   free(tmpast);
 
-  cvc_smt_ast *tmpb = new cvc_smt_ast(elem_sort, e);
+  cvc_smt_ast *tmpb = new cvc_smt_ast(this, convert_sort(elem_sort), e);
   expr2tc result = get_bv(type2tc(), tmpb);
   free(tmpb);
 
@@ -232,7 +232,7 @@ cvc_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     abort();
   }
 
-  return new cvc_smt_ast(s, e);
+  return new cvc_smt_ast(this, s, e);
 }
 
 smt_sort *
@@ -292,7 +292,7 @@ cvc_convt::mk_smt_bvint(const mp_integer &theint, bool sign, unsigned int w)
   // assume CVC is going to cut the top off correctly.
   CVC4::BitVector bv = CVC4::BitVector(w, (uint64_t)theint.to_int64());
   CVC4::Expr e = em.mkConst(bv);
-  return new cvc_smt_ast(s, e);
+  return new cvc_smt_ast(this, s, e);
 }
 
 smt_ast *
@@ -300,7 +300,7 @@ cvc_convt::mk_smt_bool(bool val)
 {
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   CVC4::Expr e = em.mkConst(val);
-  return new cvc_smt_ast(s, e);
+  return new cvc_smt_ast(this, s, e);
 }
 
 smt_ast *
@@ -318,13 +318,13 @@ cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
   // from the symbol table. If not, time for a new name.
   if (sym_tab.isBound(name)) {
     CVC4::Expr e = sym_tab.lookup(name);
-    return new cvc_smt_ast(s, e);
+    return new cvc_smt_ast(this, s, e);
   }
 
   // Time for a new one.
   CVC4::Expr e = em.mkVar(name, sort->t); // "global", eh?
   sym_tab.bind(name, e, true);
-  return new cvc_smt_ast(s, e);
+  return new cvc_smt_ast(this, s, e);
 }
 
 smt_sort *
@@ -347,5 +347,5 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
   CVC4::BitVectorExtract ext(high, low);
   CVC4::Expr ext2 = em.mkConst(ext);
   CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
-  return new cvc_smt_ast(s, fin);
+  return new cvc_smt_ast(this, s, fin);
 }
