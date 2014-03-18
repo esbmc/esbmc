@@ -19,9 +19,10 @@ is_unbounded_array(const smt_sort *s)
     return false;
 }
 
+template <typename subclass>
 class array_ast : public smt_ast {
 public:
-#define array_downcast(x) static_cast<const array_ast*>(x)
+#define array_downcast(x) static_cast<const array_ast<subclass>*>(x)
 
   array_ast(smt_convt *ctx, const smt_sort *_s)
     : smt_ast(ctx, _s), symname(""), array_fields()
@@ -35,6 +36,13 @@ public:
   }
 
   virtual ~array_ast(void) { }
+
+  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt assign(smt_convt *ctx, const expr2tc &sym) const;
+  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
 
   std::string symname; // Only if this was produced from mk_smt_symbol.
 
@@ -65,12 +73,12 @@ public:
 
   // The api parts that this implements for smt_convt:
 
-  virtual const smt_ast *convert_array_equality(const expr2tc &a,
-                                                const expr2tc &b);
-  virtual const smt_ast *mk_select(const expr2tc &array, const expr2tc &idx,
+  smt_astt convert_array_assign(array_ast<subclass> *src, const expr2tc &dst);
+  const smt_ast *mk_select(const array_ast<subclass> *array, const expr2tc &idx,
                                    const smt_sort *ressort);
-  virtual const smt_ast *mk_store(const expr2tc &array, const expr2tc &idx,
-                                  const expr2tc &value,
+  virtual smt_astt mk_store(const array_ast<subclass> *array,
+                                  const expr2tc &idx,
+                                  smt_astt value,
                                   const smt_sort *ressort);
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
@@ -94,16 +102,16 @@ public:
 
   // Internal funk:
 
-  const smt_ast *mk_unbounded_select(const array_ast *array,
+  const smt_ast *mk_unbounded_select(const array_ast<subclass> *array,
                                      const expr2tc &idx,
                                      const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const array_ast *array,
+  const smt_ast *mk_unbounded_store(const array_ast<subclass> *array,
                                     const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-  smt_ast *unbounded_array_ite(const array_ast *cond,
-                                       const array_ast *true_arr,
-                                       const array_ast *false_arr,
+  smt_ast *unbounded_array_ite(const array_ast<subclass> *cond,
+                                       const array_ast<subclass> *true_arr,
+                                       const array_ast<subclass> *false_arr,
                                        const smt_sort *thesort);
 
   // Array constraint beating
@@ -123,13 +131,13 @@ public:
                                     const std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc,unsigned> &idx_map);
 
-  inline array_ast *new_ast(smt_sortt _s) {
-    return new array_ast(this, _s);
+  inline array_ast<subclass> *new_ast(smt_sortt _s) {
+    return new array_ast<subclass>(this, _s);
   }
 
-  inline array_ast *new_ast(smt_sortt _s,
+  inline array_ast<subclass> *new_ast(smt_sortt _s,
       const std::vector<const smt_ast *> &_a) {
-    return new array_ast(this, _s, _a);
+    return new array_ast<subclass>(this, _s, _a);
   }
 
   // Members
@@ -153,7 +161,7 @@ public:
   struct array_select {
     unsigned int src_array_update_num;
     expr2tc idx;
-    smt_ast *val;
+    smt_astt val;
   };
   std::vector<std::vector<std::list<struct array_select> > > array_values;
 
@@ -171,12 +179,12 @@ public:
     union {
       struct {
         unsigned int src_array_update_num;
-        const smt_ast *val;
+        smt_astt val;
       } w;
       struct {
         unsigned int src_array_update_true;
         unsigned int src_array_update_false;
-        const smt_ast *cond;
+        smt_astt cond;
       } i;
     } u;
   };

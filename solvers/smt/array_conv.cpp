@@ -22,34 +22,25 @@ array_convt<subclass>::~array_convt()
 }
 
 template <class subclass>
-smt_astt 
-array_convt<subclass>::convert_array_equality(const expr2tc &a, const expr2tc &b)
+smt_astt
+array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr2tc &dst)
 {
 
-  // Only support a scenario where the lhs (a) is a symbol.
-  assert(is_symbol2t(a) && "Malformed array equality");
+  assert(is_symbol2t(dst));
 
-  const array_ast *value;
+  array_ast<subclass> *destination =
+    const_cast<array_ast<subclass>*>(array_downcast(this->convert_ast(dst)));
+  const array_ast<subclass> *source = src;
 
-  // We want everything to go through the expression cache. Except when creating
-  // new arrays with either constant_array_of or constant_array.
-  if (is_constant_expr(b)) {
-    value = array_downcast(this->array_create(b));
-  } else {
-    value = array_downcast(this->convert_ast(b));
-  }
+  assign_array_symbol(destination->symname, source);
 
-  const symbol2t &sym = to_symbol2t(a);
-  std::string symname = sym.get_symbol_name();
+  // And copy across it's valuation
+  destination->array_fields = source->array_fields;
+  destination->base_array_id = source->base_array_id;
+  destination->array_update_num = source->array_update_num;
 
-  assign_array_symbol(symname, value);
-
-  // Also pump that into the smt cache.
-  typename subclass::smt_cache_entryt e = { a, value, this->ctx_level };
-  this->smt_cache.insert(e);
-
-  // Return a true value, because that assignment is always true.
-  return this->convert_ast(true_expr);
+  // Return the resulting ast -- this gets shoved into the AST/expr cache.
+  return destination;
 }
 
 template <class subclass>
@@ -62,7 +53,7 @@ array_convt<subclass>::fresh_array(smt_sortt ms, const std::string &name)
   smt_sortt range_sort =
     this->mk_sort(SMT_SORT_BV, ms->get_range_width(), false);
 
-  array_ast *mast = new_ast(ms);
+  array_ast<subclass> *mast = new_ast(ms);
   mast->symname = name;
   assign_array_symbol(name, mast);
 
@@ -109,11 +100,9 @@ array_convt<subclass>::fresh_array(smt_sortt ms, const std::string &name)
 
 template <class subclass>
 smt_astt 
-array_convt<subclass>::mk_select(const expr2tc &array, const expr2tc &idx,
+array_convt<subclass>::mk_select(const array_ast<subclass> *ma, const expr2tc &idx,
                          smt_sortt ressort)
 {
-  assert(ressort->id != SMT_SORT_ARRAY);
-  const array_ast *ma = array_downcast(this->convert_ast(array));
 
   if (is_unbounded_array(ma->sort))
     return mk_unbounded_select(ma, idx, ressort);
@@ -160,17 +149,16 @@ array_convt<subclass>::mk_select(const expr2tc &array, const expr2tc &idx,
 
 template <class subclass>
 smt_astt 
-array_convt<subclass>::mk_store(const expr2tc &array, const expr2tc &idx,
-                        const expr2tc &value, smt_sortt ressort)
+array_convt<subclass>::mk_store(const array_ast<subclass>* ma, const expr2tc &idx,
+                                smt_astt value, smt_sortt ressort)
 {
-  const array_ast *ma = array_downcast(this->convert_ast(array));
 
   if (is_unbounded_array(ma->sort))
-    return mk_unbounded_store(ma, idx, this->convert_ast(value), ressort);
+    return mk_unbounded_store(ma, idx, value, ressort);
 
   assert(ma->array_fields.size() != 0);
 
-  array_ast *mast =
+  array_ast<subclass> *mast =
     new_ast(ressort, ma->array_fields);
 
   // If this is a constant index, simple. If not, not.
@@ -178,16 +166,16 @@ array_convt<subclass>::mk_store(const expr2tc &array, const expr2tc &idx,
     const constant_int2t &intref = to_constant_int2t(idx);
     unsigned long intval = intref.constant_value.to_ulong();
     if (intval > ma->array_fields.size())
-      return this->convert_ast(array);
+      return ma;
 
     // Otherwise,
-    mast->array_fields[intval] = this->convert_ast(value);
+    mast->array_fields[intval] = value;
     return mast;
   }
 
   // Oh dear. We need to update /all the fields/ :(
   smt_astt real_idx = this->convert_ast(idx);
-  smt_astt real_value = this->convert_ast(value);
+  smt_astt real_value = value;
   smt_astt iteargs[3], idxargs[2];
   unsigned long dom_width = mast->sort->get_domain_width();
   smt_sortt bool_sort = this->mk_sort(SMT_SORT_BOOL);
@@ -212,7 +200,7 @@ array_convt<subclass>::mk_store(const expr2tc &array, const expr2tc &idx,
 
 template <class subclass>
 smt_astt 
-array_convt<subclass>::mk_unbounded_select(const array_ast *ma,
+array_convt<subclass>::mk_unbounded_select(const array_ast<subclass> *ma,
                                    const expr2tc &real_idx,
                                    smt_sortt ressort)
 {
@@ -220,7 +208,7 @@ array_convt<subclass>::mk_unbounded_select(const array_ast *ma,
   array_indexes[ma->base_array_id].insert(real_idx);
 
   // Generate a new free variable
-  smt_ast *a = this->mk_fresh(ressort, "mk_unbounded_select");
+  smt_astt a = this->mk_fresh(ressort, "mk_unbounded_select");
 
   struct array_select sel;
   sel.src_array_update_num = ma->array_update_num;
@@ -238,7 +226,7 @@ array_convt<subclass>::mk_unbounded_select(const array_ast *ma,
 
 template <class subclass>
 smt_astt 
-array_convt<subclass>::mk_unbounded_store(const array_ast *ma,
+array_convt<subclass>::mk_unbounded_store(const array_ast<subclass> *ma,
                                   const expr2tc &idx, smt_astt value,
                                   smt_sortt ressort)
 {
@@ -246,7 +234,7 @@ array_convt<subclass>::mk_unbounded_store(const array_ast *ma,
   array_indexes[ma->base_array_id].insert(idx);
 
   // More nuanced: allocate a new array representation.
-  array_ast *newarr = new_ast(ressort);
+  array_ast<subclass> *newarr = new_ast(ressort);
   newarr->base_array_id = ma->base_array_id;
   newarr->array_update_num = array_updates[ma->base_array_id].size();
 
@@ -277,9 +265,9 @@ array_convt<subclass>::array_ite(smt_astt _cond,
                          smt_astt _false_arr,
                          smt_sortt thesort)
 {
-  const array_ast *cond = array_downcast(_cond);
-  const array_ast *true_arr = array_downcast(_true_arr);
-  const array_ast *false_arr = array_downcast(_false_arr);
+  const array_ast<subclass> *cond = array_downcast(_cond);
+  const array_ast<subclass> *true_arr = array_downcast(_true_arr);
+  const array_ast<subclass> *false_arr = array_downcast(_false_arr);
 
   if (is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
@@ -287,7 +275,7 @@ array_convt<subclass>::array_ite(smt_astt _cond,
   // For each element, make an ite.
   assert(true_arr->array_fields.size() != 0 &&
          true_arr->array_fields.size() == false_arr->array_fields.size());
-  array_ast *mast = new_ast(thesort);
+  array_ast<subclass> *mast = new_ast(thesort);
   smt_astt args[3];
   args[0] = cond;
   unsigned long i;
@@ -304,9 +292,9 @@ array_convt<subclass>::array_ite(smt_astt _cond,
 
 template <class subclass>
 smt_ast *
-array_convt<subclass>::unbounded_array_ite(const array_ast *cond,
-                                   const array_ast *true_arr,
-                                   const array_ast *false_arr,
+array_convt<subclass>::unbounded_array_ite(const array_ast<subclass> *cond,
+                                   const array_ast<subclass> *true_arr,
+                                   const array_ast<subclass> *false_arr,
                                    smt_sortt thesort)
 {
   // Precondition for a lot of goo: that the two arrays are the same, at
@@ -314,7 +302,7 @@ array_convt<subclass>::unbounded_array_ite(const array_ast *cond,
   assert(true_arr->base_array_id == false_arr->base_array_id &&
          "ITE between two arrays with different bases are unsupported");
 
-  array_ast *newarr = new_ast(thesort);
+  array_ast<subclass> *newarr = new_ast(thesort);
   newarr->base_array_id = true_arr->base_array_id;
   newarr->array_update_num = array_updates[true_arr->base_array_id].size();
 
@@ -346,7 +334,7 @@ array_convt<subclass>::convert_array_of(const expr2tc &init_val,
 
   smt_sortt arr_sort = this->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
 
-  array_ast *mast = new_ast(arr_sort);
+  array_ast<subclass> *mast = new_ast(arr_sort);
 
   smt_astt init = this->convert_ast(init_val);
   if (!this->int_encoding && is_bool_type(init_val) && this->no_bools_in_arrays)
@@ -354,7 +342,7 @@ array_convt<subclass>::convert_array_of(const expr2tc &init_val,
 
   if (is_unbounded_array(arr_sort)) {
     std::string name = this->mk_fresh_name("array_of_unbounded::");
-    mast = static_cast<array_ast*>(fresh_array(arr_sort, name));
+    mast = static_cast<array_ast<subclass>*>(fresh_array(arr_sort, name));
     array_of_vals.insert(std::pair<unsigned, smt_astt >
                                   (mast->base_array_id, init));
   } else {
@@ -371,7 +359,7 @@ expr2tc
 array_convt<subclass>::get_array_elem(smt_astt a, uint64_t index,
                                       const type2tc &subtype)
 {
-  const array_ast *mast = array_downcast(a);
+  const array_ast<subclass> *mast = array_downcast(a);
 
   if (mast->base_array_id >= array_valuation.size()) {
     // This is an array that was not previously converted, therefore doesn't
@@ -662,3 +650,44 @@ array_convt<subclass>::add_initial_ackerman_constraints(
     }
   }
 }
+
+template <typename subclass>
+smt_astt
+array_ast<subclass>::eq(smt_convt *ctx __attribute__((unused)),
+                        smt_astt other __attribute__((unused))) const
+{
+  std::cerr << "Array equality encoded -- should have become an array assign?" << std::endl;
+  abort();
+}
+
+template <typename subclass>
+smt_astt
+array_ast<subclass>::assign(smt_convt *ctx, const expr2tc &sym) const
+{
+  array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
+  array_ast<subclass> *mutable_this = const_cast<array_ast<subclass>*>(this);
+  return actx->convert_array_assign(this, sym);
+}
+
+template <typename subclass>
+smt_astt
+array_ast<subclass>::update(smt_convt *ctx, smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr) const
+{
+  array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
+  if (is_nil_expr(idx_expr))
+    idx_expr = constant_int2tc(get_uint_type(sort->domain_width), BigInt(idx));
+
+  return actx->mk_store(this, idx_expr, value, sort);
+}
+
+template <typename subclass>
+smt_astt
+array_ast<subclass>::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
+  smt_sort *s = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
+  return actx->mk_select(this, idx, s);
+}
+

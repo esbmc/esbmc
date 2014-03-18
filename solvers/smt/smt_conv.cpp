@@ -227,6 +227,8 @@ smt_convt::make_conjunct(const ast_vec &v)
   smt_astt result;
   unsigned int i;
 
+  assert(v.size() != 0);
+
   // Funky on account of conversion from land...
   for (i = 0; i < v.size(); i++) {
     args[i] = v[i];
@@ -270,10 +272,22 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   if (value == false)
     a = invert_ast(a);
   assert_ast(a);
+}
+
+void
+smt_convt::convert_assign(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  smt_astt side2 = convert_ast(eq.side_2);
+  smt_astt result = side2->assign(this, eq.side_1);
+
+  // Put that into the smt cache, thus preserving the assigned symbols value.
+  smt_cache_entryt e = { eq.side_1, result, ctx_level };
+  smt_cache.insert(e);
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
-  if (is_equality2t(expr) && value) {
+  if (is_equality2t(expr)) {
     const equality2t eq = to_equality2t(expr);
     if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
       const symbol2t sym = to_symbol2t(eq.side_1);

@@ -264,6 +264,16 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     }
   }
 
+  // Construct canonical address-of this thing, and check the cache. The addrof
+  // expression this is sourced from might have ended up with the wrong type,
+  // alas.
+  address_of2tc new_addr_of(expr->type, expr);
+  if (caching) {
+    smt_cachet::const_iterator cache_result = smt_cache.find(new_addr_of);
+    if (cache_result != smt_cache.end())
+      return (cache_result->ast);
+  }
+
   // add object won't duplicate objs for identical exprs (it's a map)
   obj_num = pointer_logic.back().add_object(expr);
 
@@ -303,6 +313,12 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
     args[1] = output;
 
     assert_ast(args[0]->eq(this, args[1]));
+  }
+
+  // Insert canonical address-of this expression.
+  if (caching) {
+    struct smt_cache_entryt entry = { new_addr_of, a, ctx_level };
+    smt_cache.insert(entry);
   }
 
   return a;
@@ -530,7 +546,7 @@ smt_convt::init_addr_space_array(void)
   membs.push_back(obj0_end);
   constant_struct2tc addr0_tuple(addr_space_type, membs);
   symbol2tc addr0_range(addr_space_type, "__ESBMC_ptr_addr_range_0");
-  equality2tc addr0_range_eq(addr0_tuple, addr0_range);
+  equality2tc addr0_range_eq(addr0_range, addr0_tuple);
   assert_expr(addr0_range_eq);
 
   membs.clear();
@@ -538,7 +554,7 @@ smt_convt::init_addr_space_array(void)
   membs.push_back(obj1_end);
   constant_struct2tc addr1_tuple(addr_space_type, membs);
   symbol2tc addr1_range(addr_space_type, "__ESBMC_ptr_addr_range_1");
-  equality2tc addr1_range_eq(addr1_tuple, addr1_range);
+  equality2tc addr1_range_eq(addr1_range, addr1_tuple);
   assert_expr(addr1_range_eq);
 
   bump_addrspace_array(pointer_logic.back().get_null_object(), addr0_tuple);
@@ -561,6 +577,9 @@ smt_convt::init_addr_space_array(void)
   equality2tc zero_eq(zero_ptr, null_ptr_tuple);
   equality2tc null_eq(null_ptr, null_ptr_tuple);
   equality2tc invalid_eq(invalid_ptr, invalid_ptr_tuple);
+
+  null_ptr_ast = convert_ast(null_ptr_tuple);
+  invalid_ptr_ast = convert_ast(invalid_ptr_tuple);
 
   assert_expr(zero_eq);
   assert_expr(null_eq);
@@ -585,7 +604,7 @@ smt_convt::bump_addrspace_array(unsigned int idx, const expr2tc &val)
   ss2 << "__ESBMC_addrspace_arr_" << addr_space_sym_num.back();
   symbol2tc newname(addr_space_arr_type, ss2.str());
   equality2tc eq(newname, store);
-  assert_expr(eq);
+  convert_assign(eq);
   return;
 }
 
