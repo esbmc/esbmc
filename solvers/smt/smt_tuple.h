@@ -5,6 +5,7 @@
 
 // Abstract class defining the interface required for creating tuples.
 class tuple_iface {
+public:
   /** Create a sort representing a struct. i.e., a tuple. Ideally this should
    *  actually be part of the overridden tuple api, but due to history it isn't
    *  yet. If solvers don't support tuples, implement this to abort.
