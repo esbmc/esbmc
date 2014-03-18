@@ -1232,11 +1232,6 @@ smt_convt::fix_array_idx(const expr2tc &idx, const type2tc &arr_sort)
   if (domain_width == config.ansi_c.int_width)
     return idx;
 
-  if (domain_width == 0) {
-    // Infinite array?
-    domain_width = config.ansi_c.int_width;
-  }
-
   // Otherwise, we need to extract the lower bits out of this.
   return typecast2tc(get_uint_type(domain_width), idx);
 }
