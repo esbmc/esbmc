@@ -22,7 +22,7 @@ array_convt<subclass>::~array_convt()
 }
 
 template <class subclass>
-void 
+smt_astt
 array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr2tc &dst)
 {
 
@@ -34,12 +34,11 @@ array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr
 
   assign_array_symbol(destination->symname, source);
 
-  // Also pump that into the smt cache.
-  typename subclass::smt_cache_entryt e = { dst, destination, this->ctx_level };
-  this->smt_cache.insert(e);
+  // And copy across it's valuation
+  destination->array_fields = source->array_fields;
 
-  // Return a true value, because that assignment is always true.
-  return;
+  // Return the resulting ast -- this gets shoved into the AST/expr cache.
+  return destination;
 }
 
 template <class subclass>
@@ -660,13 +659,12 @@ array_ast<subclass>::eq(smt_convt *ctx __attribute__((unused)),
 }
 
 template <typename subclass>
-void
+smt_astt
 array_ast<subclass>::assign(smt_convt *ctx, const expr2tc &sym) const
 {
   array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
   array_ast<subclass> *mutable_this = const_cast<array_ast<subclass>*>(this);
-  actx->convert_array_assign(this, sym);
-  return;
+  return actx->convert_array_assign(this, sym);
 }
 
 template <typename subclass>

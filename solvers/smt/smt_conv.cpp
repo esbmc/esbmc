@@ -279,7 +279,11 @@ smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
   smt_astt side2 = convert_ast(eq.side_2);
-  side2->assign(this, eq.side_1);
+  smt_astt result = side2->assign(this, eq.side_1);
+
+  // Put that into the smt cache, thus preserving the assigned symbols value.
+  smt_cache_entryt e = { eq.side_1, result, ctx_level };
+  smt_cache.insert(e);
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.

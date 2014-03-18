@@ -57,12 +57,13 @@
  * slower approach works.
  */
 
-void
+smt_astt
 smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
 {
   smt_astt s = ctx->convert_ast(sym);
   smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
   ctx->assert_ast(ctx->mk_func_app(boolsort, SMT_FUNC_EQ, s, this));
+  return s;
 }
 
 void
@@ -174,7 +175,7 @@ smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
 }
 
-void
+smt_astt
 tuple_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
 {
   // If we're being assigned to something, populate all our vars first
@@ -188,7 +189,7 @@ tuple_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
 
   // Just copy across element data.
   destination->elements = elements;
-  return;
+  return target;
 }
 
 smt_astt 
@@ -220,7 +221,7 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-void
+smt_astt
 array_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
 {
   array_smt_astt target = to_array_ast(ctx->convert_ast(sym));
@@ -231,6 +232,7 @@ array_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
   // Just copy across element data.
   destination->elements = elements;
   destination->is_still_free = false;
+  return destination;
 }
 
 smt_astt 
