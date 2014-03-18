@@ -352,6 +352,9 @@ class array_smt_ast;
 typedef const tuple_smt_ast * tuple_smt_astt;
 typedef const array_smt_ast * array_smt_astt;
 
+// Pull in the tuple interface definitions. _after_ the AST defs.
+#include "smt_tuple.h"
+
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
  *  deconstructing ESBMC expressions down into SMT representation. See
