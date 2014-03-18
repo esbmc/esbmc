@@ -455,7 +455,7 @@ expr_handle_table:
 
     if (is_struct_type(arr.subtype) || is_union_type(arr.subtype) ||
         is_pointer_type(arr.subtype))
-      a = tuple_array_create(expr, domain);
+      a = tuple_api->tuple_array_create(expr, domain);
     else
       a = array_create(expr);
     break;
@@ -979,7 +979,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
     if (!tuple_support &&
         (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
       // Perform smt-tuple hacks.
-      return mk_tuple_symbol(expr);
+      return tuple_api->mk_tuple_symbol(expr);
     } else if (!tuple_support && is_array_type(expr)) {
       // Determine the range if we have arrays of arrays.
       const array_type2t &arr = to_array_type(expr->type);
@@ -989,7 +989,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       // If this is an array of structs, we have a tuple array sym.
       if (is_structure_type(range) || is_pointer_type(range)) {
-        return mk_tuple_array_symbol(expr);
+        return tuple_api->mk_tuple_array_symbol(expr);
       } else {
         ; // continue onwards;
       }
@@ -1740,7 +1740,7 @@ smt_convt::get(const expr2tc &expr)
   case type2t::struct_id:
   case type2t::union_id:
   case type2t::pointer_id:
-    return tuple_get(expr);
+    return tuple_api->tuple_get(expr);
   default:
     std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
               << ") in smt get" << std::endl;

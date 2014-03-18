@@ -688,7 +688,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
   }
 
   if (is_structure_type(base_init->type))
-    return tuple_array_of(base_init, array_size);
+    return tuple_api->tuple_array_of(base_init, array_size);
   else if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
