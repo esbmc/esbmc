@@ -781,13 +781,13 @@ smtlib_convt::push_ctx()
   smt_convt::push_ctx();
   temp_sym_count.push_back(temp_sym_count.back());
 
-  fprintf(out_stream, "(push)\n");
+  fprintf(out_stream, "(push 1)\n");
 }
 
 void
 smtlib_convt::pop_ctx()
 {
-  fprintf(out_stream, "(pop)\n");
+  fprintf(out_stream, "(pop 1)\n");
 
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
