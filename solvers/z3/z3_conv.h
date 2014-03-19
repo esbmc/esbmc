@@ -20,6 +20,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
 #include <vector>
 #include <string.h>
 
@@ -32,7 +33,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_convt: public smt_convt
+class z3_convt: public smt_convt, public tuple_iface
 {
 public:
   z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
