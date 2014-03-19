@@ -74,7 +74,6 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 {
   tuple_api = NULL;
 
-  set_tuple_iface(new smt_tuple_flattener(this, ns));
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 

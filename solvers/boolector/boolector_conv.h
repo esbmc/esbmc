@@ -4,6 +4,7 @@
 #include <namespace.h>
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 
 extern "C" {
 #include <boolector.h>

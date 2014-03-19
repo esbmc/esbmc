@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 
 #include <util/threeval.h>
 
