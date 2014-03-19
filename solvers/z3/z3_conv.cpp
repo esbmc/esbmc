@@ -823,10 +823,18 @@ z3_convt::tuple_create(const expr2tc &structdef)
 }
 
 smt_astt
-z3_convt::tuple_fresh(const smt_sort *s)
+z3_convt::union_create(const expr2tc &unidef __attribute__((unused)))
+{
+  std::cerr << "Union create in z3_convt called" << std::endl;
+  abort();
+}
+
+smt_astt
+z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
-  z3::expr output = ctx.fresh_const(NULL, zs->s);
+  const char *n = (name == "") ? NULL : name.c_str();
+  z3::expr output = ctx.fresh_const(n, zs->s);
   return new_ast(output, zs);
 }
 
@@ -904,6 +912,26 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   return new_ast(output, asort);
 }
 
+smt_astt
+z3_convt::mk_tuple_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt
+z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt
+z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
+{
+  return convert_array_of(init, domain_width);
+}
+
 expr2tc
 z3_convt::tuple_get(const expr2tc &expr)
 {
@@ -932,6 +960,12 @@ z3_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
+expr2tc
+z3_convt::tuple_array_get(const expr2tc &expr __attribute__((unused)))
+{
+  std::cerr << "Z3 tuple_array_get currently unimplemented" << std::endl;
+  abort();
+}
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
