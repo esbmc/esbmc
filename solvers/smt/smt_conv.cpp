@@ -72,8 +72,9 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
     tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
-  tuple_api = new smt_tuple_flattener(this, ns);
+  tuple_api = NULL;
 
+  set_tuple_iface(new smt_tuple_flattener(this, ns));
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
@@ -127,6 +128,12 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 
 smt_convt::~smt_convt(void)
 {
+}
+
+void
+smt_convt::set_tuple_iface(tuple_iface *iface)
+{
+  tuple_api = iface;
 }
 
 void

@@ -813,6 +813,8 @@ public:
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
   void init_addr_space_array(void);
+  /** Stores handle for the tuple interface. */
+  void set_tuple_iface(tuple_iface *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
