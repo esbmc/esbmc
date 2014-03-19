@@ -33,10 +33,11 @@ public:
    *  @return AST representing the created tuple */
   virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "") = 0;
 
-  /** Mangle constant_array / array_of data with tuple array type, into a
-   *  more convenient format, acceptable by tuple_array_create */
   // XXX XXX XXX docs gap
-  virtual smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain) = 0;
+  virtual smt_astt tuple_array_create(const type2tc &array_type,
+                              smt_astt *inputargs,
+                              bool const_array,
+                              smt_sortt domain) = 0;
 
   /** Create a potentially /large/ array of tuples. This is called when we
    *  encounter an array_of operation, with a very large array size, of tuple

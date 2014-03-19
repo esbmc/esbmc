@@ -482,7 +482,7 @@ smt_tuple_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 }
 
 smt_astt 
-smt_tuple_flattener::tuple_array_create1(const type2tc &array_type,
+smt_tuple_flattener::tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
                               bool const_array,
                               smt_sortt domain __attribute__((unused)))
@@ -636,31 +636,6 @@ smt_tuple_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array
   }
 
   return newsym;
-}
-
-smt_astt 
-smt_tuple_flattener::tuple_array_create(const expr2tc &expr, smt_sortt domain)
-{
-  // Take a constant_array2t or an array_of, and format the data from them into
-  // a form palatable to tuple_array_create.
-
-  if (is_constant_array_of2t(expr)) {
-    const constant_array_of2t &arr = to_constant_array_of2t(expr);
-    smt_astt arg = ctx->convert_ast(arr.initializer);
-
-    return tuple_array_create1(arr.type, &arg, true, domain);
-  } else {
-    assert(is_constant_array2t(expr));
-    const constant_array2t &arr = to_constant_array2t(expr);
-    smt_astt args[arr.datatype_members.size()];
-    unsigned int i = 0;
-    forall_exprs(it, arr.datatype_members) {
-      args[i] = ctx->convert_ast(*it);
-      i++;
-    }
-
-    return tuple_array_create1(arr.type, args, false, domain);
-  }
 }
 
 smt_sortt
