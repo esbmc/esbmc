@@ -392,7 +392,7 @@ typedef const array_smt_ast * array_smt_astt;
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget, private tuple_iface
+class smt_convt : public messaget
 {
 public:
   /** Shorthand for a vector of smt_ast's */
@@ -628,23 +628,7 @@ public:
    *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) =0;
 
-  /** Create a sort representing a struct. i.e., a tuple. Ideally this should
-   *  actually be part of the overridden tuple api, but due to history it isn't
-   *  yet. If solvers don't support tuples, implement this to abort.
-   *  @param type The struct type to create a tuple representation of.
-   *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
-
-  // XXX XXX XXX -- turn this into a formulation on top of structs.
-
-  /** Create a sort representing a union. i.e., a tuple. Ideally this should
-   *  actually be part of the overridden tuple api, but due to history it isn't
-   *  yet. If solvers don't support tuples, implement this to abort.
-   *  @param type The union type to create a tuple representation of.
-   *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_union_sort(const type2tc &type) = 0;
-
-  /** Create an 'extract' func app. Due to the fact that we can't currently
+    /** Create an 'extract' func app. Due to the fact that we can't currently
    *  encode integer constants as function arguments without serious faff,
    *  this can't be performed via the medium of mk_func_app. Hence, this api
    *  call.
@@ -672,48 +656,6 @@ public:
    *  @return Expression representation of the element */
   virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
                                  const type2tc &subtype) = 0;
-
-  /** @} */
-
-  /** @{
-   *  @name Tuple solver-converter API. */
-
-  /** Create a new tuple from a struct definition.
-   *  @param structdef A constant_struct2tc, describing all the members of the
-   *         tuple to create.
-   *  @return AST representing the created tuple */
-  virtual smt_astt tuple_create(const expr2tc &structdef);
-
-  virtual smt_astt union_create(const expr2tc &unidef);
-
-  /** Create a fresh tuple, with freely valued fields.
-   *  @param s Sort of the tuple to create
-   *  @return AST representing the created tuple */
-  virtual smt_astt tuple_fresh(smt_sortt s, std::string name = "");
-
-  /** Create an array of tuple values. Takes a type, and an array of ast's,
-   *  and creates an array where the elements have the value of the input asts.
-   *  Essentially a way of converting a constant_array2tc, with tuple type.
-   *  @param array_type Type of the array we will be creating, with size.
-   *  @param input_args Array of ASTs to form the elements of this array. Must
-   *         have the size indicated by array_type. (This method can't be
-   *         used to create nondeterministically or infinitely sized arrays).
-   *  @param const_array If true, only the first element of input_args is valid,
-   *         and is repeated for every element in this (fixed size) array.
-   *  @param domain Sort of the domain of this array. */
-  virtual smt_astt tuple_array_create1(const type2tc &array_type,
-                                            smt_astt *input_args,
-                                            bool const_array,
-                                            smt_sortt domain);
-
-  /** Create a potentially /large/ array of tuples. This is called when we
-   *  encounter an array_of operation, with a very large array size, of tuple
-   *  sort.
-   *  @param Expression of tuple value to populate this array with.
-   *  @param domain_width The size of array to create, in domain bits.
-   *  @return An AST representing an array of the tuple value, init_value. */
-  virtual smt_astt tuple_array_of(const expr2tc &init_value,
-                                        unsigned long domain_width);
 
   /** @} */
 
@@ -867,18 +809,6 @@ public:
   /** Mangle constant_array / array_of data with tuple array type, into a
    *  more convenient format, acceptable by tuple_array_create */
   smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain);
-  /** Convert a symbol2tc to a tuple_smt_ast */
-  smt_astt mk_tuple_symbol(const expr2tc &expr);
-  /** Like mk_tuple_symbol, but for arrays */
-  smt_astt mk_tuple_array_symbol(const expr2tc &expr);
-
-  /** Extract the assignment to a tuple-typed symbol from the SMT solvers
-   *  model */
-  virtual expr2tc tuple_get(const expr2tc &expr);
-  expr2tc tuple_get_rec(tuple_smt_astt tuple);
-  /** Extract the assignment to a tuple-array symbol from the SMT solvers
-   *  model */
-  expr2tc tuple_array_get(const expr2tc &expr);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */

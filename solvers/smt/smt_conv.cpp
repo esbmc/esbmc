@@ -9,6 +9,8 @@
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
 
+#include "smt_tuple_flat.h"
+
 // Helpers extracted from z3_convt.
 
 static std::string
@@ -70,7 +72,7 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
     tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
-  tuple_api = static_cast<tuple_iface*>(this);
+  tuple_api = new smt_tuple_flattener(this, ns);
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -810,11 +812,7 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::bool_id:
     return mk_sort(SMT_SORT_BOOL);
   case type2t::struct_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(type);
-    } else {
-      return tuple_api->mk_struct_sort(type);
-    }
+    return tuple_api->mk_struct_sort(type);
   case type2t::union_id:
     if (!tuple_support) {
       return new tuple_smt_sort(type);
@@ -823,11 +821,7 @@ smt_convt::convert_sort(const type2tc &type)
     }
   case type2t::code_id:
   case type2t::pointer_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(pointer_struct);
-    } else {
-      return tuple_api->mk_struct_sort(pointer_struct);
-    }
+    return tuple_api->mk_struct_sort(pointer_struct);
   case type2t::unsignedbv_id:
     is_signed = false;
     /* FALLTHROUGH */
@@ -1903,7 +1897,7 @@ smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
   operands.push_back(zero_val);
 
   constant_struct2tc strct(pointer_struct, operands);
-  return tuple_array_of(strct, array_width);
+  return tuple_api->tuple_array_of(strct, array_width);
 }
 
 // Default behaviours for SMT AST's

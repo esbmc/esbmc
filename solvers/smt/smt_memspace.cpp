@@ -254,7 +254,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
       if (!tuple_support) {
         type2tc t(new pointer_type2t(get_empty_type()));
         symbol2tc sym(t, symbol);
-        a = mk_tuple_symbol(sym);
+        a = tuple_api->mk_tuple_symbol(sym);
       } else {
         s = convert_sort(pointer_struct);
         a = mk_smt_symbol(symbol, s);
@@ -282,7 +282,7 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   if (!tuple_support) {
     type2tc t(new pointer_type2t(get_empty_type()));
     symbol2tc sym(t, symbol);
-    a = mk_tuple_symbol(sym);
+    a = tuple_api->mk_tuple_symbol(sym);
   } else {
     a = mk_smt_symbol(symbol, s);
   }
@@ -331,7 +331,7 @@ smt_convt::init_pointer_obj(unsigned int obj_num, const expr2tc &size)
     membs.push_back(constant_int2tc(machine_ptr, BigInt(obj_num)));
     membs.push_back(constant_int2tc(machine_ptr, BigInt(0)));
     constant_struct2tc ptr_val_s(pointer_struct, membs);
-    smt_astt ptr_val = tuple_create(ptr_val_s);
+    smt_astt ptr_val = tuple_api->tuple_create(ptr_val_s);
 
     type2tc ptr_loc_type = machine_ptr;
 
