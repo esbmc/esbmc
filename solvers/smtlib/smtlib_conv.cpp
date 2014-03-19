@@ -41,6 +41,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
     fprintf(out_stream, "(set-logic QF_AUFBV)\n");
     fprintf(out_stream, "(set-info :status unknown)\n");
+    fprintf(out_stream, "(set-option :produce-models true)\n");
 
     smt_post_init();
     return;
@@ -100,6 +101,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
 
   fprintf(out_stream, "(set-logic QF_AUFBV)\n");
   fprintf(out_stream, "(set-info :status unknown)\n");
+  fprintf(out_stream, "(set-option :produce-models true)\n");
 
   // Fetch solver name and version.
   fprintf(out_stream, "(get-info :name)\n");
