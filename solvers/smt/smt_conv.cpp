@@ -133,6 +133,7 @@ smt_convt::~smt_convt(void)
 void
 smt_convt::set_tuple_iface(tuple_iface *iface)
 {
+  assert(tuple_api == NULL && "set_tuple_iface should only be called once");
   tuple_api = iface;
 }
 
