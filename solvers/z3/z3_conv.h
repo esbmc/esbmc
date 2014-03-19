@@ -94,7 +94,6 @@ private:
   virtual smt_astt union_create(const expr2tc &unidef);
   virtual smt_astt tuple_fresh(const smt_sort *s, std::string name = "");
   virtual expr2tc tuple_get(const expr2tc &expr);
-  virtual expr2tc tuple_array_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,

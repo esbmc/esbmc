@@ -134,8 +134,8 @@ public:
   virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual expr2tc tuple_get(const expr2tc &expr);
-  virtual expr2tc tuple_array_get(const expr2tc &expr);
 
+  expr2tc tuple_array_get(const expr2tc &expr);
   expr2tc tuple_get_rec(tuple_smt_astt tuple);
   virtual smt_astt tuple_array_create(const type2tc &array_type,
                                             smt_astt *input_args,

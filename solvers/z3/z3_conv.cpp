@@ -963,13 +963,6 @@ z3_convt::tuple_get(const expr2tc &expr)
   return outstruct;
 }
 
-expr2tc
-z3_convt::tuple_array_get(const expr2tc &expr __attribute__((unused)))
-{
-  std::cerr << "Z3 tuple_array_get currently unimplemented" << std::endl;
-  abort();
-}
-
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)
 {
