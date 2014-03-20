@@ -12,6 +12,31 @@ typedef const tuple_sym_smt_ast *tuple_sym_smt_astt;
 typedef const array_sym_smt_ast *array_sym_smt_astt;
 typedef const tuple_smt_sort *tuple_smt_sortt;
 
+/** Storage for flattened tuple sorts.
+ *  When flattening tuples (and arrays of them) down to SMT, we need to store
+ *  additional type data. This sort is used in tuple code to record that data.
+ *  @see smt_tuple.cpp */
+class tuple_smt_sort : public smt_sort
+{
+public:
+  /** Actual type (struct or array of structs) of the tuple that's been
+   * flattened */
+  const type2tc thetype;
+
+  tuple_smt_sort(const type2tc &type)
+    : smt_sort(SMT_SORT_STRUCT, 0, 0), thetype(type)
+  {
+  }
+
+  tuple_smt_sort(const type2tc &type, unsigned long range_width,
+                 unsigned long dom_width)
+    : smt_sort(SMT_SORT_ARRAY, range_width, dom_width), thetype(type)
+  {
+  }
+
+  virtual ~tuple_smt_sort() { }
+};
+
 /** Function app representing a tuple sorted value.
  *  This AST represents any kind of SMT function that results in something of
  *  a tuple sort. As documented in smt_tuple.c, the result of any kind of
