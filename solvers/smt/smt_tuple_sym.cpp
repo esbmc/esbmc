@@ -365,6 +365,31 @@ array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
   }
 }
 
+void
+array_sym_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+{
+
+  // We have two tuple_sym_smt_asts and need to call assign on all of their
+  // components.
+  array_sym_smt_astt src = this;
+  array_sym_smt_astt dst = to_array_sym_ast(sym);
+  tuple_smt_sortt ts = to_tuple_sort(sort);
+  const array_type2t &arrtype = to_array_type(ts->thetype);
+  const struct_union_data &data = ctx->get_type_def(arrtype.subtype);
+
+  unsigned int i = 0;
+  forall_types(it, data.members) {
+    type2tc tmparrtype(new array_type2t(*it, arrtype.array_size,
+          arrtype.size_is_infinite));
+    smt_astt source = src->project(ctx, i);
+    smt_astt destination = dst->project(ctx, i);
+    source->assign(ctx, destination);
+    i++;
+  }
+
+  return;
+}
+
 smt_astt
 smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
 {

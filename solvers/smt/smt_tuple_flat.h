@@ -221,6 +221,7 @@ public:
                                 expr2tc idx_expr = expr2tc()) const;
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
 };
 
 inline tuple_sym_smt_astt
