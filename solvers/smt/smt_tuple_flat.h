@@ -1,11 +1,11 @@
 #include "smt_conv.h"
 #include <namespace.h>
 
-class tuple_smt_ast;
-class array_smt_ast;
+class tuple_node_smt_ast;
+class array_node_smt_ast;
 class tuple_smt_sort;
-typedef const tuple_smt_ast *tuple_smt_astt;
-typedef const array_smt_ast *array_smt_astt;
+typedef const tuple_node_smt_ast *tuple_node_smt_astt;
+typedef const array_node_smt_ast *array_node_smt_astt;
 typedef const tuple_smt_sort *tuple_smt_sortt;
 
 /** Function app representing a tuple sorted value.
@@ -20,15 +20,15 @@ typedef const tuple_smt_sort *tuple_smt_sortt;
  *  tuple creating method has been called.
  *
  *  @see smt_tuple.c */
-class tuple_smt_ast : public smt_ast {
+class tuple_node_smt_ast : public smt_ast {
 public:
   /** Primary constructor.
    *  @param s The sort of the tuple, of type tuple_smt_sort.
    *  @param _name The symbol prefix of the variables representing this tuples
    *               value. */
-  tuple_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+  tuple_node_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
     : smt_ast(ctx, s), name(_name) { }
-  virtual ~tuple_smt_ast() { }
+  virtual ~tuple_node_smt_ast() { }
 
   /** The symbol prefix of the variables representing this tuples value, as a
    *  string (i.e., no associated type). */
@@ -49,10 +49,10 @@ public:
   void make_free(smt_convt *ctx);
 };
 
-inline tuple_smt_astt
+inline tuple_node_smt_astt
 to_tuple_ast(smt_astt a)
 {
-  tuple_smt_astt ta = dynamic_cast<tuple_smt_astt>(a);
+  tuple_node_smt_astt ta = dynamic_cast<tuple_node_smt_astt>(a);
   assert(ta != NULL && "Tuple AST mismatch");
   return ta;
 }
@@ -65,11 +65,11 @@ to_tuple_sort(smt_sortt a)
   return ta;
 }
 
-class array_smt_ast : public tuple_smt_ast
+class array_node_smt_ast : public tuple_node_smt_ast
 {
 public:
-  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name);
-  virtual ~array_smt_ast() { }
+  array_node_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name);
+  virtual ~array_node_smt_ast() { }
 
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
@@ -84,18 +84,18 @@ public:
   bool is_still_free;
 };
 
-inline array_smt_astt
+inline array_node_smt_astt
 to_array_ast(smt_astt a)
 {
-  array_smt_astt ta = dynamic_cast<array_smt_astt>(a);
+  array_node_smt_astt ta = dynamic_cast<array_node_smt_astt>(a);
   assert(ta != NULL && "Tuple-Array AST mismatch");
   return ta;
 }
 
 extern inline
-array_smt_ast::array_smt_ast(smt_convt *ctx, smt_sortt s,
+array_node_smt_ast::array_node_smt_ast(smt_convt *ctx, smt_sortt s,
     const std::string &_name)
-    : tuple_smt_ast(ctx, s, _name) {
+    : tuple_node_smt_ast(ctx, s, _name) {
   // A new array is inherently fresh; thus field each element slot with
   // a fresh new array.
 
@@ -113,12 +113,12 @@ array_smt_ast::array_smt_ast(smt_convt *ctx, smt_sortt s,
     smt_sortt newsort = ctx->convert_sort(new_arrtype);
 
     // Normal elements are just normal arrays. Everything else requires
-    // a recursive array_smt_ast.
+    // a recursive array_node_smt_ast.
     if (is_tuple_ast_type(*it)) {
-      elements[i] = new array_smt_ast(ctx, newsort,
+      elements[i] = new array_node_smt_ast(ctx, newsort,
                               _name + "." + strct.member_names[i].as_string());
     } else {
-      elements[i] = ctx->mk_fresh(newsort, "array_smt_ast");
+      elements[i] = ctx->mk_fresh(newsort, "array_node_smt_ast");
     }
 
     i++;
@@ -142,7 +142,7 @@ public:
   virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
   virtual expr2tc tuple_get(const expr2tc &expr);
 
-  expr2tc tuple_get_rec(tuple_smt_astt tuple);
+  expr2tc tuple_get_rec(tuple_node_smt_astt tuple);
   virtual smt_astt tuple_array_create(const type2tc &array_type,
                                             smt_astt *input_args,
                                             bool const_array,
