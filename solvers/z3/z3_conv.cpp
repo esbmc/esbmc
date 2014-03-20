@@ -735,7 +735,8 @@ z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+  return new z3_smt_sort(
+      is_array_type(type) ? SMT_SORT_ARRAY : SMT_SORT_STRUCT, s, type);
 }
 
 smt_sort *
