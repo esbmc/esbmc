@@ -293,9 +293,9 @@ public:
    *  for some special cases up to the backend, there may be optimisations made
    *  for array or tuple assigns, and so forth.
    *  @param ctx SMT context to do the assignment in.
-   *  @param name Symbol to assign to
+   *  @param sym Symbol to assign to
    *  @return AST representing the assigned symbol */
-  virtual smt_astt assign(smt_convt *ctx, const expr2tc &sym) const;
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
 
   /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.

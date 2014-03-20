@@ -38,7 +38,7 @@ public:
   virtual ~array_ast(void) { }
 
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt assign(smt_convt *ctx, const expr2tc &sym) const;
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
@@ -73,7 +73,7 @@ public:
 
   // The api parts that this implements for smt_convt:
 
-  smt_astt convert_array_assign(array_ast<subclass> *src, const expr2tc &dst);
+  void convert_array_assign(array_ast<subclass> *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast<subclass> *array, const expr2tc &idx,
                                    const smt_sort *ressort);
   virtual smt_astt mk_store(const array_ast<subclass> *array,

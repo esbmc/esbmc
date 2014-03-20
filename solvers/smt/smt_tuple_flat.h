@@ -68,7 +68,7 @@ public:
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt assign(smt_convt *ctx, const expr2tc &sym) const;
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;
@@ -103,7 +103,7 @@ public:
   virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
       smt_astt falseop) const;
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt assign(smt_convt *ctx, const expr2tc &sym) const;
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
                                 expr2tc idx_expr = expr2tc()) const;

@@ -22,14 +22,13 @@ array_convt<subclass>::~array_convt()
 }
 
 template <class subclass>
-smt_astt
-array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr2tc &dst)
+void
+array_convt<subclass>::convert_array_assign(array_ast<subclass> *src,
+                                            smt_astt sym)
 {
 
-  assert(is_symbol2t(dst));
-
   array_ast<subclass> *destination =
-    const_cast<array_ast<subclass>*>(array_downcast(this->convert_ast(dst)));
+    const_cast<array_ast<subclass>*>(array_downcast(sym));
   const array_ast<subclass> *source = src;
 
   assign_array_symbol(destination->symname, source);
@@ -38,9 +37,7 @@ array_convt<subclass>::convert_array_assign(array_ast<subclass> *src, const expr
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
   destination->array_update_num = source->array_update_num;
-
-  // Return the resulting ast -- this gets shoved into the AST/expr cache.
-  return destination;
+  return;
 }
 
 template <class subclass>
@@ -661,12 +658,13 @@ array_ast<subclass>::eq(smt_convt *ctx __attribute__((unused)),
 }
 
 template <typename subclass>
-smt_astt
-array_ast<subclass>::assign(smt_convt *ctx, const expr2tc &sym) const
+void
+array_ast<subclass>::assign(smt_convt *ctx, smt_astt sym) const
 {
   array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
   array_ast<subclass> *mutable_this = const_cast<array_ast<subclass>*>(this);
-  return actx->convert_array_assign(this, sym);
+  actx->convert_array_assign(this, sym);
+  return sym;
 }
 
 template <typename subclass>

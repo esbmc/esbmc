@@ -154,13 +154,13 @@ array_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   return result_sym;
 }
 
-smt_astt
-tuple_node_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
+void
+tuple_node_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
   // If we're being assigned to something, populate all our vars first
   const_cast<tuple_node_smt_ast*>(this)->make_free(ctx);
 
-  tuple_node_smt_astt target = to_tuple_node_ast(ctx->convert_ast(expr));
+  tuple_node_smt_astt target = to_tuple_node_ast(sym);
   assert(target->elements.size() == 0 &&
         "tuple smt assign with elems populated");
 
@@ -168,7 +168,6 @@ tuple_node_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
 
   // Just copy across element data.
   destination->elements = elements;
-  return target;
 }
 
 smt_astt 
@@ -200,10 +199,11 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   return ctx->make_conjunct(eqs);
 }
 
-smt_astt
-array_node_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
+void
+array_node_smt_ast::assign(smt_convt *ctx __attribute__((unused)),
+                           smt_astt sym) const
 {
-  array_node_smt_astt target = to_array_node_ast(ctx->convert_ast(sym));
+  array_node_smt_astt target = to_array_node_ast(sym);
 
   assert(target->is_still_free && "Non-free array ast assigned");
   array_node_smt_ast *destination = const_cast<array_node_smt_ast *>(target);
@@ -211,7 +211,6 @@ array_node_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
   // Just copy across element data.
   destination->elements = elements;
   destination->is_still_free = false;
-  return destination;
 }
 
 smt_astt 

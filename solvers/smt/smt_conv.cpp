@@ -289,11 +289,12 @@ void
 smt_convt::convert_assign(const expr2tc &expr)
 {
   const equality2t &eq = to_equality2t(expr);
+  smt_astt side1 = convert_ast(eq.side_1);
   smt_astt side2 = convert_ast(eq.side_2);
-  smt_astt result = side2->assign(this, eq.side_1);
+  side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the assigned symbols value.
-  smt_cache_entryt e = { eq.side_1, result, ctx_level };
+  smt_cache_entryt e = { eq.side_1, side1, ctx_level };
   smt_cache.insert(e);
 
   // Workaround for the fact that we don't have a good way of encoding unions
@@ -1926,12 +1927,10 @@ smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
 
 // Default behaviours for SMT AST's
 
-smt_astt
-smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
+void
+smt_ast::assign(smt_convt *ctx, smt_astt sym) const
 {
-  smt_astt s = ctx->convert_ast(sym);
-  ctx->assert_ast(eq(ctx, s));
-  return s;
+  ctx->assert_ast(eq(ctx, sym));
 }
 
 smt_astt
