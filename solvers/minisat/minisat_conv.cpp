@@ -70,7 +70,6 @@ minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
 : cnf_convt(true, int_encoding, _ns, is_cpp, false, true, true),
   solver(), options(_opts), false_asserted(false)
 {
-  set_tuple_iface(new smt_tuple_node_flattener(this, ns));
 }
 
 minisat_convt::~minisat_convt(void)

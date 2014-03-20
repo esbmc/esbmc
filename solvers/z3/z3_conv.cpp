@@ -70,9 +70,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
-  // Set ourselves as the smt interface
-  set_tuple_iface(static_cast<tuple_iface*>(this));
-
   z3_convt::init_addr_space_array();
 }
 

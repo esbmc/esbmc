@@ -23,8 +23,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   temp_sym_count.push_back(1);
   std::string cmd;
 
-  set_tuple_iface(new smt_tuple_node_flattener(this, ns));
-
   // We may be being instructed to just output to a file.
   cmd = options.get_option("output");
   if (cmd != "") {

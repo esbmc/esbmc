@@ -26,8 +26,6 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
   } else {
     debugfile = NULL;
   }
-
-  set_tuple_iface(new smt_tuple_node_flattener(this, ns));
 }
 
 boolector_convt::~boolector_convt(void)

@@ -287,6 +287,11 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
   tuple_iface *tuple_api = NULL;
   smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api);
 
+  if (tuple_api != NULL)
+    ctx->set_tuple_iface(tuple_api);
+  else
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+
   ctx->smt_post_init();
   return ctx;
 }
