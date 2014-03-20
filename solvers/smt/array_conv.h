@@ -38,6 +38,7 @@ public:
   virtual ~array_ast(void) { }
 
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
@@ -93,8 +94,8 @@ public:
   virtual smt_ast *fresh_array(const smt_sort *ms,
                                const std::string &name);
   smt_ast *array_ite(const smt_ast *cond,
-                                   const smt_ast *true_arr,
-                                   const smt_ast *false_arr,
+                                   const array_ast<subclass> *true_arr,
+                                   const array_ast<subclass> *false_arr,
                                    const smt_sort *thesort);
   expr2tc get_array_elem(const smt_ast *a, uint64_t index,
                          const type2tc &subtype);

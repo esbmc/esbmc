@@ -257,14 +257,11 @@ array_convt<subclass>::mk_unbounded_store(const array_ast<subclass> *ma,
 
 template <class subclass>
 smt_ast *
-array_convt<subclass>::array_ite(smt_astt _cond,
-                         smt_astt _true_arr,
-                         smt_astt _false_arr,
+array_convt<subclass>::array_ite(smt_astt cond,
+                         const array_ast<subclass> *true_arr,
+                         const array_ast<subclass> *false_arr,
                          smt_sortt thesort)
 {
-  const array_ast<subclass> *cond = array_downcast(_cond);
-  const array_ast<subclass> *true_arr = array_downcast(_true_arr);
-  const array_ast<subclass> *false_arr = array_downcast(_false_arr);
 
   if (is_unbounded_array(true_arr->sort))
     return unbounded_array_ite(cond, true_arr, false_arr, thesort);
@@ -687,3 +684,11 @@ array_ast<subclass>::select(smt_convt *ctx, const expr2tc &idx) const
   return actx->mk_select(this, idx, s);
 }
 
+
+template <typename subclass>
+smt_astt
+array_ast<subclass>::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+{
+  array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
+  return actx->array_ite(cond, this, falseop, sort);
+}
