@@ -20,7 +20,6 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
   assert(!int_encoding && "Integer encoding mode for CVC unimplemented");
 
   set_tuple_iface(new smt_tuple_node_flattener(this, ns));
-  smt_post_init();
 }
 
 cvc_convt::~cvc_convt()

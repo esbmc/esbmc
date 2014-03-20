@@ -71,7 +71,6 @@ minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
   solver(), options(_opts), false_asserted(false)
 {
   set_tuple_iface(new smt_tuple_node_flattener(this, ns));
-  smt_post_init();
 }
 
 minisat_convt::~minisat_convt(void)

@@ -44,7 +44,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     fprintf(out_stream, "(set-logic QF_AUFBV)\n");
     fprintf(out_stream, "(set-info :status unknown)\n");
 
-    smt_post_init();
     return;
   }
 
@@ -144,8 +143,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
   solver_version = val.data;
   delete smtlib_output;
-
-  smt_post_init();
 }
 
 smtlib_convt::~smtlib_convt()

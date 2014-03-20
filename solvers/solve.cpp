@@ -286,5 +286,7 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
 {
   tuple_iface *tuple_api = NULL;
   smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api);
+
+  ctx->smt_post_init();
   return ctx;
 }

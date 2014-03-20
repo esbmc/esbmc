@@ -30,7 +30,6 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
   env = msat_create_env(cfg);
 
   set_tuple_iface(new smt_tuple_node_flattener(this, ns));
-  smt_post_init();
 }
 
 mathsat_convt::~mathsat_convt(void)

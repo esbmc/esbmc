@@ -73,7 +73,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
   // Set ourselves as the smt interface
   set_tuple_iface(static_cast<tuple_iface*>(this));
 
-  smt_post_init();
   z3_convt::init_addr_space_array();
 }
 
