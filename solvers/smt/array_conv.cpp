@@ -31,8 +31,6 @@ array_convt<subclass>::convert_array_assign(const array_ast<subclass> *src,
     const_cast<array_ast<subclass>*>(array_downcast(sym));
   const array_ast<subclass> *source = src;
 
-  assign_array_symbol(destination->symname, source);
-
   // And copy across it's valuation
   destination->array_fields = source->array_fields;
   destination->base_array_id = source->base_array_id;
@@ -52,7 +50,6 @@ array_convt<subclass>::fresh_array(smt_sortt ms, const std::string &name)
 
   array_ast<subclass> *mast = new_ast(ms);
   mast->symname = name;
-  assign_array_symbol(name, mast);
 
   if (is_unbounded_array(mast->sort)) {
     // Don't attempt to initialize. Store the fact that we've allocated a

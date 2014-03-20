@@ -40,9 +40,6 @@ public:
 
   virtual void setto(literalt a, bool val);
 
-  // Implemented by solver for arrays:
-  virtual void assign_array_symbol(const std::string &str, const smt_ast *a);
-
   // Internal gunk
 
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);

@@ -66,8 +66,6 @@ public:
   ~array_convt();
 
   // Things that the user must implement:
-  virtual void assign_array_symbol(const std::string &name,
-                                   const smt_ast *val) = 0;
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
   virtual expr2tc get_bool(const smt_ast *a) = 0;
   // And the get_bv and get_bool methods.
