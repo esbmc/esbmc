@@ -151,3 +151,45 @@ public:
   smt_convt *ctx;
   const namespacet &ns;
 };
+
+class tuple_sym_smt_ast : public smt_ast {
+public:
+  /** Primary constructor.
+   *  @param s The sort of the tuple, of type tuple_smt_sort.
+   *  @param _name The symbol prefix of the variables representing this tuples
+   *               value. */
+  tuple_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : smt_ast(ctx, s), name(_name) { }
+  virtual ~tuple_sym_smt_ast() { }
+
+  /** The symbol prefix of the variables representing this tuples value, as a
+   *  string (i.e., no associated type). */
+  const std::string name;
+
+
+  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
+      smt_astt falseop) const;
+  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+};
+
+class array_sym_smt_ast : public tuple_sym_smt_ast
+{
+public:
+  array_sym_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
+    : tuple_sym_smt_ast(ctx, s, _name) { }
+  virtual ~array_sym_smt_ast() { }
+
+  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
+      smt_astt falseop) const;
+  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt update(smt_convt *ctx, smt_astt value,
+                                unsigned int idx,
+                                expr2tc idx_expr = expr2tc()) const;
+  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
+  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
+};
