@@ -67,7 +67,7 @@ minisat_convt::lcnf(const bvt &bv)
 
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
-: cnf_convt(true, int_encoding, _ns, is_cpp, true, true),
+: cnf_convt(int_encoding, _ns, is_cpp, true, true),
   solver(), options(_opts), false_asserted(false)
 {
 }

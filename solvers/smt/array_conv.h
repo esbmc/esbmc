@@ -59,7 +59,7 @@ public:
   struct array_select;
   struct array_with;
 
-  array_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
+  array_convt(bool int_encoding, const namespacet &_ns,
               bool is_cpp, bool bools_in_arrs,
               bool can_init_inf_arrs);
   ~array_convt();

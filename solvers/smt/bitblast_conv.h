@@ -39,7 +39,7 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  bitblast_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
+  bitblast_convt(bool int_encoding, const namespacet &_ns,
                  bool is_cpp, bool bools_in_arrs,
                  bool can_init_inf_arrs);
   ~bitblast_convt();

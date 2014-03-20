@@ -369,9 +369,6 @@ public:
   /** Primary constructor. After construction, smt_post_init must be called
    *  before the object is used as a solver converter.
    *
-   *  @param enable_cache Whether or not to store a map of exprs to smt_ast's
-   *         in a cache, and return the cached smt_ast if we attempt to convert
-   *         an expr a second time.
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
@@ -385,7 +382,7 @@ public:
    *         with pointer tracking modelling arrays we assert that the elements
    *         we use were initialized to a particular value. Ugly, but works on
    *         various solvers. */
-  smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
+  smt_convt(bool int_encoding, const namespacet &_ns,
             bool is_cpp, bool no_bools_in_arrays,
             bool can_init_inf_arrs);
   ~smt_convt();

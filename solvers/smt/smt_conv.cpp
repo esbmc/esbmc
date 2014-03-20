@@ -65,10 +65,10 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
+smt_convt::smt_convt(bool intmode, const namespacet &_ns,
                      bool is_cpp, bool _nobools,
                      bool can_init_inf_arrays)
-  : ctx_level(0), caching(enable_cache), int_encoding(intmode), ns(_ns),
+  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns),
     no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
