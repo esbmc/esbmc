@@ -880,14 +880,6 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   z3::expr output;
   const array_type2t &arrtype = to_array_type(arr_type);
 
-  const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
-
-  assert(is_constant_int2t(arrtype.array_size) &&
-         "array_of sizes should be constant");
-
-  int64_t size;
-  size = sz.as_long();
-
   if (const_array) {
     z3::expr value, index;
     z3::sort array_type, dom_type;
@@ -909,6 +901,15 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
     z3::sort z3_array_type;
     z3::expr int_cte, val_cte;
     z3::sort domain_sort;
+
+    assert(!is_nil_expr(arrtype.array_size) && "Non-const array-of's can't be infinitely sized");
+    const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
+
+    assert(is_constant_int2t(arrtype.array_size) &&
+           "array_of sizes should be constant");
+
+    int64_t size;
+    size = sz.as_long();
 
     z3_array_type = z3_sort_downcast(convert_sort(arr_type))->s;
     domain_sort = z3_array_type.array_domain();
