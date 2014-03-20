@@ -3,9 +3,13 @@
 
 class tuple_node_smt_ast;
 class array_node_smt_ast;
+class tuple_sym_smt_ast;
+class array_sym_smt_ast;
 class tuple_smt_sort;
 typedef const tuple_node_smt_ast *tuple_node_smt_astt;
 typedef const array_node_smt_ast *array_node_smt_astt;
+typedef const tuple_sym_smt_ast *tuple_sym_smt_astt;
+typedef const array_sym_smt_ast *array_sym_smt_astt;
 typedef const tuple_smt_sort *tuple_smt_sortt;
 
 /** Function app representing a tuple sorted value.
@@ -193,6 +197,22 @@ public:
   virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 };
+
+inline tuple_sym_smt_astt
+to_tuple_sym_ast(smt_astt a)
+{
+  tuple_sym_smt_astt ta = dynamic_cast<tuple_sym_smt_astt>(a);
+  assert(ta != NULL && "Tuple AST mismatch");
+  return ta;
+}
+
+inline array_sym_smt_astt
+to_array_sym_ast(smt_astt a)
+{
+  array_sym_smt_astt ta = dynamic_cast<array_sym_smt_astt>(a);
+  assert(ta != NULL && "Tuple-Array AST mismatch");
+  return ta;
+}
 
 class smt_tuple_sym_flattener : public tuple_iface
 {
