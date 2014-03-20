@@ -230,9 +230,9 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
 }
 
 smt_convt *
-create_solver_factory(const std::string &solver_name, bool is_cpp,
-                      bool int_encoding, const namespacet &ns,
-                      const optionst &options)
+create_solver_factory1(const std::string &solver_name, bool is_cpp,
+                       bool int_encoding, const namespacet &ns,
+                       const optionst &options)
 {
   if (solver_name == "")
     // Pick one based on options.
@@ -263,4 +263,14 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
               << std::endl;
     abort();
   }
+}
+
+
+smt_convt *
+create_solver_factory(const std::string &solver_name, bool is_cpp,
+                      bool int_encoding, const namespacet &ns,
+                      const optionst &options)
+{
+  smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options);
+  return ctx;
 }
