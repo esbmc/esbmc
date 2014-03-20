@@ -685,7 +685,7 @@ smt_astt
 array_ast<subclass>::select(smt_convt *ctx, const expr2tc &idx) const
 {
   array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
-  smt_sort *s = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
+  smt_sortt s = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false);
   return actx->mk_select(this, idx, s);
 }
 
