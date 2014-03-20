@@ -25,12 +25,6 @@ USE_SOLVER_MINISAT=1
 USE_SOLVER_MATHSAT=1
 USE_SOLVER_CVC=1
 
-# MetaSMT supports the above solvers via its own interface, as well as some
-# more, listed below.
-#USE_SOLVER_METASMT=1
-#  USE_SOLVER_SWORD=1
-#  USE_SOLVER_STP=1
-
 endif #EXTERN_ESBMC_CONFIG
 
 # If no OS or patform was specified, try to guess

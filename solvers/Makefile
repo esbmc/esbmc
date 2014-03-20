@@ -13,11 +13,6 @@ OBJS+= z3/$(OBJDIR)/z3.o
 DIRS+= z3
 endif
 
-ifdef METASMT
-OBJS+= metasmt/$(OBJDIR)/meta_smt_all.o
-DIRS+= metasmt
-endif
-
 ifdef MATHSAT
 OBJS+= mathsat/$(OBJDIR)/mathsat.o
 DIRS+= mathsat

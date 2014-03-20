@@ -127,7 +127,6 @@ const struct opt_templ esbmc_options[] = {
 { 0,    "smtlib",               switc,          ""      },
 { 0,    "output",               string,         ""      },
 { 0,	"double-assign-check",	switc,		""	},
-{ 0,    "metasmt",              switc,         ""      },
 { 0,    "minisat",              switc,         ""      },
 { 0,    "boolector",            switc,         ""      },
 { 0,    "sword",                switc,         ""      },
