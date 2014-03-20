@@ -91,7 +91,7 @@ create_boolector_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static const unsigned int num_of_solvers = 9;
+static const unsigned int num_of_solvers = 8;
 static const std::string list_of_solvers[] =
 { "z3", "smtlib", "minisat", "boolector", "sword", "stp", "mathsat", "cvc"};
 
