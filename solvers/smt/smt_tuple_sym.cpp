@@ -432,15 +432,6 @@ smt_convt::tuple_fresh(smt_sortt s)
     return new tuple_sym_smt_ast(this, s, name);
 }
 
-const struct_union_data &
-smt_convt::get_type_def(const type2tc &type) const
-{
-
-  return (is_pointer_type(type))
-        ? *pointer_type_data
-        : dynamic_cast<const struct_union_data &>(*type.get());
-}
-
 smt_astt
 smt_convt::mk_tuple_symbol(const expr2tc &expr)
 {
