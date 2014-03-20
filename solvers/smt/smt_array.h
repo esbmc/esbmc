@@ -4,6 +4,7 @@
 
 class array_iface
 {
+public:
   virtual smt_astt mk_array_symbol(const std::string &name, smt_sortt sort) = 0;
   virtual expr2tc get_array_elem(smt_astt a, uint64_t idx,
                                  const type2tc &subtype) = 0;

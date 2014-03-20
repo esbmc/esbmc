@@ -992,11 +992,14 @@ smt_convt::convert_terminal(const expr2tc &expr)
       }
     }
 
-    // Just a normal symbol.
+    // Just a normal symbol. Possibly an array symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
-    return mk_smt_symbol(name, sort);
+    if (is_array_type(expr))
+      return mk_array_symbol(name, sort);
+    else
+      return mk_smt_symbol(name, sort);
   }
   default:
     std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
