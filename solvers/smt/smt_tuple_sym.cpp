@@ -368,72 +368,74 @@ array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 }
 
 smt_astt
-smt_convt::tuple_create(const expr2tc &structdef)
+smt_tuple_sym_flattener::tuple_create(const expr2tc &structdef)
 {
   // From a vector of expressions, create a tuple representation by creating
   // a fresh name and assigning members into it.
-  std::string name = mk_fresh_name("tuple_create::");
+  std::string name = ctx->mk_fresh_name("tuple_create::");
   // Add a . suffix because this is of tuple type.
   name += ".";
 
-  smt_ast *result = new tuple_sym_smt_ast(this, convert_sort(structdef->type),name);
+  smt_ast *result =
+    new tuple_sym_smt_ast(ctx, ctx->convert_sort(structdef->type),name);
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
-    smt_astt tmp = convert_ast(*structdef->get_sub_expr(i));
-    smt_astt elem = result->project(this, i);
-    assert_ast(elem->eq(this, tmp));
+    smt_astt tmp = ctx->convert_ast(*structdef->get_sub_expr(i));
+    smt_astt elem = result->project(ctx, i);
+    ctx->assert_ast(elem->eq(ctx, tmp));
   }
 
   return result;
 }
 
 smt_astt
-smt_convt::union_create(const expr2tc &unidef)
+smt_tuple_sym_flattener::union_create(const expr2tc &unidef)
 {
   // Unions are known to be brok^W fragile. Create a free new structure, and
   // assign in any members where the type matches the single member of the
   // initializer members. No need to worry about subtypes; this is a union.
-  std::string name = mk_fresh_name("union_create::");
+  std::string name = ctx->mk_fresh_name("union_create::");
   // Add a . suffix because this is of tuple type.
   name += ".";
   symbol2tc result(unidef->type, irep_idt(name));
 
   const constant_union2t &uni = to_constant_union2t(unidef);
-  const struct_union_data &def = get_type_def(uni.type);
+  const struct_union_data &def = ctx->get_type_def(uni.type);
   assert(uni.datatype_members.size() == 1 && "Unexpectedly full union "
          "initializer");
   const expr2tc &init = uni.datatype_members[0];
-  smt_astt result_ast = convert_ast(result);
-  smt_astt init_ast = convert_ast(init);
+  smt_astt result_ast = ctx->convert_ast(result);
+  smt_astt init_ast = ctx->convert_ast(init);
 
   unsigned int i = 0;
   forall_types(it, def.members) {
     if (base_type_eq(*it, init->type, ns)) {
       // Assign in.
-      smt_astt target_memb = result_ast->project(this, i);
-      assert_ast(target_memb->eq(this, init_ast));
+      smt_astt target_memb = result_ast->project(ctx, i);
+      ctx->assert_ast(target_memb->eq(ctx, init_ast));
     }
     i++;
   }
 
-  return new tuple_sym_smt_ast(this, convert_sort(unidef->type), name);
+  return new tuple_sym_smt_ast(ctx, ctx->convert_sort(unidef->type), name);
 }
 
 smt_astt
-smt_convt::tuple_fresh(smt_sortt s)
+smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
-  std::string name = mk_fresh_name("tuple_fresh::") + ".";
+  std::string n = (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "."
+                               : name;
 
-  smt_astt a = mk_smt_symbol(name, s);
+  smt_astt a = ctx->mk_smt_symbol(n, s);
   (void)a;
   if (s->id == SMT_SORT_ARRAY)
-    return new array_sym_smt_ast(this, s, name);
+    return new array_sym_smt_ast(ctx, s, n);
   else
-    return new tuple_sym_smt_ast(this, s, name);
+    return new tuple_sym_smt_ast(ctx, s, n);
 }
 
 smt_astt
-smt_convt::mk_tuple_symbol(const expr2tc &expr)
+smt_tuple_sym_flattener::mk_tuple_symbol(const expr2tc &expr)
 {
   // Assuming this is a symbol, convert it to being an ast with tuple type.
   // That's done by creating the prefix for the names of all the contained
@@ -447,25 +449,25 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
   if (name[name.size() - 1] != '.')
     name += ".";
 
-  smt_sortt sort = convert_sort(sym.type);
+  smt_sortt sort = ctx->convert_sort(sym.type);
   assert(sort->id != SMT_SORT_ARRAY);
-  return new tuple_sym_smt_ast(this, sort, name);
+  return new tuple_sym_smt_ast(ctx, sort, name);
 }
 
 smt_astt
-smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
+smt_tuple_sym_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
   // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
-  smt_sortt sort = convert_sort(sym.type);
-  return new array_sym_smt_ast(this, sort, name);
+  smt_sortt sort = ctx->convert_sort(sym.type);
+  return new array_sym_smt_ast(ctx, sort, name);
 }
 
 smt_astt 
-smt_convt::tuple_array_create(const type2tc &array_type,
-                              smt_astt *inputargs,
-                              bool const_array,
+smt_tuple_sym_flattener::tuple_array_create(const type2tc &array_type,
+                                            smt_astt *inputargs,
+                                            bool const_array,
                               smt_sortt domain __attribute__((unused)))
 {
   // Create a tuple array from a constant representation. This means that
@@ -473,9 +475,9 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   // a fresh tuple array symbol, then repeatedly updating it with tuples at each
   // index. Ignore infinite arrays, they're "not for you".
   // XXX - probably more efficient to update each member array, but not now.
-  smt_sortt sort = convert_sort(array_type);
-  std::string name = mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = new array_sym_smt_ast(this, sort, name);
+  smt_sortt sort = ctx->convert_sort(array_type);
+  std::string name = ctx->mk_fresh_name("tuple_array_create::") + ".";
+  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -496,14 +498,14 @@ smt_convt::tuple_array_create(const type2tc &array_type,
     // indexes.
     smt_astt init = inputargs[0];
     for (unsigned int i = 0; i < sz; i++) {
-      newsym = newsym->update(this, init, i);
+      newsym = newsym->update(ctx, init, i);
     }
 
     return newsym;
   } else {
     // Repeatedly store operands into this.
     for (unsigned int i = 0; i < sz; i++) {
-      newsym = newsym->update(this, inputargs[i], i);
+      newsym = newsym->update(ctx, inputargs[i], i);
     }
 
     return newsym;
@@ -511,15 +513,15 @@ smt_convt::tuple_array_create(const type2tc &array_type,
 }
 
 expr2tc
-smt_convt::tuple_get(const expr2tc &expr)
+smt_tuple_sym_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name();
 
   const type2tc &thetype = (is_structure_type(expr->type))
-    ? expr->type : pointer_struct;
-  const struct_union_data &strct = get_type_def(thetype);
+    ? expr->type : ctx->pointer_struct;
+  const struct_union_data &strct = ctx->get_type_def(thetype);
 
   // XXX - what's the correct type to return here.
   constant_struct2tc outstruct(expr->type, std::vector<expr2tc>());
@@ -530,7 +532,7 @@ smt_convt::tuple_get(const expr2tc &expr)
     std::stringstream ss;
     ss << name << "." << strct.member_names[i];
     symbol2tc sym(*it, ss.str());
-    outstruct.get()->datatype_members.push_back(get(sym));
+    outstruct.get()->datatype_members.push_back(ctx->get(sym));
     i++;
   }
 
@@ -541,37 +543,29 @@ smt_convt::tuple_get(const expr2tc &expr)
     uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
                                      .constant_value.to_uint64();
     pointer_logict::pointert p(num, BigInt(offs));
-    return pointer_logic.back().pointer_expr(p, expr->type);
+    return ctx->pointer_logic.back().pointer_expr(p, expr->type);
   }
 
   return outstruct;
 }
 
-expr2tc
-smt_convt::tuple_array_get(const expr2tc &expr __attribute__((unused)))
-{
-  std::cerr << "Tuple array get currently unimplemented" << std::endl;
-  return expr2tc();
-}
-
 smt_astt 
-smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
+smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
-  assert(!tuple_support);
 
   // An array of tuples without tuple support: decompose into array_of's each
   // subtype.
-  const struct_union_data &subtype =  get_type_def(init_val->type);
+  const struct_union_data &subtype = ctx->get_type_def(init_val->type);
   const constant_datatype_data &data =
     static_cast<const constant_datatype_data &>(*init_val.get());
 
   constant_int2tc arrsize(index_type2(), BigInt(array_size));
   type2tc arrtype(new array_type2t(init_val->type, arrsize, false));
-  std::string name = mk_fresh_name("tuple_array_of::") + ".";
+  std::string name = ctx->mk_fresh_name("tuple_array_of::") + ".";
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
-  smt_sortt sort = convert_sort(arrtype);
-  smt_astt newsym = new array_sym_smt_ast(this, sort, name);
+  smt_sortt sort = ctx->convert_sort(arrtype);
+  smt_astt newsym = new array_sym_smt_ast(ctx, sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++) {
@@ -579,11 +573,11 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
     type2tc subarr_type = type2tc(new array_type2t(val->type, arrsize, false));
     constant_array_of2tc sub_array_of(subarr_type, val);
 
-    smt_astt tuple_arr_of_sym_ast = convert_ast(tuple_arr_of_sym);
-    smt_astt target_array = tuple_arr_of_sym_ast->project(this, i);
+    smt_astt tuple_arr_of_sym_ast = ctx->convert_ast(tuple_arr_of_sym);
+    smt_astt target_array = tuple_arr_of_sym_ast->project(ctx, i);
 
-    smt_astt sub_array_of_ast = convert_ast(sub_array_of);
-    assert_ast(target_array->eq(this, sub_array_of_ast));
+    smt_astt sub_array_of_ast = ctx->convert_ast(sub_array_of);
+    ctx->assert_ast(target_array->eq(ctx, sub_array_of_ast));
   }
 
   return newsym;
