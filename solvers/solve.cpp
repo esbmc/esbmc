@@ -287,8 +287,20 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
   tuple_iface *tuple_api = NULL;
   smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api);
 
-  if (tuple_api != NULL)
+  bool node_flat = options.get_bool_option("tuple-node-flattener");
+  bool sym_flat = options.get_bool_option("tuple-sym-flattener");
+
+  // Pick a tuple flattener to use. If the solver has native support, and no
+  // options were given, use that by default
+  if (tuple_api != NULL && !node_flat && !sym_flat)
     ctx->set_tuple_iface(tuple_api);
+  // Use the node flattener if specified
+  else if (node_flat)
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+  // Use the symbol flattener if specified
+  else if (sym_flat)
+    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
+  // Default: node flattener
   else
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
 

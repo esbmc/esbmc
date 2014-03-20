@@ -137,6 +137,8 @@ const struct opt_templ esbmc_options[] = {
 { 0,	"git-hash",		switc,		""	},
 { 0,	"no-align-check",	switc,		""	},
 { 0,	"quiet",	switc,		""	},
+{ 0,	"tuple-node-flattener",	switc,		""	},
+{ 0,	"tuple-sym-flattener",	switc,		""	},
 { '?',	"",			switc,		""	},
 { 'h',	"",			switc,		""	},
 { 'I',	"",			string,		""	},
