@@ -294,6 +294,9 @@ smt_convt::convert_assign(const expr2tc &expr)
   side2->assign(this, side1);
 
   // Put that into the smt cache, thus preserving the assigned symbols value.
+  // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
+  // if this is removed, then everything that plays silly buggers outside of
+  // the symbol table will break.
   smt_cache_entryt e = { eq.side_1, side1, ctx_level };
   smt_cache.insert(e);
 
