@@ -597,13 +597,6 @@ smt_tuple_flattener::tuple_get_rec(tuple_smt_astt tuple)
   return outstruct;
 }
 
-expr2tc
-smt_tuple_flattener::tuple_array_get(const expr2tc &expr __attribute__((unused)))
-{
-  std::cerr << "Tuple array get currently unimplemented" << std::endl;
-  return expr2tc();
-}
-
 smt_astt 
 smt_tuple_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
