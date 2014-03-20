@@ -229,7 +229,10 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   } else if (options.get_bool_option("boolector")) {
     return create_boolector_solver(is_cpp, int_encoding, ns, options);
   } else {
-    return create_z3_solver(is_cpp, int_encoding, ns);
+    z3_convt *cvt =
+      static_cast<z3_convt*>(create_z3_solver(is_cpp, int_encoding, ns));
+    *tuple_api = static_cast<tuple_iface*>(cvt);
+    return cvt;
   }
 }
 
@@ -246,7 +249,10 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   *tuple_api = NULL;
 
   if (solver_name == "z3") {
-    return create_z3_solver(is_cpp, int_encoding, ns);
+    z3_convt *cvt =
+      static_cast<z3_convt*>(create_z3_solver(is_cpp, int_encoding, ns));
+    *tuple_api = static_cast<tuple_iface*>(cvt);
+    return cvt;
   } else if (solver_name == "mathsat") {
     return create_mathsat_solver(int_encoding, is_cpp, ns);
   } else if (solver_name == "cvc") {
