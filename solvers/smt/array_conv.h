@@ -72,8 +72,6 @@ public:
   virtual expr2tc get_bool(const smt_ast *a) = 0;
   // And the get_bv and get_bool methods.
 
-  // The api parts that this implements for smt_convt:
-
   void convert_array_assign(const array_ast<subclass> *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast<subclass> *array, const expr2tc &idx,
                                    const smt_sort *ressort);
