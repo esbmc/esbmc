@@ -44,7 +44,7 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(true, int_encoding, _ns, is_cpp, true, false, true), ctx(false)
+: smt_convt(true, int_encoding, _ns, is_cpp, false, true), ctx(false)
 {
   this->int_encoding = int_encoding;
 
@@ -70,7 +70,6 @@ z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 
   assumpt_ctx_stack.push_back(assumpt.begin());
 
-  smt_post_init();
   z3_convt::init_addr_space_array();
 }
 
@@ -351,8 +350,11 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   {
     // Because of crazy domain sort rewriting, pass this via all the other smt
     // processing code.
-    const z3_smt_sort *array_type = z3_sort_downcast(convert_sort(type));
-    sort = array_type->s;
+    const array_type2t &arr = to_array_type(type);
+    unsigned int domain_width = calculate_array_domain_width(arr);
+    smt_sortt domain = mk_sort(SMT_SORT_BV, domain_width, false);
+    smt_sortt range = convert_sort(arr.subtype);
+    sort = z3_sort_downcast(mk_sort(SMT_SORT_ARRAY, domain, range))->s;
     break;
   }
   case type2t::unsignedbv_id:
@@ -733,7 +735,20 @@ z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+
+  if (is_array_type(type)) {
+    const array_type2t &arrtype = to_array_type(type);
+    unsigned int domain_width;
+    if (int_encoding)
+      domain_width = 0;
+    else
+      domain_width = s.array_domain().bv_size();
+
+    return new z3_smt_sort(SMT_SORT_ARRAY, s, 0, domain_width,
+                           convert_sort(arrtype.subtype));
+  } else {
+    return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+  }
 }
 
 smt_sort *
@@ -823,10 +838,18 @@ z3_convt::tuple_create(const expr2tc &structdef)
 }
 
 smt_astt
-z3_convt::tuple_fresh(const smt_sort *s)
+z3_convt::union_create(const expr2tc &unidef __attribute__((unused)))
+{
+  std::cerr << "Union create in z3_convt called" << std::endl;
+  abort();
+}
+
+smt_astt
+z3_convt::tuple_fresh(const smt_sort *s, std::string name)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort*>(s);
-  z3::expr output = ctx.fresh_const(NULL, zs->s);
+  const char *n = (name == "") ? NULL : name.c_str();
+  z3::expr output = ctx.fresh_const(n, zs->s);
   return new_ast(output, zs);
 }
 
@@ -857,14 +880,6 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   z3::expr output;
   const array_type2t &arrtype = to_array_type(arr_type);
 
-  const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
-
-  assert(is_constant_int2t(arrtype.array_size) &&
-         "array_of sizes should be constant");
-
-  int64_t size;
-  size = sz.as_long();
-
   if (const_array) {
     z3::expr value, index;
     z3::sort array_type, dom_type;
@@ -887,6 +902,15 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
     z3::expr int_cte, val_cte;
     z3::sort domain_sort;
 
+    assert(!is_nil_expr(arrtype.array_size) && "Non-const array-of's can't be infinitely sized");
+    const constant_int2t &sz = to_constant_int2t(arrtype.array_size);
+
+    assert(is_constant_int2t(arrtype.array_size) &&
+           "array_of sizes should be constant");
+
+    int64_t size;
+    size = sz.as_long();
+
     z3_array_type = z3_sort_downcast(convert_sort(arr_type))->s;
     domain_sort = z3_array_type.array_domain();
 
@@ -902,6 +926,26 @@ z3_convt::tuple_array_create(const type2tc &arr_type,
   smt_sort *ssort = mk_struct_sort(arrtype.subtype);
   smt_sort *asort = mk_sort(SMT_SORT_ARRAY, domain, ssort);
   return new_ast(output, asort);
+}
+
+smt_astt
+z3_convt::mk_tuple_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt
+z3_convt::mk_tuple_array_symbol(const expr2tc &expr)
+{
+  const symbol2t &sym = to_symbol2t(expr);
+  return mk_smt_symbol(sym.get_symbol_name(), convert_sort(sym.type));
+}
+
+smt_astt
+z3_convt::tuple_array_of(const expr2tc &init, unsigned long domain_width)
+{
+  return convert_array_of(init, domain_width);
 }
 
 expr2tc
@@ -931,7 +975,6 @@ z3_convt::tuple_get(const expr2tc &expr)
 
   return outstruct;
 }
-
 
 smt_ast *
 z3_convt::mk_fresh(const smt_sort *sort, const std::string &tag)

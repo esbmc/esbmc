@@ -162,8 +162,7 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
     expr2tc tmp(step.cond);
     step.cond_ast = smt_conv.convert_ast(tmp);
   } else if (step.is_assignment()) {
-    expr2tc tmp2(step.cond);
-    smt_conv.set_to(tmp2, true);
+    smt_conv.convert_assign(step.cond);
   } else if (step.is_output()) {
     for(std::list<expr2tc>::const_iterator
         o_it = step.output_args.begin();
@@ -176,7 +175,7 @@ void symex_target_equationt::convert_internal_step(smt_convt &smt_conv,
       else
       {
         symbol2tc sym(tmp->type, "symex::output::"+i2string(output_count++));
-        equality2tc eq(tmp, sym);
+        equality2tc eq(sym, tmp);
         smt_conv.set_to(eq, true);
         step.converted_output_args.push_back(sym);
       }

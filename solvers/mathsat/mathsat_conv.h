@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_MATHSAT_MATHSAT_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 
 #include <util/threeval.h>
 
@@ -26,7 +27,8 @@ class mathsat_smt_ast : public smt_ast
 {
 public:
 #define mathsat_ast_downcast(x) static_cast<const mathsat_smt_ast *>(x)
-  mathsat_smt_ast(const smt_sort *_s, msat_term _t) : smt_ast(_s), t(_t) { }
+  mathsat_smt_ast(smt_convt *ctx, const smt_sort *_s, msat_term _t)
+    : smt_ast(ctx, _s), t(_t) { }
   virtual ~mathsat_smt_ast() { }
 
   msat_term t;
@@ -62,7 +64,7 @@ public:
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
   expr2tc get_array_elem(const smt_ast *array, uint64_t idx,
-                         const smt_sort *elem_sort);
+                         const type2tc &elem_sort);
 
   // MathSAT data.
   msat_config cfg;

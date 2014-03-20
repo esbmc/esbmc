@@ -9,6 +9,8 @@
 #include "smt_conv.h"
 #include <solvers/prop/literal.h>
 
+#include "smt_tuple_flat.h"
+
 // Helpers extracted from z3_convt.
 
 static std::string
@@ -64,12 +66,14 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support, bool _nobools,
+                     bool is_cpp, bool _nobools,
                      bool can_init_inf_arrays)
   : ctx_level(0), caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
+    no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
+  tuple_api = NULL;
+
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
 
@@ -123,6 +127,13 @@ smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
 
 smt_convt::~smt_convt(void)
 {
+}
+
+void
+smt_convt::set_tuple_iface(tuple_iface *iface)
+{
+  assert(tuple_api == NULL && "set_tuple_iface should only be called once");
+  tuple_api = iface;
 }
 
 void
@@ -227,6 +238,8 @@ smt_convt::make_conjunct(const ast_vec &v)
   smt_astt result;
   unsigned int i;
 
+  assert(v.size() != 0);
+
   // Funky on account of conversion from land...
   for (i = 0; i < v.size(); i++) {
     args[i] = v[i];
@@ -270,10 +283,26 @@ smt_convt::set_to(const expr2tc &expr, bool value)
   if (value == false)
     a = invert_ast(a);
   assert_ast(a);
+}
+
+void
+smt_convt::convert_assign(const expr2tc &expr)
+{
+  const equality2t &eq = to_equality2t(expr);
+  smt_astt side1 = convert_ast(eq.side_1);
+  smt_astt side2 = convert_ast(eq.side_2);
+  side2->assign(this, side1);
+
+  // Put that into the smt cache, thus preserving the assigned symbols value.
+  // IMPORTANT: the cache is now a fundemental part of how some flatteners work,
+  // if this is removed, then everything that plays silly buggers outside of
+  // the symbol table will break.
+  smt_cache_entryt e = { eq.side_1, side1, ctx_level };
+  smt_cache.insert(e);
 
   // Workaround for the fact that we don't have a good way of encoding unions
   // into SMT. Just work out what the last assigned field is.
-  if (is_equality2t(expr) && value) {
+  if (is_equality2t(expr)) {
     const equality2t eq = to_equality2t(expr);
     if (is_union_type(eq.side_1->type) && is_with2t(eq.side_2)) {
       const symbol2t sym = to_symbol2t(eq.side_1);
@@ -405,12 +434,12 @@ expr_handle_table:
   }
   case expr2t::constant_struct_id:
   {
-    a = tuple_create(expr);
+    a = tuple_api->tuple_create(expr);
     break;
   }
   case expr2t::constant_union_id:
   {
-    a = union_create(expr);
+    a = tuple_api->union_create(expr);
     break;
   }
   case expr2t::constant_array_id:
@@ -421,9 +450,8 @@ expr_handle_table:
       // Don't honour inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
-      if ((is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))
-          && !tuple_support)
-        a = tuple_fresh(sort);
+      if (is_tuple_ast_type(arr.subtype))
+        a = tuple_api->tuple_fresh(sort);
       else
         a = mk_fresh(sort, "inf_array");
       break;
@@ -794,24 +822,12 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::bool_id:
     return mk_sort(SMT_SORT_BOOL);
   case type2t::struct_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(type);
-    } else {
-      return mk_struct_sort(type);
-    }
+    return tuple_api->mk_struct_sort(type);
   case type2t::union_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(type);
-    } else {
-      return mk_union_sort(type);
-    }
+    return tuple_api->mk_union_sort(type);
   case type2t::code_id:
   case type2t::pointer_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(pointer_struct);
-    } else {
-      return mk_struct_sort(pointer_struct);
-    }
+    return tuple_api->mk_struct_sort(pointer_struct);
   case type2t::unsignedbv_id:
     is_signed = false;
     /* FALLTHROUGH */
@@ -854,10 +870,9 @@ smt_convt::convert_sort(const type2tc &type)
     while (is_array_type(range))
       range = to_array_type(range).subtype;
 
-    unsigned int range_width = range->get_width();
-    if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
-      return new tuple_smt_sort(type, range_width,
-          calculate_array_domain_width(arr));
+    if (is_tuple_ast_type(range)) {
+      type2tc thetype = flatten_array_type(type);
+      return tuple_api->mk_struct_sort(thetype);
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
@@ -960,11 +975,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     // Special case for tuple symbols
-    if (!tuple_support &&
-        (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
-      // Perform smt-tuple hacks.
-      return mk_tuple_symbol(expr);
-    } else if (!tuple_support && is_array_type(expr)) {
+    if (is_tuple_ast_type(expr)) {
+      return tuple_api->mk_tuple_symbol(expr);
+    } else if (is_array_type(expr)) {
       // Determine the range if we have arrays of arrays.
       const array_type2t &arr = to_array_type(expr->type);
       type2tc range = arr.subtype;
@@ -973,7 +986,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
 
       // If this is an array of structs, we have a tuple array sym.
       if (is_structure_type(range) || is_pointer_type(range)) {
-        return mk_tuple_array_symbol(expr);
+        return tuple_api->mk_tuple_array_symbol(expr);
       } else {
         ; // continue onwards;
       }
@@ -1724,7 +1737,7 @@ smt_convt::get(const expr2tc &expr)
   case type2t::struct_id:
   case type2t::union_id:
   case type2t::pointer_id:
-    return tuple_get(expr);
+    return tuple_api->tuple_get(expr);
   default:
     std::cerr << "Unimplemented type'd expression (" << expr->type->type_id
               << ") in smt get" << std::endl;
@@ -1760,4 +1773,227 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   }
 
   return constant_array2tc(arr_type, fields);
+}
+
+const struct_union_data &
+smt_convt::get_type_def(const type2tc &type) const
+{
+
+  return (is_pointer_type(type))
+        ? *pointer_type_data
+        : dynamic_cast<const struct_union_data &>(*type.get());
+}
+
+smt_astt 
+smt_convt::array_create(const expr2tc &expr)
+{
+  if (is_constant_array_of2t(expr))
+    return convert_array_of_prep(expr);
+
+  // Handle constant array expressions: these don't have tuple type and so
+  // don't need funky handling, but we need to create a fresh new symbol and
+  // repeatedly store the desired data into it, to create an SMT array
+  // representing the expression we're converting.
+  std::string name = mk_fresh_name("array_create::") + ".";
+  expr2tc newsym = symbol2tc(expr->type, name);
+
+  // Check size
+  const array_type2t &arr_type = to_array_type(expr->type);
+  if (arr_type.size_is_infinite) {
+    // Guarentee nothing, this is modelling only.
+    return convert_ast(newsym);
+  } else if (!is_constant_int2t(arr_type.array_size)) {
+    std::cerr << "Non-constant sized array of type constant_array_of2t"
+              << std::endl;
+    abort();
+  }
+
+  const constant_int2t &thesize = to_constant_int2t(arr_type.array_size);
+  uint64_t sz = thesize.constant_value.to_ulong();
+
+  assert(is_constant_array2t(expr));
+  const constant_array2t &array = to_constant_array2t(expr);
+
+  // Repeatedly store things into this.
+  smt_astt newsym_ast = convert_ast(newsym);
+  for (unsigned int i = 0; i < sz; i++) {
+    expr2tc init = array.datatype_members[i];
+
+    // Workaround for bools-in-arrays
+    if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
+        no_bools_in_arrays)
+      init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
+
+    newsym_ast = newsym_ast->update(this, convert_ast(init), i);
+  }
+
+  return newsym_ast;
+}
+
+smt_astt 
+smt_convt::convert_array_of_prep(const expr2tc &expr)
+{
+  const constant_array_of2t &arrof = to_constant_array_of2t(expr);
+  const array_type2t &arrtype = to_array_type(arrof.type);
+  expr2tc base_init;
+  unsigned long array_size = 0;
+
+  // So: we have an array_of, that we have to convert into a bunch of stores.
+  // However, it might be a nested array. If that's the case, then we're
+  // guarenteed to have another array_of in the initializer (which in turn might
+  // be nested). In that case, flatten to a single array of whatever's at the
+  // bottom of the array_of.
+  if (is_array_type(arrtype.subtype)) {
+    type2tc flat_type = flatten_array_type(expr->type);
+    const array_type2t &arrtype2 = to_array_type(flat_type);
+    array_size = calculate_array_domain_width(arrtype2);
+
+    expr2tc rec_expr = expr;
+    while (is_constant_array_of2t(rec_expr))
+      rec_expr = to_constant_array_of2t(rec_expr).initializer;
+
+    base_init = rec_expr;
+  } else {
+    base_init = arrof.initializer;
+    array_size = calculate_array_domain_width(arrtype);
+  }
+
+  if (is_structure_type(base_init->type))
+    return tuple_api->tuple_array_of(base_init, array_size);
+  else if (is_pointer_type(base_init->type))
+    return pointer_array_of(base_init, array_size);
+  else
+    return convert_array_of(base_init, array_size);
+}
+
+smt_astt 
+smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
+{
+  // We now an initializer, and a size of array to build. So:
+
+  std::vector<expr2tc> array_of_inits;
+  for (unsigned long i = 0; i < (1ULL << array_size); i++)
+    array_of_inits.push_back(init_val);
+
+  constant_int2tc real_arr_size(index_type2(), BigInt(1ULL << array_size));
+  type2tc newtype(new array_type2t(init_val->type, real_arr_size, false));
+
+  expr2tc res(new constant_array2t(newtype, array_of_inits));
+  return convert_ast(res);
+}
+
+smt_astt 
+smt_convt::pointer_array_of(const expr2tc &init_val, unsigned long array_width)
+{
+  // Actually a tuple, but the operand is going to be a symbol, null.
+  assert(is_symbol2t(init_val) && "Pointer type'd array_of can only be an "
+         "array of null");
+  const symbol2t &sym = to_symbol2t(init_val);
+  assert(sym.thename == "NULL" && "Pointer type'd array_of can only be an "
+         "array of null");
+
+  // Well known value; zero and zero.
+  constant_int2tc zero_val(machine_ptr, BigInt(0));
+  std::vector<expr2tc> operands;
+  operands.reserve(2);
+  operands.push_back(zero_val);
+  operands.push_back(zero_val);
+
+  constant_struct2tc strct(pointer_struct, operands);
+  return tuple_api->tuple_array_of(strct, array_width);
+}
+
+smt_astt
+smt_convt::tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain)
+{
+  // Take a constant_array2t or an array_of, and format the data from them into
+  // a form palatable to tuple_array_create.
+
+  if (is_constant_array_of2t(expr)) {
+    const constant_array_of2t &arr = to_constant_array_of2t(expr);
+    smt_astt arg = convert_ast(arr.initializer);
+
+    return tuple_api->tuple_array_create(arr.type, &arg, true, domain);
+  } else {
+    assert(is_constant_array2t(expr));
+    const constant_array2t &arr = to_constant_array2t(expr);
+    smt_astt args[arr.datatype_members.size()];
+    unsigned int i = 0;
+    forall_exprs(it, arr.datatype_members) {
+      args[i] = convert_ast(*it);
+      i++;
+    }
+
+    return tuple_api->tuple_array_create(arr.type, args, false, domain);
+  }
+}
+
+// Default behaviours for SMT AST's
+
+void
+smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+{
+  ctx->assert_ast(eq(ctx, sym));
+}
+
+smt_astt
+smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+{
+  return ctx->mk_func_app(sort, SMT_FUNC_ITE, cond, this, falseop);
+}
+
+smt_astt
+smt_ast::eq(smt_convt *ctx, smt_astt other) const
+{
+  // Simple approach: this is a leaf piece of SMT, compute a basic equality.
+  smt_sortt boolsort = ctx->mk_sort(SMT_SORT_BOOL);
+  return ctx->mk_func_app(boolsort, SMT_FUNC_EQ, this, other);
+}
+
+smt_astt
+smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
+    expr2tc idx_expr) const
+{
+  // If we're having an update applied to us, then the only valid situation
+  // this can occur in is if we're an array.
+  assert(sort->id == SMT_SORT_ARRAY);
+
+  // We're an array; just generate a 'with' operation.
+  expr2tc index;
+  if (is_nil_expr(idx_expr)) {
+    index = constant_int2tc(type2tc(new unsignedbv_type2t(sort->domain_width)),
+          BigInt(idx));
+  } else {
+    index = idx_expr;
+  }
+
+  return ctx->mk_func_app(sort, SMT_FUNC_STORE,
+                          this, ctx->convert_ast(index), value);
+}
+
+smt_astt
+smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+{
+  assert(sort->id == SMT_SORT_ARRAY && "Select operation applied to non-array "
+         "scalar AST");
+
+  // Just apply a select operation to the current array. Index should be fixed.
+
+  // Guess the resulting sort. This could be a lot, lot better.
+  smt_sortt range_sort = NULL;
+  if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
+    range_sort = ctx->mk_sort(SMT_SORT_BOOL);
+  else
+    range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
+
+  return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT,
+                          this, ctx->convert_ast(idx));
+}
+
+smt_astt
+smt_ast::project(smt_convt *ctx __attribute__((unused)),
+    unsigned int idx __attribute__((unused))) const
+{
+  std::cerr << "Projecting from non-tuple based AST" << std::endl;
+  abort();
 }

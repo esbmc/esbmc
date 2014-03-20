@@ -22,8 +22,8 @@ ifndef EXTERN_ESBMC_CONFIG # Don't overwrite configuration given by environment
 USE_SOLVER_Z3=1
 USE_SOLVER_BOOLECTOR=1
 USE_SOLVER_MINISAT=1
-#USE_SOLVER_MATHSAT=1
-#USE_SOLVER_CVC=1
+USE_SOLVER_MATHSAT=1
+USE_SOLVER_CVC=1
 
 # MetaSMT supports the above solvers via its own interface, as well as some
 # more, listed below.

@@ -23,7 +23,8 @@ class cvc_smt_ast : public smt_ast
 {
 public:
 #define cvc_ast_downcast(x) static_cast<const cvc_smt_ast *>(x)
-  cvc_smt_ast(const smt_sort *_s, CVC4::Expr &_e) : smt_ast(_s), e(_e) { }
+  cvc_smt_ast(smt_convt *ctx, const smt_sort *_s, CVC4::Expr &_e)
+    : smt_ast(ctx, _s), e(_e) { }
   virtual ~cvc_smt_ast() { }
 
   CVC4::Expr e;
@@ -59,7 +60,7 @@ public:
   expr2tc get_bool(const smt_ast *a);
   expr2tc get_bv(const type2tc &t, const smt_ast *a);
   expr2tc get_array_elem(const smt_ast *array, uint64_t index,
-                         const smt_sort *sort);
+                         const type2tc &elem_sort);
 
   CVC4::ExprManager em;
   CVC4::SmtEngine smt;

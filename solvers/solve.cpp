@@ -5,6 +5,8 @@
 #endif
 #include <solvers/smtlib/smtlib_conv.h>
 
+#include <solvers/smt/smt_tuple.h>
+
 // For the purpose of vastly reducing build times:
 smt_convt *
 create_new_metasmt_minisat_solver(bool int_encoding, bool is_cpp,
@@ -180,11 +182,13 @@ static const std::string list_of_solvers[] =
 
 static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
-            const optionst &options)
+            const optionst &options, tuple_iface **tuple_api)
 {
   unsigned int i, total_solvers = 0;
   for (i = 0; i < num_of_solvers; i++)
     total_solvers += (options.get_bool_option(list_of_solvers[i])) ? 1 : 0;
+
+  *tuple_api = NULL;
 
   if (total_solvers == 0) {
     std::cerr << "No solver specified; defaulting to Z3" << std::endl;
@@ -225,21 +229,30 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   } else if (options.get_bool_option("boolector")) {
     return create_boolector_solver(is_cpp, int_encoding, ns, options);
   } else {
-    return create_z3_solver(is_cpp, int_encoding, ns);
+    z3_convt *cvt =
+      static_cast<z3_convt*>(create_z3_solver(is_cpp, int_encoding, ns));
+    *tuple_api = static_cast<tuple_iface*>(cvt);
+    return cvt;
   }
 }
 
 smt_convt *
-create_solver_factory(const std::string &solver_name, bool is_cpp,
-                      bool int_encoding, const namespacet &ns,
-                      const optionst &options)
+create_solver_factory1(const std::string &solver_name, bool is_cpp,
+                       bool int_encoding, const namespacet &ns,
+                       const optionst &options,
+                       tuple_iface **tuple_api)
 {
   if (solver_name == "")
     // Pick one based on options.
-    return pick_solver(is_cpp, int_encoding, ns, options);
+    return pick_solver(is_cpp, int_encoding, ns, options, tuple_api);
+
+  *tuple_api = NULL;
 
   if (solver_name == "z3") {
-    return create_z3_solver(is_cpp, int_encoding, ns);
+    z3_convt *cvt =
+      static_cast<z3_convt*>(create_z3_solver(is_cpp, int_encoding, ns));
+    *tuple_api = static_cast<tuple_iface*>(cvt);
+    return cvt;
   } else if (solver_name == "mathsat") {
     return create_mathsat_solver(int_encoding, is_cpp, ns);
   } else if (solver_name == "cvc") {
@@ -263,4 +276,34 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
               << std::endl;
     abort();
   }
+}
+
+
+smt_convt *
+create_solver_factory(const std::string &solver_name, bool is_cpp,
+                      bool int_encoding, const namespacet &ns,
+                      const optionst &options)
+{
+  tuple_iface *tuple_api = NULL;
+  smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api);
+
+  bool node_flat = options.get_bool_option("tuple-node-flattener");
+  bool sym_flat = options.get_bool_option("tuple-sym-flattener");
+
+  // Pick a tuple flattener to use. If the solver has native support, and no
+  // options were given, use that by default
+  if (tuple_api != NULL && !node_flat && !sym_flat)
+    ctx->set_tuple_iface(tuple_api);
+  // Use the node flattener if specified
+  else if (node_flat)
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+  // Use the symbol flattener if specified
+  else if (sym_flat)
+    ctx->set_tuple_iface(new smt_tuple_sym_flattener(ctx, ns));
+  // Default: node flattener
+  else
+    ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+
+  ctx->smt_post_init();
+  return ctx;
 }

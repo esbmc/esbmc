@@ -8,6 +8,8 @@
 
 #include <irep2.h>
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
+#include <solvers/smt/smt_tuple_flat.h>
 
 class sexpr {
 public:

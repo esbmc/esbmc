@@ -9,6 +9,7 @@
 #include <inttypes.h>
 
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple_flat.h>
 #include <solvers/smt/array_conv.h>
 #include <solvers/smt/bitblast_conv.h>
 #include <solvers/smt/cnf_conv.h>

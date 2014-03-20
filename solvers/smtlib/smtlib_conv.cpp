@@ -17,7 +17,7 @@ extern sexpr *smtlib_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
-  : smt_convt(false, int_encoding, _ns, is_cpp, false, true, false),
+  : smt_convt(true, int_encoding, _ns, is_cpp, true, false),
     options(_opts)
 {
   temp_sym_count.push_back(1);
@@ -42,7 +42,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     fprintf(out_stream, "(set-logic QF_AUFBV)\n");
     fprintf(out_stream, "(set-info :status unknown)\n");
 
-    smt_post_init();
     return;
   }
 
@@ -142,8 +141,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   assert(val.token == TOK_STRINGLIT && "Non-string solver version response");
   solver_version = val.data;
   delete smtlib_output;
-
-  smt_post_init();
 }
 
 smtlib_convt::~smtlib_convt()

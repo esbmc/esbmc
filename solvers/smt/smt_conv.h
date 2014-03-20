@@ -201,9 +201,7 @@ enum smt_func_kind {
  */
 
 class smt_sort;
-class tuple_smt_sort;
 typedef const smt_sort * smt_sortt;
-typedef const tuple_smt_sort *tuple_smt_sortt;
 
 class smt_sort {
 public:
@@ -234,31 +232,6 @@ public:
   virtual unsigned long get_range_width(void) const {
     return data_width;
   }
-};
-
-/** Storage for flattened tuple sorts.
- *  When flattening tuples (and arrays of them) down to SMT, we need to store
- *  additional type data. This sort is used in tuple code to record that data.
- *  @see smt_tuple.cpp */
-class tuple_smt_sort : public smt_sort
-{
-public:
-  /** Actual type (struct or array of structs) of the tuple that's been
-   * flattened */
-  const type2tc thetype;
-
-  tuple_smt_sort(const type2tc &type)
-    : smt_sort(SMT_SORT_STRUCT, 0, 0), thetype(type)
-  {
-  }
-
-  tuple_smt_sort(const type2tc &type, unsigned long range_width,
-                 unsigned long dom_width)
-    : smt_sort(SMT_SORT_ARRAY, range_width, dom_width), thetype(type)
-  {
-  }
-
-  virtual ~tuple_smt_sort() { }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))
@@ -295,11 +268,7 @@ inline bool is_tuple_array_ast_type(const type2tc &t)
  */
 
 class smt_ast;
-class tuple_smt_ast;
-class array_smt_ast;
 typedef const smt_ast * smt_astt;
-typedef const tuple_smt_ast * tuple_smt_astt;
-typedef const array_smt_ast * array_smt_astt;
 
 class smt_ast {
 public:
@@ -319,6 +288,14 @@ public:
    *  @param other Piece of AST to compare 'this' with.
    *  @return Boolean typed AST representing an equality */
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+
+  /** Abstractly produce an assign. Defaults to being an equality, however
+   *  for some special cases up to the backend, there may be optimisations made
+   *  for array or tuple assigns, and so forth.
+   *  @param ctx SMT context to do the assignment in.
+   *  @param sym Symbol to assign to
+   *  @return AST representing the assigned symbol */
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
 
   /** Abstractly produce an "update", i.e. an array 'with' or tuple 'with'.
    *  @param ctx SMT context to make this update in.
@@ -343,59 +320,8 @@ public:
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 };
 
-/** Function app representing a tuple sorted value.
- *  This AST represents any kind of SMT function that results in something of
- *  a tuple sort. As documented in smt_tuple.c, the result of any kind of
- *  tuple operation that gets flattened is a symbol prefix, which is what this
- *  ast actually stores.
- *
- *  This AST should only be used in smt_tuple.c, if you're using it elsewhere
- *  think very hard about what you're trying to do. Its creation should also
- *  only occur if there is no tuple support in the solver being used, and a
- *  tuple creating method has been called.
- *
- *  @see smt_tuple.c */
-class tuple_smt_ast : public smt_ast {
-public:
-  /** Primary constructor.
-   *  @param s The sort of the tuple, of type tuple_smt_sort.
-   *  @param _name The symbol prefix of the variables representing this tuples
-   *               value. */
-  tuple_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
-    : smt_ast(ctx, s), name(_name) { }
-  virtual ~tuple_smt_ast() { }
-
-  /** The symbol prefix of the variables representing this tuples value, as a
-   *  string (i.e., no associated type). */
-  const std::string name;
-
-
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-};
-
-class array_smt_ast : public tuple_smt_ast
-{
-public:
-  array_smt_ast (smt_convt *ctx, smt_sortt s, const std::string &_name)
-    : tuple_smt_ast(ctx, s, _name) { }
-  virtual ~array_smt_ast() { }
-
-  virtual smt_astt ite(smt_convt *ctx, smt_astt cond,
-      smt_astt falseop) const;
-  virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
-  virtual smt_astt update(smt_convt *ctx, smt_astt value,
-                                unsigned int idx,
-                                expr2tc idx_expr = expr2tc()) const;
-  virtual smt_astt select(smt_convt *ctx, const expr2tc &idx) const;
-  virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
-};
+// Pull in the tuple interface definitions. _after_ the AST defs.
+#include "smt_tuple.h"
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -450,8 +376,6 @@ public:
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
    *         cpp:: prefix to their symbols.
-   *  @param tuple_support True if the underlying solver has native tuple
-   *         support.
    *  @param no_bools_in_arrays Whether or not the solver supports having
    *         arrays with booleans as the range, which isn't strictly permitted
    *         by SMT, but is by C.
@@ -462,7 +386,7 @@ public:
    *         we use were initialized to a particular value. Ugly, but works on
    *         various solvers. */
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
+            bool is_cpp, bool no_bools_in_arrays,
             bool can_init_inf_arrs);
   ~smt_convt();
 
@@ -494,6 +418,8 @@ public:
    *  @param expr The expression to convert into the SMT solver
    *  @return The resulting handle to the SMT value. */
   smt_astt convert_ast(const expr2tc &expr);
+
+  void convert_assign(const expr2tc &expr);
 
   /** Make an n-ary 'or' function application.
    *  Takes a vector of smt_ast's, all boolean sorted, and creates a single
@@ -668,23 +594,7 @@ public:
    *  @param The newly created terminal smt_ast of this symbol. */
   virtual smt_astt mk_smt_symbol(const std::string &name, smt_sortt s) =0;
 
-  /** Create a sort representing a struct. i.e., a tuple. Ideally this should
-   *  actually be part of the overridden tuple api, but due to history it isn't
-   *  yet. If solvers don't support tuples, implement this to abort.
-   *  @param type The struct type to create a tuple representation of.
-   *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_struct_sort(const type2tc &type) = 0;
-
-  // XXX XXX XXX -- turn this into a formulation on top of structs.
-
-  /** Create a sort representing a union. i.e., a tuple. Ideally this should
-   *  actually be part of the overridden tuple api, but due to history it isn't
-   *  yet. If solvers don't support tuples, implement this to abort.
-   *  @param type The union type to create a tuple representation of.
-   *  @return The tuple representation of the type, wrapped in an smt_sort. */
-  virtual smt_sortt mk_union_sort(const type2tc &type) = 0;
-
-  /** Create an 'extract' func app. Due to the fact that we can't currently
+    /** Create an 'extract' func app. Due to the fact that we can't currently
    *  encode integer constants as function arguments without serious faff,
    *  this can't be performed via the medium of mk_func_app. Hence, this api
    *  call.
@@ -712,48 +622,6 @@ public:
    *  @return Expression representation of the element */
   virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
                                  const type2tc &subtype) = 0;
-
-  /** @} */
-
-  /** @{
-   *  @name Tuple solver-converter API. */
-
-  /** Create a new tuple from a struct definition.
-   *  @param structdef A constant_struct2tc, describing all the members of the
-   *         tuple to create.
-   *  @return AST representing the created tuple */
-  virtual smt_astt tuple_create(const expr2tc &structdef);
-
-  virtual smt_astt union_create(const expr2tc &unidef);
-
-  /** Create a fresh tuple, with freely valued fields.
-   *  @param s Sort of the tuple to create
-   *  @return AST representing the created tuple */
-  virtual smt_astt tuple_fresh(smt_sortt s);
-
-  /** Create an array of tuple values. Takes a type, and an array of ast's,
-   *  and creates an array where the elements have the value of the input asts.
-   *  Essentially a way of converting a constant_array2tc, with tuple type.
-   *  @param array_type Type of the array we will be creating, with size.
-   *  @param input_args Array of ASTs to form the elements of this array. Must
-   *         have the size indicated by array_type. (This method can't be
-   *         used to create nondeterministically or infinitely sized arrays).
-   *  @param const_array If true, only the first element of input_args is valid,
-   *         and is repeated for every element in this (fixed size) array.
-   *  @param domain Sort of the domain of this array. */
-  virtual smt_astt tuple_array_create(const type2tc &array_type,
-                                            smt_astt *input_args,
-                                            bool const_array,
-                                            smt_sortt domain);
-
-  /** Create a potentially /large/ array of tuples. This is called when we
-   *  encounter an array_of operation, with a very large array size, of tuple
-   *  sort.
-   *  @param Expression of tuple value to populate this array with.
-   *  @param domain_width The size of array to create, in domain bits.
-   *  @return An AST representing an array of the tuple value, init_value. */
-  virtual smt_astt tuple_array_of(const expr2tc &init_value,
-                                        unsigned long domain_width);
 
   /** @} */
 
@@ -906,23 +774,13 @@ public:
   smt_astt array_create(const expr2tc &expr);
   /** Mangle constant_array / array_of data with tuple array type, into a
    *  more convenient format, acceptable by tuple_array_create */
-  smt_astt tuple_array_create_despatch(const expr2tc &expr,
-                                             smt_sortt domain);
-  /** Convert a symbol2tc to a tuple_smt_ast */
-  smt_astt mk_tuple_symbol(const expr2tc &expr);
-  /** Like mk_tuple_symbol, but for arrays */
-  smt_astt mk_tuple_array_symbol(const expr2tc &expr);
-
-  /** Extract the assignment to a tuple-typed symbol from the SMT solvers
-   *  model */
-  virtual expr2tc tuple_get(const expr2tc &expr);
-  /** Extract the assignment to a tuple-array symbol from the SMT solvers
-   *  model */
-  expr2tc tuple_array_get(const expr2tc &expr);
+  smt_astt tuple_array_create(const expr2tc &expr, smt_sortt domain);
 
   /** Initialize tracking data for the address space records. This also sets
    *  up the symbols / addresses of 'NULL', '0', and the invalid pointer */
   void init_addr_space_array(void);
+  /** Stores handle for the tuple interface. */
+  void set_tuple_iface(tuple_iface *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -956,6 +814,8 @@ public:
   /** Extract a type definition (i.e. a struct_union_data object) from a type.
    *  This method abstracts the fact that a pointer type is in fact a tuple. */
   const struct_union_data &get_type_def(const type2tc &type) const;
+  /** Prep call for creating a tuple array */
+  smt_astt tuple_array_create_despatch(const expr2tc &expr, smt_sortt domain);
 
   /** Convert a boolean to a bitvector with one bit. */
   smt_astt make_bool_bit(smt_astt a);
@@ -1106,9 +966,6 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  /** True if the solver in use supports tuples itself, false if we should be
-   *  using the tuple flattener in smt_convt. */
-  bool tuple_support;
   /** True if the SMT solver does not support arrays with boolean range.
    *  Technically, the spec does not require this, but most solvers have
    *  support anyway. */
@@ -1122,6 +979,9 @@ public:
    *  stuff may make some assertions using it, see the discussion in the
    *  constructor. */
   std::string dyn_info_arr_name;
+
+  smt_astt null_ptr_ast;
+  smt_astt invalid_ptr_ast;
 
   /** Mapping of name prefixes to use counts: when we want a fresh new name
    *  with a particular prefix, this map stores how many times that prefix has
@@ -1158,6 +1018,8 @@ public:
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
 
+  tuple_iface *tuple_api;
+
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
    *  pass straight down to smt_convt::mk_func_app with a corresponding SMT
@@ -1174,6 +1036,7 @@ public:
 // Define here to enable inlining
 extern inline
 smt_ast::smt_ast(smt_convt *ctx, smt_sortt s) : sort(s) {
+  assert(sort != NULL);
   ctx->live_asts.push_back(this);
 }
 

@@ -20,6 +20,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 #include <solvers/smt/smt_conv.h>
 #include <solvers/prop/pointer_logic.h>
 #include <solvers/smt/smt_conv.h>
+#include <solvers/smt/smt_tuple.h>
 #include <vector>
 #include <string.h>
 
@@ -32,7 +33,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_convt: public smt_convt
+class z3_convt: public smt_convt, public tuple_iface
 {
 public:
   z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
@@ -90,13 +91,19 @@ private:
   virtual const smt_ast *make_conjunct(const ast_vec &v);
 
   virtual smt_astt tuple_create(const expr2tc &structdef);
-  virtual smt_astt tuple_fresh(const smt_sort *s);
+  virtual smt_astt union_create(const expr2tc &unidef);
+  virtual smt_astt tuple_fresh(const smt_sort *s, std::string name = "");
   virtual expr2tc tuple_get(const expr2tc &expr);
 
   virtual const smt_ast *tuple_array_create(const type2tc &array_type,
                                             const smt_ast **input_args,
                                             bool const_array,
                                             const smt_sort *domain);
+
+  virtual smt_astt mk_tuple_symbol(const expr2tc &expr);
+  virtual smt_astt mk_tuple_array_symbol(const expr2tc &expr);
+  virtual smt_astt tuple_array_of(const expr2tc &init,
+                                  unsigned long domain_width);
 
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);

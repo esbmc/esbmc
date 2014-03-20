@@ -393,7 +393,7 @@ smt_convt::convert_typecast_struct(const typecast2t &cast)
   }
 
   smt_sortt fresh_sort = convert_sort(cast.type);
-  smt_astt fresh = tuple_fresh(fresh_sort);
+  smt_astt fresh = tuple_api->tuple_fresh(fresh_sort);
   smt_astt src_ast = convert_ast(cast.from);
 
   if (same_format) {
