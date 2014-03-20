@@ -55,10 +55,10 @@
  * slower approach works.
  */
 
-__attribute__((always_inline)) static inline tuple_smt_astt
+__attribute__((always_inline)) static inline tuple_sym_smt_astt
 to_tuple_ast(smt_astt a)
 {
-  tuple_smt_astt ta = dynamic_cast<tuple_smt_astt>(a);
+  tuple_sym_smt_astt ta = dynamic_cast<tuple_sym_smt_astt>(a);
   assert(ta != NULL && "Tuple AST mismatch");
   return ta;
 }
@@ -82,15 +82,15 @@ smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 }
 
 smt_astt 
-tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // So - we need to generate an ite between true_val and false_val, that gets
   // switched on based on cond, and store the output into result. Do this by
   // projecting each member out of our arguments and computing another ite
   // over each member. Note that we always make assertions here, because the
   // ite is always true. We return the output symbol.
-  tuple_smt_astt true_val = this;
-  tuple_smt_astt false_val = to_tuple_ast(falseop);
+  tuple_sym_smt_astt true_val = this;
+  tuple_sym_smt_astt false_val = to_tuple_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(thissort->thetype, name);
@@ -117,11 +117,11 @@ tuple_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 }
 
 smt_astt 
-array_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
+array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
-  tuple_smt_astt true_val = this;
-  tuple_smt_astt false_val = to_tuple_ast(falseop);
+  tuple_sym_smt_astt true_val = this;
+  tuple_sym_smt_astt false_val = to_tuple_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
@@ -163,13 +163,13 @@ smt_ast::eq(smt_convt *ctx, smt_astt other) const
 }
 
 smt_astt 
-tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
-  // We have two tuple_smt_asts and need to create a boolean ast representing
+  // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
-  tuple_smt_astt ta = this;
-  tuple_smt_astt tb = to_tuple_ast(other);
+  tuple_sym_smt_astt ta = this;
+  tuple_sym_smt_astt tb = to_tuple_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
@@ -191,13 +191,13 @@ tuple_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 
 
 smt_astt 
-array_smt_ast::eq(smt_convt *ctx, smt_astt other) const
+array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
-  // We have two tuple_smt_asts and need to create a boolean ast representing
+  // We have two tuple_sym_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
-  tuple_smt_astt ta = this;
-  tuple_smt_astt tb = to_tuple_ast(other);
+  tuple_sym_smt_astt ta = this;
+  tuple_sym_smt_astt tb = to_tuple_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
@@ -247,7 +247,7 @@ smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 }
 
 smt_astt 
-tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
+tuple_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr) const
 {
   smt_convt::ast_vec eqs;
@@ -259,7 +259,7 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
   std::string name = ctx->mk_fresh_name("tuple_update::") + ".";
-  tuple_smt_astt result = new tuple_smt_ast(ctx, sort, name);
+  tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members, deciding what to do with them.
   unsigned int j = 0;
@@ -286,7 +286,7 @@ tuple_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 }
 
 smt_astt 
-array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
+array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr) const
 {
   smt_convt::ast_vec eqs;
@@ -304,7 +304,7 @@ array_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
   }
 
   std::string name = ctx->mk_fresh_name("tuple_array_update::") + ".";
-  tuple_smt_astt result = new array_smt_ast(ctx, sort, name);
+  tuple_sym_smt_astt result = new array_sym_smt_ast(ctx, sort, name);
 
   // Iterate over all members. They are _all_ indexed and updated.
   unsigned int i = 0;
@@ -350,7 +350,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 }
 
 smt_astt 
-tuple_smt_ast::select(smt_convt *ctx __attribute__((unused)),
+tuple_sym_smt_ast::select(smt_convt *ctx __attribute__((unused)),
     const expr2tc &idx __attribute__((unused))) const
 {
   std::cerr << "Select operation applied to tuple" << std::endl;
@@ -358,7 +358,7 @@ tuple_smt_ast::select(smt_convt *ctx __attribute__((unused)),
 }
 
 smt_astt 
-array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
+array_sym_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t &array_type = to_array_type(ts->thetype);
@@ -366,7 +366,7 @@ array_smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   smt_sortt result_sort = ctx->convert_sort(array_type.subtype);
 
   std::string name = ctx->mk_fresh_name("tuple_array_select::") + ".";
-  tuple_smt_astt result = new tuple_smt_ast(ctx, result_sort, name);
+  tuple_sym_smt_astt result = new tuple_sym_smt_ast(ctx, result_sort, name);
 
   unsigned int i = 0;
   forall_types(it, data.members) {
@@ -394,13 +394,13 @@ smt_ast::project(smt_convt *ctx __attribute__((unused)),
 }
 
 smt_astt 
-tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+tuple_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   // Create an AST representing the i'th field of the tuple a. This means we
   // have to open up the (tuple symbol) a, tack on the field name to the end
   // of that name, and then return that. It now names the variable that contains
   // the value of that field. If it's actually another tuple, we instead return
-  // a new tuple_smt_ast containing its name.
+  // a new tuple_sym_smt_ast containing its name.
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
@@ -417,9 +417,9 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     // the internal struct being projected.
     sym_name = sym_name + ".";
     if (is_tuple_array_ast_type(restype))
-      return new array_smt_ast(ctx, s, sym_name);
+      return new array_sym_smt_ast(ctx, s, sym_name);
     else
-      return new tuple_smt_ast(ctx, s, sym_name);
+      return new tuple_sym_smt_ast(ctx, s, sym_name);
   } else {
     // This is a normal variable, so create a normal symbol of its name.
     return ctx->mk_smt_symbol(sym_name, s);
@@ -427,7 +427,7 @@ tuple_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 }
 
 smt_astt 
-array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
+array_sym_smt_ast::project(smt_convt *ctx, unsigned int idx) const
 {
   tuple_smt_sortt ts = to_tuple_sort(sort);
 
@@ -451,7 +451,7 @@ array_smt_ast::project(smt_convt *ctx, unsigned int idx) const
     // This is a struct within a struct, so just generate the name prefix of
     // the internal struct being projected.
     sym_name = sym_name + ".";
-    return new array_smt_ast(ctx, s, sym_name);
+    return new array_sym_smt_ast(ctx, s, sym_name);
   } else {
     // This is a normal variable, so create a normal symbol of its name.
     return ctx->mk_smt_symbol(sym_name, s);
@@ -467,7 +467,7 @@ smt_convt::tuple_create(const expr2tc &structdef)
   // Add a . suffix because this is of tuple type.
   name += ".";
 
-  smt_ast *result = new tuple_smt_ast(this, convert_sort(structdef->type),name);
+  smt_ast *result = new tuple_sym_smt_ast(this, convert_sort(structdef->type),name);
 
   for (unsigned int i = 0; i < structdef->get_num_sub_exprs(); i++) {
     smt_astt tmp = convert_ast(*structdef->get_sub_expr(i));
@@ -507,7 +507,7 @@ smt_convt::union_create(const expr2tc &unidef)
     i++;
   }
 
-  return new tuple_smt_ast(this, convert_sort(unidef->type), name);
+  return new tuple_sym_smt_ast(this, convert_sort(unidef->type), name);
 }
 
 smt_astt
@@ -518,9 +518,9 @@ smt_convt::tuple_fresh(smt_sortt s)
   smt_astt a = mk_smt_symbol(name, s);
   (void)a;
   if (s->id == SMT_SORT_ARRAY)
-    return new array_smt_ast(this, s, name);
+    return new array_sym_smt_ast(this, s, name);
   else
-    return new tuple_smt_ast(this, s, name);
+    return new tuple_sym_smt_ast(this, s, name);
 }
 
 const struct_union_data &
@@ -549,7 +549,7 @@ smt_convt::mk_tuple_symbol(const expr2tc &expr)
 
   smt_sortt sort = convert_sort(sym.type);
   assert(sort->id != SMT_SORT_ARRAY);
-  return new tuple_smt_ast(this, sort, name);
+  return new tuple_sym_smt_ast(this, sort, name);
 }
 
 smt_astt
@@ -559,7 +559,7 @@ smt_convt::mk_tuple_array_symbol(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name() + "[]";
   smt_sortt sort = convert_sort(sym.type);
-  return new array_smt_ast(this, sort, name);
+  return new array_sym_smt_ast(this, sort, name);
 }
 
 smt_astt 
@@ -575,7 +575,7 @@ smt_convt::tuple_array_create(const type2tc &array_type,
   // XXX - probably more efficient to update each member array, but not now.
   smt_sortt sort = convert_sort(array_type);
   std::string name = mk_fresh_name("tuple_array_create::") + ".";
-  smt_astt newsym = new array_smt_ast(this, sort, name);
+  smt_astt newsym = new array_sym_smt_ast(this, sort, name);
 
   // Check size
   const array_type2t &arr_type = to_array_type(array_type);
@@ -769,7 +769,7 @@ smt_convt::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
   symbol2tc tuple_arr_of_sym(arrtype, irep_idt(name));
 
   smt_sortt sort = convert_sort(arrtype);
-  smt_astt newsym = new array_smt_ast(this, sort, name);
+  smt_astt newsym = new array_sym_smt_ast(this, sort, name);
 
   assert(subtype.members.size() == data.datatype_members.size());
   for (unsigned long i = 0; i < subtype.members.size(); i++) {
