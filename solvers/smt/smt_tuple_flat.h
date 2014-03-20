@@ -50,7 +50,7 @@ public:
 };
 
 inline tuple_node_smt_astt
-to_tuple_ast(smt_astt a)
+to_tuple_node_ast(smt_astt a)
 {
   tuple_node_smt_astt ta = dynamic_cast<tuple_node_smt_astt>(a);
   assert(ta != NULL && "Tuple AST mismatch");
@@ -85,7 +85,7 @@ public:
 };
 
 inline array_node_smt_astt
-to_array_ast(smt_astt a)
+to_array_node_ast(smt_astt a)
 {
   array_node_smt_astt ta = dynamic_cast<array_node_smt_astt>(a);
   assert(ta != NULL && "Tuple-Array AST mismatch");

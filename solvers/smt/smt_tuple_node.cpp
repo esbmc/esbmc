@@ -95,7 +95,7 @@ tuple_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // over each member. Note that we always make assertions here, because the
   // ite is always true. We return the output symbol.
   tuple_node_smt_astt true_val = this;
-  tuple_node_smt_astt false_val = to_tuple_ast(falseop);
+  tuple_node_smt_astt false_val = to_tuple_node_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   tuple_node_smt_ast *result_sym = new tuple_node_smt_ast(ctx, sort, name);
@@ -126,7 +126,7 @@ smt_astt
 array_node_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
-  array_node_smt_astt false_val = to_array_ast(falseop);
+  array_node_smt_astt false_val = to_array_node_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
@@ -160,7 +160,7 @@ tuple_node_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
   // If we're being assigned to something, populate all our vars first
   const_cast<tuple_node_smt_ast*>(this)->make_free(ctx);
 
-  tuple_node_smt_astt target = to_tuple_ast(ctx->convert_ast(expr));
+  tuple_node_smt_astt target = to_tuple_node_ast(ctx->convert_ast(expr));
   assert(target->elements.size() == 0 &&
         "tuple smt assign with elems populated");
 
@@ -174,13 +174,13 @@ tuple_node_smt_ast::assign(smt_convt *ctx, const expr2tc &expr) const
 smt_astt 
 tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 {
-  const_cast<tuple_node_smt_ast*>(to_tuple_ast(other))->make_free(ctx);
+  const_cast<tuple_node_smt_ast*>(to_tuple_node_ast(other))->make_free(ctx);
 
   // We have two tuple_node_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
   tuple_node_smt_astt ta = this;
-  tuple_node_smt_astt tb = to_tuple_ast(other);
+  tuple_node_smt_astt tb = to_tuple_node_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
@@ -203,7 +203,7 @@ tuple_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
 smt_astt
 array_node_smt_ast::assign(smt_convt *ctx, const expr2tc &sym) const
 {
-  array_node_smt_astt target = to_array_ast(ctx->convert_ast(sym));
+  array_node_smt_astt target = to_array_node_ast(ctx->convert_ast(sym));
 
   assert(target->is_still_free && "Non-free array ast assigned");
   array_node_smt_ast *destination = const_cast<array_node_smt_ast *>(target);
@@ -221,7 +221,7 @@ array_node_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // We have two tuple_node_smt_asts and need to create a boolean ast representing
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
-  array_node_smt_astt tb = to_array_ast(other);
+  array_node_smt_astt tb = to_array_node_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
@@ -402,7 +402,7 @@ smt_tuple_node_flattener::union_create(const expr2tc &unidef)
   smt_astt init_ast = ctx->convert_ast(init);
 
   tuple_node_smt_ast *result_t_ast =
-    const_cast<tuple_node_smt_ast *>(to_tuple_ast(result_ast));
+    const_cast<tuple_node_smt_ast *>(to_tuple_node_ast(result_ast));
   result_t_ast->elements.resize(def.members.size());
 
   unsigned int i = 0;
@@ -536,7 +536,7 @@ smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
   const symbol2t &sym = to_symbol2t(expr);
   std::string name = sym.get_symbol_name();
 
-  tuple_node_smt_astt a = to_tuple_ast(ctx->convert_ast(expr));
+  tuple_node_smt_astt a = to_tuple_node_ast(ctx->convert_ast(expr));
   return tuple_get_rec(a);
 }
 
@@ -564,7 +564,7 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
     expr2tc res;
 
     if (is_tuple_ast_type(*it)) {
-      res = tuple_get_rec(to_tuple_ast(tuple->elements[i]));
+      res = tuple_get_rec(to_tuple_node_ast(tuple->elements[i]));
     } else if (is_tuple_array_ast_type(*it)) {
       res = expr2tc(); // XXX currently unimplemented
     } else if (is_number_type(*it)) {
