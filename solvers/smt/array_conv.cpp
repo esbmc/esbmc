@@ -664,7 +664,6 @@ array_ast<subclass>::assign(smt_convt *ctx, smt_astt sym) const
   array_convt<subclass> *actx = static_cast<array_convt<subclass>*>(ctx);
   array_ast<subclass> *mutable_this = const_cast<array_ast<subclass>*>(this);
   actx->convert_array_assign(this, sym);
-  return sym;
 }
 
 template <typename subclass>
