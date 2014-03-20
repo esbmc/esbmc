@@ -234,7 +234,6 @@ smt_astt
 smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
 {
   smt_astt a;
-  smt_sortt s;
   std::string cte, identifier;
   unsigned int obj_num;
 
@@ -251,14 +250,9 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
       // value, so we can just refer to a symbol.
       obj_num = pointer_logic.back().get_null_object();
 
-      if (!tuple_support) {
-        type2tc t(new pointer_type2t(get_empty_type()));
-        symbol2tc sym(t, symbol);
-        a = tuple_api->mk_tuple_symbol(sym);
-      } else {
-        s = convert_sort(pointer_struct);
-        a = mk_smt_symbol(symbol, s);
-      }
+      type2tc t(new pointer_type2t(get_empty_type()));
+      symbol2tc sym(t, symbol);
+      a = tuple_api->mk_tuple_symbol(sym);
 
       return a;
     }
@@ -278,14 +272,9 @@ smt_convt::convert_identifier_pointer(const expr2tc &expr, std::string symbol)
   obj_num = pointer_logic.back().add_object(expr);
 
   // Produce a symbol representing this.
-  s = convert_sort(pointer_struct);
-  if (!tuple_support) {
-    type2tc t(new pointer_type2t(get_empty_type()));
-    symbol2tc sym(t, symbol);
-    a = tuple_api->mk_tuple_symbol(sym);
-  } else {
-    a = mk_smt_symbol(symbol, s);
-  }
+  type2tc t(new pointer_type2t(get_empty_type()));
+  symbol2tc sym(t, symbol);
+  a = tuple_api->mk_tuple_symbol(sym);
 
   // If this object hasn't yet been put in the address space record, we need to
   // assert that the symbol has the object ID we've allocated, and then fill out

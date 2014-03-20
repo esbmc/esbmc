@@ -154,6 +154,8 @@ public:
 
   inline z3_smt_ast *
   new_ast(z3::expr _e, const smt_sort *_s) {
+    if (_s->id == SMT_SORT_STRUCT)
+      __asm__("int $3");
     return new z3_smt_ast(this, _e, _s);
   }
 

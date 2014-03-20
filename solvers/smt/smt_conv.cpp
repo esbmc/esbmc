@@ -66,10 +66,10 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
 }
 
 smt_convt::smt_convt(bool enable_cache, bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _tuple_support, bool _nobools,
+                     bool is_cpp, bool _nobools,
                      bool can_init_inf_arrays)
   : ctx_level(0), caching(enable_cache), int_encoding(intmode), ns(_ns),
-    tuple_support(_tuple_support), no_bools_in_arrays(_nobools),
+    no_bools_in_arrays(_nobools),
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
   tuple_api = NULL;
@@ -446,8 +446,7 @@ expr_handle_table:
       // Don't honour inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
-      if ((is_structure_type(arr.subtype) || is_pointer_type(arr.subtype))
-          && !tuple_support)
+      if (is_tuple_ast_type(arr.subtype))
         a = tuple_api->tuple_fresh(sort);
       else
         a = mk_fresh(sort, "inf_array");
@@ -821,11 +820,7 @@ smt_convt::convert_sort(const type2tc &type)
   case type2t::struct_id:
     return tuple_api->mk_struct_sort(type);
   case type2t::union_id:
-    if (!tuple_support) {
-      return new tuple_smt_sort(type);
-    } else {
-      return tuple_api->mk_union_sort(type);
-    }
+    return tuple_api->mk_union_sort(type);
   case type2t::code_id:
   case type2t::pointer_id:
     return tuple_api->mk_struct_sort(pointer_struct);
@@ -871,10 +866,9 @@ smt_convt::convert_sort(const type2tc &type)
     while (is_array_type(range))
       range = to_array_type(range).subtype;
 
-    unsigned int range_width = range->get_width();
-    if (!tuple_support && (is_structure_type(range) || is_pointer_type(range))){
-      return new tuple_smt_sort(type, range_width,
-          calculate_array_domain_width(arr));
+    if (is_tuple_ast_type(range)) {
+      type2tc thetype = flatten_array_type(type);
+      return tuple_api->mk_struct_sort(thetype);
     }
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
@@ -977,11 +971,9 @@ smt_convt::convert_terminal(const expr2tc &expr)
   case expr2t::symbol_id:
   {
     // Special case for tuple symbols
-    if (!tuple_support &&
-        (is_union_type(expr) || is_struct_type(expr) || is_pointer_type(expr))){
-      // Perform smt-tuple hacks.
+    if (is_tuple_ast_type(expr)) {
       return tuple_api->mk_tuple_symbol(expr);
-    } else if (!tuple_support && is_array_type(expr)) {
+    } else if (is_array_type(expr)) {
       // Determine the range if we have arrays of arrays.
       const array_type2t &arr = to_array_type(expr->type);
       type2tc range = arr.subtype;

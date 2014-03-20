@@ -16,7 +16,7 @@ create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 
 mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
-  : smt_convt(true, int_encoding, ns, is_cpp, false, true, false)
+  : smt_convt(true, int_encoding, ns, is_cpp, true, false)
 {
   if (int_encoding) {
     std::cerr << "MathSAT converter doesn't support integer encoding"

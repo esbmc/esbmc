@@ -401,8 +401,6 @@ public:
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
    *         cpp:: prefix to their symbols.
-   *  @param tuple_support True if the underlying solver has native tuple
-   *         support.
    *  @param no_bools_in_arrays Whether or not the solver supports having
    *         arrays with booleans as the range, which isn't strictly permitted
    *         by SMT, but is by C.
@@ -413,7 +411,7 @@ public:
    *         we use were initialized to a particular value. Ugly, but works on
    *         various solvers. */
   smt_convt(bool enable_cache, bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool tuple_support, bool no_bools_in_arrays,
+            bool is_cpp, bool no_bools_in_arrays,
             bool can_init_inf_arrs);
   ~smt_convt();
 
@@ -993,9 +991,6 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  /** True if the solver in use supports tuples itself, false if we should be
-   *  using the tuple flattener in smt_convt. */
-  bool tuple_support;
   /** True if the SMT solver does not support arrays with boolean range.
    *  Technically, the spec does not require this, but most solvers have
    *  support anyway. */
