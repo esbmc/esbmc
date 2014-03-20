@@ -23,7 +23,7 @@ array_convt<subclass>::~array_convt()
 
 template <class subclass>
 void
-array_convt<subclass>::convert_array_assign(array_ast<subclass> *src,
+array_convt<subclass>::convert_array_assign(const array_ast<subclass> *src,
                                             smt_astt sym)
 {
 

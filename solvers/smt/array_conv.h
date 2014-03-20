@@ -73,7 +73,7 @@ public:
 
   // The api parts that this implements for smt_convt:
 
-  void convert_array_assign(array_ast<subclass> *src, smt_astt sym);
+  void convert_array_assign(const array_ast<subclass> *src, smt_astt sym);
   const smt_ast *mk_select(const array_ast<subclass> *array, const expr2tc &idx,
                                    const smt_sort *ressort);
   virtual smt_astt mk_store(const array_ast<subclass> *array,
