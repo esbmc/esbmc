@@ -302,6 +302,12 @@ cvc_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+cvc_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const cvc_smt_sort *sort = cvc_sort_downcast(s);

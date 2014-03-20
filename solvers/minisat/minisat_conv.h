@@ -40,6 +40,9 @@ public:
 
   virtual void setto(literalt a, bool val);
 
+  // XXX LOLTEMPORARAY
+  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s);
+
   // Internal gunk
 
   void convert(const bvt &bv, Minisat::vec<Lit> &dest);

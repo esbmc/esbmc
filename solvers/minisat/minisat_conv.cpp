@@ -148,3 +148,9 @@ minisat_convt::assert_lit(const literalt &l)
   solver.addClause_(c);
   return;
 }
+
+smt_ast *
+minisat_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return fresh_array(s, name);
+}

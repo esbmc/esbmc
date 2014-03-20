@@ -415,6 +415,12 @@ mathsat_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+mathsat_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const mathsat_smt_sort *ms = mathsat_sort_downcast(s);

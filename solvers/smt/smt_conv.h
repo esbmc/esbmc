@@ -322,6 +322,8 @@ public:
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
 #include "smt_tuple.h"
+// Also, array interface
+#include "smt_array.h"
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -360,7 +362,7 @@ public:
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget
+class smt_convt : public messaget, public array_iface
 {
 public:
   /** Shorthand for a vector of smt_ast's */
