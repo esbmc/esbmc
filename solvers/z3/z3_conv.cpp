@@ -735,8 +735,18 @@ z3_convt::mk_struct_sort(const type2tc &type)
 {
   z3::sort s;
   convert_type(type, s);
-  return new z3_smt_sort(
-      is_array_type(type) ? SMT_SORT_ARRAY : SMT_SORT_STRUCT, s, type);
+
+  if (is_array_type(type)) {
+    unsigned int domain_width;
+    if (int_encoding)
+      domain_width = 0;
+    else
+      domain_width = s.array_domain().bv_size();
+
+    return new z3_smt_sort(SMT_SORT_ARRAY, s, 0, domain_width, NULL);
+  } else {
+    return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
+  }
 }
 
 smt_sort *
