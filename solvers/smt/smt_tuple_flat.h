@@ -125,10 +125,10 @@ array_node_smt_ast::array_node_smt_ast(smt_convt *ctx, smt_sortt s,
   }
 }
 
-class smt_tuple_flattener : public tuple_iface
+class smt_tuple_node_flattener : public tuple_iface
 {
 public:
-  smt_tuple_flattener(smt_convt *_ctx, const namespacet &_ns)
+  smt_tuple_node_flattener(smt_convt *_ctx, const namespacet &_ns)
     : tuple_iface(), ctx(_ctx), ns(_ns) { }
 
   virtual smt_sortt mk_struct_sort(const type2tc &type);

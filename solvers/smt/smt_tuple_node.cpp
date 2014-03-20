@@ -362,7 +362,7 @@ array_node_smt_ast::project(smt_convt *ctx __attribute__((unused)),
 }
 
 smt_astt
-smt_tuple_flattener::tuple_create(const expr2tc &structdef)
+smt_tuple_node_flattener::tuple_create(const expr2tc &structdef)
 {
   // From a vector of expressions, create a tuple representation by creating
   // a fresh name and assigning members into it.
@@ -383,7 +383,7 @@ smt_tuple_flattener::tuple_create(const expr2tc &structdef)
 }
 
 smt_astt
-smt_tuple_flattener::union_create(const expr2tc &unidef)
+smt_tuple_node_flattener::union_create(const expr2tc &unidef)
 {
   // Unions are known to be brok^W fragile. Create a free new structure, and
   // assign in any members where the type matches the single member of the
@@ -431,7 +431,7 @@ smt_tuple_flattener::union_create(const expr2tc &unidef)
 }
 
 smt_astt
-smt_tuple_flattener::tuple_fresh(smt_sortt s, std::string name)
+smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
 {
   if (name == "")
     name = ctx->mk_fresh_name("tuple_fresh::") + ".";
@@ -445,7 +445,7 @@ smt_tuple_flattener::tuple_fresh(smt_sortt s, std::string name)
 }
 
 smt_astt
-smt_tuple_flattener::mk_tuple_symbol(const expr2tc &expr)
+smt_tuple_node_flattener::mk_tuple_symbol(const expr2tc &expr)
 {
   // Assuming this is a symbol, convert it to being an ast with tuple type.
   // That's done by creating the prefix for the names of all the contained
@@ -472,7 +472,7 @@ smt_tuple_flattener::mk_tuple_symbol(const expr2tc &expr)
 }
 
 smt_astt
-smt_tuple_flattener::mk_tuple_array_symbol(const expr2tc &expr)
+smt_tuple_node_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 {
   // Exactly the same as creating a tuple symbol, but for arrays.
   const symbol2t &sym = to_symbol2t(expr);
@@ -482,7 +482,7 @@ smt_tuple_flattener::mk_tuple_array_symbol(const expr2tc &expr)
 }
 
 smt_astt 
-smt_tuple_flattener::tuple_array_create(const type2tc &array_type,
+smt_tuple_node_flattener::tuple_array_create(const type2tc &array_type,
                               smt_astt *inputargs,
                               bool const_array,
                               smt_sortt domain __attribute__((unused)))
@@ -530,7 +530,7 @@ smt_tuple_flattener::tuple_array_create(const type2tc &array_type,
 }
 
 expr2tc
-smt_tuple_flattener::tuple_get(const expr2tc &expr)
+smt_tuple_node_flattener::tuple_get(const expr2tc &expr)
 {
   assert(is_symbol2t(expr) && "Non-symbol in smtlib expr get()");
   const symbol2t &sym = to_symbol2t(expr);
@@ -541,7 +541,7 @@ smt_tuple_flattener::tuple_get(const expr2tc &expr)
 }
 
 expr2tc
-smt_tuple_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
+smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 {
   tuple_smt_sortt sort = to_tuple_sort(tuple->sort);
 
@@ -598,7 +598,7 @@ smt_tuple_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 }
 
 smt_astt 
-smt_tuple_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
+smt_tuple_node_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array_size)
 {
 
   // An array of tuples without tuple support: decompose into array_of's each
@@ -632,13 +632,13 @@ smt_tuple_flattener::tuple_array_of(const expr2tc &init_val, unsigned long array
 }
 
 smt_sortt
-smt_tuple_flattener::mk_struct_sort(const type2tc &type)
+smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
 {
   return new tuple_smt_sort(type);
 }
 
 smt_sortt
-smt_tuple_flattener::mk_union_sort(const type2tc &type)
+smt_tuple_node_flattener::mk_union_sort(const type2tc &type)
 {
   return new tuple_smt_sort(type);
 }

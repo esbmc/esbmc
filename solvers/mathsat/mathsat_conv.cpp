@@ -29,7 +29,7 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
   msat_set_option(cfg, "model_generation", "true");
   env = msat_create_env(cfg);
 
-  set_tuple_iface(new smt_tuple_flattener(this, ns));
+  set_tuple_iface(new smt_tuple_node_flattener(this, ns));
   smt_post_init();
 }
 
