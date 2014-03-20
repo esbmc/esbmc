@@ -55,22 +55,6 @@
  * slower approach works.
  */
 
-__attribute__((always_inline)) static inline tuple_sym_smt_astt
-to_tuple_ast(smt_astt a)
-{
-  tuple_sym_smt_astt ta = dynamic_cast<tuple_sym_smt_astt>(a);
-  assert(ta != NULL && "Tuple AST mismatch");
-  return ta;
-}
-
-__attribute__((always_inline)) static inline tuple_smt_sortt 
-to_tuple_sort(smt_sortt a)
-{
-  tuple_smt_sortt ta = dynamic_cast<tuple_smt_sortt >(a);
-  assert(ta != NULL && "Tuple AST mismatch");
-  return ta;
-}
-
 smt_astt 
 smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
@@ -90,7 +74,7 @@ tuple_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
   // over each member. Note that we always make assertions here, because the
   // ite is always true. We return the output symbol.
   tuple_sym_smt_astt true_val = this;
-  tuple_sym_smt_astt false_val = to_tuple_ast(falseop);
+  tuple_sym_smt_astt false_val = to_tuple_sym_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   std::string name = ctx->mk_fresh_name("tuple_ite::") + ".";
   symbol2tc result(thissort->thetype, name);
@@ -121,7 +105,7 @@ array_sym_smt_ast::ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const
 {
   // Similar to tuple ite's, but the leafs are arrays.
   tuple_sym_smt_astt true_val = this;
-  tuple_sym_smt_astt false_val = to_tuple_ast(falseop);
+  tuple_sym_smt_astt false_val = to_tuple_sym_ast(falseop);
   tuple_smt_sortt thissort = to_tuple_sort(sort);
   assert(is_array_type(thissort->thetype));
   const array_type2t &array_type = to_array_type(thissort->thetype);
@@ -169,7 +153,7 @@ tuple_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
   tuple_sym_smt_astt ta = this;
-  tuple_sym_smt_astt tb = to_tuple_ast(other);
+  tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const struct_union_data &data = ctx->get_type_def(ts->thetype);
 
@@ -197,7 +181,7 @@ array_sym_smt_ast::eq(smt_convt *ctx, smt_astt other) const
   // their equality: iterate over all their members, compute an equality for
   // each of them, and then combine that into a final ast.
   tuple_sym_smt_astt ta = this;
-  tuple_sym_smt_astt tb = to_tuple_ast(other);
+  tuple_sym_smt_astt tb = to_tuple_sym_ast(other);
   tuple_smt_sortt ts = to_tuple_sort(sort);
   assert(is_array_type(ts->thetype));
   const array_type2t &arrtype = to_array_type(ts->thetype);
