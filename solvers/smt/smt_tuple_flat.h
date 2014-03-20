@@ -1,6 +1,13 @@
 #include "smt_conv.h"
 #include <namespace.h>
 
+class tuple_smt_ast;
+class array_smt_ast;
+class tuple_smt_sort;
+typedef const tuple_smt_ast *tuple_smt_astt;
+typedef const array_smt_ast *array_smt_astt;
+typedef const tuple_smt_sort *tuple_smt_sortt;
+
 /** Function app representing a tuple sorted value.
  *  This AST represents any kind of SMT function that results in something of
  *  a tuple sort. As documented in smt_tuple.c, the result of any kind of

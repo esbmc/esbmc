@@ -201,9 +201,7 @@ enum smt_func_kind {
  */
 
 class smt_sort;
-class tuple_smt_sort;
 typedef const smt_sort * smt_sortt;
-typedef const tuple_smt_sort *tuple_smt_sortt;
 
 class smt_sort {
 public:
@@ -346,11 +344,6 @@ public:
    *  @return AST representing the chosen element / element-array */
   virtual smt_astt project(smt_convt *ctx, unsigned int elem) const;
 };
-
-class tuple_smt_ast;
-class array_smt_ast;
-typedef const tuple_smt_ast * tuple_smt_astt;
-typedef const array_smt_ast * array_smt_astt;
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
 #include "smt_tuple.h"
