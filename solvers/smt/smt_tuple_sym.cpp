@@ -449,8 +449,6 @@ smt_tuple_sym_flattener::tuple_fresh(smt_sortt s, std::string name)
   std::string n = (name == "") ? ctx->mk_fresh_name("tuple_fresh::") + "."
                                : name;
 
-  smt_astt a = ctx->mk_smt_symbol(n, s);
-  (void)a;
   if (s->id == SMT_SORT_ARRAY)
     return new array_sym_smt_ast(ctx, s, n);
   else

@@ -435,8 +435,6 @@ smt_tuple_node_flattener::tuple_fresh(smt_sortt s, std::string name)
   if (name == "")
     name = ctx->mk_fresh_name("tuple_fresh::") + ".";
 
-  smt_astt a = ctx->mk_smt_symbol(name, s);
-  (void)a;
   if (s->id == SMT_SORT_ARRAY)
     return new array_node_smt_ast(ctx, s, name);
   else
