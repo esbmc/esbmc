@@ -227,7 +227,6 @@ smt_astt
 array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
     expr2tc idx_expr) const
 {
-  smt_convt::ast_vec eqs;
 
   tuple_smt_sortt ts = to_tuple_sort(sort);
   const array_type2t array_type = to_array_type(ts->thetype);
@@ -257,12 +256,11 @@ array_sym_smt_ast::update(smt_convt *ctx, smt_astt value, unsigned int idx,
 
     // Now equality it into the result object
     smt_astt res_field = result->project(ctx, i);
-    eqs.push_back(res_field->eq(ctx, updated));
+    updated->assign(ctx, res_field);
 
     i++;
   }
 
-  ctx->assert_ast(ctx->make_conjunct(eqs));
   return result;
 }
 
