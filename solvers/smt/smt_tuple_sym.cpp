@@ -582,3 +582,15 @@ smt_tuple_sym_flattener::tuple_array_of(const expr2tc &init_val, unsigned long a
 
   return newsym;
 }
+
+smt_sortt
+smt_tuple_sym_flattener::mk_struct_sort(const type2tc &type)
+{
+  return new tuple_smt_sort(type);
+}
+
+smt_sortt
+smt_tuple_sym_flattener::mk_union_sort(const type2tc &type)
+{
+  return new tuple_smt_sort(type);
+}
