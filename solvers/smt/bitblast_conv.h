@@ -28,11 +28,10 @@ public:
   bvt bv;
 };
 
-template <class subclass>
-class bitblast_convt : public subclass
+class bitblast_convt : public smt_convt
 {
 public:
-  typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >
+  typedef hash_map_cont<std::string, smt_astt, std::hash<std::string> >
     symtable_type;
 
   typedef enum {
@@ -75,7 +74,7 @@ public:
 
   // smt_convt apis we fufil
 
-  virtual smt_ast* mk_func_app(const smt_sort *ressort, smt_func_kind f,
+  virtual smt_astt mk_func_app(const smt_sort *ressort, smt_func_kind f,
                                const smt_ast* const* args, unsigned int num);
   virtual smt_sort* mk_sort(smt_sort_kind k, ...);
   virtual smt_ast* mk_smt_int(const mp_integer &intval, bool sign);
@@ -83,7 +82,7 @@ public:
   virtual smt_ast* mk_smt_bvint(const mp_integer &inval, bool sign,
                                 unsigned int w);
   virtual smt_ast* mk_smt_bool(bool boolval);
-  virtual smt_ast* mk_smt_symbol(const std::string &name, const smt_sort *sort);
+  virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *sort);
   virtual smt_sort* mk_struct_sort(const type2tc &t);
   virtual smt_sort* mk_union_sort(const type2tc&t);
   virtual smt_ast* mk_extract(const smt_ast *src, unsigned int high,
@@ -144,8 +143,5 @@ public:
   // place for these things to come together.
   symtable_type sym_table;
 };
-
-// And because this is a template...
-#include "bitblast_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_ */
