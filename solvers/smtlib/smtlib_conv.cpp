@@ -15,6 +15,17 @@ int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
+smt_convt *
+create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts __attribute__((unused)),
+                          tuple_iface **tuple_api __attribute__((unused)),
+                          array_iface **array_api)
+{
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, is_cpp, opts);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
+}
+
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
   : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),

@@ -1,11 +1,14 @@
 #include "solve.h"
 
-#include <solvers/smtlib/smtlib_conv.h>
-
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_array.h>
+#include <solvers/smt/smt_tuple_flat.h>
 
 // For the purpose of vastly reducing build times:
+smt_convt *
+create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts,
+                          tuple_iface **tuple_api, array_iface **array_api);
 smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts,
@@ -136,7 +139,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   }
 
   if (options.get_bool_option("smtlib")) {
-    return new smtlib_convt(int_encoding, ns, is_cpp, options);
+    return create_new_smtlib_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
   } else if (options.get_bool_option("mathsat")) {
     return create_mathsat_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (options.get_bool_option("cvc")) {
@@ -171,7 +174,7 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   } else if (solver_name == "cvc") {
     return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (solver_name == "smtlib") {
-    return new smtlib_convt(int_encoding, ns, is_cpp, options);
+    return create_new_smtlib_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
   } else if (options.get_bool_option("boolector")) {
