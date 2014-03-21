@@ -5,11 +5,10 @@
 #include "bitblast_conv.h"
 #include "cnf_iface.h"
 
-class cnf_convt : public sat_iface, public bitblast_convt
+class cnf_convt : public sat_iface
 {
 public:
-  cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
-            cnf_iface *cnf_api);
+  cnf_convt(cnf_iface *cnf_api);
   ~cnf_convt();
 
   // The API we're implementing: all reducing to cnf(), eventually.

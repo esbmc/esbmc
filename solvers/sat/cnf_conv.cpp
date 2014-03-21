@@ -1,10 +1,7 @@
 #include "cnf_conv.h"
 
-cnf_convt::cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
-    cnf_iface *_cnf_api)
-  : sat_iface(), bitblast_convt(int_encoding, _ns, is_cpp,
-                                static_cast<sat_iface*>(this)),
-    cnf_api(_cnf_api)
+cnf_convt::cnf_convt(cnf_iface *_cnf_api)
+  : sat_iface(), cnf_api(_cnf_api)
 {
 }
 

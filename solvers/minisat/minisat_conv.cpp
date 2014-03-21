@@ -71,7 +71,8 @@ minisat_convt::lcnf(const bvt &bv)
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
 : cnf_iface(),
-  cnf_convt(int_encoding, _ns, is_cpp, static_cast<cnf_iface*>(this)),
+  cnf_convt(static_cast<cnf_iface*>(this)),
+  bitblast_convt(int_encoding, _ns, is_cpp, static_cast<sat_iface*>(this)),
   solver(), options(_opts), false_asserted(false)
 {
 }
