@@ -9,15 +9,21 @@
 #include <ansi-c/c_types.h>
 
 smt_convt *
-create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
+create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts __attribute__((unused)),
+                          tuple_iface **tuple_api __attribute__((unused)),
+                          array_iface **array_api)
 {
-    return new mathsat_convt(is_cpp, int_encoding, ns);
+  mathsat_convt *conv = new mathsat_convt(is_cpp, int_encoding, ns);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
-  : smt_convt(int_encoding, ns, is_cpp, true, false)
+  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
+
   if (int_encoding) {
     std::cerr << "MathSAT converter doesn't support integer encoding"
               << std::endl;
@@ -44,6 +50,8 @@ mathsat_convt::assert_ast(const smt_ast *a)
 smt_convt::resultt
 mathsat_convt::dec_solve()
 {
+  pre_solve();
+
   msat_result r = msat_solve(env);
   if (r == MSAT_SAT) {
     return P_SATISFIABLE;
@@ -415,6 +423,12 @@ mathsat_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+mathsat_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 mathsat_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const mathsat_smt_sort *ms = mathsat_sort_downcast(s);
@@ -445,4 +459,16 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
   const mathsat_smt_ast *mast = mathsat_ast_downcast(a);
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
   return new mathsat_smt_ast(this, s, t);
+}
+
+const smt_ast *
+mathsat_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+mathsat_convt::add_array_constraints_for_solving()
+{
+  return;
 }

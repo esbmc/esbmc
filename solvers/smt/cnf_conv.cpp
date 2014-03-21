@@ -4,10 +4,8 @@
 
 template <class subclass>
 cnf_convt<subclass>::cnf_convt(bool int_encoding,
-                      const namespacet &_ns, bool is_cpp,
-                      bool bools_in_arrs, bool can_init_inf_arrs)
-  : subclass(int_encoding, _ns, is_cpp,
-              bools_in_arrs, can_init_inf_arrs)
+                      const namespacet &_ns, bool is_cpp)
+  : subclass(int_encoding, _ns, is_cpp)
 {
 }
 

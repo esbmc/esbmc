@@ -4,11 +4,8 @@
 
 template <class subclass>
 bitblast_convt<subclass>::bitblast_convt(bool int_encoding,
-                               const namespacet &_ns, bool is_cpp,
-                               bool bools_in_arrs,
-                               bool can_init_inf_arrs)
-  : subclass(int_encoding, _ns, is_cpp,
-              bools_in_arrs, can_init_inf_arrs)
+                               const namespacet &_ns, bool is_cpp)
+  : subclass(int_encoding, _ns, is_cpp)
 {
 }
 
@@ -78,7 +75,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   case SMT_FUNC_ITE:
   {
     if (ressort->id == SMT_SORT_ARRAY) {
-      return this->array_ite(_args[0], _args[1], _args[2], ressort);
+      return _args[1]->ite(this, _args[0], _args[2]);
     } else {
       assert(args[1]->bv.size() == args[2]->bv.size());
       result = new_ast(ressort);
@@ -394,19 +391,13 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, smt_sortt sort)
   }
   case SMT_SORT_ARRAY:
   {
-    result = this->fresh_array(s, name);
+    result = this->array_api->mk_array_symbol(name, s);
     break;
   }
   default:
-  // Alas, tuple_fresh invokes us gratuitously with an invalid type. I can't
-  // remember why, but it was justified at the time, for one solver, somewhere.
-  // Either way, it should die in the future, but until then...
-  return NULL;
-#if 0
     std::cerr << "Unimplemented symbol type " << sort->id
               << " in bitblast symbol creation" << std::endl;
     abort();
-#endif
   }
 
   sym_table.insert(symtable_type::value_type(name, result));

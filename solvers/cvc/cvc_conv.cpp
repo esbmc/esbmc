@@ -3,13 +3,18 @@
 #include "cvc_conv.h"
 
 smt_convt *
-create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
+create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                      const optionst &opts __attribute__((unused)),
+                      tuple_iface **tuple_api __attribute__((unused)),
+                      array_iface **array_api)
 {
-    return new cvc_convt(is_cpp, int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(is_cpp, int_encoding, ns);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns, is_cpp, true, false),
+   : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false),
      em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
@@ -27,6 +32,8 @@ cvc_convt::~cvc_convt()
 smt_convt::resultt
 cvc_convt::dec_solve()
 {
+  pre_solve();
+
   CVC4::Result r = smt.checkSat();
   if (r.isSat())
     return P_SATISFIABLE;
@@ -302,6 +309,12 @@ cvc_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+cvc_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 cvc_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const cvc_smt_sort *sort = cvc_sort_downcast(s);
@@ -346,4 +359,16 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
   CVC4::Expr ext2 = em.mkConst(ext);
   CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
   return new cvc_smt_ast(this, s, fin);
+}
+
+const smt_ast *
+cvc_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+cvc_convt::add_array_constraints_for_solving()
+{
+  return;
 }

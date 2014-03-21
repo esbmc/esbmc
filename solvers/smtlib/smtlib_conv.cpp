@@ -15,11 +15,23 @@ int smtlibparse(int startval);
 extern int smtlib_send_start_code;
 extern sexpr *smtlib_output;
 
+smt_convt *
+create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts __attribute__((unused)),
+                          tuple_iface **tuple_api __attribute__((unused)),
+                          array_iface **array_api)
+{
+  smtlib_convt *conv = new smtlib_convt(int_encoding, ns, is_cpp, opts);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
+}
+
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
-  : smt_convt(int_encoding, _ns, is_cpp, true, false),
+  : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),
     options(_opts)
 {
+
   temp_sym_count.push_back(1);
   std::string cmd;
 
@@ -287,6 +299,8 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 smt_convt::resultt
 smtlib_convt::dec_solve()
 {
+  pre_solve();
+
   // Set some preliminaries, logic and so forth.
   // Declare all the symbols + sorts
   // Emit constraints
@@ -714,6 +728,12 @@ smtlib_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+smtlib_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
@@ -792,6 +812,20 @@ smtlib_convt::pop_ctx()
   temp_sym_count.pop_back();
 
   smt_convt::pop_ctx();
+}
+
+const smt_ast *
+smtlib_convt::convert_array_of(const expr2tc &init_val,
+    unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+smtlib_convt::add_array_constraints_for_solving()
+{
+  // None required
+  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";
