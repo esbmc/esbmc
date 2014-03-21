@@ -23,7 +23,8 @@ create_new_boolector_solver(bool int_encoding, const namespacet &ns,
                           bool is_cpp, const optionst &options);
 smt_convt *
 create_new_z3_solver(bool int_encoding, const namespacet &ns,
-                          bool is_cpp, const optionst &options);
+                          bool is_cpp, const optionst &options,
+                          tuple_iface **tuple_api, array_iface **array_api);
 
 static smt_convt *
 create_z3_solver(bool is_cpp __attribute__((unused)),
@@ -38,10 +39,7 @@ create_z3_solver(bool is_cpp __attribute__((unused)),
               << std::endl;
     abort();
 #else
-    z3_convt *conv = (z3_convt*)create_new_z3_solver(int_encoding, ns, is_cpp, opts);
-    *tuple_api = static_cast<tuple_iface*>(conv);
-    *array_api = static_cast<array_iface*>(conv);
-    return conv;
+    return create_new_z3_solver(int_encoding, ns, is_cpp, opts, tuple_api, array_api);
 #endif
 }
 

@@ -35,9 +35,13 @@
 
 smt_convt *
 create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                              const optionst &opts __attribute__((unused)))
+                              const optionst &opts __attribute__((unused)),
+                              tuple_iface **tuple_api, array_iface **array_api)
 {
-  return new z3_convt(int_encoding, is_cpp, ns);
+  z3_convt *conv = new z3_convt(int_encoding, is_cpp, ns);
+  *tuple_api = static_cast<tuple_iface*>(conv);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
