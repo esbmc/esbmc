@@ -11,7 +11,8 @@ create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts);
 smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts);
+                          const optionst &opts,
+                          tuple_iface **tuple_api, array_iface **array_api);
 smt_convt *
 create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts,
@@ -61,14 +62,16 @@ static smt_convt *
 create_mathsat_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)),
-                                const optionst &opts __attribute__((unused)))
+                                const optionst &opts __attribute__((unused)),
+                 tuple_iface **tuple_api __attribute__((unused)),
+                 array_iface **array_api __attribute__((unused)))
 {
 #if !defined(MATHSAT)
     std::cerr << "Sorry, MathSAT support was not built into this "
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_mathsat_solver(int_encoding, ns, is_cpp, opts);
+    return create_new_mathsat_solver(int_encoding, ns, is_cpp, opts, tuple_api, array_api);
 #endif
 }
 
@@ -132,7 +135,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   if (options.get_bool_option("smtlib")) {
     return new smtlib_convt(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("mathsat")) {
-    return create_mathsat_solver(int_encoding, is_cpp, ns, options);
+    return create_mathsat_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (options.get_bool_option("cvc")) {
     return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (options.get_bool_option("minisat")) {
@@ -161,7 +164,7 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   if (solver_name == "z3") {
     return create_z3_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   } else if (solver_name == "mathsat") {
-    return create_mathsat_solver(int_encoding, is_cpp, ns, options);
+    return create_mathsat_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (solver_name == "cvc") {
     return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (solver_name == "smtlib") {
