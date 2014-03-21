@@ -493,3 +493,10 @@ boolector_convt::overflow_arith(const expr2tc &expr)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new_ast(s, res);
 }
+
+const smt_ast *
+boolector_convt::convert_array_of(const expr2tc &init_val,
+    unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}

@@ -452,3 +452,9 @@ mathsat_convt::mk_extract(const smt_ast *a, unsigned int high,
   msat_term t = msat_make_bv_extract(env, high, low, mast->t);
   return new mathsat_smt_ast(this, s, t);
 }
+
+const smt_ast *
+mathsat_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}

@@ -688,6 +688,12 @@ z3_convt::mk_smt_bool(bool val)
 }
 
 smt_astt
+z3_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_astt
 z3_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   const z3_smt_sort *zs = static_cast<const z3_smt_sort *>(s);

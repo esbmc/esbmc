@@ -1870,7 +1870,9 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
 }
 
 smt_astt 
-smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
+array_iface::default_convert_array_of(const expr2tc &init_val,
+                                          unsigned long array_size,
+                                          smt_convt *ctx)
 {
   // We now an initializer, and a size of array to build. So:
 
@@ -1882,7 +1884,7 @@ smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
   type2tc newtype(new array_type2t(init_val->type, real_arr_size, false));
 
   expr2tc res(new constant_array2t(newtype, array_of_inits));
-  return convert_ast(res);
+  return ctx->convert_ast(res);
 }
 
 smt_astt 

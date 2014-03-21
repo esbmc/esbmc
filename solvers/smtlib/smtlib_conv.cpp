@@ -714,6 +714,12 @@ smtlib_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+smtlib_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 smtlib_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   smtlib_smt_ast *a = new smtlib_smt_ast(this, s, SMT_FUNC_SYMBOL);
@@ -792,6 +798,13 @@ smtlib_convt::pop_ctx()
   temp_sym_count.pop_back();
 
   smt_convt::pop_ctx();
+}
+
+const smt_ast *
+smtlib_convt::convert_array_of(const expr2tc &init_val,
+    unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";

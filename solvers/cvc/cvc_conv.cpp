@@ -353,3 +353,9 @@ cvc_convt::mk_extract(const smt_ast *a, unsigned int high,
   CVC4::Expr fin = em.mkExpr(CVC4::Kind::BITVECTOR_EXTRACT, ext2, ca->e);
   return new cvc_smt_ast(this, s, fin);
 }
+
+const smt_ast *
+cvc_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}

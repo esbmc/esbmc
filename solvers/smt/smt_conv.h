@@ -668,21 +668,6 @@ public:
    *  @return AST representing the result of evaluating expr. */
   virtual smt_astt convert_array_store(const expr2tc &expr);
 
-  /** Create an array with a single initializer. This may be a small, fixed
-   *  size array, or it may be a nondeterministically sized array with a
-   *  word-sized domain. Default implementation is to repeatedly store into
-   *  the array for as many elements as necessary; subclassing class should
-   *  override if it has a more efficient method.
-   *  Nondeterministically sized memory with an initializer is very rare;
-   *  the only real users of this are fixed sized (but large) static arrays
-   *  that are zero initialized, or some infinite-domain modelling arrays
-   *  used in ESBMC.
-   *  @param init_val The value to initialize each element with.
-   *  @param domain_width The size of the array to create, in domain bits.
-   *  @return An AST representing the created constant array. */
-  virtual smt_astt convert_array_of(const expr2tc &init_val,
-                                          unsigned long domain_width);
-
   /** @} */
 
   /** @{

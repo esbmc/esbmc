@@ -79,10 +79,14 @@ public:
                                 unsigned int w);
   virtual smt_ast *mk_smt_bool(bool val);
   virtual smt_ast *mk_smt_symbol(const std::string &name, const smt_sort *s);
+  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
+
+  const smt_ast *convert_array_of(const expr2tc &init_val,
+                                  unsigned long domain_width);
 
   virtual expr2tc get_bool(const smt_ast *a);
   virtual expr2tc get_bv(const type2tc &t, const smt_ast *a);
