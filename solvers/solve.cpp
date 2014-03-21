@@ -8,7 +8,8 @@
 // For the purpose of vastly reducing build times:
 smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts);
+                          const optionst &opts,
+                          tuple_iface **tuple_api, array_iface **array_api);
 smt_convt *
 create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts,
@@ -47,14 +48,16 @@ static smt_convt *
 create_minisat_solver(bool int_encoding __attribute__((unused)),
                       const namespacet &ns __attribute__((unused)),
                       bool is_cpp __attribute__((unused)),
-                      const optionst &options __attribute__((unused)))
+                      const optionst &options __attribute__((unused)),
+                 tuple_iface **tuple_api __attribute__((unused)),
+                 array_iface **array_api __attribute__((unused)))
 {
 #ifndef MINISAT
     std::cerr << "Sorry, MiniSAT support was not built into this version of "
               "ESBMC" << std::endl;
     abort();
 #else
-    return create_new_minisat_solver(int_encoding, ns, is_cpp, options);
+    return create_new_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
 #endif
 }
 
@@ -139,7 +142,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   } else if (options.get_bool_option("cvc")) {
     return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
   } else if (options.get_bool_option("minisat")) {
-    return create_minisat_solver(int_encoding, ns, is_cpp, options);
+    return create_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
   } else if (options.get_bool_option("boolector")) {
     return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   } else {
@@ -170,7 +173,7 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   } else if (solver_name == "smtlib") {
     return new smtlib_convt(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("minisat")) {
-    return create_minisat_solver(int_encoding, ns, is_cpp, options);
+    return create_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
   } else if (options.get_bool_option("boolector")) {
     return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   } else {

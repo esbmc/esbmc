@@ -7,9 +7,13 @@
 
 smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &options)
+                          const optionst &options,
+                          tuple_iface **tuple_api __attribute__((unused)),
+                          array_iface **array_api) // XXX temp
 {
-  return new minisat_convt(int_encoding, ns, is_cpp, options);
+  minisat_convt *conv = new minisat_convt(int_encoding, ns, is_cpp, options);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 literalt
