@@ -65,7 +65,7 @@ private:
 
   void convert_struct_union_type(const std::vector<type2tc> &members,
                                  const std::vector<irep_idt> &member_names,
-                                 const irep_idt &name, bool uni, void *_bv);
+                                 const irep_idt &name, bool uni, z3::sort &s);
 
   z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
                            const z3::expr &new_val);

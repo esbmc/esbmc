@@ -26,15 +26,14 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
-#define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *&>((arg))))
-#define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
-
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
                           "[" << __LINE__ << "]" << std::endl;
 #else
 #define DEBUGLOC
 #endif
+
+
 
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
@@ -208,11 +207,10 @@ void
 z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
                                     const std::vector<irep_idt> &member_names,
                                     const irep_idt &struct_name, bool uni,
-                                    void *_bv)
+                                    z3::sort &sort)
 {
   z3::symbol mk_tuple_name, *proj_names;
   z3::sort *proj_types;
-  z3::sort &sort = cast_to_z3_sort(_bv);
   Z3_func_decl mk_tuple_decl, *proj_decls;
   std::string name;
   u_int num_elems;
@@ -338,14 +336,14 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   {
     const struct_type2t &strct = to_struct_type(type);
     convert_struct_union_type(strct.members, strct.member_names, strct.name,
-                              false, &sort);
+                              false, sort);
     break;
   }
   case type2t::union_id:
   {
     const union_type2t &uni = to_union_type(type);
     convert_struct_union_type(uni.members, uni.member_names, uni.name,
-                              true, &sort);
+                              true, sort);
     break;
   }
   case type2t::array_id:
