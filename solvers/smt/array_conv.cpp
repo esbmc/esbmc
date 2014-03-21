@@ -345,6 +345,9 @@ array_convt::get_array_elem(smt_astt a, uint64_t index,
   for (it = indexes.begin(); it != indexes.end(); it++, i++) {
     const expr2tc &e = *it;
     expr2tc e2 = ctx->get(e);
+    if (is_nil_expr(e2))
+      continue;
+
     const constant_int2t &intval = to_constant_int2t(e2);
     if (intval.constant_value.to_uint64() == index)
       break;
