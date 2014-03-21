@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 #define _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 #include "bitblast_conv.h"
 
 class cnf_convt : public bitblast_convt

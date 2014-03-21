@@ -1,7 +1,7 @@
 #ifndef _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
 
 class bitblast_smt_sort : public smt_sort {
   // Record all the things.
