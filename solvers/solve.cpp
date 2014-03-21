@@ -17,7 +17,8 @@ create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts);
 smt_convt *
 create_new_boolector_solver(bool int_encoding, const namespacet &ns,
-                          bool is_cpp, const optionst &options);
+                          bool is_cpp, const optionst &options,
+                          tuple_iface **tuple_api, array_iface **array_api);
 smt_convt *
 create_new_z3_solver(bool int_encoding, const namespacet &ns,
                           bool is_cpp, const optionst &options,
@@ -89,14 +90,16 @@ static smt_convt *
 create_boolector_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
                                 const namespacet &ns __attribute__((unused)),
-                                const optionst &options __attribute__((unused)))
+                                const optionst &options __attribute__((unused)),
+                 tuple_iface **tuple_api __attribute__((unused)),
+                 array_iface **array_api __attribute__((unused)))
 {
 #if !defined(BOOLECTOR)
     std::cerr << "Sorry, Boolector support was not built into this "
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_boolector_solver(int_encoding, ns, is_cpp, options);
+    return create_new_boolector_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
 #endif
 }
 
@@ -132,7 +135,7 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("boolector")) {
-    return create_boolector_solver(is_cpp, int_encoding, ns, options);
+    return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   } else {
     return create_z3_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   }
@@ -163,7 +166,7 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("boolector")) {
-    return create_boolector_solver(is_cpp, int_encoding, ns, options);
+    return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
   } else {
     std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
               << std::endl;
