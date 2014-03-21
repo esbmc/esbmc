@@ -33,6 +33,11 @@ OBJS+= boolector/$(OBJDIR)/boolector.o
 DIRS+= boolector
 endif
 
+ifdef YICES
+OBJS+= yices/$(OBJDIR)/yices.o
+DIRS+= yices
+endif
+
 #
 ###############################################################################
 
