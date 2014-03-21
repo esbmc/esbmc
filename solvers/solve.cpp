@@ -4,7 +4,11 @@
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_tuple_flat.h>
 
-typedef smt_convt *(*solver_creator)
+typedef smt_convt *(solver_creator)
+  (bool int_encoding, const namespacet &ns, bool is_cpp, const optionst &opts,
+   tuple_iface **tuple_api, array_iface **array_api);
+
+typedef smt_convt *(*solver_creator_ptr)
   (bool int_encoding, const namespacet &ns, bool is_cpp, const optionst &opts,
    tuple_iface **tuple_api, array_iface **array_api);
 
@@ -17,7 +21,7 @@ solver_creator create_new_mathsat_solver;
 
 struct solver_config {
   std::string name;
-  solver_creator create;
+  solver_creator_ptr create;
 };
 
 static struct solver_config solvers[] =  {
