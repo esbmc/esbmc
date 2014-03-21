@@ -13,6 +13,8 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns, const optionst &options)
   : smt_convt(int_encoding, ns, is_cpp, true, false)
 {
+  set_array_iface(static_cast<array_iface*>(this));
+
   if (int_encoding) {
     std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
     abort();

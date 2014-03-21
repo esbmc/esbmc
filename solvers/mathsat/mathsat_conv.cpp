@@ -18,6 +18,8 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
   : smt_convt(int_encoding, ns, is_cpp, true, false)
 {
+  set_array_iface(static_cast<array_iface*>(this));
+
   if (int_encoding) {
     std::cerr << "MathSAT converter doesn't support integer encoding"
               << std::endl;

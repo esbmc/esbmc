@@ -23,7 +23,7 @@ public:
   BtorNode *e;
 };
 
-class boolector_convt : public smt_convt
+class boolector_convt : public smt_convt, public array_iface
 {
 public:
   typedef hash_map_cont<std::string, smt_ast *, std::hash<std::string> >

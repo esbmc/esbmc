@@ -34,7 +34,7 @@ public:
   msat_term t;
 };
 
-class mathsat_convt : public smt_convt
+class mathsat_convt : public smt_convt, public array_iface
 {
 public:
   mathsat_convt(bool is_cpp, bool int_encoding, const namespacet &ns);

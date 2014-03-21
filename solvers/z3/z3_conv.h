@@ -33,7 +33,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_convt: public smt_convt, public tuple_iface
+class z3_convt: public smt_convt, public tuple_iface, public array_iface
 {
 public:
   z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);

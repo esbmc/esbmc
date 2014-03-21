@@ -73,6 +73,7 @@ smt_convt::smt_convt(bool intmode, const namespacet &_ns,
     can_init_unbounded_arrs(can_init_inf_arrays)
 {
   tuple_api = NULL;
+  array_api = NULL;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -134,6 +135,13 @@ smt_convt::set_tuple_iface(tuple_iface *iface)
 {
   assert(tuple_api == NULL && "set_tuple_iface should only be called once");
   tuple_api = iface;
+}
+
+void
+smt_convt::set_array_iface(array_iface *iface)
+{
+  assert(array_api == NULL && "set_array_iface should only be called once");
+  array_api = iface;
 }
 
 void
@@ -997,7 +1005,7 @@ smt_convt::convert_terminal(const expr2tc &expr)
     std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
     if (is_array_type(expr))
-      return mk_array_symbol(name, sort);
+      return array_api->mk_array_symbol(name, sort);
     else
       return mk_smt_symbol(name, sort);
   }
@@ -1772,7 +1780,7 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   std::vector<expr2tc> fields;
 
   for (size_t i = 0; i < (1ULL << w); i++) {
-    fields.push_back(get_array_elem(array, i, ar.subtype));
+    fields.push_back(array_api->get_array_elem(array, i, ar.subtype));
   }
 
   return constant_array2tc(arr_type, fields);
@@ -1866,7 +1874,7 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
   else if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
-    return convert_array_of(base_init, array_size);
+    return array_api->convert_array_of(base_init, array_size);
 }
 
 smt_astt 

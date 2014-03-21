@@ -362,7 +362,7 @@ public:
  *
  *  @see smt_conv.h
  *  @see smt_func_kind */
-class smt_convt : public messaget, public array_iface
+class smt_convt : public messaget
 {
 public:
   /** Shorthand for a vector of smt_ast's */
@@ -614,14 +614,6 @@ public:
    *  @return Expression representation of a's value, as a constant_int2tc */
   virtual expr2tc get_bv(const type2tc &t, smt_astt a) = 0;
 
-  /** Extract an element from the model of an array, at an explicit index.
-   *  @param array AST representing the array we are extracting from
-   *  @param index The index of the element we wish to expect
-   *  @param subtype The type of the element we are extracting, i.e. array range
-   *  @return Expression representation of the element */
-  virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
-                                 const type2tc &subtype) = 0;
-
   /** @} */
 
   /** @{
@@ -765,6 +757,8 @@ public:
   void init_addr_space_array(void);
   /** Stores handle for the tuple interface. */
   void set_tuple_iface(tuple_iface *iface);
+  /** Stores handle for the array interface. */
+  void set_array_iface(array_iface *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -1003,6 +997,7 @@ public:
   std::vector<unsigned int> live_asts_sizes;
 
   tuple_iface *tuple_api;
+  array_iface *array_api;
 
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and

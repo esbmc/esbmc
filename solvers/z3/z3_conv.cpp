@@ -46,6 +46,8 @@ Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 : smt_convt(int_encoding, _ns, is_cpp, false, true), ctx(false)
 {
+  set_array_iface(static_cast<array_iface*>(this));
+
   this->int_encoding = int_encoding;
 
   assumpt_mode = false;

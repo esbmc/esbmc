@@ -20,6 +20,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   : smt_convt(int_encoding, _ns, is_cpp, true, false),
     options(_opts)
 {
+  set_array_iface(static_cast<array_iface*>(this));
+
   temp_sym_count.push_back(1);
   std::string cmd;
 

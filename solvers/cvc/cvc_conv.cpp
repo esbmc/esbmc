@@ -14,6 +14,8 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
 {
   // Already initialized stuff in the constructor list,
 
+  set_array_iface(static_cast<array_iface*>(this));
+
   smt.setOption("produce-models", true);
   smt.setLogic("QF_AUFBV");
 

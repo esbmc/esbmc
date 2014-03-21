@@ -58,7 +58,7 @@ public:
   const smt_ast *args[4];
 };
 
-class smtlib_convt : public smt_convt {
+class smtlib_convt : public smt_convt, public array_iface {
 public:
   smtlib_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
                const optionst &_options);
