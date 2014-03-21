@@ -33,7 +33,12 @@
 #define DEBUGLOC
 #endif
 
-
+smt_convt *
+create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                              const optionst &opts __attribute__((unused)))
+{
+  return new z3_convt(int_encoding, is_cpp, ns);
+}
 
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
