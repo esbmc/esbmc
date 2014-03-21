@@ -3,7 +3,8 @@
 #include "cvc_conv.h"
 
 smt_convt *
-create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
+create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                      const optionst &opts __attribute__((unused)))
 {
     return new cvc_convt(is_cpp, int_encoding, ns);
 }

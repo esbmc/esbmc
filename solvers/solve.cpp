@@ -13,12 +13,14 @@ smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &opts);
 smt_convt *
-create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
+create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts);
 smt_convt *
-create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns);
+create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                          const optionst &opts);
 smt_convt *
-create_new_boolector_solver(bool int_encoding, bool is_cpp,
-                            const namespacet &ns, const optionst &options);
+create_new_boolector_solver(bool int_encoding, const namespacet &ns,
+                          bool is_cpp, const optionst &options);
 
 static smt_convt *
 create_z3_solver(bool is_cpp __attribute__((unused)),
@@ -52,28 +54,30 @@ create_minisat_solver(bool int_encoding __attribute__((unused)),
 static smt_convt *
 create_mathsat_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
-                                const namespacet &ns __attribute__((unused)))
+                                const namespacet &ns __attribute__((unused)),
+                                const optionst &opts __attribute__((unused)))
 {
 #if !defined(MATHSAT)
     std::cerr << "Sorry, MathSAT support was not built into this "
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_mathsat_solver(int_encoding, is_cpp, ns);
+    return create_new_mathsat_solver(int_encoding, ns, is_cpp, opts);
 #endif
 }
 
 static smt_convt *
 create_cvc_solver(bool is_cpp __attribute__((unused)),
                                 bool int_encoding __attribute__((unused)),
-                                const namespacet &ns __attribute__((unused)))
+                                const namespacet &ns __attribute__((unused)),
+                                const optionst &opts __attribute__((unused)))
 {
 #if !defined(USECVC)
     std::cerr << "Sorry, CVC support was not built into this "
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_cvc_solver(int_encoding, is_cpp, ns);
+    return create_new_cvc_solver(int_encoding, ns, is_cpp, opts);
 #endif
 }
 
@@ -88,7 +92,7 @@ create_boolector_solver(bool is_cpp __attribute__((unused)),
               << "version of ESBMC" << std::endl;
     abort();
 #else
-    return create_new_boolector_solver(is_cpp, int_encoding, ns, options);
+    return create_new_boolector_solver(int_encoding, ns, is_cpp, options);
 #endif
 }
 
@@ -118,9 +122,9 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   if (options.get_bool_option("smtlib")) {
     return new smtlib_convt(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("mathsat")) {
-    return create_mathsat_solver(int_encoding, is_cpp, ns);
+    return create_mathsat_solver(int_encoding, is_cpp, ns, options);
   } else if (options.get_bool_option("cvc")) {
-    return create_cvc_solver(int_encoding, is_cpp, ns);
+    return create_cvc_solver(int_encoding, is_cpp, ns, options);
   } else if (options.get_bool_option("minisat")) {
     return create_minisat_solver(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("boolector")) {
@@ -153,9 +157,9 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
     *tuple_api = static_cast<tuple_iface*>(cvt);
     return cvt;
   } else if (solver_name == "mathsat") {
-    return create_mathsat_solver(int_encoding, is_cpp, ns);
+    return create_mathsat_solver(int_encoding, is_cpp, ns, options);
   } else if (solver_name == "cvc") {
-    return create_cvc_solver(int_encoding, is_cpp, ns);
+    return create_cvc_solver(int_encoding, is_cpp, ns, options);
   } else if (solver_name == "smtlib") {
     return new smtlib_convt(int_encoding, ns, is_cpp, options);
   } else if (options.get_bool_option("minisat")) {

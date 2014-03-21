@@ -3,8 +3,8 @@
 #include "boolector_conv.h"
 
 smt_convt *
-create_new_boolector_solver(bool is_cpp, bool int_encoding,
-                            const namespacet &ns, const optionst &options)
+create_new_boolector_solver(bool int_encoding, const namespacet &ns,
+                            bool is_cpp, const optionst &options)
 {
   return new boolector_convt(is_cpp, int_encoding, ns, options);
 }
