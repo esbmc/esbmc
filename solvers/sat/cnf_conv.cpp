@@ -1,8 +1,10 @@
 #include "cnf_conv.h"
 
-cnf_convt::cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp)
+cnf_convt::cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+    cnf_iface *_cnf_api)
   : sat_iface(), bitblast_convt(int_encoding, _ns, is_cpp,
-                                static_cast<sat_iface*>(this))
+                                static_cast<sat_iface*>(this)),
+    cnf_api(_cnf_api)
 {
 }
 
@@ -97,28 +99,28 @@ cnf_convt::gate_xor(literalt a, literalt b, literalt o)
   lits.push_back(neg(a));
   lits.push_back(neg(b));
   lits.push_back(neg(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(3);
   lits.push_back(pos(a));
   lits.push_back(pos(b));
   lits.push_back(neg(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(3);
   lits.push_back(neg(a));
   lits.push_back(pos(b));
   lits.push_back(pos(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(3);
   lits.push_back(pos(a));
   lits.push_back(neg(b));
   lits.push_back(pos(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 }
 
 void
@@ -131,20 +133,20 @@ cnf_convt::gate_or(literalt a, literalt b, literalt o)
   lits.reserve(2);
   lits.push_back(neg(a));
   lits.push_back(pos(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(2);
   lits.push_back(neg(b));
   lits.push_back(pos(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(3);
   lits.push_back(pos(a));
   lits.push_back(pos(b));
   lits.push_back(neg(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 }
 
 void
@@ -157,36 +159,36 @@ cnf_convt::gate_and(literalt a, literalt b, literalt o)
   lits.reserve(2);
   lits.push_back(pos(a));
   lits.push_back(neg(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(2);
   lits.push_back(pos(b));
   lits.push_back(neg(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 
   lits.clear();
   lits.reserve(3);
   lits.push_back(neg(a));
   lits.push_back(neg(b));
   lits.push_back(pos(o));
-  lcnf(lits);
+  cnf_api->lcnf(lits);
 }
 
 void
 cnf_convt::set_equal(literalt a, literalt b)
 {
   if (a == const_literal(false)) {
-    setto(b, false);
+    cnf_api->setto(b, false);
     return;
   } else if (b == const_literal(false)) {
-    setto(a, false);
+    cnf_api->setto(a, false);
     return;
   } else if (a == const_literal(true)) {
-    setto(b, true);
+    cnf_api->setto(b, true);
     return;
   } else if (b == const_literal(true)) {
-    setto(a, true);
+    cnf_api->setto(a, true);
     return;
   }
 
@@ -194,10 +196,10 @@ cnf_convt::set_equal(literalt a, literalt b)
   bv.resize(2);
   bv[0] = a;
   bv[1] = lnot(b);
-  lcnf(bv);
+  cnf_api->lcnf(bv);
 
   bv[0] = lnot(a);
   bv[1] = b;
-  lcnf(bv);
+  cnf_api->lcnf(bv);
   return;
 }
