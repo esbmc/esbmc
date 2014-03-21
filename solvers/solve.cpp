@@ -115,9 +115,9 @@ create_boolector_solver(bool is_cpp __attribute__((unused)),
 #endif
 }
 
-static const unsigned int num_of_solvers = 8;
+static const unsigned int num_of_solvers = 6;
 static const std::string list_of_solvers[] =
-{ "z3", "smtlib", "minisat", "boolector", "sword", "stp", "mathsat", "cvc"};
+{ "z3", "smtlib", "minisat", "boolector", "mathsat", "cvc"};
 
 static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
