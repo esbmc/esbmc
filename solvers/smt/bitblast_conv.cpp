@@ -78,7 +78,7 @@ bitblast_convt<subclass>::mk_func_app(smt_sortt ressort,
   case SMT_FUNC_ITE:
   {
     if (ressort->id == SMT_SORT_ARRAY) {
-      return this->array_ite(_args[0], _args[1], _args[2], ressort);
+      return _args[1]->ite(this, _args[0], _args[2]);
     } else {
       assert(args[1]->bv.size() == args[2]->bv.size());
       result = new_ast(ressort);
@@ -394,7 +394,7 @@ bitblast_convt<subclass>::mk_smt_symbol(const std::string &name, smt_sortt sort)
   }
   case SMT_SORT_ARRAY:
   {
-    result = this->fresh_array(s, name);
+    result = this->array_api->mk_array_symbol(name, s);
     break;
   }
   default:

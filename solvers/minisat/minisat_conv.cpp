@@ -68,6 +68,7 @@ minisat_convt::lcnf(const bvt &bv)
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
 : cnf_convt(int_encoding, _ns, is_cpp, true, true),
+  array_convt(this),
   solver(), options(_opts), false_asserted(false)
 {
   set_array_iface(static_cast<array_iface*>(this));
