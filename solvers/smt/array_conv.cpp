@@ -325,7 +325,7 @@ array_convt::convert_array_of(const expr2tc &init_val,
 
 expr2tc
 array_convt::get_array_elem(smt_astt a, uint64_t index,
-                                      const type2tc &subtype)
+                            const type2tc &subtype __attribute__((unused)))
 {
   const array_ast *mast = array_downcast(a);
 
@@ -356,7 +356,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index,
 
   // We've found an index; pick its value out, convert back to expr.
   // First, what's it's type?
-  type2tc src_type = subtype;
+  type2tc src_type = get_uint_type(array_subtypes[mast->base_array_id]);
 
   const std::vector<smt_astt > &solver_values =
     array_valuation[mast->base_array_id][mast->array_update_num];
