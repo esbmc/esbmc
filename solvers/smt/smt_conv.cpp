@@ -65,10 +65,8 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool can_init_inf_arrays)
-  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns),
-    can_init_unbounded_arrs(can_init_inf_arrays)
+smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
+  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
   array_api = NULL;
@@ -452,7 +450,7 @@ expr_handle_table:
   case expr2t::constant_array_of_id:
   {
     const array_type2t &arr = to_array_type(expr->type);
-    if (!can_init_unbounded_arrs && arr.size_is_infinite) {
+    if (!array_api->can_init_infinite_arrays && arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.

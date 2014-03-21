@@ -7,7 +7,8 @@ class array_iface
 public:
   // This constructor makes this not qualify as an abstract interface, but
   // meh.
-  array_iface(bool _b) : supports_bools_in_arrays(_b) { }
+  array_iface(bool _b, bool inf) : supports_bools_in_arrays(_b),
+                                   can_init_infinite_arrays(inf) { }
 
   virtual smt_astt mk_array_symbol(const std::string &name, smt_sortt sort) = 0;
 
@@ -42,5 +43,5 @@ public:
 
   // Small piece of internal munging:
   bool supports_bools_in_arrays;
+  bool can_init_infinite_arrays;
 };
-

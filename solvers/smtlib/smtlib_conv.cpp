@@ -17,7 +17,7 @@ extern sexpr *smtlib_output;
 
 smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
                            bool is_cpp, const optionst &_opts)
-  : smt_convt(int_encoding, _ns, is_cpp, false), array_iface(false),
+  : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),
     options(_opts)
 {
   set_array_iface(static_cast<array_iface*>(this));

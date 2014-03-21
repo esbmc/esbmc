@@ -374,15 +374,8 @@ public:
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
-   *         cpp:: prefix to their symbols.
-   *  @param can_init_inf_arrs Whether the solver can efficiently initialize
-   *         infinite arrays. If it can, the convert_array_of method is used
-   *         to create them. If not, a free array is used, and when we fiddle
-   *         with pointer tracking modelling arrays we assert that the elements
-   *         we use were initialized to a particular value. Ugly, but works on
-   *         various solvers. */
-  smt_convt(bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool can_init_inf_arrs);
+   *         cpp:: prefix to their symbols. */
+  smt_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
   ~smt_convt();
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -940,9 +933,6 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  /** Whether or not the solver can initialize an unbounded array. See:
-   *  the constructor. */
-  bool can_init_unbounded_arrs;
 
   bool ptr_foo_inited;
   /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space

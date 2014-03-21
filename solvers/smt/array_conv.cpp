@@ -1,7 +1,7 @@
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
 
-array_convt::array_convt(smt_convt *_ctx) : array_iface(false),
+array_convt::array_convt(smt_convt *_ctx) : array_iface(false, true),
   array_indexes(), array_values(), array_updates(), ctx(_ctx)
 {
 }

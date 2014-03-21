@@ -16,7 +16,7 @@ create_new_mathsat_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 
 mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
-  : smt_convt(int_encoding, ns, is_cpp, false), array_iface(false)
+  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
   set_array_iface(static_cast<array_iface*>(this));
 
