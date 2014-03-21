@@ -1,3 +1,6 @@
+#ifndef _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
+#define _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_
+
 #include "smt_conv.h"
 
 // Interface definition for array manipulation
@@ -45,3 +48,5 @@ public:
   bool supports_bools_in_arrays;
   bool can_init_infinite_arrays;
 };
+
+#endif /* _ESBMC_SOLVERS_SMT_SMT_ARRAY_H_ */
