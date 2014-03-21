@@ -45,6 +45,12 @@ CXXFLAGS+= -DUSECVC -I $(CVC)/include
 SOLVER_LIBS += -L$(CVC)/lib -lcvc4
 endif
 
+ifdef USE_SOLVER_YICES
+YICES = $(YICES_PATH)
+CXXFLAGS+= -DYICES -I $(YICES)/include
+SOLVER_LIBS += -L$(YICES)/lib -lyices
+endif
+
 # Other goo
 
 ifdef TARGET32
