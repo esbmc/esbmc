@@ -4,9 +4,13 @@
 
 smt_convt *
 create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                      const optionst &opts __attribute__((unused)))
+                      const optionst &opts __attribute__((unused)),
+                      tuple_iface **tuple_api __attribute__((unused)),
+                      array_iface **array_api)
 {
-    return new cvc_convt(is_cpp, int_encoding, ns);
+  cvc_convt *conv = new cvc_convt(is_cpp, int_encoding, ns);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
