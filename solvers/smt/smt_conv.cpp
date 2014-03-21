@@ -1719,6 +1719,14 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
 
 // Debis from prop_convt: to be reorganized.
 
+void
+smt_convt::pre_solve()
+{
+  tuple_api->add_tuple_constraints_for_solving();
+  array_api->add_array_constraints_for_solving();
+  return;
+}
+
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {

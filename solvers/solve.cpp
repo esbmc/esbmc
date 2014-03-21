@@ -3,6 +3,7 @@
 #include <solvers/smt/smt_tuple.h>
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_tuple_flat.h>
+#include <solvers/smt/array_conv.h>
 
 typedef smt_convt *(solver_creator)
   (bool int_encoding, const namespacet &ns, bool is_cpp, const optionst &opts,
@@ -130,6 +131,7 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
+  bool array_flat = options.get_bool_option("array-flattener");
 
   // Pick a tuple flattener to use. If the solver has native support, and no
   // options were given, use that by default
@@ -144,6 +146,16 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
   // Default: node flattener
   else
     ctx->set_tuple_iface(new smt_tuple_node_flattener(ctx, ns));
+
+  // Pick an array flattener to use. Again, pick the solver native one by
+  // default, or the one specified, or if none of the above then use the built
+  // in arrays -> to BV flattener.
+  if (array_api != NULL && !array_flat)
+    ctx->set_array_iface(array_api);
+  else if (array_flat)
+    ctx->set_array_iface(new array_convt(ctx));
+  else
+    ctx->set_array_iface(new array_convt(ctx));
 
   ctx->smt_post_init();
   return ctx;

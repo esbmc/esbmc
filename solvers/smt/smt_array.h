@@ -42,6 +42,8 @@ public:
                                           unsigned long domain_width,
                                           smt_convt *ctx);
 
+  virtual void add_array_constraints_for_solving() = 0;
+
   // And everything else goes through the ast methods!
 
   // Small piece of internal munging:

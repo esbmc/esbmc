@@ -31,7 +31,6 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   : smt_convt(int_encoding, _ns, is_cpp), array_iface(false, false),
     options(_opts)
 {
-  set_array_iface(static_cast<array_iface*>(this));
 
   temp_sym_count.push_back(1);
   std::string cmd;
@@ -300,6 +299,8 @@ smtlib_convt::emit_ast(const smtlib_smt_ast *ast, std::string &output)
 smt_convt::resultt
 smtlib_convt::dec_solve()
 {
+  pre_solve();
+
   // Set some preliminaries, logic and so forth.
   // Declare all the symbols + sorts
   // Emit constraints
@@ -818,6 +819,13 @@ smtlib_convt::convert_array_of(const expr2tc &init_val,
     unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+smtlib_convt::add_array_constraints_for_solving()
+{
+  // None required
+  return;
 }
 
 const std::string smtlib_convt::temp_prefix = "?x";

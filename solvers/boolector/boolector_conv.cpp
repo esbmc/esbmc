@@ -18,7 +18,6 @@ boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns, const optionst &options)
   : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
-  set_array_iface(static_cast<array_iface*>(this));
 
   if (int_encoding) {
     std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
@@ -50,6 +49,8 @@ boolector_convt::~boolector_convt(void)
 smt_convt::resultt
 boolector_convt::dec_solve()
 {
+  pre_solve();
+
   int result = boolector_sat(btor);
 
   if (result == BOOLECTOR_SAT)
@@ -506,4 +507,10 @@ boolector_convt::convert_array_of(const expr2tc &init_val,
     unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+boolector_convt::add_array_constraints_for_solving()
+{
+  return;
 }

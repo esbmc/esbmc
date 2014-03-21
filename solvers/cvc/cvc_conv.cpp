@@ -19,8 +19,6 @@ cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
 {
   // Already initialized stuff in the constructor list,
 
-  set_array_iface(static_cast<array_iface*>(this));
-
   smt.setOption("produce-models", true);
   smt.setLogic("QF_AUFBV");
 
@@ -34,6 +32,8 @@ cvc_convt::~cvc_convt()
 smt_convt::resultt
 cvc_convt::dec_solve()
 {
+  pre_solve();
+
   CVC4::Result r = smt.checkSat();
   if (r.isSat())
     return P_SATISFIABLE;
@@ -365,4 +365,10 @@ const smt_ast *
 cvc_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+cvc_convt::add_array_constraints_for_solving()
+{
+  return;
 }

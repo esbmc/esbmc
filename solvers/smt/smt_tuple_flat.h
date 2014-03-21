@@ -177,6 +177,8 @@ public:
                                             bool const_array,
                                             smt_sortt domain);
 
+  virtual void add_tuple_constraints_for_solving();
+
   smt_convt *ctx;
   const namespacet &ns;
 };
@@ -262,6 +264,8 @@ public:
                                             smt_astt *input_args,
                                             bool const_array,
                                             smt_sortt domain);
+
+  virtual void add_tuple_constraints_for_solving();
 
   smt_convt *ctx;
   const namespacet &ns;

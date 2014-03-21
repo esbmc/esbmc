@@ -449,6 +449,8 @@ public:
    *  @return Result code of the call to the solver. */
   virtual resultt dec_solve() = 0;
 
+  void pre_solve();
+
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
    *  to symbols / variables used in the formula. This method retrieves the

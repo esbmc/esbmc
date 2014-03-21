@@ -9,10 +9,9 @@ smt_convt *
 create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
                           const optionst &options,
                           tuple_iface **tuple_api __attribute__((unused)),
-                          array_iface **array_api) // XXX temp
+                          array_iface **array_api __attribute__((unused)))
 {
   minisat_convt *conv = new minisat_convt(int_encoding, ns, is_cpp, options);
-  *array_api = static_cast<array_iface*>(conv);
   return conv;
 }
 
@@ -72,10 +71,8 @@ minisat_convt::lcnf(const bvt &bv)
 minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
                              bool is_cpp, const optionst &_opts)
 : cnf_convt(int_encoding, _ns, is_cpp),
-  array_convt(this),
   solver(), options(_opts), false_asserted(false)
 {
-  set_array_iface(static_cast<array_iface*>(this));
 }
 
 minisat_convt::~minisat_convt(void)
@@ -85,11 +82,12 @@ minisat_convt::~minisat_convt(void)
 smt_convt::resultt
 minisat_convt::dec_solve()
 {
+  pre_solve();
+
   if (false_asserted)
     // Then the formula can never be satisfied.
     return smt_convt::P_UNSATISFIABLE;
 
-  add_array_constraints();
   bool res = solver.solve();
   if (res)
     return smt_convt::P_SATISFIABLE;
@@ -155,8 +153,3 @@ minisat_convt::assert_lit(const literalt &l)
   return;
 }
 
-smt_ast *
-minisat_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
-{
-  return fresh_array(s, name);
-}

@@ -70,6 +70,8 @@ public:
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
+  virtual void add_array_constraints_for_solving();
+
   // MathSAT data.
   msat_config cfg;
   msat_env env;

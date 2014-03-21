@@ -26,7 +26,7 @@ array_convt::convert_array_assign(const array_ast *src,
 }
 
 smt_ast *
-array_convt::fresh_array(smt_sortt ms, const std::string &name)
+array_convt::mk_array_symbol(const std::string &name, smt_sortt ms)
 {
   // No solver representation for this.
   unsigned long domain_width = ms->get_domain_width();
@@ -311,7 +311,7 @@ array_convt::convert_array_of(const expr2tc &init_val,
 
   if (is_unbounded_array(arr_sort)) {
     std::string name = ctx->mk_fresh_name("array_of_unbounded::");
-    mast = static_cast<array_ast*>(fresh_array(arr_sort, name));
+    mast = static_cast<array_ast*>(mk_array_symbol(name, arr_sort));
     array_of_vals.insert(std::pair<unsigned, smt_astt >
                                   (mast->base_array_id, init));
   } else {
@@ -365,7 +365,7 @@ array_convt::get_array_elem(smt_astt a, uint64_t index,
 }
 
 void
-array_convt::add_array_constraints(void)
+array_convt::add_array_constraints_for_solving(void)
 {
 
   for (unsigned int i = 0; i < array_indexes.size(); i++) {

@@ -85,6 +85,8 @@ public:
   virtual smt_ast *mk_extract(const smt_ast *a, unsigned int high,
                               unsigned int low, const smt_sort *s);
 
+  virtual void add_array_constraints_for_solving();
+
   const smt_ast *convert_array_of(const expr2tc &init_val,
                                   unsigned long domain_width);
 

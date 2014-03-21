@@ -20,7 +20,7 @@ typedef Minisat::Lit Lit;
 typedef Minisat::lbool lbool;
 typedef std::vector<literalt> bvt; // sadface.jpg
 
-class minisat_convt : public cnf_convt< bitblast_convt < smt_convt> >, public array_convt {
+class minisat_convt : public cnf_convt< bitblast_convt < smt_convt> > {
 public:
   typedef enum {
     LEFT, LRIGHT, ARIGHT
@@ -39,9 +39,6 @@ public:
   virtual void lcnf(const bvt &bv);
 
   virtual void setto(literalt a, bool val);
-
-  // XXX LOLTEMPORARAY
-  virtual smt_ast *mk_array_symbol(const std::string &name, const smt_sort *s);
 
   // Internal gunk
 

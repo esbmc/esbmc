@@ -23,7 +23,6 @@ mathsat_convt::mathsat_convt(bool is_cpp, bool int_encoding,
                              const namespacet &ns)
   : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
-  set_array_iface(static_cast<array_iface*>(this));
 
   if (int_encoding) {
     std::cerr << "MathSAT converter doesn't support integer encoding"
@@ -51,6 +50,8 @@ mathsat_convt::assert_ast(const smt_ast *a)
 smt_convt::resultt
 mathsat_convt::dec_solve()
 {
+  pre_solve();
+
   msat_result r = msat_solve(env);
   if (r == MSAT_SAT) {
     return P_SATISFIABLE;
@@ -464,4 +465,10 @@ const smt_ast *
 mathsat_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
 {
   return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+mathsat_convt::add_array_constraints_for_solving()
+{
+  return;
 }

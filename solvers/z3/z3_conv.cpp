@@ -54,7 +54,6 @@ Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
 : smt_convt(int_encoding, _ns, is_cpp), array_iface(true, true),ctx(false)
 {
-  set_array_iface(static_cast<array_iface*>(this));
 
   this->int_encoding = int_encoding;
 
@@ -156,6 +155,8 @@ z3_convt::dec_solve(void)
   unsigned major, minor, build, revision;
   z3::check_result result;
   Z3_get_version(&major, &minor, &build, &revision);
+
+  pre_solve();
 
   result = check2_z3_properties();
 
@@ -1501,3 +1502,16 @@ z3_convt::make_conjunct(const ast_vec &v)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new_ast(e, s);
 }
+
+void
+z3_convt::add_array_constraints_for_solving()
+{
+  return;
+}
+
+void
+z3_convt::add_tuple_constraints_for_solving()
+{
+  return;
+}
+
