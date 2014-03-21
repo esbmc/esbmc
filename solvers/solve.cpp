@@ -6,6 +6,7 @@
 #include <solvers/smtlib/smtlib_conv.h>
 
 #include <solvers/smt/smt_tuple.h>
+#include <solvers/smt/smt_array.h>
 
 // For the purpose of vastly reducing build times:
 smt_convt *
@@ -97,13 +98,15 @@ static const std::string list_of_solvers[] =
 
 static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
-            const optionst &options, tuple_iface **tuple_api)
+            const optionst &options, tuple_iface **tuple_api,
+            array_iface **array_api)
 {
   unsigned int i, total_solvers = 0;
   for (i = 0; i < num_of_solvers; i++)
     total_solvers += (options.get_bool_option(list_of_solvers[i])) ? 1 : 0;
 
   *tuple_api = NULL;
+  *array_api = NULL;
 
   if (total_solvers == 0) {
     std::cerr << "No solver specified; defaulting to Z3" << std::endl;
@@ -134,13 +137,15 @@ smt_convt *
 create_solver_factory1(const std::string &solver_name, bool is_cpp,
                        bool int_encoding, const namespacet &ns,
                        const optionst &options,
-                       tuple_iface **tuple_api)
+                       tuple_iface **tuple_api,
+                       array_iface **array_api)
 {
   if (solver_name == "")
     // Pick one based on options.
-    return pick_solver(is_cpp, int_encoding, ns, options, tuple_api);
+    return pick_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
 
   *tuple_api = NULL;
+  *array_api = NULL;
 
   if (solver_name == "z3") {
     z3_convt *cvt =
@@ -171,7 +176,8 @@ create_solver_factory(const std::string &solver_name, bool is_cpp,
                       const optionst &options)
 {
   tuple_iface *tuple_api = NULL;
-  smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api);
+  array_iface *array_api = NULL;
+  smt_convt *ctx = create_solver_factory1(solver_name, is_cpp, int_encoding, ns, options, &tuple_api, &array_api);
 
   bool node_flat = options.get_bool_option("tuple-node-flattener");
   bool sym_flat = options.get_bool_option("tuple-sym-flattener");
