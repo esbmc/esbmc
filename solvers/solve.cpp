@@ -4,153 +4,102 @@
 #include <solvers/smt/smt_array.h>
 #include <solvers/smt/smt_tuple_flat.h>
 
-// For the purpose of vastly reducing build times:
-smt_convt *
-create_new_smtlib_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts,
-                          tuple_iface **tuple_api, array_iface **array_api);
-smt_convt *
-create_new_minisat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts,
-                          tuple_iface **tuple_api, array_iface **array_api);
-smt_convt *
-create_new_mathsat_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts,
-                          tuple_iface **tuple_api, array_iface **array_api);
-smt_convt *
-create_new_cvc_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
-                          const optionst &opts,
-                          tuple_iface **tuple_api, array_iface **array_api);
-smt_convt *
-create_new_boolector_solver(bool int_encoding, const namespacet &ns,
-                          bool is_cpp, const optionst &options,
-                          tuple_iface **tuple_api, array_iface **array_api);
-smt_convt *
-create_new_z3_solver(bool int_encoding, const namespacet &ns,
-                          bool is_cpp, const optionst &options,
-                          tuple_iface **tuple_api, array_iface **array_api);
+typedef smt_convt *(*solver_creator)
+  (bool int_encoding, const namespacet &ns, bool is_cpp, const optionst &opts,
+   tuple_iface **tuple_api, array_iface **array_api);
 
-static smt_convt *
-create_z3_solver(bool is_cpp __attribute__((unused)),
-                 bool int_encoding __attribute__((unused)),
-                 const namespacet &ns __attribute__((unused)),
-                 const optionst &opts __attribute__((unused)),
-                 tuple_iface **tuple_api __attribute__((unused)),
-                 array_iface **array_api __attribute__((unused)))
-{
-#ifndef Z3
-    std::cerr << "Sorry, Z3 support was not built into this version of ESBMC"
-              << std::endl;
-    abort();
-#else
-    return create_new_z3_solver(int_encoding, ns, is_cpp, opts, tuple_api, array_api);
+solver_creator create_new_smtlib_solver;
+solver_creator create_new_z3_solver;
+solver_creator create_new_minisat_solver;
+solver_creator create_new_boolector_solver;
+solver_creator create_new_cvc_solver;
+solver_creator create_new_mathsat_solver;
+
+struct solver_config {
+  std::string name;
+  solver_creator create;
+};
+
+static struct solver_config solvers[] =  {
+  { "smtlib", create_new_smtlib_solver },
+#ifdef Z3
+  { "z3", create_new_z3_solver },
 #endif
-}
-
-static smt_convt *
-create_minisat_solver(bool int_encoding __attribute__((unused)),
-                      const namespacet &ns __attribute__((unused)),
-                      bool is_cpp __attribute__((unused)),
-                      const optionst &options __attribute__((unused)),
-                 tuple_iface **tuple_api __attribute__((unused)),
-                 array_iface **array_api __attribute__((unused)))
-{
-#ifndef MINISAT
-    std::cerr << "Sorry, MiniSAT support was not built into this version of "
-              "ESBMC" << std::endl;
-    abort();
-#else
-    return create_new_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
+#ifdef MINISAT
+  { "minisat", create_new_minisat_solver },
 #endif
-}
-
-static smt_convt *
-create_mathsat_solver(bool is_cpp __attribute__((unused)),
-                                bool int_encoding __attribute__((unused)),
-                                const namespacet &ns __attribute__((unused)),
-                                const optionst &opts __attribute__((unused)),
-                 tuple_iface **tuple_api __attribute__((unused)),
-                 array_iface **array_api __attribute__((unused)))
-{
-#if !defined(MATHSAT)
-    std::cerr << "Sorry, MathSAT support was not built into this "
-              << "version of ESBMC" << std::endl;
-    abort();
-#else
-    return create_new_mathsat_solver(int_encoding, ns, is_cpp, opts, tuple_api, array_api);
+#ifdef BOOLECTOR
+  { "boolector", create_new_boolector_solver },
 #endif
-}
-
-static smt_convt *
-create_cvc_solver(bool is_cpp __attribute__((unused)),
-                                bool int_encoding __attribute__((unused)),
-                                const namespacet &ns __attribute__((unused)),
-                                const optionst &opts __attribute__((unused)),
-                 tuple_iface **tuple_api __attribute__((unused)),
-                 array_iface **array_api __attribute__((unused)))
-{
-#if !defined(USECVC)
-    std::cerr << "Sorry, CVC support was not built into this "
-              << "version of ESBMC" << std::endl;
-    abort();
-#else
-    return create_new_cvc_solver(int_encoding, ns, is_cpp, opts, tuple_api, array_api);
+#ifdef CVC
+  { "cvc", create_new_cvc_solver },
 #endif
-}
-
-static smt_convt *
-create_boolector_solver(bool is_cpp __attribute__((unused)),
-                                bool int_encoding __attribute__((unused)),
-                                const namespacet &ns __attribute__((unused)),
-                                const optionst &options __attribute__((unused)),
-                 tuple_iface **tuple_api __attribute__((unused)),
-                 array_iface **array_api __attribute__((unused)))
-{
-#if !defined(BOOLECTOR)
-    std::cerr << "Sorry, Boolector support was not built into this "
-              << "version of ESBMC" << std::endl;
-    abort();
-#else
-    return create_new_boolector_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
+#ifdef MATHSAT
+  { "mathsat", create_new_mathsat_solver }
 #endif
-}
+};
 
-static const unsigned int num_of_solvers = 6;
-static const std::string list_of_solvers[] =
+static const std::string list_of_all_solvers[] =
 { "z3", "smtlib", "minisat", "boolector", "mathsat", "cvc"};
+
+static const unsigned int total_num_of_solvers =
+sizeof(list_of_all_solvers) / sizeof(std::string);
+
+static const unsigned int num_solvers =
+sizeof(solvers) / sizeof(solver_config);
+
+static smt_convt *
+create_solver(std::string the_solver,
+            bool is_cpp, bool int_encoding, const namespacet &ns,
+            const optionst &options, tuple_iface **tuple_api,
+            array_iface **array_api)
+{
+
+  for (unsigned int i = 0; i < num_solvers; i++) {
+    if (the_solver == solvers[i].name) {
+      return solvers[i].create(int_encoding, ns, is_cpp,
+                               options, tuple_api, array_api);
+    }
+  }
+
+  std::cerr << "The " << the_solver << " solver has not been built into this version of ESBMC, sorry" << std::endl;
+  abort();
+}
 
 static smt_convt *
 pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
             const optionst &options, tuple_iface **tuple_api,
             array_iface **array_api)
 {
-  unsigned int i, total_solvers = 0;
-  for (i = 0; i < num_of_solvers; i++)
-    total_solvers += (options.get_bool_option(list_of_solvers[i])) ? 1 : 0;
+  unsigned int i;
+  std::string the_solver = "";
 
   *tuple_api = NULL;
   *array_api = NULL;
 
-  if (total_solvers == 0) {
-    std::cerr << "No solver specified; defaulting to Z3" << std::endl;
-  } else if (total_solvers > 1) {
-    std::cerr << "Please only specify one solver" << std::endl;
-    abort();
+  for (i = 0; i < total_num_of_solvers; i++) {
+    if (options.get_bool_option(list_of_all_solvers[i])) {
+      if (the_solver != "") {
+        std::cerr << "Please only specify one solver" << std::endl;
+        abort();
+      }
+
+      the_solver = list_of_all_solvers[i];
+    }
   }
 
-  if (options.get_bool_option("smtlib")) {
-    return create_new_smtlib_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
-  } else if (options.get_bool_option("mathsat")) {
-    return create_mathsat_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
-  } else if (options.get_bool_option("cvc")) {
-    return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
-  } else if (options.get_bool_option("minisat")) {
-    return create_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
-  } else if (options.get_bool_option("boolector")) {
-    return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
-  } else {
-    return create_z3_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
+  if (the_solver == "") {
+#ifdef Z3
+    std::cerr << "No solver specified; defaulting to Z3" << std::endl;
+    the_solver = "z3";
+#else
+    std::cerr << "No solver specified and Z3 is not enabled: please specify a solver" << std::endl;
+    abort();
+#endif
   }
+
+  return create_solver(the_solver, is_cpp, int_encoding, ns,
+                       options, tuple_api, array_api);
 }
 
 smt_convt *
@@ -167,23 +116,8 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   *tuple_api = NULL;
   *array_api = NULL;
 
-  if (solver_name == "z3") {
-    return create_z3_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
-  } else if (solver_name == "mathsat") {
-    return create_mathsat_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
-  } else if (solver_name == "cvc") {
-    return create_cvc_solver(int_encoding, is_cpp, ns, options, tuple_api, array_api);
-  } else if (solver_name == "smtlib") {
-    return create_new_smtlib_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
-  } else if (options.get_bool_option("minisat")) {
-    return create_minisat_solver(int_encoding, ns, is_cpp, options, tuple_api, array_api);
-  } else if (options.get_bool_option("boolector")) {
-    return create_boolector_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
-  } else {
-    std::cerr << "Unrecognized solver \"" << solver_name << "\" created"
-              << std::endl;
-    abort();
-  }
+  return create_solver(solver_name, is_cpp, int_encoding, ns,
+                       options, tuple_api, array_api);
 }
 
 
