@@ -78,9 +78,6 @@ pick_solver(bool is_cpp, bool int_encoding, const namespacet &ns,
   unsigned int i;
   std::string the_solver = "";
 
-  *tuple_api = NULL;
-  *array_api = NULL;
-
   for (i = 0; i < total_num_of_solvers; i++) {
     if (options.get_bool_option(list_of_all_solvers[i])) {
       if (the_solver != "") {
@@ -116,9 +113,6 @@ create_solver_factory1(const std::string &solver_name, bool is_cpp,
   if (solver_name == "")
     // Pick one based on options.
     return pick_solver(is_cpp, int_encoding, ns, options, tuple_api, array_api);
-
-  *tuple_api = NULL;
-  *array_api = NULL;
 
   return create_solver(solver_name, is_cpp, int_encoding, ns,
                        options, tuple_api, array_api);
