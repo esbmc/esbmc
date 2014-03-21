@@ -5,6 +5,10 @@
 class array_iface
 {
 public:
+  // This constructor makes this not qualify as an abstract interface, but
+  // meh.
+  array_iface(bool _b) : supports_bools_in_arrays(_b) { }
+
   virtual smt_astt mk_array_symbol(const std::string &name, smt_sortt sort) = 0;
 
   /** Extract an element from the model of an array, at an explicit index.
@@ -35,4 +39,8 @@ public:
                                           smt_convt *ctx);
 
   // And everything else goes through the ast methods!
+
+  // Small piece of internal munging:
+  bool supports_bools_in_arrays;
 };
+

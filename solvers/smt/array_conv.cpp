@@ -1,7 +1,7 @@
 #include "array_conv.h"
 #include <ansi-c/c_types.h>
 
-array_convt::array_convt(smt_convt *_ctx) : 
+array_convt::array_convt(smt_convt *_ctx) : array_iface(false),
   array_indexes(), array_values(), array_updates(), ctx(_ctx)
 {
 }
@@ -298,7 +298,7 @@ array_convt::convert_array_of(const expr2tc &init_val,
   smt_sortt dom_sort = ctx->mk_sort(SMT_SORT_BV, domain_width, false);
   smt_sortt idx_sort = ctx->convert_sort(init_val->type);
 
-  if (!ctx->int_encoding && is_bool_type(init_val) && ctx->no_bools_in_arrays)
+  if (is_bool_type(init_val))
     idx_sort = ctx->mk_sort(SMT_SORT_BV, 1, false);
 
   smt_sortt arr_sort = ctx->mk_sort(SMT_SORT_ARRAY, dom_sort, idx_sort);
@@ -306,7 +306,7 @@ array_convt::convert_array_of(const expr2tc &init_val,
   array_ast *mast = new_ast(arr_sort);
 
   smt_astt init = ctx->convert_ast(init_val);
-  if (!ctx->int_encoding && is_bool_type(init_val) && ctx->no_bools_in_arrays)
+  if (is_bool_type(init_val))
     init = ctx->make_bool_bit(init);
 
   if (is_unbounded_array(arr_sort)) {

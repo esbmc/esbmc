@@ -375,9 +375,6 @@ public:
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
    *         cpp:: prefix to their symbols.
-   *  @param no_bools_in_arrays Whether or not the solver supports having
-   *         arrays with booleans as the range, which isn't strictly permitted
-   *         by SMT, but is by C.
    *  @param can_init_inf_arrs Whether the solver can efficiently initialize
    *         infinite arrays. If it can, the convert_array_of method is used
    *         to create them. If not, a free array is used, and when we fiddle
@@ -385,8 +382,7 @@ public:
    *         we use were initialized to a particular value. Ugly, but works on
    *         various solvers. */
   smt_convt(bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool no_bools_in_arrays,
-            bool can_init_inf_arrs);
+            bool is_cpp, bool can_init_inf_arrs);
   ~smt_convt();
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -944,10 +940,6 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  /** True if the SMT solver does not support arrays with boolean range.
-   *  Technically, the spec does not require this, but most solvers have
-   *  support anyway. */
-  bool no_bools_in_arrays;
   /** Whether or not the solver can initialize an unbounded array. See:
    *  the constructor. */
   bool can_init_unbounded_arrs;

@@ -40,8 +40,7 @@ public:
   } shiftt;
 
   bitblast_convt(bool int_encoding, const namespacet &_ns,
-                 bool is_cpp, bool bools_in_arrs,
-                 bool can_init_inf_arrs);
+                 bool is_cpp, bool can_init_inf_arrs);
   ~bitblast_convt();
 
   // The plan: have a mk_func_app method available, that's called by the

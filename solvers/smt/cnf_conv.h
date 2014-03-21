@@ -8,7 +8,7 @@ class cnf_convt : public subclass
 {
 public:
   cnf_convt(bool int_encoding, const namespacet &_ns,
-                 bool is_cpp, bool bools_in_arrs,
+                 bool is_cpp,
                  bool can_init_inf_arrs);
   ~cnf_convt();
 

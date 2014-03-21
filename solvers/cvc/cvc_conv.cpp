@@ -9,7 +9,7 @@ create_new_cvc_solver(bool int_encoding, bool is_cpp, const namespacet &ns)
 }
 
 cvc_convt::cvc_convt(bool is_cpp, bool int_encoding, const namespacet &ns)
-   : smt_convt(int_encoding, ns, is_cpp, true, false),
+   : smt_convt(int_encoding, ns, is_cpp, false), array_iface(false),
      em(), smt(&em), sym_tab()
 {
   // Already initialized stuff in the constructor list,
