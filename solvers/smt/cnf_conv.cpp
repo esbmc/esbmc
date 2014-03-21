@@ -1,30 +1,24 @@
-// Danger Will Robinson: this is not a C++ class, but in fact a template, and
-// is included by cnf_conv.h directly so that uses of it are instanciated
-// correctly.
+#include "cnf_conv.h"
 
-template <class subclass>
-cnf_convt<subclass>::cnf_convt(bool int_encoding,
+cnf_convt::cnf_convt(bool int_encoding,
                       const namespacet &_ns, bool is_cpp)
-  : subclass(int_encoding, _ns, is_cpp)
+  : bitblast_convt(int_encoding, _ns, is_cpp)
 {
 }
 
-template <class subclass>
-cnf_convt<subclass>::~cnf_convt()
+cnf_convt::~cnf_convt()
 {
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::lnot(literalt a)
+cnf_convt::lnot(literalt a)
 {
   a.invert();
   return a;
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::lselect(literalt a, literalt b, literalt c)
+cnf_convt::lselect(literalt a, literalt b, literalt c)
 {  // a?b:c = (a AND b) OR (/a AND c)
   if(a==const_literal(true)) return b;
   if(a==const_literal(false)) return c;
@@ -37,23 +31,20 @@ cnf_convt<subclass>::lselect(literalt a, literalt b, literalt c)
   return lor(one, two);
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::lequal(literalt a, literalt b)
+cnf_convt::lequal(literalt a, literalt b)
 {
   return lnot(lxor(a, b));
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::limplies(literalt a, literalt b)
+cnf_convt::limplies(literalt a, literalt b)
 {
   return lor(lnot(a), b);
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::lxor(literalt a, literalt b)
+cnf_convt::lxor(literalt a, literalt b)
 {
   if (a == const_literal(false)) return b;
   if (b == const_literal(false)) return a;
@@ -65,9 +56,8 @@ cnf_convt<subclass>::lxor(literalt a, literalt b)
   return output;
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::lor(literalt a, literalt b)
+cnf_convt::lor(literalt a, literalt b)
 {
   if (a == const_literal(false)) return b;
   if (b == const_literal(false)) return a;
@@ -79,9 +69,8 @@ cnf_convt<subclass>::lor(literalt a, literalt b)
   return output;
 }
 
-template <class subclass>
 literalt
-cnf_convt<subclass>::land(literalt a, literalt b)
+cnf_convt::land(literalt a, literalt b)
 {
   if (a == const_literal(true)) return b;
   if (b == const_literal(true)) return a;
@@ -94,9 +83,8 @@ cnf_convt<subclass>::land(literalt a, literalt b)
   return output;
 }
 
-template <class subclass>
 void
-cnf_convt<subclass>::gate_xor(literalt a, literalt b, literalt o)
+cnf_convt::gate_xor(literalt a, literalt b, literalt o)
 {
   // a xor b = o <==> (a' + b' + o')
   //                  (a + b + o' )
@@ -133,9 +121,8 @@ cnf_convt<subclass>::gate_xor(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-template <class subclass>
 void
-cnf_convt<subclass>::gate_or(literalt a, literalt b, literalt o)
+cnf_convt::gate_or(literalt a, literalt b, literalt o)
 {
   // a+b=c <==> (a' + c)( b' + c)(a + b + c')
   bvt lits;
@@ -160,9 +147,8 @@ cnf_convt<subclass>::gate_or(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-template <class subclass>
 void
-cnf_convt<subclass>::gate_and(literalt a, literalt b, literalt o)
+cnf_convt::gate_and(literalt a, literalt b, literalt o)
 {
   // a*b=c <==> (a + o')( b + o')(a'+b'+o)
   bvt lits;
@@ -187,9 +173,8 @@ cnf_convt<subclass>::gate_and(literalt a, literalt b, literalt o)
   lcnf(lits);
 }
 
-template <class subclass>
 void
-cnf_convt<subclass>::set_equal(literalt a, literalt b)
+cnf_convt::set_equal(literalt a, literalt b)
 {
   if (a == const_literal(false)) {
     setto(b, false);

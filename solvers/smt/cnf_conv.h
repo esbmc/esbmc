@@ -2,9 +2,9 @@
 #define _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 
 #include "smt_conv.h"
+#include "bitblast_conv.h"
 
-template <class subclass>
-class cnf_convt : public subclass
+class cnf_convt : public bitblast_convt
 {
 public:
   cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
@@ -27,8 +27,5 @@ public:
   virtual void gate_and(literalt a, literalt b, literalt o);
   virtual void set_equal(literalt a, literalt b);
 };
-
-// And because this is a template...
-#include "cnf_conv.cpp"
 
 #endif /* _ESBMC_SOLVERS_SMT_CNF_CONV_H_ */
