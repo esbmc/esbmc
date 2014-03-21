@@ -4,7 +4,7 @@
 #include <solvers/smt/smt_conv.h>
 #include "bitblast_conv.h"
 
-class cnf_convt : public bitblast_convt
+class cnf_convt : public sat_iface, public bitblast_convt
 {
 public:
   cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);

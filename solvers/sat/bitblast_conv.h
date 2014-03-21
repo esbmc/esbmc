@@ -2,6 +2,7 @@
 #define _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_
 
 #include <solvers/smt/smt_conv.h>
+#include "sat_iface.h"
 
 class bitblast_smt_sort : public smt_sort {
   // Record all the things.
@@ -38,7 +39,8 @@ public:
     LEFT, LRIGHT, ARIGHT
   } shiftt;
 
-  bitblast_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
+  bitblast_convt(bool int_encoding, const namespacet &_ns, bool is_cpp,
+      sat_iface *sat_api);
   ~bitblast_convt();
 
   // The plan: have a mk_func_app method available, that's called by the
@@ -57,20 +59,6 @@ public:
   // The remanining flexibility options available to the solver are then only
   // in the domain of logical operations on literals, although all kinds of
   // other API things can be fudged, such as tuples and arrays.
-
-  // Boolean operations we require.
-  virtual void lcnf(const bvt &bv) = 0;
-  virtual literalt lnot(literalt a) = 0;
-  virtual literalt lselect(literalt a, literalt b, literalt c) = 0;
-  virtual literalt lequal(literalt a, literalt b) = 0;
-  virtual literalt limplies(literalt a, literalt b) = 0;
-  virtual literalt lxor(literalt a, literalt b) = 0;
-  virtual literalt land(literalt a, literalt b) = 0;
-  virtual literalt lor(literalt a, literalt b) = 0;
-  virtual void set_equal(literalt a, literalt b) = 0;
-  virtual void assert_lit(const literalt &a) = 0;
-  virtual tvt l_get(const literalt &a) = 0;
-  virtual literalt new_variable() = 0;
 
   // smt_convt apis we fufil
 
@@ -142,6 +130,8 @@ public:
   // of literals and actual things that we give names to. So it's the logical
   // place for these things to come together.
   symtable_type sym_table;
+
+  sat_iface *sat_api;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_BITBLAST_CONV_H_ */

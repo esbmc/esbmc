@@ -1,8 +1,8 @@
 #include "cnf_conv.h"
 
-cnf_convt::cnf_convt(bool int_encoding,
-                      const namespacet &_ns, bool is_cpp)
-  : bitblast_convt(int_encoding, _ns, is_cpp)
+cnf_convt::cnf_convt(bool int_encoding, const namespacet &_ns, bool is_cpp)
+  : sat_iface(), bitblast_convt(int_encoding, _ns, is_cpp,
+                                static_cast<sat_iface*>(this))
 {
 }
 
