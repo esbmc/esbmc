@@ -1,8 +1,5 @@
 #include "solve.h"
 
-#ifdef Z3
-#include <solvers/z3/z3_conv.h>
-#endif
 #include <solvers/smtlib/smtlib_conv.h>
 
 #include <solvers/smt/smt_tuple.h>
