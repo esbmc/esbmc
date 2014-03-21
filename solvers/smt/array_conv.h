@@ -54,7 +54,7 @@ public:
 
 
 template <class subclass>
-class array_convt : public subclass
+class array_convt : public subclass, public array_iface
 {
 public:
   struct array_select;

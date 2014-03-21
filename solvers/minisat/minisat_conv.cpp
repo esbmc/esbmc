@@ -70,6 +70,7 @@ minisat_convt::minisat_convt(bool int_encoding, const namespacet &_ns,
 : cnf_convt(int_encoding, _ns, is_cpp, true, true),
   solver(), options(_opts), false_asserted(false)
 {
+  set_array_iface(static_cast<array_iface*>(this));
 }
 
 minisat_convt::~minisat_convt(void)
