@@ -35,7 +35,7 @@ static struct solver_config solvers[] =  {
 #ifdef BOOLECTOR
   { "boolector", create_new_boolector_solver },
 #endif
-#ifdef CVC
+#ifdef USECVC
   { "cvc", create_new_cvc_solver },
 #endif
 #ifdef MATHSAT
