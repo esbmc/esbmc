@@ -5,6 +5,32 @@
 
 #include <yices.h>
 
+class yices_smt_sort : public smt_sort
+{
+public:
+#define yices_sort_downcast(x) static_cast<const yices_smt_sort *>(x)
+  yices_smt_sort(smt_sort_kind i, CVC4::Type &_t) : smt_sort(i), t(_t) { }
+  yices_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned int w)
+    : smt_sort(i, w), t(_t) { }
+  yices_smt_sort(smt_sort_kind i, CVC4::Type &_t, unsigned long w,
+                 unsigned long d)
+    : smt_sort(i, w, d), t(_t) { }
+  virtual ~yices_smt_sort() { }
+
+  type_t type;
+};
+
+class yices_smt_ast : public smt_ast
+{
+public:
+#define yices_ast_downcast(x) static_cast<const yices_smt_ast *>(x)
+  yices_smt_ast(smt_convt *ctx, const smt_sort *_s, term_t &_t)
+    : smt_ast(ctx, _s), term(_t) { }
+  virtual ~yices_smt_ast() { }
+
+  term_t term;
+};
+
 class yices_convt : public smt_convt, public array_iface
 {
 public:
