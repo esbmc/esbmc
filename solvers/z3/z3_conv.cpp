@@ -26,15 +26,23 @@
 #include "z3_conv.h"
 #include "../ansi-c/c_types.h"
 
-#define cast_to_z3(arg) (*(reinterpret_cast<z3::expr *&>((arg))))
-#define cast_to_z3_sort(arg) (*(reinterpret_cast<z3::sort *>((arg))))
-
 #ifdef DEBUG
 #define DEBUGLOC std::cout << std::endl << __FUNCTION__ << \
                           "[" << __LINE__ << "]" << std::endl;
 #else
 #define DEBUGLOC
 #endif
+
+smt_convt *
+create_new_z3_solver(bool int_encoding, const namespacet &ns, bool is_cpp,
+                              const optionst &opts __attribute__((unused)),
+                              tuple_iface **tuple_api, array_iface **array_api)
+{
+  z3_convt *conv = new z3_convt(int_encoding, is_cpp, ns);
+  *tuple_api = static_cast<tuple_iface*>(conv);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
+}
 
 Z3_ast workaround_Z3_mk_bvadd_no_overflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
@@ -44,8 +52,9 @@ Z3_ast workaround_Z3_mk_bvsub_no_underflow(Z3_context ctx, Z3_ast a1, Z3_ast a2,
                                           Z3_bool is_signed);
 Z3_ast workaround_Z3_mk_bvneg_no_overflow(Z3_context ctx, Z3_ast a);
 z3_convt::z3_convt(bool int_encoding, bool is_cpp, const namespacet &_ns)
-: smt_convt(int_encoding, _ns, is_cpp, false, true), ctx(false)
+: smt_convt(int_encoding, _ns, is_cpp), array_iface(true, true),ctx(false)
 {
+
   this->int_encoding = int_encoding;
 
   assumpt_mode = false;
@@ -147,6 +156,8 @@ z3_convt::dec_solve(void)
   z3::check_result result;
   Z3_get_version(&major, &minor, &build, &revision);
 
+  pre_solve();
+
   result = check2_z3_properties();
 
   if (result == z3::unsat)
@@ -206,11 +217,10 @@ void
 z3_convt::convert_struct_union_type(const std::vector<type2tc> &members,
                                     const std::vector<irep_idt> &member_names,
                                     const irep_idt &struct_name, bool uni,
-                                    void *_bv)
+                                    z3::sort &sort)
 {
   z3::symbol mk_tuple_name, *proj_names;
   z3::sort *proj_types;
-  z3::sort &sort = cast_to_z3_sort(_bv);
   Z3_func_decl mk_tuple_decl, *proj_decls;
   std::string name;
   u_int num_elems;
@@ -336,14 +346,14 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
   {
     const struct_type2t &strct = to_struct_type(type);
     convert_struct_union_type(strct.members, strct.member_names, strct.name,
-                              false, &sort);
+                              false, sort);
     break;
   }
   case type2t::union_id:
   {
     const union_type2t &uni = to_union_type(type);
     convert_struct_union_type(uni.members, uni.member_names, uni.name,
-                              true, &sort);
+                              true, sort);
     break;
   }
   case type2t::array_id:
@@ -685,6 +695,12 @@ z3_convt::mk_smt_bool(bool val)
 {
   smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new_ast(ctx.bool_val(val), s);
+}
+
+smt_astt
+z3_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
 }
 
 smt_astt
@@ -1486,3 +1502,16 @@ z3_convt::make_conjunct(const ast_vec &v)
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new_ast(e, s);
 }
+
+void
+z3_convt::add_array_constraints_for_solving()
+{
+  return;
+}
+
+void
+z3_convt::add_tuple_constraints_for_solving()
+{
+  return;
+}
+

@@ -322,6 +322,8 @@ public:
 
 // Pull in the tuple interface definitions. _after_ the AST defs.
 #include "smt_tuple.h"
+// Also, array interface
+#include "smt_array.h"
 
 /** The base SMT-conversion class/interface.
  *  smt_convt handles a number of decisions that must be made when
@@ -372,19 +374,8 @@ public:
    *  @param int_encoding Whether nor not we should use QF_AUFLIRA or QF_AUFBV.
    *  @param _ns Namespace for looking up the type of certain symbols.
    *  @param is_cpp Flag indicating whether memory modelling arrays have c:: or
-   *         cpp:: prefix to their symbols.
-   *  @param no_bools_in_arrays Whether or not the solver supports having
-   *         arrays with booleans as the range, which isn't strictly permitted
-   *         by SMT, but is by C.
-   *  @param can_init_inf_arrs Whether the solver can efficiently initialize
-   *         infinite arrays. If it can, the convert_array_of method is used
-   *         to create them. If not, a free array is used, and when we fiddle
-   *         with pointer tracking modelling arrays we assert that the elements
-   *         we use were initialized to a particular value. Ugly, but works on
-   *         various solvers. */
-  smt_convt(bool int_encoding, const namespacet &_ns,
-            bool is_cpp, bool no_bools_in_arrays,
-            bool can_init_inf_arrs);
+   *         cpp:: prefix to their symbols. */
+  smt_convt(bool int_encoding, const namespacet &_ns, bool is_cpp);
   ~smt_convt();
 
   /** Post-constructor setup method. We must create various pieces of memory
@@ -457,6 +448,8 @@ public:
    *  an error occurred.
    *  @return Result code of the call to the solver. */
   virtual resultt dec_solve() = 0;
+
+  void pre_solve();
 
   /** Fetch a satisfying assignment from the solver. If a previous call to
    *  dec_solve returned satisfiable, then the solver has a set of assignments
@@ -612,14 +605,6 @@ public:
    *  @return Expression representation of a's value, as a constant_int2tc */
   virtual expr2tc get_bv(const type2tc &t, smt_astt a) = 0;
 
-  /** Extract an element from the model of an array, at an explicit index.
-   *  @param array AST representing the array we are extracting from
-   *  @param index The index of the element we wish to expect
-   *  @param subtype The type of the element we are extracting, i.e. array range
-   *  @return Expression representation of the element */
-  virtual expr2tc get_array_elem(smt_astt array, uint64_t index,
-                                 const type2tc &subtype) = 0;
-
   /** @} */
 
   /** @{
@@ -665,21 +650,6 @@ public:
    *  @param expr with2tc operation to convert to SMT.
    *  @return AST representing the result of evaluating expr. */
   virtual smt_astt convert_array_store(const expr2tc &expr);
-
-  /** Create an array with a single initializer. This may be a small, fixed
-   *  size array, or it may be a nondeterministically sized array with a
-   *  word-sized domain. Default implementation is to repeatedly store into
-   *  the array for as many elements as necessary; subclassing class should
-   *  override if it has a more efficient method.
-   *  Nondeterministically sized memory with an initializer is very rare;
-   *  the only real users of this are fixed sized (but large) static arrays
-   *  that are zero initialized, or some infinite-domain modelling arrays
-   *  used in ESBMC.
-   *  @param init_val The value to initialize each element with.
-   *  @param domain_width The size of the array to create, in domain bits.
-   *  @return An AST representing the created constant array. */
-  virtual smt_astt convert_array_of(const expr2tc &init_val,
-                                          unsigned long domain_width);
 
   /** @} */
 
@@ -778,6 +748,8 @@ public:
   void init_addr_space_array(void);
   /** Stores handle for the tuple interface. */
   void set_tuple_iface(tuple_iface *iface);
+  /** Stores handle for the array interface. */
+  void set_array_iface(array_iface *iface);
   /** Store a new address-allocation record into the address space accounting.
    *  idx indicates the object number of this record. */
   void bump_addrspace_array(unsigned int idx, const expr2tc &val);
@@ -963,13 +935,6 @@ public:
    *  rare case where we're doing some pointer arithmetic and need to have the
    *  concrete type of a pointer. */
   const namespacet &ns;
-  /** True if the SMT solver does not support arrays with boolean range.
-   *  Technically, the spec does not require this, but most solvers have
-   *  support anyway. */
-  bool no_bools_in_arrays;
-  /** Whether or not the solver can initialize an unbounded array. See:
-   *  the constructor. */
-  bool can_init_unbounded_arrs;
 
   bool ptr_foo_inited;
   /** Full name of the '__ESBMC_is_dynamic' modelling array. The memory space
@@ -1016,6 +981,7 @@ public:
   std::vector<unsigned int> live_asts_sizes;
 
   tuple_iface *tuple_api;
+  array_iface *array_api;
 
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and

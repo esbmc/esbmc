@@ -65,14 +65,11 @@ smt_convt::get_member_name_field(const type2tc &t, const expr2tc &name) const
   return get_member_name_field(t, str.value);
 }
 
-smt_convt::smt_convt(bool intmode, const namespacet &_ns,
-                     bool is_cpp, bool _nobools,
-                     bool can_init_inf_arrays)
-  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns),
-    no_bools_in_arrays(_nobools),
-    can_init_unbounded_arrs(can_init_inf_arrays)
+smt_convt::smt_convt(bool intmode, const namespacet &_ns, bool is_cpp)
+  : ctx_level(0), caching(true), int_encoding(intmode), ns(_ns)
 {
   tuple_api = NULL;
+  array_api = NULL;
 
   std::vector<type2tc> members;
   std::vector<irep_idt> names;
@@ -134,6 +131,13 @@ smt_convt::set_tuple_iface(tuple_iface *iface)
 {
   assert(tuple_api == NULL && "set_tuple_iface should only be called once");
   tuple_api = iface;
+}
+
+void
+smt_convt::set_array_iface(array_iface *iface)
+{
+  assert(array_api == NULL && "set_array_iface should only be called once");
+  array_api = iface;
 }
 
 void
@@ -388,7 +392,7 @@ nocvt:
   // Irritating special case: if we're selecting a bool out of an array, and
   // we're in QF_AUFBV mode, do special handling.
   if ((!int_encoding && is_index2t(expr) && is_bool_type(expr->type) &&
-       no_bools_in_arrays) ||
+       !array_api->supports_bools_in_arrays) ||
        special_cases)
     goto expr_handle_table;
 
@@ -446,7 +450,7 @@ expr_handle_table:
   case expr2t::constant_array_of_id:
   {
     const array_type2t &arr = to_array_type(expr->type);
-    if (!can_init_unbounded_arrs && arr.size_is_infinite) {
+    if (!array_api->can_init_infinite_arrays && arr.size_is_infinite) {
       // Don't honour inifinite sized array initializers. Modelling only.
       // If we have an array of tuples and no tuple support, use tuple_fresh.
       // Otherwise, mk_fresh.
@@ -877,7 +881,8 @@ smt_convt::convert_sort(const type2tc &type)
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sortt r;
-    if (!int_encoding && is_bool_type(range) && no_bools_in_arrays) {
+    if (!int_encoding && is_bool_type(range) &&
+        !array_api->supports_bools_in_arrays) {
       r = mk_sort(SMT_SORT_BV, 1, false);
     } else {
       r = convert_sort(range);
@@ -992,11 +997,14 @@ smt_convt::convert_terminal(const expr2tc &expr)
       }
     }
 
-    // Just a normal symbol.
+    // Just a normal symbol. Possibly an array symbol.
     const symbol2t &sym = to_symbol2t(expr);
     std::string name = sym.get_symbol_name();
     smt_sortt sort = convert_sort(sym.type);
-    return mk_smt_symbol(name, sort);
+    if (is_array_type(expr))
+      return array_api->mk_array_symbol(name, sort);
+    else
+      return mk_smt_symbol(name, sort);
   }
   default:
     std::cerr << "Converting unrecognized terminal expr to SMT" << std::endl;
@@ -1445,7 +1453,8 @@ smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
+  if (!int_encoding && is_bool_type(arrtype.subtype) &&
+      !array_api->supports_bools_in_arrays) {
     return make_bit_bool(a);
   } else {
     return a;
@@ -1476,7 +1485,8 @@ smt_convt::convert_array_store(const expr2tc &expr)
   const array_type2t &arrtype = to_array_type(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+  if (!int_encoding && is_bool_type(arrtype.subtype) &&
+      !array_api->supports_bools_in_arrays) {
     typecast2tc cast(get_uint_type(1), update_val);
     update = convert_ast(cast);
   } else {
@@ -1709,6 +1719,14 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
 
 // Debis from prop_convt: to be reorganized.
 
+void
+smt_convt::pre_solve()
+{
+  tuple_api->add_tuple_constraints_for_solving();
+  array_api->add_array_constraints_for_solving();
+  return;
+}
+
 expr2tc
 smt_convt::get(const expr2tc &expr)
 {
@@ -1769,7 +1787,7 @@ smt_convt::get_array(smt_astt array, const type2tc &t)
   std::vector<expr2tc> fields;
 
   for (size_t i = 0; i < (1ULL << w); i++) {
-    fields.push_back(get_array_elem(array, i, ar.subtype));
+    fields.push_back(array_api->get_array_elem(array, i, ar.subtype));
   }
 
   return constant_array2tc(arr_type, fields);
@@ -1821,7 +1839,7 @@ smt_convt::array_create(const expr2tc &expr)
 
     // Workaround for bools-in-arrays
     if (is_bool_type(array.datatype_members[i]->type) && !int_encoding &&
-        no_bools_in_arrays)
+        !array_api->supports_bools_in_arrays)
       init = typecast2tc(type2tc(new unsignedbv_type2t(1)), init);
 
     newsym_ast = newsym_ast->update(this, convert_ast(init), i);
@@ -1863,11 +1881,13 @@ smt_convt::convert_array_of_prep(const expr2tc &expr)
   else if (is_pointer_type(base_init->type))
     return pointer_array_of(base_init, array_size);
   else
-    return convert_array_of(base_init, array_size);
+    return array_api->convert_array_of(base_init, array_size);
 }
 
 smt_astt 
-smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
+array_iface::default_convert_array_of(const expr2tc &init_val,
+                                          unsigned long array_size,
+                                          smt_convt *ctx)
 {
   // We now an initializer, and a size of array to build. So:
 
@@ -1879,7 +1899,7 @@ smt_convt::convert_array_of(const expr2tc &init_val, unsigned long array_size)
   type2tc newtype(new array_type2t(init_val->type, real_arr_size, false));
 
   expr2tc res(new constant_array2t(newtype, array_of_inits));
-  return convert_ast(res);
+  return ctx->convert_ast(res);
 }
 
 smt_astt 
@@ -1981,7 +2001,7 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
 
   // Guess the resulting sort. This could be a lot, lot better.
   smt_sortt range_sort = NULL;
-  if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
+  if (sort->data_width == 1 && ctx->array_api->supports_bools_in_arrays)
     range_sort = ctx->mk_sort(SMT_SORT_BOOL);
   else
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?

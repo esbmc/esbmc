@@ -3,16 +3,22 @@
 #include "boolector_conv.h"
 
 smt_convt *
-create_new_boolector_solver(bool is_cpp, bool int_encoding,
-                            const namespacet &ns, const optionst &options)
+create_new_boolector_solver(bool int_encoding, const namespacet &ns,
+                            bool is_cpp, const optionst &options,
+                            tuple_iface **tuple_api __attribute__((unused)),
+                            array_iface **array_api)
 {
-  return new boolector_convt(is_cpp, int_encoding, ns, options);
+  boolector_convt *conv =
+    new boolector_convt(is_cpp, int_encoding, ns, options);
+  *array_api = static_cast<array_iface*>(conv);
+  return conv;
 }
 
 boolector_convt::boolector_convt(bool is_cpp, bool int_encoding,
                                  const namespacet &ns, const optionst &options)
-  : smt_convt(int_encoding, ns, is_cpp, true, false)
+  : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
+
   if (int_encoding) {
     std::cerr << "Boolector does not support integer encoding mode"<< std::endl;
     abort();
@@ -43,6 +49,8 @@ boolector_convt::~boolector_convt(void)
 smt_convt::resultt
 boolector_convt::dec_solve()
 {
+  pre_solve();
+
   int result = boolector_sat(btor);
 
   if (result == BOOLECTOR_SAT)
@@ -309,6 +317,12 @@ boolector_convt::mk_smt_bool(bool val)
 }
 
 smt_ast *
+boolector_convt::mk_array_symbol(const std::string &name, const smt_sort *s)
+{
+  return mk_smt_symbol(name, s);
+}
+
+smt_ast *
 boolector_convt::mk_smt_symbol(const std::string &name, const smt_sort *s)
 {
   symtable_type::iterator it = symtable.find(name);
@@ -486,4 +500,17 @@ boolector_convt::overflow_arith(const expr2tc &expr)
 
   const smt_sort *s = mk_sort(SMT_SORT_BOOL);
   return new_ast(s, res);
+}
+
+const smt_ast *
+boolector_convt::convert_array_of(const expr2tc &init_val,
+    unsigned long domain_width)
+{
+  return default_convert_array_of(init_val, domain_width, this);
+}
+
+void
+boolector_convt::add_array_constraints_for_solving()
+{
+  return;
 }

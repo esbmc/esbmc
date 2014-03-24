@@ -3,6 +3,9 @@
 
 // Something to abstract the flattening of arrays to QF_BV.
 
+#include <set>
+
+#include <irep2.h>
 #include "smt_conv.h"
 
 static inline bool
@@ -19,25 +22,27 @@ is_unbounded_array(const smt_sort *s)
     return false;
 }
 
-template <typename subclass>
+class array_convt;
+
 class array_ast : public smt_ast {
 public:
-#define array_downcast(x) static_cast<const array_ast<subclass>*>(x)
+#define array_downcast(x) static_cast<const array_ast*>(x)
 
-  array_ast(smt_convt *ctx, const smt_sort *_s)
-    : smt_ast(ctx, _s), symname(""), array_fields()
+  array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s)
+    : smt_ast(ctx, _s), symname(""), array_fields(), array_ctx(actx)
   {
   }
 
-  array_ast(smt_convt *ctx, const smt_sort *_s,
+  array_ast(array_convt *actx, smt_convt *ctx, const smt_sort *_s,
                     const std::vector<const smt_ast *> &_a)
-    : smt_ast(ctx, _s), symname(""), array_fields(_a)
+    : smt_ast(ctx, _s), symname(""), array_fields(_a), array_ctx(actx)
   {
   }
 
   virtual ~array_ast(void) { }
 
   virtual smt_astt eq(smt_convt *ctx, smt_astt other) const;
+  virtual smt_astt ite(smt_convt *ctx, smt_astt cond, smt_astt falseop) const;
   virtual void assign(smt_convt *ctx, smt_astt sym) const;
   virtual smt_astt update(smt_convt *ctx, smt_astt value,
                                 unsigned int idx,
@@ -49,69 +54,50 @@ public:
   std::vector<const smt_ast *> array_fields;
   unsigned int base_array_id;
   unsigned int array_update_num;
+
+  array_convt *array_ctx;
 };
 
-
-template <class subclass>
-class array_convt : public subclass
+class array_convt : public array_iface
 {
 public:
   struct array_select;
   struct array_with;
 
-  array_convt(bool int_encoding, const namespacet &_ns,
-              bool is_cpp, bool bools_in_arrs,
-              bool can_init_inf_arrs);
+  array_convt(smt_convt *_ctx);
   ~array_convt();
 
-  // Things that the user must implement:
-  virtual void assign_array_symbol(const std::string &name,
-                                   const smt_ast *val) = 0;
-  virtual expr2tc get_bv(const type2tc &t, const smt_ast *a) = 0;
-  virtual expr2tc get_bool(const smt_ast *a) = 0;
-  // And the get_bv and get_bool methods.
-
-  // The api parts that this implements for smt_convt:
-
-  void convert_array_assign(array_ast<subclass> *src, smt_astt sym);
-  const smt_ast *mk_select(const array_ast<subclass> *array, const expr2tc &idx,
+  void convert_array_assign(const array_ast *src, smt_astt sym);
+  const smt_ast *mk_select(const array_ast *array, const expr2tc &idx,
                                    const smt_sort *ressort);
-  virtual smt_astt mk_store(const array_ast<subclass> *array,
+  virtual smt_astt mk_store(const array_ast *array,
                                   const expr2tc &idx,
                                   smt_astt value,
                                   const smt_sort *ressort);
   virtual const smt_ast *convert_array_of(const expr2tc &init_val,
                                           unsigned long domain_width);
 
-  // The effective api for the solver-end to be using. Note that it has to
-  //   a) Catch creation of array symbols and use fresh_array
-  //   b) Catch array ITE's and call array_ite
-  //   c) Pass control of 'get'ed array exprs to array_get
-  //   d) Call add_array_constraints before calling dec_solve. Can be called
-  //      multiple times.
-
-  virtual smt_ast *fresh_array(const smt_sort *ms,
-                               const std::string &name);
-  smt_ast *array_ite(const smt_ast *cond,
-                                   const smt_ast *true_arr,
-                                   const smt_ast *false_arr,
+  smt_ast *mk_array_symbol(const std::string &name, const smt_sort *ms);
+  smt_astt array_ite(const smt_ast *cond,
+                                   const array_ast *true_arr,
+                                   const array_ast *false_arr,
                                    const smt_sort *thesort);
   expr2tc get_array_elem(const smt_ast *a, uint64_t index,
                          const type2tc &subtype);
-  void add_array_constraints(void);
+  void add_array_constraints_for_solving(void);
 
   // Internal funk:
 
-  const smt_ast *mk_unbounded_select(const array_ast<subclass> *array,
+  const smt_ast *mk_unbounded_select(const array_ast *array,
                                      const expr2tc &idx,
                                      const smt_sort *ressort);
-  const smt_ast *mk_unbounded_store(const array_ast<subclass> *array,
+  const smt_ast *mk_unbounded_store(const array_ast *array,
                                     const expr2tc &idx,
                                     const smt_ast *value,
                                     const smt_sort *ressort);
-  smt_ast *unbounded_array_ite(const array_ast<subclass> *cond,
-                                       const array_ast<subclass> *true_arr,
-                                       const array_ast<subclass> *false_arr,
+  smt_astt unbounded_array_ite(smt_astt cond,
+                                       const array_ast *true_arr,
+                                       const array_ast *false_arr,
                                        const smt_sort *thesort);
 
   // Array constraint beating
@@ -131,13 +117,13 @@ public:
                                     const std::vector<const smt_ast *> &vals,
                                     const std::map<expr2tc,unsigned> &idx_map);
 
-  inline array_ast<subclass> *new_ast(smt_sortt _s) {
-    return new array_ast<subclass>(this, _s);
+  inline array_ast *new_ast(smt_sortt _s) {
+    return new array_ast(this, ctx, _s);
   }
 
-  inline array_ast<subclass> *new_ast(smt_sortt _s,
+  inline array_ast *new_ast(smt_sortt _s,
       const std::vector<const smt_ast *> &_a) {
-    return new array_ast<subclass>(this, _s, _a);
+    return new array_ast(this, ctx, _s, _a);
   }
 
   // Members
@@ -198,10 +184,9 @@ public:
   // vectors, dimensions are arrays id's, historical point, array element,
   // respectively.
   std::vector<std::vector<std::vector<const smt_ast *> > > array_valuation;
-};
 
-// And because this is a template...
-#include "array_conv.cpp"
+  smt_convt *ctx;
+};
 
 #endif /* _ESBMC_SOLVERS_SMT_ARRAY_SMT_CONV_H_ */
 

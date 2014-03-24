@@ -57,6 +57,8 @@ public:
   /** Extract the assignment to a tuple-typed symbol from the SMT solvers
    *  model */
   virtual expr2tc tuple_get(const expr2tc &expr) = 0;
+
+  virtual void add_tuple_constraints_for_solving() = 0;
 };
 
 #endif /* _ESBMC_SOLVERS_SMT_SMT_TUPLE_H_ */

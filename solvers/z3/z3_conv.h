@@ -33,7 +33,7 @@ Author: Lucas Cordeiro, lcc08r@ecs.soton.ac.uk
 
 typedef unsigned int uint;
 
-class z3_convt: public smt_convt, public tuple_iface
+class z3_convt: public smt_convt, public tuple_iface, public array_iface
 {
 public:
   z3_convt(bool int_encoding, bool is_cpp, const namespacet &ns);
@@ -65,7 +65,7 @@ private:
 
   void convert_struct_union_type(const std::vector<type2tc> &members,
                                  const std::vector<irep_idt> &member_names,
-                                 const irep_idt &name, bool uni, void *_bv);
+                                 const irep_idt &name, bool uni, z3::sort &s);
 
   z3::expr mk_tuple_update(const z3::expr &t, unsigned i,
                            const z3::expr &new_val);
@@ -82,6 +82,7 @@ private:
   virtual smt_astt mk_smt_bvint(const mp_integer &theint, bool sign,
                                 unsigned int w);
   virtual smt_astt mk_smt_bool(bool val);
+  virtual smt_astt mk_array_symbol(const std::string &name, const smt_sort *s);
   virtual smt_astt mk_smt_symbol(const std::string &name, const smt_sort *s);
   virtual smt_sort *mk_struct_sort(const type2tc &type);
   virtual smt_sort *mk_union_sort(const type2tc &type);
@@ -113,6 +114,9 @@ private:
   virtual const smt_ast *overflow_neg(const expr2tc &expr);
 
   virtual smt_ast *mk_fresh(const smt_sort *s, const std::string &tag);
+
+  virtual void add_array_constraints_for_solving();
+  virtual void add_tuple_constraints_for_solving();
 
   // Assert a formula; needs_literal indicates a new literal should be allocated
   // for this assertion (Z3_check_assumptions refuses to deal with assumptions

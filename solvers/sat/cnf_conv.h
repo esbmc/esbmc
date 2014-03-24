@@ -1,20 +1,15 @@
 #ifndef _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 #define _ESBMC_SOLVERS_SMT_CNF_CONV_H_
 
-#include "smt_conv.h"
+#include <solvers/smt/smt_conv.h>
+#include "bitblast_conv.h"
+#include "cnf_iface.h"
 
-template <class subclass>
-class cnf_convt : public subclass
+class cnf_convt : public sat_iface
 {
 public:
-  cnf_convt(bool int_encoding, const namespacet &_ns,
-                 bool is_cpp, bool bools_in_arrs,
-                 bool can_init_inf_arrs);
+  cnf_convt(cnf_iface *cnf_api);
   ~cnf_convt();
-
-  // The API we require:
-  virtual void setto(literalt a, bool val) = 0;
-  virtual void lcnf(const bvt &bv) = 0;
 
   // The API we're implementing: all reducing to cnf(), eventually.
   virtual literalt lnot(literalt a);
@@ -28,9 +23,8 @@ public:
   virtual void gate_or(literalt a, literalt b, literalt o);
   virtual void gate_and(literalt a, literalt b, literalt o);
   virtual void set_equal(literalt a, literalt b);
-};
 
-// And because this is a template...
-#include "cnf_conv.cpp"
+  cnf_iface *cnf_api;
+};
 
 #endif /* _ESBMC_SOLVERS_SMT_CNF_CONV_H_ */
