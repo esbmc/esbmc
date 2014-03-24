@@ -185,7 +185,6 @@ enum smt_func_kind {
 
   SMT_FUNC_INT2REAL,
   SMT_FUNC_REAL2INT,
-  SMT_FUNC_POW,
   SMT_FUNC_IS_INT,
 };
 
@@ -1118,6 +1117,10 @@ public:
    *  contained when a push occurred. On pop, the live_asts vector is reset
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
+
+  // Workaround for integer shifts. This is an array of the powers of two,
+  // up to 2^64.
+  smt_astt int_shift_op_array;
 
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
