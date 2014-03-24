@@ -121,7 +121,16 @@ yices_convt::mk_smt_bool(bool val)
 smt_astt
 yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 {
-  abort();
+  // Is this term already in the symbol table?
+  term_t term = yices_get_term_by_name(name.c_str());
+  if (term == NULL_TERM) {
+    // No: create a new one.
+    yices_smt_sort *sort = yices_sort_downcast(s);
+    term = yices_new_uninterpreted_term(sort->type);
+    yices_set_term_name(term, name.c_str());
+  }
+
+  return new yices_smt_ast(this, s, term);
 }
 
 smt_astt
