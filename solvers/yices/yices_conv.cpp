@@ -2,6 +2,8 @@
 #include <stdarg.h>
 #include <stdint.h>
 
+#include <sstream>
+
 #include "yices_conv.h"
 
 smt_convt *
@@ -57,7 +59,9 @@ yices_convt::l_get(smt_astt l)
 const std::string
 yices_convt::solver_text()
 {
-  abort();
+  std::stringstream ss;
+  ss << "Yices version " << yices_version;
+  return ss.str();
 }
 
 void
