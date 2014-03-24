@@ -345,8 +345,10 @@ smt_ast::select(smt_convt *ctx, const expr2tc &idx) const
   smt_sortt range_sort = NULL;
   if (sort->data_width == 1 && !ctx->no_bools_in_arrays)
     range_sort = ctx->mk_sort(SMT_SORT_BOOL);
-  else
+  else if (!ctx->int_encoding)
     range_sort = ctx->mk_sort(SMT_SORT_BV, sort->data_width, false); //XXX sign?
+  else
+    range_sort = ctx->mk_sort(SMT_SORT_INT);
 
   return ctx->mk_func_app(range_sort, SMT_FUNC_SELECT, args, 2);
 }

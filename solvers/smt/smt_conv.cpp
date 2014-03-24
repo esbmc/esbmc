@@ -888,8 +888,9 @@ smt_convt::convert_sort(const type2tc &type)
 
     // Work around QF_AUFBV demanding arrays of bitvectors.
     smt_sortt r;
-    if (!int_encoding && is_bool_type(range) && no_bools_in_arrays) {
-      r = mk_sort(SMT_SORT_BV, 1, false);
+    if (is_bool_type(range) && no_bools_in_arrays) {
+      r = (int_encoding) ? mk_sort(SMT_SORT_INT)
+                         : mk_sort(SMT_SORT_BV, 1, false);
     } else {
       r = convert_sort(range);
     }
@@ -1252,8 +1253,10 @@ smt_convt::make_bool_bit(smt_astt a)
 
   assert(a->sort->id == SMT_SORT_BOOL && "Wrong sort fed to "
          "smt_convt::make_bool_bit");
-  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
-  smt_astt zero = mk_smt_bvint(BigInt(0), false, 1);
+  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
+                                : mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt zero = (int_encoding) ? mk_smt_int(BigInt(0), false)
+                                 : mk_smt_bvint(BigInt(0), false, 1);
   smt_astt args[3];
   args[0] = a;
   args[1] = one;
@@ -1265,10 +1268,13 @@ smt_astt
 smt_convt::make_bit_bool(smt_astt a)
 {
 
-  assert(a->sort->id == SMT_SORT_BV && "Wrong sort fed to "
-         "smt_convt::make_bit_bool");
+  assert(((!int_encoding && a->sort->id == SMT_SORT_BV) ||
+          (int_encoding && a->sort->id == SMT_SORT_INT)) &&
+        "Wrong sort fed to " "smt_convt::make_bit_bool");
+
   smt_sortt boolsort = mk_sort(SMT_SORT_BOOL);
-  smt_astt one = mk_smt_bvint(BigInt(1), false, 1);
+  smt_astt one = (int_encoding) ? mk_smt_int(BigInt(1), false)
+                                : mk_smt_bvint(BigInt(1), false, 1);
   smt_astt args[2];
   args[0] = a;
   args[1] = one;
@@ -1500,7 +1506,7 @@ smt_convt::convert_array_index(const expr2tc &expr)
   a = a->select(this, newidx);
 
   const array_type2t &arrtype = to_array_type(index.source_value->type);
-  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
+  if (is_bool_type(arrtype.subtype) && no_bools_in_arrays) {
     return make_bit_bool(a);
   } else {
     return a;
@@ -1531,7 +1537,7 @@ smt_convt::convert_array_store(const expr2tc &expr)
   const array_type2t &arrtype = to_array_type(expr->type);
 
   // Workaround for bools-in-arrays.
-  if (!int_encoding && is_bool_type(arrtype.subtype) && no_bools_in_arrays){
+  if (is_bool_type(arrtype.subtype) && no_bools_in_arrays){
     typecast2tc cast(get_uint_type(1), update_val);
     update = convert_ast(cast);
   } else {
