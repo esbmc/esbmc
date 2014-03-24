@@ -35,6 +35,7 @@ class yices_convt : public smt_convt, public array_iface
 {
 public:
   yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp);
+  virtual ~yices_convt();
 
   virtual resultt dec_solve();
   virtual tvt l_get(const smt_ast *l);
@@ -68,6 +69,7 @@ public:
   expr2tc get_array_elem(smt_astt array, uint64_t index,
                          const type2tc &subtype);
 
+  context_t *yices_ctx;
 };
 
 #endif /* _ESBMC_SOLVERS_YICES_YICES_CONV_H_ */

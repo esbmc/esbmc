@@ -19,6 +19,25 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
   : smt_convt(int_encoding, ns, is_cpp), array_iface(false, false)
 {
   yices_init();
+
+  ctx_config_t *config = yices_new_config();
+  if (int_encoding)
+    yices_default_config_for_logic(config, "QF_AUFLIRA");
+  else
+    yices_default_config_for_logic(config, "QF_AUFBV");
+
+  // XXX -- work out mode detection in the future.
+  // yices_set_config(config, "mode", "push-pop");
+  yices_set_config(config, "mode", "one-shot");
+
+  yices_ctx = yices_new_context(config);
+  yices_free_config(config);
+}
+
+yices_convt::~yices_convt()
+{
+  yices_free_context(yices_ctx);
+  yices_garbage_collect(NULL, 0, NULL, 0, false);
 }
 
 smt_convt::resultt
