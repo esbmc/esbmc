@@ -60,7 +60,13 @@ yices_convt::dec_solve()
 tvt
 yices_convt::l_get(smt_astt l)
 {
-  abort();
+  expr2tc b = get_bool(l);
+  if (b == true_expr)
+    return tvt(true);
+  else if (b == false_expr)
+    return tvt(false);
+  else
+    return tvt(tvt::TV_UNKNOWN);
 }
 
 const std::string
