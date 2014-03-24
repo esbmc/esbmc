@@ -82,6 +82,25 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   switch (k) {
   case SMT_FUNC_EQ:
     return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
+
+  case SMT_FUNC_BVUGT:
+    return new_ast(s, yices_bvgt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVUGTE:
+    return new_ast(s, yices_bvge_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVULT:
+    return new_ast(s, yices_bvlt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVULTE:
+    return new_ast(s, yices_bvle_atom(asts[0]->term, asts[1]->term));
+
+  case SMT_FUNC_BVSGT:
+    return new_ast(s, yices_bvsgt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVSGTE:
+    return new_ast(s, yices_bvsge_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVSLT:
+    return new_ast(s, yices_bvslt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVSLTE:
+    return new_ast(s, yices_bvsle_atom(asts[0]->term, asts[1]->term));
+
   case SMT_FUNC_AND:
     return new_ast(s, yices_and2(asts[0]->term, asts[1]->term));
   case SMT_FUNC_STORE:
