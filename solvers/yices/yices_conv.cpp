@@ -81,13 +81,7 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_EQ:
-  {
-    if (args[0]->sort->id == SMT_SORT_BV) {
-      return new_ast(s, yices_redcomp(asts[0]->term, asts[1]->term));
-    } else {
-      return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
-    }
-  }
+    return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
   case SMT_FUNC_AND:
     return new_ast(s, yices_and2(asts[0]->term, asts[1]->term));
   case SMT_FUNC_STORE:
