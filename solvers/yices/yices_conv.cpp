@@ -304,7 +304,22 @@ yices_convt::get_bool(smt_astt a)
 expr2tc
 yices_convt::get_bv(const type2tc &t, smt_astt a)
 {
-  abort();
+  int32_t data[64];
+  yices_smt_ast *ast = yices_ast_downcast(a);
+
+  unsigned int width = t->get_width();
+  assert(width <= 64);
+  if (yices_get_bv_value(sat_model, ast->term, data) != 0)
+    return expr2tc();
+
+  uint64_t val = 0;
+  unsigned int i;
+  for (i = 0; i < width; i++) {
+    val <<= 1;
+    val |= data[i];
+  }
+
+  return constant_int2tc(t, BigInt(val));
 }
 
 expr2tc
