@@ -239,7 +239,9 @@ smt_astt
 yices_convt::mk_extract(smt_astt a, unsigned int high,
                             unsigned int low, smt_sortt s)
 {
-  abort();
+  yices_smt_ast *ast = yices_ast_downcast(a);
+  term_t term = yices_bvextract(ast->term, low, high);
+  return new_ast(s, term);
 }
 
 smt_astt
