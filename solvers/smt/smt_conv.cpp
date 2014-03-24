@@ -669,11 +669,8 @@ expr_handle_table:
     if (int_encoding) {
       // Raise 2^shift, then multiply first operand by that value. If it's
       // negative, what to do? FIXME.
-      constant_int2tc two(shl.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      smt_astt powval = int_shift_op_array->select(this, shl.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_MUL, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVSHL, &args[0], 2);
@@ -695,11 +692,8 @@ expr_handle_table:
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
-      constant_int2tc two(ashr.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      smt_astt powval = int_shift_op_array->select(this, ashr.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVASHR, &args[0], 2);
@@ -722,11 +716,8 @@ expr_handle_table:
       // Raise 2^shift, then divide first operand by that value. If it's
       // negative, I suspect the correct operation is to latch to -1,
       // XXX XXX XXX haven't implemented that yet.
-      constant_int2tc two(lshr.type, BigInt(2));
-      smt_astt powargs[2];
-      powargs[0] = args[1];
-      powargs[1] = convert_ast(two);
-      args[1] = mk_func_app(sort, SMT_FUNC_POW, &powargs[0], 2);
+      smt_astt powval = int_shift_op_array->select(this, lshr.side_2);
+      args[1] = powval;
       a = mk_func_app(sort, SMT_FUNC_DIV, &args[0], 2);
     } else {
       a = mk_func_app(sort, SMT_FUNC_BVLSHR, &args[0], 2);
