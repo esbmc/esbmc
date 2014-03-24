@@ -81,15 +81,13 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   case SMT_FUNC_EQ:
   {
     if (args[0]->sort->id == SMT_SORT_BV) {
-      return new yices_smt_ast(this, s, yices_redcomp(asts[0]->term,
-                                                      asts[1]->term));
+      return new_ast(s, yices_redcomp(asts[0]->term, asts[1]->term));
     } else {
-      return new yices_smt_ast(this, s, yices_bveq_atom(asts[0]->term,
-                                                        asts[1]->term));
+      return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
     }
   }
   case SMT_FUNC_AND:
-    return new yices_smt_ast(this, s, yices_and2(asts[0]->term, asts[1]->term));
+    return new_ast(s, yices_and2(asts[0]->term, asts[1]->term));
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
               << "' in yices_convt::mk_func_app" << std::endl;
