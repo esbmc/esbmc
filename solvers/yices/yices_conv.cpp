@@ -160,7 +160,11 @@ yices_convt::mk_smt_bvint(const mp_integer &theint,
 smt_astt
 yices_convt::mk_smt_bool(bool val)
 {
-  abort();
+  smt_sortt s = mk_sort(SMT_SORT_BOOL);
+  if (val)
+    return new_ast(s, yices_true());
+  else
+    return new_ast(s, yices_false());
 }
 
 smt_astt
