@@ -88,6 +88,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
                                                         asts[1]->term));
     }
   }
+  case SMT_FUNC_AND:
+    return new yices_smt_ast(this, s, yices_and2(asts[0]->term, asts[1]->term));
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
               << "' in yices_convt::mk_func_app" << std::endl;
