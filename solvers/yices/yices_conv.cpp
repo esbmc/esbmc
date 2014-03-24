@@ -61,7 +61,8 @@ yices_convt::solver_text()
 void
 yices_convt::assert_ast(smt_astt a)
 {
-  abort();
+  yices_smt_ast *ast = yices_ast_downcast(a);
+  yices_assert_formula(yices_ctx, ast->term);
 }
 
 smt_astt
