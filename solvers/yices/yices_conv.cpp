@@ -103,6 +103,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 
   case SMT_FUNC_AND:
     return new_ast(s, yices_and2(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_OR:
+    return new_ast(s, yices_or2(asts[0]->term, asts[1]->term));
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
     return new_ast(s, yices_update(asts[0]->term, 1, &asts[1]->term,
