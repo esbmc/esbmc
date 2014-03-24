@@ -47,7 +47,14 @@ yices_convt::~yices_convt()
 smt_convt::resultt
 yices_convt::dec_solve()
 {
-  abort();
+  smt_status_t result = yices_check_context(yices_ctx, NULL);
+
+  if (result == STATUS_SAT)
+    return smt_convt::P_SATISFIABLE;
+  else if (result == STATUS_UNSAT)
+    return smt_convt::P_UNSATISFIABLE;
+  else
+    return smt_convt::P_ERROR;
 }
 
 tvt
