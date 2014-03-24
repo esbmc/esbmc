@@ -106,10 +106,13 @@ yices_convt::mk_smt_real(const std::string &str)
 }
 
 smt_astt
-yices_convt::mk_smt_bvint(const mp_integer &theint, bool sign,
-                              unsigned int w)
+yices_convt::mk_smt_bvint(const mp_integer &theint,
+      bool sign __attribute__((unused)),
+      unsigned int w)
 {
-  abort();
+  term_t term = yices_bvconst_uint64(w, theint.to_uint64());
+  smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
+  return new yices_smt_ast(this, s, term);
 }
 
 smt_astt
