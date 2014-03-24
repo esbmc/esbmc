@@ -149,12 +149,12 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
     yices_smt_sort *dom = va_arg(ap, yices_smt_sort*);
     yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
     type_t t = yices_function_type(1, &dom->type, range->type);
-    return new yices_smt_sort(k, t);
+    return new yices_smt_sort(k, t, range->data_width, dom->data_width);
   }
   case SMT_SORT_BV:
   {
     uint = va_arg(ap, unsigned long);
-    return new yices_smt_sort(k, yices_bv_type(uint));
+    return new yices_smt_sort(k, yices_bv_type(uint), uint);
   }
   default:
     std::cerr << "Unimplemented sort " << k << " in yices mk_sort" << std::endl;
