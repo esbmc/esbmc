@@ -25,7 +25,15 @@ class yices_smt_ast : public smt_ast
 public:
 #define yices_ast_downcast(x) static_cast<const yices_smt_ast *>(x)
   yices_smt_ast(smt_convt *ctx, const smt_sort *_s, term_t _t)
-    : smt_ast(ctx, _s), term(_t) { }
+    : smt_ast(ctx, _s), term(_t) {
+
+      // Detect term errors
+      if (term == NULL_TERM) {
+        std::cerr << "Error creating yices term" << std::endl;
+        yices_print_error(stderr);
+        abort();
+      }
+    }
   virtual ~yices_smt_ast() { }
 
   term_t term;

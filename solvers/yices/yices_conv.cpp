@@ -20,6 +20,8 @@ yices_convt::yices_convt(bool int_encoding, const namespacet &ns, bool is_cpp)
 {
   yices_init();
 
+  yices_clear_error();
+
   ctx_config_t *config = yices_new_config();
   if (int_encoding)
     yices_default_config_for_logic(config, "QF_AUFLIRA");
