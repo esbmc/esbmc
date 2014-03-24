@@ -1,3 +1,7 @@
+#include <stddef.h>
+#include <stdarg.h>
+#include <stdint.h>
+
 #include "yices_conv.h"
 
 smt_convt *
@@ -52,7 +56,41 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 smt_sortt
 yices_convt::mk_sort(const smt_sort_kind k, ...)
 {
-  abort();
+  va_list ap;
+  unsigned long uint;
+
+  va_start(ap, k);
+  switch(k) {
+  case SMT_SORT_BOOL:
+  {
+    return new yices_smt_sort(k, yices_bool_type());
+  }
+  case SMT_SORT_INT:
+  {
+    return new yices_smt_sort(k, yices_int_type());
+  }
+  case SMT_SORT_REAL:
+  {
+    return new yices_smt_sort(k, yices_real_type());
+  }
+  case SMT_SORT_ARRAY:
+  {
+    // Arrays are uninterpreted functions with updates. Create an array with
+    // the given domain as a single dimension.
+    yices_smt_sort *dom = va_arg(ap, yices_smt_sort*);
+    yices_smt_sort *range = va_arg(ap, yices_smt_sort*);
+    type_t t = yices_function_type(1, &dom->type, range->type);
+    return new yices_smt_sort(k, t);
+  }
+  case SMT_SORT_BV:
+  {
+    uint = va_arg(ap, unsigned long);
+    return new yices_smt_sort(k, yices_bv_type(uint));
+  }
+  default:
+    std::cerr << "Unimplemented sort " << k << " in yices mk_sort" << std::endl;
+    abort();
+  }
 }
 
 smt_astt
