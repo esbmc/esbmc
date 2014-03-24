@@ -77,7 +77,7 @@ public:
   expr2tc get_array_elem(smt_astt array, uint64_t index,
                          const type2tc &subtype);
 
-  inline new_ast(smt_sortt s, term_t t) {
+  inline smt_astt new_ast(smt_sortt s, term_t t) {
     return new yices_smt_ast(this, s, t);
   }
 
