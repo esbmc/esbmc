@@ -23,6 +23,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   temp_sym_count.push_back(1);
   std::string cmd;
 
+  std::string logic = (int_encoding) ? "QF_AUFLIRA" : "QF_AUFBV";
+
   // We may be being instructed to just output to a file.
   cmd = options.get_option("output");
   if (cmd != "") {
@@ -39,7 +41,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     solver_version = "";
     solver_proc_pid = 0;
 
-    fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+    fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
     fprintf(out_stream, "(set-info :status unknown)\n");
 
     smt_post_init();
@@ -98,7 +100,7 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // Point lexer input at output stream
   smtlibin = in_stream;
 
-  fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+  fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
   fprintf(out_stream, "(set-info :status unknown)\n");
 
   // Fetch solver name and version.
