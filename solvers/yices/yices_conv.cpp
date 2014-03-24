@@ -212,7 +212,7 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 smt_astt
 yices_convt::mk_array_symbol(const std::string &name, smt_sortt s)
 {
-  abort();
+  return mk_smt_symbol(name, s);
 }
 
 smt_sortt
