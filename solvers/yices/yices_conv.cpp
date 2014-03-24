@@ -290,7 +290,15 @@ yices_convt::add_array_constraints_for_solving()
 expr2tc
 yices_convt::get_bool(smt_astt a)
 {
-  abort();
+  int32_t val;
+  yices_smt_ast *ast = yices_ast_downcast(a);
+  if (yices_get_bool_value(sat_model, ast->term, &val) != 0)
+    return expr2tc();
+
+  if (val)
+    return true_expr;
+  else
+    return false_expr;
 }
 
 expr2tc
