@@ -1119,6 +1119,10 @@ public:
    *  back to that point. */
   std::vector<unsigned int> live_asts_sizes;
 
+  // Workaround for integer shifts. This is an array of the powers of two,
+  // up to 2^64.
+  smt_astt int_shift_op_array;
+
   /** Table containing information about how to handle expressions to convert
    *  them to SMT. There are various options -- convert all the operands and
    *  pass straight down to smt_convt::mk_func_app with a corresponding SMT

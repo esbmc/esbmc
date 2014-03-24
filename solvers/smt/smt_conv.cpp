@@ -148,6 +148,21 @@ smt_convt::smt_post_init(void)
 
   init_addr_space_array();
 
+  if (int_encoding) {
+    std::vector<expr2tc> power_array_data;
+    uint64_t pow;
+    unsigned int count = 0;
+    type2tc powarr_elemt = get_uint_type(64);
+    for (pow = 1ULL; count < 64; pow <<= 1, count++)
+      power_array_data.push_back(constant_int2tc(powarr_elemt, BigInt(pow)));
+
+    type2tc power_array_type(new array_type2t(powarr_elemt,
+                                              gen_uint(64), false));
+
+    constant_array2tc power_array(power_array_type, power_array_data);
+    int_shift_op_array = convert_ast(power_array);
+  }
+
   ptr_foo_inited = true;
 }
 
