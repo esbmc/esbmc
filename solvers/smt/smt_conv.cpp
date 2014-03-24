@@ -1758,7 +1758,6 @@ smt_convt::smt_func_name_table[expr2t::end_expr_id] =  {
   "extract",
   "int2real",
   "real2int",
-  "^",
   "is_int"
 };
 

@@ -633,9 +633,6 @@ z3_convt::mk_func_app(const smt_sort *s, smt_func_kind k,
     return new_ast(z3::to_expr(ctx, Z3_mk_int2real(ctx, asts[0]->e)), s);
   case SMT_FUNC_IS_INT:
     return new_ast(z3::to_expr(ctx, Z3_mk_is_int(ctx, asts[0]->e)), s);
-  case SMT_FUNC_POW:
-        return new_ast(z3::to_expr(ctx, Z3_mk_power(ctx, asts[0]->e,                                                       asts[1]->e)), s);
-  case SMT_FUNC_HACKS:
   default:
     assert(0 && "Unhandled SMT func in z3 conversion");
   }

@@ -185,7 +185,6 @@ enum smt_func_kind {
 
   SMT_FUNC_INT2REAL,
   SMT_FUNC_REAL2INT,
-  SMT_FUNC_POW,
   SMT_FUNC_IS_INT,
 };
 
