@@ -179,6 +179,7 @@ yices_convt::mk_smt_bvint(const mp_integer &theint,
       bool sign __attribute__((unused)),
       unsigned int w)
 {
+  assert(w != 0);
   term_t term = yices_bvconst_uint64(w, theint.to_uint64());
   smt_sortt s = mk_sort(SMT_SORT_BV, w, false);
   return new yices_smt_ast(this, s, term);
