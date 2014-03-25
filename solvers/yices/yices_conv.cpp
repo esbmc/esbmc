@@ -272,7 +272,8 @@ yices_convt::mk_sort(const smt_sort_kind k, ...)
 }
 
 smt_astt
-yices_convt::mk_smt_int(const mp_integer &theint, bool sign)
+yices_convt::mk_smt_int(const mp_integer &theint,
+    bool sign __attribute__((unused)))
 {
   term_t term = yices_int64(theint.to_int64());
   smt_sortt s = mk_sort(SMT_SORT_INT);
