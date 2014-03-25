@@ -1757,6 +1757,9 @@ smt_convt::get(const expr2tc &expr)
   {
     // XXX -- again, another candidate for refactoring.
     expr2tc tmp = get_bv(expr->type, convert_ast(expr));
+    if (is_nil_expr(tmp))
+      return tmp;
+
     const constant_int2t &intval = to_constant_int2t(tmp);
     uint64_t val = intval.constant_value.to_ulong();
     std::stringstream ss;
