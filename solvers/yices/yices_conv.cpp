@@ -385,7 +385,7 @@ yices_convt::get_bv(const type2tc &t, smt_astt a)
 {
   int32_t data[64];
   int32_t err = 0;
-  yices_smt_ast *ast = yices_ast_downcast(a);
+  const yices_smt_ast *ast = yices_ast_downcast(a);
 
   // XXX -- model fetching for ints needs to be better
   if (int_encoding) {
@@ -420,5 +420,17 @@ expr2tc
 yices_convt::get_array_elem(smt_astt array, uint64_t index,
                        const type2tc &subtype)
 {
-  abort();
+  // Construct a term accessing that element, and get_bv it.
+  const yices_smt_ast *ast = yices_ast_downcast(array);
+  term_t idx;
+  if (int_encoding) {
+    idx = yices_int64(index);
+  } else {
+    idx = yices_bvconst_uint64(subtype->get_width(), index);
+  }
+
+  term_t app = yices_application(ast->term, 1, &idx);
+  smt_sortt subsort = convert_sort(subtype);
+  smt_astt container = new_ast(subsort, app);
+  return get_bv(subtype, container);
 }
