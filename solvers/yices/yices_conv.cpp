@@ -87,7 +87,7 @@ yices_convt::solver_text()
 void
 yices_convt::assert_ast(smt_astt a)
 {
-  yices_smt_ast *ast = yices_ast_downcast(a);
+  const yices_smt_ast *ast = yices_ast_downcast(a);
   yices_assert_formula(yices_ctx, ast->term);
 }
 
@@ -155,7 +155,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     return new_ast(s, yices_update(asts[0]->term, 1, &temp_term,
                                    asts[2]->term));
   case SMT_FUNC_SELECT:
-    return new_ast(s, yices_application(asts[0]->term, 1, &asts[1]->term));
+    temp_term = asts[1]->term;
+    return new_ast(s, yices_application(asts[0]->term, 1, &temp_term));
 
   case SMT_FUNC_ADD:
     return new_ast(s, yices_add(asts[0]->term, asts[1]->term));
@@ -264,7 +265,7 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
   term_t term = yices_get_term_by_name(name.c_str());
   if (term == NULL_TERM) {
     // No: create a new one.
-    yices_smt_sort *sort = yices_sort_downcast(s);
+    const yices_smt_sort *sort = yices_sort_downcast(s);
     term = yices_new_uninterpreted_term(sort->type);
     yices_set_term_name(term, name.c_str());
   }
@@ -294,7 +295,7 @@ smt_astt
 yices_convt::mk_extract(smt_astt a, unsigned int high,
                             unsigned int low, smt_sortt s)
 {
-  yices_smt_ast *ast = yices_ast_downcast(a);
+  const yices_smt_ast *ast = yices_ast_downcast(a);
   term_t term = yices_bvextract(ast->term, low, high);
   return new_ast(s, term);
 }
@@ -316,7 +317,7 @@ expr2tc
 yices_convt::get_bool(smt_astt a)
 {
   int32_t val;
-  yices_smt_ast *ast = yices_ast_downcast(a);
+  const yices_smt_ast *ast = yices_ast_downcast(a);
   if (yices_get_bool_value(sat_model, ast->term, &val) != 0)
     return expr2tc();
 
