@@ -112,6 +112,15 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     else
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
+  case SMT_FUNC_GT:
+    return new_ast(s, yices_arith_gt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_GTE:
+    return new_ast(s, yices_arith_geq_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_LT:
+    return new_ast(s, yices_arith_lt_atom(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_LTE:
+    return new_ast(s, yices_arith_leq_atom(asts[0]->term, asts[1]->term));
+
   case SMT_FUNC_BVUGT:
     return new_ast(s, yices_bvgt_atom(asts[0]->term, asts[1]->term));
   case SMT_FUNC_BVUGTE:
