@@ -355,7 +355,7 @@ smt_astt
 yices_convt::convert_array_of(const expr2tc &init_val,
                                 unsigned long domain_width)
 {
-  abort();
+  return default_convert_array_of(init_val, domain_width, this);
 }
 
 void
