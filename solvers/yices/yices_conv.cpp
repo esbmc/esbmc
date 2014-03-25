@@ -174,6 +174,15 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     return new_ast(s, yices_bvsub(asts[0]->term, asts[1]->term));
   case SMT_FUNC_BVMUL:
     return new_ast(s, yices_bvmul(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVUDIV:
+    return new_ast(s, yices_bvdiv(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVSDIV:
+    return new_ast(s, yices_bvsdiv(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVUMOD:
+    return new_ast(s, yices_bvrem(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVSMOD:
+    return new_ast(s, yices_bvsrem(asts[0]->term, asts[1]->term));
+
   case SMT_FUNC_CONCAT:
     return new_ast(s, yices_bvconcat(asts[0]->term, asts[1]->term));
   default:
