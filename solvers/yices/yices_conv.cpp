@@ -115,6 +115,12 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     else
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
+  case SMT_FUNC_NOTEQ:
+    if (asts[0]->term == asts[1]->term)
+      return mk_smt_bool(false);
+    else
+      return new_ast(s, yices_distinct(asts[0]->term, asts[1]->term));
+
   case SMT_FUNC_GT:
     return new_ast(s, yices_arith_gt_atom(asts[0]->term, asts[1]->term));
   case SMT_FUNC_GTE:
