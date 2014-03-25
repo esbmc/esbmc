@@ -151,6 +151,9 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   case SMT_FUNC_IMPLIES:
     return new_ast(s, yices_implies(asts[0]->term, asts[1]->term));
 
+  case SMT_FUNC_ITE:
+    return new_ast(s, yices_ite(asts[0]->term, asts[1]->term, asts[2]->term));
+
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
     temp_term = asts[1]->term;
