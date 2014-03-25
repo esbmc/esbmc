@@ -171,6 +171,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     temp_term = yices_mul(temp_term, asts[1]->term);
     temp_term = yices_sub(asts[0]->term, temp_term);
     return new_ast(s, temp_term);
+  case SMT_FUNC_NEG:
+    return new_ast(s, yices_neg(asts[0]->term));
 
   case SMT_FUNC_BVADD:
     return new_ast(s, yices_bvadd(asts[0]->term, asts[1]->term));
@@ -195,6 +197,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     return new_ast(s, yices_bvashr(asts[0]->term, asts[1]->term));
   case SMT_FUNC_BVLSHR:
     return new_ast(s, yices_bvlshr(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVNEG:
+    return new_ast(s, yices_bvneg(asts[0]->term));
 
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
