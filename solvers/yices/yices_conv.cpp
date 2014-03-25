@@ -423,7 +423,7 @@ yices_convt::get_array_elem(smt_astt array, uint64_t index,
   if (int_encoding) {
     idx = yices_int64(index);
   } else {
-    idx = yices_bvconst_uint64(subtype->get_width(), index);
+    idx = yices_bvconst_uint64(array->sort->domain_width, index);
   }
 
   term_t app = yices_application(ast->term, 1, &idx);
