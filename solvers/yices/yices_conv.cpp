@@ -68,6 +68,9 @@ tvt
 yices_convt::l_get(smt_astt l)
 {
   expr2tc b = get_bool(l);
+  if (is_nil_expr(b))
+    return tvt(tvt::TV_UNKNOWN);
+
   if (b == true_expr)
     return tvt(true);
   else if (b == false_expr)
