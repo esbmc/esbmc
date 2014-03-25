@@ -362,7 +362,13 @@ z3_convt::convert_type(const type2tc &type, z3::sort &sort)
     // processing code.
     const array_type2t &arr = to_array_type(type);
     unsigned int domain_width = calculate_array_domain_width(arr);
-    smt_sortt domain = mk_sort(SMT_SORT_BV, domain_width, false);
+
+    smt_sortt domain;
+    if (int_encoding)
+      domain = mk_sort(SMT_SORT_INT);
+    else
+      domain = mk_sort(SMT_SORT_BV, domain_width, false);
+
     smt_sortt range = convert_sort(arr.subtype);
     sort = z3_sort_downcast(mk_sort(SMT_SORT_ARRAY, domain, range))->s;
     break;
