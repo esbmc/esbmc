@@ -154,6 +154,12 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   case SMT_FUNC_ITE:
     return new_ast(s, yices_ite(asts[0]->term, asts[1]->term, asts[2]->term));
 
+  case SMT_FUNC_IS_INT:
+    std::cerr << "Yices does not support an is-integer operation on reals, "
+              << "therefore certain casts and operations don't work, sorry"
+              << std::endl;
+    abort();
+
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
     temp_term = asts[1]->term;
