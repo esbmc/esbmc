@@ -167,6 +167,10 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   case SMT_FUNC_DIV:
     return new_ast(s, yices_division(asts[0]->term, asts[1]->term));
   case SMT_FUNC_MOD:
+    temp_term = yices_division(asts[0]->term, asts[1]->term);
+    temp_term = yices_mul(temp_term, asts[1]->term);
+    temp_term = yices_sub(asts[0]->term, temp_term);
+    return new_ast(s, temp_term);
 
   case SMT_FUNC_BVADD:
     return new_ast(s, yices_bvadd(asts[0]->term, asts[1]->term));
