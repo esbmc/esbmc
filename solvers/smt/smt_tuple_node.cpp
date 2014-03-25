@@ -582,6 +582,11 @@ smt_tuple_node_flattener::tuple_get_rec(tuple_node_smt_astt tuple)
 
   // If it's a pointer, rewrite.
   if (is_pointer_type(sort->thetype) || sort->thetype == ctx->pointer_struct) {
+
+    // Guard against a free pointer though
+    if (is_nil_expr(outstruct->datatype_members[0]))
+      return expr2tc();
+
     uint64_t num = to_constant_int2t(outstruct->datatype_members[0])
                                     .constant_value.to_uint64();
     uint64_t offs = to_constant_int2t(outstruct->datatype_members[1])
