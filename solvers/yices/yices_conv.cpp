@@ -234,7 +234,9 @@ yices_convt::mk_smt_int(const mp_integer &theint, bool sign)
 smt_astt
 yices_convt::mk_smt_real(const std::string &str)
 {
-  abort();
+  term_t term = yices_parse_rational(str.c_str());
+  smt_sortt s = mk_sort(SMT_SORT_REAL);
+  return new_ast(s, term);
 }
 
 smt_astt
