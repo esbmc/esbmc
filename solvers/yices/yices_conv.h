@@ -81,7 +81,7 @@ public:
     return new yices_smt_ast(this, s, t);
   }
 
-  inline clear_model(void) {
+  inline void clear_model(void) {
     if (sat_model) {
       yices_free_model(sat_model);
       sat_model = NULL;
