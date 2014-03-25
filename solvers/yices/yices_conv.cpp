@@ -107,6 +107,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
   case SMT_FUNC_EQ:
     if (asts[0]->sort->id == SMT_SORT_BOOL)
       return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
+    else if (int_encoding)
+      return new_ast(s, yices_arith_eq_atom(asts[0]->term, asts[1]->term));
     else
       return new_ast(s, yices_bveq_atom(asts[0]->term, asts[1]->term));
 
