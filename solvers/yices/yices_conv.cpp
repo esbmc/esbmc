@@ -98,6 +98,7 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 {
   const yices_smt_ast *asts[4];
   unsigned int i;
+  term_t temp_term;
 
   assert(numargs <= 4);
   for (i = 0; i < numargs; i++)
@@ -150,7 +151,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 
   case SMT_FUNC_STORE:
     // Crazy "function update" situation.
-    return new_ast(s, yices_update(asts[0]->term, 1, &asts[1]->term,
+    temp_term = asts[1]->term;
+    return new_ast(s, yices_update(asts[0]->term, 1, &temp_term,
                                    asts[2]->term));
   case SMT_FUNC_SELECT:
     return new_ast(s, yices_application(asts[0]->term, 1, &asts[1]->term));
