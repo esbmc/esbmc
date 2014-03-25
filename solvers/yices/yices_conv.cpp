@@ -384,24 +384,36 @@ expr2tc
 yices_convt::get_bv(const type2tc &t, smt_astt a)
 {
   int32_t data[64];
+  int32_t err = 0;
   yices_smt_ast *ast = yices_ast_downcast(a);
 
-  unsigned int width = t->get_width();
-  assert(width <= 64);
-  if (yices_get_bv_value(sat_model, ast->term, data) != 0) {
-    std::cerr << "Error fetching number from model" << std::endl;
-    yices_print_error(stderr);
-    abort();
+  // XXX -- model fetching for ints needs to be better
+  if (int_encoding) {
+    int64_t val;
+    err = yices_get_int64_value(sat_model, ast->term, &val);
+    if (!err)
+      return constant_int2tc(t, BigInt(val));
+  } else {
+    unsigned int width = t->get_width();
+    assert(width <= 64);
+    err = yices_get_bv_value(sat_model, ast->term, data);
+    if (err)
+      goto out;
+
+    uint64_t val = 0;
+    unsigned int i;
+    for (i = 0; i < width; i++) {
+      val <<= 1;
+      val |= data[i];
+    }
+
+    return constant_int2tc(t, BigInt(val));
   }
 
-  uint64_t val = 0;
-  unsigned int i;
-  for (i = 0; i < width; i++) {
-    val <<= 1;
-    val |= data[i];
-  }
-
-  return constant_int2tc(t, BigInt(val));
+out:
+  std::cerr << "Error fetching number from model" << std::endl;
+  yices_print_error(stderr);
+  abort();
 }
 
 expr2tc
