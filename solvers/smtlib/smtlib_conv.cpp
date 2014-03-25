@@ -35,6 +35,8 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   temp_sym_count.push_back(1);
   std::string cmd;
 
+  std::string logic = (int_encoding) ? "QF_AUFLIRA" : "QF_AUFBV";
+
   // We may be being instructed to just output to a file.
   cmd = options.get_option("output");
   if (cmd != "") {
@@ -51,8 +53,9 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
     solver_version = "";
     solver_proc_pid = 0;
 
-    fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+    fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
     fprintf(out_stream, "(set-info :status unknown)\n");
+    fprintf(out_stream, "(set-option :produce-models true)\n");
 
     return;
   }
@@ -109,8 +112,9 @@ smtlib_convt::smtlib_convt(bool int_encoding, const namespacet &_ns,
   // Point lexer input at output stream
   smtlibin = in_stream;
 
-  fprintf(out_stream, "(set-logic QF_AUFBV)\n");
+  fprintf(out_stream, "(set-logic %s)\n", logic.c_str());
   fprintf(out_stream, "(set-info :status unknown)\n");
+  fprintf(out_stream, "(set-option :produce-models true)\n");
 
   // Fetch solver name and version.
   fprintf(out_stream, "(get-info :name)\n");
@@ -798,13 +802,13 @@ smtlib_convt::push_ctx()
   smt_convt::push_ctx();
   temp_sym_count.push_back(temp_sym_count.back());
 
-  fprintf(out_stream, "(push)\n");
+  fprintf(out_stream, "(push 1)\n");
 }
 
 void
 smtlib_convt::pop_ctx()
 {
-  fprintf(out_stream, "(pop)\n");
+  fprintf(out_stream, "(pop 1)\n");
 
   // Wipe this level of symbol table.
   symbol_tablet::nth_index<1>::type &syms_numindex = symbol_table.get<1>();
