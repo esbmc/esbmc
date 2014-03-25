@@ -391,14 +391,16 @@ yices_convt::get_bv(const type2tc &t, smt_astt a)
   if (int_encoding) {
     int64_t val;
     err = yices_get_int64_value(sat_model, ast->term, &val);
-    if (!err)
+    if (err)
+      return expr2tc();
+    else
       return constant_int2tc(t, BigInt(val));
   } else {
     unsigned int width = t->get_width();
     assert(width <= 64);
     err = yices_get_bv_value(sat_model, ast->term, data);
     if (err)
-      goto out;
+      return expr2tc();
 
     uint64_t val = 0;
     unsigned int i;
@@ -409,11 +411,6 @@ yices_convt::get_bv(const type2tc &t, smt_astt a)
 
     return constant_int2tc(t, BigInt(val));
   }
-
-out:
-  std::cerr << "Error fetching number from model" << std::endl;
-  yices_print_error(stderr);
-  abort();
 }
 
 expr2tc
