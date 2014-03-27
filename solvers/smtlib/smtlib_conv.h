@@ -27,7 +27,7 @@ public:
     : smt_sort(k) { }
   explicit smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
                   const smtlib_smt_sort *rag)
-    : smt_sort(k), domain(dom), range(rag) { }
+    : smt_sort(k, dom->data_width, rag->data_width), domain(dom), range(rag) { }
 
   virtual unsigned long get_domain_width(void) const {
     assert(id == SMT_SORT_ARRAY);
