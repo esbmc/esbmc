@@ -730,12 +730,21 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     s = new z3_smt_sort(k, ctx.bv_sort(uint), uint);
     break;
   case SMT_SORT_ARRAY:
+  {
     dom = va_arg(ap, z3_smt_sort *); // Consider constness?
     range = va_arg(ap, z3_smt_sort *);
     assert(int_encoding || dom->data_width != 0);
-    s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), range->data_width,
+
+    // The range data width is allowed to be zero, which happens if the range
+    // is a tuple type.
+    unsigned int data_width = range->data_width;
+    if (range->id == SMT_SORT_STRUCT)
+      data_width = 1;
+
+    s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), data_width,
                         dom->data_width, range);
     break;
+  }
   case SMT_SORT_BOOL:
     s = new z3_smt_sort(k, ctx.bool_sort());
     break;
@@ -760,7 +769,9 @@ z3_convt::mk_struct_sort(const type2tc &type)
     else
       domain_width = s.array_domain().bv_size();
 
-    return new z3_smt_sort(SMT_SORT_ARRAY, s, 0, domain_width,
+    // The '1' range is a dummy, seeing how smt_sortt has no representation of
+    // tuple sort ranges
+    return new z3_smt_sort(SMT_SORT_ARRAY, s, 1, domain_width,
                            convert_sort(arrtype.subtype));
   } else {
     return new z3_smt_sort(SMT_SORT_STRUCT, s, type);
