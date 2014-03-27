@@ -341,13 +341,13 @@ yices_convt::mk_array_symbol(const std::string &name, smt_sortt s)
 }
 
 smt_sortt
-yices_convt::mk_struct_sort(const type2tc &type)
+yices_convt::mk_struct_sort(const type2tc &type __attribute__((unused)))
 {
   abort();
 }
 
 smt_sortt
-yices_convt::mk_union_sort(const type2tc &type)
+yices_convt::mk_union_sort(const type2tc &type __attribute__((unused)))
 {
   abort();
 }
