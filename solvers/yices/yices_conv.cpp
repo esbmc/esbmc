@@ -412,7 +412,7 @@ yices_convt::get_bv(const type2tc &t, smt_astt a)
 
     uint64_t val = 0;
     int i;
-    for (i = width - 1; i > 0; i--) {
+    for (i = width - 1; i >= 0; i--) {
       val <<= 1;
       val |= data[i];
     }
