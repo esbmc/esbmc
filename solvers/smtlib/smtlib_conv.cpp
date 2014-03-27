@@ -675,6 +675,7 @@ smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
+    assert(uint != 0);
     s = new smtlib_smt_sort(k, uint, thebool);
     break;
   case SMT_SORT_ARRAY:
