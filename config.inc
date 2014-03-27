@@ -24,6 +24,10 @@ USE_SOLVER_BOOLECTOR=1
 USE_SOLVER_MINISAT=1
 USE_SOLVER_MATHSAT=1
 USE_SOLVER_CVC=1
+# NB: YICES currently has some kind of error exhibited by 02_eureka07 whereby
+# array updates or selects aren't effective. This is fully a problem in the
+# solver itself, because if you print it to smtlib 2 format then use other
+# solvers on it, only yices finds a model.
 USE_SOLVER_YICES=1
 
 endif #EXTERN_ESBMC_CONFIG
