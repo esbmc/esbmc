@@ -53,7 +53,7 @@ yices_convt::dec_solve()
   smt_status_t result = yices_check_context(yices_ctx, NULL);
 
   if (result == STATUS_SAT) {
-    sat_model = yices_get_model(yices_ctx, 0);
+    sat_model = yices_get_model(yices_ctx, 1);
     return smt_convt::P_SATISFIABLE;
   } else if (result == STATUS_UNSAT) {
     sat_model = NULL;
