@@ -21,11 +21,11 @@ public:
 
 class smtlib_smt_sort : public smt_sort {
 public:
-  smtlib_smt_sort(smt_sort_kind k, unsigned int w)
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w)
     : smt_sort(k, w) { };
-  smtlib_smt_sort(smt_sort_kind k)
+  explicit smtlib_smt_sort(smt_sort_kind k)
     : smt_sort(k) { }
-  smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
+  explicit smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
                   const smtlib_smt_sort *rag)
     : smt_sort(k), domain(dom), range(rag) { }
 
