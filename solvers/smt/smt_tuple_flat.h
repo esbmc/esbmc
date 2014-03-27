@@ -24,7 +24,7 @@ public:
   const type2tc thetype;
 
   tuple_smt_sort(const type2tc &type)
-    : smt_sort(SMT_SORT_STRUCT, 0, 0), thetype(type)
+    : smt_sort(SMT_SORT_STRUCT), thetype(type)
   {
   }
 
