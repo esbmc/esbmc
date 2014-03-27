@@ -172,7 +172,7 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_REAL:
     return "Real";
   case SMT_SORT_BV:
-    ss << "(_ BitVec " << sort->width << ")";
+    ss << "(_ BitVec " << sort->data_width << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
     ss << "(Array " << sort_to_string(sort->domain) << " "
@@ -209,15 +209,16 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     // Construct a bitvector
   {
     // Irritatingly, the number may be higher than the actual bitwidth permits.
-    assert(sort->width <= 64 && "smtlib printer assumes no numbers more than "
-          "64 bits wide, sorry");
+    assert(sort->data_width <= 64 && "smtlib printer assumes no numbers more "
+           "than 64 bits wide, sorry");
     int64_t theval = ast->intval.to_int64();
-    if (sort->width < 64) {
-      uint64_t mask = 1ULL << sort->width;
+    if (sort->data_width < 64) {
+      uint64_t mask = 1ULL << sort->data_width;
       mask -= 1;
       theval &= mask;
     }
-    ss << "(_ bv" << theval << " " << sort->width << ")";
+    assert(sort->data_width != 0);
+    ss << "(_ bv" << theval << " " << sort->data_width << ")";
     output = ss.str();
     return 0;
   }
