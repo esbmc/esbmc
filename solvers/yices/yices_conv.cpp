@@ -109,9 +109,9 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
 
   switch (k) {
   case SMT_FUNC_EQ:
+    assert(asts[0]->sort->id != SMT_SORT_ARRAY && "Yices array assignment "
+           "made its way through to an equality");
     if (asts[0]->sort->id == SMT_SORT_BOOL)
-      return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
-    else if (asts[0]->sort->id == SMT_SORT_ARRAY)
       return new_ast(s, yices_eq(asts[0]->term, asts[1]->term));
     else if (int_encoding)
       return new_ast(s, yices_arith_eq_atom(asts[0]->term, asts[1]->term));
@@ -337,7 +337,11 @@ yices_convt::mk_smt_symbol(const std::string &name, smt_sortt s)
 smt_astt
 yices_convt::mk_array_symbol(const std::string &name, smt_sortt s)
 {
-  return mk_smt_symbol(name, s);
+  // For array symbols, store the symbol name in the ast to implement
+  // assign semantics
+  const yices_smt_ast *ast = yices_ast_downcast(mk_smt_symbol(name, s));
+  const_cast<yices_smt_ast*>(ast)->symname = name;
+  return ast;
 }
 
 smt_sortt
@@ -438,4 +442,21 @@ yices_convt::get_array_elem(smt_astt array, uint64_t index,
   smt_sortt subsort = convert_sort(subtype);
   smt_astt container = new_ast(subsort, app);
   return get_bv(subtype, container);
+}
+
+void
+yices_smt_ast::assign(smt_convt *ctx, smt_astt sym) const
+{
+  if (sort->id == SMT_SORT_ARRAY) {
+    // Perform assign semantics, of this to the given sym
+    const yices_smt_ast *ast = yices_ast_downcast(sym);
+    yices_remove_term_name(ast->symname.c_str());
+    yices_set_term_name(term, ast->symname.c_str());
+
+    // set the other ast too
+    const_cast<yices_smt_ast*>(ast)->term = term;
+  } else {
+    smt_ast::assign(ctx, sym);
+  }
+  return;
 }

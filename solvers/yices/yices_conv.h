@@ -36,7 +36,12 @@ public:
     }
   virtual ~yices_smt_ast() { }
 
+  // Provide assign semantics for arrays. While yices will swallow array
+  // equalities, it silently doesn't honour them. Apparently.
+  virtual void assign(smt_convt *ctx, smt_astt sym) const;
+
   term_t term;
+  std::string symname;
 };
 
 class yices_convt : public smt_convt, public array_iface
