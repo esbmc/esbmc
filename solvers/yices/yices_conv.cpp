@@ -231,6 +231,8 @@ yices_convt::mk_func_app(smt_sortt s, smt_func_kind k,
     return new_ast(s, yices_bvxor(asts[0]->term, asts[1]->term));
   case SMT_FUNC_BVAND:
     return new_ast(s, yices_bvand(asts[0]->term, asts[1]->term));
+  case SMT_FUNC_BVOR:
+    return new_ast(s, yices_bvor(asts[0]->term, asts[1]->term));
 
   default:
     std::cerr << "Unimplemented SMT function '" << smt_func_name_table[k]
