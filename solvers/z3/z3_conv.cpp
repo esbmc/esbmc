@@ -738,7 +738,7 @@ z3_convt::mk_sort(const smt_sort_kind k, ...)
     // The range data width is allowed to be zero, which happens if the range
     // is not a bitvector / integer
     unsigned int data_width = range->data_width;
-    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL)
+    if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
       data_width = 1;
 
     s = new z3_smt_sort(k, ctx.array_sort(dom->s, range->s), data_width,
@@ -893,7 +893,7 @@ z3_convt::convert_array_of(const expr2tc &init_val, unsigned long domain_width)
   z3::expr output = z3::to_expr(ctx, Z3_mk_const_array(ctx, dom_sort, val));
 
   long unsigned int range_width = range->data_width;
-  if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL)
+  if (range->id == SMT_SORT_STRUCT || range->id == SMT_SORT_BOOL || range->id == SMT_SORT_UNION)
     range_width = 1;
 
   long unsigned int dom_width = (int_encoding) ? 0 : dom_sort.bv_size();
