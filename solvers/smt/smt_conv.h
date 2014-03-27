@@ -216,11 +216,22 @@ public:
   /** BV Width of array domain. For everything else, undefined */
   unsigned long domain_width;
 
-  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0) { }
+  smt_sort(smt_sort_kind i) : id(i), data_width(0), domain_width(0)
+  {
+    assert(id != SMT_SORT_ARRAY);
+  }
   smt_sort(smt_sort_kind i, unsigned long width)
-    : id(i), data_width(width), domain_width(0) { }
+    : id(i), data_width(width), domain_width(0)
+  {
+    assert(width != 0);
+    assert(id != SMT_SORT_ARRAY);
+  }
   smt_sort(smt_sort_kind i, unsigned long rwidth, unsigned long domwidth)
-    : id(i), data_width(rwidth), domain_width(domwidth) { }
+    : id(i), data_width(rwidth), domain_width(domwidth) {
+      assert(id == SMT_SORT_ARRAY);
+      assert(data_width != 0);
+      assert(domain_width != 0);
+    }
 
   virtual ~smt_sort() { }
 
