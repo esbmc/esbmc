@@ -636,7 +636,8 @@ smt_tuple_node_flattener::mk_struct_sort(const type2tc &type)
     const array_type2t &arrtype = to_array_type(type);
     assert(!is_array_type(arrtype.subtype) && "Arrays dimensions should be flattened by the time they reach tuple interface");
     unsigned int dom_width = ctx->calculate_array_domain_width(arrtype);
-    return new tuple_smt_sort(type, 0, dom_width);
+    // NB: the range value is a dummy.
+    return new tuple_smt_sort(type, 1, dom_width);
   } else {
     return new tuple_smt_sort(type);
   }
