@@ -1434,7 +1434,7 @@ z3_convt::get_array_elem(const smt_ast *array, uint64_t index,
                          const type2tc &subtype)
 {
   const z3_smt_ast *za = z3_smt_downcast(array);
-  unsigned long bv_size = array->sort->get_domain_width();
+  unsigned long bv_size = array->sort->domain_width;
   const z3_smt_ast *idx;
   if (int_encoding)
     idx = static_cast<const z3_smt_ast*>(mk_smt_int(BigInt(index), false));

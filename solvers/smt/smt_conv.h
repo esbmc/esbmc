@@ -234,15 +234,6 @@ public:
     }
 
   virtual ~smt_sort() { }
-
-  /** Deprecated array domain width accessor */
-  virtual unsigned long get_domain_width(void) const {
-    return domain_width;
-  }
-  /** Deprecated array range width accessor */
-  virtual unsigned long get_range_width(void) const {
-    return data_width;
-  }
 };
 
 #define is_tuple_ast_type(x) (is_structure_type(x) || is_pointer_type(x))

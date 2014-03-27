@@ -29,11 +29,6 @@ public:
                   const smtlib_smt_sort *rag)
     : smt_sort(k, dom->data_width, rag->data_width), domain(dom), range(rag) { }
 
-  virtual unsigned long get_domain_width(void) const {
-    assert(id == SMT_SORT_ARRAY);
-    return domain->data_width;
-  }
-
   const smtlib_smt_sort *domain;
   const smtlib_smt_sort *range;
 };
