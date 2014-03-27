@@ -176,7 +176,7 @@ smtlib_convt::sort_to_string(const smt_sort *s) const
   case SMT_SORT_REAL:
     return "Real";
   case SMT_SORT_BV:
-    ss << "(_ BitVec " << sort->width << ")";
+    ss << "(_ BitVec " << sort->data_width << ")";
     return ss.str();
   case SMT_SORT_ARRAY:
     ss << "(Array " << sort_to_string(sort->domain) << " "
@@ -213,15 +213,16 @@ smtlib_convt::emit_terminal_ast(const smtlib_smt_ast *ast, std::string &output)
     // Construct a bitvector
   {
     // Irritatingly, the number may be higher than the actual bitwidth permits.
-    assert(sort->width <= 64 && "smtlib printer assumes no numbers more than "
-          "64 bits wide, sorry");
+    assert(sort->data_width <= 64 && "smtlib printer assumes no numbers more "
+           "than 64 bits wide, sorry");
     int64_t theval = ast->intval.to_int64();
-    if (sort->width < 64) {
-      uint64_t mask = 1ULL << sort->width;
+    if (sort->data_width < 64) {
+      uint64_t mask = 1ULL << sort->data_width;
       mask -= 1;
       theval &= mask;
     }
-    ss << "(_ bv" << theval << " " << sort->width << ")";
+    assert(sort->data_width != 0);
+    ss << "(_ bv" << theval << " " << sort->data_width << ")";
     output = ss.str();
     return 0;
   }
@@ -439,7 +440,7 @@ smtlib_convt::get_array_elem (const smt_ast *array, uint64_t index,
   std::string name = sa->symname;
 
   // XXX -- double bracing this may be a Z3 ecentricity
-  unsigned int domain_width = array->sort->get_domain_width();
+  unsigned int domain_width = array->sort->domain_width;
   fprintf(out_stream,
       "(get-value ((select |%s| (_ bv%" PRIu64 " %" PRIu64 "))))\n",
       name.c_str(), index, domain_width);
@@ -678,7 +679,8 @@ smtlib_convt::mk_sort(const smt_sort_kind k __attribute__((unused)), ...)
   case SMT_SORT_BV:
     uint = va_arg(ap, unsigned long);
     thebool = va_arg(ap, int);
-    s = new smtlib_smt_sort(k, uint, thebool);
+    assert(uint != 0);
+    s = new smtlib_smt_sort(k, uint);
     break;
   case SMT_SORT_ARRAY:
     dom = va_arg(ap, smtlib_smt_sort *); // Consider constness?

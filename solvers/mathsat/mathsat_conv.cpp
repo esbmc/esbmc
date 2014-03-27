@@ -122,7 +122,7 @@ expr2tc
 mathsat_convt::get_array_elem(const smt_ast *array, uint64_t idx,
                               const type2tc &elem_sort)
 {
-  size_t orig_w = array->sort->get_domain_width();
+  size_t orig_w = array->sort->domain_width;
   const mathsat_smt_ast *mast = mathsat_ast_downcast(array);
 
   smt_ast *tmpast = mk_smt_bvint(BigInt(idx), false, orig_w);

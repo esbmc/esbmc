@@ -21,23 +21,14 @@ public:
 
 class smtlib_smt_sort : public smt_sort {
 public:
-  smtlib_smt_sort(smt_sort_kind k, unsigned int w, bool s)
-    : smt_sort(k), width(w), sign(s) { };
-  smtlib_smt_sort(smt_sort_kind k, unsigned int w)
-    : smt_sort(k), width(w) { }
-  smtlib_smt_sort(smt_sort_kind k)
+  explicit smtlib_smt_sort(smt_sort_kind k, unsigned int w)
+    : smt_sort(k, w) { };
+  explicit smtlib_smt_sort(smt_sort_kind k)
     : smt_sort(k) { }
-  smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
+  explicit smtlib_smt_sort(smt_sort_kind k, const smtlib_smt_sort *dom,
                   const smtlib_smt_sort *rag)
-    : smt_sort(k), domain(dom), range(rag) { }
+    : smt_sort(k, dom->data_width, rag->data_width), domain(dom), range(rag) { }
 
-  virtual unsigned long get_domain_width(void) const {
-    assert(id == SMT_SORT_ARRAY);
-    return domain->width;
-  }
-
-  unsigned int width;
-  bool sign;
   const smtlib_smt_sort *domain;
   const smtlib_smt_sort *range;
 };

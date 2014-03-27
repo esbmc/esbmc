@@ -29,10 +29,10 @@ smt_ast *
 array_convt::mk_array_symbol(const std::string &name, smt_sortt ms)
 {
   // No solver representation for this.
-  unsigned long domain_width = ms->get_domain_width();
+  unsigned long domain_width = ms->domain_width;
   unsigned long array_size = 1UL << domain_width;
   smt_sortt range_sort =
-    ctx->mk_sort(SMT_SORT_BV, ms->get_range_width(), false);
+    ctx->mk_sort(SMT_SORT_BV, ms->data_width, false);
 
   array_ast *mast = new_ast(ms);
   mast->symname = name;
@@ -61,7 +61,7 @@ array_convt::mk_array_symbol(const std::string &name, smt_sortt ms)
     w.idx = expr2tc();
     array_updates[mast->base_array_id].push_back(w);
 
-    array_subtypes.push_back(ms->get_range_width());
+    array_subtypes.push_back(ms->data_width);
 
     return mast;
   }
@@ -105,7 +105,7 @@ array_convt::mk_select(const array_ast *ma, const expr2tc &idx,
   smt_astt fresh = ctx->mk_fresh(ressort, "array_mk_select::");
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt args[2], idxargs[2], impargs[2];
-  unsigned long dom_width = ma->sort->get_domain_width();
+  unsigned long dom_width = ma->sort->domain_width;
   smt_sortt bool_sort = ctx->mk_sort(SMT_SORT_BOOL);
 
   args[0] = fresh;
@@ -154,7 +154,7 @@ array_convt::mk_store(const array_ast* ma, const expr2tc &idx,
   smt_astt real_idx = ctx->convert_ast(idx);
   smt_astt real_value = value;
   smt_astt iteargs[3], idxargs[2];
-  unsigned long dom_width = mast->sort->get_domain_width();
+  unsigned long dom_width = mast->sort->domain_width;
   smt_sortt bool_sort = ctx->mk_sort(SMT_SORT_BOOL);
 
   idxargs[0] = real_idx;
